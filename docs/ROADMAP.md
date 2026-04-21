@@ -1,11 +1,31 @@
 # Orchid Roadmap
 
+Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
+
 ## MVP (v0.1) — 6–8 months
 
 ### Core
-- [ ] Workspace structure (Cargo workspace, crates split)
-- [ ] State store (redb wrapper) + configuration (TOML)
-- [ ] Event bus + command registry
+- [x] **Workspace structure** (Cargo workspace, 11-crate split, shared workspace deps, dev-fast profile, Slint build wiring)
+- [x] **State store & configuration** — `orchid-storage`
+  - [x] `redb`-backed `StateStore` with typed `Read`/`Write` transactions
+  - [x] Stored value types (`SchemaMeta`, `HistoryEntry`, `WidgetInstance`, `Workspace`, `FileTag`, `SessionState`, `CacheEntry`, …) via `bincode` 2.x
+  - [x] Schema versioning + migration engine (`CURRENT_SCHEMA_VERSION = 1`)
+  - [x] `HISTORY_BY_TIMESTAMP_INDEX` for ordered history iteration
+  - [x] Cache age-eviction primitive (`evict_cache_older_than`)
+  - [x] `OrchidConfig` TOML schema, `ConfigLoader` (atomic save + validation)
+  - [x] `ConfigWatcher` — debounced hot-reload over `tokio::sync::broadcast`
+  - [x] OS-aware paths (`OrchidPaths`) via `directories`
+- [x] **Event bus, action system, command registry** — `orchid-core`
+  - [x] Priority-ordered multi-producer/consumer `EventBus` (channel / async / sync subscribers, filter by type / source / predicate, slow-consumer policy, metrics, graceful shutdown)
+  - [x] `Action` trait, `ActionContext`, `ActionOutcome`, panic-catching `ActionDispatcher` with before/after middleware
+  - [x] `HistoryRecorder` middleware (auto-persists every dispatched action into `orchid-storage`, respects `privacy.record_action_history`)
+  - [x] `CommandRegistry` + `CommandDescriptor` + `ActionFactory`, shortcut-override batch apply
+  - [x] Shell-like `parse_command_line` (quoted strings, `--flag` / `--key=value` / `--key value`, registry-aware multi-word verb resolution)
+  - [x] `Shortcut` parser with canonical round-trip + `is_reserved` (`Win+L`, `Win+Space`, `Ctrl+Alt+<letter>`)
+  - [x] `CommandPalette` fuzzy search via `nucleo-matcher`
+  - [x] Unified `InputEvent` (touch / mouse / keyboard / pen), ergonomic `ScreenZone`s
+  - [x] `GestureRecognizer` (tap, double-tap, long-press via `tick`, swipe, edge-swipe, pinch, rotate, pan)
+  - [x] `InputMapper` + `default_bindings` for spec-defined edge / multi-finger swipes
 - [ ] Minimal Slint + Skia window + theming + i18n infrastructure
 
 ### File Manager
@@ -62,13 +82,14 @@
 - [ ] Universal search (files + commands + settings)
 
 ### UX
-- [ ] Theming (light/dark, density modes, hot-reload)
+- [ ] Theming (light/dark, density modes, hot-reload) — density + theme keys live in `OrchidConfig`; renderer-side wiring pending
 - [ ] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast)
 - [ ] Internationalization (11 languages, RTL)
 - [ ] Adaptive layouts (profiles for different screens)
-- [ ] Gestures (touch, pen, mouse)
-- [ ] Keyboard shortcuts + leader-key mode
-- [ ] Onboarding tour, hint mode, command palette
+- [~] Gestures (touch, pen, mouse) — recogniser + default binding set done in `orchid-core`; real input plumbing pending in `orchid-ui`
+- [~] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, and user override application done; leader-key mode + chord tracking pending
+- [~] Command palette — fuzzy search engine and result types done in `orchid-core`; palette UI pending in `orchid-ui`
+- [ ] Onboarding tour, hint mode
 
 ### Additional
 - [ ] Jyotish module (optional, not in default widgets)
