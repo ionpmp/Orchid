@@ -1,6 +1,6 @@
 [package]
 name = "orchid-crypto"
-description = "Cryptography primitives for Orchid: age encryption, KDBX4 password vaults, and BLAKE3 + FastCDC content addressing."
+description = "Cryptography primitives for Orchid: age file encryption, KDBX4 password vaults, and BLAKE3 + FastCDC content addressing."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,51 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+# Core crypto
 age.workspace = true
 keepass.workspace = true
+argon2.workspace = true
 blake3.workspace = true
 fastcdc.workspace = true
+totp-rs.workspace = true
+zeroize.workspace = true
+secrecy.workspace = true
 rand.workspace = true
+rand_core.workspace = true
+getrandom.workspace = true
+subtle.workspace = true
+
+# Storage + plumbing
+redb.workspace = true
+serde.workspace = true
+bincode.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true }
+tokio-util.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+tempfile.workspace = true
+hex.workspace = true
+base32.workspace = true
+url.workspace = true
+async-trait.workspace = true
+tar.workspace = true
+
+orchid-core.workspace = true
+orchid-storage.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = [
+    "Win32_Security_Cryptography",
+    "Win32_Foundation",
+    "Win32_System_Memory",
+]
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile.workspace = true
+tracing-subscriber.workspace = true
