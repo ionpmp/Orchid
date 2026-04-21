@@ -1,24 +1,50 @@
-//! Filesystem layer for Orchid.
+//! Filesystem layer for Orchid: providers, watching, tags, managed folders,
+//! encrypted paths, archives, and file operations.
 //!
-//! Provides the unified provider abstraction that sits behind the file manager:
-//! a local filesystem backend, network providers (SFTP / SMB / WebDAV / FTP via
-//! rclone), directory watching via `notify`, and chunk-based content-addressed
-//! storage powered by [`orchid_crypto`] and [`orchid_storage`].
+//! See module-level docs for each subsystem.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
+#![allow(clippy::result_large_err)]
 
-/// Returns the crate version as declared in `Cargo.toml`.
+pub mod archive;
+pub mod encrypted;
+pub mod entry;
+pub mod error;
+pub mod managed;
+pub mod mime;
+pub mod operations;
+pub mod path;
+pub mod provider;
+pub mod tag;
+pub mod watcher;
+
+pub use archive::{detect_format, open_archive, ArchiveEntry, ArchiveFormat, ArchiveReader};
+pub use encrypted::{
+    EncryptedFolderConfig, EncryptedFolderEngine, EncryptedFolderRecord, EncryptedPathRegistered,
+};
+pub use entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
+pub use error::{FsError, Result};
+pub use managed::{
+    ManagedFileIngestedEvent, ManagedFolderConfig, ManagedFolderEngine, ManagedFolderStats,
+};
+pub use mime::guess_mime;
+pub use operations::{
+    copy, delete, move_, CopyOptions, DeleteOptions, OperationProgress, ProgressSink,
+};
+pub use path::FsPath;
+pub use provider::{
+    FsCapabilities, FsChange, FsChangeKind, FsProvider, FsProviderRegistry, FsWatcherHandle,
+    LocalProvider, ProviderId,
+};
+pub use tag::{TagManager, TagsChangedEvent};
+pub use watcher::{
+    events::{FsCreatedEvent, FsDeletedEvent, FsModifiedEvent, FsRenamedEvent},
+    FileWatcher, WatchHandle,
+};
+
+/// Returns the crate version.
+#[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn version_is_non_empty() {
-        assert!(!version().is_empty());
-    }
 }

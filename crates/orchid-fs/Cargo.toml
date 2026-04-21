@@ -1,6 +1,6 @@
 [package]
 name = "orchid-fs"
-description = "Filesystem abstractions for Orchid: local FS, network providers, watching, and chunked content-addressed storage."
+description = "Filesystem layer for Orchid: providers, watching, tags, managed folders, encrypted paths, archives, and file operations."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,39 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+tokio = { workspace = true }
+tokio-util.workspace = true
 notify.workspace = true
-tokio.workspace = true
+notify-debouncer-full.workspace = true
 walkdir.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+bincode.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+mime_guess.workspace = true
+infer.workspace = true
+zip.workspace = true
+sevenz-rust.workspace = true
+tar.workspace = true
+flate2.workspace = true
+dashmap.workspace = true
+redb.workspace = true
+filetime.workspace = true
+trash.workspace = true
 
-orchid-crypto.workspace = true
+orchid-core.workspace = true
 orchid-storage.workspace = true
+orchid-crypto.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = ["Win32_Storage_FileSystem", "Win32_Foundation"]
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true }
+tracing-subscriber.workspace = true

@@ -106,12 +106,19 @@ tantivy = "0.22"
 portable-pty = "0.8"
 alacritty_terminal = "0.24"
 
-# Viewers
+# Viewers / archives / file IO
 pdfium-render = "0.8"
 image = "0.25"
 tree-sitter = "0.24"
 sevenz-rust = "0.6"
 zip = "2"
+flate2 = "1"
+mime_guess = "2"
+infer = "0.16"
+filetime = "0.2"
+trash = "5"
+encoding_rs = "0.8"
+chardetng = "0.1"
 
 # IPC (reserved for wiring in the next stage)
 capnp = "0.20"

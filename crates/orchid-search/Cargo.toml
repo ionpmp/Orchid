@@ -1,6 +1,6 @@
 [package]
 name = "orchid-search"
-description = "Full-text and metadata search for Orchid, built on Tantivy with notify-driven incremental indexing."
+description = "Full-text search for Orchid backed by Tantivy, with content extractors for text and PDF."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,23 @@ authors.workspace = true
 
 [dependencies]
 tantivy.workspace = true
-notify.workspace = true
-tokio.workspace = true
+tokio = { workspace = true }
+async-trait.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+dashmap.workspace = true
+encoding_rs.workspace = true
+chardetng.workspace = true
+pdfium-render.workspace = true
+
+orchid-core.workspace = true
+orchid-storage.workspace = true
+orchid-fs.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile.workspace = true
+tracing-subscriber.workspace = true

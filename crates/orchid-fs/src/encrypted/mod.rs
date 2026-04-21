@@ -1,0 +1,17 @@
+//! Encrypted paths — files and folders stored on disk as `.age` ciphertexts.
+//!
+//! # Security
+//!
+//! The engine persists only [`orchid_crypto::IdentityKind`] so that the
+//! `fs_encrypted_paths` table knows which paths are encrypted and which
+//! auth flow to use. The actual passphrase / X25519 key is NEVER written
+//! to disk by this crate — it is supplied fresh at every reveal and lives
+//! only in memory for the duration of the operation.
+
+pub mod engine;
+pub(crate) mod index;
+pub mod marker;
+
+pub use engine::{EncryptedFolderConfig, EncryptedFolderEngine, EncryptedPathRegistered};
+pub use index::EncryptedFolderRecord;
+pub use marker::{looks_encrypted, AGE_EXT};
