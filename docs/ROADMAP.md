@@ -64,13 +64,13 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Archives (browse + extract)
 
 ### Security
-- [ ] Password manager (KDBX4 format, custom UX)
-- [ ] File and folder encryption (age-based)
+- [~] Password manager (KDBX4 format, custom UX) — KDBX4 read/write, groups / entries / TOTP / search done in `orchid-crypto::kdbx`; widget UI pending
+- [~] File and folder encryption (age-based) — `age` + directory tar / reveal sessions done in `orchid-crypto::age_encryption`; file-manager wiring pending in `orchid-fs`
 - [ ] Biometric unlock via Windows Hello
 
 ### Storage
-- [ ] Content-addressed storage (BLAKE3 + FastCDC chunking)
-- [ ] Deduplication in managed folders
+- [~] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC done in `orchid-crypto::content`; managed-folder policy layer pending in `orchid-fs`
+- [~] Deduplication in managed folders — `Deduplicator` + `FileManifest` primitives done; integration with the file manager pending
 
 ### Network Clients
 - [ ] SFTP / SMB / WebDAV / FTP via rclone
