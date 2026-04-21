@@ -79,6 +79,13 @@ bincode = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 
+# Runtime utilities
+async-trait = "0.1"
+dashmap = "6"
+smallvec = { version = "1", features = ["serde"] }
+nucleo-matcher = "0.3"
+bitflags = { version = "2", features = ["serde"] }
+
 # Search
 tantivy = "0.22"
 

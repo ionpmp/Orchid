@@ -1,23 +1,78 @@
-//! Core abstractions for Orchid.
+//! Core event bus, action system, command registry, and input abstractions
+//! for Orchid.
 //!
-//! This crate will host the shared type vocabulary used across the workspace:
-//! event-bus primitives, the command registry trait, and cross-cutting domain
-//! types. For the current scaffolding stage it only exposes a version helper.
+//! # Layout
+//!
+//! * [`event`] — typed event bus used as the central nervous system of the
+//!   app.
+//! * [`action`] — semantic operations triggered by users; an [`ActionDispatcher`]
+//!   runs middleware around each action and a [`HistoryRecorder`] persists
+//!   executed actions through [`orchid_storage`].
+//! * [`command`] — user-visible commands, their metadata, textual parsing,
+//!   keyboard shortcuts, and the fuzzy palette search.
+//! * [`input`] — platform-agnostic input events, gesture recognition, screen
+//!   zones, and the gesture/shortcut-to-command mapper.
+//!
+//! # Dispatch pipeline
+//!
+//! ```text
+//! InputEvent --> GestureRecognizer --> RecognizedGesture --\
+//!                                                           \
+//! KeyboardEvent ---> Shortcut ------------------------------ > InputMapper ---> command id
+//!                                                                                      |
+//!                                                                    CommandRegistry <-+
+//!                                                                      |
+//!                                                           Box<dyn Action>
+//!                                                                      |
+//!                                                          ActionDispatcher (middleware)
+//!                                                                      |
+//!                                                                  EventBus
+//! ```
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
+// `CoreError` and `StorageError` aggregate several sizeable upstream error
+// types. Boxing them wholesale would allocate on every error path for no real
+// benefit — the error path is the cold path.
+#![allow(clippy::result_large_err)]
 
-/// Returns the crate version as declared in `Cargo.toml`.
+pub mod action;
+pub mod command;
+pub mod error;
+pub mod event;
+pub mod input;
+
+pub use action::{
+    Action, ActionContext, ActionDispatcher, ActionMiddleware, ActionOutcome, HistoryRecorder,
+    ReversiblePair, REVERSIBLE_WINDOW_SECONDS,
+};
+pub use command::{
+    is_reserved, parse_command_line, parse_command_line_with_registry, ActionFactory,
+    CommandArg, CommandArgKind, CommandCategory, CommandDescriptor, CommandPalette,
+    CommandRegistry, Key, Modifiers, PaletteResult, ParsedCommand, Shortcut,
+    ShortcutOverrideResult, TerminalInvocation,
+};
+pub use error::{CoreError, Result};
+pub use event::{
+    AppShuttingDown, AppStarted, Event, EventBus, EventBusConfig, EventBusMetrics,
+    EventEnvelope, EventFilter, EventSource, HandlerPriority, SlowConsumerPolicy,
+    SubscriptionHandle, SubscriptionId,
+};
+pub use input::{
+    default_bindings, Edge, GestureConfig, GesturePattern, GestureRecognizer, InputBindings,
+    InputEvent, InputMapper, KeyEventKind, KeyboardEvent, MouseButton, MouseButtons, MouseEvent,
+    MouseEventKind, PenEvent, Point, RecognizedGesture, ScreenBounds, ScreenZone, SwipeDirection,
+    TouchEvent, TouchPhase,
+};
+
+/// Returns the version of this crate.
+///
+/// # Examples
+///
+/// ```
+/// assert!(!orchid_core::version().is_empty());
+/// ```
+#[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn version_is_non_empty() {
-        assert!(!version().is_empty());
-    }
 }

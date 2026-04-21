@@ -1,6 +1,6 @@
 [package]
 name = "orchid-core"
-description = "Core types, event bus primitives, and command-registry abstractions shared across the Orchid workspace."
+description = "Core event bus, action system, command registry, and input abstractions for Orchid."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,23 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+tokio = { workspace = true }
 serde.workspace = true
-tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+async-trait.workspace = true
+dashmap.workspace = true
+parking_lot.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+bincode.workspace = true
+smallvec.workspace = true
+nucleo-matcher.workspace = true
+bitflags.workspace = true
+
+orchid-storage.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile.workspace = true
+tracing-subscriber.workspace = true
