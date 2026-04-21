@@ -1,0 +1,17 @@
+[package]
+name = "orchid-widgets"
+description = "Widget infrastructure for Orchid: lifecycle, layout persistence, and built-in widget traits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+orchid-core.workspace = true
+orchid-storage.workspace = true

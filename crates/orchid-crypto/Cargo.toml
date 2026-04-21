@@ -1,0 +1,17 @@
+[package]
+name = "orchid-crypto"
+description = "Cryptography primitives for Orchid: age encryption, KDBX4 password vaults, and BLAKE3 + FastCDC content addressing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+age.workspace = true
+keepass.workspace = true
+blake3.workspace = true
+fastcdc.workspace = true
+rand.workspace = true
+thiserror.workspace = true

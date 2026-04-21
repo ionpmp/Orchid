@@ -1,0 +1,15 @@
+[package]
+name = "orchid-search"
+description = "Full-text and metadata search for Orchid, built on Tantivy with notify-driven incremental indexing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+tantivy.workspace = true
+notify.workspace = true
+tokio.workspace = true
+thiserror.workspace = true

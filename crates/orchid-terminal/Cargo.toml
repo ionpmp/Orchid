@@ -1,0 +1,15 @@
+[package]
+name = "orchid-terminal"
+description = "Terminal emulation for Orchid: portable-pty process hosting with alacritty_terminal VT parsing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+portable-pty.workspace = true
+alacritty_terminal.workspace = true
+tokio.workspace = true
+thiserror.workspace = true

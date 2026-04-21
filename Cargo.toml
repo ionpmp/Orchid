@@ -1,0 +1,139 @@
+# Orchid workspace manifest.
+#
+# All crates share metadata and dependency versions via workspace inheritance.
+# When adding a new shared dependency, pin its version here (under
+# [workspace.dependencies]) and reference it from the consuming crate with
+# `dep.workspace = true`.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/orchid-core",
+    "crates/orchid-storage",
+    "crates/orchid-crypto",
+    "crates/orchid-fs",
+    "crates/orchid-search",
+    "crates/orchid-terminal",
+    "crates/orchid-viewers",
+    "crates/orchid-widgets",
+    "crates/orchid-i18n",
+    "crates/orchid-ui",
+    "crates/orchid-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/PLACEHOLDER_ORG/orchid"
+authors = ["Orchid Contributors <placeholder@example.com>"]
+
+# -----------------------------------------------------------------------------
+# Shared dependency versions.
+#
+# TODO(scaffolding): Versions below are pinned to major ranges for scaffolding.
+# Before 1.0 we should sweep these and lock to exact minors as the dependency
+# tree stabilises.
+# -----------------------------------------------------------------------------
+[workspace.dependencies]
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Serialization / config
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Logging / tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Storage
+redb = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Crypto / content addressing
+age = "0.10"
+keepass = "0.7"
+blake3 = "1"
+fastcdc = "3"
+rand = "0.8"
+
+# Filesystem / watching
+notify = "7"
+notify-debouncer-full = "0.4"
+walkdir = "2"
+directories = "5"
+tempfile = "3"
+
+# Concurrency
+parking_lot = "0.12"
+
+# Binary encoding / identifiers / time
+bincode = { version = "2", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+
+# Search
+tantivy = "0.22"
+
+# Terminal
+portable-pty = "0.8"
+alacritty_terminal = "0.24"
+
+# Viewers
+pdfium-render = "0.8"
+image = "0.25"
+tree-sitter = "0.24"
+sevenz-rust = "0.6"
+zip = "2"
+
+# IPC (reserved for wiring in the next stage)
+capnp = "0.20"
+capnp-rpc = "0.20"
+
+# i18n
+icu = "1"
+
+# UI
+slint = { version = "1", features = ["renderer-skia"] }
+slint-build = "1"
+
+# Internal crates -- path + version keeps workspace inheritance happy.
+orchid-core = { path = "crates/orchid-core", version = "0.1.0" }
+orchid-storage = { path = "crates/orchid-storage", version = "0.1.0" }
+orchid-crypto = { path = "crates/orchid-crypto", version = "0.1.0" }
+orchid-fs = { path = "crates/orchid-fs", version = "0.1.0" }
+orchid-search = { path = "crates/orchid-search", version = "0.1.0" }
+orchid-terminal = { path = "crates/orchid-terminal", version = "0.1.0" }
+orchid-viewers = { path = "crates/orchid-viewers", version = "0.1.0" }
+orchid-widgets = { path = "crates/orchid-widgets", version = "0.1.0" }
+orchid-i18n = { path = "crates/orchid-i18n", version = "0.1.0" }
+orchid-ui = { path = "crates/orchid-ui", version = "0.1.0" }
+
+# -----------------------------------------------------------------------------
+# Profiles
+# -----------------------------------------------------------------------------
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+# Standard dev profile -- full debug info, unoptimised workspace code.
+
+# Build dependencies optimised even in debug mode so the first-party code stays
+# quick to iterate on without paying the perf cost of unoptimised deps.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Fast iteration profile: light optimisation for first-party code as well.
+# Use via `cargo build --profile dev-fast`.
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 1

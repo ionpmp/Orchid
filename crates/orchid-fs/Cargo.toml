@@ -1,0 +1,18 @@
+[package]
+name = "orchid-fs"
+description = "Filesystem abstractions for Orchid: local FS, network providers, watching, and chunked content-addressed storage."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+notify.workspace = true
+tokio.workspace = true
+walkdir.workspace = true
+thiserror.workspace = true
+
+orchid-crypto.workspace = true
+orchid-storage.workspace = true

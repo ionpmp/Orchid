@@ -1,0 +1,17 @@
+[package]
+name = "orchid-viewers"
+description = "Viewers for Orchid: PDF (pdfium-render), images, syntax-highlighted text (tree-sitter), and archive browsing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+pdfium-render.workspace = true
+image.workspace = true
+tree-sitter.workspace = true
+sevenz-rust.workspace = true
+zip.workspace = true
+thiserror.workspace = true

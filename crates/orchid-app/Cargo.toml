@@ -1,0 +1,29 @@
+[package]
+name = "orchid-app"
+description = "Orchid desktop application: wires every workspace crate together and owns the main loop."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "orchid"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+orchid-core.workspace = true
+orchid-storage.workspace = true
+orchid-crypto.workspace = true
+orchid-fs.workspace = true
+orchid-search.workspace = true
+orchid-terminal.workspace = true
+orchid-viewers.workspace = true
+orchid-widgets.workspace = true
+orchid-i18n.workspace = true
+orchid-ui.workspace = true

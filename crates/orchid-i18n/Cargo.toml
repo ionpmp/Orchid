@@ -1,0 +1,15 @@
+[package]
+name = "orchid-i18n"
+description = "Localization and internationalization for Orchid, built on ICU with TOML message catalogues."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+icu.workspace = true
+serde.workspace = true
+toml.workspace = true
+thiserror.workspace = true
