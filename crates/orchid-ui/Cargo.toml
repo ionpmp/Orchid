@@ -17,10 +17,16 @@ secrecy.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true
 arboard.workspace = true
+uuid.workspace = true
+serde.workspace = true
+bincode.workspace = true
+chrono.workspace = true
 
 orchid-core.workspace = true
 orchid-crypto.workspace = true
+orchid-storage.workspace = true
 orchid-terminal.workspace = true
+orchid-widgets.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true

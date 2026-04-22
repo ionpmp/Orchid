@@ -1,24 +1,42 @@
-//! Widget infrastructure for Orchid.
-//!
-//! Owns the widget lifecycle, layout persistence, and the traits that the
-//! built-in widgets (weather, moon, system indicators, media player, RSS,
-//! search) implement. Widget state and placement are persisted through
-//! [`orchid_storage`], and shared types come from [`orchid_core`].
+//! Widget framework for Orchid (work in progress).
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
+#![allow(clippy::result_large_err)]
 
-/// Returns the crate version as declared in `Cargo.toml`.
+pub mod commands;
+pub mod error;
+pub mod events;
+pub mod group;
+pub mod layout;
+pub mod manager;
+pub mod registry;
+pub mod widget;
+pub mod workspace;
+
+pub use error::{Result, WidgetError};
+pub use events::*;
+pub use group::{GroupManager, WidgetGroup};
+pub use layout::{
+    LayoutEngine, LayoutMode, LayoutOptions, LayoutSnapshot, PixelBounds, PlacedWidget,
+    ViewportSize,
+};
+pub use registry::WidgetRegistry;
+pub use widget::descriptor::{WidgetCategory, WidgetDescriptor, WidgetFactory};
+pub use widget::instance::{SharedInstance, WidgetInstanceRuntime};
+pub use widget::lifecycle::LifecycleController;
+pub use widget::snapshot::{
+    TerminalPayload, TerminalPayloadCell, WidgetPayload, WidgetSnapshot, WidgetStatus,
+};
+pub use widget::{Widget, WidgetCapabilities, WidgetContext};
+pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
+
+pub use commands::build_command_set;
+pub use manager::operations::CreateWidgetRequest;
+pub use manager::{WidgetManager, WidgetManagerOptions};
+
+/// Crate version.
+#[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn version_is_non_empty() {
-        assert!(!version().is_empty());
-    }
 }

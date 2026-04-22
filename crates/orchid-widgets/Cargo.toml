@@ -1,6 +1,6 @@
 [package]
 name = "orchid-widgets"
-description = "Widget infrastructure for Orchid: lifecycle, layout persistence, and built-in widget traits."
+description = "Widget framework for Orchid: registry, instances, lifecycle, layouts, workspaces, and groups."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,23 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-tokio.workspace = true
+tokio = { workspace = true }
+async-trait.workspace = true
 serde.workspace = true
+bincode.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+dashmap.workspace = true
+smallvec.workspace = true
+bitflags.workspace = true
+redb.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true }

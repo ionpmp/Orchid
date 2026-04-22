@@ -21,7 +21,14 @@
 pub mod clipboard;
 pub mod palette;
 pub mod render;
+pub mod view;
+pub mod widget;
 
 pub use clipboard::ArboardClipboard;
 pub use palette::{palette_from_flavor, ThemeFlavor};
 pub use render::{snapshot_to_cells, RenderCell};
+pub use view::TerminalWidgetView;
+pub use widget::{
+    terminal_descriptor, StoredBackend, TerminalWidget, TerminalWidgetDeps,
+    TerminalWidgetState, TERMINAL_TYPE_ID,
+};

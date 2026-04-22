@@ -5101,15 +5101,21 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "async-trait",
+ "bincode",
+ "chrono",
  "orchid-core",
  "orchid-crypto",
+ "orchid-storage",
  "orchid-terminal",
+ "orchid-widgets",
  "parking_lot",
  "secrecy",
+ "serde",
  "slint",
  "slint-build",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -5128,11 +5134,22 @@ dependencies = [
 name = "orchid-widgets"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "bincode",
+ "bitflags 2.11.1",
+ "chrono",
+ "dashmap 6.1.0",
  "orchid-core",
  "orchid-storage",
+ "parking_lot",
+ "redb",
  "serde",
+ "smallvec",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

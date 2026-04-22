@@ -46,7 +46,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Inline graphics (sixel + kitty) — deferred to v1.x
 
 ### Widgets
-- [ ] Infrastructure (layouts, workspaces, lifecycle)
+- [~] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge. The Slint workspace dashboard (drag / resize / dock / switcher, app bootstrap) remains blocked on a dedicated UI-shell task (shared `Theme` global, `LocaleManager`, `StartupWindowController`).
 - [ ] Widget: Weather
 - [ ] Widget: Moon (astronomy)
 - [ ] Widget: System indicators
@@ -55,7 +55,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Widget: Media player (audio/video)
 - [ ] Widget: RSS feed
 - [ ] Widget: Password manager
-- [ ] Widget: Terminal
+- [~] Widget: Terminal — `orchid-ui::TerminalWidget` implements the `Widget` trait end-to-end (spawns an `orchid_terminal::TerminalSession`, snapshots the grid into `WidgetPayload::Terminal`, restores after `Unloaded`). Slint terminal surface / dock entry / live painting pending the UI-shell task.
 
 ### Viewers
 - [ ] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW)
