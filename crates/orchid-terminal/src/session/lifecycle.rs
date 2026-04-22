@@ -142,10 +142,12 @@ impl TerminalSession {
         let shell_owned = { self.io.lock().take() };
         if let Some(shell) = shell_owned {
             drop(shell.writer_tx);
-            if let Some(h) = shell.writer_handle.lock().take() {
+            let writer = { shell.writer_handle.lock().take() };
+            if let Some(h) = writer {
                 let _ = h.await;
             }
-            if let Some(h) = shell.reader_handle.lock().take() {
+            let reader = { shell.reader_handle.lock().take() };
+            if let Some(h) = reader {
                 // Best-effort: if the reader task is still blocked on read,
                 // wait up to 200 ms and then abort it.
                 let abort = h.abort_handle();
@@ -177,7 +179,8 @@ impl TerminalSession {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
 
-        if let Some(task) = self.reader_task.lock().take() {
+        let task = { self.reader_task.lock().take() };
+        if let Some(task) = task {
             let abort = task.abort_handle();
             tokio::select! {
                 _ = task => {}

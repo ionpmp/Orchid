@@ -81,7 +81,7 @@ fn blend(a: Rgba, b: Rgba, t: f32) -> Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use orchid_terminal::{Cell, GridLine, TerminalPalette};
+    use orchid_terminal::{Cell, CellColor, GridLine, TerminalPalette};
 
     fn palette() -> TerminalPalette {
         TerminalPalette::default_dark()

@@ -38,12 +38,12 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Quick filter
 
 ### Terminal
-- [ ] PTY backend (portable-pty + ConPTY)
-- [ ] Terminal emulation (alacritty_terminal)
-- [ ] Tabs + splits
-- [ ] PowerShell, cmd, WSL backends
-- [ ] SSH sessions
-- [ ] Inline graphics (sixel + kitty)
+- [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize
+- [x] Terminal emulation — custom `vte`-based emulator (SGR, cursor, erase, scroll regions, OSC 0/2/7, DSR). Migration to `alacritty_terminal` for advanced features (vi mode, regex scrollback search) is planned for v1.x
+- [~] Tabs + splits — `orchid-terminal::layout` data model complete; UI rendering pending the Slint terminal view
+- [x] PowerShell, cmd, WSL backends — all three plus `Custom` variant covered by `BackendSpec`
+- [x] SSH sessions — `SshTarget` parses `ssh://` URIs and produces correct argv (jump hosts, identity files, extra args)
+- [ ] Inline graphics (sixel + kitty) — deferred to v1.x
 
 ### Widgets
 - [ ] Infrastructure (layouts, workspaces, lifecycle)

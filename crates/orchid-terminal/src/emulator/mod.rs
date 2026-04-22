@@ -721,7 +721,7 @@ impl<'a> Perform for Handler<'a> {
             }
             0x08 => self.state.backspace(),
             0x09 => self.state.tab(),
-            0x0A | 0x0B | 0x0C => self.state.line_feed(),
+            0x0A..=0x0C => self.state.line_feed(),
             0x0D => self.state.carriage_return(),
             _ => {}
         }
