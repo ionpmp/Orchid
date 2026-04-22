@@ -142,9 +142,13 @@ memmap2 = "0.9"
 
 # i18n
 icu = "1"
+fluent = "0.16"
+fluent-bundle = "0.15"
+intl-memoizer = "0.5"
+unic-langid = { version = "0.9", features = ["macros"] }
 
 # UI
-slint = { version = "1", features = ["renderer-skia"] }
+slint = { version = "1", features = ["renderer-skia", "backend-winit", "compat-1-2"] }
 slint-build = "1"
 
 # Internal crates -- path + version keeps workspace inheritance happy.

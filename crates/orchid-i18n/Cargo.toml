@@ -1,6 +1,6 @@
 [package]
 name = "orchid-i18n"
-description = "Localization and internationalization for Orchid, built on ICU with TOML message catalogues."
+description = "Localization for Orchid — Fluent-backed message catalogues with ICU-ready formatting hooks."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,15 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+fluent.workspace = true
+fluent-bundle.workspace = true
+intl-memoizer.workspace = true
+unic-langid.workspace = true
 icu.workspace = true
+parking_lot.workspace = true
 serde.workspace = true
-toml.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

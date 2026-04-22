@@ -16,6 +16,7 @@ parking_lot.workspace = true
 secrecy.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true
+thiserror.workspace = true
 arboard.workspace = true
 uuid.workspace = true
 serde.workspace = true
@@ -24,6 +25,7 @@ chrono.workspace = true
 
 orchid-core.workspace = true
 orchid-crypto.workspace = true
+orchid-i18n.workspace = true
 orchid-storage.workspace = true
 orchid-terminal.workspace = true
 orchid-viewers.workspace = true
@@ -33,4 +35,5 @@ orchid-widgets.workspace = true
 slint-build.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true }

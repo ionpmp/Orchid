@@ -1,14 +1,12 @@
 //! Orchid desktop application entry point.
-//!
-//! Initialises tracing and will, in a later stage, construct the core runtime,
-//! mount the Slint UI, and drive the main event loop. For now it only proves
-//! the workspace wires together end-to-end.
 
 #![warn(clippy::all)]
 
-use anyhow::Result;
-use tracing::info;
+use anyhow::{Context, Result};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+use orchid_storage::OrchidPaths;
+use orchid_ui::OrchidApp;
 
 fn init_tracing() -> Result<()> {
     let filter =
@@ -26,14 +24,28 @@ fn init_tracing() -> Result<()> {
 fn main() -> Result<()> {
     init_tracing()?;
 
-    info!(
-        version = env!("CARGO_PKG_VERSION"),
-        "Orchid starting"
-    );
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "Orchid starting");
 
-    // TODO(app): construct the Orchid runtime, mount the Slint UI, and enter
-    // the main loop. This is intentionally left as a placeholder while the
-    // supporting crates are stubbed out.
+    let paths = OrchidPaths::resolve().context("failed to resolve Orchid paths")?;
 
+    // Small multi-thread runtime for async bootstrap work. The Slint
+    // event loop itself runs on the main thread, outside this runtime.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(2)
+        .build()
+        .context("failed to build tokio runtime")?;
+
+    let app = runtime
+        .block_on(OrchidApp::bootstrap(paths))
+        .context("bootstrap failed")?;
+
+    // Keep the runtime reachable for any subsystem tasks spawned during
+    // `bootstrap` (none yet — reserved for task 11B).
+    let _guard = runtime.enter();
+
+    app.run_startup().context("UI loop exited with error")?;
+
+    tracing::info!("Orchid exiting cleanly");
     Ok(())
 }

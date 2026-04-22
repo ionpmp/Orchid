@@ -1,8 +1,109 @@
-// Minimal Orchid window stub. Replaced by the real UI tree in a later stage.
+// Orchid — minimal UI shell for the startup window.
+// The real widget canvas arrives in task 11B.
 
-export component MainWindow inherits Window {
-    title: "Orchid";
-    Text {
-        text: "Orchid";
+export global Theme {
+    in property <color> surface-base;
+    in property <color> surface-raised;
+    in property <color> text-primary;
+    in property <color> text-secondary;
+    in property <color> text-tertiary;
+    in property <color> accent-brand;
+    in property <color> border-default;
+    in property <string> font-family-sans;
+    in property <length> font-size-sm;
+    in property <length> font-size-md;
+    in property <length> font-size-lg;
+    in property <length> font-size-xl;
+    in property <length> font-size-2xl;
+    in property <length> font-size-3xl;
+    in property <int> weight-regular;
+    in property <int> weight-medium;
+    in property <int> weight-semibold;
+    in property <length> radius-md;
+    in property <length> spacing-unit;
+}
+
+export global Strings {
+    in property <string> window-title;
+    in property <string> welcome;
+    in property <string> subtitle;
+    in property <string> version-label;
+    in property <string> theme-label;
+    in property <string> language-label;
+    in property <string> density-label;
+}
+
+export global AppState {
+    in property <string> current-theme-id;
+    in property <string> current-language;
+    in property <string> current-density;
+}
+
+export component StartupWindow inherits Window {
+    title: Strings.window-title;
+    preferred-width: 800px;
+    preferred-height: 600px;
+    min-width: 480px;
+    min-height: 360px;
+    background: Theme.surface-base;
+    default-font-family: Theme.font-family-sans;
+    default-font-size: Theme.font-size-md;
+
+    VerticalLayout {
+        padding: Theme.spacing-unit * 8;
+        spacing: Theme.spacing-unit * 4;
+        alignment: center;
+
+        Text {
+            text: Strings.welcome;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-3xl;
+            font-weight: Theme.weight-semibold;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: Strings.subtitle;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-lg;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: Strings.version-label;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.border-default;
+            horizontal-stretch: 1;
+        }
+
+        HorizontalLayout {
+            spacing: Theme.spacing-unit * 3;
+            alignment: center;
+
+            Text { text: Strings.theme-label; color: Theme.text-secondary; }
+            Text { text: AppState.current-theme-id; color: Theme.text-primary; }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.spacing-unit * 3;
+            alignment: center;
+
+            Text { text: Strings.language-label; color: Theme.text-secondary; }
+            Text { text: AppState.current-language; color: Theme.text-primary; }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.spacing-unit * 3;
+            alignment: center;
+
+            Text { text: Strings.density-label; color: Theme.text-secondary; }
+            Text { text: AppState.current-density; color: Theme.text-primary; }
+        }
     }
 }

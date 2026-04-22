@@ -5155,6 +5155,7 @@ dependencies = [
  "orchid-ui",
  "orchid-viewers",
  "orchid-widgets",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -5259,10 +5260,16 @@ dependencies = [
 name = "orchid-i18n"
 version = "0.1.0"
 dependencies = [
+ "fluent",
+ "fluent-bundle",
  "icu",
+ "intl-memoizer",
+ "parking_lot",
  "serde",
+ "tempfile",
  "thiserror 2.0.18",
- "toml 0.8.23",
+ "tracing",
+ "unic-langid",
 ]
 
 [[package]]
@@ -5344,6 +5351,7 @@ dependencies = [
  "chrono",
  "orchid-core",
  "orchid-crypto",
+ "orchid-i18n",
  "orchid-storage",
  "orchid-terminal",
  "orchid-viewers",
@@ -5353,6 +5361,8 @@ dependencies = [
  "serde",
  "slint",
  "slint-build",
+ "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "uuid",
@@ -5797,6 +5807,12 @@ dependencies = [
  "quote",
  "version_check",
 ]
+
+[[package]]
+name = "proc-macro-hack"
+version = "0.5.20+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
@@ -8110,6 +8126,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ba52c9b05311f4f6e62d5d9d46f094bd6e84cb8df7b3ef952748d752a7d05"
 dependencies = [
  "unic-langid-impl",
+ "unic-langid-macros",
 ]
 
 [[package]]
@@ -8120,6 +8137,30 @@ checksum = "dce1bf08044d4b7a94028c93786f8566047edc11110595914de93362559bc658"
 dependencies = [
  "serde",
  "tinystr 0.8.3",
+]
+
+[[package]]
+name = "unic-langid-macros"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5957eb82e346d7add14182a3315a7e298f04e1ba4baac36f7f0dbfedba5fc25"
+dependencies = [
+ "proc-macro-hack",
+ "tinystr 0.8.3",
+ "unic-langid-impl",
+ "unic-langid-macros-impl",
+]
+
+[[package]]
+name = "unic-langid-macros-impl"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1249a628de3ad34b821ecb1001355bca3940bcb2f88558f1a8bd82e977f75b5"
+dependencies = [
+ "proc-macro-hack",
+ "quote",
+ "syn 2.0.117",
+ "unic-langid-impl",
 ]
 
 [[package]]
