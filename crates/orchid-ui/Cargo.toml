@@ -1,6 +1,6 @@
 [package]
 name = "orchid-ui"
-description = "Slint-based UI layer for Orchid (Skia renderer)."
+description = "Slint-based UI layer for Orchid (Skia renderer), including the terminal widget helpers."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,19 @@ build = "build.rs"
 
 [dependencies]
 slint.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+secrecy.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+arboard.workspace = true
+
+orchid-core.workspace = true
+orchid-crypto.workspace = true
+orchid-terminal.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

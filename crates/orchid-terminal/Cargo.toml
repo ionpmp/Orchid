@@ -1,6 +1,6 @@
 [package]
 name = "orchid-terminal"
-description = "Terminal emulation for Orchid: portable-pty process hosting with alacritty_terminal VT parsing."
+description = "Terminal subsystem for Orchid: PTY backends, VT emulation, sessions, and layouts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,39 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+# Core terminal
 portable-pty.workspace = true
-alacritty_terminal.workspace = true
-tokio.workspace = true
+vte.workspace = true
+bytes.workspace = true
+
+# Async
+tokio = { workspace = true }
+
+# Plumbing
+serde.workspace = true
+bincode.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+dashmap.workspace = true
+async-trait.workspace = true
+bitflags.workspace = true
+
+orchid-core.workspace = true
+orchid-storage.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = [
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+    "Win32_Foundation",
+]
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true }
+tracing-subscriber.workspace = true

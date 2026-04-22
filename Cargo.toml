@@ -105,6 +105,9 @@ tantivy = "0.22"
 # Terminal
 portable-pty = "0.8"
 alacritty_terminal = "0.24"
+vte = "0.13"
+bytes = "1"
+arboard = "3"
 
 # Viewers / archives / file IO
 pdfium-render = "0.8"

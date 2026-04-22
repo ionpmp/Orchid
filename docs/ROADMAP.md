@@ -34,7 +34,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Tabs, breadcrumbs
 - [ ] Drag-and-drop
 - [ ] Virtual folders (Recent, Categories, Network)
-- [ ] Inline rename, tags, color labels
+- [~] Inline rename, tags, color labels — tag / colour / star state implemented in `orchid-fs::TagManager` backed by storage; UI inline rename is File-Manager work
 - [ ] Quick filter
 
 ### Terminal
@@ -77,9 +77,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Virtual folders in file manager
 
 ### Search
-- [ ] Tantivy indexing
-- [ ] File watcher for incremental updates
-- [ ] Universal search (files + commands + settings)
+- [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown
+- [x] File watcher for incremental updates — `IndexFsSubscriber` consumes `fs.created/modified/deleted/renamed/tags_changed` events, extracts text/PDF content, enqueues into `IndexScheduler`
+- [~] Universal search (files + commands + settings) — file search complete; command-palette hookup and settings-index integration pending
 
 ### UX
 - [ ] Theming (light/dark, density modes, hot-reload) — density + theme keys live in `OrchidConfig`; renderer-side wiring pending

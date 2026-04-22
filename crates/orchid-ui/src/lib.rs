@@ -1,13 +1,21 @@
 //! Slint-based UI layer for Orchid.
 //!
-//! The Slint component tree is compiled from `ui/` by `build.rs` and will be
-//! exposed here via `slint::include_modules!()` once the UI grows beyond the
-//! current stub.
+//! Currently exposes the renderer-agnostic terminal-widget helpers
+//! (palette, cell conversion, clipboard). The Slint component tree itself
+//! is still a stub — the shared Theme global and window bootstrap land in a
+//! follow-up task.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+pub mod widgets;
+
+pub use widgets::terminal::{
+    palette_from_flavor, snapshot_to_cells, ArboardClipboard, RenderCell, ThemeFlavor,
+};
+
 /// Returns the crate version as declared in `Cargo.toml`.
+#[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
