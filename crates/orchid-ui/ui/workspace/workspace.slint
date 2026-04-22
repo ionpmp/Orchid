@@ -1,0 +1,71 @@
+import { Theme } from "../theme_global.slint";
+import { WidgetFrame } from "widget-frame.slint";
+import { WorkspaceSwitcher } from "workspace-switcher.slint";
+import { WidgetDock } from "widget-dock.slint";
+import { WorkspaceModel, WorkspaceSummary, WidgetFrameModel, DockWidgetType } from "defs.slint";
+
+export component WorkspaceView inherits Rectangle {
+    in property <WorkspaceModel> workspace;
+
+    callback workspace-clicked(string);
+    callback workspace-create-clicked();
+    callback dock-add-clicked(string);
+    callback widget-close-clicked(string);
+    callback widget-drag-started(string, length, length);
+    callback widget-drag-moved(string, length, length);
+    callback widget-drag-ended(string);
+    callback widget-resize-started(string, string);
+    callback widget-resize-moved(string, length, length);
+    callback widget-resize-ended(string);
+    callback terminal-key-pressed(string, string);
+    callback terminal-viewport-changed(string, length, length);
+
+    background: Theme.surface-base;
+
+    WorkspaceSwitcher {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 40px;
+        workspaces: root.workspace.workspaces;
+        active-workspace-id: root.workspace.active-workspace-id;
+        workspace-clicked(id) => { root.workspace-clicked(id); }
+        workspace-create-clicked => { root.workspace-create-clicked(); }
+    }
+
+    canvas := Rectangle {
+        x: 0;
+        y: 40px;
+        width: parent.width;
+        height: parent.height - 40px - 64px;
+        background: Theme.surface-base;
+        clip: true;
+
+        for w[i] in root.workspace.widgets: WidgetFrame {
+            x: w.x;
+            y: w.y;
+            width: w.width;
+            height: w.height;
+            model: w;
+            close-clicked => { root.widget-close-clicked(w.instance-id); }
+            drag-started(dx, dy) => { root.widget-drag-started(w.instance-id, dx, dy); }
+            drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
+            drag-ended => { root.widget-drag-ended(w.instance-id); }
+            resize-started(corner) => { root.widget-resize-started(w.instance-id, corner); }
+            resize-moved(dx, dy) => { root.widget-resize-moved(w.instance-id, dx, dy); }
+            resize-ended => { root.widget-resize-ended(w.instance-id); }
+            terminal-key-pressed(text) => { root.terminal-key-pressed(w.instance-id, text); }
+            terminal-viewport-changed(w_, h_) => { root.terminal-viewport-changed(w.instance-id, w_, h_); }
+        }
+    }
+
+    WidgetDock {
+        x: 0;
+        y: parent.height - 64px;
+        width: parent.width;
+        height: 64px;
+        dock-types: root.workspace.dock-types;
+        dock-add-label: root.workspace.dock-add-label;
+        add-clicked(type-id) => { root.dock-add-clicked(type-id); }
+    }
+}

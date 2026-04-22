@@ -6,6 +6,7 @@
 
 pub mod app;
 pub mod error;
+mod slint_generated;
 pub mod theme;
 pub mod widgets;
 pub mod window;
@@ -17,11 +18,12 @@ pub use theme::{
     ThemeMeta, TypographyTokens,
 };
 pub use widgets::terminal::{
-    palette_from_flavor, snapshot_to_cells, terminal_descriptor, ArboardClipboard,
-    RenderCell, StoredBackend, TerminalWidget, TerminalWidgetDeps, TerminalWidgetState,
-    TerminalWidgetView, ThemeFlavor, TERMINAL_TYPE_ID,
+    palette_from_flavor, palette_from_theme, snapshot_to_cells, terminal_descriptor,
+    ArboardClipboard, RenderCell, StoredBackend, TerminalWidget, TerminalWidgetDeps,
+    TerminalWidgetState, TerminalWidgetView, ThemeFlavor, TERMINAL_TYPE_ID,
 };
 pub use widgets::view::{SlintPayload, SlintTerminalCell, WidgetView, WidgetViewDispatcher};
+pub use window::main_window::MainWindowController;
 pub use window::startup::StartupWindowController;
 
 /// Crate version.

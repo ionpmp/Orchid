@@ -1,0 +1,63 @@
+import { Theme } from "../theme_global.slint";
+import { TerminalCellModel } from "defs.slint";
+
+export component TerminalView inherits Rectangle {
+    in property <int> cols;
+    in property <int> rows;
+    in property <[[TerminalCellModel]]> cells;
+    in property <int> cursor-col;
+    in property <int> cursor-row;
+    in property <bool> cursor-visible;
+    in property <length> cell-width;
+    in property <length> cell-height;
+
+    callback key-pressed(string);
+
+    background: Theme.surface-base;
+    forward-focus: focus-scope;
+
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            root.key-pressed(event.text);
+            return accept;
+        }
+    }
+
+    TouchArea {
+        clicked => { focus-scope.focus(); }
+    }
+
+    for row[r] in cells: Rectangle {
+        x: 0;
+        y: r * cell-height;
+        width: parent.width;
+        height: cell-height;
+
+        for cell[c] in row: Rectangle {
+            x: c * cell-width;
+            y: 0;
+            width: cell-width;
+            height: cell-height;
+            background: cell.bg;
+
+            Text {
+                text: cell.ch;
+                color: cell.fg;
+                font-family: Theme.font-family-mono;
+                font-size: Theme.font-size-md;
+                font-weight: cell.bold ? Theme.weight-semibold : Theme.weight-regular;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    if cursor-visible: Rectangle {
+        x: cursor-col * cell-width;
+        y: cursor-row * cell-height;
+        width: cell-width;
+        height: cell-height;
+        background: Theme.accent-brand;
+        opacity: 0.5;
+    }
+}

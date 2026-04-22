@@ -1,0 +1,9 @@
+import { WorkspaceModel } from "workspace/defs.slint";
+
+export global AppState {
+    in property <string> current-theme-id;
+    in property <string> current-language;
+    in property <string> current-density;
+    in property <int> mode;
+    in property <WorkspaceModel> workspace;
+}

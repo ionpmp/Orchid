@@ -1,0 +1,56 @@
+import { Theme } from "../theme_global.slint";
+import { DockWidgetType } from "defs.slint";
+
+export component WidgetDock inherits Rectangle {
+    in property <[DockWidgetType]> dock-types;
+    in property <string> dock-add-label;
+
+    callback add-clicked(string);
+
+    background: Theme.surface-raised;
+
+    Rectangle {
+        y: 0;
+        width: parent.width;
+        height: 1px;
+        background: Theme.border-default;
+    }
+
+    HorizontalLayout {
+        y: 1px;
+        width: parent.width;
+        height: parent.height - 1px;
+        padding: 8px;
+        spacing: 8px;
+        alignment: center;
+
+        Text {
+            text: root.dock-add-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+
+        for dw[i] in dock-types: Rectangle {
+            width: 120px;
+            height: 48px;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+
+            TouchArea {
+                clicked => { root.add-clicked(dw.type-id); }
+            }
+
+            Text {
+                text: dw.label;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-medium;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

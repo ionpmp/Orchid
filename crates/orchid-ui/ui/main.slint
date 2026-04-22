@@ -1,109 +1,115 @@
-// Orchid — minimal UI shell for the startup window.
-// The real widget canvas arrives in task 11B.
+import { Theme } from "theme_global.slint";
+import { Strings } from "strings_global.slint";
+import { AppState } from "app_state_global.slint";
+import { WorkspaceView } from "workspace/workspace.slint";
+import { WorkspaceModel, WidgetFrameModel, WorkspaceSummary, DockWidgetType, TerminalCellModel } from "workspace/defs.slint";
 
-export global Theme {
-    in property <color> surface-base;
-    in property <color> surface-raised;
-    in property <color> text-primary;
-    in property <color> text-secondary;
-    in property <color> text-tertiary;
-    in property <color> accent-brand;
-    in property <color> border-default;
-    in property <string> font-family-sans;
-    in property <length> font-size-sm;
-    in property <length> font-size-md;
-    in property <length> font-size-lg;
-    in property <length> font-size-xl;
-    in property <length> font-size-2xl;
-    in property <length> font-size-3xl;
-    in property <int> weight-regular;
-    in property <int> weight-medium;
-    in property <int> weight-semibold;
-    in property <length> radius-md;
-    in property <length> spacing-unit;
-}
+export { Theme } from "theme_global.slint";
+export { Strings } from "strings_global.slint";
+export { AppState } from "app_state_global.slint";
+export { WorkspaceModel, WidgetFrameModel, WorkspaceSummary, DockWidgetType, TerminalCellModel } from "workspace/defs.slint";
 
-export global Strings {
-    in property <string> window-title;
-    in property <string> welcome;
-    in property <string> subtitle;
-    in property <string> version-label;
-    in property <string> theme-label;
-    in property <string> language-label;
-    in property <string> density-label;
-}
-
-export global AppState {
-    in property <string> current-theme-id;
-    in property <string> current-language;
-    in property <string> current-density;
-}
-
-export component StartupWindow inherits Window {
+export component MainWindow inherits Window {
     title: Strings.window-title;
-    preferred-width: 800px;
-    preferred-height: 600px;
-    min-width: 480px;
-    min-height: 360px;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 800px;
+    min-height: 600px;
     background: Theme.surface-base;
     default-font-family: Theme.font-family-sans;
     default-font-size: Theme.font-size-md;
 
+    callback get-started-clicked();
+    callback workspace-clicked(string);
+    callback workspace-create-clicked();
+    callback dock-add-clicked(string);
+    callback widget-close-clicked(string);
+    callback widget-drag-started(string, length, length);
+    callback widget-drag-moved(string, length, length);
+    callback widget-drag-ended(string);
+    callback widget-resize-started(string, string);
+    callback widget-resize-moved(string, length, length);
+    callback widget-resize-ended(string);
+    callback terminal-key-pressed(string, string);
+    callback terminal-viewport-changed(string, length, length);
+    callback window-size-changed(length, length);
+    callback ui-tick();
+
     VerticalLayout {
-        padding: Theme.spacing-unit * 8;
-        spacing: Theme.spacing-unit * 4;
-        alignment: center;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        changed width => { root.window-size-changed(self.width, self.height); }
+        changed height => { root.window-size-changed(self.width, self.height); }
 
-        Text {
-            text: Strings.welcome;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-3xl;
-            font-weight: Theme.weight-semibold;
-            horizontal-alignment: center;
+        Timer {
+            interval: 100ms;
+            running: AppState.mode == 1;
+            triggered => { root.ui-tick(); }
         }
 
-        Text {
-            text: Strings.subtitle;
-            color: Theme.text-secondary;
-            font-size: Theme.font-size-lg;
-            horizontal-alignment: center;
+        if AppState.mode == 0: VerticalLayout {
+            padding: Theme.spacing-unit * 8;
+            spacing: Theme.spacing-unit * 4;
+            alignment: center;
+
+            Text {
+                text: Strings.welcome;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-3xl;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: Strings.subtitle;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-lg;
+                horizontal-alignment: center;
+            }
+
+            Rectangle {
+                width: 320px;
+                height: 56px;
+                background: Theme.accent-brand;
+                border-radius: Theme.radius-md;
+
+                TouchArea {
+                    clicked => { root.get-started-clicked(); }
+                }
+
+                Text {
+                    text: Strings.get-started-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-lg;
+                    font-weight: Theme.weight-semibold;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
 
-        Text {
-            text: Strings.version-label;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            horizontal-alignment: center;
-        }
-
-        Rectangle {
-            height: 1px;
-            background: Theme.border-default;
+        if AppState.mode == 1: WorkspaceView {
+            width: 100%;
+            height: 100%;
+            vertical-stretch: 1;
             horizontal-stretch: 1;
-        }
-
-        HorizontalLayout {
-            spacing: Theme.spacing-unit * 3;
-            alignment: center;
-
-            Text { text: Strings.theme-label; color: Theme.text-secondary; }
-            Text { text: AppState.current-theme-id; color: Theme.text-primary; }
-        }
-
-        HorizontalLayout {
-            spacing: Theme.spacing-unit * 3;
-            alignment: center;
-
-            Text { text: Strings.language-label; color: Theme.text-secondary; }
-            Text { text: AppState.current-language; color: Theme.text-primary; }
-        }
-
-        HorizontalLayout {
-            spacing: Theme.spacing-unit * 3;
-            alignment: center;
-
-            Text { text: Strings.density-label; color: Theme.text-secondary; }
-            Text { text: AppState.current-density; color: Theme.text-primary; }
+            workspace: AppState.workspace;
+            workspace-clicked(id) => { root.workspace-clicked(id); }
+            workspace-create-clicked => { root.workspace-create-clicked(); }
+            dock-add-clicked(type-id) => { root.dock-add-clicked(type-id); }
+            widget-close-clicked(id) => { root.widget-close-clicked(id); }
+            widget-drag-started(id, dx, dy) => { root.widget-drag-started(id, dx, dy); }
+            widget-drag-moved(id, dx, dy) => { root.widget-drag-moved(id, dx, dy); }
+            widget-drag-ended(id) => { root.widget-drag-ended(id); }
+            widget-resize-started(id, corner) => { root.widget-resize-started(id, corner); }
+            widget-resize-moved(id, dx, dy) => { root.widget-resize-moved(id, dx, dy); }
+            widget-resize-ended(id) => { root.widget-resize-ended(id); }
+            terminal-key-pressed(id, text) => { root.terminal-key-pressed(id, text); }
+            terminal-viewport-changed(id, w, h) => { root.terminal-viewport-changed(id, w, h); }
         }
     }
 }
+
+// Legacy name for tests and callers that use StartupWindow.
+export component StartupWindow inherits MainWindow { }

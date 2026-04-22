@@ -51,6 +51,7 @@ pub struct ColorTokens {
 #[allow(missing_docs)]
 pub struct TypographyTokens {
     pub font_family_sans: String,
+    pub font_family_mono: String,
     pub size_sm: f32,
     pub size_md: f32,
     pub size_lg: f32,
@@ -66,6 +67,7 @@ impl Default for TypographyTokens {
     fn default() -> Self {
         Self {
             font_family_sans: "Segoe UI, Inter, sans-serif".into(),
+            font_family_mono: "Cascadia Code, Consolas, monospace".into(),
             size_sm: 12.0,
             size_md: 14.0,
             size_lg: 18.0,

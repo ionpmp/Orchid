@@ -217,3 +217,16 @@ status-density = Density:
 density-touch = Touch
 density-mouse = Mouse
 density-hybrid = Hybrid
+
+# ---- Workspace shell (task 11B) ----
+startup-get-started = Get Started
+workspace-default-name = Main
+workspace-new = New workspace
+workspace-unnamed = Workspace { $n }
+dock-add-label = Add widget
+dock-widget-terminal = Terminal
+widget-title-terminal = Terminal
+widget-close-tooltip = Close widget
+widget-close-confirm = Close { $name }?
+action-confirm-yes = Yes
+action-confirm-no = No

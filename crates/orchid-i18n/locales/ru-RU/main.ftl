@@ -212,3 +212,16 @@ status-density = Плотность:
 density-touch = Сенсор
 density-mouse = Мышь
 density-hybrid = Смешанная
+
+# ---- Workspace shell (task 11B) ----
+startup-get-started = Начать работу
+workspace-default-name = Главный
+workspace-new = Новый рабочий стол
+workspace-unnamed = Рабочий стол { $n }
+dock-add-label = Добавить виджет
+dock-widget-terminal = Терминал
+widget-title-terminal = Терминал
+widget-close-tooltip = Закрыть виджет
+widget-close-confirm = Закрыть { $name }?
+action-confirm-yes = Да
+action-confirm-no = Нет

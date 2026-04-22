@@ -1,0 +1,65 @@
+import { Theme } from "../theme_global.slint";
+import { WorkspaceSummary } from "defs.slint";
+
+export component WorkspaceSwitcher inherits Rectangle {
+    in property <[WorkspaceSummary]> workspaces;
+    in property <string> active-workspace-id;
+
+    callback workspace-clicked(string);
+    callback workspace-create-clicked();
+
+    background: Theme.surface-raised;
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: Theme.border-default;
+    }
+
+    HorizontalLayout {
+        padding: 4px;
+        spacing: 4px;
+        alignment: start;
+
+        for ws[i] in workspaces: Rectangle {
+            width: 120px;
+            height: 32px;
+            background: ws.is-active ? Theme.accent-brand : Theme.surface-base;
+            border-radius: Theme.radius-md;
+
+            TouchArea {
+                clicked => { root.workspace-clicked(ws.id); }
+            }
+
+            Text {
+                text: ws.name;
+                color: ws.is-active ? Theme.text-primary : Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                font-weight: ws.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+
+            TouchArea {
+                clicked => { root.workspace-create-clicked(); }
+            }
+
+            Text {
+                text: "+";
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

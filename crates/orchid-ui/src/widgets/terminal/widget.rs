@@ -12,6 +12,7 @@
 //!   [`TerminalWidgetState`] blob so the session can be respawned after an
 //!   `Unloaded → Active` transition.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -25,7 +26,7 @@ use orchid_widgets::{
     widget::config, Result, TerminalPayload, TerminalPayloadCell, Widget, WidgetCapabilities,
     WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
@@ -123,6 +124,10 @@ pub struct TerminalWidgetDeps {
     /// Storage handle for future persistence of advanced state. Reserved;
     /// unused by v1 of this widget.
     pub storage: Arc<StateStore>,
+    /// Filled in [`TerminalWidget::on_create`] and cleared on
+    /// `on_close` / `on_unload` so the main window can route key events and
+    /// pixel resizes to the right PTY session.
+    pub session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
 }
 
 impl std::fmt::Debug for TerminalWidgetDeps {
@@ -197,6 +202,10 @@ impl Widget for TerminalWidget {
         self.session_id
             .set(session_id)
             .map_err(|_| WidgetError::InvalidStateForOperation("session_id already set".into()))?;
+        self.deps
+            .session_routing
+            .lock()
+            .insert(self.instance_id, session_id);
         // Record the chosen backend so save_state reflects what is really
         // running.
         self.state.backend = StoredBackend::from_spec(&spec);
@@ -218,18 +227,24 @@ impl Widget for TerminalWidget {
         // Close the underlying session to free memory. `on_create` will
         // respawn on the way back to Active.
         if let Some(sid) = self.session_id.take() {
+            self.deps.session_routing.lock().remove(&self.instance_id);
             if let Err(e) = self.deps.sessions.close(sid).await {
                 tracing::warn!(session_id = %sid, error = %e, "terminal on_unload close failed");
             }
+        } else {
+            self.deps.session_routing.lock().remove(&self.instance_id);
         }
         Ok(())
     }
 
     async fn on_close(&mut self, _ctx: &WidgetContext) -> Result<()> {
         if let Some(sid) = self.session_id.take() {
+            self.deps.session_routing.lock().remove(&self.instance_id);
             if let Err(e) = self.deps.sessions.close(sid).await {
                 tracing::warn!(session_id = %sid, error = %e, "terminal on_close failed");
             }
+        } else {
+            self.deps.session_routing.lock().remove(&self.instance_id);
         }
         Ok(())
     }
@@ -324,8 +339,8 @@ pub fn terminal_descriptor(
 ) -> orchid_widgets::WidgetDescriptor {
     orchid_widgets::WidgetDescriptor {
         type_id: TERMINAL_TYPE_ID,
-        display_name_key: "widget-terminal-name",
-        description_key: "widget-terminal-desc",
+        display_name_key: "widget-title-terminal",
+        description_key: "widget-title-terminal",
         icon_name: "terminal",
         category: orchid_widgets::WidgetCategory::Developer,
         default_size: WidgetSize::ExtraLarge,

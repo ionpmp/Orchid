@@ -40,11 +40,11 @@ fn main() -> Result<()> {
         .block_on(OrchidApp::bootstrap(paths))
         .context("bootstrap failed")?;
 
-    // Keep the runtime reachable for any subsystem tasks spawned during
-    // `bootstrap` (none yet — reserved for task 11B).
+    // Main-window callbacks use `slint::spawn_local`; the runtime handle is
+    // also required for post-shutdown `block_on` in `OrchidApp::run_main`.
     let _guard = runtime.enter();
 
-    app.run_startup().context("UI loop exited with error")?;
+    app.run_main().context("UI loop exited with error")?;
 
     tracing::info!("Orchid exiting cleanly");
     Ok(())

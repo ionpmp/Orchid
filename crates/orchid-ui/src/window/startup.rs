@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use slint::ComponentHandle;
+use slint::{ModelRc, VecModel};
 use tracing::info;
 
 use orchid_core::EventBus;
@@ -18,15 +19,8 @@ use orchid_storage::OrchidConfig;
 use crate::error::{Result, UiError};
 use crate::theme::ThemeManager;
 
-// Pull in the generated Slint bindings. Included in exactly this file so
-// no collision arises from re-including in `lib.rs`. Wrapped in a tiny
-// module so crate-wide lints (`missing_docs`, clippy pedantic) are
-// silenced for the generated output.
-#[allow(missing_docs, clippy::all)]
-mod generated {
-    slint::include_modules!();
-}
-use generated::{AppState, StartupWindow, Strings, Theme};
+use crate::slint_generated::{AppState, DockWidgetType, StartupWindow, Strings, Theme};
+use crate::slint_generated::WorkspaceModel;
 
 /// Wraps the [`StartupWindow`] with enough dependencies to push every
 /// global value once.
@@ -82,6 +76,7 @@ impl StartupWindowController {
         g.set_border_default(c.border_default.to_slint());
 
         g.set_font_family_sans(tokens.typography.font_family_sans.clone().into());
+        g.set_font_family_mono(tokens.typography.font_family_mono.clone().into());
         g.set_font_size_sm(tokens.typography.size_sm);
         g.set_font_size_md(tokens.typography.size_md);
         g.set_font_size_lg(tokens.typography.size_lg);
@@ -111,6 +106,10 @@ impl StartupWindowController {
         g.set_theme_label(mgr.tr("status-theme").into());
         g.set_language_label(mgr.tr("status-language").into());
         g.set_density_label(mgr.tr("status-density").into());
+        g.set_get_started_label(mgr.tr("startup-get-started").into());
+        g.set_workspace_new_label(mgr.tr("workspace-new").into());
+        g.set_dock_add_label(mgr.tr("dock-add-label").into());
+        g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
     }
 
     fn apply_app_state(&self) {
@@ -128,6 +127,20 @@ impl StartupWindowController {
         g.set_current_theme_id(theme.meta.id.clone().into());
         g.set_current_language(language.as_str().into());
         g.set_current_density(self.locale.tr(density_key).into());
+        g.set_mode(0);
+        g.set_workspace(WorkspaceModel {
+            workspaces: ModelRc::new(VecModel::default()),
+            active_workspace_id: "".into(),
+            widgets: ModelRc::new(VecModel::default()),
+            dock_types: ModelRc::new(VecModel::from(vec![DockWidgetType {
+                type_id: "terminal".into(),
+                label: self.locale.tr("dock-widget-terminal").into(),
+                icon: "terminal".into(),
+            }])),
+            dock_add_label: self.locale.tr("dock-add-label").into(),
+            grid_columns: 16,
+            grid_rows: 10,
+        });
     }
 
     /// Show the window and enter the Slint event loop until it closes.

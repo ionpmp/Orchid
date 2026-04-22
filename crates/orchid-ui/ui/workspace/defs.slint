@@ -1,0 +1,51 @@
+// Shared structs for workspace UI (avoids import cycles with widget-frame).
+
+export struct WorkspaceSummary {
+    id: string,
+    name: string,
+    ordinal: int,
+    is-active: bool,
+}
+
+export struct TerminalCellModel {
+    ch: string,
+    fg: color,
+    bg: color,
+    bold: bool,
+}
+
+export struct WidgetFrameModel {
+    instance-id: string,
+    type-id: string,
+    title: string,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    z-order: int,
+
+    terminal-cols: int,
+    terminal-rows: int,
+    terminal-cells: [[TerminalCellModel]],
+    terminal-cursor-col: int,
+    terminal-cursor-row: int,
+    terminal-cursor-visible: bool,
+    terminal-cell-width: length,
+    terminal-cell-height: length,
+}
+
+export struct DockWidgetType {
+    type-id: string,
+    label: string,
+    icon: string,
+}
+
+export struct WorkspaceModel {
+    workspaces: [WorkspaceSummary],
+    active-workspace-id: string,
+    widgets: [WidgetFrameModel],
+    dock-types: [DockWidgetType],
+    dock-add-label: string,
+    grid-columns: int,
+    grid-rows: int,
+}

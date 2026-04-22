@@ -7,6 +7,131 @@
 
 use orchid_terminal::{Rgba, TerminalPalette};
 
+use crate::theme::Theme;
+
+/// Build a [`TerminalPalette`] from a loaded [`Theme`] (token colours).
+#[must_use]
+pub fn palette_from_theme(theme: &Theme) -> TerminalPalette {
+    let t = &theme.tokens.color;
+
+    let ansi: [Rgba; 16] = [
+        Rgba {
+            r: 0x00,
+            g: 0x00,
+            b: 0x00,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xCD,
+            g: 0x31,
+            b: 0x31,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x47,
+            g: 0xB5,
+            b: 0x47,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xCC,
+            g: 0xA1,
+            b: 0x31,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x31,
+            g: 0x72,
+            b: 0xCC,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xA6,
+            g: 0x60,
+            b: 0xCC,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x31,
+            g: 0xB5,
+            b: 0xCC,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xCC,
+            g: 0xCC,
+            b: 0xCC,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x80,
+            g: 0x80,
+            b: 0x80,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xFF,
+            g: 0x60,
+            b: 0x60,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x80,
+            g: 0xE0,
+            b: 0x80,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xFF,
+            g: 0xD0,
+            b: 0x60,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x80,
+            g: 0xB0,
+            b: 0xFF,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xE0,
+            g: 0x90,
+            b: 0xFF,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0x80,
+            g: 0xE0,
+            b: 0xF0,
+            a: 0xFF,
+        },
+        Rgba {
+            r: 0xFF,
+            g: 0xFF,
+            b: 0xFF,
+            a: 0xFF,
+        },
+    ];
+
+    TerminalPalette {
+        default_fg: color_to_rgba(t.text_primary),
+        default_bg: color_to_rgba(t.surface_base),
+        cursor: color_to_rgba(t.accent_brand),
+        selection_bg: color_to_rgba(t.accent_brand),
+        selection_fg: color_to_rgba(t.text_primary),
+        ansi,
+    }
+}
+
+fn color_to_rgba(c: crate::theme::Color) -> Rgba {
+    Rgba {
+        r: c.r,
+        g: c.g,
+        b: c.b,
+        a: c.a,
+    }
+}
+
 /// Which themed palette to apply to a terminal view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeFlavor {
