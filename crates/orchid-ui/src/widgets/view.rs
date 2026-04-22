@@ -14,7 +14,10 @@
 
 use std::collections::HashMap;
 
-use orchid_widgets::{WidgetPayload, WidgetSnapshot};
+use orchid_widgets::{
+    MediaPlayerPayload, MoonPayload, PasswordManagerPayload, RssPayload, SystemPayload,
+    UniversalSearchPayload, WeatherPayload, WidgetPayload, WidgetSnapshot,
+};
 use parking_lot::RwLock;
 
 /// Rust-side mirror of the Slint struct emitted into the workspace model.
@@ -91,8 +94,166 @@ impl SlintPayload {
                 cursor_row: payload.cursor_row as i32,
                 cursor_visible: payload.cursor_visible,
             },
+            WidgetPayload::Weather(p) => Self::Text(weather_to_text_lines(p)),
+            WidgetPayload::Moon(p) => Self::Text(moon_to_text_lines(p)),
+            WidgetPayload::SystemIndicators(p) => Self::Text(system_to_text_lines(p)),
+            WidgetPayload::RssFeed(p) => Self::Text(rss_to_text_lines(p)),
+            WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
+            WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),
+            WidgetPayload::PasswordManager(p) => Self::Text(password_to_text_lines(p)),
         }
     }
+}
+
+fn weather_to_text_lines(w: &WeatherPayload) -> Vec<String> {
+    let mut lines = vec![
+        w.location_name.clone(),
+        format!("{} — {}", w.current_temp_text, w.condition_label),
+    ];
+    if let Some(ref f) = w.feels_like_text {
+        lines.push(f.clone());
+    }
+    if let Some(ref h) = w.humidity_text {
+        lines.push(h.clone());
+    }
+    if let Some(ref wind) = w.wind_text {
+        lines.push(wind.clone());
+    }
+    for day in &w.forecast {
+        let mut s = format!("{}: {} / {}", day.day_label, day.high_text, day.low_text);
+        if let Some(ref p) = day.precipitation_probability_text {
+            s.push_str(" · ");
+            s.push_str(p);
+        }
+        lines.push(s);
+    }
+    lines.push(w.last_updated_text.clone());
+    lines
+}
+
+fn moon_to_text_lines(m: &MoonPayload) -> Vec<String> {
+    let mut lines = vec![
+        m.phase_label.clone(),
+        m.illumination_text.clone(),
+        m.age_text.clone(),
+        m.distance_text.clone(),
+        m.next_full_text.clone(),
+        m.next_new_text.clone(),
+    ];
+    if let Some(ref t) = m.moonrise_text {
+        lines.push(t.clone());
+    }
+    if let Some(ref t) = m.moonset_text {
+        lines.push(t.clone());
+    }
+    if let Some(ref t) = m.sunrise_text {
+        lines.push(t.clone());
+    }
+    if let Some(ref t) = m.sunset_text {
+        lines.push(t.clone());
+    }
+    if let Some(ref t) = m.libration_text {
+        lines.push(t.clone());
+    }
+    lines
+}
+
+fn system_to_text_lines(s: &SystemPayload) -> Vec<String> {
+    s.indicators
+        .iter()
+        .map(|i| {
+            let mut line = format!("{}: {}", i.label, i.value_text);
+            if let Some(p) = i.percent {
+                line.push_str(&format!(" ({p:.0}%)"));
+            }
+            line
+        })
+        .collect()
+}
+
+fn rss_to_text_lines(r: &RssPayload) -> Vec<String> {
+    let mut lines = vec![r.last_updated_text.clone()];
+    if let Some(e) = &r.error_summary {
+        lines.push(e.clone());
+    }
+    for item in &r.items {
+        let mut line = item.title.clone();
+        if !item.source_name.is_empty() {
+            line.push_str(" — ");
+            line.push_str(&item.source_name);
+        }
+        lines.push(line);
+        if let Some(s) = &item.summary_text {
+            lines.push(format!("  {s}"));
+        }
+    }
+    lines
+}
+
+fn search_to_text_lines(s: &UniversalSearchPayload) -> Vec<String> {
+    let mut lines = vec![format!("Query: {}", s.query)];
+    if s.is_searching {
+        lines.push("Searching…".to_string());
+    }
+    if let Some(e) = &s.error {
+        lines.push(e.clone());
+    }
+    for c in &s.candidates {
+        let mut line = format!("· {} — {}", c.title, c.source_name);
+        if let Some(sub) = &c.subtitle {
+            line.push_str(" — ");
+            line.push_str(sub);
+        }
+        lines.push(line);
+    }
+    lines
+}
+
+fn media_to_text_lines(m: &MediaPlayerPayload) -> Vec<String> {
+    if !m.has_session {
+        return vec!["No media session".to_string()];
+    }
+    let artist_album = format!("{} — {}", m.artist, m.album);
+    vec![
+        m.title.clone(),
+        artist_album,
+        m.source_app.clone(),
+        format!(
+            "{} / {} ({:.0}%)",
+            m.position_text,
+            m.duration_text,
+            f64::from(m.progress_fraction) * 100.0
+        ),
+        if m.is_playing {
+            "Playing".to_string()
+        } else {
+            "Paused".to_string()
+        },
+    ]
+}
+
+/// Plain-text preview for the password widget: no secrets, no TOTP codes.
+fn password_to_text_lines(p: &PasswordManagerPayload) -> Vec<String> {
+    if !p.is_unlocked {
+        let mut lines = vec!["Locked".to_string()];
+        if let Some(r) = &p.lock_reason {
+            lines.push(r.clone());
+        }
+        return lines;
+    }
+    let mut lines = vec![format!("Search: {}", p.search_query)];
+    for e in &p.entries {
+        lines.push(format!("· {} — {}", e.title, e.username));
+    }
+    if let Some(d) = &p.selected {
+        lines.push("— — —".to_string());
+        lines.push(d.title.clone());
+        lines.push(format!("user: {}", d.username));
+        if let Some(url) = &d.url {
+            lines.push(url.clone());
+        }
+    }
+    lines
 }
 
 /// Implemented by each widget type so that the dispatcher can produce a

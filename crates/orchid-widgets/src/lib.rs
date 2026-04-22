@@ -4,6 +4,7 @@
 #![warn(clippy::all)]
 #![allow(clippy::result_large_err)]
 
+pub mod builtin;
 pub mod commands;
 pub mod error;
 pub mod events;
@@ -28,7 +29,15 @@ pub use widget::lifecycle::LifecycleController;
 pub use widget::snapshot::{
     TerminalPayload, TerminalPayloadCell, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
-pub use widget::{Widget, WidgetCapabilities, WidgetContext};
+pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
+
+pub use builtin::{register_all, register_core};
+pub use widget::payloads::{
+    IndicatorStatus, MediaPlayerPayload, MoonPayload, PasswordEntryDetailView,
+    PasswordEntryView, PasswordManagerPayload, RssItemView, RssPayload,
+    SearchCandidateView, SystemIndicator, SystemPayload, UniversalSearchPayload,
+    WeatherForecastDay, WeatherPayload, WeatherStatusTag,
+};
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 
 pub use commands::build_command_set;

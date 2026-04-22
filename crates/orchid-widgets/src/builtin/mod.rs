@@ -1,0 +1,65 @@
+//! Built-in widget implementations that ship with Orchid.
+//!
+//! Each submodule contains one concrete widget (a [`crate::Widget`] impl),
+//! a provider / data-source, payload conversion, and a helper returning the
+//! corresponding [`crate::WidgetDescriptor`].
+//!
+//! The [`register_all`] / [`register_core`] helpers wire every built-in
+//! descriptor into a [`crate::WidgetRegistry`] in one call. Consumers that
+//! need additional wiring (search sources, custom media providers) call
+//! the per-widget descriptor builders directly.
+
+pub mod media;
+pub mod moon;
+pub mod password;
+pub mod rss;
+pub mod search;
+pub mod system;
+pub mod weather;
+
+use std::sync::Arc;
+
+use crate::error::Result;
+use crate::registry::WidgetRegistry;
+
+/// Register every built-in widget that works without user-injected
+/// dependencies. Handy for tests / samples. Production bootstraps should
+/// prefer [`register_all`] so the password widget and a real search
+/// aggregator land in the same registry.
+///
+/// # Errors
+///
+/// Propagates duplicate-registration errors from the registry.
+pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result<()> {
+    registry.register(weather::descriptor(http.clone()))?;
+    registry.register(moon::descriptor())?;
+    registry.register(system::descriptor())?;
+    registry.register(rss::descriptor(http))?;
+    registry.register(search::descriptor_stub())?;
+    registry.register(media::descriptor())?;
+    Ok(())
+}
+
+/// Register every built-in widget including the password manager and a
+/// real search aggregator.
+///
+/// # Errors
+///
+/// Propagates duplicate-registration errors.
+#[allow(clippy::too_many_arguments)]
+pub fn register_all(
+    registry: &WidgetRegistry,
+    http: reqwest::Client,
+    search_aggregator: Arc<search::SearchAggregator>,
+    password_db: Arc<orchid_crypto::PasswordDatabase>,
+    clipboard: Arc<dyn orchid_crypto::SecureClipboard>,
+) -> Result<()> {
+    registry.register(weather::descriptor(http.clone()))?;
+    registry.register(moon::descriptor())?;
+    registry.register(system::descriptor())?;
+    registry.register(rss::descriptor(http))?;
+    registry.register(search::descriptor(search_aggregator))?;
+    registry.register(media::descriptor())?;
+    registry.register(password::descriptor(password_db, clipboard))?;
+    Ok(())
+}

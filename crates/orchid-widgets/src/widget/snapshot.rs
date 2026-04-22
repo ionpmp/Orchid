@@ -38,13 +38,27 @@ pub enum WidgetPayload {
         /// Rows top-to-bottom.
         lines: Vec<String>,
     },
-    /// Generic key-value list (system info, weather, ...).
+    /// Generic key-value list.
     KeyValueList {
         /// Entries in display order.
         entries: Vec<(String, String)>,
     },
     /// Terminal grid and cursor.
     Terminal(TerminalPayload),
+    /// Weather widget.
+    Weather(crate::widget::payloads::WeatherPayload),
+    /// Moon widget.
+    Moon(crate::widget::payloads::MoonPayload),
+    /// System indicators widget.
+    SystemIndicators(crate::widget::payloads::SystemPayload),
+    /// RSS feed widget.
+    RssFeed(crate::widget::payloads::RssPayload),
+    /// Universal search widget.
+    UniversalSearch(crate::widget::payloads::UniversalSearchPayload),
+    /// Media player widget.
+    MediaPlayer(crate::widget::payloads::MediaPlayerPayload),
+    /// Password manager widget.
+    PasswordManager(crate::widget::payloads::PasswordManagerPayload),
 }
 
 /// Terminal-specific payload carried inside [`WidgetPayload::Terminal`].

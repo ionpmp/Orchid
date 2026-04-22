@@ -4,7 +4,11 @@ pub mod config;
 pub mod descriptor;
 pub mod instance;
 pub mod lifecycle;
+pub mod payloads;
+pub mod refresh;
 pub mod snapshot;
+
+pub use refresh::PeriodicRefresh;
 
 use std::sync::Arc;
 

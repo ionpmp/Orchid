@@ -12,6 +12,7 @@ authors.workspace = true
 tokio = { workspace = true }
 async-trait.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 bincode.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -22,9 +23,19 @@ dashmap.workspace = true
 smallvec.workspace = true
 bitflags.workspace = true
 redb.workspace = true
+reqwest.workspace = true
+feed-rs.workspace = true
+futures.workspace = true
+opener.workspace = true
+sysinfo.workspace = true
+url.workspace = true
+secrecy.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true
+orchid-crypto.workspace = true
+orchid-search.workspace = true
+orchid-fs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
