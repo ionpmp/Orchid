@@ -1,6 +1,6 @@
 [package]
 name = "orchid-viewers"
-description = "Viewers for Orchid: PDF (pdfium-render), images, syntax-highlighted text (tree-sitter), and archive browsing."
+description = "Content viewers for Orchid: images, PDF, text (with syntax highlighting), archives, and thumbnails."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,32 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-pdfium-render.workspace = true
 image.workspace = true
 tree-sitter.workspace = true
-sevenz-rust.workspace = true
-zip.workspace = true
+ropey.workspace = true
+memmap2.workspace = true
+encoding_rs.workspace = true
+chardetng.workspace = true
+infer.workspace = true
+blake3.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+bincode.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tokio = { workspace = true }
+dashmap.workspace = true
+
+orchid-core.workspace = true
+orchid-storage.workspace = true
+orchid-fs.workspace = true
+
+# Archive readers are wrapped through orchid-fs; direct deps are not needed
+# in the viewers crate.
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true }

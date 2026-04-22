@@ -15,8 +15,9 @@
 use std::collections::HashMap;
 
 use orchid_widgets::{
-    MediaPlayerPayload, MoonPayload, PasswordManagerPayload, RssPayload, SystemPayload,
-    UniversalSearchPayload, WeatherPayload, WidgetPayload, WidgetSnapshot,
+    FileManagerPayload, MediaPlayerPayload, MoonPayload, PasswordManagerPayload, RssPayload,
+    SystemPayload, UniversalSearchPayload, ViewerPayload, WeatherPayload, WidgetPayload,
+    WidgetSnapshot,
 };
 use parking_lot::RwLock;
 
@@ -101,6 +102,8 @@ impl SlintPayload {
             WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
             WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),
             WidgetPayload::PasswordManager(p) => Self::Text(password_to_text_lines(p)),
+            WidgetPayload::Viewer(p) => Self::Text(viewer_to_text_lines(p)),
+            WidgetPayload::FileManager(p) => Self::Text(file_manager_to_text_lines(p)),
         }
     }
 }
@@ -252,6 +255,100 @@ fn password_to_text_lines(p: &PasswordManagerPayload) -> Vec<String> {
         if let Some(url) = &d.url {
             lines.push(url.clone());
         }
+    }
+    lines
+}
+
+fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
+    use orchid_viewers::ViewerSnapshot;
+    match &p.snapshot {
+        ViewerSnapshot::Loading { path_display } => {
+            vec![format!("Loading {path_display}…")]
+        }
+        ViewerSnapshot::Error {
+            path_display,
+            message,
+        } => vec![format!("{path_display}"), format!("Error: {message}")],
+        ViewerSnapshot::Image(i) => vec![
+            i.path_display.clone(),
+            format!("Image {}×{}", i.width_px, i.height_px),
+            i.info_text.clone(),
+        ],
+        ViewerSnapshot::Pdf(p) => vec![
+            p.path_display.clone(),
+            format!("PDF — page {} / {}", p.current_page, p.page_count),
+            p.info_text.clone(),
+        ],
+        ViewerSnapshot::Text(t) => {
+            let mut lines = vec![
+                t.path_display.clone(),
+                format!(
+                    "{} · {} · {} · {} lines",
+                    t.language, t.encoding, t.line_ending, t.total_lines
+                ),
+            ];
+            for line in &t.visible_lines {
+                let text: String =
+                    line.segments.iter().map(|s| s.text.as_str()).collect();
+                lines.push(format!("{:>5}│ {}", line.line_number + 1, text));
+            }
+            lines
+        }
+        ViewerSnapshot::Archive(a) => {
+            let mut lines = vec![
+                format!("{} — {}", a.path_display, a.format),
+                a.info_text.clone(),
+                format!("{}/", a.current_inner_path),
+            ];
+            for e in &a.entries {
+                lines.push(format!(
+                    "{} {}{}",
+                    if e.is_dir { "📁" } else { "📄" },
+                    e.name,
+                    if e.is_dir { "/" } else { "" }
+                ));
+            }
+            if let Some(preview) = &a.preview {
+                lines.push("— — —".into());
+                match preview {
+                    orchid_viewers::ArchivePreview::Text(t) => {
+                        for row in t.lines().take(20) {
+                            lines.push(row.to_string());
+                        }
+                    }
+                    orchid_viewers::ArchivePreview::Binary { size } => {
+                        lines.push(format!("Binary, {size} bytes"));
+                    }
+                }
+            }
+            lines
+        }
+    }
+}
+
+fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (idx, pane) in p.panes.iter().enumerate() {
+        if let Some(tab) = pane.tabs.first() {
+            lines.push(format!(
+                "Pane {}: {}",
+                if idx == 0 { "L" } else { "R" },
+                tab.path_display
+            ));
+            lines.push(tab.status_text.clone());
+            for entry in tab.entries.iter().take(20) {
+                lines.push(format!(
+                    "{} {} {} {}",
+                    if entry.is_dir { "📁" } else { "📄" },
+                    entry.name,
+                    entry.size_text,
+                    entry.modified_text
+                ));
+            }
+        }
+    }
+    if let Some(clip) = &p.clipboard_indicator {
+        lines.push(clip.clone());
     }
     lines
 }

@@ -36,6 +36,7 @@ orchid-storage.workspace = true
 orchid-crypto.workspace = true
 orchid-search.workspace = true
 orchid-fs.workspace = true
+orchid-viewers.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

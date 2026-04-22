@@ -136,6 +136,10 @@ opener = "0.7"
 # System info
 sysinfo = { version = "0.32", default-features = false, features = ["disk", "system", "network"] }
 
+# Text editor primitives
+ropey = "1"
+memmap2 = "0.9"
+
 # i18n
 icu = "1"
 

@@ -33,10 +33,11 @@ pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
-    IndicatorStatus, MediaPlayerPayload, MoonPayload, PasswordEntryDetailView,
-    PasswordEntryView, PasswordManagerPayload, RssItemView, RssPayload,
-    SearchCandidateView, SystemIndicator, SystemPayload, UniversalSearchPayload,
-    WeatherForecastDay, WeatherPayload, WeatherStatusTag,
+    EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, MediaPlayerPayload,
+    MoonPayload, PanePayload, PasswordEntryDetailView, PasswordEntryView,
+    PasswordManagerPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator,
+    SystemPayload, TabPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
+    WeatherPayload, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 

@@ -1,24 +1,38 @@
-//! Viewers for Orchid.
-//!
-//! Hosts the per-format viewing logic: `pdfium-render` for PDFs, `image` for
-//! raster formats, `tree-sitter` for syntax-highlighted text, and
-//! `sevenz-rust` / `zip` for archive browsing. The crate exposes a single
-//! viewer trait so the UI can route files by detected kind.
+//! Content viewers for Orchid: images, PDF (stub), text with syntax
+//! highlighting, archives, and thumbnails.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
+#![allow(clippy::result_large_err)]
 
-/// Returns the crate version as declared in `Cargo.toml`.
+pub mod archive;
+pub mod dispatch;
+pub mod error;
+pub mod image;
+pub mod pdf;
+pub mod snapshot;
+pub mod text;
+pub mod thumbnail;
+pub mod viewer_trait;
+
+pub use archive::ArchiveViewer;
+pub use dispatch::{kind_for, select_viewer, ViewerKind};
+pub use error::{Result, ViewerError};
+pub use image::{ImageFormat, ImageViewer, LoadedImage, ViewTransform};
+pub use pdf::PdfViewer;
+pub use snapshot::{
+    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ImageSnapshot, PdfSnapshot,
+    SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
+};
+pub use text::{
+    CursorPos, LineEnding, SyntaxHighlighter, TextBuffer, TextOp, TextOpKind, TextViewer,
+    TextViewerMode, UndoStack,
+};
+pub use thumbnail::{Thumbnail, ThumbnailCache, ThumbnailService, ThumbnailSize};
+pub use viewer_trait::Viewer;
+
+/// Crate version.
+#[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn version_is_non_empty() {
-        assert!(!version().is_empty());
-    }
 }

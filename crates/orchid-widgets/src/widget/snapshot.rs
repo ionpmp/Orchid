@@ -59,6 +59,10 @@ pub enum WidgetPayload {
     MediaPlayer(crate::widget::payloads::MediaPlayerPayload),
     /// Password manager widget.
     PasswordManager(crate::widget::payloads::PasswordManagerPayload),
+    /// Content viewer widget.
+    Viewer(crate::widget::payloads::ViewerPayload),
+    /// File manager widget.
+    FileManager(crate::widget::payloads::FileManagerPayload),
 }
 
 /// Terminal-specific payload carried inside [`WidgetPayload::Terminal`].

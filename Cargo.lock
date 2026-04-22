@@ -5346,6 +5346,7 @@ dependencies = [
  "orchid-crypto",
  "orchid-storage",
  "orchid-terminal",
+ "orchid-viewers",
  "orchid-widgets",
  "parking_lot",
  "secrecy",
@@ -5361,12 +5362,28 @@ dependencies = [
 name = "orchid-viewers"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "bincode",
+ "blake3",
+ "chardetng",
+ "chrono",
+ "dashmap 6.1.0",
+ "encoding_rs",
  "image",
- "pdfium-render",
- "sevenz-rust",
+ "infer",
+ "memmap2",
+ "orchid-core",
+ "orchid-fs",
+ "orchid-storage",
+ "parking_lot",
+ "ropey",
+ "serde",
+ "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
  "tree-sitter",
- "zip",
+ "uuid",
 ]
 
 [[package]]
@@ -5386,6 +5403,7 @@ dependencies = [
  "orchid-fs",
  "orchid-search",
  "orchid-storage",
+ "orchid-viewers",
  "parking_lot",
  "redb",
  "reqwest",
@@ -6302,6 +6320,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ropey"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93411e420bcd1a75ddd1dc3caf18c23155eda2c090631a85af21ba19e97093b5"
+dependencies = [
+ "smallvec",
+ "str_indices",
+]
+
+[[package]]
 name = "rowan"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7135,6 +7163,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "str_indices"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d08889ec5408683408db66ad89e0e1f93dff55c73a4ccc71c427d5b277ee47e6"
 
 [[package]]
 name = "streaming-iterator"

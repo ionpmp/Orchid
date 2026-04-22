@@ -26,6 +26,7 @@ orchid-core.workspace = true
 orchid-crypto.workspace = true
 orchid-storage.workspace = true
 orchid-terminal.workspace = true
+orchid-viewers.workspace = true
 orchid-widgets.workspace = true
 
 [build-dependencies]

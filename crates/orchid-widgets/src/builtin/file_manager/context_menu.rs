@@ -1,0 +1,227 @@
+//! Context-menu descriptor builder.
+//!
+//! Produces a flat (with submenus) list of actionable items whose
+//! `enabled` flag depends on the current selection. The items carry
+//! command ids that the UI layer maps to [`orchid_core::Action`]
+//! dispatches.
+
+use orchid_fs::FsEntry;
+
+/// One entry in the file-manager context menu.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct ContextMenuItem {
+    pub id: String,
+    pub label_key: String,
+    pub icon: &'static str,
+    pub enabled: bool,
+    pub separator_after: bool,
+    pub submenu: Vec<ContextMenuItem>,
+}
+
+/// Builder input flags — lets tests / UI override capability probes
+/// without reaching into `orchid-fs` engines.
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct ContextMenuInputs {
+    pub clipboard_has_contents: bool,
+    pub all_encrypted: bool,
+    pub any_encrypted: bool,
+    pub all_managed: bool,
+}
+
+/// Build the menu from the current selection and the extra flags.
+#[must_use]
+pub fn build_for_selection(
+    selection: &[FsEntry],
+    inputs: ContextMenuInputs,
+) -> Vec<ContextMenuItem> {
+    let count = selection.len();
+    let has_selection = count > 0;
+    let single_file = count == 1 && selection[0].metadata.kind == orchid_fs::FsEntryKind::File;
+    let single = count == 1;
+    let mut items = Vec::new();
+
+    items.push(ContextMenuItem {
+        id: if count > 1 { "fs.open-all".into() } else { "fs.open".into() },
+        label_key: if count > 1 {
+            "fm-action-open-all".into()
+        } else {
+            "fm-action-open".into()
+        },
+        icon: "action-open",
+        enabled: has_selection,
+        separator_after: false,
+        submenu: Vec::new(),
+    });
+    items.push(ContextMenuItem {
+        id: "fs.open-with".into(),
+        label_key: "fm-action-open-with".into(),
+        icon: "action-open-with",
+        enabled: single_file,
+        separator_after: true,
+        submenu: vec![ContextMenuItem {
+            id: "viewer.open".into(),
+            label_key: "fm-action-open-in-viewer".into(),
+            icon: "widget-viewer",
+            enabled: single_file,
+            separator_after: false,
+            submenu: Vec::new(),
+        }],
+    });
+
+    items.push(item("fs.copy", "fm-action-copy", "action-copy", has_selection));
+    items.push(item("fs.cut", "fm-action-cut", "action-cut", has_selection));
+    items.push(sep(item(
+        "fs.paste",
+        "fm-action-paste",
+        "action-paste",
+        inputs.clipboard_has_contents,
+    )));
+
+    items.push(item("fs.rename", "fm-action-rename", "action-rename", single));
+    items.push(sep(item(
+        "fs.delete",
+        "fm-action-delete",
+        "action-delete",
+        has_selection,
+    )));
+
+    items.push(ContextMenuItem {
+        id: "fs.tag-add".into(),
+        label_key: "fm-action-add-tag".into(),
+        icon: "action-tag",
+        enabled: has_selection,
+        separator_after: false,
+        submenu: Vec::new(),
+    });
+    items.push(ContextMenuItem {
+        id: "fs.color-label".into(),
+        label_key: "fm-action-color-label".into(),
+        icon: "action-color",
+        enabled: has_selection,
+        separator_after: false,
+        submenu: Vec::new(),
+    });
+    items.push(sep(item(
+        "fs.star",
+        "fm-action-star",
+        "action-star",
+        has_selection,
+    )));
+
+    if inputs.any_encrypted {
+        items.push(item(
+            "fs.decrypt",
+            "fm-action-decrypt",
+            "action-decrypt",
+            inputs.all_encrypted,
+        ));
+    } else {
+        items.push(item(
+            "fs.encrypt",
+            "fm-action-encrypt",
+            "action-encrypt",
+            has_selection,
+        ));
+    }
+    items.last_mut().unwrap().separator_after = true;
+
+    items.push(item(
+        "fs.add-to-managed",
+        "fm-action-add-to-managed",
+        "action-managed",
+        has_selection && !inputs.all_managed,
+    ));
+    items.last_mut().unwrap().separator_after = true;
+
+    items.push(item(
+        "fs.properties",
+        "fm-action-properties",
+        "action-properties",
+        has_selection,
+    ));
+
+    items
+}
+
+fn item(id: &str, label_key: &str, icon: &'static str, enabled: bool) -> ContextMenuItem {
+    ContextMenuItem {
+        id: id.into(),
+        label_key: label_key.into(),
+        icon,
+        enabled,
+        separator_after: false,
+        submenu: Vec::new(),
+    }
+}
+
+fn sep(mut it: ContextMenuItem) -> ContextMenuItem {
+    it.separator_after = true;
+    it
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use orchid_fs::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata, FsPath};
+
+    fn entry(name: &str, kind: FsEntryKind, encrypted: bool) -> FsEntry {
+        let meta = FsMetadata {
+            kind,
+            size: 0,
+            created: None,
+            modified: Some(Utc::now()),
+            accessed: None,
+            readonly: false,
+            hidden: false,
+            system: false,
+            mime: None,
+            extended: ExtendedAttributes {
+                is_encrypted: encrypted,
+                ..Default::default()
+            },
+        };
+        FsEntry {
+            path: FsPath::new(format!("local:/tmp/{name}")).unwrap(),
+            name: name.into(),
+            metadata: meta,
+        }
+    }
+
+    #[test]
+    fn no_selection_disables_most_actions() {
+        let menu = build_for_selection(&[], ContextMenuInputs::default());
+        let copy = menu.iter().find(|i| i.id == "fs.copy").unwrap();
+        assert!(!copy.enabled);
+        let paste = menu.iter().find(|i| i.id == "fs.paste").unwrap();
+        assert!(!paste.enabled);
+    }
+
+    #[test]
+    fn clipboard_flag_enables_paste() {
+        let inputs = ContextMenuInputs {
+            clipboard_has_contents: true,
+            ..Default::default()
+        };
+        let menu = build_for_selection(&[], inputs);
+        let paste = menu.iter().find(|i| i.id == "fs.paste").unwrap();
+        assert!(paste.enabled);
+    }
+
+    #[test]
+    fn encrypted_selection_swaps_encrypt_for_decrypt() {
+        let sel = vec![entry("a", FsEntryKind::File, true)];
+        let menu = build_for_selection(
+            &sel,
+            ContextMenuInputs {
+                any_encrypted: true,
+                all_encrypted: true,
+                ..Default::default()
+            },
+        );
+        assert!(menu.iter().any(|i| i.id == "fs.decrypt"));
+        assert!(!menu.iter().any(|i| i.id == "fs.encrypt"));
+    }
+}

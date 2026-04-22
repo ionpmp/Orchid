@@ -9,12 +9,14 @@
 //! need additional wiring (search sources, custom media providers) call
 //! the per-widget descriptor builders directly.
 
+pub mod file_manager;
 pub mod media;
 pub mod moon;
 pub mod password;
 pub mod rss;
 pub mod search;
 pub mod system;
+pub mod viewer;
 pub mod weather;
 
 use std::sync::Arc;
