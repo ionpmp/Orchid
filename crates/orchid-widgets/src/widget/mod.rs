@@ -7,6 +7,7 @@ pub mod lifecycle;
 pub mod payloads;
 pub mod refresh;
 pub mod snapshot;
+pub mod snapshot_cache;
 
 pub use refresh::PeriodicRefresh;
 
@@ -24,6 +25,7 @@ pub use lifecycle::LifecycleController;
 pub use snapshot::{
     TerminalPayload, TerminalPayloadCell, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
+pub use snapshot_cache::WidgetSnapshotCache;
 
 /// Capabilities reported by a widget at runtime. The manager consults these
 /// before attempting resize / group / unload operations.

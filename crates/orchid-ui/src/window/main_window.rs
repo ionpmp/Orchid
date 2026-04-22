@@ -1,7 +1,17 @@
 //! Main window controller for workspace mode (task 11B).
+//!
+//! # Invariant
+//!
+//! The Slint main thread must not block on async widget locks (e.g. by waiting
+//! on the terminal [`tokio::sync::Mutex`]). Grid data comes from the lock-free
+//! [`orchid_widgets::WidgetSnapshotCache`], which a background task in
+//! `WidgetManager` fills. Blocking the UI thread to await snapshots reintroduces
+//! the jank fixed in task 11B-Fix.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use parking_lot::Mutex;
 use slint::Color;
@@ -9,7 +19,7 @@ use slint::ComponentHandle;
 use slint::ModelRc;
 use slint::SharedString;
 use slint::VecModel;
-use tracing::warn;
+use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use orchid_core::EventBus;
@@ -51,6 +61,8 @@ pub struct MainWindowController {
     drag_start_bounds: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
     resize_state: Arc<Mutex<Option<ResizeInteraction>>>,
     canvas_size: Arc<Mutex<(f32, f32)>>,
+    /// When true, a later [`MainWindow::on_ui_tick`] flushes [`rebuild_workspace_model`].
+    rebuild_pending: Arc<AtomicBool>,
 }
 
 struct ResizeInteraction {
@@ -97,6 +109,7 @@ impl MainWindowController {
             drag_start_bounds: Arc::new(Mutex::new(HashMap::new())),
             resize_state: Arc::new(Mutex::new(None)),
             canvas_size: Arc::new(Mutex::new((800.0, 500.0))),
+            rebuild_pending: Arc::new(AtomicBool::new(false)),
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -180,12 +193,18 @@ impl MainWindowController {
         Ok(())
     }
 
+    /// Batches a workspace model update onto the next [`on_ui_tick`] (≈60 Hz).
+    fn schedule_rebuild(self: &Arc<Self>) {
+        self.rebuild_pending.store(true, Ordering::Release);
+        trace!(target: "orchid_ui::workspace", "rebuild requested");
+    }
+
     fn wire_window_size(self: &Arc<Self>) {
         let t = Arc::downgrade(self);
         self.window.on_window_size_changed(move |w, h| {
             if let Some(c) = t.upgrade() {
                 *c.canvas_size.lock() = (w, (h - 40.0 - 64.0).max(1.0));
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -196,7 +215,13 @@ impl MainWindowController {
             let t = t.clone();
             move || {
                 if let Some(c) = t.upgrade() {
-                    let _ = c.rebuild_workspace_model();
+                    let from_layout = c
+                        .rebuild_pending
+                        .swap(false, Ordering::AcqRel);
+                    let from_cache = c.widget_manager.take_frame_pending();
+                    if from_layout || from_cache {
+                        let _ = c.rebuild_workspace_model();
+                    }
                 }
             }
         });
@@ -341,7 +366,7 @@ impl MainWindowController {
             }
             if let Some(c) = t.upgrade() {
                 c.window.global::<AppState>().set_mode(1);
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -357,7 +382,7 @@ impl MainWindowController {
                 warn!(?e, "switch");
             }
             if let Some(c) = t.upgrade() {
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -381,7 +406,7 @@ impl MainWindowController {
                 warn!(?e, "switch new");
             }
             if let Some(c) = t.upgrade() {
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -412,7 +437,7 @@ impl MainWindowController {
                 warn!(?e, "add terminal");
             }
             if let Some(c) = t.upgrade() {
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -430,7 +455,7 @@ impl MainWindowController {
             if let Some(c) = t.upgrade() {
                 c.drag_offset.lock().remove(&u);
                 c.resize_override.lock().remove(&u);
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -467,7 +492,7 @@ impl MainWindowController {
             return;
         };
         *self.drag_offset.lock().entry(u).or_insert((0.0, 0.0)) = (dx, dy);
-        let _ = self.rebuild_workspace_model();
+        self.schedule_rebuild();
     }
 
     fn on_widget_drag_ended(self: &Arc<Self>, id: &SharedString) {
@@ -512,7 +537,7 @@ impl MainWindowController {
             let all = c.widget_manager.instances_for_workspace(w.id);
             let pos = GridPosition { col, row };
             if le.can_place(w.id, u, pos, size, &all).is_err() {
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
                 return;
             }
             let (pos, _) = le.snap(pos, size);
@@ -521,7 +546,7 @@ impl MainWindowController {
             }
             if let Some(c) = t.upgrade() {
                 c.drag_offset.lock().remove(&u);
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -591,7 +616,7 @@ impl MainWindowController {
             }
             drop(st);
             self.resize_override.lock().insert(u, b);
-            let _ = self.rebuild_workspace_model();
+            self.schedule_rebuild();
         }
     }
 
@@ -600,11 +625,9 @@ impl MainWindowController {
             return;
         };
         let _ = self.resize_state.lock().take();
-        let pb = self.resize_override.lock().remove(&u);
-        if pb.is_none() {
+        let Some(pb) = self.resize_override.lock().remove(&u) else {
             return;
-        }
-        let pb = pb.expect("checked");
+        };
         let wm = self.widget_manager.clone();
         let le = self.layout_engine.clone();
         let t = Arc::downgrade(self);
@@ -631,7 +654,7 @@ impl MainWindowController {
                 warn!(?e, "resize");
             }
             if let Some(c) = t.upgrade() {
-                let _ = c.rebuild_workspace_model();
+                c.schedule_rebuild();
             }
         });
     }
@@ -640,13 +663,33 @@ impl MainWindowController {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
         };
-        if let Some(sid) = self.session_routing.lock().get(&inst).copied() {
-            if let Ok(s) = self.session_manager.get(sid) {
-                if let Err(e) = s.send_input(text.as_str().as_bytes()) {
-                    warn!(?e, "input");
-                }
-            }
+        let Some(sid) = self.session_routing.lock().get(&inst).copied() else {
+            return;
+        };
+        let Ok(session) = self.session_manager.get(sid) else {
+            return;
+        };
+        let encoded = encode_slint_key_text(text.as_str());
+        if encoded.is_empty() {
+            return;
         }
+        trace!(
+            target: "orchid_ui::terminal_input",
+            ch_len = text.as_str().chars().count(),
+            bytes = ?encoded,
+            "encode key for PTY"
+        );
+        if let Err(e) = session.send_input(&encoded) {
+            warn!(?e, "input");
+            return;
+        }
+        debug!(
+            target: "orchid_ui::terminal_input",
+            %sid,
+            sent = encoded.len(),
+            "forwarding terminal key"
+        );
+        self.schedule_rebuild();
     }
 
     fn on_terminal_viewport(self: &Arc<Self>, id: &SharedString, w: f32, h: f32) {
@@ -662,16 +705,19 @@ impl MainWindowController {
                 warn!(?e, "pty");
             }
         }
+        self.schedule_rebuild();
     }
 
     /// Rebuild the Slint [`WorkspaceModel`].
     pub fn rebuild_workspace_model(self: &Arc<Self>) -> Result<()> {
+        let t0 = Instant::now();
         let w = self
             .workspace_manager
             .active()
             .map_err(|e| UiError::Slint(format!("{e}")))?;
         let (vw, vh) = *self.canvas_size.lock();
         let instances = self.widget_manager.instances_for_workspace(w.id);
+        let n_inst = instances.len();
         let view = ViewportSize {
             width_px: vw,
             height_px: vh,
@@ -682,7 +728,7 @@ impl MainWindowController {
         let app_g = self.window.global::<AppState>();
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
-        let handle = tokio::runtime::Handle::try_current();
+        let cache = self.widget_manager.snapshot_cache();
         let mut frames: Vec<WidgetFrameModel> = Vec::new();
         for (idx, pl) in snap.cells.iter().enumerate() {
             let mut bounds = pl.bounds;
@@ -697,53 +743,24 @@ impl MainWindowController {
                 continue;
             };
             let type_s: SharedString = iref.type_id.clone().into();
+            let cached = cache.get(pl.instance_id);
             let (title, tcols, trows, tcells, tcc, tcr, tcvis) =
-                if let Ok(h) = &handle {
-                    let inst_arc = iref.clone();
-                    if let Some(ws) = h.block_on(async move { inst_arc.widget.lock().await.snapshot() })
-                    {
-                        let title: SharedString = ws.title.into();
-                        match &ws.payload {
-                            WidgetPayload::Terminal(t) => (
-                                title,
-                                t.cols as i32,
-                                t.rows as i32,
-                                build_terminal_model(t),
-                                t.cursor_col as i32,
-                                t.cursor_row as i32,
-                                t.cursor_visible,
-                            ),
-                            _ => (
-                                self.locale.tr("widget-title-terminal").into(),
-                                80,
-                                24,
-                                blank_terminal(80, 24),
-                                0,
-                                0,
-                                true,
-                            ),
-                        }
-                    } else {
-                        (
-                            self.locale.tr("widget-title-terminal").into(),
-                            80,
-                            24,
-                            blank_terminal(80, 24),
-                            0,
-                            0,
-                            true,
-                        )
+                if let Some(ws) = cached.as_deref() {
+                    let tstr: SharedString = ws.title.clone().into();
+                    match &ws.payload {
+                        WidgetPayload::Terminal(t) => (
+                            tstr,
+                            i32::from(t.cols),
+                            i32::from(t.rows),
+                            build_terminal_model(t),
+                            i32::from(t.cursor_col),
+                            i32::from(t.cursor_row),
+                            t.cursor_visible,
+                        ),
+                        _ => default_frame_data(&self.locale),
                     }
                 } else {
-                    (
-                        self.locale.tr("widget-title-terminal").into(),
-                        80,
-                        24,
-                        blank_terminal(80, 24),
-                        0,
-                        0,
-                        true,
-                    )
+                    default_frame_data(&self.locale)
                 };
             let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
             let fm = WidgetFrameModel {
@@ -784,6 +801,7 @@ impl MainWindowController {
                 }
             })
             .collect();
+        let n_frames = frames.len();
         app_g.set_workspace(WorkspaceModel {
             workspaces: ModelRc::new(VecModel::from(wlist)),
             active_workspace_id: w.id.to_string().into(),
@@ -797,6 +815,13 @@ impl MainWindowController {
             grid_columns: i32::from(snap.grid_columns),
             grid_rows: i32::from(snap.grid_rows),
         });
+        let ms = t0.elapsed().as_secs_f64() * 1000.0;
+        debug!(
+            target: "orchid_ui::workspace",
+            instances = n_inst,
+            frames = n_frames,
+            "rebuild_workspace_model in {ms:.2} ms"
+        );
         Ok(())
     }
 
@@ -871,4 +896,98 @@ fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<TerminalCellMode
         rows.push(ModelRc::new(VecModel::from(rowv)));
     }
     ModelRc::new(VecModel::from(rows))
+}
+
+fn default_frame_data(
+    locale: &LocaleManager,
+) -> (
+    SharedString,
+    i32,
+    i32,
+    ModelRc<ModelRc<TerminalCellModel>>,
+    i32,
+    i32,
+    bool,
+) {
+    (
+        locale.tr("widget-title-terminal").into(),
+        80,
+        24,
+        blank_terminal(80, 24),
+        0,
+        0,
+        true,
+    )
+}
+
+// TODO(11B-Fix follow-up): Expose `event.key` (semantic key) from Slint in addition
+// to `event.text` and use `orchid_terminal::InputEncoder` for xterm-style arrow /
+// F-key / Home / End sequences once the workspace `slint` version supports it
+// in key handlers.
+/// Maps Slint `KeyEvent.text` payloads to bytes for the PTY. Empty input means
+/// a non-textual key in current Slint builds; see TODO above.
+fn encode_slint_key_text(text: &str) -> Vec<u8> {
+    if text.is_empty() {
+        trace!(
+            target: "orchid_ui::terminal_input",
+            "empty Slint key text (e.g. arrow or modifier-only key)"
+        );
+        return Vec::new();
+    }
+    let mut chars = text.chars();
+    if let (Some(c), None) = (chars.next(), chars.next()) {
+        match c {
+            '\n' | '\r' => return vec![0x0D],
+            '\u{8}' | '\u{7f}' => return vec![0x7F],
+            '\t' => return vec![b'\t'],
+            '\u{1b}' => return vec![0x1B],
+            c if (c as u32) < 0x20 => return vec![c as u8],
+            _ => {}
+        }
+    }
+    text.as_bytes().to_vec()
+}
+
+#[cfg(test)]
+mod key_encode_tests {
+    use super::encode_slint_key_text;
+
+    #[test]
+    fn encodes_printable() {
+        assert_eq!(&encode_slint_key_text("a"), b"a");
+        assert_eq!(&encode_slint_key_text("hello"), b"hello");
+    }
+
+    #[test]
+    fn encodes_enter_as_cr() {
+        assert_eq!(encode_slint_key_text("\n"), vec![0x0D]);
+        assert_eq!(encode_slint_key_text("\r"), vec![0x0D]);
+    }
+
+    #[test]
+    fn encodes_backspace_as_del() {
+        assert_eq!(encode_slint_key_text("\u{8}"), vec![0x7F]);
+        assert_eq!(encode_slint_key_text("\u{7f}"), vec![0x7F]);
+    }
+
+    #[test]
+    fn encodes_tab() {
+        assert_eq!(encode_slint_key_text("\t"), vec![b'\t']);
+    }
+
+    #[test]
+    fn encodes_escape() {
+        assert_eq!(encode_slint_key_text("\u{1b}"), vec![0x1B]);
+    }
+
+    #[test]
+    fn empty_is_empty() {
+        assert!(encode_slint_key_text("").is_empty());
+    }
+
+    #[test]
+    fn utf8_passed_through() {
+        assert_eq!(&encode_slint_key_text("ü"), "ü".as_bytes());
+        assert_eq!(&encode_slint_key_text("日"), "日".as_bytes());
+    }
 }

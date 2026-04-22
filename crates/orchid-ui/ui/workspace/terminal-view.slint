@@ -14,50 +14,66 @@ export component TerminalView inherits Rectangle {
     callback key-pressed(string);
 
     background: Theme.surface-base;
-    forward-focus: focus-scope;
 
+    // FocusScope fills the widget; z-order: cells, cursor, TouchArea (top) so
+    // clicks are captured for focus. Cursor remains visible through transparent TouchArea.
     focus-scope := FocusScope {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+
         key-pressed(event) => {
-            root.key-pressed(event.text);
+            if (event.text != "") {
+                root.key-pressed(event.text);
+                return accept;
+            }
             return accept;
         }
-    }
 
-    TouchArea {
-        clicked => { focus-scope.focus(); }
-    }
-
-    for row[r] in cells: Rectangle {
-        x: 0;
-        y: r * cell-height;
-        width: parent.width;
-        height: cell-height;
-
-        for cell[c] in row: Rectangle {
-            x: c * cell-width;
-            y: 0;
-            width: cell-width;
+        for row[r] in cells: Rectangle {
+            x: 0;
+            y: r * cell-height;
+            width: parent.width;
             height: cell-height;
-            background: cell.bg;
 
-            Text {
-                text: cell.ch;
-                color: cell.fg;
-                font-family: Theme.font-family-mono;
-                font-size: Theme.font-size-md;
-                font-weight: cell.bold ? Theme.weight-semibold : Theme.weight-regular;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            for cell[c] in row: Rectangle {
+                x: c * cell-width;
+                y: 0;
+                width: cell-width;
+                height: cell-height;
+                background: cell.bg;
+
+                Text {
+                    text: cell.ch;
+                    color: cell.fg;
+                    font-family: Theme.font-family-mono;
+                    font-size: Theme.font-size-md;
+                    font-weight: cell.bold ? Theme.weight-semibold : Theme.weight-regular;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
         }
-    }
 
-    if cursor-visible: Rectangle {
-        x: cursor-col * cell-width;
-        y: cursor-row * cell-height;
-        width: cell-width;
-        height: cell-height;
-        background: Theme.accent-brand;
-        opacity: 0.5;
+        if cursor-visible: Rectangle {
+            x: cursor-col * cell-width;
+            y: cursor-row * cell-height;
+            width: cell-width;
+            height: cell-height;
+            background: Theme.accent-brand;
+            opacity: 0.5;
+        }
+
+        TouchArea {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+
+            clicked => {
+                focus-scope.focus();
+            }
+        }
     }
 }

@@ -43,7 +43,7 @@ export component MainWindow inherits Window {
         changed height => { root.window-size-changed(self.width, self.height); }
 
         Timer {
-            interval: 100ms;
+            interval: 16ms;
             running: AppState.mode == 1;
             triggered => { root.ui-tick(); }
         }

@@ -3,6 +3,7 @@
 pub mod operations;
 pub mod persistence;
 
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,7 +13,7 @@ use orchid_storage::{LifecycleState, StateStore};
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use crate::error::{Result, WidgetError};
@@ -20,6 +21,8 @@ use crate::events::WidgetClosed;
 use crate::registry::WidgetRegistry;
 use crate::widget::instance::{SharedInstance, WidgetInstanceRuntime};
 use crate::widget::lifecycle::LifecycleController;
+use crate::widget::snapshot::{TerminalPayload, WidgetPayload, WidgetSnapshot};
+use crate::widget::WidgetSnapshotCache;
 use crate::widget::WidgetContext;
 
 pub use operations::CreateWidgetRequest;
@@ -55,7 +58,14 @@ pub(crate) struct WidgetManagerInner {
     instances: DashMap<Uuid, SharedInstance>,
     lifecycle: LifecycleController,
     options: RwLock<WidgetManagerOptions>,
+    /// Idle lifecycle sweeper.
     sweeper: Mutex<Option<JoinHandle<()>>>,
+    /// Pumps [`Widget::snapshot`] for active instances into [`WidgetSnapshotCache`].
+    snapshot_pump: Mutex<Option<JoinHandle<()>>>,
+    /// Latest snapshots for UI consumption (updated off the main thread).
+    pub snapshot_cache: Arc<WidgetSnapshotCache>,
+    /// Set when a new frame was written to [`WidgetSnapshotCache`]; UI ticks read it.
+    pub ui_frame_pending: Arc<AtomicBool>,
 }
 
 /// Public handle to the widget manager.
@@ -85,6 +95,7 @@ impl WidgetManager {
         options: WidgetManagerOptions,
     ) -> Self {
         let lifecycle = LifecycleController::new(bus.clone());
+        let snapshot_cache = Arc::new(WidgetSnapshotCache::new());
         Self {
             inner: Arc::new(WidgetManagerInner {
                 registry,
@@ -95,6 +106,9 @@ impl WidgetManager {
                 lifecycle,
                 options: RwLock::new(options),
                 sweeper: Mutex::new(None),
+                snapshot_pump: Mutex::new(None),
+                snapshot_cache,
+                ui_frame_pending: Arc::new(AtomicBool::new(false)),
             }),
         }
     }
@@ -109,6 +123,19 @@ impl WidgetManager {
     #[must_use]
     pub fn bus(&self) -> &Arc<orchid_core::EventBus> {
         &self.inner.bus
+    }
+
+    /// Lock-free read path for the UI thread (filled by the snapshot pump).
+    #[must_use]
+    pub fn snapshot_cache(&self) -> &Arc<WidgetSnapshotCache> {
+        &self.inner.snapshot_cache
+    }
+
+    /// `true` when the snapshot pump stored a new frame; clears the flag.
+    pub fn take_frame_pending(&self) -> bool {
+        self.inner
+            .ui_frame_pending
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
     }
 
     /// Build a [`WidgetContext`] for the given instance.
@@ -270,6 +297,16 @@ impl WidgetManager {
             }
         });
         *self.inner.sweeper.lock().await = Some(handle);
+
+        let inner_pump = Arc::clone(&self.inner);
+        let pump = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(33));
+            loop {
+                interval.tick().await;
+                run_snapshot_pump(&inner_pump).await;
+            }
+        });
+        *self.inner.snapshot_pump.lock().await = Some(pump);
         Ok(())
     }
 
@@ -281,6 +318,9 @@ impl WidgetManager {
     /// snapshot.
     pub async fn shutdown(&self) -> Result<()> {
         if let Some(h) = self.inner.sweeper.lock().await.take() {
+            h.abort();
+        }
+        if let Some(h) = self.inner.snapshot_pump.lock().await.take() {
             h.abort();
         }
         // Final snapshot before closing.
@@ -301,6 +341,65 @@ impl WidgetManager {
         }
         Ok(())
     }
+}
+
+fn terminal_payload_eq(a: &TerminalPayload, b: &TerminalPayload) -> bool {
+    a.cursor_col == b.cursor_col
+        && a.cursor_row == b.cursor_row
+        && a.cols == b.cols
+        && a.rows == b.rows
+        && a.cursor_visible == b.cursor_visible
+        && a.cells == b.cells
+}
+
+/// `true` if the new snapshot would render the same as the previous one.
+fn snapshot_renders_unchanged(prev: &WidgetSnapshot, new: &WidgetSnapshot) -> bool {
+    if prev.title != new.title {
+        return false;
+    }
+    if prev.status != new.status {
+        return false;
+    }
+    match (&prev.payload, &new.payload) {
+        (WidgetPayload::Terminal(a), WidgetPayload::Terminal(b)) => terminal_payload_eq(a, b),
+        _ => false,
+    }
+}
+
+async fn run_snapshot_pump(inner: &WidgetManagerInner) {
+    let instances: Vec<SharedInstance> = inner
+        .instances
+        .iter()
+        .map(|e| Arc::clone(e.value()))
+        .collect();
+    for inst in instances {
+        if *inst.lifecycle.read() != LifecycleState::Active {
+            continue;
+        }
+        let snapshot = {
+            let guard = inst.widget.lock().await;
+            guard.snapshot()
+        };
+        if let Some(snap) = snapshot {
+            let id = inst.id;
+            let prev = inner.snapshot_cache.get(id);
+            let is_new = prev
+                .as_deref()
+                .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
+            inner.snapshot_cache.put(id, snap);
+            if is_new {
+                inner
+                    .ui_frame_pending
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+    }
+    trace!(
+        target: "orchid_widgets::snapshot_pump",
+        instances = inner.instances.len(),
+        cached = inner.snapshot_cache.len(),
+        "snapshot pump tick"
+    );
 }
 
 async fn run_sweepers(inner: &WidgetManagerInner) {
@@ -357,6 +456,7 @@ impl WidgetManager {
             orchid_core::EventSource::Subsystem("widgets".into()),
             WidgetClosed { instance_id: id },
         );
+        self.inner.snapshot_cache.remove(id);
         Ok(())
     }
 }

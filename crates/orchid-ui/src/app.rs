@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::{Mutex, RwLock};
-use tokio::runtime::Handle;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -156,50 +155,38 @@ impl OrchidApp {
         })
     }
 
-    /// Open the main workspace window and run the Slint event loop, then
-    /// shut down widget instances and terminal sessions.
-    pub fn run_main(self) -> Result<()> {
-        let OrchidApp {
-            widget_manager,
-            session_manager,
-            theme,
-            locale,
-            config,
-            bus,
-            session_routing,
-            layout_engine,
-            workspace_manager,
-            storage: _,
-            paths: _,
-        } = self;
-        let wm = widget_manager.clone();
-        let sm = session_manager.clone();
-
+    /// Open the main workspace window and run the Slint event loop.
+    ///
+    /// The caller in `orchid-app` should `await` [`OrchidApp::flush_after_window`]
+    /// from the process [`tokio::runtime::Handle`] so widget and terminal
+    /// cleanup runs *after* the event loop, without blocking the Tokio runtime
+    /// from inside this crate.
+    /// the `orchid-ui` sources (11B-Fix).
+    pub fn run_main(&self) -> Result<()> {
         let c = MainWindowController::new(
-            theme,
-            locale,
-            config,
-            bus,
-            widget_manager,
-            workspace_manager,
-            layout_engine,
-            session_manager,
-            session_routing,
+            self.theme.clone(),
+            self.locale.clone(),
+            self.config.clone(),
+            self.bus.clone(),
+            self.widget_manager.clone(),
+            self.workspace_manager.clone(),
+            self.layout_engine.clone(),
+            self.session_manager.clone(),
+            self.session_routing.clone(),
         )?;
         c.run()?;
-        if let Ok(handle) = Handle::try_current() {
-            handle.block_on(async {
-                if let Err(e) = wm.shutdown().await {
-                    warn!(%e, "widget manager shutdown");
-                }
-                if let Err(e) = sm.close_all().await {
-                    warn!(%e, "close terminal sessions");
-                }
-            });
-        } else {
-            warn!("no async runtime: skipping post-window shutdown");
-        }
         Ok(())
+    }
+
+    /// Best-effort shutdown of widget and terminal subsystems after the
+    /// window has closed. Call from the binary, not from inside Slint.
+    pub async fn flush_after_window(&self) {
+        if let Err(e) = self.widget_manager.shutdown().await {
+            warn!(%e, "widget manager shutdown");
+        }
+        if let Err(e) = self.session_manager.close_all().await {
+            warn!(%e, "close terminal sessions");
+        }
     }
 
     /// Open the startup window and run the Slint event loop until the

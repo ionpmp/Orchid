@@ -29,6 +29,7 @@ pub use widget::lifecycle::LifecycleController;
 pub use widget::snapshot::{
     TerminalPayload, TerminalPayloadCell, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
+pub use widget::WidgetSnapshotCache;
 pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 
 pub use builtin::{register_all, register_core};

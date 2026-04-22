@@ -40,11 +40,14 @@ fn main() -> Result<()> {
         .block_on(OrchidApp::bootstrap(paths))
         .context("bootstrap failed")?;
 
-    // Main-window callbacks use `slint::spawn_local`; the runtime handle is
-    // also required for post-shutdown `block_on` in `OrchidApp::run_main`.
+    // `slint::spawn_local` and widget async work need the runtime in scope.
     let _guard = runtime.enter();
 
     app.run_main().context("UI loop exited with error")?;
+
+    if let Ok(h) = tokio::runtime::Handle::try_current() {
+        h.block_on(app.flush_after_window());
+    }
 
     tracing::info!("Orchid exiting cleanly");
     Ok(())
