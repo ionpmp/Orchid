@@ -791,6 +791,13 @@ impl MainWindowController {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
         };
+        // `content` width/height `changed` fires on every live resize step; do not
+        // resize the PTY here — that thrashes the shell and triggers extra rebuilds.
+        // `TerminalView` uses `image-fit: fill` until the PTY is committed in
+        // [`on_widget_resize_ended`] and the next non-preview rebuild.
+        if self.resize_override.lock().contains_key(&inst) {
+            return;
+        }
         if self.resize_terminal_pty_to_content(inst, w, h) {
             self.schedule_rebuild();
         }
@@ -831,10 +838,12 @@ impl MainWindowController {
                 continue;
             };
             if iref.type_id == "terminal" {
-                let cw = bounds.width.max(1.0);
-                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
-                if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
-                    self.schedule_rebuild();
+                if !ro.contains_key(&pl.instance_id) {
+                    let cw = bounds.width.max(1.0);
+                    let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
+                    if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
+                        self.schedule_rebuild();
+                    }
                 }
             }
             let type_s: SharedString = iref.type_id.clone().into();
