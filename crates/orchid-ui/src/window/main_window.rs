@@ -16,6 +16,7 @@ use std::time::Instant;
 use parking_lot::Mutex;
 use slint::Color;
 use slint::ComponentHandle;
+use slint::Model;
 use slint::ModelRc;
 use slint::SharedString;
 use slint::VecModel;
@@ -63,6 +64,15 @@ pub struct MainWindowController {
     canvas_size: Arc<Mutex<(f32, f32)>>,
     /// When true, a later [`MainWindow::on_ui_tick`] flushes [`rebuild_workspace_model`].
     rebuild_pending: Arc<AtomicBool>,
+    /// Last (cols, rows) applied to each terminal from [`Self::on_terminal_viewport`], to avoid
+    /// resize+rebuild storms when `set_workspace` re-lays out the same pixel viewport.
+    last_terminal_viewport_pty: Arc<Mutex<HashMap<Uuid, (u16, u16)>>>,
+    /// Stable Slint `ModelRc`s for the workspace and widget lists. Replacing the whole
+    /// `ModelRc` on every tick re-instantiated every `for` item and dropped keyboard focus
+    /// on the terminal's [`FocusScope`]; we only mutate these via [`sync_vec_model`].
+    workspace_workspaces: ModelRc<WorkspaceSummary>,
+    workspace_widgets: ModelRc<WidgetFrameModel>,
+    workspace_dock_types: ModelRc<DockWidgetType>,
 }
 
 struct ResizeInteraction {
@@ -92,6 +102,15 @@ impl MainWindowController {
             cell_width_px: (tokens.size_md * 0.6).max(4.0),
             cell_height_px: (tokens.size_md * 1.4).max(8.0),
         };
+        let workspace_workspaces: ModelRc<WorkspaceSummary> =
+            ModelRc::new(VecModel::<WorkspaceSummary>::default());
+        let workspace_widgets: ModelRc<WidgetFrameModel> =
+            ModelRc::new(VecModel::<WidgetFrameModel>::default());
+        let workspace_dock_types: ModelRc<DockWidgetType> = ModelRc::new(VecModel::from(vec![DockWidgetType {
+            type_id: "terminal".into(),
+            label: locale.tr("dock-widget-terminal").into(),
+            icon: "terminal".into(),
+        }]));
         let this = Arc::new(Self {
             window,
             theme,
@@ -110,6 +129,10 @@ impl MainWindowController {
             resize_state: Arc::new(Mutex::new(None)),
             canvas_size: Arc::new(Mutex::new((800.0, 500.0))),
             rebuild_pending: Arc::new(AtomicBool::new(false)),
+            last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
+            workspace_workspaces,
+            workspace_widgets,
+            workspace_dock_types,
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -689,7 +712,6 @@ impl MainWindowController {
             sent = encoded.len(),
             "forwarding terminal key"
         );
-        self.schedule_rebuild();
     }
 
     fn on_terminal_viewport(self: &Arc<Self>, id: &SharedString, w: f32, h: f32) {
@@ -697,14 +719,25 @@ impl MainWindowController {
             return;
         };
         let pty: PtySize = self.font_metrics.fit(w.max(1.0), h.max(1.0));
+        {
+            let last = self.last_terminal_viewport_pty.lock();
+            if last.get(&inst) == Some(&(pty.cols, pty.rows)) {
+                return;
+            }
+        }
         let Some(sid) = self.session_routing.lock().get(&inst).copied() else {
             return;
         };
-        if let Ok(s) = self.session_manager.get(sid) {
-            if let Err(e) = s.resize(pty) {
-                warn!(?e, "pty");
-            }
+        let Ok(s) = self.session_manager.get(sid) else {
+            return;
+        };
+        if let Err(e) = s.resize(pty) {
+            warn!(?e, "pty");
+            return;
         }
+        self.last_terminal_viewport_pty
+            .lock()
+            .insert(inst, (pty.cols, pty.rows));
         self.schedule_rebuild();
     }
 
@@ -802,15 +835,22 @@ impl MainWindowController {
             })
             .collect();
         let n_frames = frames.len();
-        app_g.set_workspace(WorkspaceModel {
-            workspaces: ModelRc::new(VecModel::from(wlist)),
-            active_workspace_id: w.id.to_string().into(),
-            widgets: ModelRc::new(VecModel::from(frames)),
-            dock_types: ModelRc::new(VecModel::from(vec![DockWidgetType {
+        sync_vec_model(&self.workspace_workspaces, wlist);
+        sync_vec_model(&self.workspace_widgets, frames);
+        // Keep dock copy in sync (locale, theme strings may change over time).
+        self.workspace_dock_types.set_row_data(
+            0,
+            DockWidgetType {
                 type_id: "terminal".into(),
                 label: self.locale.tr("dock-widget-terminal").into(),
                 icon: "terminal".into(),
-            }])),
+            },
+        );
+        app_g.set_workspace(WorkspaceModel {
+            workspaces: self.workspace_workspaces.clone(),
+            active_workspace_id: w.id.to_string().into(),
+            widgets: self.workspace_widgets.clone(),
+            dock_types: self.workspace_dock_types.clone(),
             dock_add_label: self.locale.tr("dock-add-label").into(),
             grid_columns: i32::from(snap.grid_columns),
             grid_rows: i32::from(snap.grid_rows),
@@ -834,6 +874,25 @@ impl MainWindowController {
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         tracing::info!("Main window closed");
         Ok(())
+    }
+}
+
+/// Replace all rows in a `VecModel` wrapped by `ModelRc` without creating a new `ModelRc`, so
+/// `for` loops in Slint keep the same item instances and retain focus/scroll state.
+fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+    let v = model
+        .as_any()
+        .downcast_ref::<VecModel<T>>()
+        .expect("sync_vec_model: model must be VecModel-backed");
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
     }
 }
 
