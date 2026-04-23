@@ -47,6 +47,9 @@ use crate::slint_generated::{
 };
 use crate::theme::ThemeManager;
 
+/// Top switcher (40) + bottom dock (64) = canvas height in [`workspace.slint`].
+const CANVAS_INSET_H: f32 = 40.0 + 64.0;
+
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
     window: MainWindow,
@@ -70,6 +73,8 @@ pub struct MainWindowController {
     canvas_size: Arc<Mutex<(f32, f32)>>,
     /// When true, a later [`MainWindow::on_ui_tick`] flushes [`rebuild_workspace_model`].
     rebuild_pending: Arc<AtomicBool>,
+    /// Last `Window::scale_factor` used to raster the terminal; when it changes, we re-raster.
+    last_window_scale: parking_lot::Mutex<f32>,
     /// Last (cols, rows) applied to each terminal from [`Self::on_terminal_viewport`], to avoid
     /// resize+rebuild storms when `set_workspace` re-lays out the same pixel viewport.
     last_terminal_viewport_pty: Arc<Mutex<HashMap<Uuid, (u16, u16)>>>,
@@ -136,6 +141,7 @@ impl MainWindowController {
             resize_state: Arc::new(Mutex::new(None)),
             canvas_size: Arc::new(Mutex::new((800.0, 500.0))),
             rebuild_pending: Arc::new(AtomicBool::new(false)),
+            last_window_scale: parking_lot::Mutex::new(0.0),
             last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
             workspace_workspaces,
             workspace_widgets,
@@ -144,7 +150,6 @@ impl MainWindowController {
         this.apply_theme()?;
         this.apply_strings()?;
         this.apply_initial_mode()?;
-        this.wire_window_size();
         this.wire_callbacks()?;
         Ok(this)
     }
@@ -229,14 +234,25 @@ impl MainWindowController {
         trace!(target: "orchid_ui::workspace", "rebuild requested");
     }
 
-    fn wire_window_size(self: &Arc<Self>) {
-        let t = Arc::downgrade(self);
-        self.window.on_window_size_changed(move |w, h| {
-            if let Some(c) = t.upgrade() {
-                *c.canvas_size.lock() = (w, (h - 40.0 - 64.0).max(1.0));
-                c.schedule_rebuild();
-            }
-        });
+    /// Match [`Self::canvas_size`] to the window client in logical pixels (workspace canvas area).
+    /// Slint `changed` on the canvas does not run for the *first* size, so we poll winit on every
+    /// `on_ui_tick` and after `show` until the size converges. Returns `true` if the viewport changed.
+    fn sync_canvas_size_from_winit(self: &Arc<Self>) -> bool {
+        let win = self.window.window();
+        let p = win.size();
+        if p.width < 2 || p.height < 2 {
+            return false;
+        }
+        let sc = win.scale_factor();
+        let log = p.to_logical(sc);
+        let next = (log.width, (log.height - CANVAS_INSET_H).max(1.0));
+        let mut cur = self.canvas_size.lock();
+        if (cur.0 - next.0).abs() > 0.5 || (cur.1 - next.1).abs() > 0.5 {
+            *cur = next;
+            true
+        } else {
+            false
+        }
     }
 
     fn wire_callbacks(self: &Arc<Self>) -> Result<()> {
@@ -245,11 +261,23 @@ impl MainWindowController {
             let t = t.clone();
             move || {
                 if let Some(c) = t.upgrade() {
+                    let canvas_size_mismatch = c.sync_canvas_size_from_winit();
+                    let scale = c.window.window().scale_factor();
+                    let scale_changed = {
+                        let mut last = c.last_window_scale.lock();
+                        if (scale - *last).abs() > 0.001 {
+                            *last = scale;
+                            true
+                        } else {
+                            false
+                        }
+                    };
                     let from_layout = c
                         .rebuild_pending
-                        .swap(false, Ordering::AcqRel);
+                        .swap(false, Ordering::AcqRel)
+                        || canvas_size_mismatch;
                     let from_cache = c.widget_manager.take_frame_pending();
-                    if from_layout || from_cache {
+                    if from_layout || from_cache || scale_changed {
                         let _ = c.rebuild_workspace_model();
                     }
                 }
@@ -689,6 +717,44 @@ impl MainWindowController {
         });
     }
 
+    /// Content area of [`widget-frame.slint`] below the title bar (`height - 32px`); must match
+    /// what `terminal-viewport-changed` would report as `w`/`h`.
+    const WIDGET_FRAME_HEADER_PX: f32 = 32.0;
+
+    /// Resize the PTY grid to the terminal's content `Rectangle` size. Slint's `changed` on that
+    /// area often does not run for the *first* layout, so this is also invoked from
+    /// [`rebuild_workspace_model`]. Returns `true` if the TTY was actually resized.
+    fn resize_terminal_pty_to_content(
+        self: &Arc<Self>,
+        inst: Uuid,
+        content_w: f32,
+        content_h: f32,
+    ) -> bool {
+        let w = content_w.max(1.0);
+        let h = content_h.max(1.0);
+        let pty: PtySize = self.font_metrics.fit(w, h);
+        {
+            let last = self.last_terminal_viewport_pty.lock();
+            if last.get(&inst) == Some(&(pty.cols, pty.rows)) {
+                return false;
+            }
+        }
+        let Some(sid) = self.session_routing.lock().get(&inst).copied() else {
+            return false;
+        };
+        let Ok(s) = self.session_manager.get(sid) else {
+            return false;
+        };
+        if let Err(e) = s.resize(pty) {
+            warn!(?e, "pty");
+            return false;
+        }
+        self.last_terminal_viewport_pty
+            .lock()
+            .insert(inst, (pty.cols, pty.rows));
+        true
+    }
+
     fn on_terminal_key(self: &Arc<Self>, id: &SharedString, text: &SharedString) {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
@@ -725,27 +791,9 @@ impl MainWindowController {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
         };
-        let pty: PtySize = self.font_metrics.fit(w.max(1.0), h.max(1.0));
-        {
-            let last = self.last_terminal_viewport_pty.lock();
-            if last.get(&inst) == Some(&(pty.cols, pty.rows)) {
-                return;
-            }
+        if self.resize_terminal_pty_to_content(inst, w, h) {
+            self.schedule_rebuild();
         }
-        let Some(sid) = self.session_routing.lock().get(&inst).copied() else {
-            return;
-        };
-        let Ok(s) = self.session_manager.get(sid) else {
-            return;
-        };
-        if let Err(e) = s.resize(pty) {
-            warn!(?e, "pty");
-            return;
-        }
-        self.last_terminal_viewport_pty
-            .lock()
-            .insert(inst, (pty.cols, pty.rows));
-        self.schedule_rebuild();
     }
 
     /// Rebuild the Slint [`WorkspaceModel`].
@@ -782,6 +830,13 @@ impl MainWindowController {
             let Ok(iref) = self.widget_manager.get_instance(pl.instance_id) else {
                 continue;
             };
+            if iref.type_id == "terminal" {
+                let cw = bounds.width.max(1.0);
+                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
+                if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
+                    self.schedule_rebuild();
+                }
+            }
             let type_s: SharedString = iref.type_id.clone().into();
             let cached = cache.get(pl.instance_id);
             let (title, tcols, trows, tcells, tpix, tcc, tcr, tcvis) =
@@ -795,12 +850,14 @@ impl MainWindowController {
                                 let ccol = [acc.r, acc.g, acc.b, acc.a];
                                 let cw = self.font_metrics.cell_width_px as u32;
                                 let ch = self.font_metrics.cell_height_px as u32;
+                                let scale = self.window.window().scale_factor();
                                 terminal_raster::render_terminal(
                                     t,
                                     f,
                                     size_md,
                                     cw,
                                     ch,
+                                    scale,
                                     ccol,
                                 )
                                 .unwrap_or_default()
@@ -900,6 +957,12 @@ impl MainWindowController {
         self.window
             .show()
             .map_err(|e| UiError::Slint(format!("show: {e}")))?;
+        // Converge layout viewport to the real client size; `on_ui_tick` also polls until stable.
+        if self.sync_canvas_size_from_winit() {
+            if self.workspace_manager.active().is_ok() {
+                let _ = self.rebuild_workspace_model();
+            }
+        }
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         tracing::info!("Main window closed");
         Ok(())

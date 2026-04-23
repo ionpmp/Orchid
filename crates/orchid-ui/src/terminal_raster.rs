@@ -37,30 +37,41 @@ fn blend_straight_over(dst: &mut [u8], i: usize, layer: [u8; 4], a: f32) {
     dst[i + 3] = (t * 255.0 + d * (1.0 - t)) as u8;
 }
 
-/// Raster the terminal to an RGBA image of size `cols * cell_w` by `rows * cell_h` pixels.
-/// `size_px` is `typography.size_md` for the loaded face. `cursor_color` is straight `[r, g, b, a]`
-/// like `TerminalPayloadCell` colours.
+/// Raster the terminal to an RGBA image in **physical** pixels: buffer size is
+/// `cols * (cell_w·s) × rows * (cell_h·s)` and glyphs use `size_px·s` so the bitmap matches
+/// the window’s device pixel ratio (pass `slint` `Window` `scale_factor` as `content_scale`).
+/// `cell_w` / `cell_h` and `size_px` remain **logical** (same as PTY / `FontMetrics`).
+/// `cursor_color` is straight `[r, g, b, a]` like `TerminalPayloadCell` colours.
 pub fn render_terminal(
     t: &TerminalPayload,
     font: &Font,
     size_px: f32,
     cell_w: u32,
     cell_h: u32,
+    content_scale: f32,
     cursor_color: [u8; 4],
 ) -> Option<Image> {
     if t.cols == 0 || t.rows == 0 {
         return Some(Image::default());
     }
-    let tw = t.cols as u32 * cell_w;
-    let th = t.rows as u32 * cell_h;
+    let s = if content_scale.is_finite() && content_scale > 0.0 {
+        content_scale.clamp(1.0, 4.0)
+    } else {
+        1.0
+    };
+    let size_draw = size_px * s;
+    let cell_wp = (cell_w as f32 * s).round().max(1.0) as u32;
+    let cell_hp = (cell_h as f32 * s).round().max(1.0) as u32;
+    let tw = t.cols as u32 * cell_wp;
+    let th = t.rows as u32 * cell_hp;
     if tw == 0 || th == 0 {
         return None;
     }
-    let line = font.horizontal_line_metrics(size_px)?;
+    let line = font.horizontal_line_metrics(size_draw)?;
 
     let mut buffer: SharedPixelBuffer<Rgba8Pixel> = SharedPixelBuffer::new(tw, th);
     {
-        let s = buffer.make_mut_slice();
+        let sbuf = buffer.make_mut_slice();
         for r in 0..t.rows {
             for c in 0..t.cols {
                 let i = (r * t.cols + c) as usize;
@@ -72,11 +83,11 @@ pub fn render_terminal(
                     b: b[2],
                     a: b[3],
                 };
-                let cx = c as u32 * cell_w;
-                let cy = r as u32 * cell_h;
-                for yy in 0..cell_h {
-                    for xx in 0..cell_w {
-                        s[((cy + yy) * tw + (cx + xx)) as usize] = px;
+                let cx = c as u32 * cell_wp;
+                let cy = r as u32 * cell_hp;
+                for yy in 0..cell_hp {
+                    for xx in 0..cell_wp {
+                        sbuf[((cy + yy) * tw + (cx + xx)) as usize] = px;
                     }
                 }
             }
@@ -92,21 +103,21 @@ pub fn render_terminal(
                 if cell.ch == '\0' || cell.ch == ' ' {
                     continue;
                 }
-                let (m, coverage) = font.rasterize(cell.ch, size_px);
+                let (m, coverage) = font.rasterize(cell.ch, size_draw);
                 if coverage.is_empty() || m.width == 0 || m.height == 0 {
                     continue;
                 }
                 let w = m.width;
                 let h = m.height;
                 let b = m.bounds;
-                let cx = c as f32 * cell_w as f32;
-                let cy = r as f32 * cell_h as f32;
+                let cx = c as f32 * cell_wp as f32;
+                let cy = r as f32 * cell_hp as f32;
                 // Baseline in y-down: line box top of row + ascent.
                 let baseline = cy + line.ascent;
                 // y-up: bottom = ymin, top of outline = ymin + height.
                 let y_top = baseline - (b.ymin + b.height);
                 let x_left = cx
-                    + (cell_w as f32 - m.advance_width).max(0.0) * 0.5
+                    + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5
                     + m.xmin as f32;
                 let fg = cell.fg_rgba;
                 for y in 0..h {
@@ -137,12 +148,12 @@ pub fn render_terminal(
         && (t.cursor_col as u32) < t.cols as u32
         && (t.cursor_row as u32) < t.rows as u32
     {
-        let cx = t.cursor_col as f32 * cell_w as f32;
-        let cy = t.cursor_row as f32 * cell_h as f32;
+        let cx = t.cursor_col as f32 * cell_wp as f32;
+        let cy = t.cursor_row as f32 * cell_hp as f32;
         let a = 0.35f32;
         let p2 = buffer.make_mut_bytes();
-        for yy in 0..cell_h {
-            for xx in 0..cell_w {
+        for yy in 0..cell_hp {
+            for xx in 0..cell_wp {
                 let px = (cx as u32 + xx) as u32;
                 let py = (cy as u32 + yy) as u32;
                 if px < tw && py < th {
