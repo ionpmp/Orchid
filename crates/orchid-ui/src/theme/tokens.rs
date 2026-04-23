@@ -67,7 +67,9 @@ impl Default for TypographyTokens {
     fn default() -> Self {
         Self {
             font_family_sans: "Segoe UI, Inter, sans-serif".into(),
-            font_family_mono: "Cascadia Code, Consolas, monospace".into(),
+            // Prefer a single monospace design (Cascadia Mono) to avoid per-glyph mixed fallbacks
+            // that make column spacing look irregular next to "Cascadia Code, ...".
+            font_family_mono: "Cascadia Mono, Cascadia Code, Consolas, ui-monospace, monospace".into(),
             size_sm: 12.0,
             size_md: 14.0,
             size_lg: 18.0,

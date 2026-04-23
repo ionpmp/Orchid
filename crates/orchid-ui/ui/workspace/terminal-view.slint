@@ -2,11 +2,11 @@ import { Theme } from "../theme_global.slint";
 import { TerminalCellModel } from "defs.slint";
 
 export component TerminalView inherits Rectangle {
-    // Route window focus to the inner scope so key-pressed receives text input.
     forward-focus: focus-scope;
     in property <int> cols;
     in property <int> rows;
     in property <[[TerminalCellModel]]> cells;
+    in property <image> pixels;
     in property <int> cursor-col;
     in property <int> cursor-row;
     in property <bool> cursor-visible;
@@ -17,8 +17,6 @@ export component TerminalView inherits Rectangle {
 
     background: Theme.surface-base;
 
-    // FocusScope fills the widget; z-order: cells, cursor, TouchArea (top) so
-    // clicks are captured for focus. Cursor remains visible through transparent TouchArea.
     focus-scope := FocusScope {
         x: 0;
         y: 0;
@@ -33,38 +31,12 @@ export component TerminalView inherits Rectangle {
             return accept;
         }
 
-        for row[r] in cells: Rectangle {
-            x: 0;
-            y: r * cell-height;
-            width: parent.width;
-            height: cell-height;
-
-            for cell[c] in row: Rectangle {
-                x: c * cell-width;
-                y: 0;
-                width: cell-width;
-                height: cell-height;
-                background: cell.bg;
-
-                Text {
-                    text: cell.ch;
-                    color: cell.fg;
-                    font-family: Theme.font-family-mono;
-                    font-size: Theme.font-size-md;
-                    font-weight: cell.bold ? Theme.weight-semibold : Theme.weight-regular;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-        }
-
-        if cursor-visible: Rectangle {
-            x: cursor-col * cell-width;
-            y: cursor-row * cell-height;
-            width: cell-width;
-            height: cell-height;
-            background: Theme.accent-brand;
-            opacity: 0.5;
+        // One fontdue-rastered bitmap (PT grid); avoids Skia Text vs metrics mismatch.
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.pixels;
+            image-fit: fill;
         }
 
         TouchArea {

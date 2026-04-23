@@ -32,6 +32,8 @@ export struct WidgetFrameModel {
     terminal-cursor-visible: bool,
     terminal-cell-width: length,
     terminal-cell-height: length,
+    /// fontdue-rastered terminal (same font as font metrics; avoids Skia per-cell text mismatch).
+    terminal-pixels: image,
 }
 
 export struct DockWidgetType {

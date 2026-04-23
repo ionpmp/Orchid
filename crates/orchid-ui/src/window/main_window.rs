@@ -16,6 +16,7 @@ use std::time::Instant;
 use parking_lot::Mutex;
 use slint::Color;
 use slint::ComponentHandle;
+use slint::Image;
 use slint::Model;
 use slint::ModelRc;
 use slint::SharedString;
@@ -38,6 +39,8 @@ use orchid_widgets::{
 use parking_lot::RwLock;
 
 use crate::error::{Result, UiError};
+use crate::terminal_font_metrics;
+use crate::terminal_raster;
 use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, Strings, TerminalCellModel, Theme, WidgetFrameModel,
     WorkspaceModel, WorkspaceSummary,
@@ -57,6 +60,9 @@ pub struct MainWindowController {
     session_manager: Arc<SessionManager>,
     session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
     font_metrics: FontMetrics,
+    /// When [`Self::font_metrics`] is from system font resolution, the same `fontdue` face for
+    /// [`crate::terminal_raster`]. Otherwise the terminal falls back to a blank `Image` layer.
+    mono_font: Option<fontdue::Font>,
     drag_offset: Arc<Mutex<HashMap<Uuid, (f32, f32)>>>,
     resize_override: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
     drag_start_bounds: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
@@ -98,10 +104,10 @@ impl MainWindowController {
         let window = MainWindow::new()
             .map_err(|e| UiError::Slint(format!("failed to create MainWindow: {e}")))?;
         let tokens = &theme.current().tokens.typography;
-        let font_metrics = FontMetrics {
-            cell_width_px: (tokens.size_md * 0.6).max(4.0),
-            cell_height_px: (tokens.size_md * 1.4).max(8.0),
-        };
+        // Cell size: prefer real `advance` + `line` metrics from the first matching system
+        // monospace (fontdb + fontdue), so Slint/PTY share the same grid as the shaped font
+        // (not hand-tuned 0.6×size heuristics).
+        let (font_metrics, mono_font) = terminal_font_metrics::font_and_metrics_from_typography(tokens);
         let workspace_workspaces: ModelRc<WorkspaceSummary> =
             ModelRc::new(VecModel::<WorkspaceSummary>::default());
         let workspace_widgets: ModelRc<WidgetFrameModel> =
@@ -123,6 +129,7 @@ impl MainWindowController {
             session_manager: session_manager.clone(),
             session_routing,
             font_metrics,
+            mono_font,
             drag_offset: Arc::new(Mutex::new(HashMap::new())),
             resize_override: Arc::new(Mutex::new(HashMap::new())),
             drag_start_bounds: Arc::new(Mutex::new(HashMap::new())),
@@ -777,19 +784,40 @@ impl MainWindowController {
             };
             let type_s: SharedString = iref.type_id.clone().into();
             let cached = cache.get(pl.instance_id);
-            let (title, tcols, trows, tcells, tcc, tcr, tcvis) =
+            let (title, tcols, trows, tcells, tpix, tcc, tcr, tcvis) =
                 if let Some(ws) = cached.as_deref() {
                     let tstr: SharedString = ws.title.clone().into();
                     match &ws.payload {
-                        WidgetPayload::Terminal(t) => (
-                            tstr,
-                            i32::from(t.cols),
-                            i32::from(t.rows),
-                            build_terminal_model(t),
-                            i32::from(t.cursor_col),
-                            i32::from(t.cursor_row),
-                            t.cursor_visible,
-                        ),
+                        WidgetPayload::Terminal(t) => {
+                            let img = if let Some(ref f) = self.mono_font {
+                                let size_md = self.theme.current().tokens.typography.size_md;
+                                let acc = self.theme.current().tokens.color.accent_brand;
+                                let ccol = [acc.r, acc.g, acc.b, acc.a];
+                                let cw = self.font_metrics.cell_width_px as u32;
+                                let ch = self.font_metrics.cell_height_px as u32;
+                                terminal_raster::render_terminal(
+                                    t,
+                                    f,
+                                    size_md,
+                                    cw,
+                                    ch,
+                                    ccol,
+                                )
+                                .unwrap_or_default()
+                            } else {
+                                Image::default()
+                            };
+                            (
+                                tstr,
+                                i32::from(t.cols),
+                                i32::from(t.rows),
+                                build_terminal_model(t),
+                                img,
+                                i32::from(t.cursor_col),
+                                i32::from(t.cursor_row),
+                                t.cursor_visible,
+                            )
+                        }
                         _ => default_frame_data(&self.locale),
                     }
                 } else {
@@ -813,6 +841,7 @@ impl MainWindowController {
                 terminal_cursor_visible: tcvis,
                 terminal_cell_width: cw,
                 terminal_cell_height: ch,
+                terminal_pixels: tpix,
             };
             frames.push(fm);
         }
@@ -964,6 +993,7 @@ fn default_frame_data(
     i32,
     i32,
     ModelRc<ModelRc<TerminalCellModel>>,
+    Image,
     i32,
     i32,
     bool,
@@ -973,6 +1003,7 @@ fn default_frame_data(
         80,
         24,
         blank_terminal(80, 24),
+        Image::default(),
         0,
         0,
         true,

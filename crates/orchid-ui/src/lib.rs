@@ -8,6 +8,8 @@ pub mod app;
 pub mod error;
 mod slint_generated;
 pub mod theme;
+mod terminal_font_metrics;
+mod terminal_raster;
 pub mod widgets;
 pub mod window;
 
