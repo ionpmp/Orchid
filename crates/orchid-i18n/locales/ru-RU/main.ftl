@@ -83,16 +83,17 @@ system-battery-time-remaining = осталось { $time }
 system-network-rate = ↑ { $up }/с  ↓ { $down }/с
 
 # ---- RSS ----
-rss-no-feeds = Ленты не настроены
+rss-no-feeds = Нет настроенных лент
 rss-error-summary = Не удалось обновить { $n } из { $total } лент
 rss-item-published-minutes = { $m } мин. назад
 rss-item-published-hours = { $h } ч. назад
 rss-item-published-days = { $d } дн. назад
 
 # ---- Universal Search ----
-search-placeholder = Введите текст для поиска файлов, команд и настроек…
+search-placeholder = Введите запрос для поиска файлов, команд и настроек...
 search-empty-state = Начните вводить запрос
 search-no-results = Ничего не найдено по запросу «{ $query }»
+search-no-results-short = Нет результатов
 search-searching = Идёт поиск…
 search-source-files = Файлы
 search-source-commands = Команды
@@ -225,13 +226,6 @@ dock-widget-moon = Луна
 dock-widget-system = Система
 dock-widget-rss = Новости
 dock-widget-search = Поиск
-
-rss-no-feeds = Нет настроенных лент
-
-search-placeholder = Введите запрос для поиска файлов, команд и настроек...
-search-empty-state = Начните вводить запрос
-search-no-results-short = Нет результатов
-search-searching = Идёт поиск...
 
 moon-age-label = Возраст
 moon-distance-label = Расстояние

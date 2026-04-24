@@ -95,6 +95,8 @@ export struct SearchModel {
     empty-state-text: string,
     no-results-text: string,
     searching-text: string,
+    /// True only for the first rebuild after the user adds a search widget from the dock.
+    request-autofocus: bool,
 }
 
 export struct WidgetFrameModel {

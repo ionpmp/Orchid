@@ -59,6 +59,9 @@ impl WidgetManager {
             .get(&type_id)
             .ok_or_else(|| WidgetError::UnknownWidgetType(type_id.clone()))?;
 
+        let canonical_type_id = descriptor.type_id.to_string();
+        let created_type_id = canonical_type_id.clone();
+
         let size = size.unwrap_or(descriptor.default_size);
         validate_size(&descriptor, size)?;
 
@@ -84,7 +87,7 @@ impl WidgetManager {
         let runtime = Arc::new(WidgetInstanceRuntime {
             id: instance_id,
             workspace_id,
-            type_id: type_id.clone(),
+            type_id: canonical_type_id,
             position: RwLock::new(position),
             size: RwLock::new(size),
             lifecycle: RwLock::new(LifecycleState::Active),
@@ -131,7 +134,7 @@ impl WidgetManager {
             WidgetCreated {
                 instance_id,
                 workspace_id,
-                type_id,
+                type_id: created_type_id,
             },
         );
         debug!(%instance_id, %workspace_id, "widget created");

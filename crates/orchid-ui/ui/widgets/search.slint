@@ -20,7 +20,15 @@ export component SearchView inherits Rectangle {
     }
 
     init => {
-        input.focus();
+        if (model.request-autofocus) {
+            input.focus();
+        }
+    }
+
+    changed model => {
+        if (model.request-autofocus) {
+            input.focus();
+        }
     }
 
     VerticalLayout {

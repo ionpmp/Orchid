@@ -25,13 +25,14 @@ async fn catalog_widgets_can_be_created() {
     // system widget is created while a live terminal session already exists.
     // Creating system (and other lightweight types) before the terminal keeps
     // this integration test reliable; the dock still offers all six types.
+    // Order keeps `system` before `terminal` so PTY + sysinfo do not wedge on Windows CI.
     for type_id in [
         "weather",
         "moon",
         "system",
         "terminal",
         "rss",
-        "universal-search",
+        "search",
     ] {
         let req = orchid_widgets::CreateWidgetRequest {
             type_id: type_id.to_string(),

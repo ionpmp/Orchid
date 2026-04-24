@@ -97,6 +97,8 @@ pub struct MainWindowController {
     workspace_dock_types: ModelRc<DockWidgetType>,
     /// Per universal-search instance: selected candidate row (clamped on rebuild).
     search_selection: Arc<RwLock<HashMap<Uuid, i32>>>,
+    /// Set when a search widget is created from the dock; cleared after the next workspace rebuild.
+    search_autofocus_pending: Arc<Mutex<Option<Uuid>>>,
 }
 
 struct ResizeInteraction {
@@ -166,6 +168,7 @@ impl MainWindowController {
             workspace_widgets,
             workspace_dock_types,
             search_selection: Arc::new(RwLock::new(HashMap::new())),
+            search_autofocus_pending: Arc::new(Mutex::new(None)),
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -589,11 +592,8 @@ impl MainWindowController {
         let wm = self.widget_manager.clone();
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
-        let type_owned = if type_id_str == "search" {
-            "universal-search".to_string()
-        } else {
-            type_id_str.to_string()
-        };
+        let type_id_owned = type_id_str.to_string();
+        let focus_search_input = type_id_owned == "search";
         let _ = slint::spawn_local(async move {
             let wid = match wsm.active() {
                 Ok(w) => w.id,
@@ -601,7 +601,7 @@ impl MainWindowController {
             };
             let new_id = match wm
                 .create(orchid_widgets::CreateWidgetRequest {
-                    type_id: type_owned,
+                    type_id: type_id_owned,
                     workspace_id: wid,
                     position: None,
                     size: None,
@@ -618,6 +618,9 @@ impl MainWindowController {
             };
             Self::move_new_widget_to_free_slot(&le, &wm, wid, new_id).await;
             if let Some(c) = t.upgrade() {
+                if focus_search_input {
+                    *c.search_autofocus_pending.lock() = Some(new_id);
+                }
                 c.schedule_rebuild();
             }
         });
@@ -1344,6 +1347,10 @@ impl MainWindowController {
                         } else {
                             0
                         });
+                    let request_autofocus = matches!(
+                        *self.search_autofocus_pending.lock(),
+                        Some(id) if id == pl.instance_id
+                    );
                     (
                         tstr,
                         80,
@@ -1357,7 +1364,7 @@ impl MainWindowController {
                         empty_moon_model(),
                         empty_system_model(),
                         empty_rss_model(&self.locale),
-                        build_search_model(s, &self.locale, selected),
+                        build_search_model(s, &self.locale, selected, request_autofocus),
                     )
                 }
                 _ => (
@@ -1501,6 +1508,7 @@ impl MainWindowController {
             frames = n_frames,
             "rebuild_workspace_model in {ms:.2} ms"
         );
+        *self.search_autofocus_pending.lock() = None;
         Ok(())
     }
 
@@ -1757,6 +1765,7 @@ fn empty_search_model(locale: &LocaleManager) -> SearchModel {
         empty_state_text: locale.tr("search-empty-state").into(),
         no_results_text: locale.tr("search-no-results-short").into(),
         searching_text: locale.tr("search-searching").into(),
+        request_autofocus: false,
     }
 }
 
@@ -1764,6 +1773,7 @@ fn build_search_model(
     p: &orchid_widgets::UniversalSearchPayload,
     locale: &LocaleManager,
     selected: i32,
+    request_autofocus: bool,
 ) -> SearchModel {
     let candidates: Vec<SearchCandidateEntry> = p
         .candidates
@@ -1810,6 +1820,7 @@ fn build_search_model(
         empty_state_text: locale.tr("search-empty-state").into(),
         no_results_text: locale.tr("search-no-results-short").into(),
         searching_text: locale.tr("search-searching").into(),
+        request_autofocus,
     }
 }
 

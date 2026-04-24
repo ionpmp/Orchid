@@ -50,9 +50,16 @@ impl WidgetRegistry {
     }
 
     /// Fetch a descriptor by type id.
+    ///
+    /// Accepts UI aliases such as `"search"` for the universal search widget
+    /// ([`crate::builtin::search::TYPE_ID`]).
     #[must_use]
     pub fn get(&self, type_id: &str) -> Option<WidgetDescriptor> {
-        self.descriptors.get(type_id).map(|e| e.value().clone())
+        let key = match type_id {
+            "search" => "universal-search",
+            other => other,
+        };
+        self.descriptors.get(key).map(|e| e.value().clone())
     }
 
     /// Every registered descriptor, in no particular order.
