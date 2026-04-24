@@ -140,6 +140,8 @@ impl StartupWindowController {
             dock_add_label: self.locale.tr("dock-add-label").into(),
             grid_columns: 16,
             grid_rows: 10,
+            canvas_content_width: 1f32.into(),
+            canvas_content_height: 1f32.into(),
         });
     }
 

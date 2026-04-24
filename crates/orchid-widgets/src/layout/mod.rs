@@ -34,8 +34,11 @@ pub struct LayoutOptions {
     pub mode: LayoutMode,
     /// Logical cells per row.
     pub grid_columns: u16,
-    /// Logical cells per column.
+    /// Logical cells per column (may exceed [`Self::view_rows`] to allow vertical scrolling).
     pub grid_rows: u16,
+    /// Divides the viewport height to compute **cell height in pixels**; independent of
+    /// [`Self::grid_rows`] so adding rows grows the canvas downward without shrinking cells.
+    pub view_rows: u16,
     /// Snap threshold in cells (reserved for future drag-snap logic).
     pub snap_threshold_cells: u16,
     /// Gap between adjacent widgets, in logical pixels.
@@ -48,6 +51,7 @@ impl Default for LayoutOptions {
             mode: LayoutMode::Grid,
             grid_columns: 16,
             grid_rows: 10,
+            view_rows: 10,
             snap_threshold_cells: 1,
             gutter_px: 8.0,
         }
@@ -96,6 +100,36 @@ impl LayoutEngine {
     #[must_use]
     pub fn options(&self) -> LayoutOptions {
         self.options.read().clone()
+    }
+
+    /// Ensures [`LayoutOptions::grid_columns`] / [`LayoutOptions::grid_rows`] are at least large
+    /// enough to contain every instance on `workspace_id` (e.g. after restore from storage when
+    /// the grid was previously grown).
+    pub fn grow_grid_to_fit_instances(&self, workspace_id: Uuid, instances: &[SharedInstance]) {
+        const MAX_GRID_ROWS: u16 = 512;
+        const MAX_GRID_COLS: u16 = 128;
+        let mut opts = self.options.read().clone();
+        let mut max_col_end: u16 = 0;
+        let mut max_row_end: u16 = 0;
+        for inst in instances.iter().filter(|i| i.workspace_id == workspace_id) {
+            let pos = *inst.position.read();
+            let size = *inst.size.read();
+            let (w, h) = size_in_cells(size);
+            max_col_end = max_col_end.max(pos.col.saturating_add(w));
+            max_row_end = max_row_end.max(pos.row.saturating_add(h));
+        }
+        let mut changed = false;
+        if max_col_end > opts.grid_columns {
+            opts.grid_columns = max_col_end.min(MAX_GRID_COLS);
+            changed = true;
+        }
+        if max_row_end > opts.grid_rows {
+            opts.grid_rows = max_row_end.min(MAX_GRID_ROWS);
+            changed = true;
+        }
+        if changed {
+            self.set_options(opts);
+        }
     }
 
     /// Auto-place a widget of `size` on `workspace_id`.
@@ -169,6 +203,56 @@ impl LayoutEngine {
         }
     }
 
+    /// Like [`Self::auto_place_excluding`], but grows [`LayoutOptions::grid_rows`] (space at the
+    /// bottom) until a slot appears, and widens [`LayoutOptions::grid_columns`] if the widget does
+    /// not fit horizontally. Returns the original error if limits are reached.
+    pub fn auto_place_excluding_with_growth(
+        &self,
+        workspace_id: Uuid,
+        size: WidgetSize,
+        existing: &[SharedInstance],
+        ignore_instance: Uuid,
+    ) -> Result<GridPosition> {
+        const MAX_GRID_ROWS: u16 = 512;
+        const MAX_GRID_COLS: u16 = 128;
+        const MAX_ITERS: u32 = 1024;
+        let mut iters = 0u32;
+        loop {
+            iters += 1;
+            if iters > MAX_ITERS {
+                return Err(WidgetError::Layout(
+                    "auto_place: exceeded growth iteration cap".into(),
+                ));
+            }
+            match self.auto_place_excluding(workspace_id, size, existing, ignore_instance) {
+                Ok(p) => return Ok(p),
+                Err(e) => {
+                    let mut opts = self.options();
+                    let (wc, hc) = size_in_cells(size);
+                    let mut grew = false;
+                    if wc > opts.grid_columns && opts.grid_columns < MAX_GRID_COLS {
+                        opts.grid_columns = wc.min(MAX_GRID_COLS);
+                        grew = true;
+                    }
+                    if hc > opts.grid_rows && opts.grid_rows < MAX_GRID_ROWS {
+                        opts.grid_rows = hc.min(MAX_GRID_ROWS);
+                        grew = true;
+                    }
+                    if !grew && opts.grid_rows < MAX_GRID_ROWS {
+                        opts.grid_rows = opts.grid_rows.saturating_add(1);
+                        grew = true;
+                    }
+                    if !grew {
+                        return Err(e);
+                    }
+                    opts.grid_columns = opts.grid_columns.min(MAX_GRID_COLS);
+                    opts.grid_rows = opts.grid_rows.min(MAX_GRID_ROWS);
+                    self.set_options(opts);
+                }
+            }
+        }
+    }
+
     /// Validate a placement request against existing widgets.
     ///
     /// # Errors
@@ -226,15 +310,24 @@ impl LayoutEngine {
         viewport: ViewportSize,
     ) -> LayoutSnapshot {
         let opts = self.options.read().clone();
-        let cell_w = viewport.width_px / opts.grid_columns as f32;
-        let cell_h = viewport.height_px / opts.grid_rows as f32;
+        let view_rows = opts.view_rows.max(1);
+        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_h = viewport.height_px / f32::from(view_rows);
         let gutter = opts.gutter_px;
-        let mut cells = Vec::with_capacity(instances.len());
-        for (idx, inst) in instances
+        let content_width_px = viewport.width_px;
+        let content_height_px = f32::from(opts.grid_rows) * cell_h;
+        let mut insts: Vec<SharedInstance> = instances
             .iter()
             .filter(|i| i.workspace_id == workspace_id)
-            .enumerate()
-        {
+            .cloned()
+            .collect();
+        insts.sort_by(|a, b| {
+            let ta = *a.last_touched.read();
+            let tb = *b.last_touched.read();
+            tb.cmp(&ta)
+        });
+        let mut cells = Vec::with_capacity(insts.len());
+        for (idx, inst) in insts.into_iter().enumerate() {
             let position = *inst.position.read();
             let size = *inst.size.read();
             let (w_cells, h_cells) = size_in_cells(size);
@@ -263,6 +356,8 @@ impl LayoutEngine {
             grid_rows: opts.grid_rows,
             cell_width_px: cell_w,
             cell_height_px: cell_h,
+            content_width_px,
+            content_height_px,
         }
     }
 }
@@ -280,8 +375,9 @@ pub fn position_from_content_top_left(
     top_left_y: f32,
     size: WidgetSize,
 ) -> GridPosition {
+    let view_rows = opts.view_rows.max(1);
     let cell_w = viewport.width_px / f32::from(opts.grid_columns);
-    let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+    let cell_h = viewport.height_px / f32::from(view_rows);
     let g = opts.gutter_px;
     let col_f = (top_left_x - g * 0.5) / cell_w;
     let row_f = (top_left_y - g * 0.5) / cell_h;
@@ -310,8 +406,9 @@ pub fn free_placement_from_pixel_bounds(
     opts: &LayoutOptions,
 ) -> (GridPosition, WidgetSize) {
     let g = opts.gutter_px;
+    let view_rows = opts.view_rows.max(1);
     let cell_w = viewport.width_px / f32::from(opts.grid_columns);
-    let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+    let cell_h = viewport.height_px / f32::from(view_rows);
     // Inverse of snapshot: width = w*cell_w - g, height = h*cell_h - g
     let w = (bounds.width + g) / cell_w;
     let h = (bounds.height + g) / cell_h;
@@ -517,6 +614,23 @@ mod tests {
         assert!((placed.bounds.y - 4.0).abs() < 0.1);
         assert!((placed.bounds.width - 192.0).abs() < 0.1);
         assert!((placed.bounds.height - 192.0).abs() < 0.1);
+        assert!((snap.content_width_px - 1600.0).abs() < 0.1);
+        assert!((snap.content_height_px - 1000.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn snapshot_content_grows_with_extra_rows() {
+        let mut opts = LayoutOptions::default();
+        opts.grid_rows = 20;
+        opts.view_rows = 10;
+        let engine = LayoutEngine::new(opts);
+        let ws = Uuid::new_v4();
+        let snap = engine.snapshot(ws, &[], ViewportSize {
+            width_px: 1600.0,
+            height_px: 1000.0,
+        });
+        assert!((snap.cell_height_px - 100.0).abs() < 0.1);
+        assert!((snap.content_height_px - 2000.0).abs() < 0.1);
     }
 
     #[test]
@@ -534,7 +648,7 @@ mod tests {
         let (w, h) = size_in_cells(WidgetSize::ExtraLarge);
         assert_eq!((w, h), (8, 4));
         let cell_w = viewport.width_px / f32::from(opts.grid_columns);
-        let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+        let cell_h = viewport.height_px / f32::from(opts.view_rows.max(1));
         let g = opts.gutter_px;
         let x = pos.col as f32 * cell_w + g * 0.5;
         let y = pos.row as f32 * cell_h + g * 0.5;
@@ -580,7 +694,7 @@ mod tests {
         };
         let g = opts.gutter_px;
         let cell_w = viewport.width_px / f32::from(opts.grid_columns);
-        let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+        let cell_h = viewport.height_px / f32::from(opts.view_rows.max(1));
         let wcells: u16 = 4;
         let hcells: u16 = 3;
         let pb = PixelBounds {
@@ -592,6 +706,43 @@ mod tests {
         let (p, s) = free_placement_from_pixel_bounds(&pb, viewport, &opts);
         assert_eq!(p, GridPosition { col: 0, row: 0 });
         assert_eq!(s, WidgetSize::Free { w: 4, h: 3 });
+    }
+
+    #[test]
+    fn grow_grid_to_fit_instances_expands_for_widgets_below_default_rows() {
+        let engine = LayoutEngine::new(LayoutOptions::default());
+        let ws = Uuid::new_v4();
+        let inst = fake_instance(ws, GridPosition { col: 0, row: 15 }, WidgetSize::Small);
+        engine.grow_grid_to_fit_instances(ws, &[inst]);
+        assert!(engine.options().grid_rows >= 17);
+    }
+
+    #[test]
+    fn auto_place_excluding_with_growth_extends_grid_rows() {
+        let mut opts = LayoutOptions::default();
+        opts.grid_columns = 4;
+        opts.grid_rows = 2;
+        opts.view_rows = 2;
+        let engine = LayoutEngine::new(opts);
+        let ws = Uuid::new_v4();
+        let mut all: Vec<SharedInstance> = Vec::new();
+        for col in [0u16, 2u16] {
+            for row in [0u16, 1u16] {
+                all.push(fake_instance(
+                    ws,
+                    GridPosition { col, row },
+                    WidgetSize::Small,
+                ));
+            }
+        }
+        let extra = fake_instance(ws, GridPosition { col: 0, row: 0 }, WidgetSize::Small);
+        let extra_id = extra.id;
+        all.push(extra);
+        let pos = engine
+            .auto_place_excluding_with_growth(ws, WidgetSize::Small, &all, extra_id)
+            .expect("fifth 2×2 fits after growing rows");
+        assert!(engine.options().grid_rows > 2);
+        assert!(pos.row >= 2, "new slot should be on an added row: {pos:?}");
     }
 
     #[test]

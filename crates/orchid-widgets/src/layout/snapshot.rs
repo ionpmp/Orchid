@@ -54,4 +54,8 @@ pub struct LayoutSnapshot {
     pub cell_width_px: f32,
     /// Effective cell height.
     pub cell_height_px: f32,
+    /// Horizontal extent of the scrollable canvas (logical px), usually the viewport width.
+    pub content_width_px: f32,
+    /// Vertical extent: `grid_rows * cell_height_px` so extra logical rows extend below the fold.
+    pub content_height_px: f32,
 }

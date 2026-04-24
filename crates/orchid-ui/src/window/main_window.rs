@@ -260,10 +260,10 @@ impl MainWindowController {
         };
         let size = *inst.size.read();
         let all = widgets.instances_for_workspace(workspace_id);
-        let pos = match layout.auto_place_excluding(workspace_id, size, &all, new_id) {
+        let pos = match layout.auto_place_excluding_with_growth(workspace_id, size, &all, new_id) {
             Ok(p) => p,
             Err(e) => {
-                warn!(?e, "auto-place: no free cell");
+                warn!(?e, "auto-place: no free cell after expanding grid");
                 return;
             }
         };
@@ -602,6 +602,7 @@ impl MainWindowController {
         if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
             let inst = self.widget_manager.instances_for_workspace(w.id);
             let (vw, vh) = *self.canvas_size.lock();
+            self.layout_engine.grow_grid_to_fit_instances(w.id, &inst);
             for pl in self
                 .layout_engine
                 .snapshot(
@@ -762,11 +763,13 @@ impl MainWindowController {
         };
         if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
             let (vw, vh) = *self.canvas_size.lock();
+            let inst = self.widget_manager.instances_for_workspace(w.id);
+            self.layout_engine.grow_grid_to_fit_instances(w.id, &inst);
             for pl in self
                 .layout_engine
                 .snapshot(
                     w.id,
-                    &self.widget_manager.instances_for_workspace(w.id),
+                    &inst,
                     ViewportSize {
                         width_px: vw,
                         height_px: vh,
@@ -1001,6 +1004,8 @@ impl MainWindowController {
             .map_err(|e| UiError::Slint(format!("{e}")))?;
         let (vw, vh) = *self.canvas_size.lock();
         let instances = self.widget_manager.instances_for_workspace(w.id);
+        self.layout_engine
+            .grow_grid_to_fit_instances(w.id, &instances);
         let view = ViewportSize {
             width_px: vw,
             height_px: vh,
@@ -1207,6 +1212,8 @@ impl MainWindowController {
             .map_err(|e| UiError::Slint(format!("{e}")))?;
         let (vw, vh) = *self.canvas_size.lock();
         let instances = self.widget_manager.instances_for_workspace(w.id);
+        self.layout_engine
+            .grow_grid_to_fit_instances(w.id, &instances);
         let n_inst = instances.len();
         let view = ViewportSize {
             width_px: vw,
@@ -1215,6 +1222,8 @@ impl MainWindowController {
         let snap = self
             .layout_engine
             .snapshot(w.id, &instances, view);
+        let canvas_content_w = snap.content_width_px.max(vw);
+        let canvas_content_h = snap.content_height_px.max(vh);
         let app_g = self.window.global::<AppState>();
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
@@ -1276,6 +1285,8 @@ impl MainWindowController {
             dock_add_label: self.locale.tr("dock-add-label").into(),
             grid_columns: i32::from(snap.grid_columns),
             grid_rows: i32::from(snap.grid_rows),
+            canvas_content_width: canvas_content_w.into(),
+            canvas_content_height: canvas_content_h.into(),
         });
         if pty_changed_needs_rebuild {
             self.schedule_rebuild();
@@ -1338,6 +1349,8 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
         dock_add_label: locale.tr("dock-add-label").into(),
         grid_columns: 16,
         grid_rows: 10,
+        canvas_content_width: 1f32.into(),
+        canvas_content_height: 1f32.into(),
     }
 }
 
