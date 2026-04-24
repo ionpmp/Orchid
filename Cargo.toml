@@ -147,8 +147,19 @@ fluent-bundle = "0.15"
 intl-memoizer = "0.5"
 unic-langid = { version = "0.9", features = ["macros"] }
 
-# UI
-slint = { version = "1", features = ["renderer-skia", "backend-winit", "compat-1-2"] }
+# UI — `default-features = false` drops Slint’s default `accessibility` feature, which
+# enables AccessKit on the winit backend. On Windows that can panic with
+# "RefCell already borrowed" (a11y tree build + TerminalView focus) — see
+# winitwindowadapter::handle_focus_change. Re-enable if screen-reader support is required.
+slint = { version = "1", default-features = false, features = [
+    "std",
+    "backend-default",
+    "backend-winit",
+    "renderer-femtovg",
+    "renderer-software",
+    "renderer-skia",
+    "compat-1-2",
+] }
 slint-build = "1"
 
 # Internal crates -- path + version keeps workspace inheritance happy.

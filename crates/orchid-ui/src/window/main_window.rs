@@ -8,7 +8,7 @@
 //! `WidgetManager` fills. Blocking the UI thread to await snapshots reintroduces
 //! the jank fixed in task 11B-Fix.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 use orchid_core::EventBus;
 use orchid_i18n::LocaleManager;
-use orchid_storage::{GridPosition, OrchidConfig, WidgetSize};
+use orchid_storage::OrchidConfig;
 use orchid_terminal::SessionManager;
 use orchid_terminal::{FontMetrics, PtySize};
 use orchid_widgets::layout::PixelBounds;
@@ -34,8 +34,10 @@ use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::WidgetPayload;
 use orchid_widgets::{
-    LayoutEngine, WidgetManager, WorkspaceManager,
+    free_placement_from_pixel_bounds, position_from_content_top_left, LayoutEngine, PlacedWidget,
+    WidgetManager, WorkspaceManager,
 };
+use orchid_widgets::SharedInstance;
 use parking_lot::RwLock;
 
 use crate::error::{Result, UiError};
@@ -70,6 +72,8 @@ pub struct MainWindowController {
     /// Proportional / symbol font for drawing code points the monospace face does not contain.
     mono_font_glyph_fallback: Option<fontdue::Font>,
     drag_offset: Arc<Mutex<HashMap<Uuid, (f32, f32)>>>,
+    /// Local (header) grab point at `pointer down`: frame origin is `pointer_canvas - grab`.
+    drag_grab: Arc<Mutex<HashMap<Uuid, (f32, f32)>>>,
     resize_override: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
     drag_start_bounds: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
     resize_state: Arc<Mutex<Option<ResizeInteraction>>>,
@@ -94,6 +98,8 @@ struct ResizeInteraction {
     instance_id: Uuid,
     corner: String,
     start: PixelBounds,
+    /// First pointer report in canvas space.
+    press_canvas: (f32, f32),
 }
 
 impl MainWindowController {
@@ -139,6 +145,7 @@ impl MainWindowController {
             mono_font,
             mono_font_glyph_fallback,
             drag_offset: Arc::new(Mutex::new(HashMap::new())),
+            drag_grab: Arc::new(Mutex::new(HashMap::new())),
             resize_override: Arc::new(Mutex::new(HashMap::new())),
             drag_start_bounds: Arc::new(Mutex::new(HashMap::new())),
             resize_state: Arc::new(Mutex::new(None)),
@@ -237,6 +244,34 @@ impl MainWindowController {
         trace!(target: "orchid_ui::workspace", "rebuild requested");
     }
 
+    /// `create` stores new instances at a placeholder cell; place them on a free grid cell.
+    async fn move_new_widget_to_free_slot(
+        layout: &LayoutEngine,
+        widgets: &WidgetManager,
+        workspace_id: Uuid,
+        new_id: Uuid,
+    ) {
+        let inst = match widgets.get_instance(new_id) {
+            Ok(i) => i,
+            Err(e) => {
+                warn!(?e, "auto-place: new instance");
+                return;
+            }
+        };
+        let size = *inst.size.read();
+        let all = widgets.instances_for_workspace(workspace_id);
+        let pos = match layout.auto_place_excluding(workspace_id, size, &all, new_id) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(?e, "auto-place: no free cell");
+                return;
+            }
+        };
+        if let Err(e) = widgets.move_to(new_id, pos).await {
+            warn!(?e, "auto-place: move_to");
+        }
+    }
+
     /// Match [`Self::canvas_size`] to the window client in logical pixels (workspace canvas area).
     /// Slint `changed` on the canvas does not run for the *first* size, so we poll winit on every
     /// `on_ui_tick` and after `show` until the size converges. Returns `true` if the viewport changed.
@@ -275,13 +310,35 @@ impl MainWindowController {
                             false
                         }
                     };
-                    let from_layout = c
-                        .rebuild_pending
-                        .swap(false, Ordering::AcqRel)
-                        || canvas_size_mismatch;
-                    let from_cache = c.widget_manager.take_frame_pending();
-                    if from_layout || from_cache || scale_changed {
-                        let _ = c.rebuild_workspace_model();
+                    let rebuild_flag = c.rebuild_pending.swap(false, Ordering::AcqRel);
+                    let from_layout = rebuild_flag || canvas_size_mismatch;
+                    let need_full = from_layout || scale_changed;
+                    // While the user drags or resizes, full rebuild + terminal patch are far too
+                    // heavy to run on every ~60Hz tick; defer until the gesture ends.
+                    // Do not require `!canvas_size_mismatch`: winit can report sub-pixel / jittery
+                    // size every frame; that would set `from_layout` and force a full rebuild
+                    // during drag, undoing the preview path. `sync_canvas_size_from_winit` still
+                    // runs so `canvas_size` stays current; a pending rebuild flushes when the
+                    // gesture ends. We only bypass defer for scale (DPR) changes, which are rare
+                    // mid-gesture but need a full pass immediately.
+                    let live_gesture = {
+                        let d = c.drag_offset.lock();
+                        let r = c.resize_override.lock();
+                        !d.is_empty() || !r.is_empty()
+                    };
+                    let defer_heavy = live_gesture && !scale_changed;
+                    if need_full {
+                        if defer_heavy {
+                            c.rebuild_pending.store(true, Ordering::Release);
+                        } else {
+                            c.widget_manager.drain_frame_dirty_ids();
+                            let _ = c.rebuild_workspace_model();
+                        }
+                    } else if !defer_heavy {
+                        let dirty = c.widget_manager.drain_frame_dirty_ids();
+                        if !dirty.is_empty() {
+                            let _ = c.patch_workspace_frames(&dirty);
+                        }
                     }
                 }
             }
@@ -328,17 +385,17 @@ impl MainWindowController {
         });
         self.window.on_widget_drag_started({
             let t = t.clone();
-            move |id, _x, _y| {
+            move |id, lx, ly| {
                 if let Some(c) = t.upgrade() {
-                    c.on_widget_drag_started(&id);
+                    c.on_widget_drag_started(&id, lx, ly);
                 }
             }
         });
         self.window.on_widget_drag_moved({
             let t = t.clone();
-            move |id, dx, dy| {
+            move |id, canvas_x, canvas_y| {
                 if let Some(c) = t.upgrade() {
-                    c.on_widget_drag_moved(&id, dx, dy);
+                    c.on_widget_drag_moved(&id, canvas_x, canvas_y);
                 }
             }
         });
@@ -352,17 +409,17 @@ impl MainWindowController {
         });
         self.window.on_widget_resize_started({
             let t = t.clone();
-            move |id, corner| {
+            move |id, corner, press_x, press_y| {
                 if let Some(c) = t.upgrade() {
-                    c.on_widget_resize_started(&id, &corner);
+                    c.on_widget_resize_started(&id, &corner, press_x, press_y);
                 }
             }
         });
         self.window.on_widget_resize_moved({
             let t = t.clone();
-            move |id, dx, dy| {
+            move |id, canvas_x, canvas_y| {
                 if let Some(c) = t.upgrade() {
-                    c.on_widget_resize_moved(&id, dx, dy);
+                    c.on_widget_resize_moved(&id, canvas_x, canvas_y);
                 }
             }
         });
@@ -394,6 +451,7 @@ impl MainWindowController {
     }
 
     fn on_get_started(self: &Arc<Self>) {
+        let le = self.layout_engine.clone();
         let wm = self.widget_manager.clone();
         let wsm = self.workspace_manager.clone();
         let loc = self.locale.clone();
@@ -411,7 +469,7 @@ impl MainWindowController {
             } else {
                 wsm.list()[0].id
             };
-            if let Err(e) = wm
+            let new_id = match wm
                 .create(orchid_widgets::CreateWidgetRequest {
                     type_id: "terminal".into(),
                     workspace_id: ws,
@@ -422,9 +480,13 @@ impl MainWindowController {
                 })
                 .await
             {
-                warn!(?e, "terminal");
-                return;
-            }
+                Ok(id) => id,
+                Err(e) => {
+                    warn!(?e, "terminal");
+                    return;
+                }
+            };
+            Self::move_new_widget_to_free_slot(&le, &wm, ws, new_id).await;
             if let Some(c) = t.upgrade() {
                 c.window.global::<AppState>().set_mode(1);
                 c.schedule_rebuild();
@@ -478,6 +540,7 @@ impl MainWindowController {
             warn!(type_id = type_id_str, "unknown widget type from dock");
             return;
         }
+        let le = self.layout_engine.clone();
         let wm = self.widget_manager.clone();
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
@@ -487,7 +550,7 @@ impl MainWindowController {
                 Ok(w) => w.id,
                 Err(_) => return,
             };
-            if let Err(e) = wm
+            let new_id = match wm
                 .create(orchid_widgets::CreateWidgetRequest {
                     type_id: type_owned,
                     workspace_id: wid,
@@ -498,9 +561,13 @@ impl MainWindowController {
                 })
                 .await
             {
-                warn!(?e, "add widget");
-                return;
-            }
+                Ok(id) => id,
+                Err(e) => {
+                    warn!(?e, "add widget");
+                    return;
+                }
+            };
+            Self::move_new_widget_to_free_slot(&le, &wm, wid, new_id).await;
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
             }
@@ -519,16 +586,19 @@ impl MainWindowController {
             }
             if let Some(c) = t.upgrade() {
                 c.drag_offset.lock().remove(&u);
+                c.drag_start_bounds.lock().remove(&u);
+                c.drag_grab.lock().remove(&u);
                 c.resize_override.lock().remove(&u);
                 c.schedule_rebuild();
             }
         });
     }
 
-    fn on_widget_drag_started(self: &Arc<Self>, id: &SharedString) {
+    fn on_widget_drag_started(self: &Arc<Self>, id: &SharedString, grab_lx: f32, grab_ly: f32) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
+        self.drag_grab.lock().insert(u, (grab_lx, grab_ly));
         if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
             let inst = self.widget_manager.instances_for_workspace(w.id);
             let (vw, vh) = *self.canvas_size.lock();
@@ -552,11 +622,54 @@ impl MainWindowController {
         }
     }
 
-    fn on_widget_drag_moved(self: &Arc<Self>, id: &SharedString, dx: f32, dy: f32) {
+    fn on_widget_drag_moved(self: &Arc<Self>, id: &SharedString, canvas_x: f32, canvas_y: f32) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
-        *self.drag_offset.lock().entry(u).or_insert((0.0, 0.0)) = (dx, dy);
+        self.apply_drag_frame_preview(u, canvas_x, canvas_y);
+    }
+
+    /// O(1) update of the dragged widget's `x`/`y` in the Slint model (no full rebuild).
+    fn apply_drag_frame_preview(self: &Arc<Self>, instance: Uuid, canvas_x: f32, canvas_y: f32) {
+        let Some((gx, gy)) = self.drag_grab.lock().get(&instance).copied() else {
+            self.schedule_rebuild();
+            return;
+        };
+        let Some(start) = self.drag_start_bounds.lock().get(&instance).copied() else {
+            self.schedule_rebuild();
+            return;
+        };
+        let fx = canvas_x - gx;
+        let fy = canvas_y - gy;
+        *self
+            .drag_offset
+            .lock()
+            .entry(instance)
+            .or_insert((0.0, 0.0)) = (fx - start.x, fy - start.y);
+        let v = match self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+        {
+            Some(m) => m,
+            None => {
+                self.schedule_rebuild();
+                return;
+            }
+        };
+        let needle = instance.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            row.x = fx;
+            row.y = fy;
+            v.set_row_data(r, row);
+            return;
+        }
         self.schedule_rebuild();
     }
 
@@ -564,8 +677,14 @@ impl MainWindowController {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
-        let off = self.drag_offset.lock().remove(&u);
-        let start = self.drag_start_bounds.lock().remove(&u);
+        // Keep drag offset in place until the async path commits (or bails) so
+        // `rebuild` during a failed can_place still shows the pre-commit drag, not
+        // a one-frame jump with stale math.
+        let (off, start) = {
+            let doff = self.drag_offset.lock();
+            let ds = self.drag_start_bounds.lock();
+            (doff.get(&u).copied(), ds.get(&u).copied())
+        };
         let (off, start) = match (off, start) {
             (Some(o), Some(s)) => (o, s),
             _ => return,
@@ -574,35 +693,50 @@ impl MainWindowController {
         let le = self.layout_engine.clone();
         let t = Arc::downgrade(self);
         let _ = slint::spawn_local(async move {
+            let end_drag = |c: &Arc<MainWindowController>| {
+                c.drag_offset.lock().remove(&u);
+                c.drag_start_bounds.lock().remove(&u);
+                c.drag_grab.lock().remove(&u);
+            };
             let Some(c) = t.upgrade() else {
                 return;
             };
             let w = match c.workspace_manager.active() {
                 Ok(w) => w,
-                Err(_) => return,
+                Err(_) => {
+                    if let Some(c) = t.upgrade() {
+                        end_drag(&c);
+                        c.schedule_rebuild();
+                    }
+                    return;
+                }
             };
             let (vw, vh) = *c.canvas_size.lock();
             let opts = le.options();
-            let g = opts.gutter_px;
-            let cell_w = vw / f32::from(opts.grid_columns);
-            let cell_h = vh / f32::from(opts.grid_rows);
             let new_x = start.x + off.0;
             let new_y = start.y + off.1;
-            let col = ((new_x - g * 0.5) / cell_w)
-                .round()
-                .clamp(0.0, f32::from(opts.grid_columns.saturating_sub(1))) as u16;
-            let row = ((new_y - g * 0.5) / cell_h)
-                .round()
-                .clamp(0.0, f32::from(opts.grid_rows.saturating_sub(1))) as u16;
             let inst = match wm.get_instance(u) {
                 Ok(i) => i,
-                Err(_) => return,
+                Err(_) => {
+                    if let Some(c) = t.upgrade() {
+                        end_drag(&c);
+                        c.schedule_rebuild();
+                    }
+                    return;
+                }
             };
             let size = *inst.size.read();
+            let viewport = ViewportSize {
+                width_px: vw,
+                height_px: vh,
+            };
+            let pos = position_from_content_top_left(viewport, &opts, new_x, new_y, size);
             let all = c.widget_manager.instances_for_workspace(w.id);
-            let pos = GridPosition { col, row };
             if le.can_place(w.id, u, pos, size, &all).is_err() {
-                c.schedule_rebuild();
+                if let Some(c) = t.upgrade() {
+                    end_drag(&c);
+                    c.schedule_rebuild();
+                }
                 return;
             }
             let (pos, _) = le.snap(pos, size);
@@ -610,13 +744,19 @@ impl MainWindowController {
                 warn!(?e, "move");
             }
             if let Some(c) = t.upgrade() {
-                c.drag_offset.lock().remove(&u);
+                end_drag(&c);
                 c.schedule_rebuild();
             }
         });
     }
 
-    fn on_widget_resize_started(self: &Arc<Self>, id: &SharedString, corner: &SharedString) {
+    fn on_widget_resize_started(
+        self: &Arc<Self>,
+        id: &SharedString,
+        corner: &SharedString,
+        press_x: f32,
+        press_y: f32,
+    ) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
@@ -639,6 +779,7 @@ impl MainWindowController {
                         instance_id: u,
                         corner: corner.to_string(),
                         start: pl.bounds,
+                        press_canvas: (press_x, press_y),
                     });
                     return;
                 }
@@ -646,7 +787,7 @@ impl MainWindowController {
         }
     }
 
-    fn on_widget_resize_moved(self: &Arc<Self>, id: &SharedString, dx: f32, dy: f32) {
+    fn on_widget_resize_moved(self: &Arc<Self>, id: &SharedString, canvas_x: f32, canvas_y: f32) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
@@ -655,34 +796,67 @@ impl MainWindowController {
             if s.instance_id != u {
                 return;
             }
+            let dcx = canvas_x - s.press_canvas.0;
+            let dcy = canvas_y - s.press_canvas.1;
             let mut b = s.start;
             match s.corner.as_str() {
                 "se" => {
-                    b.width = (b.width + dx).max(40.0);
-                    b.height = (b.height + dy).max(40.0);
+                    b.width = (b.width + dcx).max(40.0);
+                    b.height = (b.height + dcy).max(40.0);
                 }
                 "sw" => {
-                    b.x += dx;
-                    b.width = (b.width - dx).max(40.0);
-                    b.height = (b.height + dy).max(40.0);
+                    b.x += dcx;
+                    b.width = (b.width - dcx).max(40.0);
+                    b.height = (b.height + dcy).max(40.0);
                 }
                 "ne" => {
-                    b.y += dy;
-                    b.width = (b.width + dx).max(40.0);
-                    b.height = (b.height - dy).max(40.0);
+                    b.y += dcy;
+                    b.width = (b.width + dcx).max(40.0);
+                    b.height = (b.height - dcy).max(40.0);
                 }
                 "nw" => {
-                    b.x += dx;
-                    b.y += dy;
-                    b.width = (b.width - dx).max(40.0);
-                    b.height = (b.height - dy).max(40.0);
+                    b.x += dcx;
+                    b.y += dcy;
+                    b.width = (b.width - dcx).max(40.0);
+                    b.height = (b.height - dcy).max(40.0);
                 }
                 _ => {}
             }
             drop(st);
             self.resize_override.lock().insert(u, b);
-            self.schedule_rebuild();
+            self.apply_resize_frame_preview(u, b);
         }
+    }
+
+    /// O(1) update of a frame's bounds during live resize (no full `rebuild_workspace_model`).
+    fn apply_resize_frame_preview(self: &Arc<Self>, instance: Uuid, b: PixelBounds) {
+        let v = match self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+        {
+            Some(m) => m,
+            None => {
+                self.schedule_rebuild();
+                return;
+            }
+        };
+        let needle = instance.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            row.x = b.x;
+            row.y = b.y;
+            row.width = b.width;
+            row.height = b.height;
+            v.set_row_data(r, row);
+            return;
+        }
+        self.schedule_rebuild();
     }
 
     fn on_widget_resize_ended(self: &Arc<Self>, id: &SharedString) {
@@ -703,15 +877,11 @@ impl MainWindowController {
             }
             let opts = le.options();
             let (vw, vh) = *c.canvas_size.lock();
-            let g = opts.gutter_px;
-            let cell_w = vw / f32::from(opts.grid_columns);
-            let cell_h = vh / f32::from(opts.grid_rows);
-            let col = ((pb.x - g * 0.5) / cell_w).round() as u16;
-            let row = ((pb.y - g * 0.5) / cell_h).round() as u16;
-            let wcells = (((pb.width + g) / cell_w).round() as u16).max(1);
-            let hcells = (((pb.height + g) / cell_h).round() as u16).max(1);
-            let new_pos = GridPosition { col, row };
-            let new_size = WidgetSize::Free { w: wcells, h: hcells };
+            let viewport = ViewportSize {
+                width_px: vw,
+                height_px: vh,
+            };
+            let (new_pos, new_size) = free_placement_from_pixel_bounds(&pb, viewport, &opts);
             if let Err(e) = wm.move_to(u, new_pos).await {
                 warn!(?e, "resize move");
             }
@@ -807,11 +977,224 @@ impl MainWindowController {
         // resize the PTY here — that thrashes the shell and triggers extra rebuilds.
         // `TerminalView` uses `image-fit: fill` until the PTY is committed in
         // [`on_widget_resize_ended`] and the next non-preview rebuild.
+        if self.drag_offset.lock().contains_key(&inst) {
+            return;
+        }
         if self.resize_override.lock().contains_key(&inst) {
             return;
         }
         if self.resize_terminal_pty_to_content(inst, w, h) {
             self.schedule_rebuild();
+        }
+    }
+
+    /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
+    /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
+    fn patch_workspace_frames(self: &Arc<Self>, ids: &[Uuid]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let unique: HashSet<Uuid> = ids.iter().copied().collect();
+        let w = self
+            .workspace_manager
+            .active()
+            .map_err(|e| UiError::Slint(format!("{e}")))?;
+        let (vw, vh) = *self.canvas_size.lock();
+        let instances = self.widget_manager.instances_for_workspace(w.id);
+        let view = ViewportSize {
+            width_px: vw,
+            height_px: vh,
+        };
+        let snap = self
+            .layout_engine
+            .snapshot(w.id, &instances, view);
+        let off = self.drag_offset.lock().clone();
+        let ro = self.resize_override.lock().clone();
+        let v = self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+            .expect("workspace widgets must be VecModel-backed");
+        for id in &unique {
+            let Some((idx, pl)) = snap
+                .cells
+                .iter()
+                .enumerate()
+                .find(|(_, c)| c.instance_id == *id)
+            else {
+                continue;
+            };
+            let mut bounds = pl.bounds;
+            if let Some(o) = off.get(id) {
+                bounds.x += o.0;
+                bounds.y += o.1;
+            }
+            if let Some(ov) = ro.get(id) {
+                bounds = *ov;
+            }
+            let Ok(iref) = self.widget_manager.get_instance(*id) else {
+                continue;
+            };
+            if iref.type_id == "terminal" && !ro.contains_key(id) {
+                let cw = bounds.width.max(1.0);
+                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
+                let _ = self.resize_terminal_pty_to_content(*id, cw, ch);
+            }
+            let new_row = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
+            let needle = id.to_string();
+            for r in 0..v.row_count() {
+                let Some(row) = v.row_data(r) else {
+                    continue;
+                };
+                if row.instance_id.as_str() == needle.as_str() {
+                    v.set_row_data(r, new_row);
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn build_widget_frame_for_placed(
+        &self,
+        pl: &PlacedWidget,
+        z_order: i32,
+        bounds: PixelBounds,
+        iref: &SharedInstance,
+    ) -> WidgetFrameModel {
+        let type_s: SharedString = iref.type_id.clone().into();
+        let cache = self.widget_manager.snapshot_cache();
+        let cached = cache.get(pl.instance_id);
+        let (
+            title,
+            tcols,
+            trows,
+            tcells,
+            tpix,
+            tcc,
+            tcr,
+            tcvis,
+            weather_model,
+            moon_model,
+            system_model,
+        ) = if let Some(ws) = cached.as_deref() {
+            let tstr: SharedString = ws.title.clone().into();
+            match &ws.payload {
+                WidgetPayload::Terminal(t) => {
+                    let img = if let Some(ref f) = self.mono_font {
+                        let size_md = self.theme.current().tokens.typography.size_md;
+                        let acc = self.theme.current().tokens.color.accent_brand;
+                        let ccol = [acc.r, acc.g, acc.b, acc.a];
+                        let cw = self.font_metrics.cell_width_px as u32;
+                        let ch = self.font_metrics.cell_height_px as u32;
+                        let scale = self.window.window().scale_factor();
+                        let glyph_fb = self.mono_font_glyph_fallback.as_ref();
+                        terminal_raster::render_terminal(
+                            t,
+                            f,
+                            glyph_fb,
+                            size_md,
+                            cw,
+                            ch,
+                            scale,
+                            ccol,
+                        )
+                        .unwrap_or_default()
+                    } else {
+                        Image::default()
+                    };
+                    (
+                        tstr,
+                        i32::from(t.cols),
+                        i32::from(t.rows),
+                        build_terminal_model(t),
+                        img,
+                        i32::from(t.cursor_col),
+                        i32::from(t.cursor_row),
+                        t.cursor_visible,
+                        empty_weather_model(),
+                        empty_moon_model(),
+                        empty_system_model(),
+                    )
+                }
+                WidgetPayload::Weather(w) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    build_weather_model(w, &self.locale),
+                    empty_moon_model(),
+                    empty_system_model(),
+                ),
+                WidgetPayload::Moon(m) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    build_moon_model(m, &self.locale),
+                    empty_system_model(),
+                ),
+                WidgetPayload::SystemIndicators(s) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    empty_moon_model(),
+                    build_system_model(s),
+                ),
+                _ => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    empty_moon_model(),
+                    empty_system_model(),
+                ),
+            }
+        } else {
+            default_frame_data_extended(&self.locale, iref.type_id.as_str())
+        };
+        let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
+        WidgetFrameModel {
+            instance_id: pl.instance_id.to_string().into(),
+            type_id: type_s,
+            title,
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            z_order,
+            terminal_cols: tcols,
+            terminal_rows: trows,
+            terminal_cells: tcells,
+            terminal_cursor_col: tcc,
+            terminal_cursor_row: tcr,
+            terminal_cursor_visible: tcvis,
+            terminal_cell_width: cw,
+            terminal_cell_height: ch,
+            terminal_pixels: tpix,
+            weather: weather_model,
+            moon: moon_model,
+            system: system_model,
         }
     }
 
@@ -835,8 +1218,8 @@ impl MainWindowController {
         let app_g = self.window.global::<AppState>();
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
-        let cache = self.widget_manager.snapshot_cache();
         let mut frames: Vec<WidgetFrameModel> = Vec::new();
+        let mut pty_changed_needs_rebuild = false;
         for (idx, pl) in snap.cells.iter().enumerate() {
             let mut bounds = pl.bounds;
             if let Some(o) = off.get(&pl.instance_id) {
@@ -853,143 +1236,15 @@ impl MainWindowController {
                 let cw = bounds.width.max(1.0);
                 let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
                 if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
-                    self.schedule_rebuild();
+                    pty_changed_needs_rebuild = true;
                 }
             }
-            let type_s: SharedString = iref.type_id.clone().into();
-            let cached = cache.get(pl.instance_id);
-            let (
-                title,
-                tcols,
-                trows,
-                tcells,
-                tpix,
-                tcc,
-                tcr,
-                tcvis,
-                weather_model,
-                moon_model,
-                system_model,
-            ) = if let Some(ws) = cached.as_deref() {
-                let tstr: SharedString = ws.title.clone().into();
-                match &ws.payload {
-                    WidgetPayload::Terminal(t) => {
-                        let img = if let Some(ref f) = self.mono_font {
-                            let size_md = self.theme.current().tokens.typography.size_md;
-                            let acc = self.theme.current().tokens.color.accent_brand;
-                            let ccol = [acc.r, acc.g, acc.b, acc.a];
-                            let cw = self.font_metrics.cell_width_px as u32;
-                            let ch = self.font_metrics.cell_height_px as u32;
-                            let scale = self.window.window().scale_factor();
-                            let glyph_fb = self.mono_font_glyph_fallback.as_ref();
-                            terminal_raster::render_terminal(
-                                t,
-                                f,
-                                glyph_fb,
-                                size_md,
-                                cw,
-                                ch,
-                                scale,
-                                ccol,
-                            )
-                            .unwrap_or_default()
-                        } else {
-                            Image::default()
-                        };
-                        (
-                            tstr,
-                            i32::from(t.cols),
-                            i32::from(t.rows),
-                            build_terminal_model(t),
-                            img,
-                            i32::from(t.cursor_col),
-                            i32::from(t.cursor_row),
-                            t.cursor_visible,
-                            empty_weather_model(),
-                            empty_moon_model(),
-                            empty_system_model(),
-                        )
-                    }
-                    WidgetPayload::Weather(w) => (
-                        tstr,
-                        80,
-                        24,
-                        blank_terminal(80, 24),
-                        Image::default(),
-                        0,
-                        0,
-                        true,
-                        build_weather_model(w, &self.locale),
-                        empty_moon_model(),
-                        empty_system_model(),
-                    ),
-                    WidgetPayload::Moon(m) => (
-                        tstr,
-                        80,
-                        24,
-                        blank_terminal(80, 24),
-                        Image::default(),
-                        0,
-                        0,
-                        true,
-                        empty_weather_model(),
-                        build_moon_model(m, &self.locale),
-                        empty_system_model(),
-                    ),
-                    WidgetPayload::SystemIndicators(s) => (
-                        tstr,
-                        80,
-                        24,
-                        blank_terminal(80, 24),
-                        Image::default(),
-                        0,
-                        0,
-                        true,
-                        empty_weather_model(),
-                        empty_moon_model(),
-                        build_system_model(s),
-                    ),
-                    _ => (
-                        tstr,
-                        80,
-                        24,
-                        blank_terminal(80, 24),
-                        Image::default(),
-                        0,
-                        0,
-                        true,
-                        empty_weather_model(),
-                        empty_moon_model(),
-                        empty_system_model(),
-                    ),
-                }
-            } else {
-                default_frame_data_extended(&self.locale, iref.type_id.as_str())
-            };
-            let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
-            let fm = WidgetFrameModel {
-                instance_id: pl.instance_id.to_string().into(),
-                type_id: type_s,
-                title,
-                x: bounds.x,
-                y: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                z_order: idx as i32,
-                terminal_cols: tcols,
-                terminal_rows: trows,
-                terminal_cells: tcells,
-                terminal_cursor_col: tcc,
-                terminal_cursor_row: tcr,
-                terminal_cursor_visible: tcvis,
-                terminal_cell_width: cw,
-                terminal_cell_height: ch,
-                terminal_pixels: tpix,
-                weather: weather_model,
-                moon: moon_model,
-                system: system_model,
-            };
-            frames.push(fm);
+            frames.push(self.build_widget_frame_for_placed(
+                pl,
+                idx as i32,
+                bounds,
+                &iref,
+            ));
         }
         let wlist: Vec<WorkspaceSummary> = self
             .workspace_manager
@@ -1022,6 +1277,9 @@ impl MainWindowController {
             grid_columns: i32::from(snap.grid_columns),
             grid_rows: i32::from(snap.grid_rows),
         });
+        if pty_changed_needs_rebuild {
+            self.schedule_rebuild();
+        }
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
         debug!(
             target: "orchid_ui::workspace",
@@ -1038,9 +1296,12 @@ impl MainWindowController {
         self.window
             .show()
             .map_err(|e| UiError::Slint(format!("show: {e}")))?;
-        // Converge layout viewport to the real client size; `on_ui_tick` also polls until stable.
+        // Converge layout: sync canvas, then `schedule_rebuild` (do not call
+        // `rebuild_workspace_model` synchronously here). A sync rebuild after
+        // `show()` can re-enter Slint/winit while a borrow is still held, causing
+        // `RefCell already borrowed` panics on Windows.
         if self.sync_canvas_size_from_winit() && self.workspace_manager.active().is_ok() {
-            let _ = self.rebuild_workspace_model();
+            self.schedule_rebuild();
         }
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         tracing::info!("Main window closed");

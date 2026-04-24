@@ -19,8 +19,8 @@ pub use error::{Result, WidgetError};
 pub use events::*;
 pub use group::{GroupManager, WidgetGroup};
 pub use layout::{
-    LayoutEngine, LayoutMode, LayoutOptions, LayoutSnapshot, PixelBounds, PlacedWidget,
-    ViewportSize,
+    free_placement_from_pixel_bounds, position_from_content_top_left, LayoutEngine, LayoutMode,
+    LayoutOptions, LayoutSnapshot, PixelBounds, PlacedWidget, ViewportSize,
 };
 pub use registry::WidgetRegistry;
 pub use widget::descriptor::{WidgetCategory, WidgetDescriptor, WidgetFactory};

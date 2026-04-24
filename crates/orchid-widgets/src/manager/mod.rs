@@ -3,7 +3,8 @@
 pub mod operations;
 pub mod persistence;
 
-use std::sync::atomic::AtomicBool;
+use std::collections::HashSet;
+use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -64,8 +65,8 @@ pub(crate) struct WidgetManagerInner {
     snapshot_pump: Mutex<Option<JoinHandle<()>>>,
     /// Latest snapshots for UI consumption (updated off the main thread).
     pub snapshot_cache: Arc<WidgetSnapshotCache>,
-    /// Set when a new frame was written to [`WidgetSnapshotCache`]; UI ticks read it.
-    pub ui_frame_pending: Arc<AtomicBool>,
+    /// Instance ids with a new snapshot; drained on the UI thread to refresh those rows only.
+    frame_dirty: parking_lot::Mutex<HashSet<Uuid>>,
 }
 
 /// Public handle to the widget manager.
@@ -108,7 +109,7 @@ impl WidgetManager {
                 sweeper: Mutex::new(None),
                 snapshot_pump: Mutex::new(None),
                 snapshot_cache,
-                ui_frame_pending: Arc::new(AtomicBool::new(false)),
+                frame_dirty: parking_lot::Mutex::new(HashSet::new()),
             }),
         }
     }
@@ -131,11 +132,14 @@ impl WidgetManager {
         &self.inner.snapshot_cache
     }
 
-    /// `true` when the snapshot pump stored a new frame; clears the flag.
-    pub fn take_frame_pending(&self) -> bool {
-        self.inner
-            .ui_frame_pending
-            .swap(false, std::sync::atomic::Ordering::AcqRel)
+    /// Clears and returns which instances have new snapshot data since last drain.
+    /// Used to patch a subset of `WidgetFrameModel` rows instead of a full layout rebuild.
+    pub fn drain_frame_dirty_ids(&self) -> Vec<Uuid> {
+        let mut g = self.inner.frame_dirty.lock();
+        if g.is_empty() {
+            return Vec::new();
+        }
+        mem::take(&mut *g).into_iter().collect()
     }
 
     /// Build a [`WidgetContext`] for the given instance.
@@ -388,9 +392,7 @@ async fn run_snapshot_pump(inner: &WidgetManagerInner) {
                 .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
             inner.snapshot_cache.put(id, snap);
             if is_new {
-                inner
-                    .ui_frame_pending
-                    .store(true, std::sync::atomic::Ordering::Release);
+                inner.frame_dirty.lock().insert(id);
             }
         }
     }

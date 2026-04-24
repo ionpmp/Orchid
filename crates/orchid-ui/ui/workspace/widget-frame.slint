@@ -12,7 +12,7 @@ export component WidgetFrame inherits Rectangle {
     callback drag-started(length, length);
     callback drag-moved(length, length);
     callback drag-ended();
-    callback resize-started(string);
+    callback resize-started(string, length, length);
     callback resize-moved(length, length);
     callback resize-ended();
     callback terminal-key-pressed(string);
@@ -47,7 +47,9 @@ export component WidgetFrame inherits Rectangle {
             y: 0;
             moved => {
                 if (self.pressed) {
-                    root.drag-moved(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                    // Pointer in *canvas* (workspace) space: the grab bar moves with the frame, so
+                    // local (mouse-pressed) fights the model and causes visible jitter.
+                    root.drag-moved(root.x + self.mouse-x, root.y + self.mouse-y);
                 }
             }
             pointer-event(event) => {
@@ -103,19 +105,28 @@ export component WidgetFrame inherits Rectangle {
         height: parent.height - 32px;
         background: Theme.surface-base;
 
-        if model.type-id == "terminal" : TerminalView {
+        if model.type-id == "terminal" : Rectangle {
             width: parent.width;
             height: parent.height;
-            cols: model.terminal-cols;
-            rows: model.terminal-rows;
-            cells: model.terminal-cells;
-            pixels: model.terminal-pixels;
-            cursor-col: model.terminal-cursor-col;
-            cursor-row: model.terminal-cursor-row;
-            cursor-visible: model.terminal-cursor-visible;
-            cell-width: model.terminal-cell-width;
-            cell-height: model.terminal-cell-height;
-            key-pressed(text) => { root.terminal-key-pressed(text); }
+            // Viewport must track terminal content only. Emitting on the shared `content` area
+            // fired for every widget and on drag-induced layout noise (x/y) → PTY/rebuild loop.
+            changed width => { root.terminal-viewport-changed(self.width, self.height); }
+            changed height => { root.terminal-viewport-changed(self.width, self.height); }
+
+            TerminalView {
+                width: parent.width;
+                height: parent.height;
+                cols: model.terminal-cols;
+                rows: model.terminal-rows;
+                cells: model.terminal-cells;
+                pixels: model.terminal-pixels;
+                cursor-col: model.terminal-cursor-col;
+                cursor-row: model.terminal-cursor-row;
+                cursor-visible: model.terminal-cursor-visible;
+                cell-width: model.terminal-cell-width;
+                cell-height: model.terminal-cell-height;
+                key-pressed(text) => { root.terminal-key-pressed(text); }
+            }
         }
 
         if model.type-id == "weather" : WeatherView {
@@ -135,13 +146,6 @@ export component WidgetFrame inherits Rectangle {
             height: parent.height;
             model: root.model.system;
         }
-
-        changed width => {
-            root.terminal-viewport-changed(self.width, self.height);
-        }
-        changed height => {
-            root.terminal-viewport-changed(self.width, self.height);
-        }
     }
 
     resize-se := TouchArea {
@@ -152,12 +156,15 @@ export component WidgetFrame inherits Rectangle {
         mouse-cursor: MouseCursor.nwse-resize;
         moved => {
             if (self.pressed) {
-                root.resize-moved(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                root.resize-moved(
+                    root.x + self.x + self.mouse-x,
+                    root.y + self.y + self.mouse-y
+                );
             }
         }
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down) {
-                root.resize-started("se");
+                root.resize-started("se", root.x + self.x + self.mouse-x, root.y + self.y + self.mouse-y);
             } else if (event.kind == PointerEventKind.up) {
                 root.resize-ended();
             }
@@ -172,12 +179,15 @@ export component WidgetFrame inherits Rectangle {
         mouse-cursor: MouseCursor.nesw-resize;
         moved => {
             if (self.pressed) {
-                root.resize-moved(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                root.resize-moved(
+                    root.x + self.x + self.mouse-x,
+                    root.y + self.y + self.mouse-y
+                );
             }
         }
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down) {
-                root.resize-started("sw");
+                root.resize-started("sw", root.x + self.x + self.mouse-x, root.y + self.y + self.mouse-y);
             } else if (event.kind == PointerEventKind.up) {
                 root.resize-ended();
             }
@@ -192,12 +202,15 @@ export component WidgetFrame inherits Rectangle {
         mouse-cursor: MouseCursor.nesw-resize;
         moved => {
             if (self.pressed) {
-                root.resize-moved(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                root.resize-moved(
+                    root.x + self.x + self.mouse-x,
+                    root.y + self.y + self.mouse-y
+                );
             }
         }
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down) {
-                root.resize-started("ne");
+                root.resize-started("ne", root.x + self.x + self.mouse-x, root.y + self.y + self.mouse-y);
             } else if (event.kind == PointerEventKind.up) {
                 root.resize-ended();
             }
@@ -212,12 +225,15 @@ export component WidgetFrame inherits Rectangle {
         mouse-cursor: MouseCursor.nwse-resize;
         moved => {
             if (self.pressed) {
-                root.resize-moved(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                root.resize-moved(
+                    root.x + self.x + self.mouse-x,
+                    root.y + self.y + self.mouse-y
+                );
             }
         }
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down) {
-                root.resize-started("nw");
+                root.resize-started("nw", root.x + self.x + self.mouse-x, root.y + self.y + self.mouse-y);
             } else if (event.kind == PointerEventKind.up) {
                 root.resize-ended();
             }

@@ -132,6 +132,43 @@ impl LayoutEngine {
         }
     }
 
+    /// Like [`LayoutEngine::auto_place`], but **excludes** `ignore_instance` from the occupied set.
+    /// Use when a new widget was created at a placeholder position (e.g. `(0,0)`) and must be moved
+    /// to the first free cell without colliding with **other** widgets or with a duplicate of itself
+    /// at the wrong coordinates.
+    pub fn auto_place_excluding(
+        &self,
+        workspace_id: Uuid,
+        size: WidgetSize,
+        existing: &[SharedInstance],
+        ignore_instance: Uuid,
+    ) -> Result<GridPosition> {
+        let opts = self.options.read().clone();
+        if !fits_in_grid(GridPosition { col: 0, row: 0 }, size, opts.grid_columns, opts.grid_rows) {
+            return Err(WidgetError::Layout(format!(
+                "widget of size {size:?} does not fit in {}x{} grid",
+                opts.grid_columns, opts.grid_rows
+            )));
+        }
+        let occupied = rects_for_excluding(existing, workspace_id, Some(ignore_instance));
+        match opts.mode {
+            LayoutMode::Grid => grid_first_fit(size, &opts, &occupied).ok_or_else(|| {
+                WidgetError::Layout(format!(
+                    "no free slot on workspace {workspace_id} for size {size:?}"
+                ))
+            }),
+            LayoutMode::Free => {
+                free::spiral_place(size, opts.grid_columns, opts.grid_rows, &occupied).ok_or_else(
+                    || {
+                        WidgetError::Layout(format!(
+                            "free-layout spiral placement failed for size {size:?}"
+                        ))
+                    },
+                )
+            }
+        }
+    }
+
     /// Validate a placement request against existing widgets.
     ///
     /// # Errors
@@ -230,6 +267,73 @@ impl LayoutEngine {
     }
 }
 
+/// Converts a widget top-left in canvas pixel space to a [`GridPosition`], inverting
+/// the mapping used in [`LayoutEngine::snapshot`]:
+/// `x = col * cell_w + gutter/2`, `y = row * cell_h + gutter/2`, then applies
+/// [`grid::snap_position`] so the top-left is valid for `size` (e.g. 8×4
+/// `ExtraLarge` is clamped to `col <= grid_columns - 8`, not `grid_columns - 1`).
+#[must_use]
+pub fn position_from_content_top_left(
+    viewport: ViewportSize,
+    opts: &LayoutOptions,
+    top_left_x: f32,
+    top_left_y: f32,
+    size: WidgetSize,
+) -> GridPosition {
+    let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+    let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+    let g = opts.gutter_px;
+    let col_f = (top_left_x - g * 0.5) / cell_w;
+    let row_f = (top_left_y - g * 0.5) / cell_h;
+    let col = (col_f.round() as i64).clamp(0, i64::from(u16::MAX)) as u16;
+    let row = (row_f.round() as i64).clamp(0, i64::from(u16::MAX)) as u16;
+    snap_position(
+        GridPosition { col, row },
+        size,
+        opts.grid_columns,
+        opts.grid_rows,
+    )
+}
+
+/// Resolves live pixel `bounds` (as produced by [`LayoutEngine::snapshot`]) into a
+/// `Free` grid size and a valid top-left [`GridPosition`].
+///
+/// The stride `cell_w = viewport.width / grid_columns` matches [`LayoutEngine::snapshot`]
+/// (not a «pure inner cell» in px); span width/height in px follow
+/// `W = w_cells * cell_w - gutter`, so the inverse is `w_cells = (W + gutter) / cell_w`.
+/// Top-left is derived via [`position_from_content_top_left`] for that `WidgetSize::Free`
+/// so multi-cell [`snap_position`] rules apply, unlike raw float→`u16` casts.
+#[must_use]
+pub fn free_placement_from_pixel_bounds(
+    bounds: &PixelBounds,
+    viewport: ViewportSize,
+    opts: &LayoutOptions,
+) -> (GridPosition, WidgetSize) {
+    let g = opts.gutter_px;
+    let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+    let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+    // Inverse of snapshot: width = w*cell_w - g, height = h*cell_h - g
+    let w = (bounds.width + g) / cell_w;
+    let h = (bounds.height + g) / cell_h;
+    let w = w
+        .round()
+        .max(1.0)
+        .min(f32::from(opts.grid_columns)) as u16;
+    let h = h
+        .round()
+        .max(1.0)
+        .min(f32::from(opts.grid_rows)) as u16;
+    let size = WidgetSize::Free { w, h };
+    let pos = position_from_content_top_left(
+        viewport,
+        opts,
+        bounds.x,
+        bounds.y,
+        size,
+    );
+    (pos, size)
+}
+
 fn grid_first_fit(
     size: WidgetSize,
     opts: &LayoutOptions,
@@ -249,15 +353,26 @@ fn grid_first_fit(
 }
 
 fn rects_for(instances: &[SharedInstance], workspace_id: Uuid) -> Vec<CellRect> {
+    rects_for_excluding(instances, workspace_id, None)
+}
+
+fn rects_for_excluding(
+    instances: &[SharedInstance],
+    workspace_id: Uuid,
+    ignore: Option<Uuid>,
+) -> Vec<CellRect> {
     instances
         .iter()
-        .filter(|i| i.workspace_id == workspace_id)
+        .filter(|i| {
+            i.workspace_id == workspace_id && ignore.map_or(true, |e| i.id != e)
+        })
         .map(|i| CellRect::from_widget(*i.position.read(), *i.size.read()))
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
+    use super::grid::{fits_in_grid, size_in_cells};
     use super::*;
     use std::sync::Arc;
 
@@ -324,6 +439,25 @@ mod tests {
     }
 
     #[test]
+    fn auto_place_excluding_ignores_new_instance_at_origin() {
+        let engine = LayoutEngine::new(LayoutOptions::default());
+        let ws = Uuid::new_v4();
+        let a = fake_instance(ws, GridPosition { col: 0, row: 0 }, WidgetSize::Small);
+        let b = fake_instance(ws, GridPosition { col: 0, row: 0 }, WidgetSize::Small);
+        let c = fake_instance(ws, GridPosition { col: 0, row: 0 }, WidgetSize::Small);
+        let c_id = c.id;
+        let all = [a, b, c];
+        let pos = engine
+            .auto_place_excluding(ws, WidgetSize::Small, &all, c_id)
+            .expect("free slot for third 2x2 when ignoring c's placeholder");
+        assert_ne!(
+            (pos.col, pos.row),
+            (0, 0),
+            "with a and b at (0,0), c should not stay on the same cell"
+        );
+    }
+
+    #[test]
     fn auto_place_first_fit_in_grid_mode() {
         let engine = LayoutEngine::new(LayoutOptions::default());
         let ws = Uuid::new_v4();
@@ -383,6 +517,81 @@ mod tests {
         assert!((placed.bounds.y - 4.0).abs() < 0.1);
         assert!((placed.bounds.width - 192.0).abs() < 0.1);
         assert!((placed.bounds.height - 192.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn position_from_content_top_left_inverts_snapshot_for_exlarge() {
+        let mut opts = LayoutOptions::default();
+        opts.grid_columns = 16;
+        opts.grid_rows = 10;
+        opts.gutter_px = 8.0;
+        let viewport = ViewportSize {
+            width_px: 1600.0,
+            height_px: 1000.0,
+        };
+        // ExtraLarge: top-left (8,0) => last col 16 for base row (fits 16x10).
+        let pos = GridPosition { col: 8, row: 0 };
+        let (w, h) = size_in_cells(WidgetSize::ExtraLarge);
+        assert_eq!((w, h), (8, 4));
+        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+        let g = opts.gutter_px;
+        let x = pos.col as f32 * cell_w + g * 0.5;
+        let y = pos.row as f32 * cell_h + g * 0.5;
+        let back = position_from_content_top_left(
+            viewport,
+            &opts,
+            x,
+            y,
+            WidgetSize::ExtraLarge,
+        );
+        assert_eq!(back, pos);
+
+        // Example: vw=1280, 16 cols, g=8 → cell_w=80, 4 cell span: 4*80-8=312, inverse (312+8)/80=4
+        {
+            let vw = 1280.0_f32;
+            let cell = vw / f32::from(opts.grid_columns);
+            let four = 4.0_f32;
+            let wpx = four * cell - g;
+            assert!((wpx - 312.0).abs() < 0.01);
+            let wcells = ((wpx + g) / cell).round() as u16;
+            assert_eq!(wcells, 4);
+        }
+
+        // Old bug: anchoring to max single-cell index (15) is invalid for 8 wide.
+        let invalid_anchor = (15, 0);
+        let p = GridPosition {
+            col: invalid_anchor.0,
+            row: invalid_anchor.1,
+        };
+        let ok = fits_in_grid(p, WidgetSize::ExtraLarge, opts.grid_columns, opts.grid_rows);
+        assert!(!ok, "8-wide widget cannot start at col 15 in a 16-col grid");
+    }
+
+    #[test]
+    fn free_placement_inverts_snapshot_free_bounds() {
+        let mut opts = LayoutOptions::default();
+        opts.grid_columns = 16;
+        opts.grid_rows = 10;
+        opts.gutter_px = 8.0;
+        let viewport = ViewportSize {
+            width_px: 1280.0,
+            height_px: 1000.0,
+        };
+        let g = opts.gutter_px;
+        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_h = viewport.height_px / f32::from(opts.grid_rows);
+        let wcells: u16 = 4;
+        let hcells: u16 = 3;
+        let pb = PixelBounds {
+            x: g * 0.5,
+            y: g * 0.5,
+            width: wcells as f32 * cell_w - g,
+            height: hcells as f32 * cell_h - g,
+        };
+        let (p, s) = free_placement_from_pixel_bounds(&pb, viewport, &opts);
+        assert_eq!(p, GridPosition { col: 0, row: 0 });
+        assert_eq!(s, WidgetSize::Free { w: 4, h: 3 });
     }
 
     #[test]

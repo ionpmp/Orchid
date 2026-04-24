@@ -62,11 +62,10 @@ impl WidgetManager {
         let size = size.unwrap_or(descriptor.default_size);
         validate_size(&descriptor, size)?;
 
-        // For auto-placement we need a LayoutEngine; we don't own one here,
-        // so callers pass `position = Some(...)` when they want a specific
-        // slot and pass `position = None` to indicate "put it somewhere".
-        // In that case we place at origin and let the collision check
-        // elsewhere catch duplicates for MVP.
+        // `position: None` uses a temporary grid origin; the UI (or any host with
+        // a [`crate::LayoutEngine`]) should call
+        // [`LayoutEngine::auto_place_excluding`] and [`Self::move_to`] immediately
+        // after create so each instance gets a free cell.
         let position = position.unwrap_or(GridPosition { col: 0, row: 0 });
 
         let instance_id = Uuid::new_v4();

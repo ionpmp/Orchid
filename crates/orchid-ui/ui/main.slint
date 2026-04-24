@@ -51,7 +51,7 @@ export component MainWindow inherits Window {
     callback widget-drag-started(string, length, length);
     callback widget-drag-moved(string, length, length);
     callback widget-drag-ended(string);
-    callback widget-resize-started(string, string);
+    callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
     callback terminal-key-pressed(string, string);
@@ -123,8 +123,8 @@ export component MainWindow inherits Window {
             widget-drag-started(id, dx, dy) => { root.widget-drag-started(id, dx, dy); }
             widget-drag-moved(id, dx, dy) => { root.widget-drag-moved(id, dx, dy); }
             widget-drag-ended(id) => { root.widget-drag-ended(id); }
-            widget-resize-started(id, corner) => { root.widget-resize-started(id, corner); }
-            widget-resize-moved(id, dx, dy) => { root.widget-resize-moved(id, dx, dy); }
+            widget-resize-started(id, c, px, py) => { root.widget-resize-started(id, c, px, py); }
+            widget-resize-moved(id, px, py) => { root.widget-resize-moved(id, px, py); }
             widget-resize-ended(id) => { root.widget-resize-ended(id); }
             terminal-key-pressed(id, text) => { root.terminal-key-pressed(id, text); }
             terminal-viewport-changed(id, w, h) => { root.terminal-viewport-changed(id, w, h); }
