@@ -43,15 +43,5 @@ pub fn delete_instance(storage: &StateStore, id: Uuid) -> Result<()> {
 /// Propagates storage errors.
 pub fn load_all_instances(storage: &StateStore) -> Result<Vec<WidgetInstance>> {
     let txn = storage.read()?;
-    // No dedicated "list all" API on the read transaction, but
-    // `widgets_for_workspace` walks the whole table. We collect across
-    // workspaces by iterating every known workspace id + an "unassigned"
-    // pass; easier path is a small helper that iterates the raw table.
-    let mut out = Vec::new();
-    let workspaces = txn.list_workspaces()?;
-    for ws in &workspaces {
-        let widgets = txn.widgets_for_workspace(ws.id)?;
-        out.extend(widgets);
-    }
-    Ok(out)
+    Ok(txn.list_all_widgets()?)
 }

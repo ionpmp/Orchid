@@ -144,7 +144,7 @@ impl WidgetManager {
     ///
     /// Propagates the `on_close` error and storage errors.
     pub async fn close(&self, id: Uuid) -> Result<()> {
-        self.close_locked(id).await
+        self.close_locked(id, true).await
     }
 
     /// Move a widget to a new grid position. The caller is responsible for

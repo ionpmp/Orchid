@@ -284,6 +284,28 @@ impl ReadTransaction<'_> {
         Ok(out)
     }
 
+    /// Return every widget instance in the database (unordered).
+    ///
+    /// Prefer this over walking workspaces when loading instances: rows must
+    /// round-trip even if workspace metadata is temporarily inconsistent.
+    ///
+    /// # Errors
+    ///
+    /// Propagates redb errors.
+    pub fn list_all_widgets(&self) -> Result<Vec<WidgetInstance>> {
+        let table = match self.inner.open_table(WIDGET_INSTANCES_TABLE) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let mut out = Vec::new();
+        for entry in table.iter()? {
+            let (_k, v) = entry?;
+            out.push(v.value());
+        }
+        Ok(out)
+    }
+
     /// Fetch a workspace by id.
     ///
     /// # Errors

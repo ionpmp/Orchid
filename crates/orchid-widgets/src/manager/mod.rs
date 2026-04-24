@@ -342,7 +342,10 @@ impl WidgetManager {
             .map(|e| *e.key())
             .collect();
         for id in ids {
-            if let Err(e) = self.close(id).await {
+            // Final snapshot already wrote layout + state; only drop runtime
+            // hooks here — deleting rows would wipe persisted widgets on the
+            // next cold start.
+            if let Err(e) = self.close_locked(id, false).await {
                 warn!(widget_id = %id, error = %e, "close during shutdown failed");
             }
         }
@@ -442,9 +445,11 @@ async fn run_sweepers(inner: &WidgetManagerInner) {
 }
 
 impl WidgetManager {
-    /// Close an instance — invokes `on_close`, removes it from the in-memory
-    /// map, and deletes its persisted row.
-    pub(crate) async fn close_locked(&self, id: Uuid) -> Result<()> {
+    /// Close an instance — invokes `on_close` and removes it from the in-memory
+    /// map. When `delete_storage_row` is `true`, also deletes the persisted row
+    /// (user closed the widget). When `false`, the row is left intact so a prior
+    /// [`Self::snapshot_to_storage`] remains visible after process exit.
+    pub(crate) async fn close_locked(&self, id: Uuid, delete_storage_row: bool) -> Result<()> {
         let (_, instance) = self
             .inner
             .instances
@@ -456,7 +461,9 @@ impl WidgetManager {
             let mut w = instance.widget.lock().await;
             w.on_close(&ctx).await?;
         }
-        persistence::delete_instance(&self.inner.storage, id)?;
+        if delete_storage_row {
+            persistence::delete_instance(&self.inner.storage, id)?;
+        }
         self.inner.bus.publish(
             orchid_core::EventSource::Subsystem("widgets".into()),
             WidgetClosed { instance_id: id },

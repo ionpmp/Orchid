@@ -114,6 +114,10 @@ fn widget_is_queryable_by_workspace() {
     assert_eq!(widgets.len(), 1);
     assert_eq!(widgets[0].widget_type, "rss");
 
+    let listed = r.list_all_widgets().unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, widget.id);
+
     let other = r.widgets_for_workspace(Uuid::new_v4()).unwrap();
     assert!(other.is_empty());
 }
