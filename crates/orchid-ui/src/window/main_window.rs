@@ -80,7 +80,8 @@ pub struct MainWindowController {
     last_terminal_viewport_pty: Arc<Mutex<HashMap<Uuid, (u16, u16)>>>,
     /// Stable Slint `ModelRc`s for the workspace and widget lists. Replacing the whole
     /// `ModelRc` on every tick re-instantiated every `for` item and dropped keyboard focus
-    /// on the terminal's [`FocusScope`]; we only mutate these via [`sync_vec_model`].
+    /// on the terminal's `TextInput` (see `terminal-view.slint`); we only mutate these via
+    /// [`sync_vec_model`].
     workspace_workspaces: ModelRc<WorkspaceSummary>,
     workspace_widgets: ModelRc<WidgetFrameModel>,
     workspace_dock_types: ModelRc<DockWidgetType>,
@@ -760,6 +761,11 @@ impl MainWindowController {
             return;
         };
         let Some(sid) = self.session_routing.lock().get(&inst).copied() else {
+            trace!(
+                target: "orchid_ui::terminal_input",
+                %inst,
+                "key ignored: no session routing (PTY not ready for this instance)"
+            );
             return;
         };
         let Ok(session) = self.session_manager.get(sid) else {
@@ -1086,6 +1092,54 @@ fn default_frame_data(
 // to `event.text` and use `orchid_terminal::InputEncoder` for xterm-style arrow /
 // F-key / Home / End sequences once the workspace `slint` version supports it
 // in key handlers.
+/// True when `t` should not have its leading U+001B removed by [`trim_slint_key_artifacts`].
+fn is_leading_escape_to_preserve(t: &str) -> bool {
+    if !t.starts_with('\u{1b}') {
+        return false;
+    }
+    t.chars().nth(1).is_some_and(|c| matches!(c, '[' | 'O'))
+}
+
+/// Strips Slint / winit key identity that is not user text (see `slint` `key_codes`):
+/// - U+FEFF (BOM)
+/// - Private use U+E000..=U+F8FF
+/// - Slint modifier-style C0 U+0010..=U+0019 (incl. Backtab id 0x19)
+/// - When 2+ code points: other C0 (U+00..=U+1F) except U+001B (we keep real ESC and
+///   CSI/SS3 via [`is_leading_escape_to_preserve`]).
+fn trim_slint_key_artifacts(text: &str) -> &str {
+    let mut t = text;
+    loop {
+        if t.is_empty() {
+            break;
+        }
+        if is_leading_escape_to_preserve(t) {
+            break;
+        }
+        let Some(c) = t.chars().next() else {
+            break;
+        };
+        let n = c as u32;
+        if n == 0xFEFF {
+            t = &t[c.len_utf8()..];
+            continue;
+        }
+        if n >= 0xE000 && n <= 0xF8FF {
+            t = &t[c.len_utf8()..];
+            continue;
+        }
+        if t.chars().count() > 1 && n >= 0x10 && n <= 0x19 {
+            t = &t[c.len_utf8()..];
+            continue;
+        }
+        if t.chars().count() > 1 && n < 0x20 && n != 0x1B {
+            t = &t[c.len_utf8()..];
+            continue;
+        }
+        break;
+    }
+    t
+}
+
 /// Maps Slint `KeyEvent.text` payloads to bytes for the PTY. Empty input means
 /// a non-textual key in current Slint builds; see TODO above.
 fn encode_slint_key_text(text: &str) -> Vec<u8> {
@@ -1096,8 +1150,34 @@ fn encode_slint_key_text(text: &str) -> Vec<u8> {
         );
         return Vec::new();
     }
-    let mut chars = text.chars();
+    if text == "\r\n" || text == "\n\r" {
+        return vec![0x0D];
+    }
+    let t = trim_slint_key_artifacts(text);
+    if t.is_empty() {
+        trace!(
+            target: "orchid_ui::terminal_input",
+            "key text was only Slint key-identity (PUA or modifier id); not forwarding to PTY"
+        );
+        return Vec::new();
+    }
+    if t == "\r\n" || t == "\n\r" {
+        return vec![0x0D];
+    }
+    let mut chars = t.chars();
     if let (Some(c), None) = (chars.next(), chars.next()) {
+        let cp = c as u32;
+        // Slint uses U+10..=U+19 (DC1..) as *modifier key identity* for Key.* wiring
+        // when paired with a printable; alone they must not become raw C0 in the PTY
+        // (DLE, DC1, ..), which would print as "extra" garbage before/after RU/EN.
+        if (0x10..=0x19).contains(&cp) {
+            trace!(
+                target: "orchid_ui::terminal_input",
+                "Slint key id U+{:04X} only; not forwarding to PTY",
+                cp
+            );
+            return Vec::new();
+        }
         match c {
             '\n' | '\r' => return vec![0x0D],
             '\u{8}' | '\u{7f}' => return vec![0x7F],
@@ -1107,7 +1187,7 @@ fn encode_slint_key_text(text: &str) -> Vec<u8> {
             _ => {}
         }
     }
-    text.as_bytes().to_vec()
+    t.as_bytes().to_vec()
 }
 
 #[cfg(test)]
@@ -1121,9 +1201,29 @@ mod key_encode_tests {
     }
 
     #[test]
+    fn strips_slint_pua_and_modifier_id_prefixes() {
+        assert_eq!(&encode_slint_key_text("\u{F700}a"), b"a");
+        assert_eq!(&encode_slint_key_text("\u{E000}Z"), b"Z");
+        assert!(encode_slint_key_text("\u{F700}").is_empty());
+        // Slint: Shift = U+0010; a stray prefix + '$' (Shift+4 on US layout) must
+        // be a single 0x24, not 0x10, 0x24.
+        assert_eq!(&encode_slint_key_text("\u{10}$"), b"$");
+        assert_eq!(&encode_slint_key_text("\u{F700}\u{10}x"), b"x");
+        // VT/FF/LF/CR and similar C0 + symbol (e.g. Shift+2/3 on some Winit paths)
+        assert_eq!(&encode_slint_key_text("\u{0B}@"), b"@");
+        assert_eq!(&encode_slint_key_text("\u{0A}#"), b"#");
+        assert_eq!(&encode_slint_key_text("\u{FEFF}x"), b"x");
+        // CSI/SS3 must stay intact
+        assert_eq!(&encode_slint_key_text("\u{1b}[A"), b"\x1b[A");
+        assert_eq!(&encode_slint_key_text("\u{1b}OP"), b"\x1bOP");
+    }
+
+    #[test]
     fn encodes_enter_as_cr() {
         assert_eq!(encode_slint_key_text("\n"), vec![0x0D]);
         assert_eq!(encode_slint_key_text("\r"), vec![0x0D]);
+        assert_eq!(encode_slint_key_text("\r\n"), vec![0x0D]);
+        assert_eq!(encode_slint_key_text("\n\r"), vec![0x0D]);
     }
 
     #[test]
@@ -1145,6 +1245,20 @@ mod key_encode_tests {
     #[test]
     fn empty_is_empty() {
         assert!(encode_slint_key_text("").is_empty());
+    }
+
+    #[test]
+    fn slint_lone_modifier_id_sends_nothing() {
+        // U+10..=U+19: Slint may emit these alone for modifier; never send as DLE/DC1/…
+        for cp in 0x10u32..=0x19 {
+            let c = char::from_u32(cp).expect("BMP C0");
+            let mut buf = [0u8; 4];
+            let s = c.encode_utf8(&mut buf);
+            assert!(
+                encode_slint_key_text(s).is_empty(),
+                "U+{cp:04X} should not be forwarded as raw C0"
+            );
+        }
     }
 
     #[test]

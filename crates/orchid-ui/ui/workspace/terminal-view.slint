@@ -1,8 +1,12 @@
 import { Theme } from "../theme_global.slint";
 import { TerminalCellModel } from "defs.slint";
 
+// Use built-in `TextInput` (not `FocusScope`) to receive key events. On winit+Windows
+// the plain `FocusScope` path is unreliable: `KeyEvent::text` can be empty or pre-wrapped
+// in spurious C0/PUA codepoints, so the PTY never got consistent bytes. `TextInput` uses
+// the same text pipeline as the platform text system (layouts, @/#, IME-friendly).
 export component TerminalView inherits Rectangle {
-    forward-focus: focus-scope;
+    forward-focus: text-input;
     in property <int> cols;
     in property <int> rows;
     in property <[[TerminalCellModel]]> cells;
@@ -17,37 +21,104 @@ export component TerminalView inherits Rectangle {
 
     background: Theme.surface-base;
 
-    focus-scope := FocusScope {
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.pixels;
+        image-fit: fill;
+    }
+
+    text-input := TextInput {
         x: 0;
         y: 0;
-        width: parent.width;
-        height: parent.height;
-
+        width: 100%;
+        height: 100%;
+        text: "";
+        single-line: true;
+        font-size: 0.1px;
+        // Match canvas so a stray space is invisible; raster is drawn in the `Image` below.
+        color: Theme.surface-base;
+        text-cursor-width: 0px;
+        enabled: true;
+        read-only: false;
+        // Swallow the event so nothing accumulates in `text`; the PTY gets the bytes in Rust.
         key-pressed(event) => {
-            if (event.text != "") {
+            if (event.text == Key.Return) {
+                root.key-pressed("\u{d}");
+            } else if (event.text == Key.Tab) {
+                root.key-pressed("\u{9}");
+            } else if (event.text == Key.Backtab) {
+                root.key-pressed("\u{1b}[Z");
+            } else if (event.text == Key.Backspace) {
+                root.key-pressed("\u{7f}");
+            } else if (event.text == Key.Escape) {
+                root.key-pressed("\u{1b}");
+            } else if (event.text == Key.Space) {
+                root.key-pressed(" ");
+            } else if (event.text == Key.UpArrow) {
+                root.key-pressed("\u{1b}[A");
+            } else if (event.text == Key.DownArrow) {
+                root.key-pressed("\u{1b}[B");
+            } else if (event.text == Key.LeftArrow) {
+                root.key-pressed("\u{1b}[D");
+            } else if (event.text == Key.RightArrow) {
+                root.key-pressed("\u{1b}[C");
+            } else if (event.text == Key.Home) {
+                root.key-pressed("\u{1b}[H");
+            } else if (event.text == Key.End) {
+                root.key-pressed("\u{1b}[F");
+            } else if (event.text == Key.PageUp) {
+                root.key-pressed("\u{1b}[5~");
+            } else if (event.text == Key.PageDown) {
+                root.key-pressed("\u{1b}[6~");
+            } else if (event.text == Key.Insert) {
+                root.key-pressed("\u{1b}[2~");
+            } else if (event.text == Key.Delete) {
+                root.key-pressed("\u{1b}[3~");
+            } else if (event.text == Key.F1) {
+                root.key-pressed("\u{1b}OP");
+            } else if (event.text == Key.F2) {
+                root.key-pressed("\u{1b}OQ");
+            } else if (event.text == Key.F3) {
+                root.key-pressed("\u{1b}OR");
+            } else if (event.text == Key.F4) {
+                root.key-pressed("\u{1b}OS");
+            } else if (event.text == Key.F5) {
+                root.key-pressed("\u{1b}[15~");
+            } else if (event.text == Key.F6) {
+                root.key-pressed("\u{1b}[17~");
+            } else if (event.text == Key.F7) {
+                root.key-pressed("\u{1b}[18~");
+            } else if (event.text == Key.F8) {
+                root.key-pressed("\u{1b}[19~");
+            } else if (event.text == Key.F9) {
+                root.key-pressed("\u{1b}[20~");
+            } else if (event.text == Key.F10) {
+                root.key-pressed("\u{1b}[21~");
+            } else if (event.text == Key.F11) {
+                root.key-pressed("\u{1b}[23~");
+            } else if (event.text == Key.F12) {
+                root.key-pressed("\u{1b}[24~");
+            } else if (event.text == Key.At) {
+                root.key-pressed("@");
+            } else if (event.text == Key.Hash) {
+                root.key-pressed("#");
+            } else if (event.text == Key.Dollar) {
+                root.key-pressed("$");
+            } else if (event.text == Key.Ampersand) {
+                root.key-pressed("&");
+            } else if (event.text == Key.Percent) {
+                root.key-pressed("%");
+            } else if (event.text != "") {
                 root.key-pressed(event.text);
-                return accept;
             }
+            // No echo here; PTY owns visible text. Clear so UTF-8 cannot linger as two one-byte
+            // steps or combine with the next key on Windows TextInput.
+            self.text = "";
             return accept;
         }
-
-        // One fontdue-rastered bitmap (PT grid); avoids Skia Text vs metrics mismatch.
-        Image {
-            width: 100%;
-            height: 100%;
-            source: root.pixels;
-            image-fit: fill;
-        }
-
-        TouchArea {
-            x: 0;
-            y: 0;
-            width: parent.width;
-            height: parent.height;
-
-            clicked => {
-                focus-scope.focus();
-            }
+        init => {
+            self.focus();
         }
     }
 }
