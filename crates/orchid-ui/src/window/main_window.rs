@@ -66,6 +66,8 @@ pub struct MainWindowController {
     /// When [`Self::font_metrics`] is from system font resolution, the same `fontdue` face for
     /// [`crate::terminal_raster`]. Otherwise the terminal falls back to a blank `Image` layer.
     mono_font: Option<fontdue::Font>,
+    /// Proportional / symbol font for drawing code points the monospace face does not contain.
+    mono_font_glyph_fallback: Option<fontdue::Font>,
     drag_offset: Arc<Mutex<HashMap<Uuid, (f32, f32)>>>,
     resize_override: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
     drag_start_bounds: Arc<Mutex<HashMap<Uuid, PixelBounds>>>,
@@ -113,7 +115,8 @@ impl MainWindowController {
         // Cell size: prefer real `advance` + `line` metrics from the first matching system
         // monospace (fontdb + fontdue), so Slint/PTY share the same grid as the shaped font
         // (not hand-tuned 0.6×size heuristics).
-        let (font_metrics, mono_font) = terminal_font_metrics::font_and_metrics_from_typography(tokens);
+        let (font_metrics, mono_font, mono_font_glyph_fallback) =
+            terminal_font_metrics::font_and_metrics_from_typography(tokens);
         let workspace_workspaces: ModelRc<WorkspaceSummary> =
             ModelRc::new(VecModel::<WorkspaceSummary>::default());
         let workspace_widgets: ModelRc<WidgetFrameModel> =
@@ -136,6 +139,7 @@ impl MainWindowController {
             session_routing,
             font_metrics,
             mono_font,
+            mono_font_glyph_fallback,
             drag_offset: Arc::new(Mutex::new(HashMap::new())),
             resize_override: Arc::new(Mutex::new(HashMap::new())),
             drag_start_bounds: Arc::new(Mutex::new(HashMap::new())),
@@ -866,9 +870,11 @@ impl MainWindowController {
                                 let cw = self.font_metrics.cell_width_px as u32;
                                 let ch = self.font_metrics.cell_height_px as u32;
                                 let scale = self.window.window().scale_factor();
+                                let glyph_fb = self.mono_font_glyph_fallback.as_ref();
                                 terminal_raster::render_terminal(
                                     t,
                                     f,
+                                    glyph_fb,
                                     size_md,
                                     cw,
                                     ch,

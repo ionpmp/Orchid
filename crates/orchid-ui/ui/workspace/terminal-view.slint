@@ -41,7 +41,11 @@ export component TerminalView inherits Rectangle {
         text-cursor-width: 0px;
         enabled: true;
         read-only: false;
-        // Swallow the event so nothing accumulates in `text`; the PTY gets the bytes in Rust.
+        // Handle keys in two ways: (1) when `key-pressed` has `event.text` (or a Key.* match),
+        // `accept` and send to the PTY; (2) when the platform gives an empty `event.text` for
+        // Shift+digit (@/#/$ on US), return `reject` so TextInput inserts, then `edited` sends
+        // the new buffer and clears. Never `accept` without having forwarded — that swallowed
+        // @/#/$ on Windows+TextInput.
         key-pressed(event) => {
             if (event.text == Key.Return) {
                 root.key-pressed("\u{d}");
@@ -111,11 +115,17 @@ export component TerminalView inherits Rectangle {
                 root.key-pressed("%");
             } else if (event.text != "") {
                 root.key-pressed(event.text);
+            } else {
+                // Let the widget apply the key; we pick the inserted text in `edited`.
+                return reject;
             }
-            // No echo here; PTY owns visible text. Clear so UTF-8 cannot linger as two one-byte
-            // steps or combine with the next key on Windows TextInput.
             self.text = "";
             return accept;
+        }
+        edited() => {
+            if (self.text == "") { return; }
+            root.key-pressed(self.text);
+            self.text = "";
         }
         init => {
             self.focus();

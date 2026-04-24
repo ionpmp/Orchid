@@ -56,12 +56,42 @@ fn any_mono_font(db: &Database) -> Option<Font> {
     .flatten()
 }
 
-/// Return PTY/Slint cell size and the same loaded `fontdue` face for raster (when a system match
-/// exists), or `None` for the font when no face was found.
-pub fn font_and_metrics_from_typography(tokens: &TypographyTokens) -> (FontMetrics, Option<Font>) {
+/// A proportional / symbol-rich system face used only when the monospace
+/// `font.rasterize(ch)` returns an empty outline (Nerd, box-drawing, many symbols, CJK, emoji).
+const GLYPH_RASTER_FALLBACK_FAMILIES: &[&str] = &[
+    "Segoe UI Symbol",
+    "Segoe UI",
+    "Noto Sans Symbols 2",
+    "Noto Sans Symbols",
+    "Microsoft YaHei",
+    "Noto Sans",
+    "Liberation Sans",
+    "DejaVu Sans",
+    "Apple Symbols",
+];
+
+fn load_glyph_raster_fallback(db: &Database) -> Option<Font> {
+    for &name in GLYPH_RASTER_FALLBACK_FAMILIES {
+        if let Some(f) = load_font_by_family(db, name) {
+            debug!(
+                target: "orchid_ui::font_metrics",
+                family = name,
+                "loaded raster glyph fallback (wider coverage than primary mono)"
+            );
+            return Some(f);
+        }
+    }
+    None
+}
+
+/// Return PTY/Slint cell size, the loaded `fontdue` face for the monospace grid, and an optional
+/// second face for rastering glyphs the primary does not cover (empty bitmap).
+pub fn font_and_metrics_from_typography(
+    tokens: &TypographyTokens,
+) -> (FontMetrics, Option<Font>, Option<Font>) {
     let size_px = tokens.size_md;
     if !size_px.is_finite() || size_px <= 0.0 {
-        return (heuristic_font_metrics(tokens), None);
+        return (heuristic_font_metrics(tokens), None, None);
     }
     static DB: std::sync::OnceLock<Database> = std::sync::OnceLock::new();
     let db = DB.get_or_init(|| {
@@ -86,15 +116,15 @@ pub fn font_and_metrics_from_typography(tokens: &TypographyTokens) -> (FontMetri
         }
     }
     let Some(font) = font else {
-        return (heuristic_font_metrics(tokens), None);
+        return (heuristic_font_metrics(tokens), None, None);
     };
 
     let Some(lm) = font.horizontal_line_metrics(size_px) else {
-        return (heuristic_font_metrics(tokens), None);
+        return (heuristic_font_metrics(tokens), None, None);
     };
     let ch = lm.new_line_size;
     if !ch.is_finite() || ch < 1.0 {
-        return (heuristic_font_metrics(tokens), None);
+        return (heuristic_font_metrics(tokens), None, None);
     }
 
     let mut cw: f32 = 0.0;
@@ -103,14 +133,15 @@ pub fn font_and_metrics_from_typography(tokens: &TypographyTokens) -> (FontMetri
         cw = cw.max(m.advance_width);
     }
     if !cw.is_finite() || cw < 1.0 {
-        return (heuristic_font_metrics(tokens), None);
+        return (heuristic_font_metrics(tokens), None, None);
     }
 
+    let glyph_raster_fallback = load_glyph_raster_fallback(db);
     let metrics = FontMetrics {
         cell_width_px: cw.max(4.0).round(),
         cell_height_px: ch.max(8.0).round(),
     };
-    (metrics, Some(font))
+    (metrics, Some(font), glyph_raster_fallback)
 }
 
 fn heuristic_font_metrics(tokens: &TypographyTokens) -> FontMetrics {

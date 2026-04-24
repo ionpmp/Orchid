@@ -1,6 +1,8 @@
 //! Rasterize a [`orchid_widgets::TerminalPayload`] with the same `fontdue::Font` used for
 //! [`orchid_terminal::FontMetrics`], then return a Slint `Image` for a single `Image` view
-//! (one draw path, no per-cell `Text` / Skia mismatch).
+//! (one draw path, no per-cell `Text` / Skia mismatch). When the monospace face has no outline for
+//! a code point, an optional `glyph_fallback` (e.g. a system UI / symbol font) is used; if that
+//! also misses, we try U+FFFD and finally a small cell-center dot so the cell is not blank.
 
 use fontdue::Font;
 use orchid_widgets::TerminalPayload;
@@ -37,6 +39,55 @@ fn blend_straight_over(dst: &mut [u8], i: usize, layer: [u8; 4], a: f32) {
     dst[i + 3] = (t * 255.0 + d * (1.0 - t)) as u8;
 }
 
+/// `font.rasterize` with no coverage (missing glyph) returns an empty mask; treat as missing.
+fn try_raster_glyph(f: &Font, ch: char, size: f32) -> Option<(fontdue::Metrics, Vec<u8>)> {
+    let (m, coverage) = f.rasterize(ch, size);
+    if !coverage.is_empty() && m.width > 0 && m.height > 0 {
+        return Some((m, coverage));
+    }
+    None
+}
+
+fn best_raster_for_cell(
+    primary: &Font,
+    glyph_fallback: Option<&Font>,
+    ch: char,
+    size: f32,
+) -> Option<(fontdue::Metrics, Vec<u8>)> {
+    try_raster_glyph(primary, ch, size)
+        .or_else(|| glyph_fallback.and_then(|fb| try_raster_glyph(fb, ch, size)))
+        .or_else(|| try_raster_glyph(primary, '\u{FFFD}', size))
+        .or_else(|| glyph_fallback.and_then(|fb| try_raster_glyph(fb, '\u{FFFD}', size)))
+}
+
+/// 2×2–3×3 block in the cell so undefined points are visible even with no TTF.
+fn draw_missing_glyphs_marker(
+    p: &mut [u8],
+    tw: u32,
+    th: u32,
+    col: u32,
+    row: u32,
+    cell_w: u32,
+    cell_h: u32,
+    fg: [u8; 4],
+) {
+    let x0 = col * cell_w + (cell_w.saturating_sub(3)) / 2;
+    let y0 = row * cell_h + (cell_h.saturating_sub(3)) / 2;
+    for dy in 0..2u32 {
+        for dx in 0..2u32 {
+            let px = x0 + dx;
+            let py = y0 + dy;
+            if px >= tw || py >= th {
+                continue;
+            }
+            let oi = (py * tw + px) as usize * 4;
+            if oi + 3 < p.len() {
+                blend_over_rgba(p, oi, fg, 0.7);
+            }
+        }
+    }
+}
+
 /// Raster the terminal to an RGBA image in **physical** pixels: buffer size is
 /// `cols * (cell_w·s) × rows * (cell_h·s)` and glyphs use `size_px·s` so the bitmap matches
 /// the window’s device pixel ratio (pass `slint` `Window` `scale_factor` as `content_scale`).
@@ -45,6 +96,7 @@ fn blend_straight_over(dst: &mut [u8], i: usize, layer: [u8; 4], a: f32) {
 pub fn render_terminal(
     t: &TerminalPayload,
     font: &Font,
+    glyph_fallback: Option<&Font>,
     size_px: f32,
     cell_w: u32,
     cell_h: u32,
@@ -103,43 +155,54 @@ pub fn render_terminal(
                 if cell.ch == '\0' || cell.ch == ' ' {
                     continue;
                 }
-                let (m, coverage) = font.rasterize(cell.ch, size_draw);
-                if coverage.is_empty() || m.width == 0 || m.height == 0 {
-                    continue;
-                }
-                let w = m.width;
-                let h = m.height;
-                let b = m.bounds;
-                let cx = c as f32 * cell_wp as f32;
-                let cy = r as f32 * cell_hp as f32;
-                // Baseline in y-down: line box top of row + ascent.
-                let baseline = cy + line.ascent;
-                // y-up: bottom = ymin, top of outline = ymin + height.
-                let y_top = baseline - (b.ymin + b.height);
-                let x_left = cx
-                    + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5
-                    + m.xmin as f32;
                 let fg = cell.fg_rgba;
-                for y in 0..h {
-                    for x in 0..w {
-                        let a = *coverage.get(y * w + x).unwrap_or(&0) as f32 / 255.0;
-                        if a <= 0.0 {
-                            continue;
-                        }
-                        let px = (x_left + x as f32).round() as i32;
-                        let py = (y_top + y as f32).round() as i32;
-                        if px < 0
-                            || py < 0
-                            || (px as u32) >= tw
-                            || (py as u32) >= th
-                        {
-                            continue;
-                        }
-                        let oi = (py as u32 * tw + px as u32) as usize * 4;
-                        if oi + 3 < p.len() {
-                            blend_over_rgba(p, oi, fg, a);
+                if let Some((m, coverage)) =
+                    best_raster_for_cell(font, glyph_fallback, cell.ch, size_draw)
+                {
+                    let w = m.width;
+                    let h = m.height;
+                    let b = m.bounds;
+                    let cx = c as f32 * cell_wp as f32;
+                    let cy = r as f32 * cell_hp as f32;
+                    // Baseline in y-down: line box top of row + ascent.
+                    let baseline = cy + line.ascent;
+                    // y-up: bottom = ymin, top of outline = ymin + height.
+                    let y_top = baseline - (b.ymin + b.height);
+                    let x_left = cx
+                        + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5
+                        + m.xmin as f32;
+                    for y in 0..h {
+                        for x in 0..w {
+                            let a = *coverage.get(y * w + x).unwrap_or(&0) as f32 / 255.0;
+                            if a <= 0.0 {
+                                continue;
+                            }
+                            let px = (x_left + x as f32).round() as i32;
+                            let py = (y_top + y as f32).round() as i32;
+                            if px < 0
+                                || py < 0
+                                || (px as u32) >= tw
+                                || (py as u32) >= th
+                            {
+                                continue;
+                            }
+                            let oi = (py as u32 * tw + px as u32) as usize * 4;
+                            if oi + 3 < p.len() {
+                                blend_over_rgba(p, oi, fg, a);
+                            }
                         }
                     }
+                } else {
+                    draw_missing_glyphs_marker(
+                        p,
+                        tw,
+                        th,
+                        c as u32,
+                        r as u32,
+                        cell_wp,
+                        cell_hp,
+                        fg,
+                    );
                 }
             }
         }
