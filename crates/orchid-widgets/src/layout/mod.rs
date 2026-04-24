@@ -314,17 +314,21 @@ impl LayoutEngine {
         let cell_w = viewport.width_px / f32::from(opts.grid_columns);
         let cell_h = viewport.height_px / f32::from(view_rows);
         let gutter = opts.gutter_px;
-        let content_width_px = viewport.width_px;
-        let content_height_px = f32::from(opts.grid_rows) * cell_h;
+        let mut content_width_px = viewport.width_px;
+        let mut content_height_px = f32::from(opts.grid_rows) * cell_h;
         let mut insts: Vec<SharedInstance> = instances
             .iter()
             .filter(|i| i.workspace_id == workspace_id)
             .cloned()
             .collect();
+        // Stable paint order (avoids `for` item reuse glitches); bottom-right paints on top.
         insts.sort_by(|a, b| {
-            let ta = *a.last_touched.read();
-            let tb = *b.last_touched.read();
-            tb.cmp(&ta)
+            let pa = *a.position.read();
+            let pb = *b.position.read();
+            pa.row
+                .cmp(&pb.row)
+                .then_with(|| pa.col.cmp(&pb.col))
+                .then_with(|| a.id.cmp(&b.id))
         });
         let mut cells = Vec::with_capacity(insts.len());
         for (idx, inst) in insts.into_iter().enumerate() {
@@ -347,6 +351,12 @@ impl LayoutEngine {
                 },
                 z_order: idx as u32,
             });
+        }
+        for c in &cells {
+            let bottom = c.bounds.y + c.bounds.height;
+            let right = c.bounds.x + c.bounds.width;
+            content_height_px = content_height_px.max(bottom);
+            content_width_px = content_width_px.max(right);
         }
         LayoutSnapshot {
             workspace_id,

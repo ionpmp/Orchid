@@ -43,15 +43,19 @@ export component WorkspaceView inherits Rectangle {
 
         // With `for` children, Flickable does not infer viewport size (Slint #407); set it explicitly
         // so wheel / drag scrolling works when the logical grid is taller than the visible area.
+        // `interactive: false`: otherwise Slint starts canvas flick after 8px move in 500ms and
+        // cancels the widget header TouchArea — vertical widget drags fail. Wheel scroll still works.
         canvas-flick := Flickable {
+            interactive: false;
             width: parent.width;
             height: parent.height;
             viewport-width: max(root.workspace.canvas-content-width, self.width);
             viewport-height: max(root.workspace.canvas-content-height, self.height);
 
+            // Must match viewport-*: `parent` here is not reliably the full scroll extent (Slint Flickable).
             canvas-inner := Rectangle {
-                width: parent.width;
-                height: parent.height;
+                width: max(root.workspace.canvas-content-width, canvas-flick.width);
+                height: max(root.workspace.canvas-content-height, canvas-flick.height);
                 background: Theme.surface-base;
 
                 for w[i] in root.workspace.widgets: WidgetFrame {
