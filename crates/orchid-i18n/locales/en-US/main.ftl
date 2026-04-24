@@ -225,6 +225,20 @@ workspace-new = New workspace
 workspace-unnamed = Workspace { $n }
 dock-add-label = Add widget
 dock-widget-terminal = Terminal
+dock-widget-weather = Weather
+dock-widget-moon = Moon
+dock-widget-system = System
+
+moon-age-label = Age
+moon-distance-label = Distance
+moon-next-full-label = Next full
+moon-next-new-label = Next new
+moon-moonrise-label = Moonrise
+moon-moonset-label = Moonset
+moon-sunrise-label = Sunrise
+moon-sunset-label = Sunset
+moon-libration-label = Libration
+
 widget-title-terminal = Terminal
 widget-close-tooltip = Close widget
 widget-close-confirm = Close { $name }?

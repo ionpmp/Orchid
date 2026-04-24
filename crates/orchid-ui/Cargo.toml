@@ -30,6 +30,7 @@ orchid-storage.workspace = true
 orchid-terminal.workspace = true
 orchid-viewers.workspace = true
 orchid-widgets.workspace = true
+reqwest.workspace = true
 fontdb = "0.23"
 fontdue = "0.9.3"
 

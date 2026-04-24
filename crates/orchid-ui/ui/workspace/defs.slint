@@ -14,6 +14,51 @@ export struct TerminalCellModel {
     bold: bool,
 }
 
+export struct WeatherForecastEntry {
+    day-label: string,
+    high-text: string,
+    low-text: string,
+    icon: string,
+    precip-text: string,
+}
+
+export struct MoonValueEntry {
+    label: string,
+    value: string,
+}
+
+export struct SystemIndicatorEntry {
+    label: string,
+    value-text: string,
+    percent: float,
+    icon: string,
+    status: int,
+}
+
+export struct WeatherModel {
+    location: string,
+    current-temp: string,
+    condition-label: string,
+    condition-icon: string,
+    feels-like: string,
+    humidity: string,
+    wind: string,
+    forecast: [WeatherForecastEntry],
+    last-updated: string,
+    status: int,
+}
+
+export struct MoonModel {
+    phase-label: string,
+    phase-icon: string,
+    illumination: string,
+    values: [MoonValueEntry],
+}
+
+export struct SystemModel {
+    indicators: [SystemIndicatorEntry],
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -34,6 +79,10 @@ export struct WidgetFrameModel {
     terminal-cell-height: length,
     /// fontdue-rastered terminal (same font as font metrics; avoids Skia per-cell text mismatch).
     terminal-pixels: image,
+
+    weather: WeatherModel,
+    moon: MoonModel,
+    system: SystemModel,
 }
 
 export struct DockWidgetType {

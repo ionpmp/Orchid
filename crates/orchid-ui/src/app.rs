@@ -108,6 +108,20 @@ impl OrchidApp {
             .register(terminal_descriptor(terminal_deps))
             .map_err(|e| UiError::Slint(format!("register terminal: {e}")))?;
 
+        let http = reqwest::Client::builder()
+            .user_agent(format!("Orchid/{}", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|e| UiError::Slint(format!("HTTP client: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::weather::descriptor(http))
+            .map_err(|e| UiError::Slint(format!("register weather: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::moon::descriptor())
+            .map_err(|e| UiError::Slint(format!("register moon: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::system::descriptor())
+            .map_err(|e| UiError::Slint(format!("register system: {e}")))?;
+
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,
             bus.clone(),

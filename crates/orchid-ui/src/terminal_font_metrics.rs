@@ -24,7 +24,7 @@ fn parse_family_list(spec: &str) -> Vec<String> {
 
 fn load_font_by_family(db: &Database, name: &str) -> Option<Font> {
     let id = db.query(&Query {
-        families: &[Family::Name(name.into())],
+        families: &[Family::Name(name)],
         weight: Weight::NORMAL,
         style: Style::Normal,
         stretch: Stretch::Normal,

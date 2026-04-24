@@ -61,6 +61,7 @@ fn best_raster_for_cell(
 }
 
 /// 2×2–3×3 block in the cell so undefined points are visible even with no TTF.
+#[allow(clippy::too_many_arguments)]
 fn draw_missing_glyphs_marker(
     p: &mut [u8],
     tw: u32,
@@ -93,6 +94,7 @@ fn draw_missing_glyphs_marker(
 /// the window’s device pixel ratio (pass `slint` `Window` `scale_factor` as `content_scale`).
 /// `cell_w` / `cell_h` and `size_px` remain **logical** (same as PTY / `FontMetrics`).
 /// `cursor_color` is straight `[r, g, b, a]` like `TerminalPayloadCell` colours.
+#[allow(clippy::too_many_arguments)]
 pub fn render_terminal(
     t: &TerminalPayload,
     font: &Font,
@@ -217,8 +219,8 @@ pub fn render_terminal(
         let p2 = buffer.make_mut_bytes();
         for yy in 0..cell_hp {
             for xx in 0..cell_wp {
-                let px = (cx as u32 + xx) as u32;
-                let py = (cy as u32 + yy) as u32;
+                let px = cx as u32 + xx;
+                let py = cy as u32 + yy;
                 if px < tw && py < th {
                     let oi = (py * tw + px) as usize * 4;
                     if oi + 3 < p2.len() {

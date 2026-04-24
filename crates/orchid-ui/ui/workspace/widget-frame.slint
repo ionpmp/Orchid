@@ -1,6 +1,9 @@
 import { Theme } from "../theme_global.slint";
 import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
+import { WeatherView } from "../widgets/weather.slint";
+import { MoonView } from "../widgets/moon.slint";
+import { SystemView } from "../widgets/system.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
@@ -113,6 +116,24 @@ export component WidgetFrame inherits Rectangle {
             cell-width: model.terminal-cell-width;
             cell-height: model.terminal-cell-height;
             key-pressed(text) => { root.terminal-key-pressed(text); }
+        }
+
+        if model.type-id == "weather" : WeatherView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.weather;
+        }
+
+        if model.type-id == "moon" : MoonView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.moon;
+        }
+
+        if model.type-id == "system" : SystemView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.system;
         }
 
         changed width => {

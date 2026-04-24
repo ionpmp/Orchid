@@ -42,7 +42,8 @@ use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
 use crate::slint_generated::{
-    AppState, DockWidgetType, MainWindow, Strings, TerminalCellModel, Theme, WidgetFrameModel,
+    AppState, DockWidgetType, MainWindow, MoonModel, MoonValueEntry, Strings, SystemIndicatorEntry,
+    SystemModel, TerminalCellModel, Theme, WeatherForecastEntry, WeatherModel, WidgetFrameModel,
     WorkspaceModel, WorkspaceSummary,
 };
 use crate::theme::ThemeManager;
@@ -121,11 +122,8 @@ impl MainWindowController {
             ModelRc::new(VecModel::<WorkspaceSummary>::default());
         let workspace_widgets: ModelRc<WidgetFrameModel> =
             ModelRc::new(VecModel::<WidgetFrameModel>::default());
-        let workspace_dock_types: ModelRc<DockWidgetType> = ModelRc::new(VecModel::from(vec![DockWidgetType {
-            type_id: "terminal".into(),
-            label: locale.tr("dock-widget-terminal").into(),
-            icon: "terminal".into(),
-        }]));
+        let workspace_dock_types: ModelRc<DockWidgetType> =
+            ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let this = Arc::new(Self {
             window,
             theme,
@@ -475,12 +473,15 @@ impl MainWindowController {
     }
 
     fn on_dock_add(self: &Arc<Self>, type_id: &SharedString) {
-        if type_id.as_str() != "terminal" {
+        let type_id_str = type_id.as_str();
+        if !matches!(type_id_str, "terminal" | "weather" | "moon" | "system") {
+            warn!(type_id = type_id_str, "unknown widget type from dock");
             return;
         }
         let wm = self.widget_manager.clone();
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
+        let type_owned = type_id_str.to_string();
         let _ = slint::spawn_local(async move {
             let wid = match wsm.active() {
                 Ok(w) => w.id,
@@ -488,7 +489,7 @@ impl MainWindowController {
             };
             if let Err(e) = wm
                 .create(orchid_widgets::CreateWidgetRequest {
-                    type_id: "terminal".into(),
+                    type_id: type_owned,
                     workspace_id: wid,
                     position: None,
                     size: None,
@@ -497,7 +498,8 @@ impl MainWindowController {
                 })
                 .await
             {
-                warn!(?e, "add terminal");
+                warn!(?e, "add widget");
+                return;
             }
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
@@ -847,60 +849,123 @@ impl MainWindowController {
             let Ok(iref) = self.widget_manager.get_instance(pl.instance_id) else {
                 continue;
             };
-            if iref.type_id == "terminal" {
-                if !ro.contains_key(&pl.instance_id) {
-                    let cw = bounds.width.max(1.0);
-                    let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
-                    if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
-                        self.schedule_rebuild();
-                    }
+            if iref.type_id == "terminal" && !ro.contains_key(&pl.instance_id) {
+                let cw = bounds.width.max(1.0);
+                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
+                if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
+                    self.schedule_rebuild();
                 }
             }
             let type_s: SharedString = iref.type_id.clone().into();
             let cached = cache.get(pl.instance_id);
-            let (title, tcols, trows, tcells, tpix, tcc, tcr, tcvis) =
-                if let Some(ws) = cached.as_deref() {
-                    let tstr: SharedString = ws.title.clone().into();
-                    match &ws.payload {
-                        WidgetPayload::Terminal(t) => {
-                            let img = if let Some(ref f) = self.mono_font {
-                                let size_md = self.theme.current().tokens.typography.size_md;
-                                let acc = self.theme.current().tokens.color.accent_brand;
-                                let ccol = [acc.r, acc.g, acc.b, acc.a];
-                                let cw = self.font_metrics.cell_width_px as u32;
-                                let ch = self.font_metrics.cell_height_px as u32;
-                                let scale = self.window.window().scale_factor();
-                                let glyph_fb = self.mono_font_glyph_fallback.as_ref();
-                                terminal_raster::render_terminal(
-                                    t,
-                                    f,
-                                    glyph_fb,
-                                    size_md,
-                                    cw,
-                                    ch,
-                                    scale,
-                                    ccol,
-                                )
-                                .unwrap_or_default()
-                            } else {
-                                Image::default()
-                            };
-                            (
-                                tstr,
-                                i32::from(t.cols),
-                                i32::from(t.rows),
-                                build_terminal_model(t),
-                                img,
-                                i32::from(t.cursor_col),
-                                i32::from(t.cursor_row),
-                                t.cursor_visible,
+            let (
+                title,
+                tcols,
+                trows,
+                tcells,
+                tpix,
+                tcc,
+                tcr,
+                tcvis,
+                weather_model,
+                moon_model,
+                system_model,
+            ) = if let Some(ws) = cached.as_deref() {
+                let tstr: SharedString = ws.title.clone().into();
+                match &ws.payload {
+                    WidgetPayload::Terminal(t) => {
+                        let img = if let Some(ref f) = self.mono_font {
+                            let size_md = self.theme.current().tokens.typography.size_md;
+                            let acc = self.theme.current().tokens.color.accent_brand;
+                            let ccol = [acc.r, acc.g, acc.b, acc.a];
+                            let cw = self.font_metrics.cell_width_px as u32;
+                            let ch = self.font_metrics.cell_height_px as u32;
+                            let scale = self.window.window().scale_factor();
+                            let glyph_fb = self.mono_font_glyph_fallback.as_ref();
+                            terminal_raster::render_terminal(
+                                t,
+                                f,
+                                glyph_fb,
+                                size_md,
+                                cw,
+                                ch,
+                                scale,
+                                ccol,
                             )
-                        }
-                        _ => default_frame_data(&self.locale),
+                            .unwrap_or_default()
+                        } else {
+                            Image::default()
+                        };
+                        (
+                            tstr,
+                            i32::from(t.cols),
+                            i32::from(t.rows),
+                            build_terminal_model(t),
+                            img,
+                            i32::from(t.cursor_col),
+                            i32::from(t.cursor_row),
+                            t.cursor_visible,
+                            empty_weather_model(),
+                            empty_moon_model(),
+                            empty_system_model(),
+                        )
                     }
-                } else {
-                    default_frame_data(&self.locale)
-                };
+                    WidgetPayload::Weather(w) => (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        build_weather_model(w, &self.locale),
+                        empty_moon_model(),
+                        empty_system_model(),
+                    ),
+                    WidgetPayload::Moon(m) => (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(),
+                        build_moon_model(m, &self.locale),
+                        empty_system_model(),
+                    ),
+                    WidgetPayload::SystemIndicators(s) => (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(),
+                        empty_moon_model(),
+                        build_system_model(s),
+                    ),
+                    _ => (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(),
+                        empty_moon_model(),
+                        empty_system_model(),
+                    ),
+                }
+            } else {
+                default_frame_data_extended(&self.locale, iref.type_id.as_str())
+            };
             let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
             let fm = WidgetFrameModel {
                 instance_id: pl.instance_id.to_string().into(),
@@ -920,6 +985,9 @@ impl MainWindowController {
                 terminal_cell_width: cw,
                 terminal_cell_height: ch,
                 terminal_pixels: tpix,
+                weather: weather_model,
+                moon: moon_model,
+                system: system_model,
             };
             frames.push(fm);
         }
@@ -944,15 +1012,7 @@ impl MainWindowController {
         let n_frames = frames.len();
         sync_vec_model(&self.workspace_workspaces, wlist);
         sync_vec_model(&self.workspace_widgets, frames);
-        // Keep dock copy in sync (locale, theme strings may change over time).
-        self.workspace_dock_types.set_row_data(
-            0,
-            DockWidgetType {
-                type_id: "terminal".into(),
-                label: self.locale.tr("dock-widget-terminal").into(),
-                icon: "terminal".into(),
-            },
-        );
+        sync_vec_model(&self.workspace_dock_types, dock_types_vec(&self.locale));
         app_g.set_workspace(WorkspaceModel {
             workspaces: self.workspace_workspaces.clone(),
             active_workspace_id: w.id.to_string().into(),
@@ -979,10 +1039,8 @@ impl MainWindowController {
             .show()
             .map_err(|e| UiError::Slint(format!("show: {e}")))?;
         // Converge layout viewport to the real client size; `on_ui_tick` also polls until stable.
-        if self.sync_canvas_size_from_winit() {
-            if self.workspace_manager.active().is_ok() {
-                let _ = self.rebuild_workspace_model();
-            }
+        if self.sync_canvas_size_from_winit() && self.workspace_manager.active().is_ok() {
+            let _ = self.rebuild_workspace_model();
         }
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         tracing::info!("Main window closed");
@@ -1015,11 +1073,7 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
         workspaces: ModelRc::new(VecModel::default()),
         active_workspace_id: SharedString::new(),
         widgets: ModelRc::new(VecModel::default()),
-        dock_types: ModelRc::new(VecModel::from(vec![DockWidgetType {
-            type_id: "terminal".into(),
-            label: locale.tr("dock-widget-terminal").into(),
-            icon: "terminal".into(),
-        }])),
+        dock_types: ModelRc::new(VecModel::from(dock_types_vec(locale))),
         dock_add_label: locale.tr("dock-add-label").into(),
         grid_columns: 16,
         grid_rows: 10,
@@ -1070,8 +1124,44 @@ fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<TerminalCellMode
     ModelRc::new(VecModel::from(rows))
 }
 
-fn default_frame_data(
+fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
+    vec![
+        DockWidgetType {
+            type_id: "terminal".into(),
+            label: locale.tr("dock-widget-terminal").into(),
+            icon: "terminal".into(),
+        },
+        DockWidgetType {
+            type_id: "weather".into(),
+            label: locale.tr("dock-widget-weather").into(),
+            icon: "weather".into(),
+        },
+        DockWidgetType {
+            type_id: "moon".into(),
+            label: locale.tr("dock-widget-moon").into(),
+            icon: "moon".into(),
+        },
+        DockWidgetType {
+            type_id: "system".into(),
+            label: locale.tr("dock-widget-system").into(),
+            icon: "system".into(),
+        },
+    ]
+}
+
+fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString {
+    match type_id {
+        "weather" => locale.tr("dock-widget-weather").into(),
+        "moon" => locale.tr("dock-widget-moon").into(),
+        "system" => locale.tr("dock-widget-system").into(),
+        _ => locale.tr("widget-title-terminal").into(),
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn default_frame_data_extended(
     locale: &LocaleManager,
+    type_id: &str,
 ) -> (
     SharedString,
     i32,
@@ -1081,9 +1171,12 @@ fn default_frame_data(
     i32,
     i32,
     bool,
+    WeatherModel,
+    MoonModel,
+    SystemModel,
 ) {
     (
-        locale.tr("widget-title-terminal").into(),
+        fallback_widget_title(locale, type_id),
         80,
         24,
         blank_terminal(80, 24),
@@ -1091,7 +1184,172 @@ fn default_frame_data(
         0,
         0,
         true,
+        empty_weather_model(),
+        empty_moon_model(),
+        empty_system_model(),
     )
+}
+
+fn empty_weather_model() -> WeatherModel {
+    WeatherModel {
+        location: SharedString::new(),
+        current_temp: SharedString::new(),
+        condition_label: SharedString::new(),
+        condition_icon: SharedString::new(),
+        feels_like: SharedString::new(),
+        humidity: SharedString::new(),
+        wind: SharedString::new(),
+        forecast: ModelRc::new(VecModel::default()),
+        last_updated: SharedString::new(),
+        status: 0,
+    }
+}
+
+fn empty_moon_model() -> MoonModel {
+    MoonModel {
+        phase_label: SharedString::new(),
+        phase_icon: SharedString::new(),
+        illumination: SharedString::new(),
+        values: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn empty_system_model() -> SystemModel {
+    SystemModel {
+        indicators: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManager) -> WeatherModel {
+    let forecast: Vec<WeatherForecastEntry> = p
+        .forecast
+        .iter()
+        .map(|d| WeatherForecastEntry {
+            day_label: d.day_label.clone().into(),
+            high_text: d.high_text.clone().into(),
+            low_text: d.low_text.clone().into(),
+            icon: d.condition_icon.into(),
+            precip_text: d
+                .precipitation_probability_text
+                .clone()
+                .unwrap_or_default()
+                .into(),
+        })
+        .collect();
+
+    let _ = locale;
+
+    WeatherModel {
+        location: p.location_name.clone().into(),
+        current_temp: p.current_temp_text.clone().into(),
+        condition_label: p.condition_label.clone().into(),
+        condition_icon: p.condition_icon.into(),
+        feels_like: p.feels_like_text.clone().unwrap_or_default().into(),
+        humidity: p.humidity_text.clone().unwrap_or_default().into(),
+        wind: p.wind_text.clone().unwrap_or_default().into(),
+        forecast: ModelRc::new(VecModel::from(forecast)),
+        last_updated: p.last_updated_text.clone().into(),
+        status: weather_status_to_int(&p.status),
+    }
+}
+
+fn weather_status_to_int(s: &orchid_widgets::WeatherStatusTag) -> i32 {
+    use orchid_widgets::WeatherStatusTag::*;
+    match s {
+        Fresh => 0,
+        Stale => 1,
+        Offline => 2,
+        Error => 3,
+    }
+}
+
+fn build_moon_model(p: &orchid_widgets::MoonPayload, locale: &LocaleManager) -> MoonModel {
+    let mut values = vec![
+        MoonValueEntry {
+            label: locale.tr("moon-age-label").into(),
+            value: p.age_text.clone().into(),
+        },
+        MoonValueEntry {
+            label: locale.tr("moon-distance-label").into(),
+            value: p.distance_text.clone().into(),
+        },
+        MoonValueEntry {
+            label: locale.tr("moon-next-full-label").into(),
+            value: p.next_full_text.clone().into(),
+        },
+        MoonValueEntry {
+            label: locale.tr("moon-next-new-label").into(),
+            value: p.next_new_text.clone().into(),
+        },
+    ];
+
+    if let Some(t) = &p.moonrise_text {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-moonrise-label").into(),
+            value: t.clone().into(),
+        });
+    }
+    if let Some(t) = &p.moonset_text {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-moonset-label").into(),
+            value: t.clone().into(),
+        });
+    }
+    if let Some(t) = &p.sunrise_text {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-sunrise-label").into(),
+            value: t.clone().into(),
+        });
+    }
+    if let Some(t) = &p.sunset_text {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-sunset-label").into(),
+            value: t.clone().into(),
+        });
+    }
+    if let Some(t) = &p.libration_text {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-libration-label").into(),
+            value: t.clone().into(),
+        });
+    }
+
+    MoonModel {
+        phase_label: p.phase_label.clone().into(),
+        phase_icon: p.phase_icon.into(),
+        illumination: p.illumination_text.clone().into(),
+        values: ModelRc::new(VecModel::from(values)),
+    }
+}
+
+fn build_system_model(p: &orchid_widgets::SystemPayload) -> SystemModel {
+    let indicators: Vec<SystemIndicatorEntry> = p
+        .indicators
+        .iter()
+        .map(|i| SystemIndicatorEntry {
+            label: i.label.clone().into(),
+            value_text: i.value_text.clone().into(),
+            percent: i
+                .percent
+                .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
+                .unwrap_or(-1.0),
+            icon: i.icon.into(),
+            status: indicator_status_to_int(&i.status),
+        })
+        .collect();
+
+    SystemModel {
+        indicators: ModelRc::new(VecModel::from(indicators)),
+    }
+}
+
+fn indicator_status_to_int(s: &orchid_widgets::IndicatorStatus) -> i32 {
+    use orchid_widgets::IndicatorStatus::*;
+    match s {
+        Normal => 0,
+        Warning => 1,
+        Critical => 2,
+    }
 }
 
 // TODO(11B-Fix follow-up): Expose `event.key` (semantic key) from Slint in addition
@@ -1129,11 +1387,11 @@ fn trim_slint_key_artifacts(text: &str) -> &str {
             t = &t[c.len_utf8()..];
             continue;
         }
-        if n >= 0xE000 && n <= 0xF8FF {
+        if (0xE000..=0xF8FF).contains(&n) {
             t = &t[c.len_utf8()..];
             continue;
         }
-        if t.chars().count() > 1 && n >= 0x10 && n <= 0x19 {
+        if t.chars().count() > 1 && (0x10..=0x19).contains(&n) {
             t = &t[c.len_utf8()..];
             continue;
         }

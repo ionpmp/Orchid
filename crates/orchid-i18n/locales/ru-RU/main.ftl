@@ -220,6 +220,20 @@ workspace-new = Новый рабочий стол
 workspace-unnamed = Рабочий стол { $n }
 dock-add-label = Добавить виджет
 dock-widget-terminal = Терминал
+dock-widget-weather = Погода
+dock-widget-moon = Луна
+dock-widget-system = Система
+
+moon-age-label = Возраст
+moon-distance-label = Расстояние
+moon-next-full-label = Следующее полнолуние
+moon-next-new-label = Следующее новолуние
+moon-moonrise-label = Восход Луны
+moon-moonset-label = Заход Луны
+moon-sunrise-label = Восход Солнца
+moon-sunset-label = Заход Солнца
+moon-libration-label = Либрация
+
 widget-title-terminal = Терминал
 widget-close-tooltip = Закрыть виджет
 widget-close-confirm = Закрыть { $name }?

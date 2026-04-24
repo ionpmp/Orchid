@@ -1,0 +1,200 @@
+import { Theme } from "../theme_global.slint";
+import { WeatherModel } from "../workspace/defs.slint";
+
+export component WeatherView inherits Rectangle {
+    in property <WeatherModel> model;
+
+    pure function weather-icon-glyph(name: string) -> string {
+        return
+            name == "weather-clear" ? "☀" :
+            name == "weather-partly-cloudy" ? "⛅" :
+            name == "weather-cloudy" ? "☁" :
+            name == "weather-overcast" ? "☁" :
+            name == "weather-fog" ? "🌫" :
+            name == "weather-drizzle" ? "🌦" :
+            name == "weather-rain" ? "🌧" :
+            name == "weather-snow" ? "❄" :
+            name == "weather-sleet" ? "🌨" :
+            name == "weather-thunderstorm" ? "⛈" :
+            name == "weather-hail" ? "🌨" :
+            name == "weather-windy" ? "💨" :
+            name == "weather-unknown" ? "·" :
+            "·";
+    }
+
+    background: transparent;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: space-between;
+
+            Text {
+                text: model.location;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-medium;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background:
+                    model.status == 0 ? #22c55e :
+                    model.status == 1 ? #eab308 :
+                    model.status == 2 ? #6b7280 :
+                    #ef4444;
+            }
+        }
+
+        Text {
+            text: model.current-temp;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-3xl;
+            font-weight: Theme.weight-semibold;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: weather-icon-glyph(model.condition-icon);
+                color: Theme.accent-brand;
+                font-size: Theme.font-size-xl;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: model.condition-label;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-md;
+                vertical-alignment: center;
+            }
+        }
+
+        if model.feels-like != "" : Text {
+            text: model.feels-like;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+        }
+
+        if model.humidity != "" || model.wind != "" : HorizontalLayout {
+            spacing: 8px;
+
+            if model.humidity != "" : Rectangle {
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                horizontal-stretch: 0;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+
+                    Text {
+                        text: model.humidity;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            if model.wind != "" : Rectangle {
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                horizontal-stretch: 0;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+
+                    Text {
+                        text: model.wind;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.border-default;
+            horizontal-stretch: 1;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: space-around;
+
+            for day[i] in model.forecast : VerticalLayout {
+                spacing: 4px;
+                alignment: center;
+                horizontal-stretch: 1;
+
+                Text {
+                    text: day.day-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: weather-icon-glyph(day.icon);
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-lg;
+                    horizontal-alignment: center;
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: center;
+
+                    Text {
+                        text: day.high-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                    }
+
+                    Text {
+                        text: " / ";
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+
+                    Text {
+                        text: day.low-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+
+                if day.precip-text != "" : Text {
+                    text: day.precip-text;
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        Text {
+            text: model.last-updated;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: end;
+        }
+    }
+}
