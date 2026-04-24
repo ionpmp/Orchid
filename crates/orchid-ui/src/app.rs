@@ -10,12 +10,14 @@ use parking_lot::{Mutex, RwLock};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use orchid_core::{EventBus, EventBusConfig};
+use orchid_core::{CommandPalette, CommandRegistry, EventBus, EventBusConfig};
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
 use orchid_storage::{ConfigLoader, OrchidConfig, OrchidPaths, StateStore};
 use orchid_terminal::SessionManager;
 use orchid_widgets::{
-    LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry, WorkspaceManager,
+    builtin::search::{CommandsSource, FilesSource, SearchAggregator, SearchSource, SettingsSource},
+    commands::build_command_set,
+    GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry, WorkspaceManager,
 };
 
 use crate::error::{Result, UiError};
@@ -41,6 +43,12 @@ pub struct OrchidApp {
     layout_engine: Arc<LayoutEngine>,
     session_manager: Arc<SessionManager>,
     session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
+    /// Shared command registry (search + future palette UI).
+    #[allow(dead_code)]
+    command_registry: Arc<CommandRegistry>,
+    /// Group manager backing widget-related commands.
+    #[allow(dead_code)]
+    group_manager: Arc<GroupManager>,
 }
 
 impl std::fmt::Debug for OrchidApp {
@@ -110,10 +118,34 @@ impl OrchidApp {
 
         let http = reqwest::Client::builder()
             .user_agent(format!("Orchid/{}", env!("CARGO_PKG_VERSION")))
+            // Shared by weather + RSS; bounded waits keep tests and the UI
+            // thread from depending on hung outbound connections.
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| UiError::Slint(format!("HTTP client: {e}")))?;
+
+        let command_registry: Arc<CommandRegistry> = Arc::new(CommandRegistry::new());
+        let command_palette: Arc<CommandPalette> =
+            Arc::new(CommandPalette::new(command_registry.clone()));
+
+        let search_index_dir = paths.data_dir.join("search_index");
+        std::fs::create_dir_all(&search_index_dir).map_err(|e| {
+            UiError::Slint(format!("create search index dir: {e}"))
+        })?;
+        let search_engine: Arc<orchid_search::SearchEngine> = Arc::new(
+            orchid_search::SearchEngine::open(&search_index_dir)
+                .map_err(|e| UiError::Slint(format!("open search index: {e}")))?,
+        );
+        let search_sources: Vec<Arc<dyn SearchSource>> = vec![
+            Arc::new(FilesSource::new(search_engine)),
+            Arc::new(CommandsSource::new(command_palette)),
+            Arc::new(SettingsSource::new()),
+        ];
+        let search_aggregator: Arc<SearchAggregator> = Arc::new(SearchAggregator::new(search_sources));
+
         widget_registry
-            .register(orchid_widgets::builtin::weather::descriptor(http))
+            .register(orchid_widgets::builtin::weather::descriptor(http.clone()))
             .map_err(|e| UiError::Slint(format!("register weather: {e}")))?;
         widget_registry
             .register(orchid_widgets::builtin::moon::descriptor())
@@ -121,6 +153,12 @@ impl OrchidApp {
         widget_registry
             .register(orchid_widgets::builtin::system::descriptor())
             .map_err(|e| UiError::Slint(format!("register system: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::rss::descriptor(http))
+            .map_err(|e| UiError::Slint(format!("register rss: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::search::descriptor(search_aggregator))
+            .map_err(|e| UiError::Slint(format!("register search: {e}")))?;
 
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,
@@ -148,6 +186,23 @@ impl OrchidApp {
             .await
             .map_err(|e| UiError::Slint(format!("widget sweeper: {e}")))?;
 
+        let group_manager: Arc<GroupManager> = Arc::new(GroupManager::new(bus.clone(), storage.clone()));
+        group_manager
+            .restore_from_storage()
+            .map_err(|e| UiError::Slint(format!("restore groups: {e}")))?;
+
+        for (desc, factory) in build_command_set(
+            widget_manager.clone(),
+            workspace_manager.clone(),
+            group_manager.clone(),
+            widget_manager.registry().clone(),
+        ) {
+            let cmd_id = desc.id.clone();
+            command_registry
+                .register(desc, factory)
+                .map_err(|e| UiError::Slint(format!("register command {cmd_id}: {e}")))?;
+        }
+
         info!(
             theme = %theme.current().meta.id,
             language = %locale.current().as_str(),
@@ -166,6 +221,8 @@ impl OrchidApp {
             layout_engine,
             session_manager,
             session_routing,
+            command_registry,
+            group_manager,
         })
     }
 
@@ -181,7 +238,9 @@ impl OrchidApp {
             self.theme.clone(),
             self.locale.clone(),
             self.config.clone(),
+            self.storage.clone(),
             self.bus.clone(),
+            self.command_registry.clone(),
             self.widget_manager.clone(),
             self.workspace_manager.clone(),
             self.layout_engine.clone(),

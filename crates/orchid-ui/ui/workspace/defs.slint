@@ -59,6 +59,44 @@ export struct SystemModel {
     indicators: [SystemIndicatorEntry],
 }
 
+export struct RssItemEntry {
+    id: string,
+    title: string,
+    source: string,
+    published: string,
+    summary: string,
+    link: string,
+}
+
+export struct RssModel {
+    items: [RssItemEntry],
+    last-updated: string,
+    error-summary: string,
+    has-items: bool,
+    empty-state-text: string,
+}
+
+export struct SearchCandidateEntry {
+    id: string,
+    source-name: string,
+    source-icon: string,
+    title: string,
+    subtitle: string,
+    shortcut: string,
+}
+
+export struct SearchModel {
+    query: string,
+    candidates: [SearchCandidateEntry],
+    is-searching: bool,
+    error: string,
+    selected-index: int,
+    placeholder-text: string,
+    empty-state-text: string,
+    no-results-text: string,
+    searching-text: string,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -83,6 +121,8 @@ export struct WidgetFrameModel {
     weather: WeatherModel,
     moon: MoonModel,
     system: SystemModel,
+    rss: RssModel,
+    search: SearchModel,
 }
 
 export struct DockWidgetType {

@@ -228,6 +228,15 @@ dock-widget-terminal = Terminal
 dock-widget-weather = Weather
 dock-widget-moon = Moon
 dock-widget-system = System
+dock-widget-rss = News
+dock-widget-search = Search
+
+rss-no-feeds = No feeds configured
+
+search-placeholder = Type to search files, commands, settings...
+search-empty-state = Start typing to search
+search-no-results-short = No results
+search-searching = Searching...
 
 moon-age-label = Age
 moon-distance-label = Distance

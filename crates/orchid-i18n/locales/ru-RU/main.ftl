@@ -223,6 +223,15 @@ dock-widget-terminal = Терминал
 dock-widget-weather = Погода
 dock-widget-moon = Луна
 dock-widget-system = Система
+dock-widget-rss = Новости
+dock-widget-search = Поиск
+
+rss-no-feeds = Нет настроенных лент
+
+search-placeholder = Введите запрос для поиска файлов, команд и настроек...
+search-empty-state = Начните вводить запрос
+search-no-results-short = Нет результатов
+search-searching = Идёт поиск...
 
 moon-age-label = Возраст
 moon-distance-label = Расстояние

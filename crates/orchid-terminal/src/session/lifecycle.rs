@@ -33,7 +33,15 @@ impl TerminalSession {
         bus: Arc<orchid_core::EventBus>,
     ) -> Result<Arc<Self>> {
         let id = Uuid::new_v4();
-        let pty = pty::spawn(&spec, size)?;
+        // `portable_pty` spawn can block for a long time on some Windows setups
+        // (AV hooks, first-run profile work). Run it off the async executor so
+        // other tasks — including test timeouts and the snapshot pump — stay
+        // schedulable.
+        let spec_spawn = spec.clone();
+        let pty = tokio::task::spawn_blocking(move || pty::spawn(&spec_spawn, size))
+            .await
+            .map_err(|e| TerminalError::SpawnFailed(format!("pty spawn join: {e}")))?;
+        let pty = pty?;
         let io = pty::start_io(Arc::clone(&pty))?;
         let emulator = Arc::new(TerminalEmulator::new(
             size.cols,

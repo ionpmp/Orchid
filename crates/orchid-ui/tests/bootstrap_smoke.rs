@@ -6,7 +6,7 @@ use orchid_storage::OrchidPaths;
 use orchid_ui::OrchidApp;
 use tempfile::TempDir;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn bootstrap_builds_all_subsystems() {
     let tmp = TempDir::new().expect("temp dir");
     let paths = OrchidPaths::for_testing(tmp.path());

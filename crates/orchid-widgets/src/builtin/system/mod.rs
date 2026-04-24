@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 use uuid::Uuid;
 
-use crate::error::Result as WidgetResult;
+use crate::error::{Result as WidgetResult, WidgetError};
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{IndicatorStatus, SystemIndicator, SystemPayload};
@@ -69,7 +69,13 @@ impl Widget for SystemWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        *self.snapshot.write() = Some(self.provider.refresh());
+        let provider = self.provider.clone();
+        let snap = tokio::task::spawn_blocking(move || provider.refresh())
+            .await
+            .map_err(|e| {
+                WidgetError::CreationFailed(format!("system metrics initial refresh: {e}"))
+            })?;
+        *self.snapshot.write() = Some(snap);
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
@@ -82,8 +88,15 @@ impl Widget for SystemWidget {
             let snap_slot = snap_slot.clone();
             let bus = bus.clone();
             async move {
-                let s = provider.refresh();
-                *snap_slot.write() = Some(s);
+                let provider2 = provider.clone();
+                let snap = match tokio::task::spawn_blocking(move || provider2.refresh()).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "system periodic refresh join failed");
+                        return;
+                    }
+                };
+                *snap_slot.write() = Some(snap);
                 bus.publish(
                     orchid_core::EventSource::Widget(instance_id),
                     WidgetSnapshotUpdated { instance_id },

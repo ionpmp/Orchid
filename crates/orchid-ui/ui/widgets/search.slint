@@ -1,0 +1,241 @@
+import { Theme } from "../theme_global.slint";
+import { SearchModel } from "../workspace/defs.slint";
+
+export component SearchView inherits Rectangle {
+    forward-focus: input;
+    in property <SearchModel> model;
+
+    callback query-changed(string);
+    callback candidate-activated(string);
+    callback selection-changed(int);
+
+    background: transparent;
+
+    pure function source-glyph(name: string) -> string {
+        return
+            name == "files" ? "📁" :
+            name == "commands" ? "⌨" :
+            name == "settings" ? "⚙" :
+            "·";
+    }
+
+    init => {
+        input.focus();
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        Rectangle {
+            height: 40px;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: input.has-focus
+                ? Theme.accent-brand
+                : Theme.border-default;
+            horizontal-stretch: 1;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+
+                Text {
+                    text: "🔍";
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-md;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 100%;
+                    background: transparent;
+
+                    if input.text == "" : Text {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        text: model.placeholder-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                    }
+
+                    input := TextInput {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        text: model.query;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                        single-line: true;
+                        key-pressed(event) => {
+                            if (event.text == Key.DownArrow) {
+                                root.selection-changed(model.selected-index + 1);
+                                return accept;
+                            }
+                            if (event.text == Key.UpArrow) {
+                                root.selection-changed(model.selected-index - 1);
+                                return accept;
+                            }
+                            if (event.text == Key.Return) {
+                                if (model.selected-index >= 0
+                                    && model.selected-index < model.candidates.length)
+                                {
+                                    root.candidate-activated(
+                                        model.candidates[model.selected-index].id
+                                    );
+                                }
+                                return accept;
+                            }
+                            return reject;
+                        }
+                        accepted => {
+                            if (model.selected-index >= 0
+                                && model.selected-index < model.candidates.length)
+                            {
+                                root.candidate-activated(
+                                    model.candidates[model.selected-index].id
+                                );
+                            }
+                        }
+                        edited => {
+                            root.query-changed(self.text);
+                        }
+                    }
+                }
+            }
+        }
+
+        if model.is-searching : Text {
+            text: model.searching-text;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+
+        if model.error != "" : Text {
+            text: model.error;
+            color: #ef4444;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+
+        if model.query == "" && model.candidates.length == 0 : VerticalLayout {
+            alignment: center;
+            vertical-stretch: 1;
+
+            Text {
+                text: model.empty-state-text;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+            }
+        }
+
+        if model.query != "" && model.candidates.length == 0 && !model.is-searching
+            : VerticalLayout {
+            alignment: center;
+            vertical-stretch: 1;
+
+            Text {
+                text: model.no-results-text;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+            }
+        }
+
+        if model.candidates.length > 0 : Flickable {
+            vertical-stretch: 1;
+            horizontal-stretch: 1;
+            interactive: true;
+            viewport-width: self.width;
+            viewport-height: cand-list.preferred-height.max(self.height);
+
+            cand-list := VerticalLayout {
+                width: parent.viewport-width;
+                spacing: 2px;
+
+                for cand[i] in model.candidates : Rectangle {
+                    height: 48px;
+                    background: (i == model.selected-index)
+                        ? Theme.accent-brand
+                        : (cand-ta.has-hover ? Theme.surface-base : transparent);
+                    border-radius: Theme.radius-md;
+
+                    cand-ta := TouchArea {
+                        clicked => {
+                            root.selection-changed(i);
+                            root.candidate-activated(cand.id);
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+
+                        Text {
+                            text: source-glyph(cand.source-icon);
+                            color: (i == model.selected-index)
+                                ? Theme.text-primary
+                                : Theme.accent-brand;
+                            font-size: Theme.font-size-lg;
+                            vertical-alignment: center;
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            spacing: 2px;
+
+                            Text {
+                                text: cand.title;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-md;
+                                font-weight: Theme.weight-medium;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+
+                            if cand.subtitle != "" : Text {
+                                text: cand.subtitle;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+                        }
+
+                        if cand.shortcut != "" : Rectangle {
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            horizontal-stretch: 0;
+
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                padding-top: 2px;
+                                padding-bottom: 2px;
+
+                                Text {
+                                    text: cand.shortcut;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

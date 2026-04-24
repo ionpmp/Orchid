@@ -24,14 +24,15 @@ use slint::VecModel;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
-use orchid_core::EventBus;
+use orchid_core::{ActionContext, ActionDispatcher, CommandRegistry, EventBus, ParsedCommand};
 use orchid_i18n::LocaleManager;
-use orchid_storage::OrchidConfig;
+use orchid_storage::{OrchidConfig, StateStore};
 use orchid_terminal::SessionManager;
 use orchid_terminal::{FontMetrics, PtySize};
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::TerminalPayload;
+use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
 use orchid_widgets::WidgetPayload;
 use orchid_widgets::{
     free_placement_from_pixel_bounds, position_from_content_top_left, LayoutEngine, PlacedWidget,
@@ -44,9 +45,9 @@ use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
 use crate::slint_generated::{
-    AppState, DockWidgetType, MainWindow, MoonModel, MoonValueEntry, Strings, SystemIndicatorEntry,
-    SystemModel, TerminalCellModel, Theme, WeatherForecastEntry, WeatherModel, WidgetFrameModel,
-    WorkspaceModel, WorkspaceSummary,
+    AppState, DockWidgetType, MainWindow, MoonModel, MoonValueEntry, RssItemEntry, RssModel,
+    SearchCandidateEntry, SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel,
+    Theme, WeatherForecastEntry, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
 };
 use crate::theme::ThemeManager;
 
@@ -59,6 +60,8 @@ pub struct MainWindowController {
     theme: Arc<ThemeManager>,
     locale: Arc<LocaleManager>,
     config: Arc<RwLock<OrchidConfig>>,
+    storage: Arc<StateStore>,
+    command_registry: Arc<CommandRegistry>,
     _bus: Arc<EventBus>,
     widget_manager: Arc<WidgetManager>,
     workspace_manager: Arc<WorkspaceManager>,
@@ -92,6 +95,8 @@ pub struct MainWindowController {
     workspace_workspaces: ModelRc<WorkspaceSummary>,
     workspace_widgets: ModelRc<WidgetFrameModel>,
     workspace_dock_types: ModelRc<DockWidgetType>,
+    /// Per universal-search instance: selected candidate row (clamped on rebuild).
+    search_selection: Arc<RwLock<HashMap<Uuid, i32>>>,
 }
 
 struct ResizeInteraction {
@@ -109,7 +114,9 @@ impl MainWindowController {
         theme: Arc<ThemeManager>,
         locale: Arc<LocaleManager>,
         config: Arc<RwLock<OrchidConfig>>,
+        storage: Arc<StateStore>,
         bus: Arc<EventBus>,
+        command_registry: Arc<CommandRegistry>,
         widget_manager: Arc<WidgetManager>,
         workspace_manager: Arc<WorkspaceManager>,
         layout_engine: Arc<LayoutEngine>,
@@ -135,6 +142,8 @@ impl MainWindowController {
             theme,
             locale,
             config,
+            storage,
+            command_registry,
             _bus: bus,
             widget_manager: widget_manager.clone(),
             workspace_manager: workspace_manager.clone(),
@@ -156,6 +165,7 @@ impl MainWindowController {
             workspace_workspaces,
             workspace_widgets,
             workspace_dock_types,
+            search_selection: Arc::new(RwLock::new(HashMap::new())),
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -447,6 +457,38 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_rss_item_clicked({
+            let t = t.clone();
+            move |link| {
+                if let Some(c) = t.upgrade() {
+                    c.on_rss_item_clicked(&link);
+                }
+            }
+        });
+        self.window.on_search_query_changed({
+            let t = t.clone();
+            move |inst, q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_search_query_changed(&inst, &q);
+                }
+            }
+        });
+        self.window.on_search_candidate_activated({
+            let t = t.clone();
+            move |inst, id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_search_candidate_activated(&inst, &id);
+                }
+            }
+        });
+        self.window.on_search_selection_changed({
+            let t = t.clone();
+            move |inst, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_search_selection_changed(&inst, idx);
+                }
+            }
+        });
         Ok(())
     }
 
@@ -536,7 +578,10 @@ impl MainWindowController {
 
     fn on_dock_add(self: &Arc<Self>, type_id: &SharedString) {
         let type_id_str = type_id.as_str();
-        if !matches!(type_id_str, "terminal" | "weather" | "moon" | "system") {
+        if !matches!(
+            type_id_str,
+            "terminal" | "weather" | "moon" | "system" | "rss" | "search"
+        ) {
             warn!(type_id = type_id_str, "unknown widget type from dock");
             return;
         }
@@ -544,7 +589,11 @@ impl MainWindowController {
         let wm = self.widget_manager.clone();
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
-        let type_owned = type_id_str.to_string();
+        let type_owned = if type_id_str == "search" {
+            "universal-search".to_string()
+        } else {
+            type_id_str.to_string()
+        };
         let _ = slint::spawn_local(async move {
             let wid = match wsm.active() {
                 Ok(w) => w.id,
@@ -589,6 +638,7 @@ impl MainWindowController {
                 c.drag_start_bounds.lock().remove(&u);
                 c.drag_grab.lock().remove(&u);
                 c.resize_override.lock().remove(&u);
+                c.search_selection.write().remove(&u);
                 c.schedule_rebuild();
             }
         });
@@ -972,6 +1022,103 @@ impl MainWindowController {
         );
     }
 
+    fn on_rss_item_clicked(self: &Arc<Self>, link: &SharedString) {
+        let s = link.as_str();
+        if s.is_empty() {
+            return;
+        }
+        tracing::debug!(target: "orchid_ui::rss", link = %s, "opening rss item");
+        if let Err(e) = orchid_widgets::builtin::rss::open_link(s) {
+            warn!(?e, "failed to open RSS link");
+        }
+    }
+
+    fn on_search_query_changed(self: &Arc<Self>, inst: &SharedString, q: &SharedString) {
+        let Ok(instance_id) = Uuid::parse_str(inst.as_str()) else {
+            return;
+        };
+        search_widget::universal_search_push_query(instance_id, q.to_string());
+        if q.as_str().trim().is_empty() {
+            self.search_selection.write().insert(instance_id, -1);
+        } else {
+            self.search_selection.write().insert(instance_id, 0);
+        }
+        self.schedule_rebuild();
+    }
+
+    fn on_search_candidate_activated(self: &Arc<Self>, inst: &SharedString, cand: &SharedString) {
+        let Ok(instance_id) = Uuid::parse_str(inst.as_str()) else {
+            return;
+        };
+        let candidate_id = cand.to_string();
+        let this = Arc::clone(self);
+        let _ = slint::spawn_local(async move {
+            this.dispatch_search_action_target(instance_id, candidate_id).await;
+        });
+    }
+
+    async fn dispatch_search_action_target(self: &Arc<Self>, instance_id: Uuid, candidate_id: String) {
+        let Some(target) =
+            search_widget::universal_search_action_target(instance_id, candidate_id.as_str())
+        else {
+            warn!(%candidate_id, "unknown search candidate");
+            return;
+        };
+        match target {
+            ActionTarget::OpenFile(path) => {
+                if let Err(e) = opener::open(&path) {
+                    warn!(?e, path = %path, "open file from search");
+                }
+            }
+            ActionTarget::RunCommand(cmd_id) => {
+                let action = match self
+                    .command_registry
+                    .build_action(&cmd_id, ParsedCommand::default())
+                {
+                    Ok(a) => a,
+                    Err(e) => {
+                        warn!(?e, cmd_id = %cmd_id, "build command action");
+                        return;
+                    }
+                };
+                let ctx = ActionContext::new(
+                    self._bus.clone(),
+                    self.storage.clone(),
+                    self.config.clone(),
+                );
+                let dispatcher = ActionDispatcher::new();
+                if let Err(e) = dispatcher.dispatch(action, &ctx).await {
+                    warn!(?e, "dispatch command from search");
+                }
+            }
+            ActionTarget::OpenSettings(section) => {
+                debug!(section = %section, "open settings from search (not wired to UI yet)");
+            }
+        }
+    }
+
+    fn on_search_selection_changed(self: &Arc<Self>, inst: &SharedString, new_idx: i32) {
+        let Ok(instance_id) = Uuid::parse_str(inst.as_str()) else {
+            return;
+        };
+        let count = self
+            .widget_manager
+            .snapshot_cache()
+            .get(instance_id)
+            .and_then(|s| match &s.payload {
+                WidgetPayload::UniversalSearch(p) => Some(p.candidates.len() as i32),
+                _ => None,
+            })
+            .unwrap_or(0);
+        let clamped = if count == 0 {
+            -1
+        } else {
+            new_idx.clamp(0, count - 1)
+        };
+        self.search_selection.write().insert(instance_id, clamped);
+        self.schedule_rebuild();
+    }
+
     fn on_terminal_viewport(self: &Arc<Self>, id: &SharedString, w: f32, h: f32) {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
@@ -1082,6 +1229,8 @@ impl MainWindowController {
             weather_model,
             moon_model,
             system_model,
+            rss_model,
+            search_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
@@ -1120,6 +1269,8 @@ impl MainWindowController {
                         empty_weather_model(),
                         empty_moon_model(),
                         empty_system_model(),
+                        empty_rss_model(&self.locale),
+                        empty_search_model(&self.locale),
                     )
                 }
                 WidgetPayload::Weather(w) => (
@@ -1134,6 +1285,8 @@ impl MainWindowController {
                     build_weather_model(w, &self.locale),
                     empty_moon_model(),
                     empty_system_model(),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
                 ),
                 WidgetPayload::Moon(m) => (
                     tstr,
@@ -1147,6 +1300,8 @@ impl MainWindowController {
                     empty_weather_model(),
                     build_moon_model(m, &self.locale),
                     empty_system_model(),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
                     tstr,
@@ -1160,7 +1315,51 @@ impl MainWindowController {
                     empty_weather_model(),
                     empty_moon_model(),
                     build_system_model(s),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
                 ),
+                WidgetPayload::RssFeed(r) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    empty_moon_model(),
+                    empty_system_model(),
+                    build_rss_model(r, &self.locale),
+                    empty_search_model(&self.locale),
+                ),
+                WidgetPayload::UniversalSearch(s) => {
+                    let selected = self
+                        .search_selection
+                        .read()
+                        .get(&pl.instance_id)
+                        .copied()
+                        .unwrap_or(if s.candidates.is_empty() {
+                            -1
+                        } else {
+                            0
+                        });
+                    (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(),
+                        empty_moon_model(),
+                        empty_system_model(),
+                        empty_rss_model(&self.locale),
+                        build_search_model(s, &self.locale, selected),
+                    )
+                }
                 _ => (
                     tstr,
                     80,
@@ -1173,6 +1372,8 @@ impl MainWindowController {
                     empty_weather_model(),
                     empty_moon_model(),
                     empty_system_model(),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
                 ),
             }
         } else {
@@ -1200,6 +1401,8 @@ impl MainWindowController {
             weather: weather_model,
             moon: moon_model,
             system: system_model,
+            rss: rss_model,
+            search: search_model,
         }
     }
 
@@ -1285,8 +1488,8 @@ impl MainWindowController {
             dock_add_label: self.locale.tr("dock-add-label").into(),
             grid_columns: i32::from(snap.grid_columns),
             grid_rows: i32::from(snap.grid_rows),
-            canvas_content_width: canvas_content_w.into(),
-            canvas_content_height: canvas_content_h.into(),
+            canvas_content_width: canvas_content_w,
+            canvas_content_height: canvas_content_h,
         });
         if pty_changed_needs_rebuild {
             self.schedule_rebuild();
@@ -1349,8 +1552,8 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
         dock_add_label: locale.tr("dock-add-label").into(),
         grid_columns: 16,
         grid_rows: 10,
-        canvas_content_width: 1f32.into(),
-        canvas_content_height: 1f32.into(),
+        canvas_content_width: 1f32,
+        canvas_content_height: 1f32,
     }
 }
 
@@ -1420,6 +1623,16 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-system").into(),
             icon: "system".into(),
         },
+        DockWidgetType {
+            type_id: "rss".into(),
+            label: locale.tr("dock-widget-rss").into(),
+            icon: "rss".into(),
+        },
+        DockWidgetType {
+            type_id: "search".into(),
+            label: locale.tr("dock-widget-search").into(),
+            icon: "search".into(),
+        },
     ]
 }
 
@@ -1428,6 +1641,8 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "weather" => locale.tr("dock-widget-weather").into(),
         "moon" => locale.tr("dock-widget-moon").into(),
         "system" => locale.tr("dock-widget-system").into(),
+        "rss" => locale.tr("dock-widget-rss").into(),
+        "universal-search" => locale.tr("dock-widget-search").into(),
         _ => locale.tr("widget-title-terminal").into(),
     }
 }
@@ -1448,6 +1663,8 @@ fn default_frame_data_extended(
     WeatherModel,
     MoonModel,
     SystemModel,
+    RssModel,
+    SearchModel,
 ) {
     (
         fallback_widget_title(locale, type_id),
@@ -1461,6 +1678,8 @@ fn default_frame_data_extended(
         empty_weather_model(),
         empty_moon_model(),
         empty_system_model(),
+        empty_rss_model(locale),
+        empty_search_model(locale),
     )
 }
 
@@ -1491,6 +1710,106 @@ fn empty_moon_model() -> MoonModel {
 fn empty_system_model() -> SystemModel {
     SystemModel {
         indicators: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn empty_rss_model(locale: &LocaleManager) -> RssModel {
+    RssModel {
+        items: ModelRc::new(VecModel::default()),
+        last_updated: SharedString::new(),
+        error_summary: SharedString::new(),
+        has_items: false,
+        empty_state_text: locale.tr("rss-no-feeds").into(),
+    }
+}
+
+fn build_rss_model(p: &orchid_widgets::RssPayload, locale: &LocaleManager) -> RssModel {
+    let items: Vec<RssItemEntry> = p
+        .items
+        .iter()
+        .map(|it| RssItemEntry {
+            id: it.id.clone().into(),
+            title: it.title.clone().into(),
+            source: it.source_name.clone().into(),
+            published: it.published_text.clone().into(),
+            summary: it.summary_text.clone().unwrap_or_default().into(),
+            link: it.link.clone().unwrap_or_default().into(),
+        })
+        .collect();
+    let has_items = !items.is_empty();
+    RssModel {
+        items: ModelRc::new(VecModel::from(items)),
+        last_updated: p.last_updated_text.clone().into(),
+        error_summary: p.error_summary.clone().unwrap_or_default().into(),
+        has_items,
+        empty_state_text: locale.tr("rss-no-feeds").into(),
+    }
+}
+
+fn empty_search_model(locale: &LocaleManager) -> SearchModel {
+    SearchModel {
+        query: SharedString::new(),
+        candidates: ModelRc::new(VecModel::default()),
+        is_searching: false,
+        error: SharedString::new(),
+        selected_index: -1,
+        placeholder_text: locale.tr("search-placeholder").into(),
+        empty_state_text: locale.tr("search-empty-state").into(),
+        no_results_text: locale.tr("search-no-results-short").into(),
+        searching_text: locale.tr("search-searching").into(),
+    }
+}
+
+fn build_search_model(
+    p: &orchid_widgets::UniversalSearchPayload,
+    locale: &LocaleManager,
+    selected: i32,
+) -> SearchModel {
+    let candidates: Vec<SearchCandidateEntry> = p
+        .candidates
+        .iter()
+        .map(|c| {
+            let title: SharedString = if c.source_name == "commands" {
+                locale.tr(c.title.as_str()).into()
+            } else {
+                c.title.clone().into()
+            };
+            let source_label = match c.source_name.as_str() {
+                "files" => locale.tr("search-source-files"),
+                "commands" => locale.tr("search-source-commands"),
+                "settings" => locale.tr("search-source-settings"),
+                _ => c.source_name.clone(),
+            };
+            let subtitle: SharedString = match &c.subtitle {
+                Some(s) => s.clone().into(),
+                None => source_label.clone().into(),
+            };
+            SearchCandidateEntry {
+                id: c.id.clone().into(),
+                source_name: source_label.into(),
+                source_icon: c.source_name.as_str().into(),
+                title,
+                subtitle,
+                shortcut: c.shortcut_hint.clone().unwrap_or_default().into(),
+            }
+        })
+        .collect();
+    let max = candidates.len() as i32;
+    let clamped = if candidates.is_empty() {
+        -1
+    } else {
+        selected.clamp(0, max - 1)
+    };
+    SearchModel {
+        query: p.query.clone().into(),
+        candidates: ModelRc::new(VecModel::from(candidates)),
+        is_searching: p.is_searching,
+        error: p.error.clone().unwrap_or_default().into(),
+        selected_index: clamped,
+        placeholder_text: locale.tr("search-placeholder").into(),
+        empty_state_text: locale.tr("search-empty-state").into(),
+        no_results_text: locale.tr("search-no-results-short").into(),
+        searching_text: locale.tr("search-searching").into(),
     }
 }
 

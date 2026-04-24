@@ -1,0 +1,121 @@
+import { Theme } from "../theme_global.slint";
+import { RssModel } from "../workspace/defs.slint";
+
+export component RssView inherits Rectangle {
+    in property <RssModel> model;
+
+    callback item-clicked(string);
+
+    background: transparent;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        if model.error-summary != "" : Rectangle {
+            background: #ef444422;
+            border-radius: Theme.radius-md;
+            horizontal-stretch: 1;
+
+            HorizontalLayout {
+                padding: 8px;
+
+                Text {
+                    text: model.error-summary;
+                    color: #ef4444;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if !model.has-items : VerticalLayout {
+            alignment: center;
+            vertical-stretch: 1;
+
+            Text {
+                text: model.empty-state-text;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+            }
+        }
+
+        if model.has-items : Flickable {
+            vertical-stretch: 1;
+            horizontal-stretch: 1;
+            interactive: true;
+            viewport-width: self.width;
+            viewport-height: rss-list.preferred-height.max(self.height);
+
+            rss-list := VerticalLayout {
+                width: parent.viewport-width;
+                spacing: 0px;
+
+                for item[i] in model.items : Rectangle {
+                    height: 84px;
+                    background: item-ta.has-hover
+                        ? Theme.surface-base
+                        : transparent;
+                    border-radius: Theme.radius-md;
+
+                    item-ta := TouchArea {
+                        clicked => {
+                            root.item-clicked(item.link);
+                        }
+                    }
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: item.title;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-semibold;
+                            wrap: no-wrap;
+                            overflow: elide;
+                            horizontal-alignment: left;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+
+                            Text {
+                                text: item.source;
+                                color: Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: item.published;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if item.summary != "" : Text {
+                            text: item.summary;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                            overflow: elide;
+                            horizontal-alignment: left;
+                            vertical-stretch: 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if model.last-updated != "" : Text {
+            text: model.last-updated;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: end;
+        }
+    }
+}

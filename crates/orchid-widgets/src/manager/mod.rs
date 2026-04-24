@@ -263,7 +263,8 @@ impl WidgetManager {
                 last_touched: RwLock::new(now),
             });
 
-            // Give the widget a chance to warm up.
+            // Give the widget a chance to warm up. Release the lock between
+            // `on_create` and `on_activate` so the snapshot pump can run.
             {
                 let ctx = self.context_for(&runtime);
                 let mut w = runtime.widget.lock().await;
@@ -271,10 +272,12 @@ impl WidgetManager {
                     warn!(widget_id = %row.id, error = %e, "restore: on_create failed");
                     continue;
                 }
-                if row.lifecycle == LifecycleState::Active {
-                    if let Err(e) = w.on_activate(&ctx).await {
-                        warn!(widget_id = %row.id, error = %e, "restore: on_activate failed");
-                    }
+            }
+            if row.lifecycle == LifecycleState::Active {
+                let ctx = self.context_for(&runtime);
+                let mut w = runtime.widget.lock().await;
+                if let Err(e) = w.on_activate(&ctx).await {
+                    warn!(widget_id = %row.id, error = %e, "restore: on_activate failed");
                 }
             }
 

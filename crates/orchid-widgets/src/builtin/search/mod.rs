@@ -4,9 +4,11 @@ pub mod aggregator;
 pub mod sources;
 
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use tokio::sync::Notify;
 use uuid::Uuid;
@@ -20,6 +22,34 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use aggregator::SearchAggregator;
 pub use sources::{ActionTarget, CommandsSource, FilesSource, SearchCandidate, SearchSource, SettingsSource};
+
+/// Live search widget cores keyed by instance id (for UI-side query / activation
+/// without holding `Arc<UniversalSearchWidget>`).
+static SEARCH_LIVE: LazyLock<DashMap<Uuid, Arc<Inner>>> = LazyLock::new(DashMap::new);
+
+/// Push a query update into the widget debouncer for `instance_id`.
+///
+/// No-op if the instance is not a live universal-search widget.
+pub fn universal_search_push_query(instance_id: Uuid, query: String) {
+    if let Some(inner) = SEARCH_LIVE.get(&instance_id) {
+        *inner.query.write() = query;
+        inner.notify.notify_one();
+    }
+}
+
+/// Look up the [`ActionTarget`] for `candidate_id` on `instance_id`.
+///
+/// Returns `None` if the instance is unknown or the candidate id is stale.
+pub fn universal_search_action_target(instance_id: Uuid, candidate_id: &str) -> Option<ActionTarget> {
+    SEARCH_LIVE.get(&instance_id).and_then(|inner| {
+        inner
+            .candidates
+            .read()
+            .iter()
+            .find(|c| c.id == candidate_id)
+            .map(|c| c.action_target.clone())
+    })
+}
 
 /// Stable type id.
 pub const TYPE_ID: &str = "universal-search";
@@ -65,17 +95,19 @@ impl UniversalSearchWidget {
         aggregator: Option<Arc<SearchAggregator>>,
         bus: Arc<orchid_core::EventBus>,
     ) -> Self {
+        let inner = Arc::new(Inner {
+            query: RwLock::new(String::new()),
+            candidates: RwLock::new(Vec::new()),
+            is_searching: RwLock::new(false),
+            error: RwLock::new(None),
+            notify: Notify::new(),
+            aggregator,
+            bus,
+            instance_id,
+        });
+        SEARCH_LIVE.insert(instance_id, inner.clone());
         Self {
-            inner: Arc::new(Inner {
-                query: RwLock::new(String::new()),
-                candidates: RwLock::new(Vec::new()),
-                is_searching: RwLock::new(false),
-                error: RwLock::new(None),
-                notify: Notify::new(),
-                aggregator,
-                bus,
-                instance_id,
-            }),
+            inner,
             task: parking_lot::Mutex::new(None),
         }
     }
@@ -227,6 +259,7 @@ impl Widget for UniversalSearchWidget {
 impl Drop for UniversalSearchWidget {
     fn drop(&mut self) {
         self.stop_debouncer();
+        SEARCH_LIVE.remove(&self.inner.instance_id);
     }
 }
 

@@ -4,6 +4,8 @@ import { TerminalView } from "terminal-view.slint";
 import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
 import { SystemView } from "../widgets/system.slint";
+import { RssView } from "../widgets/rss.slint";
+import { SearchView } from "../widgets/search.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
@@ -17,6 +19,10 @@ export component WidgetFrame inherits Rectangle {
     callback resize-ended();
     callback terminal-key-pressed(string);
     callback terminal-viewport-changed(length, length);
+    callback rss-item-clicked(string);
+    callback search-query-changed(string, string);
+    callback search-candidate-activated(string, string);
+    callback search-selection-changed(string, int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -145,6 +151,22 @@ export component WidgetFrame inherits Rectangle {
             width: parent.width;
             height: parent.height;
             model: root.model.system;
+        }
+
+        if model.type-id == "rss" : RssView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.rss;
+            item-clicked(link) => { root.rss-item-clicked(link); }
+        }
+
+        if model.type-id == "universal-search" : SearchView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.search;
+            query-changed(q) => { root.search-query-changed(root.model.instance-id, q); }
+            candidate-activated(id) => { root.search-candidate-activated(root.model.instance-id, id); }
+            selection-changed(idx) => { root.search-selection-changed(root.model.instance-id, idx); }
         }
     }
 

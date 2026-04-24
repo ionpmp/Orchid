@@ -471,7 +471,7 @@ fn rects_for_excluding(
     instances
         .iter()
         .filter(|i| {
-            i.workspace_id == workspace_id && ignore.map_or(true, |e| i.id != e)
+            i.workspace_id == workspace_id && ignore.is_none_or(|e| i.id != e)
         })
         .map(|i| CellRect::from_widget(*i.position.read(), *i.size.read()))
         .collect()
@@ -630,9 +630,11 @@ mod tests {
 
     #[test]
     fn snapshot_content_grows_with_extra_rows() {
-        let mut opts = LayoutOptions::default();
-        opts.grid_rows = 20;
-        opts.view_rows = 10;
+        let opts = LayoutOptions {
+            grid_rows: 20,
+            view_rows: 10,
+            ..LayoutOptions::default()
+        };
         let engine = LayoutEngine::new(opts);
         let ws = Uuid::new_v4();
         let snap = engine.snapshot(ws, &[], ViewportSize {
@@ -645,10 +647,12 @@ mod tests {
 
     #[test]
     fn position_from_content_top_left_inverts_snapshot_for_exlarge() {
-        let mut opts = LayoutOptions::default();
-        opts.grid_columns = 16;
-        opts.grid_rows = 10;
-        opts.gutter_px = 8.0;
+        let opts = LayoutOptions {
+            grid_columns: 16,
+            grid_rows: 10,
+            gutter_px: 8.0,
+            ..LayoutOptions::default()
+        };
         let viewport = ViewportSize {
             width_px: 1600.0,
             height_px: 1000.0,
@@ -694,10 +698,12 @@ mod tests {
 
     #[test]
     fn free_placement_inverts_snapshot_free_bounds() {
-        let mut opts = LayoutOptions::default();
-        opts.grid_columns = 16;
-        opts.grid_rows = 10;
-        opts.gutter_px = 8.0;
+        let opts = LayoutOptions {
+            grid_columns: 16,
+            grid_rows: 10,
+            gutter_px: 8.0,
+            ..LayoutOptions::default()
+        };
         let viewport = ViewportSize {
             width_px: 1280.0,
             height_px: 1000.0,
@@ -729,10 +735,12 @@ mod tests {
 
     #[test]
     fn auto_place_excluding_with_growth_extends_grid_rows() {
-        let mut opts = LayoutOptions::default();
-        opts.grid_columns = 4;
-        opts.grid_rows = 2;
-        opts.view_rows = 2;
+        let opts = LayoutOptions {
+            grid_columns: 4,
+            grid_rows: 2,
+            view_rows: 2,
+            ..LayoutOptions::default()
+        };
         let engine = LayoutEngine::new(opts);
         let ws = Uuid::new_v4();
         let mut all: Vec<SharedInstance> = Vec::new();

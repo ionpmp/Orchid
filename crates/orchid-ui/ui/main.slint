@@ -56,6 +56,10 @@ export component MainWindow inherits Window {
     callback widget-resize-ended(string);
     callback terminal-key-pressed(string, string);
     callback terminal-viewport-changed(string, length, length);
+    callback rss-item-clicked(string);
+    callback search-query-changed(string, string);
+    callback search-candidate-activated(string, string);
+    callback search-selection-changed(string, int);
     callback ui-tick();
 
     VerticalLayout {
@@ -128,6 +132,10 @@ export component MainWindow inherits Window {
             widget-resize-ended(id) => { root.widget-resize-ended(id); }
             terminal-key-pressed(id, text) => { root.terminal-key-pressed(id, text); }
             terminal-viewport-changed(id, w, h) => { root.terminal-viewport-changed(id, w, h); }
+            rss-item-clicked(link) => { root.rss-item-clicked(link); }
+            search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
+            search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }
+            search-selection-changed(inst, idx) => { root.search-selection-changed(inst, idx); }
         }
     }
 }

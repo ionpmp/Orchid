@@ -96,9 +96,15 @@ impl WidgetManager {
             last_touched: RwLock::new(now),
         });
 
+        // Do not hold the widget mutex across both hooks: `on_*` methods may
+        // `.await` work that needs the snapshot pump (or other tasks) to make
+        // progress while they still hold interior locks.
         {
             let mut w = runtime.widget.lock().await;
             w.on_create(&ctx).await?;
+        }
+        {
+            let mut w = runtime.widget.lock().await;
             w.on_activate(&ctx).await?;
         }
 
