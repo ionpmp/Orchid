@@ -25,6 +25,9 @@ widget-media-desc = Сейчас играет, управление воспро
 widget-password-name = Пароли
 widget-password-desc = Доступ к базе паролей
 
+widget-viewer-name = Просмотрщик
+widget-viewer-desc = Просмотр изображений, документов, кода и архивов
+
 # ---- Weather ----
 weather-condition-clear = Ясно
 weather-condition-partly-cloudy = Переменная облачность
@@ -228,6 +231,14 @@ dock-widget-rss = Новости
 dock-widget-search = Поиск
 dock-widget-media = Медиа
 dock-widget-password = Пароли
+dock-widget-viewer = Просмотрщик
+
+viewer-no-file = Файл не открыт
+viewer-loading-path = Загрузка: { $path }
+viewer-error-with-reason = Не удаётся отобразить файл: { $reason }
+viewer-pdf-unavailable = Поддержка PDF недоступна в этой сборке.
+viewer-archive-select-preview = Выберите файл для предпросмотра
+viewer-archive-binary-preview = Бинарный файл, { $size }
 
 password-select-entry = Выберите запись
 password-label-username = Имя пользователя

@@ -72,6 +72,11 @@ impl ViewTransform {
         self.rotation_degrees = (self.rotation_degrees + 90).rem_euclid(360);
     }
 
+    /// Rotate 90° counter-clockwise.
+    pub fn rotate_counter_clockwise(&mut self) {
+        self.rotation_degrees = (self.rotation_degrees - 90).rem_euclid(360);
+    }
+
     /// Reset to identity (zoom 1.0, no pan, no rotation).
     pub fn reset(&mut self) {
         *self = Self::default();

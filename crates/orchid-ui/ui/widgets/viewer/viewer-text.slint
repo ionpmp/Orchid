@@ -1,0 +1,124 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerTextModel } from "../../workspace/defs.slint";
+
+export component ViewerTextView inherits Rectangle {
+    in property <ViewerTextModel> model;
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            background: Theme.surface-base;
+            vertical-stretch: 1;
+            clip: true;
+
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: line-stack.preferred-height;
+
+                line-stack := VerticalLayout {
+                    spacing: 0;
+
+                    for line[i] in model.visible-lines : Rectangle {
+                        height: 18px;
+                        HorizontalLayout {
+                            spacing: 0;
+                            padding-left: 8px;
+                            padding-right: 8px;
+
+                            Rectangle {
+                                width: 56px;
+                                Text {
+                                    text: line.line-number;
+                                    color: Theme.text-tertiary;
+                                    font-family: Theme.font-family-mono;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 0;
+                                padding-left: 8px;
+                                horizontal-stretch: 1;
+
+                                for seg[j] in line.segments : Text {
+                                    text: seg.text;
+                                    color:
+                                        seg.scope == 1 ? #c586c0 :
+                                        seg.scope == 2 ? #ce9178 :
+                                        seg.scope == 3 ? #b5cea8 :
+                                        seg.scope == 4 ? #6a9955 :
+                                        seg.scope == 5 ? #dcdcaa :
+                                        seg.scope == 6 ? #4ec9b0 :
+                                        seg.scope == 7 ? #9cdcfe :
+                                        seg.scope == 8 ? #4fc1ff :
+                                        seg.scope == 9 ? #d4d4d4 :
+                                        seg.scope == 10 ? #d4d4d4 :
+                                        seg.scope == 11 ? #c586c0 :
+                                        seg.scope == 12 ? #c586c0 :
+                                        seg.scope == 13 ? #4ec9b0 :
+                                        seg.scope == 14 ? #9cdcfe :
+                                        seg.scope == 15 ? #f44747 :
+                                        Theme.text-primary;
+                                    font-family: Theme.font-family-mono;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+
+        Rectangle {
+            height: 24px;
+            background: Theme.surface-raised;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 12px;
+
+                Text {
+                    text: model.encoding;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: model.line-ending;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: model.language;
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: model.total-lines + " lines";
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                if model.dirty : Text {
+                    text: "●";
+                    color: #eab308;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

@@ -30,6 +30,9 @@ widget-media-desc = Now playing with transport controls
 widget-password-name = Passwords
 widget-password-desc = Access your password database
 
+widget-viewer-name = Viewer
+widget-viewer-desc = View images, documents, source files, and archives
+
 # ---- Weather ----
 weather-condition-clear = Clear
 weather-condition-partly-cloudy = Partly cloudy
@@ -233,6 +236,14 @@ dock-widget-rss = News
 dock-widget-search = Search
 dock-widget-media = Media
 dock-widget-password = Passwords
+dock-widget-viewer = Viewer
+
+viewer-no-file = No file open
+viewer-loading-path = Loading: { $path }
+viewer-error-with-reason = Cannot display this file: { $reason }
+viewer-pdf-unavailable = PDF support is unavailable on this build.
+viewer-archive-select-preview = Select a file to preview
+viewer-archive-binary-preview = Binary file, { $size }
 
 password-select-entry = Select an entry
 password-label-username = Username

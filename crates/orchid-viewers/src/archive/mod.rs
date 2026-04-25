@@ -1,5 +1,6 @@
 //! Archive viewer — browses ZIP / 7z / TAR / TAR.GZ via `orchid-fs`.
 
+use std::any::Any;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -265,13 +266,13 @@ impl Viewer for ArchiveViewer {
         // Preview is best-effort — only valid when a reader is held.
         let preview = self.compute_preview();
         let total = entries_guard.len() as u32;
-        let _ = selected_path;
         let info = format!("{format}, {total} entries");
         ViewerSnapshot::Archive(ArchiveSnapshot {
             path_display,
             format,
             total_entries: total,
             current_inner_path: cur,
+            selected_path: selected_path.unwrap_or_default(),
             entries: rendered,
             preview,
             info_text: info,
@@ -280,6 +281,14 @@ impl Viewer for ArchiveViewer {
 
     fn current_path(&self) -> Option<&orchid_fs::FsPath> {
         None
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

@@ -8,6 +8,7 @@ import { RssView } from "../widgets/rss.slint";
 import { SearchView } from "../widgets/search.slint";
 import { MediaView } from "../widgets/media.slint";
 import { PasswordView } from "../widgets/password.slint";
+import { ViewerView } from "../widgets/viewer/viewer.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
@@ -38,6 +39,27 @@ export component WidgetFrame inherits Rectangle {
     callback password-copy-username(string);
     callback password-copy-totp(string);
     callback password-open-url(string);
+
+    callback viewer-image-zoom-in(string);
+    callback viewer-image-zoom-out(string);
+    callback viewer-image-fit(string);
+    callback viewer-image-actual-size(string);
+    callback viewer-image-rotate-cw(string);
+    callback viewer-image-rotate-ccw(string);
+    callback viewer-image-pan(string, length, length);
+    callback viewer-viewport-changed(string, length, length);
+
+    callback viewer-pdf-prev-page(string);
+    callback viewer-pdf-next-page(string);
+    callback viewer-pdf-fit-width(string, length);
+    callback viewer-pdf-fit-page(string, length, length);
+    callback viewer-pdf-zoom-in(string);
+    callback viewer-pdf-zoom-out(string);
+    callback viewer-pdf-go-to-page(string, int);
+
+    callback viewer-archive-navigate-into(string, string);
+    callback viewer-archive-navigate-up(string);
+    callback viewer-archive-select(string, string);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -203,6 +225,40 @@ export component WidgetFrame inherits Rectangle {
             copy-username(id) => { root.password-copy-username(id); }
             copy-totp(id) => { root.password-copy-totp(id); }
             open-url(url) => { root.password-open-url(url); }
+        }
+
+        if model.type-id == "viewer" : Rectangle {
+            width: parent.width;
+            height: parent.height;
+            changed width => { root.viewer-viewport-changed(root.model.instance-id, self.width, self.height); }
+            changed height => { root.viewer-viewport-changed(root.model.instance-id, self.width, self.height); }
+
+            ViewerView {
+                width: parent.width;
+                height: parent.height;
+                model: root.model.viewer;
+
+                image-zoom-in => { root.viewer-image-zoom-in(root.model.instance-id); }
+                image-zoom-out => { root.viewer-image-zoom-out(root.model.instance-id); }
+                image-fit => { root.viewer-image-fit(root.model.instance-id); }
+                image-actual-size => { root.viewer-image-actual-size(root.model.instance-id); }
+                image-rotate-cw => { root.viewer-image-rotate-cw(root.model.instance-id); }
+                image-rotate-ccw => { root.viewer-image-rotate-ccw(root.model.instance-id); }
+                image-pan(dx, dy) => { root.viewer-image-pan(root.model.instance-id, dx, dy); }
+
+                pdf-prev-page => { root.viewer-pdf-prev-page(root.model.instance-id); }
+                pdf-next-page => { root.viewer-pdf-next-page(root.model.instance-id); }
+                pdf-fit-width => { root.viewer-pdf-fit-width(root.model.instance-id, parent.width); }
+                pdf-fit-page => { root.viewer-pdf-fit-page(root.model.instance-id, parent.width, parent.height); }
+                pdf-zoom-in => { root.viewer-pdf-zoom-in(root.model.instance-id); }
+                pdf-zoom-out => { root.viewer-pdf-zoom-out(root.model.instance-id); }
+                pdf-go-to-page(p) => { root.viewer-pdf-go-to-page(root.model.instance-id, p); }
+
+                archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
+                archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }
+                archive-select(path) => { root.viewer-archive-select(root.model.instance-id, path); }
+
+            }
         }
     }
 

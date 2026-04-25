@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use std::any::Any;
 
 use crate::error::Result;
 use crate::snapshot::ViewerSnapshot;
@@ -39,4 +40,10 @@ pub trait Viewer: Send + Sync {
 
     /// Current path, if a file is open.
     fn current_path(&self) -> Option<&orchid_fs::FsPath>;
+
+    /// Downcast for viewer-specific UI commands (zoom, page nav, etc.).
+    fn as_any(&self) -> &dyn Any;
+
+    /// Mutable downcast for async operations that need `&mut` concrete viewers.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }

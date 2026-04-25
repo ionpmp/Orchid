@@ -151,6 +151,102 @@ export struct PasswordModel {
     request-autofocus: bool,
 }
 
+export struct ViewerSyntaxSegment {
+    text: string,
+    scope: int,
+}
+
+export struct ViewerSyntaxLine {
+    line-number: int,
+    segments: [ViewerSyntaxSegment],
+}
+
+export struct ViewerImageModel {
+    width-px: int,
+    height-px: int,
+    rgba-image: image,
+    zoom: float,
+    pan-x: length,
+    pan-y: length,
+    rotation-deg: int,
+    flipped-h: bool,
+    flipped-v: bool,
+    info-text: string,
+    path-display: string,
+}
+
+export struct ViewerPdfModel {
+    page-count: int,
+    current-page: int,
+    page-width-px: int,
+    page-height-px: int,
+    page-image: image,
+    zoom: float,
+    info-text: string,
+    path-display: string,
+    available: bool,
+    unavailable-reason: string,
+}
+
+export struct ViewerTextModel {
+    language: string,
+    encoding: string,
+    line-ending: string,
+    dirty: bool,
+    read-only: bool,
+    total-lines: int,
+    first-visible-line: int,
+    cursor-line: int,
+    cursor-col: int,
+    visible-lines: [ViewerSyntaxLine],
+    info-text: string,
+    path-display: string,
+}
+
+export struct ViewerArchiveEntry {
+    path-in-archive: string,
+    name: string,
+    is-dir: bool,
+    size-text: string,
+    modified-text: string,
+    icon: string,
+    is-up: bool,
+}
+
+export struct ViewerArchiveModel {
+    format: string,
+    total-entries: int,
+    current-inner-path: string,
+    breadcrumbs: [string],
+    entries: [ViewerArchiveEntry],
+    selected-path: string,
+    preview-kind: int,
+    preview-text: string,
+    preview-binary-size: string,
+    info-text: string,
+    path-display: string,
+}
+
+export struct ViewerEmptyModel {
+    placeholder-text: string,
+}
+
+export struct ViewerStatusModel {
+    path-display: string,
+    message: string,
+    icon: string,
+}
+
+export struct ViewerModel {
+    kind: int,
+    status: ViewerStatusModel,
+    empty: ViewerEmptyModel,
+    image: ViewerImageModel,
+    pdf: ViewerPdfModel,
+    text: ViewerTextModel,
+    archive: ViewerArchiveModel,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -179,6 +275,7 @@ export struct WidgetFrameModel {
     search: SearchModel,
     media: MediaModel,
     password: PasswordModel,
+    viewer: ViewerModel,
 }
 
 export struct DockWidgetType {

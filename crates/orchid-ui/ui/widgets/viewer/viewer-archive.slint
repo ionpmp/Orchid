@@ -1,0 +1,176 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerArchiveModel } from "../../workspace/defs.slint";
+
+export component ViewerArchiveView inherits Rectangle {
+    in property <ViewerArchiveModel> model;
+
+    callback navigate-into(string);
+    callback navigate-up();
+    callback select(string);
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+
+                Text {
+                    text: model.format + " · " + model.total-entries + " entries";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: " │ ";
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: model.current-inner-path == "" ? "(root)" : model.current-inner-path;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0;
+            vertical-stretch: 1;
+
+            Rectangle {
+                width: parent.width * 0.55;
+                background: Theme.surface-base;
+
+                Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: self.width;
+                    viewport-height: list-stack.preferred-height;
+
+                    list-stack := VerticalLayout {
+                        spacing: 0;
+
+                        for entry[i] in model.entries : Rectangle {
+                            height: 28px;
+                            background: entry.path-in-archive == model.selected-path
+                                ? Theme.accent-brand
+                                : (entry-ta.has-hover ? Theme.surface-raised : transparent);
+
+                            entry-ta := TouchArea {
+                                clicked => {
+                                    if (entry.is-up) {
+                                        root.navigate-up();
+                                    } else if (entry.is-dir) {
+                                        root.navigate-into(entry.path-in-archive);
+                                    } else {
+                                        root.select(entry.path-in-archive);
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 6px;
+
+                                Text {
+                                    text: entry.is-up ? "↩" : (entry.is-dir ? "📁" : "📄");
+                                    color: Theme.accent-brand;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+
+                                Text {
+                                    text: entry.is-up ? ".." : entry.name;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+
+                                if !entry.is-up && !entry.is-dir : Text {
+                                    text: entry.size-text;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+
+                                if !entry.is-up : Text {
+                                    text: entry.modified-text;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 1px;
+                background: Theme.border-default;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.surface-base;
+
+                if model.preview-kind == 0 : VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: model.preview-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+
+                if model.preview-kind == 1 : Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: preview-text-element.preferred-width;
+                    viewport-height: preview-text-element.preferred-height;
+
+                    preview-text-element := Text {
+                        text: model.preview-text;
+                        color: Theme.text-primary;
+                        font-family: Theme.font-family-mono;
+                        font-size: Theme.font-size-sm;
+                        wrap: no-wrap;
+                    }
+                }
+
+                if model.preview-kind == 2 : VerticalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    Text { text: "📦"; color: Theme.text-tertiary; font-size: 32px; horizontal-alignment: center; }
+                    Text {
+                        text: model.preview-binary-size;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

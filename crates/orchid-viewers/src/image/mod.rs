@@ -1,5 +1,7 @@
 //! Image viewer.
 
+use std::any::Any;
+
 pub mod loader;
 pub mod operations;
 pub mod transform;
@@ -102,6 +104,20 @@ impl ImageViewer {
     pub fn actual_size(&self) {
         self.transform.write().reset();
     }
+
+    /// Nudge zoom by a factor around the viewport center.
+    pub fn zoom_by(&self, factor: f32) {
+        let (vw, vh) = *self.viewport.read();
+        let anchor_x = vw / 2.0;
+        let anchor_y = vh / 2.0;
+        let z = self.transform.read().zoom * factor;
+        self.transform.write().set_zoom(z, anchor_x, anchor_y);
+    }
+
+    /// Rotate 90° counter-clockwise.
+    pub fn rotate_ccw(&self) {
+        self.transform.write().rotate_counter_clockwise();
+    }
 }
 
 #[async_trait]
@@ -169,6 +185,14 @@ impl Viewer for ImageViewer {
         // allows returning `None`.
         let _ = &ViewerError::ImageDecode(String::new());
         None
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

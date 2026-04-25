@@ -134,6 +134,8 @@ pub struct ArchiveSnapshot {
     pub format: String,
     pub total_entries: u32,
     pub current_inner_path: String,
+    /// Selected archive member path (empty when none).
+    pub selected_path: String,
     pub entries: Vec<ArchiveEntryView>,
     pub preview: Option<ArchivePreview>,
     pub info_text: String,

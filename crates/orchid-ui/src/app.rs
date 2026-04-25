@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use orchid_core::{CommandPalette, CommandRegistry, EventBus, EventBusConfig};
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
+use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider};
 use orchid_storage::{ConfigLoader, OrchidConfig, OrchidPaths, StateStore};
 use orchid_terminal::SessionManager;
 use orchid_widgets::{
@@ -51,6 +52,9 @@ pub struct OrchidApp {
     /// Group manager backing widget-related commands.
     #[allow(dead_code)]
     group_manager: Arc<GroupManager>,
+    /// Filesystem provider registry (viewer, search, future file manager).
+    #[allow(dead_code)]
+    fs_registry: Arc<FsProviderRegistry>,
 }
 
 impl std::fmt::Debug for OrchidApp {
@@ -224,6 +228,20 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::password::descriptor(password_db, clipboard))
             .map_err(|e| UiError::Slint(format!("register password: {e}")))?;
 
+        let fs_registry: Arc<FsProviderRegistry> = Arc::new(FsProviderRegistry::new());
+        fs_registry
+            .register(Arc::new(LocalProvider::new()) as Arc<dyn FsProvider>)
+            .map_err(|e| UiError::Slint(format!("register local fs provider: {e}")))?;
+        let syntax_highlighter = Arc::new(orchid_viewers::SyntaxHighlighter::new());
+        widget_registry
+            .register(orchid_widgets::builtin::viewer::descriptor(
+                orchid_widgets::builtin::viewer::ViewerDeps {
+                    registry: fs_registry.clone(),
+                    highlighter: syntax_highlighter,
+                },
+            ))
+            .map_err(|e| UiError::Slint(format!("register viewer: {e}")))?;
+
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,
             bus.clone(),
@@ -287,7 +305,57 @@ impl OrchidApp {
             session_routing,
             command_registry,
             group_manager,
+            fs_registry,
         })
+    }
+
+    /// Open a path in a viewer widget on the active workspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UiError`] when there is no active workspace, widget creation fails, or the
+    /// viewer cannot open the path.
+    pub async fn open_in_viewer(&self, path: orchid_fs::FsPath) -> Result<Uuid, UiError> {
+        let ws_id = self
+            .workspace_manager
+            .active()
+            .map_err(|e| UiError::Slint(format!("no active workspace: {e}")))?
+            .id;
+
+        for inst in self.widget_manager.instances_for_workspace(ws_id) {
+            if inst.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
+                orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
+                    .await
+                    .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+                return Ok(inst.id);
+            }
+        }
+
+        let id = self
+            .widget_manager
+            .create(orchid_widgets::CreateWidgetRequest {
+                type_id: orchid_widgets::builtin::viewer::TYPE_ID.into(),
+                workspace_id: ws_id,
+                position: None,
+                size: None,
+                initial_lifecycle: None,
+                config_bytes: None,
+            })
+            .await
+            .map_err(|e| UiError::Slint(format!("viewer create: {e}")))?;
+
+        for _ in 0..50 {
+            if self.widget_manager.get_instance(id).is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+
+        orchid_widgets::builtin::viewer::open_path(id, path)
+            .await
+            .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+
+        Ok(id)
     }
 
     /// Open the main workspace window and run the Slint event loop.

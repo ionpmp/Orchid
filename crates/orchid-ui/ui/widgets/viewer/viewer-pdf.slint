@@ -1,0 +1,121 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerPdfModel } from "../../workspace/defs.slint";
+
+export component ViewerPdfView inherits Rectangle {
+    in property <ViewerPdfModel> model;
+
+    callback prev-page();
+    callback next-page();
+    callback fit-width();
+    callback fit-page();
+    callback zoom-in();
+    callback zoom-out();
+    callback go-to-page(int);
+
+    background: transparent;
+
+    if !model.available : VerticalLayout {
+        alignment: center;
+        padding: 16px;
+        spacing: 8px;
+        Text { text: "📄"; color: Theme.text-tertiary; font-size: 32px; horizontal-alignment: center; }
+        Text { text: model.unavailable-reason; color: Theme.text-secondary; font-size: Theme.font-size-md; horizontal-alignment: center; wrap: word-wrap; }
+    }
+
+    if model.available : VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: start;
+
+                Rectangle {
+                    width: 28px; height: 28px;
+                    background: prev-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    prev-ta := TouchArea { clicked => { root.prev-page(); } }
+                    Text { text: "◀"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 120px;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    Text {
+                        text: "Page " + model.current-page + " / " + model.page-count;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px; height: 28px;
+                    background: next-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    next-ta := TouchArea { clicked => { root.next-page(); } }
+                    Text { text: "▶"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 72px; height: 28px;
+                    background: fw-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fw-ta := TouchArea { clicked => { root.fit-width(); } }
+                    Text { text: "Fit Width"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 72px; height: 28px;
+                    background: fp-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fp-ta := TouchArea { clicked => { root.fit-page(); } }
+                    Text { text: "Fit Page"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #80808020;
+            vertical-stretch: 1;
+            clip: true;
+
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: model.page-width-px * 1px;
+                viewport-height: model.page-height-px * 1px;
+
+                Image {
+                    source: model.page-image;
+                    width: model.page-width-px * 1px;
+                    height: model.page-height-px * 1px;
+                    image-fit: fill;
+                }
+            }
+        }
+
+        if model.info-text != "" : Rectangle {
+            height: 24px;
+            background: Theme.surface-base;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                Text { text: model.info-text; color: Theme.text-tertiary; font-size: Theme.font-size-sm; vertical-alignment: center; }
+            }
+        }
+    }
+}

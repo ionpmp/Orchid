@@ -7,6 +7,7 @@
 //! dedicated task. Until then the viewer compiles, fits the `Viewer`
 //! trait, and produces an explanatory error snapshot.
 
+use std::any::Any;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -48,7 +49,37 @@ impl PdfViewer {
     /// # Errors
     ///
     /// Always returns [`ViewerError::PdfUnavailable`] in the stub.
-    pub async fn go_to_page(&self, _page: u32) -> Result<()> {
+    pub fn go_to_page(&self, _page: u32) -> Result<()> {
+        Err(ViewerError::PdfUnavailable)
+    }
+
+    /// Stub: no-op until PDFium is wired.
+    pub fn next_page(&self) -> Result<()> {
+        Err(ViewerError::PdfUnavailable)
+    }
+
+    /// Stub: no-op until PDFium is wired.
+    pub fn prev_page(&self) -> Result<()> {
+        Err(ViewerError::PdfUnavailable)
+    }
+
+    /// Stub.
+    pub fn fit_width(&self, _viewport_w: f32) -> Result<()> {
+        Err(ViewerError::PdfUnavailable)
+    }
+
+    /// Stub.
+    pub fn fit_page(&self, _viewport_w: f32, _viewport_h: f32) -> Result<()> {
+        Err(ViewerError::PdfUnavailable)
+    }
+
+    /// Stub.
+    pub fn zoom_in(&self) -> Result<()> {
+        Err(ViewerError::PdfUnavailable)
+    }
+
+    /// Stub.
+    pub fn zoom_out(&self) -> Result<()> {
         Err(ViewerError::PdfUnavailable)
     }
 }
@@ -88,5 +119,13 @@ impl Viewer for PdfViewer {
 
     fn current_path(&self) -> Option<&orchid_fs::FsPath> {
         None
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

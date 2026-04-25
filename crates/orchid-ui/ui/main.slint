@@ -79,6 +79,24 @@ export component MainWindow inherits Window {
     callback password-copy-username(string);
     callback password-copy-totp(string);
     callback password-open-url(string);
+    callback viewer-image-zoom-in(string);
+    callback viewer-image-zoom-out(string);
+    callback viewer-image-fit(string);
+    callback viewer-image-actual-size(string);
+    callback viewer-image-rotate-cw(string);
+    callback viewer-image-rotate-ccw(string);
+    callback viewer-image-pan(string, length, length);
+    callback viewer-viewport-changed(string, length, length);
+    callback viewer-pdf-prev-page(string);
+    callback viewer-pdf-next-page(string);
+    callback viewer-pdf-fit-width(string, length);
+    callback viewer-pdf-fit-page(string, length, length);
+    callback viewer-pdf-zoom-in(string);
+    callback viewer-pdf-zoom-out(string);
+    callback viewer-pdf-go-to-page(string, int);
+    callback viewer-archive-navigate-into(string, string);
+    callback viewer-archive-navigate-up(string);
+    callback viewer-archive-select(string, string);
     callback ui-tick();
 
     VerticalLayout {
@@ -164,6 +182,24 @@ export component MainWindow inherits Window {
             password-copy-username(id) => { root.password-copy-username(id); }
             password-copy-totp(id) => { root.password-copy-totp(id); }
             password-open-url(url) => { root.password-open-url(url); }
+            viewer-image-zoom-in(id) => { root.viewer-image-zoom-in(id); }
+            viewer-image-zoom-out(id) => { root.viewer-image-zoom-out(id); }
+            viewer-image-fit(id) => { root.viewer-image-fit(id); }
+            viewer-image-actual-size(id) => { root.viewer-image-actual-size(id); }
+            viewer-image-rotate-cw(id) => { root.viewer-image-rotate-cw(id); }
+            viewer-image-rotate-ccw(id) => { root.viewer-image-rotate-ccw(id); }
+            viewer-image-pan(id, dx, dy) => { root.viewer-image-pan(id, dx, dy); }
+            viewer-viewport-changed(id, w, h) => { root.viewer-viewport-changed(id, w, h); }
+            viewer-pdf-prev-page(id) => { root.viewer-pdf-prev-page(id); }
+            viewer-pdf-next-page(id) => { root.viewer-pdf-next-page(id); }
+            viewer-pdf-fit-width(id, w) => { root.viewer-pdf-fit-width(id, w); }
+            viewer-pdf-fit-page(id, w, h) => { root.viewer-pdf-fit-page(id, w, h); }
+            viewer-pdf-zoom-in(id) => { root.viewer-pdf-zoom-in(id); }
+            viewer-pdf-zoom-out(id) => { root.viewer-pdf-zoom-out(id); }
+            viewer-pdf-go-to-page(id, p) => { root.viewer-pdf-go-to-page(id, p); }
+            viewer-archive-navigate-into(id, path) => { root.viewer-archive-navigate-into(id, path); }
+            viewer-archive-navigate-up(id) => { root.viewer-archive-navigate-up(id); }
+            viewer-archive-select(id, path) => { root.viewer-archive-select(id, path); }
         }
     }
 }

@@ -34,7 +34,7 @@ use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
-use orchid_widgets::WidgetPayload;
+use orchid_widgets::{ViewerPayload, WidgetPayload};
 use orchid_widgets::{
     free_placement_from_pixel_bounds, position_from_content_top_left, LayoutEngine, PlacedWidget,
     WidgetManager, WorkspaceManager,
@@ -49,6 +49,8 @@ use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
+    ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
+    ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
 };
 use crate::theme::ThemeManager;
@@ -595,6 +597,255 @@ impl MainWindowController {
                 }
             }
         });
+
+        macro_rules! viewer_spawn {
+            ($weak:expr, $fut:expr) => {{
+                let tw = $weak.clone();
+                let _ = slint::spawn_local(Compat::new(async move {
+                    if let Err(e) = $fut.await {
+                        warn!(?e, "viewer action");
+                    }
+                    if let Some(c) = tw.upgrade() {
+                        c.schedule_rebuild();
+                    }
+                }));
+            }};
+        }
+
+        self.window.on_viewer_image_zoom_in({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_zoom_in(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_image_zoom_out({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_zoom_out(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_image_fit({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_fit(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_image_actual_size({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_actual_size(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_image_rotate_cw({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_rotate_cw(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_image_rotate_ccw({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_rotate_ccw(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_image_pan({
+            let t = t.clone();
+            move |id, dx, dy| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            if let Err(e) =
+                                orchid_widgets::builtin::viewer::image_pan(inst, dx, dy).await
+                            {
+                                warn!(?e, "viewer pan");
+                            }
+                            if let Some(ctrl) = tw.upgrade() {
+                                ctrl.schedule_rebuild();
+                            }
+                        }));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_viewport_changed({
+            let t = t.clone();
+            move |id, w, h| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            let _ = orchid_widgets::builtin::viewer::set_viewport(inst, w, h).await;
+                            if let Some(ctrl) = tw.upgrade() {
+                                ctrl.schedule_rebuild();
+                            }
+                        }));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_prev_page({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_prev_page(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_next_page({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_next_page(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_fit_width({
+            let t = t.clone();
+            move |id, vw| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            let _ = orchid_widgets::builtin::viewer::pdf_fit_width(inst, vw).await;
+                            if let Some(ctrl) = tw.upgrade() {
+                                ctrl.schedule_rebuild();
+                            }
+                        }));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_fit_page({
+            let t = t.clone();
+            move |id, vw, vh| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            let _ = orchid_widgets::builtin::viewer::pdf_fit_page(inst, vw, vh).await;
+                            if let Some(ctrl) = tw.upgrade() {
+                                ctrl.schedule_rebuild();
+                            }
+                        }));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_zoom_in({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_zoom_in(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_zoom_out({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_zoom_out(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_go_to_page({
+            let t = t.clone();
+            move |id, page| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_go_to_page(inst, page));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_archive_navigate_into({
+            let t = t.clone();
+            move |id, path| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let p = path.to_string();
+                        let tw = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            let _ = orchid_widgets::builtin::viewer::archive_navigate_into(inst, p).await;
+                            if let Some(ctrl) = tw.upgrade() {
+                                ctrl.schedule_rebuild();
+                            }
+                        }));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_archive_navigate_up({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::archive_navigate_up(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_archive_select({
+            let t = t.clone();
+            move |id, path| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let p = path.to_string();
+                        let tw = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            let _ = orchid_widgets::builtin::viewer::archive_select(inst, p).await;
+                            if let Some(ctrl) = tw.upgrade() {
+                                ctrl.schedule_rebuild();
+                            }
+                        }));
+                    }
+                }
+            }
+        });
         Ok(())
     }
 
@@ -687,6 +938,7 @@ impl MainWindowController {
         if !matches!(
             type_id_str,
             "terminal" | "weather" | "moon" | "system" | "rss" | "search" | "media" | "password"
+                | "viewer"
         ) {
             warn!(type_id = type_id_str, "unknown widget type from dock");
             return;
@@ -1509,6 +1761,7 @@ impl MainWindowController {
             search_model,
             media_model,
             password_model,
+            viewer_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
@@ -1551,6 +1804,7 @@ impl MainWindowController {
                         empty_search_model(&self.locale),
                         empty_media_model(),
                         empty_password_model(),
+                        empty_viewer_model(&self.locale),
                     )
                 }
                 WidgetPayload::Weather(w) => (
@@ -1569,6 +1823,7 @@ impl MainWindowController {
                     empty_search_model(&self.locale),
                     empty_media_model(),
                     empty_password_model(),
+                    empty_viewer_model(&self.locale),
                 ),
                 WidgetPayload::Moon(m) => (
                     tstr,
@@ -1586,6 +1841,7 @@ impl MainWindowController {
                     empty_search_model(&self.locale),
                     empty_media_model(),
                     empty_password_model(),
+                    empty_viewer_model(&self.locale),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
                     tstr,
@@ -1603,6 +1859,7 @@ impl MainWindowController {
                     empty_search_model(&self.locale),
                     empty_media_model(),
                     empty_password_model(),
+                    empty_viewer_model(&self.locale),
                 ),
                 WidgetPayload::RssFeed(r) => (
                     tstr,
@@ -1620,6 +1877,7 @@ impl MainWindowController {
                     empty_search_model(&self.locale),
                     empty_media_model(),
                     empty_password_model(),
+                    empty_viewer_model(&self.locale),
                 ),
                 WidgetPayload::UniversalSearch(s) => {
                     let selected = self
@@ -1652,6 +1910,7 @@ impl MainWindowController {
                         build_search_model(s, &self.locale, selected, request_autofocus),
                         empty_media_model(),
                         empty_password_model(),
+                        empty_viewer_model(&self.locale),
                     )
                 }
                 WidgetPayload::MediaPlayer(m) => (
@@ -1670,6 +1929,7 @@ impl MainWindowController {
                     empty_search_model(&self.locale),
                     build_media_model(m),
                     empty_password_model(),
+                    empty_viewer_model(&self.locale),
                 ),
                 WidgetPayload::PasswordManager(p) => {
                     let toast = self.password_toasts.read().get(&pl.instance_id).cloned();
@@ -1698,8 +1958,27 @@ impl MainWindowController {
                         empty_search_model(&self.locale),
                         empty_media_model(),
                         build_password_model(p, toast, autofocus),
+                        empty_viewer_model(&self.locale),
                     )
                 }
+                WidgetPayload::Viewer(v) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    empty_moon_model(),
+                    empty_system_model(),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
+                    build_viewer_model(v, &self.locale),
+                ),
                 _ => (
                     tstr,
                     80,
@@ -1716,6 +1995,7 @@ impl MainWindowController {
                     empty_search_model(&self.locale),
                     empty_media_model(),
                     empty_password_model(),
+                    empty_viewer_model(&self.locale),
                 ),
             }
         } else {
@@ -1747,6 +2027,7 @@ impl MainWindowController {
             search: search_model,
             media: media_model,
             password: password_model,
+            viewer: viewer_model,
         }
     }
 
@@ -2040,6 +2321,11 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-password").into(),
             icon: "password".into(),
         },
+        DockWidgetType {
+            type_id: "viewer".into(),
+            label: locale.tr("dock-widget-viewer").into(),
+            icon: "viewer".into(),
+        },
     ]
 }
 
@@ -2052,6 +2338,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
         "media-player" | "media" => locale.tr("dock-widget-media").into(),
         "password-manager" | "password" => locale.tr("dock-widget-password").into(),
+        "viewer" => locale.tr("dock-widget-viewer").into(),
         _ => locale.tr("widget-title-terminal").into(),
     }
 }
@@ -2076,6 +2363,7 @@ fn default_frame_data_extended(
     SearchModel,
     MediaModel,
     PasswordModel,
+    ViewerModel,
 ) {
     (
         fallback_widget_title(locale, type_id),
@@ -2093,6 +2381,7 @@ fn default_frame_data_extended(
         empty_search_model(locale),
         empty_media_model(),
         empty_password_model(),
+        empty_viewer_model(locale),
     )
 }
 
@@ -2214,6 +2503,340 @@ fn empty_password_model() -> PasswordModel {
         toast_message: SharedString::new(),
         toast_visible: false,
         request_autofocus: false,
+    }
+}
+
+fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
+    ViewerModel {
+        kind: 0,
+        status: ViewerStatusModel {
+            path_display: SharedString::new(),
+            message: SharedString::new(),
+            icon: SharedString::new(),
+        },
+        empty: ViewerEmptyModel {
+            placeholder_text: locale.tr("viewer-no-file").into(),
+        },
+        image: empty_viewer_image_model(),
+        pdf: empty_viewer_pdf_model(locale),
+        text: empty_viewer_text_model(),
+        archive: empty_viewer_archive_model(locale),
+    }
+}
+
+fn empty_viewer_image_model() -> ViewerImageModel {
+    ViewerImageModel {
+        width_px: 0,
+        height_px: 0,
+        rgba_image: Image::default(),
+        zoom: 1.0,
+        pan_x: 0.0,
+        pan_y: 0.0,
+        rotation_deg: 0,
+        flipped_h: false,
+        flipped_v: false,
+        info_text: SharedString::new(),
+        path_display: SharedString::new(),
+    }
+}
+
+fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
+    ViewerPdfModel {
+        page_count: 0,
+        current_page: 0,
+        page_width_px: 0,
+        page_height_px: 0,
+        page_image: Image::default(),
+        zoom: 1.0,
+        info_text: SharedString::new(),
+        path_display: SharedString::new(),
+        available: true,
+        unavailable_reason: locale.tr("viewer-pdf-unavailable").into(),
+    }
+}
+
+fn empty_viewer_text_model() -> ViewerTextModel {
+    ViewerTextModel {
+        language: "plaintext".into(),
+        encoding: "UTF-8".into(),
+        line_ending: "LF".into(),
+        dirty: false,
+        read_only: true,
+        total_lines: 0,
+        first_visible_line: 0,
+        cursor_line: 0,
+        cursor_col: 0,
+        visible_lines: ModelRc::new(VecModel::default()),
+        info_text: SharedString::new(),
+        path_display: SharedString::new(),
+    }
+}
+
+fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
+    ViewerArchiveModel {
+        format: SharedString::new(),
+        total_entries: 0,
+        current_inner_path: SharedString::new(),
+        breadcrumbs: ModelRc::new(VecModel::default()),
+        entries: ModelRc::new(VecModel::default()),
+        selected_path: SharedString::new(),
+        preview_kind: 0,
+        preview_text: locale.tr("viewer-archive-select-preview").into(),
+        preview_binary_size: SharedString::new(),
+        info_text: SharedString::new(),
+        path_display: SharedString::new(),
+    }
+}
+
+fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel {
+    use orchid_viewers::ViewerError;
+    use orchid_viewers::ViewerSnapshot as Vs;
+
+    let mut model = empty_viewer_model(locale);
+
+    match &p.snapshot {
+        Vs::Loading { path_display } if path_display.is_empty() => {
+            model.kind = 0;
+        }
+        Vs::Loading { path_display } => {
+            model.kind = 1;
+            model.status.path_display = path_display.clone().into();
+            model.status.icon = "loading".into();
+            let args = orchid_i18n::FluentArgs::new().with("path", path_display.as_str());
+            model.status.message = locale.tr_args("viewer-loading-path", &args).into();
+        }
+        Vs::Error {
+            path_display,
+            message,
+        } if *message == ViewerError::PdfUnavailable.to_string() => {
+            model.kind = 4;
+            model.pdf.path_display = path_display.clone().into();
+            model.pdf.available = false;
+            model.pdf.unavailable_reason = locale.tr("viewer-pdf-unavailable").into();
+        }
+        Vs::Error {
+            path_display,
+            message,
+        } => {
+            model.kind = 2;
+            model.status.path_display = path_display.clone().into();
+            model.status.icon = "error".into();
+            let args = orchid_i18n::FluentArgs::new().with("reason", message.as_str());
+            model.status.message = locale.tr_args("viewer-error-with-reason", &args).into();
+        }
+        Vs::Image(s) => {
+            model.kind = 3;
+            model.image = build_image_snapshot(s);
+        }
+        Vs::Pdf(s) => {
+            model.kind = 4;
+            model.pdf = build_pdf_snapshot(s, locale);
+        }
+        Vs::Text(s) => {
+            model.kind = 5;
+            model.text = build_text_snapshot(s);
+        }
+        Vs::Archive(s) => {
+            model.kind = 6;
+            model.archive = build_archive_snapshot(s, locale);
+        }
+    }
+
+    model
+}
+
+fn build_image_snapshot(s: &orchid_viewers::ImageSnapshot) -> ViewerImageModel {
+    let image = if s.width_px > 0 && s.height_px > 0 && !s.rgba_bytes.is_empty() {
+        let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+            s.rgba_bytes.as_slice(),
+            s.width_px,
+            s.height_px,
+        );
+        Image::from_rgba8(img)
+    } else {
+        Image::default()
+    };
+
+    ViewerImageModel {
+        width_px: s.width_px as i32,
+        height_px: s.height_px as i32,
+        rgba_image: image,
+        zoom: s.zoom,
+        pan_x: s.pan_x,
+        pan_y: s.pan_y,
+        rotation_deg: i32::from(s.rotation_degrees),
+        flipped_h: s.flipped_horizontal,
+        flipped_v: s.flipped_vertical,
+        info_text: s.info_text.clone().into(),
+        path_display: s.path_display.clone().into(),
+    }
+}
+
+fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -> ViewerPdfModel {
+    let available = !s.page_rgba_bytes.is_empty() && s.page_count > 0;
+    let image = if available {
+        let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+            s.page_rgba_bytes.as_slice(),
+            s.page_width_px,
+            s.page_height_px,
+        );
+        Image::from_rgba8(img)
+    } else {
+        Image::default()
+    };
+
+    ViewerPdfModel {
+        page_count: s.page_count as i32,
+        current_page: s.current_page as i32,
+        page_width_px: s.page_width_px as i32,
+        page_height_px: s.page_height_px as i32,
+        page_image: image,
+        zoom: s.zoom,
+        info_text: s.info_text.clone().into(),
+        path_display: s.path_display.clone().into(),
+        available,
+        unavailable_reason: if available {
+            SharedString::new()
+        } else {
+            locale.tr("viewer-pdf-unavailable").into()
+        },
+    }
+}
+
+fn build_text_snapshot(s: &orchid_viewers::TextSnapshot) -> ViewerTextModel {
+    let lines: Vec<ViewerSyntaxLine> = s
+        .visible_lines
+        .iter()
+        .map(|line| {
+            let segments: Vec<ViewerSyntaxSegment> = line
+                .segments
+                .iter()
+                .map(|seg| ViewerSyntaxSegment {
+                    text: seg.text.clone().into(),
+                    scope: syntax_scope_to_int(&seg.scope),
+                })
+                .collect();
+            ViewerSyntaxLine {
+                line_number: line.line_number as i32,
+                segments: ModelRc::new(VecModel::from(segments)),
+            }
+        })
+        .collect();
+
+    ViewerTextModel {
+        language: s.language.clone().into(),
+        encoding: s.encoding.clone().into(),
+        line_ending: s.line_ending.clone().into(),
+        dirty: s.dirty,
+        read_only: s.read_only,
+        total_lines: s.total_lines as i32,
+        first_visible_line: s.first_visible_line as i32,
+        cursor_line: s.cursor_line as i32,
+        cursor_col: s.cursor_column as i32,
+        visible_lines: ModelRc::new(VecModel::from(lines)),
+        info_text: s.info_text.clone().into(),
+        path_display: s.path_display.clone().into(),
+    }
+}
+
+fn syntax_scope_to_int(scope: &orchid_viewers::SyntaxScope) -> i32 {
+    use orchid_viewers::SyntaxScope::*;
+    match scope {
+        Plain => 0,
+        Keyword => 1,
+        String => 2,
+        Number => 3,
+        Comment => 4,
+        Function => 5,
+        Type => 6,
+        Variable => 7,
+        Constant => 8,
+        Operator => 9,
+        Punctuation => 10,
+        Attribute => 11,
+        Preprocessor => 12,
+        Tag => 13,
+        Property => 14,
+        Error => 15,
+    }
+}
+
+fn format_byte_size(n: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    let f = n as f64;
+    if f >= MB {
+        format!("{:.1} MB", f / MB)
+    } else if f >= KB {
+        format!("{:.0} KB", f / KB)
+    } else {
+        format!("{n} B")
+    }
+}
+
+fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleManager) -> ViewerArchiveModel {
+    let mut entries: Vec<ViewerArchiveEntry> = Vec::with_capacity(s.entries.len() + 1);
+
+    if !s.current_inner_path.is_empty() {
+        entries.push(ViewerArchiveEntry {
+            path_in_archive: SharedString::new(),
+            name: "..".into(),
+            is_dir: true,
+            size_text: SharedString::new(),
+            modified_text: SharedString::new(),
+            icon: "up".into(),
+            is_up: true,
+        });
+    }
+
+    for e in &s.entries {
+        entries.push(ViewerArchiveEntry {
+            path_in_archive: e.path_in_archive.clone().into(),
+            name: e.name.clone().into(),
+            is_dir: e.is_dir,
+            size_text: format_byte_size(e.size).into(),
+            modified_text: e.modified_text.clone().into(),
+            icon: e.icon.into(),
+            is_up: false,
+        });
+    }
+
+    let breadcrumbs: Vec<SharedString> = s
+        .current_inner_path
+        .split('/')
+        .filter(|seg| !seg.is_empty())
+        .map(|p| p.into())
+        .collect();
+
+    let (preview_kind, preview_text, preview_binary) = match &s.preview {
+        Some(orchid_viewers::ArchivePreview::Text(t)) => (1, t.clone().into(), SharedString::new()),
+        Some(orchid_viewers::ArchivePreview::Binary { size }) => {
+            let args = orchid_i18n::FluentArgs::new().with("size", format_byte_size(*size));
+            (
+                2,
+                SharedString::new(),
+                locale.tr_args("viewer-archive-binary-preview", &args).into(),
+            )
+        }
+        None => (
+            0,
+            locale.tr("viewer-archive-select-preview").into(),
+            SharedString::new(),
+        ),
+    };
+
+    ViewerArchiveModel {
+        format: s.format.clone().into(),
+        total_entries: s.total_entries as i32,
+        current_inner_path: s.current_inner_path.clone().into(),
+        breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
+        entries: ModelRc::new(VecModel::from(entries)),
+        selected_path: s.selected_path.clone().into(),
+        preview_kind,
+        preview_text,
+        preview_binary_size: preview_binary,
+        info_text: s.info_text.clone().into(),
+        path_display: s.path_display.clone().into(),
     }
 }
 

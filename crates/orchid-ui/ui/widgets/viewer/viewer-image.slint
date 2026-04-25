@@ -1,0 +1,163 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerImageModel } from "../../workspace/defs.slint";
+
+export component ViewerImageView inherits Rectangle {
+    in property <ViewerImageModel> model;
+
+    callback zoom-in();
+    callback zoom-out();
+    callback fit();
+    callback actual-size();
+    callback rotate-cw();
+    callback rotate-ccw();
+    callback pan(length, length);
+
+    background: transparent;
+
+    property <length> last-mx: 0px;
+    property <length> last-my: 0px;
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: start;
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: zoom-out-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zoom-out-ta := TouchArea { clicked => { root.zoom-out(); } }
+                    Text { text: "−"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 56px;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    Text {
+                        text: floor(model.zoom * 100) + "%";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: zoom-in-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zoom-in-ta := TouchArea { clicked => { root.zoom-in(); } }
+                    Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 56px;
+                    height: 28px;
+                    background: fit-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fit-ta := TouchArea { clicked => { root.fit(); } }
+                    Text { text: "Fit"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 56px;
+                    height: 28px;
+                    background: actual-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    actual-ta := TouchArea { clicked => { root.actual-size(); } }
+                    Text { text: "1:1"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: rcw-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    rcw-ta := TouchArea { clicked => { root.rotate-cw(); } }
+                    Text { text: "↻"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: rccw-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    rccw-ta := TouchArea { clicked => { root.rotate-ccw(); } }
+                    Text { text: "↺"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+        }
+
+        Rectangle {
+            background: Theme.surface-base;
+            vertical-stretch: 1;
+            clip: true;
+
+            Image {
+                source: model.rgba-image;
+                x: (parent.width - self.width) / 2 + model.pan-x;
+                y: (parent.height - self.height) / 2 + model.pan-y;
+                width: model.width-px * 1px * model.zoom;
+                height: model.height-px * 1px * model.zoom;
+                image-fit: fill;
+                transform-rotation: model.rotation-deg * 1deg;
+            }
+
+            pan-area := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        root.last-mx = self.mouse-x;
+                        root.last-my = self.mouse-y;
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        root.pan(self.mouse-x - root.last-mx, self.mouse-y - root.last-my);
+                        root.last-mx = self.mouse-x;
+                        root.last-my = self.mouse-y;
+                    }
+                }
+            }
+        }
+
+        if model.info-text != "" : Rectangle {
+            height: 24px;
+            background: Theme.surface-base;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                Text {
+                    text: model.info-text;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+}

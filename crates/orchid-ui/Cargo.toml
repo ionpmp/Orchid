@@ -26,6 +26,7 @@ chrono.workspace = true
 image.workspace = true
 
 orchid-core.workspace = true
+orchid-fs.workspace = true
 orchid-crypto.workspace = true
 orchid-i18n.workspace = true
 orchid-storage.workspace = true

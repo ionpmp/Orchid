@@ -1,0 +1,105 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerModel } from "../../workspace/defs.slint";
+import { ViewerImageView } from "viewer-image.slint";
+import { ViewerPdfView } from "viewer-pdf.slint";
+import { ViewerTextView } from "viewer-text.slint";
+import { ViewerArchiveView } from "viewer-archive.slint";
+
+export component ViewerView inherits Rectangle {
+    in property <ViewerModel> model;
+
+    callback image-zoom-in();
+    callback image-zoom-out();
+    callback image-fit();
+    callback image-actual-size();
+    callback image-rotate-cw();
+    callback image-rotate-ccw();
+    callback image-pan(length, length);
+
+    callback pdf-prev-page();
+    callback pdf-next-page();
+    callback pdf-fit-width();
+    callback pdf-fit-page();
+    callback pdf-zoom-in();
+    callback pdf-zoom-out();
+    callback pdf-go-to-page(int);
+
+    callback archive-navigate-into(string);
+    callback archive-navigate-up();
+    callback archive-select(string);
+
+    background: transparent;
+
+    if model.kind == 0 : VerticalLayout {
+        alignment: center;
+        Text {
+            text: model.empty.placeholder-text;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-md;
+            horizontal-alignment: center;
+        }
+    }
+
+    if model.kind == 1 || model.kind == 2 : VerticalLayout {
+        alignment: center;
+        padding: 16px;
+        spacing: 8px;
+
+        Text {
+            text: model.status.path-display;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-md;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        if model.status.message != "" : Text {
+            text: model.status.message;
+            color: model.kind == 1 ? Theme.accent-brand : Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    if model.kind == 3 : ViewerImageView {
+        width: parent.width;
+        height: parent.height;
+        model: root.model.image;
+        zoom-in => { root.image-zoom-in(); }
+        zoom-out => { root.image-zoom-out(); }
+        fit => { root.image-fit(); }
+        actual-size => { root.image-actual-size(); }
+        rotate-cw => { root.image-rotate-cw(); }
+        rotate-ccw => { root.image-rotate-ccw(); }
+        pan(dx, dy) => { root.image-pan(dx, dy); }
+    }
+
+    if model.kind == 4 : ViewerPdfView {
+        width: parent.width;
+        height: parent.height;
+        model: root.model.pdf;
+        prev-page => { root.pdf-prev-page(); }
+        next-page => { root.pdf-next-page(); }
+        fit-width => { root.pdf-fit-width(); }
+        fit-page => { root.pdf-fit-page(); }
+        zoom-in => { root.pdf-zoom-in(); }
+        zoom-out => { root.pdf-zoom-out(); }
+        go-to-page(p) => { root.pdf-go-to-page(p); }
+    }
+
+    if model.kind == 5 : ViewerTextView {
+        width: parent.width;
+        height: parent.height;
+        model: root.model.text;
+    }
+
+    if model.kind == 6 : ViewerArchiveView {
+        width: parent.width;
+        height: parent.height;
+        model: root.model.archive;
+        navigate-into(path) => { root.archive-navigate-into(path); }
+        navigate-up => { root.archive-navigate-up(); }
+        select(path) => { root.archive-select(path); }
+    }
+}

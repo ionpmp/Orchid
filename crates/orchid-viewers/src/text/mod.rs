@@ -6,6 +6,7 @@ pub mod save;
 pub mod syntax;
 pub mod undo;
 
+use std::any::Any;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -94,6 +95,21 @@ impl TextViewer {
     pub fn set_visible_range(&self, first_line: u32, count: u32) {
         *self.first_visible_line.write() = first_line;
         *self.visible_line_count.write() = count.max(1);
+    }
+
+    /// Scroll the visible window by whole lines (positive = down).
+    pub fn scroll_lines(&self, delta: i32) {
+        let buffer = self.buffer.read();
+        let Some(buf) = buffer.as_ref() else {
+            return;
+        };
+        let total = buf.line_count();
+        drop(buffer);
+        let count = *self.visible_line_count.read();
+        let max_first = total.saturating_sub(count);
+        let mut first = *self.first_visible_line.read() as i64 + i64::from(delta);
+        first = first.clamp(0, i64::from(max_first));
+        *self.first_visible_line.write() = first as u32;
     }
 
     /// Move the cursor.
@@ -265,5 +281,13 @@ impl Viewer for TextViewer {
 
     fn current_path(&self) -> Option<&orchid_fs::FsPath> {
         None
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
