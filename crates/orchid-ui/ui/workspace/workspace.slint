@@ -23,6 +23,15 @@ export component WorkspaceView inherits Rectangle {
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
     callback search-selection-changed(string, int);
+    callback media-play-pause();
+    callback media-next();
+    callback media-previous();
+    callback password-search-changed(string);
+    callback password-entry-clicked(string);
+    callback password-copy-password(string);
+    callback password-copy-username(string);
+    callback password-copy-totp(string);
+    callback password-open-url(string);
 
     background: Theme.surface-base;
 
@@ -81,6 +90,15 @@ export component WorkspaceView inherits Rectangle {
                     search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
                     search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }
                     search-selection-changed(inst, idx) => { root.search-selection-changed(inst, idx); }
+                    media-play-pause => { root.media-play-pause(); }
+                    media-next => { root.media-next(); }
+                    media-previous => { root.media-previous(); }
+                    password-search-changed(q) => { root.password-search-changed(q); }
+                    password-entry-clicked(id) => { root.password-entry-clicked(id); }
+                    password-copy-password(id) => { root.password-copy-password(id); }
+                    password-copy-username(id) => { root.password-copy-username(id); }
+                    password-copy-totp(id) => { root.password-copy-totp(id); }
+                    password-open-url(url) => { root.password-open-url(url); }
                 }
             }
         }

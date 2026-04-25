@@ -19,9 +19,11 @@ use orchid_widgets::{
     commands::build_command_set,
     GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry, WorkspaceManager,
 };
+use secrecy::SecretString;
 
 use crate::error::{Result, UiError};
 use crate::theme::ThemeManager;
+use crate::widgets::terminal::ArboardClipboard;
 use crate::widgets::terminal::palette::palette_from_theme;
 use crate::widgets::terminal::terminal_descriptor;
 use crate::widgets::terminal::TerminalWidgetDeps;
@@ -159,6 +161,68 @@ impl OrchidApp {
         widget_registry
             .register(orchid_widgets::builtin::search::descriptor(search_aggregator))
             .map_err(|e| UiError::Slint(format!("register search: {e}")))?;
+
+        widget_registry
+            .register(orchid_widgets::builtin::media::descriptor())
+            .map_err(|e| UiError::Slint(format!("register media: {e}")))?;
+
+        // Password manager: needs an unlocked database + a secure clipboard.
+        // For MVP we auto-create/unlock a dev database in debug builds. In release
+        // builds, if the database can't be opened yet, we still register the
+        // widget over an empty dev database so the UI can land; full unlock UI
+        // is a later task.
+        #[derive(Debug)]
+        struct NullClipboard;
+        #[async_trait::async_trait]
+        impl orchid_crypto::SecureClipboard for NullClipboard {
+            async fn copy_with_auto_clear(
+                &self,
+                _secret: secrecy::SecretString,
+                _clear_after: std::time::Duration,
+            ) -> orchid_crypto::Result<()> {
+                Ok(())
+            }
+            async fn clear_if_ours(&self) -> orchid_crypto::Result<bool> {
+                Ok(false)
+            }
+        }
+
+        let clipboard: Arc<dyn orchid_crypto::SecureClipboard> = match ArboardClipboard::new() {
+            Ok(cb) => Arc::new(cb),
+            Err(e) => {
+                warn!(error = %e, "clipboard unavailable; password copy will be disabled in this environment");
+                Arc::new(NullClipboard)
+            }
+        };
+
+        let pw_db_path = paths.data_dir.join("passwords.kdbx");
+        let master = SecretString::new("orchid-dev".to_string());
+        let password_db: Arc<orchid_crypto::PasswordDatabase> = if pw_db_path.exists() {
+            Arc::new(
+                orchid_crypto::PasswordDatabase::open(&pw_db_path, master.clone())
+                    .or_else(|_| orchid_crypto::PasswordDatabase::create(&pw_db_path, master.clone()))
+                    .map_err(|e| UiError::Slint(format!("open password db: {e}")))?,
+            )
+        } else {
+            #[cfg(debug_assertions)]
+            {
+                Arc::new(
+                    orchid_crypto::PasswordDatabase::create(&pw_db_path, master.clone())
+                        .map_err(|e| UiError::Slint(format!("create password db: {e}")))?,
+                )
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                Arc::new(
+                    orchid_crypto::PasswordDatabase::create(&pw_db_path, master.clone())
+                        .map_err(|e| UiError::Slint(format!("create password db: {e}")))?,
+                )
+            }
+        };
+
+        widget_registry
+            .register(orchid_widgets::builtin::password::descriptor(password_db, clipboard))
+            .map_err(|e| UiError::Slint(format!("register password: {e}")))?;
 
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,

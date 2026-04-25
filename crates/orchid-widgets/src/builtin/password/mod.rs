@@ -6,10 +6,12 @@
 //! widget does not own.
 
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use secrecy::ExposeSecret;
 use uuid::Uuid;
@@ -26,6 +28,52 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "password-manager";
+
+/// Live password widget cores keyed by instance id (for UI-side callbacks
+/// without holding `WidgetManager` locks).
+static PASSWORD_LIVE: LazyLock<DashMap<Uuid, Arc<PasswordHandle>>> =
+    LazyLock::new(DashMap::new);
+
+/// Push a search query into the live password widget.
+pub fn update_search(instance_id: Uuid, query: String) {
+    if let Some(h) = PASSWORD_LIVE.get(&instance_id) {
+        h.on_search_changed(query);
+    }
+}
+
+/// Select an entry by id (UUID string) on the live password widget.
+pub fn select_entry(instance_id: Uuid, entry_id: String) {
+    if let Some(h) = PASSWORD_LIVE.get(&instance_id) {
+        h.on_entry_clicked(entry_id.as_str());
+    }
+}
+
+/// Copy password (30s auto-clear) for `entry_id`.
+pub async fn copy_password(instance_id: Uuid, entry_id: &str) -> Result<(), String> {
+    let inner = PASSWORD_LIVE
+        .get(&instance_id)
+        .map(|r| Arc::clone(r.value()))
+        .ok_or_else(|| "password widget not live".to_string())?;
+    inner.copy_password(entry_id).await
+}
+
+/// Copy username (no auto-clear) for `entry_id`.
+pub async fn copy_username(instance_id: Uuid, entry_id: &str) -> Result<(), String> {
+    let inner = PASSWORD_LIVE
+        .get(&instance_id)
+        .map(|r| Arc::clone(r.value()))
+        .ok_or_else(|| "password widget not live".to_string())?;
+    inner.copy_username(entry_id).await
+}
+
+/// Copy TOTP (30s auto-clear) for `entry_id`.
+pub async fn copy_totp(instance_id: Uuid, entry_id: &str) -> Result<(), String> {
+    let inner = PASSWORD_LIVE
+        .get(&instance_id)
+        .map(|r| Arc::clone(r.value()))
+        .ok_or_else(|| "password widget not live".to_string())?;
+    inner.copy_totp(entry_id).await
+}
 
 /// Handle to the shared password database + clipboard.
 #[derive(Clone)]
@@ -44,14 +92,11 @@ impl std::fmt::Debug for PasswordDeps {
 
 /// Password-manager widget.
 pub struct PasswordManagerWidget {
-    instance_id: Uuid,
-    deps: PasswordDeps,
-    state: Arc<RwLock<State>>,
+    inner: Arc<PasswordHandle>,
     refresh: PeriodicRefresh,
-    bus: Arc<orchid_core::EventBus>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct State {
     entries: Vec<orchid_crypto::PasswordEntry>,
     search_query: String,
@@ -59,9 +104,24 @@ struct State {
     error: Option<String>,
 }
 
+struct PasswordHandle {
+    instance_id: Uuid,
+    deps: PasswordDeps,
+    state: Arc<RwLock<State>>,
+    bus: Arc<orchid_core::EventBus>,
+}
+
 impl std::fmt::Debug for PasswordManagerWidget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PasswordManagerWidget")
+            .field("instance_id", &self.inner.instance_id)
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for PasswordHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PasswordHandle")
             .field("instance_id", &self.instance_id)
             .finish_non_exhaustive()
     }
@@ -70,76 +130,70 @@ impl std::fmt::Debug for PasswordManagerWidget {
 impl PasswordManagerWidget {
     /// Construct over an unlocked database.
     pub fn new(instance_id: Uuid, deps: PasswordDeps, bus: Arc<orchid_core::EventBus>) -> Self {
-        Self {
+        let inner = Arc::new(PasswordHandle {
             instance_id,
             deps,
             state: Arc::new(RwLock::new(State::default())),
-            refresh: PeriodicRefresh::new(Duration::from_secs(1)),
             bus,
+        });
+        PASSWORD_LIVE.insert(instance_id, Arc::clone(&inner));
+        Self {
+            inner,
+            refresh: PeriodicRefresh::new(Duration::from_secs(1)),
         }
     }
+}
 
-    /// Refresh the cached entry list (optionally with a fresh search query).
-    pub fn refresh_entries(&self, query: Option<String>) {
+impl PasswordHandle {
+    fn refresh_entries(&self, query: Option<String>) {
         let q = match &query {
             Some(q) => q.clone(),
             None => self.state.read().search_query.clone(),
         };
-        let entries = if q.trim().is_empty() {
-            self.deps
-                .database
-                .list_entries(None)
-                .unwrap_or_default()
+        let (entries, err) = if q.trim().is_empty() {
+            match self.deps.database.list_entries(None) {
+                Ok(v) => (v, None),
+                Err(e) => (Vec::new(), Some(e.to_string())),
+            }
         } else {
             let search = orchid_crypto::SearchQuery {
                 text: Some(q.clone()),
                 limit: Some(200),
                 ..Default::default()
             };
-            self.deps
-                .database
-                .search(&search)
-                .map(|hits| hits.into_iter().map(|h| h.entry).collect::<Vec<_>>())
-                .unwrap_or_default()
+            match self.deps.database.search(&search) {
+                Ok(hits) => (hits.into_iter().map(|h| h.entry).collect::<Vec<_>>(), None),
+                Err(e) => (Vec::new(), Some(e.to_string())),
+            }
         };
         let mut state = self.state.write();
         state.entries = entries;
+        state.error = err;
         if let Some(new_q) = query {
             state.search_query = new_q;
         }
     }
 
-    /// Callback: user changed the search text.
-    pub fn on_search_changed(&self, query: String) {
+    fn on_search_changed(&self, query: String) {
         self.refresh_entries(Some(query));
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
-            WidgetSnapshotUpdated {
-                instance_id: self.instance_id,
-            },
+            WidgetSnapshotUpdated { instance_id: self.instance_id },
         );
     }
 
-    /// Callback: user clicked an entry row.
-    pub fn on_entry_clicked(&self, id_str: &str) {
+    fn on_entry_clicked(&self, id_str: &str) {
         let Ok(id) = Uuid::parse_str(id_str) else {
             return;
         };
         self.state.write().selected_id = Some(id);
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
-            WidgetSnapshotUpdated {
-                instance_id: self.instance_id,
-            },
+            WidgetSnapshotUpdated { instance_id: self.instance_id },
         );
     }
 
-    /// Copy the entry's password to the clipboard (30 s auto-clear).
-    ///
-    /// # Errors
-    ///
-    /// Propagates KDBX lookup errors and clipboard failures.
-    pub async fn copy_password(&self, id_str: &str) -> Result<(), String> {
+    async fn copy_password(&self, id_str: &str) -> Result<(), String> {
         let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
         let entry = self
             .deps
@@ -154,19 +208,13 @@ impl PasswordManagerWidget {
         Ok(())
     }
 
-    /// Copy the entry's username without auto-clear.
-    ///
-    /// # Errors
-    ///
-    /// Propagates KDBX lookup errors and clipboard failures.
-    pub async fn copy_username(&self, id_str: &str) -> Result<(), String> {
+    async fn copy_username(&self, id_str: &str) -> Result<(), String> {
         let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
         let entry = self
             .deps
             .database
             .get_entry(id)
             .map_err(|e| e.to_string())?;
-        // Username isn't secret; copy without auto-clear.
         self.deps
             .clipboard
             .copy_with_auto_clear(
@@ -178,13 +226,7 @@ impl PasswordManagerWidget {
         Ok(())
     }
 
-    /// Copy the currently-valid TOTP code (30 s auto-clear).
-    ///
-    /// # Errors
-    ///
-    /// Returns the string `"no TOTP"` when the entry is not configured for
-    /// TOTP, and propagates clipboard / database errors otherwise.
-    pub async fn copy_totp(&self, id_str: &str) -> Result<(), String> {
+    async fn copy_totp(&self, id_str: &str) -> Result<(), String> {
         let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
         let entry = self
             .deps
@@ -205,22 +247,12 @@ impl PasswordManagerWidget {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+}
 
-    /// Open the entry's URL in the default browser.
-    ///
-    /// # Errors
-    ///
-    /// Returns the string `"no url"` when the entry has no URL, and
-    /// propagates `opener` errors otherwise.
-    pub fn open_url(&self, id_str: &str) -> Result<(), String> {
-        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
-        let entry = self
-            .deps
-            .database
-            .get_entry(id)
-            .map_err(|e| e.to_string())?;
-        let url = entry.url.ok_or_else(|| "no url".to_string())?;
-        opener::open(url).map_err(|e| e.to_string())
+impl Drop for PasswordManagerWidget {
+    fn drop(&mut self) {
+        self.refresh.stop();
+        PASSWORD_LIVE.remove(&self.inner.instance_id);
     }
 }
 
@@ -230,25 +262,23 @@ impl Widget for PasswordManagerWidget {
         TYPE_ID
     }
     fn instance_id(&self) -> Uuid {
-        self.instance_id
+        self.inner.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh_entries(None);
+        self.inner.refresh_entries(None);
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let state = self.state.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
+        let inner = Arc::clone(&self.inner);
+        let instance_id = self.inner.instance_id;
         // One-second ticker — only fires a snapshot event when an entry
         // with TOTP is selected (so the countdown updates).
         self.refresh.start(move || {
-            let state = state.clone();
-            let bus = bus.clone();
+            let inner = Arc::clone(&inner);
             async move {
-                let need_tick = state.read().selected_id.is_some();
+                let need_tick = inner.state.read().selected_id.is_some();
                 if need_tick {
-                    bus.publish(
+                    inner.bus.publish(
                         orchid_core::EventSource::Widget(instance_id),
                         WidgetSnapshotUpdated { instance_id },
                     );
@@ -273,10 +303,10 @@ impl Widget for PasswordManagerWidget {
         Ok(())
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let state = self.state.read().clone();
+        let state = self.inner.state.read().clone();
         let payload = build_payload(&state);
         Some(WidgetSnapshot {
-            instance_id: self.instance_id,
+            instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
             title: "Passwords".into(),
             status: WidgetStatus::Ready,

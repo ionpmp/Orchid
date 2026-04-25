@@ -226,6 +226,19 @@ dock-widget-moon = Луна
 dock-widget-system = Система
 dock-widget-rss = Новости
 dock-widget-search = Поиск
+dock-widget-media = Медиа
+dock-widget-password = Пароли
+
+password-select-entry = Выберите запись
+password-label-username = Имя пользователя
+password-label-password = Пароль
+password-label-url = URL
+password-label-notes = Заметки
+password-label-totp = TOTP
+password-action-copy = Копировать
+password-action-open = Открыть
+
+password-username-copied = Имя пользователя скопировано
 
 moon-age-label = Возраст
 moon-distance-label = Расстояние

@@ -1,0 +1,208 @@
+import { Theme } from "../theme_global.slint";
+import { Strings } from "../strings_global.slint";
+import { MediaModel } from "../workspace/defs.slint";
+
+export component MediaView inherits Rectangle {
+    in property <MediaModel> model;
+
+    callback play-pause();
+    callback next();
+    callback previous();
+
+    background: transparent;
+
+    // No session placeholder
+    if !model.has-session : VerticalLayout {
+        alignment: center;
+        padding: 16px;
+
+        Text {
+            text: "🎵";
+            color: Theme.text-tertiary;
+            font-size: 48px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: Strings.media_no_session;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-md;
+            horizontal-alignment: center;
+        }
+    }
+
+    // Playing session
+    if model.has-session : VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            // Album art — 96x96 square
+            Rectangle {
+                width: 96px;
+                height: 96px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                clip: true;
+
+                if model.has-thumbnail : Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: model.thumbnail;
+                    image-fit: cover;
+                }
+
+                if !model.has-thumbnail : Text {
+                    text: "🎵";
+                    color: Theme.text-tertiary;
+                    font-size: 32px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Track info
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                spacing: 4px;
+
+                Text {
+                    text: model.title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-lg;
+                    font-weight: Theme.weight-semibold;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: model.artist;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+
+                if model.album != "" : Text {
+                    text: model.album;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+
+                if model.source-app != "" : Text {
+                    text: model.source-app;
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+        }
+
+        // Progress bar
+        Rectangle {
+            height: 4px;
+            background: Theme.surface-base;
+            border-radius: 2px;
+            horizontal-stretch: 1;
+
+            Rectangle {
+                x: 0;
+                y: 0;
+                width: parent.width * model.progress;
+                height: parent.height;
+                border-radius: 2px;
+                background: Theme.accent-brand;
+            }
+        }
+
+        // Position / duration
+        HorizontalLayout {
+            spacing: 0px;
+            alignment: space-between;
+
+            Text {
+                text: model.position;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+            }
+
+            Text {
+                text: model.duration;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+            }
+        }
+
+        // Transport controls
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: center;
+            padding-top: 8px;
+
+            // Previous
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                background: prev-ta.has-hover ? Theme.surface-base : transparent;
+                border-radius: 24px;
+
+                prev-ta := TouchArea {
+                    clicked => { root.previous(); }
+                }
+
+                Text {
+                    text: "⏮";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Play/Pause
+            Rectangle {
+                width: 56px;
+                height: 56px;
+                background: Theme.accent-brand;
+                border-radius: 28px;
+
+                pp-ta := TouchArea {
+                    clicked => { root.play-pause(); }
+                }
+
+                Text {
+                    text: model.is-playing ? "⏸" : "▶";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-2xl;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Next
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                background: next-ta.has-hover ? Theme.surface-base : transparent;
+                border-radius: 24px;
+
+                next-ta := TouchArea {
+                    clicked => { root.next(); }
+                }
+
+                Text {
+                    text: "⏭";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+

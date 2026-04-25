@@ -231,6 +231,19 @@ dock-widget-moon = Moon
 dock-widget-system = System
 dock-widget-rss = News
 dock-widget-search = Search
+dock-widget-media = Media
+dock-widget-password = Passwords
+
+password-select-entry = Select an entry
+password-label-username = Username
+password-label-password = Password
+password-label-url = URL
+password-label-notes = Notes
+password-label-totp = TOTP
+password-action-copy = Copy
+password-action-open = Open
+
+password-username-copied = Username copied
 
 moon-age-label = Age
 moon-distance-label = Distance

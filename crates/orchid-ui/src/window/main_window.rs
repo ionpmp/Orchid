@@ -46,9 +46,10 @@ use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
 use crate::slint_generated::{
-    AppState, DockWidgetType, MainWindow, MoonModel, MoonValueEntry, RssItemEntry, RssModel,
-    SearchCandidateEntry, SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel,
-    Theme, WeatherForecastEntry, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
+    AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
+    PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
+    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
+    WeatherForecastEntry, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
 };
 use crate::theme::ThemeManager;
 
@@ -100,6 +101,10 @@ pub struct MainWindowController {
     search_selection: Arc<RwLock<HashMap<Uuid, i32>>>,
     /// Set when a search widget is created from the dock; cleared after the next workspace rebuild.
     search_autofocus_pending: Arc<Mutex<Option<Uuid>>>,
+    /// Per password-manager instance: (message, visible) toast state.
+    password_toasts: Arc<RwLock<HashMap<Uuid, (String, bool)>>>,
+    /// One-shot autofocus request for password search input after dock creation.
+    password_autofocus_pending: Arc<RwLock<HashMap<Uuid, bool>>>,
 }
 
 struct ResizeInteraction {
@@ -108,6 +113,13 @@ struct ResizeInteraction {
     start: PixelBounds,
     /// First pointer report in canvas space.
     press_canvas: (f32, f32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PasswordCopyKind {
+    Password,
+    Username,
+    Totp,
 }
 
 impl MainWindowController {
@@ -170,6 +182,8 @@ impl MainWindowController {
             workspace_dock_types,
             search_selection: Arc::new(RwLock::new(HashMap::new())),
             search_autofocus_pending: Arc::new(Mutex::new(None)),
+            password_toasts: Arc::new(RwLock::new(HashMap::new())),
+            password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -223,6 +237,20 @@ impl MainWindowController {
         g.set_workspace_new_label(mgr.tr("workspace-new").into());
         g.set_dock_add_label(mgr.tr("dock-add-label").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+
+        g.set_media_no_session(mgr.tr("media-no-session").into());
+
+        g.set_password_locked(mgr.tr("password-locked").into());
+        g.set_password_no_entries(mgr.tr("password-no-entries").into());
+        g.set_password_search_placeholder(mgr.tr("password-search-placeholder").into());
+        g.set_password_select_entry(mgr.tr("password-select-entry").into());
+        g.set_password_label_username(mgr.tr("password-label-username").into());
+        g.set_password_label_password(mgr.tr("password-label-password").into());
+        g.set_password_label_url(mgr.tr("password-label-url").into());
+        g.set_password_label_notes(mgr.tr("password-label-notes").into());
+        g.set_password_label_totp(mgr.tr("password-label-totp").into());
+        g.set_password_action_copy(mgr.tr("password-action-copy").into());
+        g.set_password_action_open(mgr.tr("password-action-open").into());
         Ok(())
     }
 
@@ -493,6 +521,80 @@ impl MainWindowController {
                 }
             }
         });
+
+        self.window.on_media_play_pause({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_media_play_pause();
+                }
+            }
+        });
+        self.window.on_media_next({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_media_command("next");
+                }
+            }
+        });
+        self.window.on_media_previous({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_media_command("previous");
+                }
+            }
+        });
+
+        self.window.on_password_search_changed({
+            let t = t.clone();
+            move |q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_search_changed(&q);
+                }
+            }
+        });
+        self.window.on_password_entry_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_entry_clicked(&id);
+                }
+            }
+        });
+        self.window.on_password_copy_password({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_copy(&id, PasswordCopyKind::Password);
+                }
+            }
+        });
+        self.window.on_password_copy_username({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_copy(&id, PasswordCopyKind::Username);
+                }
+            }
+        });
+        self.window.on_password_copy_totp({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_copy(&id, PasswordCopyKind::Totp);
+                }
+            }
+        });
+        self.window.on_password_open_url({
+            let t = t.clone();
+            move |url| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_open_url(&url);
+                }
+            }
+        });
         Ok(())
     }
 
@@ -584,7 +686,7 @@ impl MainWindowController {
         let type_id_str = type_id.as_str();
         if !matches!(
             type_id_str,
-            "terminal" | "weather" | "moon" | "system" | "rss" | "search"
+            "terminal" | "weather" | "moon" | "system" | "rss" | "search" | "media" | "password"
         ) {
             warn!(type_id = type_id_str, "unknown widget type from dock");
             return;
@@ -595,6 +697,7 @@ impl MainWindowController {
         let t = Arc::downgrade(self);
         let type_id_owned = type_id_str.to_string();
         let focus_search_input = type_id_owned == "search";
+        let focus_password_input = type_id_owned == "password";
         let _ = slint::spawn_local(async move {
             let wid = match wsm.active() {
                 Ok(w) => w.id,
@@ -622,6 +725,9 @@ impl MainWindowController {
                 if focus_search_input {
                     *c.search_autofocus_pending.lock() = Some(new_id);
                 }
+                if focus_password_input {
+                    c.password_autofocus_pending.write().insert(new_id, true);
+                }
                 c.schedule_rebuild();
             }
         });
@@ -643,6 +749,8 @@ impl MainWindowController {
                 c.drag_grab.lock().remove(&u);
                 c.resize_override.lock().remove(&u);
                 c.search_selection.write().remove(&u);
+                c.password_toasts.write().remove(&u);
+                c.password_autofocus_pending.write().remove(&u);
                 c.schedule_rebuild();
             }
         });
@@ -1037,6 +1145,155 @@ impl MainWindowController {
         }
     }
 
+    fn on_media_play_pause(self: &Arc<Self>) {
+        let Some((inst_id, is_playing)) = self.find_active_media_widget() else {
+            return;
+        };
+        let _ = slint::spawn_local(async move {
+            let cmd = if is_playing { "pause" } else { "play" };
+            if let Err(e) = orchid_widgets::builtin::media::execute_command(inst_id, cmd).await {
+                warn!(?e, "media play/pause");
+            }
+        });
+    }
+
+    fn on_media_command(self: &Arc<Self>, cmd: &'static str) {
+        let Some((inst_id, _)) = self.find_active_media_widget() else {
+            return;
+        };
+        let _ = slint::spawn_local(async move {
+            if let Err(e) = orchid_widgets::builtin::media::execute_command(inst_id, cmd).await {
+                warn!(?e, "media command");
+            }
+        });
+    }
+
+    fn find_active_media_widget(&self) -> Option<(Uuid, bool)> {
+        let w = self.workspace_manager.active().ok()?;
+        let cache = self.widget_manager.snapshot_cache();
+        for inst in self.widget_manager.instances_for_workspace(w.id) {
+            if inst.type_id == "media-player" {
+                let is_playing = cache
+                    .get(inst.id)
+                    .and_then(|s| match &s.payload {
+                        orchid_widgets::WidgetPayload::MediaPlayer(p) => Some(p.is_playing),
+                        _ => None,
+                    })
+                    .unwrap_or(false);
+                return Some((inst.id, is_playing));
+            }
+        }
+        None
+    }
+
+    fn on_password_search_changed(self: &Arc<Self>, q: &SharedString) {
+        let query = q.to_string();
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        orchid_widgets::builtin::password::update_search(inst_id, query);
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = wm.refresh_snapshot_cache(inst_id).await;
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_password_entry_clicked(self: &Arc<Self>, id: &SharedString) {
+        let entry_id = id.to_string();
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        orchid_widgets::builtin::password::select_entry(inst_id, entry_id);
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = wm.refresh_snapshot_cache(inst_id).await;
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_password_copy(self: &Arc<Self>, id: &SharedString, kind: PasswordCopyKind) {
+        let entry_id = id.to_string();
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        let t = Arc::downgrade(self);
+        let locale = self.locale.clone();
+        let _ = slint::spawn_local(Compat::new(async move {
+            let toast_key = match kind {
+                PasswordCopyKind::Password => {
+                    match orchid_widgets::builtin::password::copy_password(inst_id, &entry_id).await
+                    {
+                        Ok(()) => "password-password-copied",
+                        Err(e) => {
+                            warn!(?e, "copy password");
+                            return;
+                        }
+                    }
+                }
+                PasswordCopyKind::Username => {
+                    match orchid_widgets::builtin::password::copy_username(inst_id, &entry_id).await
+                    {
+                        Ok(()) => "password-username-copied",
+                        Err(e) => {
+                            warn!(?e, "copy username");
+                            return;
+                        }
+                    }
+                }
+                PasswordCopyKind::Totp => {
+                    match orchid_widgets::builtin::password::copy_totp(inst_id, &entry_id).await {
+                        Ok(()) => "password-totp-copied",
+                        Err(e) => {
+                            warn!(?e, "copy totp");
+                            return;
+                        }
+                    }
+                }
+            };
+
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            let msg = locale.tr(toast_key).to_string();
+            c.password_toasts.write().insert(inst_id, (msg, true));
+            c.schedule_rebuild();
+
+            let t2 = Arc::downgrade(&c);
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            if let Some(cc) = t2.upgrade() {
+                cc.password_toasts.write().remove(&inst_id);
+                cc.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_password_open_url(self: &Arc<Self>, url: &SharedString) {
+        let url_str = url.to_string();
+        if url_str.is_empty() {
+            return;
+        }
+        if let Err(e) = opener::open(&url_str) {
+            warn!(?e, "failed to open URL");
+        }
+    }
+
+    fn find_active_password_widget(&self) -> Option<Uuid> {
+        let w = self.workspace_manager.active().ok()?;
+        for inst in self.widget_manager.instances_for_workspace(w.id) {
+            if inst.type_id == "password-manager" {
+                return Some(inst.id);
+            }
+        }
+        None
+    }
+
     fn on_search_query_changed(self: &Arc<Self>, inst: &SharedString, q: &SharedString) {
         let Ok(instance_id) = Uuid::parse_str(inst.as_str()) else {
             return;
@@ -1250,6 +1507,8 @@ impl MainWindowController {
             system_model,
             rss_model,
             search_model,
+            media_model,
+            password_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
@@ -1290,6 +1549,8 @@ impl MainWindowController {
                         empty_system_model(),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
+                        empty_media_model(),
+                        empty_password_model(),
                     )
                 }
                 WidgetPayload::Weather(w) => (
@@ -1306,6 +1567,8 @@ impl MainWindowController {
                     empty_system_model(),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
                 ),
                 WidgetPayload::Moon(m) => (
                     tstr,
@@ -1321,6 +1584,8 @@ impl MainWindowController {
                     empty_system_model(),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
                     tstr,
@@ -1336,6 +1601,8 @@ impl MainWindowController {
                     build_system_model(s),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
                 ),
                 WidgetPayload::RssFeed(r) => (
                     tstr,
@@ -1351,6 +1618,8 @@ impl MainWindowController {
                     empty_system_model(),
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
                 ),
                 WidgetPayload::UniversalSearch(s) => {
                     let selected = self
@@ -1381,6 +1650,54 @@ impl MainWindowController {
                         empty_system_model(),
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
+                        empty_media_model(),
+                        empty_password_model(),
+                    )
+                }
+                WidgetPayload::MediaPlayer(m) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    empty_moon_model(),
+                    empty_system_model(),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    build_media_model(m),
+                    empty_password_model(),
+                ),
+                WidgetPayload::PasswordManager(p) => {
+                    let toast = self.password_toasts.read().get(&pl.instance_id).cloned();
+                    let autofocus = self
+                        .password_autofocus_pending
+                        .read()
+                        .get(&pl.instance_id)
+                        .copied()
+                        .unwrap_or(false);
+                    if autofocus {
+                        self.password_autofocus_pending.write().remove(&pl.instance_id);
+                    }
+                    (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(),
+                        empty_moon_model(),
+                        empty_system_model(),
+                        empty_rss_model(&self.locale),
+                        empty_search_model(&self.locale),
+                        empty_media_model(),
+                        build_password_model(p, toast, autofocus),
                     )
                 }
                 _ => (
@@ -1397,6 +1714,8 @@ impl MainWindowController {
                     empty_system_model(),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
                 ),
             }
         } else {
@@ -1426,6 +1745,8 @@ impl MainWindowController {
             system: system_model,
             rss: rss_model,
             search: search_model,
+            media: media_model,
+            password: password_model,
         }
     }
 
@@ -1625,6 +1946,58 @@ fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<TerminalCellMode
     ModelRc::new(VecModel::from(rows))
 }
 
+fn base64_decode(input: &str) -> std::result::Result<Vec<u8>, ()> {
+    fn val(b: u8) -> Option<u8> {
+        match b {
+            b'A'..=b'Z' => Some(b - b'A'),
+            b'a'..=b'z' => Some(b - b'a' + 26),
+            b'0'..=b'9' => Some(b - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+
+    let bytes: Vec<u8> = input
+        .bytes()
+        .filter(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
+        .collect();
+
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+    if bytes.len() % 4 != 0 {
+        return Err(());
+    }
+
+    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+    for chunk in bytes.chunks_exact(4) {
+        let a = val(chunk[0]).ok_or(())?;
+        let b = val(chunk[1]).ok_or(())?;
+        let c = if chunk[2] == b'=' {
+            0
+        } else {
+            val(chunk[2]).ok_or(())?
+        };
+        let d = if chunk[3] == b'=' {
+            0
+        } else {
+            val(chunk[3]).ok_or(())?
+        };
+
+        let n = ((a as u32) << 18) | ((b as u32) << 12) | ((c as u32) << 6) | (d as u32);
+        out.push((n >> 16) as u8);
+        if chunk[2] != b'=' {
+            out.push((n >> 8) as u8);
+        }
+        if chunk[3] != b'=' {
+            out.push(n as u8);
+        }
+    }
+
+    Ok(out)
+}
+
 fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
     vec![
         DockWidgetType {
@@ -1657,6 +2030,16 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-search").into(),
             icon: "search".into(),
         },
+        DockWidgetType {
+            type_id: "media".into(),
+            label: locale.tr("dock-widget-media").into(),
+            icon: "media".into(),
+        },
+        DockWidgetType {
+            type_id: "password".into(),
+            label: locale.tr("dock-widget-password").into(),
+            icon: "password".into(),
+        },
     ]
 }
 
@@ -1667,6 +2050,8 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "system" => locale.tr("dock-widget-system").into(),
         "rss" => locale.tr("dock-widget-rss").into(),
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
+        "media-player" | "media" => locale.tr("dock-widget-media").into(),
+        "password-manager" | "password" => locale.tr("dock-widget-password").into(),
         _ => locale.tr("widget-title-terminal").into(),
     }
 }
@@ -1689,6 +2074,8 @@ fn default_frame_data_extended(
     SystemModel,
     RssModel,
     SearchModel,
+    MediaModel,
+    PasswordModel,
 ) {
     (
         fallback_widget_title(locale, type_id),
@@ -1704,6 +2091,8 @@ fn default_frame_data_extended(
         empty_system_model(),
         empty_rss_model(locale),
         empty_search_model(locale),
+        empty_media_model(),
+        empty_password_model(),
     )
 }
 
@@ -1782,6 +2171,142 @@ fn empty_search_model(locale: &LocaleManager) -> SearchModel {
         no_results_text: locale.tr("search-no-results-short").into(),
         searching_text: locale.tr("search-searching").into(),
         request_autofocus: false,
+    }
+}
+
+fn empty_media_model() -> MediaModel {
+    MediaModel {
+        has_session: false,
+        title: SharedString::new(),
+        artist: SharedString::new(),
+        album: SharedString::new(),
+        source_app: SharedString::new(),
+        position: SharedString::new(),
+        duration: SharedString::new(),
+        progress: 0.0,
+        is_playing: false,
+        has_thumbnail: false,
+        thumbnail: Image::default(),
+    }
+}
+
+fn empty_password_detail() -> PasswordDetail {
+    PasswordDetail {
+        has_selection: false,
+        id: SharedString::new(),
+        title: SharedString::new(),
+        username: SharedString::new(),
+        url: SharedString::new(),
+        notes: SharedString::new(),
+        totp_code: SharedString::new(),
+        totp_remaining: 0,
+        tags: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn empty_password_model() -> PasswordModel {
+    PasswordModel {
+        is_unlocked: false,
+        lock_reason: SharedString::new(),
+        entries: ModelRc::new(VecModel::default()),
+        selected: empty_password_detail(),
+        search_query: SharedString::new(),
+        toast_message: SharedString::new(),
+        toast_visible: false,
+        request_autofocus: false,
+    }
+}
+
+fn build_media_model(p: &orchid_widgets::MediaPlayerPayload) -> MediaModel {
+    let (has_thumb, thumb_img) = p
+        .thumbnail_base64
+        .as_ref()
+        .and_then(|b64| {
+            let bytes = base64_decode(b64).ok()?;
+            let dyn_img = image::load_from_memory(&bytes).ok()?;
+            let rgba = dyn_img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            if w == 0 || h == 0 {
+                return None;
+            }
+            let buf =
+                slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_raw(), w, h);
+            Some((true, Image::from_rgba8(buf)))
+        })
+        .unwrap_or((false, Image::default()));
+    MediaModel {
+        has_session: p.has_session,
+        title: p.title.clone().into(),
+        artist: p.artist.clone().into(),
+        album: p.album.clone().into(),
+        source_app: p.source_app.clone().into(),
+        position: p.position_text.clone().into(),
+        duration: p.duration_text.clone().into(),
+        progress: p.progress_fraction.clamp(0.0, 1.0),
+        is_playing: p.is_playing,
+        has_thumbnail: has_thumb,
+        thumbnail: thumb_img,
+    }
+}
+
+fn build_password_model(
+    p: &orchid_widgets::PasswordManagerPayload,
+    toast: Option<(String, bool)>,
+    autofocus: bool,
+) -> PasswordModel {
+    let entries: Vec<PasswordEntryItem> = p
+        .entries
+        .iter()
+        .map(|e| {
+            let tags: Vec<SharedString> = e.tags.iter().map(|t| t.clone().into()).collect();
+            PasswordEntryItem {
+                id: e.id.clone().into(),
+                title: e.title.clone().into(),
+                username: e.username.clone().into(),
+                url_host: e.url_host.clone().unwrap_or_default().into(),
+                has_totp: e.has_totp,
+                tags: ModelRc::new(VecModel::from(tags)),
+                color_label: e.color_label.clone().unwrap_or_default().into(),
+                modified: e.modified_text.clone().into(),
+            }
+        })
+        .collect();
+
+    let selected = match &p.selected {
+        Some(d) => {
+            let tags: Vec<PasswordTagChip> = d
+                .tags
+                .iter()
+                .map(|t| PasswordTagChip {
+                    label: t.clone().into(),
+                })
+                .collect();
+            PasswordDetail {
+                has_selection: true,
+                id: d.id.clone().into(),
+                title: d.title.clone().into(),
+                username: d.username.clone().into(),
+                url: d.url.clone().unwrap_or_default().into(),
+                notes: d.notes.clone().unwrap_or_default().into(),
+                totp_code: d.totp_code.clone().unwrap_or_default().into(),
+                totp_remaining: d.totp_remaining_seconds as i32,
+                tags: ModelRc::new(VecModel::from(tags)),
+            }
+        }
+        None => empty_password_detail(),
+    };
+
+    let (toast_msg, toast_vis) = toast.unwrap_or((String::new(), false));
+
+    PasswordModel {
+        is_unlocked: p.is_unlocked,
+        lock_reason: p.lock_reason.clone().unwrap_or_default().into(),
+        entries: ModelRc::new(VecModel::from(entries)),
+        selected,
+        search_query: p.search_query.clone().into(),
+        toast_message: toast_msg.into(),
+        toast_visible: toast_vis,
+        request_autofocus: autofocus,
     }
 }
 
@@ -1870,6 +2395,38 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
         forecast: ModelRc::new(VecModel::from(forecast)),
         last_updated: p.last_updated_text.clone().into(),
         status: weather_status_to_int(&p.status),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_media_payload() -> orchid_widgets::MediaPlayerPayload {
+        orchid_widgets::MediaPlayerPayload {
+            has_session: true,
+            title: "t".into(),
+            artist: "a".into(),
+            album: "al".into(),
+            source_app: "app".into(),
+            position_text: "0:00".into(),
+            duration_text: "1:00".into(),
+            progress_fraction: 0.5,
+            is_playing: true,
+            thumbnail_base64: None,
+        }
+    }
+
+    #[test]
+    fn media_progress_clamps() {
+        let mut p = sample_media_payload();
+        p.progress_fraction = 1.5;
+        let m = build_media_model(&p);
+        assert!(m.progress <= 1.0);
+
+        p.progress_fraction = -0.3;
+        let m = build_media_model(&p);
+        assert!(m.progress >= 0.0);
     }
 }
 

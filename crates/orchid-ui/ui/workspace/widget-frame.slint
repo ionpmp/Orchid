@@ -6,6 +6,8 @@ import { MoonView } from "../widgets/moon.slint";
 import { SystemView } from "../widgets/system.slint";
 import { RssView } from "../widgets/rss.slint";
 import { SearchView } from "../widgets/search.slint";
+import { MediaView } from "../widgets/media.slint";
+import { PasswordView } from "../widgets/password.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
@@ -23,6 +25,19 @@ export component WidgetFrame inherits Rectangle {
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
     callback search-selection-changed(string, int);
+
+    // Media
+    callback media-play-pause();
+    callback media-next();
+    callback media-previous();
+
+    // Password
+    callback password-search-changed(string);
+    callback password-entry-clicked(string);
+    callback password-copy-password(string);
+    callback password-copy-username(string);
+    callback password-copy-totp(string);
+    callback password-open-url(string);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -167,6 +182,27 @@ export component WidgetFrame inherits Rectangle {
             query-changed(q) => { root.search-query-changed(root.model.instance-id, q); }
             candidate-activated(id) => { root.search-candidate-activated(root.model.instance-id, id); }
             selection-changed(idx) => { root.search-selection-changed(root.model.instance-id, idx); }
+        }
+
+        if model.type-id == "media" || model.type-id == "media-player" : MediaView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.media;
+            play-pause => { root.media-play-pause(); }
+            next => { root.media-next(); }
+            previous => { root.media-previous(); }
+        }
+
+        if model.type-id == "password" || model.type-id == "password-manager" : PasswordView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.password;
+            search-changed(q) => { root.password-search-changed(q); }
+            entry-clicked(id) => { root.password-entry-clicked(id); }
+            copy-password(id) => { root.password-copy-password(id); }
+            copy-username(id) => { root.password-copy-username(id); }
+            copy-totp(id) => { root.password-copy-totp(id); }
+            open-url(url) => { root.password-open-url(url); }
         }
     }
 

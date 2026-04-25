@@ -99,6 +99,58 @@ export struct SearchModel {
     request-autofocus: bool,
 }
 
+export struct MediaModel {
+    has-session: bool,
+    title: string,
+    artist: string,
+    album: string,
+    source-app: string,
+    position: string,
+    duration: string,
+    progress: float,
+    is-playing: bool,
+    has-thumbnail: bool,
+    thumbnail: image,
+}
+
+export struct PasswordEntryItem {
+    id: string,
+    title: string,
+    username: string,
+    url-host: string,
+    has-totp: bool,
+    tags: [string],
+    color-label: string,
+    modified: string,
+}
+
+export struct PasswordTagChip {
+    label: string,
+}
+
+export struct PasswordDetail {
+    has-selection: bool,
+    id: string,
+    title: string,
+    username: string,
+    url: string,
+    notes: string,
+    totp-code: string,
+    totp-remaining: int,
+    tags: [PasswordTagChip],
+}
+
+export struct PasswordModel {
+    is-unlocked: bool,
+    lock-reason: string,
+    entries: [PasswordEntryItem],
+    selected: PasswordDetail,
+    search-query: string,
+    toast-message: string,
+    toast-visible: bool,
+    request-autofocus: bool,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -125,6 +177,8 @@ export struct WidgetFrameModel {
     system: SystemModel,
     rss: RssModel,
     search: SearchModel,
+    media: MediaModel,
+    password: PasswordModel,
 }
 
 export struct DockWidgetType {

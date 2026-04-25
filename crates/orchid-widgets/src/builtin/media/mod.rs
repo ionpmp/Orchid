@@ -8,9 +8,11 @@
 //! can inject any other [`MediaProvider`] impl at registration time.
 
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use uuid::Uuid;
 
@@ -103,6 +105,26 @@ pub struct MediaPlayerWidget {
     bus: Arc<orchid_core::EventBus>,
 }
 
+/// Live media providers keyed by instance id (for UI transport controls without
+/// holding widget locks).
+static MEDIA_LIVE: LazyLock<DashMap<Uuid, Arc<dyn MediaProvider>>> = LazyLock::new(DashMap::new);
+
+/// Execute a transport command on the live media session, if any.
+///
+/// No-op if the instance is not a live media widget.
+pub async fn execute_command(instance_id: Uuid, cmd: &'static str) -> Result<(), MediaError> {
+    let Some(p) = MEDIA_LIVE.get(&instance_id).map(|e| e.value().clone()) else {
+        return Err(MediaError::NoSession);
+    };
+    match cmd {
+        "play" => p.play().await,
+        "pause" => p.pause().await,
+        "next" => p.next().await,
+        "previous" => p.previous().await,
+        other => Err(MediaError::ControlFailed(format!("unknown command: {other}"))),
+    }
+}
+
 impl std::fmt::Debug for MediaPlayerWidget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MediaPlayerWidget")
@@ -118,6 +140,7 @@ impl MediaPlayerWidget {
         provider: Arc<dyn MediaProvider>,
         bus: Arc<orchid_core::EventBus>,
     ) -> Self {
+        MEDIA_LIVE.insert(instance_id, provider.clone());
         Self {
             instance_id,
             provider,
@@ -130,6 +153,12 @@ impl MediaPlayerWidget {
     /// Access the provider; used by the UI shell for transport controls.
     pub fn provider(&self) -> Arc<dyn MediaProvider> {
         self.provider.clone()
+    }
+}
+
+impl Drop for MediaPlayerWidget {
+    fn drop(&mut self) {
+        MEDIA_LIVE.remove(&self.instance_id);
     }
 }
 

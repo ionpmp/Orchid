@@ -110,6 +110,20 @@ impl StartupWindowController {
         g.set_workspace_new_label(mgr.tr("workspace-new").into());
         g.set_dock_add_label(mgr.tr("dock-add-label").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+
+        g.set_media_no_session(mgr.tr("media-no-session").into());
+
+        g.set_password_locked(mgr.tr("password-locked").into());
+        g.set_password_no_entries(mgr.tr("password-no-entries").into());
+        g.set_password_search_placeholder(mgr.tr("password-search-placeholder").into());
+        g.set_password_select_entry(mgr.tr("password-select-entry").into());
+        g.set_password_label_username(mgr.tr("password-label-username").into());
+        g.set_password_label_password(mgr.tr("password-label-password").into());
+        g.set_password_label_url(mgr.tr("password-label-url").into());
+        g.set_password_label_notes(mgr.tr("password-label-notes").into());
+        g.set_password_label_totp(mgr.tr("password-label-totp").into());
+        g.set_password_action_copy(mgr.tr("password-action-copy").into());
+        g.set_password_action_open(mgr.tr("password-action-open").into());
     }
 
     fn apply_app_state(&self) {

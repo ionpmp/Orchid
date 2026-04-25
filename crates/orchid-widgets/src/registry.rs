@@ -28,6 +28,8 @@ impl WidgetRegistry {
     pub fn canonical_type_id(type_id: &str) -> &str {
         match type_id {
             "search" => "universal-search",
+            "media" => "media-player",
+            "password" => "password-manager",
             other => other,
         }
     }
