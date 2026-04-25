@@ -1049,6 +1049,10 @@ impl MainWindowController {
         }
         // `refresh_snapshot_cache` awaits `tokio::sync::Mutex`. Slint's `spawn_local` cannot
         // drive raw Tokio futures; `Compat` runs them on a Tokio pool and resumes on Slint.
+        //
+        // TODO(search): If candidates are still empty, check logs for
+        // `universal_search_push_query: instance not in SEARCH_LIVE`. That indicates the
+        // instance isn't active/live (Sleeping/Unloaded) or UI is sending the wrong id.
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {

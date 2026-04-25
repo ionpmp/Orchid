@@ -39,6 +39,10 @@ pub fn universal_search_push_query(instance_id: Uuid, query: String) {
         inner.ensure_debouncer_running();
         inner.notify.notify_one();
     } else {
+        // TODO(search): If this triggers frequently, the UI is pushing queries for an instance
+        // that is not currently live. Likely causes:
+        // - widget is Sleeping/Unloaded and wasn't re-activated when shown
+        // - instance id mismatch between UI model and widget manager
         warn!(
             target: "orchid_widgets::search",
             %instance_id,
