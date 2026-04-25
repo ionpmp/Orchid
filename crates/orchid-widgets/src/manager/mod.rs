@@ -10,6 +10,9 @@ use std::time::Duration;
 
 use chrono::Utc;
 use dashmap::DashMap;
+use orchid_core::{
+    Event, EventEnvelope, EventFilter, HandlerPriority, SubscriptionHandle,
+};
 use orchid_storage::{LifecycleState, StateStore};
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -18,7 +21,7 @@ use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use crate::error::{Result, WidgetError};
-use crate::events::WidgetClosed;
+use crate::events::{WidgetClosed, WidgetSnapshotUpdated};
 use crate::registry::WidgetRegistry;
 use crate::widget::instance::{SharedInstance, WidgetInstanceRuntime};
 use crate::widget::lifecycle::LifecycleController;
@@ -67,6 +70,8 @@ pub(crate) struct WidgetManagerInner {
     pub snapshot_cache: Arc<WidgetSnapshotCache>,
     /// Instance ids with a new snapshot; drained on the UI thread to refresh those rows only.
     frame_dirty: parking_lot::Mutex<HashSet<Uuid>>,
+    /// Unsubscribed in [`WidgetManager::shutdown`] so disk handles are not kept alive by the bus.
+    snapshot_refresh_sub: parking_lot::Mutex<Option<SubscriptionHandle>>,
 }
 
 /// Public handle to the widget manager.
@@ -110,6 +115,7 @@ impl WidgetManager {
                 snapshot_pump: Mutex::new(None),
                 snapshot_cache,
                 frame_dirty: parking_lot::Mutex::new(HashSet::new()),
+                snapshot_refresh_sub: parking_lot::Mutex::new(None),
             }),
         }
     }
@@ -140,6 +146,36 @@ impl WidgetManager {
             return Vec::new();
         }
         mem::take(&mut *g).into_iter().collect()
+    }
+
+    /// Push one widget's current [`Widget::snapshot`] into [`WidgetSnapshotCache`]
+    /// and mark its frame dirty when the rendered payload changed.
+    ///
+    /// Used by the UI after search input or [`crate::events::WidgetSnapshotUpdated`]
+    /// so workspace rebuilds read fresh data without waiting for the periodic pump.
+    ///
+    /// # Errors
+    ///
+    /// [`WidgetError::InstanceNotFound`] when `instance_id` is unknown.
+    pub async fn refresh_snapshot_cache(&self, instance_id: Uuid) -> Result<()> {
+        let inst = self.get_instance(instance_id)?;
+        let snapshot = {
+            let guard = inst.widget.lock().await;
+            guard.snapshot()
+        };
+        let Some(snap) = snapshot else {
+            return Ok(());
+        };
+        let id = inst.id;
+        let prev = self.inner.snapshot_cache.get(id);
+        let is_new = prev
+            .as_deref()
+            .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
+        self.inner.snapshot_cache.put(id, snap);
+        if is_new {
+            self.inner.frame_dirty.lock().insert(id);
+        }
+        Ok(())
     }
 
     /// Build a [`WidgetContext`] for the given instance.
@@ -248,10 +284,12 @@ impl WidgetManager {
             };
 
             let now = Utc::now();
+            let canonical_type = crate::registry::WidgetRegistry::canonical_type_id(&row.widget_type)
+                .to_string();
             let runtime = Arc::new(WidgetInstanceRuntime {
                 id: row.id,
                 workspace_id: row.workspace_id,
-                type_id: row.widget_type.clone(),
+                type_id: canonical_type,
                 position: RwLock::new(row.position),
                 size: RwLock::new(row.size),
                 lifecycle: RwLock::new(row.lifecycle),
@@ -314,6 +352,33 @@ impl WidgetManager {
             }
         });
         *self.inner.snapshot_pump.lock().await = Some(pump);
+
+        let inner_weak = Arc::downgrade(&self.inner);
+        let snap_sub = self.inner.bus.subscribe_async(
+            EventFilter::of_type(WidgetSnapshotUpdated::event_type()),
+            HandlerPriority::Normal,
+            move |env: EventEnvelope| {
+                let id = env
+                    .downcast_arc::<WidgetSnapshotUpdated>()
+                    .map(|e| e.instance_id);
+                let inner_weak = inner_weak.clone();
+                async move {
+                    let Some(id) = id else {
+                        return;
+                    };
+                    let Some(inner) = inner_weak.upgrade() else {
+                        return;
+                    };
+                    let wm = WidgetManager { inner };
+                    let _ = wm.refresh_snapshot_cache(id).await;
+                }
+            },
+        )?;
+        let mut slot = self.inner.snapshot_refresh_sub.lock();
+        if slot.is_some() {
+            warn!("widget manager: snapshot_refresh_sub replaced without shutdown");
+        }
+        *slot = Some(snap_sub);
         Ok(())
     }
 
@@ -324,6 +389,9 @@ impl WidgetManager {
     /// Propagates storage errors encountered while writing the final
     /// snapshot.
     pub async fn shutdown(&self) -> Result<()> {
+        if let Some(h) = self.inner.snapshot_refresh_sub.lock().take() {
+            drop(h);
+        }
         if let Some(h) = self.inner.sweeper.lock().await.take() {
             h.abort();
         }

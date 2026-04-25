@@ -160,7 +160,7 @@ export component WidgetFrame inherits Rectangle {
             item-clicked(link) => { root.rss-item-clicked(link); }
         }
 
-        if model.type-id == "universal-search" : SearchView {
+        if model.type-id == "universal-search" || model.type-id == "search" : SearchView {
             width: parent.width;
             height: parent.height;
             model: root.model.search;

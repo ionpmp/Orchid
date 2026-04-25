@@ -48,6 +48,8 @@ toml = "0.8"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+# Bridge Tokio futures into Slint's `spawn_local` executor (see Slint + Tokio docs).
+async-compat = "0.2"
 
 # Logging / tracing
 tracing = "0.1"

@@ -11,6 +11,7 @@ build = "build.rs"
 
 [dependencies]
 slint.workspace = true
+async-compat.workspace = true
 async-trait.workspace = true
 parking_lot.workspace = true
 secrecy.workspace = true

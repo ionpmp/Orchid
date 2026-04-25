@@ -20,6 +20,18 @@ impl std::fmt::Debug for WidgetRegistry {
 }
 
 impl WidgetRegistry {
+    /// Map a persisted or UI-facing type id to the canonical registry key.
+    ///
+    /// The dock and legacy databases may use `"search"` while the descriptor
+    /// is registered as [`crate::builtin::search::TYPE_ID`].
+    #[must_use]
+    pub fn canonical_type_id(type_id: &str) -> &str {
+        match type_id {
+            "search" => "universal-search",
+            other => other,
+        }
+    }
+
     /// Empty registry.
     #[must_use]
     pub fn new() -> Self {
@@ -55,10 +67,7 @@ impl WidgetRegistry {
     /// ([`crate::builtin::search::TYPE_ID`]).
     #[must_use]
     pub fn get(&self, type_id: &str) -> Option<WidgetDescriptor> {
-        let key = match type_id {
-            "search" => "universal-search",
-            other => other,
-        };
+        let key = Self::canonical_type_id(type_id);
         self.descriptors.get(key).map(|e| e.value().clone())
     }
 

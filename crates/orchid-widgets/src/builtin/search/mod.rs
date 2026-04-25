@@ -9,8 +9,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
@@ -19,6 +20,7 @@ use crate::widget::payloads::{SearchCandidateView, UniversalSearchPayload};
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
 use orchid_storage::{LifecycleState, WidgetSize};
+use tracing::warn;
 
 pub use aggregator::SearchAggregator;
 pub use sources::{ActionTarget, CommandsSource, FilesSource, SearchCandidate, SearchSource, SettingsSource};
@@ -32,8 +34,16 @@ static SEARCH_LIVE: LazyLock<DashMap<Uuid, Arc<Inner>>> = LazyLock::new(DashMap:
 /// No-op if the instance is not a live universal-search widget.
 pub fn universal_search_push_query(instance_id: Uuid, query: String) {
     if let Some(inner) = SEARCH_LIVE.get(&instance_id) {
+        let inner = inner.clone();
         *inner.query.write() = query;
+        inner.ensure_debouncer_running();
         inner.notify.notify_one();
+    } else {
+        warn!(
+            target: "orchid_widgets::search",
+            %instance_id,
+            "universal_search_push_query: instance not in SEARCH_LIVE (widget closed or not yet activated)"
+        );
     }
 }
 
@@ -66,61 +76,20 @@ struct Inner {
     aggregator: Option<Arc<SearchAggregator>>,
     bus: Arc<orchid_core::EventBus>,
     instance_id: Uuid,
+    /// Background debounce loop; restarted from [`universal_search_push_query`] if it was
+    /// stopped (e.g. after `on_sleep`) so typing in the UI still produces hits.
+    debouncer_task: Mutex<Option<JoinHandle<()>>>,
 }
 
-/// Universal search widget.
-pub struct UniversalSearchWidget {
-    inner: Arc<Inner>,
-    // Debouncer task handle. Aborted on close.
-    task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
-}
-
-impl std::fmt::Debug for UniversalSearchWidget {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UniversalSearchWidget")
-            .field("instance_id", &self.inner.instance_id)
-            .finish_non_exhaustive()
-    }
-}
-
-impl UniversalSearchWidget {
-    /// Construct a search widget with a pre-built aggregator.
-    ///
-    /// `aggregator` is optional: when `None` the widget renders the empty
-    /// state and reports `error = "no sources"` on activation. This keeps
-    /// the descriptor usable even before the UI layer wires up real
-    /// sources.
-    pub fn new(
-        instance_id: Uuid,
-        aggregator: Option<Arc<SearchAggregator>>,
-        bus: Arc<orchid_core::EventBus>,
-    ) -> Self {
-        let inner = Arc::new(Inner {
-            query: RwLock::new(String::new()),
-            candidates: RwLock::new(Vec::new()),
-            is_searching: RwLock::new(false),
-            error: RwLock::new(None),
-            notify: Notify::new(),
-            aggregator,
-            bus,
-            instance_id,
-        });
-        SEARCH_LIVE.insert(instance_id, inner.clone());
-        Self {
-            inner,
-            task: parking_lot::Mutex::new(None),
+impl Inner {
+    fn ensure_debouncer_running(self: &Arc<Self>) {
+        let mut slot = self.debouncer_task.lock();
+        if let Some(h) = slot.as_ref() {
+            if !h.is_finished() {
+                return;
+            }
         }
-    }
-
-    /// Update the query. Debounces for [`DEBOUNCE`] before running a real
-    /// search.
-    pub fn update_query(&self, query: String) {
-        *self.inner.query.write() = query;
-        self.inner.notify.notify_one();
-    }
-
-    fn start_debouncer(&self) {
-        let inner = self.inner.clone();
+        let inner = Arc::clone(self);
         let handle = tokio::spawn(async move {
             loop {
                 inner.notify.notified().await;
@@ -154,13 +123,70 @@ impl UniversalSearchWidget {
                 );
             }
         });
-        *self.task.lock() = Some(handle);
+        *slot = Some(handle);
     }
 
     fn stop_debouncer(&self) {
-        if let Some(h) = self.task.lock().take() {
+        if let Some(h) = self.debouncer_task.lock().take() {
             h.abort();
         }
+    }
+}
+
+/// Universal search widget.
+pub struct UniversalSearchWidget {
+    inner: Arc<Inner>,
+}
+
+impl std::fmt::Debug for UniversalSearchWidget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UniversalSearchWidget")
+            .field("instance_id", &self.inner.instance_id)
+            .finish_non_exhaustive()
+    }
+}
+
+impl UniversalSearchWidget {
+    /// Construct a search widget with a pre-built aggregator.
+    ///
+    /// `aggregator` is optional: when `None` the widget renders the empty
+    /// state and reports `error = "no sources"` on activation. This keeps
+    /// the descriptor usable even before the UI layer wires up real
+    /// sources.
+    pub fn new(
+        instance_id: Uuid,
+        aggregator: Option<Arc<SearchAggregator>>,
+        bus: Arc<orchid_core::EventBus>,
+    ) -> Self {
+        let inner = Arc::new(Inner {
+            query: RwLock::new(String::new()),
+            candidates: RwLock::new(Vec::new()),
+            is_searching: RwLock::new(false),
+            error: RwLock::new(None),
+            notify: Notify::new(),
+            aggregator,
+            bus,
+            instance_id,
+            debouncer_task: Mutex::new(None),
+        });
+        SEARCH_LIVE.insert(instance_id, inner.clone());
+        Self { inner }
+    }
+
+    /// Update the query. Debounces for [`DEBOUNCE`] before running a real
+    /// search.
+    pub fn update_query(&self, query: String) {
+        *self.inner.query.write() = query;
+        self.inner.ensure_debouncer_running();
+        self.inner.notify.notify_one();
+    }
+
+    fn start_debouncer(&self) {
+        self.inner.ensure_debouncer_running();
+    }
+
+    fn stop_debouncer(&self) {
+        self.inner.stop_debouncer();
     }
 
     /// Clone a candidate's action target for external dispatch.
@@ -306,5 +332,106 @@ fn base_descriptor(factory: WidgetFactory) -> WidgetDescriptor {
         default_lifecycle: LifecycleState::Active,
         allows_multiple_instances: false,
         factory,
+    }
+}
+
+#[cfg(test)]
+mod live_tests {
+    use std::time::Duration;
+
+    use super::*;
+    use async_trait::async_trait;
+    use parking_lot::RwLock;
+    use orchid_core::{EventBus, EventBusConfig};
+    use orchid_storage::StateStore;
+
+    use crate::Widget;
+    use crate::widget::snapshot::WidgetPayload;
+    use sources::{ActionTarget, SearchCandidate, SearchSource};
+
+    /// Deterministic source so the debouncer path can be asserted without Tantivy.
+    struct EchoSource;
+
+    #[async_trait]
+    impl SearchSource for EchoSource {
+        fn id(&self) -> &'static str {
+            "echo"
+        }
+        fn name_key(&self) -> &'static str {
+            "echo"
+        }
+        fn icon(&self) -> &'static str {
+            "x"
+        }
+        async fn search(&self, query: &str, _limit: usize) -> Vec<SearchCandidate> {
+            if query.trim().is_empty() {
+                return Vec::new();
+            }
+            vec![SearchCandidate {
+                id: format!("echo:{query}"),
+                source_id: "echo",
+                title: format!("hit:{query}"),
+                subtitle: None,
+                icon: "x",
+                score: 10,
+                action_hint: None,
+                action_target: ActionTarget::RunCommand("noop".into()),
+            }]
+        }
+    }
+
+    fn test_ctx(instance_id: Uuid, bus: Arc<orchid_core::EventBus>) -> WidgetContext {
+        WidgetContext {
+            bus,
+            storage: Arc::new(StateStore::open_in_memory("0.0-test").expect("in-memory store")),
+            config: Arc::new(RwLock::new(orchid_storage::OrchidConfig::default())),
+            instance_id,
+            workspace_id: Uuid::new_v4(),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn push_query_after_debouncer_stopped_still_populates_candidates() {
+        let bus = Arc::new(EventBus::new(EventBusConfig::default()));
+        let id = Uuid::new_v4();
+        let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+        let mut w = UniversalSearchWidget::new(id, Some(agg), bus.clone());
+        let ctx = test_ctx(id, bus);
+        w.on_activate(&ctx).await.expect("activate");
+        w.stop_debouncer();
+
+        universal_search_push_query(id, "hello".into());
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let snap = w.snapshot().expect("snapshot");
+        let p = match snap.payload {
+            WidgetPayload::UniversalSearch(p) => p,
+            _ => panic!("expected UniversalSearch payload"),
+        };
+        assert_eq!(p.query, "hello");
+        assert_eq!(p.candidates.len(), 1);
+        assert_eq!(p.candidates[0].title, "hit:hello");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn update_query_triggers_debounced_search() {
+        let bus = Arc::new(EventBus::new(EventBusConfig::default()));
+        let id = Uuid::new_v4();
+        let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+        let mut w = UniversalSearchWidget::new(id, Some(agg), bus.clone());
+        let ctx = test_ctx(id, bus);
+        w.on_activate(&ctx).await.expect("activate");
+
+        w.update_query("abc".into());
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let snap = w.snapshot().expect("snapshot");
+        let p = match snap.payload {
+            WidgetPayload::UniversalSearch(p) => p,
+            _ => panic!("expected UniversalSearch payload"),
+        };
+        assert_eq!(p.query, "abc");
+        assert_eq!(p.candidates.len(), 1);
+        assert_eq!(p.candidates[0].title, "hit:abc");
     }
 }

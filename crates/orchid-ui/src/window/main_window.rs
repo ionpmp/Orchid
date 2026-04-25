@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+use async_compat::Compat;
 use parking_lot::Mutex;
 use slint::Color;
 use slint::ComponentHandle;
@@ -1046,7 +1047,18 @@ impl MainWindowController {
         } else {
             self.search_selection.write().insert(instance_id, 0);
         }
-        self.schedule_rebuild();
+        // `refresh_snapshot_cache` awaits `tokio::sync::Mutex`. Slint's `spawn_local` cannot
+        // drive raw Tokio futures; `Compat` runs them on a Tokio pool and resumes on Slint.
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if wm.refresh_snapshot_cache(instance_id).await.is_err() {
+                return;
+            }
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
     }
 
     fn on_search_candidate_activated(self: &Arc<Self>, inst: &SharedString, cand: &SharedString) {
@@ -1055,9 +1067,9 @@ impl MainWindowController {
         };
         let candidate_id = cand.to_string();
         let this = Arc::clone(self);
-        let _ = slint::spawn_local(async move {
+        let _ = slint::spawn_local(Compat::new(async move {
             this.dispatch_search_action_target(instance_id, candidate_id).await;
-        });
+        }));
     }
 
     async fn dispatch_search_action_target(self: &Arc<Self>, instance_id: Uuid, candidate_id: String) {
@@ -1650,7 +1662,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "moon" => locale.tr("dock-widget-moon").into(),
         "system" => locale.tr("dock-widget-system").into(),
         "rss" => locale.tr("dock-widget-rss").into(),
-        "universal-search" => locale.tr("dock-widget-search").into(),
+        "universal-search" | "search" => locale.tr("dock-widget-search").into(),
         _ => locale.tr("widget-title-terminal").into(),
     }
 }
