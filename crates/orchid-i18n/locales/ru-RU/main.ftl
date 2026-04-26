@@ -232,6 +232,7 @@ dock-widget-search = Поиск
 dock-widget-media = Медиа
 dock-widget-password = Пароли
 dock-widget-viewer = Просмотрщик
+dock-widget-fm = Файлы
 
 viewer-no-file = Файл не открыт
 viewer-loading-path = Загрузка: { $path }
@@ -266,3 +267,5 @@ widget-close-tooltip = Закрыть виджет
 widget-close-confirm = Закрыть { $name }?
 action-confirm-yes = Да
 action-confirm-no = Нет
+
+fm-confirm-title = Подтверждение

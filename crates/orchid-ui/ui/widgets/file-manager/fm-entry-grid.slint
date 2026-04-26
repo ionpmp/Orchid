@@ -1,0 +1,78 @@
+import { Theme } from "../../theme_global.slint";
+import { FmEntry } from "../../workspace/defs.slint";
+
+export component FmEntryGrid inherits Rectangle {
+    in property <[FmEntry]> entries;
+    in property <bool> large;
+
+    callback entry-clicked(string, bool);
+    callback entry-double-clicked(string, bool);
+    callback entry-context(string, length, length);
+
+    property <length> tile-size: large ? 220px : 100px;
+    property <length> tile-height: large ? 240px : 120px;
+    property <length> tile-spacing: 8px;
+    property <int> columns: max(1, floor((root.width - tile-spacing) / (tile-size + tile-spacing)));
+
+    background: transparent;
+
+    Flickable {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        viewport-height: ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing;
+
+        for entry[i] in entries : Rectangle {
+            x: tile-spacing + (mod(i, columns) * (tile-size + tile-spacing));
+            y: tile-spacing + (floor(i / columns) * (tile-height + tile-spacing));
+            width: tile-size;
+            height: tile-height;
+            background: entry.is-selected
+                ? Theme.accent-brand
+                : (tile-ta.has-hover ? Theme.surface-raised : transparent);
+            border-radius: Theme.radius-md;
+
+            tile-ta := TouchArea {
+                clicked => { root.entry-clicked(entry.path, false); }
+                double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
+            }
+
+            VerticalLayout {
+                padding: 6px;
+                spacing: 4px;
+
+                Rectangle {
+                    height: tile-size - 32px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+
+                    Text {
+                        text: entry.is-dir ? "📁" : entry.is-encrypted ? "🔒" : "📄";
+                        color: Theme.accent-brand;
+                        font-size: large ? 64px : 36px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: entry.name;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    overflow: elide;
+                }
+            }
+
+            if entry.is-starred : Text {
+                x: parent.width - 20px;
+                y: 4px;
+                text: "★";
+                color: #eab308;
+                font-size: Theme.font-size-sm;
+            }
+        }
+    }
+}
+

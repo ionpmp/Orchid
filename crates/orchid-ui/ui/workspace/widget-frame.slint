@@ -9,6 +9,7 @@ import { SearchView } from "../widgets/search.slint";
 import { MediaView } from "../widgets/media.slint";
 import { PasswordView } from "../widgets/password.slint";
 import { ViewerView } from "../widgets/viewer/viewer.slint";
+import { FileManagerView } from "../widgets/file-manager/file-manager.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
@@ -60,6 +61,29 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
     callback viewer-archive-select(string, string);
+
+    callback fm-sidebar-clicked(string);
+    callback fm-toggle-dual-pane();
+    callback fm-pane-clicked(int);
+    callback fm-tab-clicked(int, string);
+    callback fm-tab-closed(int, string);
+    callback fm-tab-new(int);
+    callback fm-nav-back(int);
+    callback fm-nav-forward(int);
+    callback fm-nav-up(int);
+    callback fm-breadcrumb-clicked(int, string);
+    callback fm-view-mode-cycle(int);
+    callback fm-quick-filter-changed(int, string);
+    callback fm-entry-clicked(int, string, bool);
+    callback fm-entry-shift-clicked(int, string);
+    callback fm-entry-double-clicked(int, string, bool);
+    callback fm-entry-context(int, string, length, length);
+    callback fm-context-action(string, [string]);
+    callback fm-context-dismiss();
+    callback fm-confirm-yes();
+    callback fm-confirm-no();
+    callback fm-rename-commit(string, string);
+    callback fm-rename-cancel();
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -259,6 +283,35 @@ export component WidgetFrame inherits Rectangle {
                 archive-select(path) => { root.viewer-archive-select(root.model.instance-id, path); }
 
             }
+        }
+
+        if model.type-id == "file-manager" : FileManagerView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.file-manager;
+
+            sidebar-clicked(id) => { root.fm-sidebar-clicked(id); }
+            toggle-dual-pane => { root.fm-toggle-dual-pane(); }
+            pane-clicked(p) => { root.fm-pane-clicked(p); }
+            tab-clicked(p, id) => { root.fm-tab-clicked(p, id); }
+            tab-closed(p, id) => { root.fm-tab-closed(p, id); }
+            tab-new(p) => { root.fm-tab-new(p); }
+            nav-back(p) => { root.fm-nav-back(p); }
+            nav-forward(p) => { root.fm-nav-forward(p); }
+            nav-up(p) => { root.fm-nav-up(p); }
+            breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(p, path); }
+            view-mode-cycle(p) => { root.fm-view-mode-cycle(p); }
+            quick-filter-changed(p, q) => { root.fm-quick-filter-changed(p, q); }
+            entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(p, path, ctrl); }
+            entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(p, path); }
+            entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(p, path, is_dir); }
+            entry-context(p, path, x, y) => { root.fm-entry-context(p, path, x, y); }
+            context-action(id, paths) => { root.fm-context-action(id, paths); }
+            context-dismiss => { root.fm-context-dismiss(); }
+            confirm-yes => { root.fm-confirm-yes(); }
+            confirm-no => { root.fm-confirm-no(); }
+            rename-commit(old, new) => { root.fm-rename-commit(old, new); }
+            rename-cancel => { root.fm-rename-cancel(); }
         }
     }
 

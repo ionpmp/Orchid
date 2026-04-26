@@ -1,0 +1,138 @@
+import { Theme } from "../../theme_global.slint";
+import { FmPane as FmPaneModel } from "../../workspace/defs.slint";
+import { FmTabs } from "fm-tabs.slint";
+import { FmToolbar } from "fm-toolbar.slint";
+import { FmBreadcrumbs } from "fm-breadcrumbs.slint";
+import { FmEntryList } from "fm-entry-list.slint";
+import { FmEntryGrid } from "fm-entry-grid.slint";
+
+export component FmPane inherits Rectangle {
+    in property <FmPaneModel> pane;
+    in property <int> pane-index;
+    in property <bool> is-active;
+
+    callback tab-clicked(int, string);
+    callback tab-closed(int, string);
+    callback tab-new();
+    callback nav-back();
+    callback nav-forward();
+    callback nav-up();
+    callback breadcrumb-clicked(string);
+    callback view-mode-cycle();
+    callback quick-filter-changed(string);
+    callback entry-clicked(string, bool);
+    callback entry-shift-clicked(string);
+    callback entry-double-clicked(string, bool);
+    callback entry-context(string, length, length);
+    callback pane-focused();
+
+    background: Theme.surface-base;
+
+    pane-ta := TouchArea {
+        clicked => { root.pane-focused(); }
+    }
+
+    VerticalLayout {
+        spacing: 0;
+
+        FmTabs {
+            height: 32px;
+            tabs: pane.tabs;
+            active-tab: pane.active-tab;
+            tab-clicked(idx, id) => { root.tab-clicked(idx, id); }
+            tab-closed(idx, id) => { root.tab-closed(idx, id); }
+            tab-new => { root.tab-new(); }
+        }
+
+        if pane.tabs.length > pane.active-tab && pane.active-tab >= 0 : VerticalLayout {
+            spacing: 0;
+            vertical-stretch: 1;
+
+            FmToolbar {
+                height: 36px;
+                tab: pane.tabs[pane.active-tab];
+                back => { root.nav-back(); }
+                forward => { root.nav-forward(); }
+                up => { root.nav-up(); }
+                view-mode-cycle => { root.view-mode-cycle(); }
+                quick-filter-changed(q) => { root.quick-filter-changed(q); }
+            }
+
+            FmBreadcrumbs {
+                height: 28px;
+                breadcrumbs: pane.tabs[pane.active-tab].breadcrumbs;
+                clicked(p) => { root.breadcrumb-clicked(p); }
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+
+                if pane.tabs[pane.active-tab].is-loading : VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "⏳";
+                        color: Theme.accent-brand;
+                        font-size: 32px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                if !pane.tabs[pane.active-tab].is-loading
+                    && pane.tabs[pane.active-tab].error == ""
+                    && (pane.tabs[pane.active-tab].view-mode == 1 || pane.tabs[pane.active-tab].view-mode == 2) :
+                    FmEntryList {
+                        width: parent.width;
+                        height: parent.height;
+                        entries: pane.tabs[pane.active-tab].entries;
+                        details: pane.tabs[pane.active-tab].view-mode == 2;
+                        entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
+                        entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
+                        entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
+                        entry-context(p, x, y) => { root.entry-context(p, x, y); }
+                    }
+
+                if !pane.tabs[pane.active-tab].is-loading
+                    && pane.tabs[pane.active-tab].error == ""
+                    && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3) :
+                    FmEntryGrid {
+                        width: parent.width;
+                        height: parent.height;
+                        entries: pane.tabs[pane.active-tab].entries;
+                        large: pane.tabs[pane.active-tab].view-mode == 3;
+                        entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
+                        entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
+                        entry-context(p, x, y) => { root.entry-context(p, x, y); }
+                    }
+
+                if pane.tabs[pane.active-tab].error != "" : VerticalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    Text { text: "⚠"; color: #ef4444; font-size: 32px; horizontal-alignment: center; }
+                    Text {
+                        text: pane.tabs[pane.active-tab].error;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 24px;
+                background: Theme.surface-raised;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: pane.tabs[pane.active-tab].status-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+

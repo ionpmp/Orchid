@@ -1,0 +1,111 @@
+import { Theme } from "../../theme_global.slint";
+import { FmEntry } from "../../workspace/defs.slint";
+
+export component FmEntryList inherits Rectangle {
+    in property <[FmEntry]> entries;
+    in property <bool> details;
+
+    callback entry-clicked(string, bool);
+    callback entry-shift-clicked(string);
+    callback entry-double-clicked(string, bool);
+    callback entry-context(string, length, length);
+
+    background: transparent;
+
+    Flickable {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        viewport-height: list-stack.preferred-height;
+
+        list-stack := VerticalLayout {
+            spacing: 0;
+
+            for entry[i] in entries : Rectangle {
+                height: 28px;
+                background: entry.is-selected
+                    ? Theme.accent-brand
+                    : (row-ta.has-hover ? Theme.surface-raised : transparent);
+
+                row-ta := TouchArea {
+                    clicked => { root.entry-clicked(entry.path, false); }
+                    double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
+                }
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 8px;
+
+                    if entry.color-label != "" : Rectangle {
+                        width: 4px;
+                        height: 16px;
+                        y: (parent.height - self.height) / 2;
+                        background:
+                            entry.color-label == "red" ? #ef4444
+                            : entry.color-label == "orange" ? #f97316
+                            : entry.color-label == "yellow" ? #eab308
+                            : entry.color-label == "green" ? #22c55e
+                            : entry.color-label == "blue" ? #3b82f6
+                            : entry.color-label == "purple" ? #a855f7
+                            : Theme.accent-brand;
+                        border-radius: 2px;
+                    }
+
+                    Text {
+                        text: entry.is-dir ? "📁"
+                            : entry.is-encrypted ? "🔒"
+                            : entry.is-managed ? "🗃"
+                            : "📄";
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: entry.name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        horizontal-stretch: details ? 0 : 1;
+                        min-width: details ? 240px : 0px;
+                        wrap: no-wrap;
+                        overflow: elide;
+                    }
+
+                    if entry.is-starred : Text {
+                        text: "★";
+                        color: #eab308;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    if details : Text {
+                        text: entry.size-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        min-width: 100px;
+                    }
+
+                    if details : Text {
+                        text: entry.modified-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        min-width: 140px;
+                    }
+
+                    if details : Text {
+                        text: entry.type-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+    }
+}
+

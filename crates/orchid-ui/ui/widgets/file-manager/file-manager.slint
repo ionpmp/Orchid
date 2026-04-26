@@ -1,0 +1,171 @@
+import { Theme } from "../../theme_global.slint";
+import { FileManagerModel } from "../../workspace/defs.slint";
+import { FmSidebar } from "fm-sidebar.slint";
+import { FmPane } from "fm-pane.slint";
+import { FmContextMenu } from "fm-context-menu.slint";
+import { FmConfirmDialog } from "fm-confirm-dialog.slint";
+
+export component FileManagerView inherits Rectangle {
+    in property <FileManagerModel> model;
+
+    callback sidebar-clicked(string);
+    callback toggle-dual-pane();
+    callback pane-clicked(int);
+    callback tab-clicked(int, string);
+    callback tab-closed(int, string);
+    callback tab-new(int);
+    callback nav-back(int);
+    callback nav-forward(int);
+    callback nav-up(int);
+    callback breadcrumb-clicked(int, string);
+    callback view-mode-cycle(int);
+    callback quick-filter-changed(int, string);
+
+    callback entry-clicked(int, string, bool);
+    callback entry-shift-clicked(int, string);
+    callback entry-double-clicked(int, string, bool);
+    callback entry-context(int, string, length, length);
+
+    callback context-action(string, [string]);
+    callback context-dismiss();
+
+    callback confirm-yes();
+    callback confirm-no();
+
+    callback rename-commit(string, string);
+    callback rename-cancel();
+
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 0;
+
+        Rectangle {
+            width: 180px;
+            background: Theme.surface-base;
+            border-color: Theme.border-default;
+            // Slint doesn't support per-side borders; draw a divider.
+            Rectangle {
+                x: parent.width - 1px;
+                y: 0;
+                width: 1px;
+                height: parent.height;
+                background: Theme.border-default;
+            }
+
+            FmSidebar {
+                width: parent.width;
+                height: parent.height;
+                items: model.sidebar-items;
+                clicked(id) => { root.sidebar-clicked(id); }
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+
+            if !model.dual-pane : FmPane {
+                width: parent.width;
+                height: parent.height;
+                pane-index: 0;
+                pane: model.panes[0];
+                is-active: true;
+                tab-clicked(idx, id) => { root.tab-clicked(0, id); }
+                tab-closed(idx, id) => { root.tab-closed(0, id); }
+                tab-new => { root.tab-new(0); }
+                nav-back => { root.nav-back(0); }
+                nav-forward => { root.nav-forward(0); }
+                nav-up => { root.nav-up(0); }
+                breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
+                view-mode-cycle => { root.view-mode-cycle(0); }
+                quick-filter-changed(q) => { root.quick-filter-changed(0, q); }
+                entry-clicked(p, ctrl) => { root.entry-clicked(0, p, ctrl); }
+                entry-shift-clicked(p) => { root.entry-shift-clicked(0, p); }
+                entry-double-clicked(p, is_dir) => { root.entry-double-clicked(0, p, is_dir); }
+                entry-context(p, x, y) => { root.entry-context(0, p, x, y); }
+                pane-focused => { root.pane-clicked(0); }
+            }
+
+            if model.dual-pane : HorizontalLayout {
+                spacing: 1px;
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-color: model.active-pane == 0 ? Theme.accent-brand : transparent;
+                    border-width: 1px;
+                    border-radius: Theme.radius-md;
+
+                    FmPane {
+                        width: parent.width;
+                        height: parent.height;
+                        pane-index: 0;
+                        pane: model.panes[0];
+                        is-active: model.active-pane == 0;
+                        tab-clicked(idx, id) => { root.tab-clicked(0, id); }
+                        tab-closed(idx, id) => { root.tab-closed(0, id); }
+                        tab-new => { root.tab-new(0); }
+                        nav-back => { root.nav-back(0); }
+                        nav-forward => { root.nav-forward(0); }
+                        nav-up => { root.nav-up(0); }
+                        breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
+                        view-mode-cycle => { root.view-mode-cycle(0); }
+                        quick-filter-changed(q) => { root.quick-filter-changed(0, q); }
+                        entry-clicked(p, ctrl) => { root.entry-clicked(0, p, ctrl); }
+                        entry-shift-clicked(p) => { root.entry-shift-clicked(0, p); }
+                        entry-double-clicked(p, is_dir) => { root.entry-double-clicked(0, p, is_dir); }
+                        entry-context(p, x, y) => { root.entry-context(0, p, x, y); }
+                        pane-focused => { root.pane-clicked(0); }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-color: model.active-pane == 1 ? Theme.accent-brand : transparent;
+                    border-width: 1px;
+                    border-radius: Theme.radius-md;
+
+                    FmPane {
+                        width: parent.width;
+                        height: parent.height;
+                        pane-index: 1;
+                        pane: model.panes[1];
+                        is-active: model.active-pane == 1;
+                        tab-clicked(idx, id) => { root.tab-clicked(1, id); }
+                        tab-closed(idx, id) => { root.tab-closed(1, id); }
+                        tab-new => { root.tab-new(1); }
+                        nav-back => { root.nav-back(1); }
+                        nav-forward => { root.nav-forward(1); }
+                        nav-up => { root.nav-up(1); }
+                        breadcrumb-clicked(p) => { root.breadcrumb-clicked(1, p); }
+                        view-mode-cycle => { root.view-mode-cycle(1); }
+                        quick-filter-changed(q) => { root.quick-filter-changed(1, q); }
+                        entry-clicked(p, ctrl) => { root.entry-clicked(1, p, ctrl); }
+                        entry-shift-clicked(p) => { root.entry-shift-clicked(1, p); }
+                        entry-double-clicked(p, is_dir) => { root.entry-double-clicked(1, p, is_dir); }
+                        entry-context(p, x, y) => { root.entry-context(1, p, x, y); }
+                        pane-focused => { root.pane-clicked(1); }
+                    }
+                }
+            }
+        }
+    }
+
+    if model.context-menu.visible : FmContextMenu {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        menu: model.context-menu;
+        action-clicked(id) => { root.context-action(id, model.context-menu.target-paths); }
+        dismiss => { root.context-dismiss(); }
+    }
+
+    if model.confirm-dialog.visible : FmConfirmDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        dialog: model.confirm-dialog;
+        yes => { root.confirm-yes(); }
+        no => { root.confirm-no(); }
+    }
+}
+

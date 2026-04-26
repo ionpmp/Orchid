@@ -237,6 +237,7 @@ dock-widget-search = Search
 dock-widget-media = Media
 dock-widget-password = Passwords
 dock-widget-viewer = Viewer
+dock-widget-fm = Files
 
 viewer-no-file = No file open
 viewer-loading-path = Loading: { $path }
@@ -271,3 +272,5 @@ widget-close-tooltip = Close widget
 widget-close-confirm = Close { $name }?
 action-confirm-yes = Yes
 action-confirm-no = No
+
+fm-confirm-title = Confirm

@@ -242,6 +242,21 @@ impl OrchidApp {
             ))
             .map_err(|e| UiError::Slint(format!("register viewer: {e}")))?;
 
+        let tag_manager = Arc::new(orchid_fs::TagManager::new(storage.clone(), bus.clone()));
+        let thumbnails = Arc::new(
+            orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
+                .map_err(|e| UiError::Slint(format!("thumbnail service: {e}")))?,
+        );
+        let fm_deps = orchid_widgets::builtin::file_manager::FileManagerDeps {
+            registry: fs_registry.clone(),
+            clipboard: Arc::new(orchid_widgets::builtin::file_manager::FileClipboard::new()),
+            tag_manager,
+            thumbnails,
+        };
+        widget_registry
+            .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))
+            .map_err(|e| UiError::Slint(format!("register file manager: {e}")))?;
+
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,
             bus.clone(),

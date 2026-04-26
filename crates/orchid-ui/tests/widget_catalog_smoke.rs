@@ -36,6 +36,7 @@ async fn catalog_widgets_can_be_created() {
         "media",
         "password",
         "viewer",
+        "file-manager",
     ] {
         let req = orchid_widgets::CreateWidgetRequest {
             type_id: type_id.to_string(),
@@ -51,5 +52,5 @@ async fn catalog_widgets_can_be_created() {
             .unwrap_or_else(|e| panic!("failed to create {type_id}: {e}"));
     }
 
-    assert_eq!(app.widget_manager().list_instances().len(), 9);
+    assert_eq!(app.widget_manager().list_instances().len(), 10);
 }

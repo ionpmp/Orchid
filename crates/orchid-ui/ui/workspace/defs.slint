@@ -247,6 +247,109 @@ export struct ViewerModel {
     archive: ViewerArchiveModel,
 }
 
+export struct FmTagChip {
+    label: string,
+    color: color,
+}
+
+export struct FmEntry {
+    path: string,
+    name: string,
+    is-dir: bool,
+    size-text: string,
+    modified-text: string,
+    type-text: string,
+    icon: string,
+    has-thumbnail: bool,
+    thumbnail-key: string,
+    is-selected: bool,
+    is-hidden: bool,
+    is-encrypted: bool,
+    is-managed: bool,
+    is-starred: bool,
+    color-label: string,
+    tags: [FmTagChip],
+}
+
+export struct FmBreadcrumb {
+    path: string,
+    label: string,
+}
+
+export struct FmTab {
+    id: string,
+    path-display: string,
+    breadcrumbs: [FmBreadcrumb],
+    can-back: bool,
+    can-forward: bool,
+    view-mode: int,
+    entries: [FmEntry],
+    selection-count: int,
+    status-text: string,
+    quick-filter: string,
+    is-loading: bool,
+    error: string,
+}
+
+export struct FmPane {
+    tabs: [FmTab],
+    active-tab: int,
+}
+
+export struct FmSidebarItem {
+    id: string,
+    label: string,
+    icon: string,
+    indent: int,
+    is-section-header: bool,
+    is-active: bool,
+}
+
+export struct FmContextAction {
+    id: string,
+    label: string,
+    shortcut: string,
+    icon: string,
+    enabled: bool,
+    is-separator: bool,
+}
+
+export struct FmContextMenu {
+    visible: bool,
+    x: length,
+    y: length,
+    actions: [FmContextAction],
+    target-paths: [string],
+}
+
+export struct FmConfirmDialog {
+    visible: bool,
+    title: string,
+    message: string,
+    confirm-label: string,
+    cancel-label: string,
+    pending-action: string,
+    pending-paths: [string],
+}
+
+export struct FmRenameState {
+    active: bool,
+    path: string,
+    proposed-name: string,
+}
+
+export struct FileManagerModel {
+    panes: [FmPane],
+    active-pane: int,
+    dual-pane: bool,
+    clipboard-indicator: string,
+    sidebar-items: [FmSidebarItem],
+    context-menu: FmContextMenu,
+    confirm-dialog: FmConfirmDialog,
+    rename: FmRenameState,
+    show-hidden: bool,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -276,6 +379,7 @@ export struct WidgetFrameModel {
     media: MediaModel,
     password: PasswordModel,
     viewer: ViewerModel,
+    file-manager: FileManagerModel,
 }
 
 export struct DockWidgetType {

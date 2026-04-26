@@ -1,0 +1,59 @@
+import { Theme } from "../../theme_global.slint";
+import { FmSidebarItem } from "../../workspace/defs.slint";
+
+export component FmSidebar inherits Rectangle {
+    in property <[FmSidebarItem]> items;
+    callback clicked(string);
+
+    background: transparent;
+
+    Flickable {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        viewport-height: vlay.preferred-height;
+
+        vlay := VerticalLayout {
+            spacing: 1px;
+            padding: 4px;
+
+            for item[i] in items : Rectangle {
+                height: item.is-section-header ? 28px : 32px;
+                background: item.is-active
+                    ? Theme.accent-brand
+                    : (item-ta.has-hover && !item.is-section-header ? Theme.surface-raised : transparent);
+                border-radius: Theme.radius-md;
+
+                item-ta := TouchArea {
+                    enabled: !item.is-section-header;
+                    clicked => { root.clicked(item.id); }
+                }
+
+                HorizontalLayout {
+                    padding-left: 8px + (item.indent * 12px);
+                    padding-right: 8px;
+                    spacing: 8px;
+
+                    Text {
+                        text: item.icon;
+                        color: item.is-section-header ? Theme.text-tertiary : Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: item.label;
+                        color: item.is-section-header ? Theme.text-tertiary : Theme.text-primary;
+                        font-size: item.is-section-header ? Theme.font-size-sm : Theme.font-size-md;
+                        font-weight: item.is-section-header ? Theme.weight-semibold : Theme.weight-regular;
+                        vertical-alignment: center;
+                        wrap: no-wrap;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+    }
+}
+

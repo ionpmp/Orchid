@@ -49,6 +49,8 @@ use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
+    FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
@@ -107,6 +109,8 @@ pub struct MainWindowController {
     password_toasts: Arc<RwLock<HashMap<Uuid, (String, bool)>>>,
     /// One-shot autofocus request for password search input after dock creation.
     password_autofocus_pending: Arc<RwLock<HashMap<Uuid, bool>>>,
+    /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
+    fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
 }
 
 struct ResizeInteraction {
@@ -186,6 +190,7 @@ impl MainWindowController {
             search_autofocus_pending: Arc::new(Mutex::new(None)),
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
+            fm_overlays: Arc::new(RwLock::new(HashMap::new())),
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -846,6 +851,183 @@ impl MainWindowController {
                 }
             }
         });
+
+        self.window.on_fm_sidebar_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_sidebar_clicked(&id);
+                }
+            }
+        });
+        self.window.on_fm_toggle_dual_pane({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_toggle_dual_pane();
+                }
+            }
+        });
+        self.window.on_fm_pane_clicked({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_pane_clicked(pane);
+                }
+            }
+        });
+        self.window.on_fm_tab_clicked({
+            let t = t.clone();
+            move |pane, tab_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_tab_clicked(pane, &tab_id);
+                }
+            }
+        });
+        self.window.on_fm_tab_closed({
+            let t = t.clone();
+            move |pane, tab_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_tab_closed(pane, &tab_id);
+                }
+            }
+        });
+        self.window.on_fm_tab_new({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_tab_new(pane);
+                }
+            }
+        });
+        self.window.on_fm_nav_back({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_nav_back(pane);
+                }
+            }
+        });
+        self.window.on_fm_nav_forward({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_nav_forward(pane);
+                }
+            }
+        });
+        self.window.on_fm_nav_up({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_nav_up(pane);
+                }
+            }
+        });
+        self.window.on_fm_breadcrumb_clicked({
+            let t = t.clone();
+            move |pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_breadcrumb_clicked(pane, &path);
+                }
+            }
+        });
+        self.window.on_fm_view_mode_cycle({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_view_mode_cycle(pane);
+                }
+            }
+        });
+        self.window.on_fm_quick_filter_changed({
+            let t = t.clone();
+            move |pane, q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_quick_filter_changed(pane, &q);
+                }
+            }
+        });
+        self.window.on_fm_entry_clicked({
+            let t = t.clone();
+            move |pane, path, ctrl| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_clicked(pane, &path, ctrl);
+                }
+            }
+        });
+        self.window.on_fm_entry_shift_clicked({
+            let t = t.clone();
+            move |pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_shift_clicked(pane, &path);
+                }
+            }
+        });
+        self.window.on_fm_entry_double_clicked({
+            let t = t.clone();
+            move |pane, path, is_dir| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_double_clicked(pane, &path, is_dir);
+                }
+            }
+        });
+        self.window.on_fm_entry_context({
+            let t = t.clone();
+            move |pane, path, x, y| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_context(pane, &path, x, y);
+                }
+            }
+        });
+        self.window.on_fm_context_action({
+            let t = t.clone();
+            move |action_id, paths| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_context_action(&action_id, &paths);
+                }
+            }
+        });
+        self.window.on_fm_context_dismiss({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_context_dismiss();
+                }
+            }
+        });
+        self.window.on_fm_confirm_yes({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_confirm_yes();
+                }
+            }
+        });
+        self.window.on_fm_confirm_no({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_confirm_no();
+                }
+            }
+        });
+        self.window.on_fm_rename_commit({
+            let t = t.clone();
+            move |old_path, new_name| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_rename_commit(&old_path, &new_name);
+                }
+            }
+        });
+        self.window.on_fm_rename_cancel({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_rename_cancel();
+                }
+            }
+        });
         Ok(())
     }
 
@@ -938,7 +1120,7 @@ impl MainWindowController {
         if !matches!(
             type_id_str,
             "terminal" | "weather" | "moon" | "system" | "rss" | "search" | "media" | "password"
-                | "viewer"
+                | "viewer" | "file-manager"
         ) {
             warn!(type_id = type_id_str, "unknown widget type from dock");
             return;
@@ -1762,6 +1944,7 @@ impl MainWindowController {
             media_model,
             password_model,
             viewer_model,
+            file_manager_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
@@ -1805,6 +1988,7 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
+                        empty_file_manager_model(&self.locale),
                     )
                 }
                 WidgetPayload::Weather(w) => (
@@ -1824,6 +2008,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::Moon(m) => (
                     tstr,
@@ -1842,6 +2027,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
                     tstr,
@@ -1860,6 +2046,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::RssFeed(r) => (
                     tstr,
@@ -1878,6 +2065,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::UniversalSearch(s) => {
                     let selected = self
@@ -1911,6 +2099,7 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
+                        empty_file_manager_model(&self.locale),
                     )
                 }
                 WidgetPayload::MediaPlayer(m) => (
@@ -1930,6 +2119,7 @@ impl MainWindowController {
                     build_media_model(m),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::PasswordManager(p) => {
                     let toast = self.password_toasts.read().get(&pl.instance_id).cloned();
@@ -1959,6 +2149,7 @@ impl MainWindowController {
                         empty_media_model(),
                         build_password_model(p, toast, autofocus),
                         empty_viewer_model(&self.locale),
+                        empty_file_manager_model(&self.locale),
                     )
                 }
                 WidgetPayload::Viewer(v) => (
@@ -1978,7 +2169,41 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     build_viewer_model(v, &self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
+                WidgetPayload::FileManager(fm) => {
+                    let overlays = self
+                        .fm_overlays
+                        .read()
+                        .get(&pl.instance_id)
+                        .cloned()
+                        .unwrap_or_else(|| FileManagerOverlays {
+                            sidebar_items: build_default_sidebar_items(&self.locale),
+                            context_menu: empty_context_menu(),
+                            confirm_dialog: empty_confirm_dialog(),
+                            rename: empty_rename_state(),
+                            show_hidden: false,
+                        });
+                    (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(),
+                        empty_moon_model(),
+                        empty_system_model(),
+                        empty_rss_model(&self.locale),
+                        empty_search_model(&self.locale),
+                        empty_media_model(),
+                        empty_password_model(),
+                        empty_viewer_model(&self.locale),
+                        build_file_manager_model(fm, overlays),
+                    )
+                }
                 _ => (
                     tstr,
                     80,
@@ -1996,6 +2221,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
                 ),
             }
         } else {
@@ -2028,6 +2254,7 @@ impl MainWindowController {
             media: media_model,
             password: password_model,
             viewer: viewer_model,
+            file_manager: file_manager_model,
         }
     }
 
@@ -2146,6 +2373,520 @@ impl MainWindowController {
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         tracing::info!("Main window closed");
         Ok(())
+    }
+
+    fn find_active_fm(&self) -> Option<Uuid> {
+        let w = self.workspace_manager.active().ok()?;
+        for inst in self.widget_manager.instances_for_workspace(w.id) {
+            if inst.type_id == "file-manager" {
+                return Some(inst.id);
+            }
+        }
+        None
+    }
+
+    fn ensure_fm_overlays(&self, inst: Uuid) -> FileManagerOverlays {
+        self.fm_overlays
+            .read()
+            .get(&inst)
+            .cloned()
+            .unwrap_or_else(|| FileManagerOverlays {
+                sidebar_items: build_default_sidebar_items(&self.locale),
+                context_menu: empty_context_menu(),
+                confirm_dialog: empty_confirm_dialog(),
+                rename: empty_rename_state(),
+                show_hidden: false,
+            })
+    }
+
+    fn fm_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> Option<bool> {
+        let cache = self.widget_manager.snapshot_cache();
+        let snap = cache.get(inst)?;
+        let ws = snap.as_ref();
+        let WidgetPayload::FileManager(fm) = &ws.payload else {
+            return None;
+        };
+        let pane_idx = usize::from(pane.min(1));
+        let pane = fm.panes.get(pane_idx)?;
+        let tab = pane.tabs.get(pane.active_tab as usize)?;
+        tab.entries
+            .iter()
+            .find(|e| e.path == path)
+            .map(|e| e.is_dir)
+    }
+
+    async fn open_in_viewer_for_controller(
+        ctrl: std::sync::Weak<MainWindowController>,
+        path: orchid_fs::FsPath,
+    ) -> Result<Uuid> {
+        let Some(c) = ctrl.upgrade() else {
+            return Err(UiError::Slint("controller gone".into()));
+        };
+        let ws_id = c
+            .workspace_manager
+            .active()
+            .map_err(|e| UiError::Slint(format!("no active workspace: {e}")))?
+            .id;
+
+        for inst in c.widget_manager.instances_for_workspace(ws_id) {
+            if inst.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
+                orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
+                    .await
+                    .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+                if let Some(c2) = ctrl.upgrade() {
+                    c2.schedule_rebuild();
+                }
+                return Ok(inst.id);
+            }
+        }
+
+        let id = c
+            .widget_manager
+            .create(orchid_widgets::CreateWidgetRequest {
+                type_id: orchid_widgets::builtin::viewer::TYPE_ID.into(),
+                workspace_id: ws_id,
+                position: None,
+                size: None,
+                initial_lifecycle: None,
+                config_bytes: None,
+            })
+            .await
+            .map_err(|e| UiError::Slint(format!("viewer create: {e}")))?;
+
+        for _ in 0..50 {
+            if c.widget_manager.get_instance(id).is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+
+        orchid_widgets::builtin::viewer::open_path(id, path)
+            .await
+            .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+        if let Some(c2) = ctrl.upgrade() {
+            c2.schedule_rebuild();
+        }
+        Ok(id)
+    }
+
+    fn on_fm_sidebar_clicked(self: &Arc<Self>, id: &SharedString) {
+        let item_id = id.to_string();
+        if item_id.starts_with("section:") {
+            return;
+        }
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let pane = 0u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = orchid_widgets::builtin::file_manager::navigate_virtual(inst, pane, &item_id).await {
+                warn!(?e, "fm sidebar navigation");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_toggle_dual_pane(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::toggle_dual_pane(inst).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_pane_clicked(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::switch_active_pane(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_tab_clicked(self: &Arc<Self>, pane: i32, tab_id: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tab = tab_id.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::switch_to_tab(inst, p, &tab).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_tab_closed(self: &Arc<Self>, pane: i32, tab_id: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tab = tab_id.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::close_tab(inst, p, &tab).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_tab_new(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::new_tab(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_nav_back(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::navigate_back(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_nav_forward(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::navigate_forward(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_nav_up(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::navigate_up(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_breadcrumb_clicked(self: &Arc<Self>, pane: i32, path: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let raw = path.to_string();
+        let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_view_mode_cycle(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::cycle_view_mode(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_quick_filter_changed(self: &Arc<Self>, pane: i32, q: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let query = q.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::set_quick_filter(inst, p, query).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_entry_clicked(self: &Arc<Self>, pane: i32, path: &SharedString, ctrl: bool) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let ps = path.to_string();
+        let ps_for_select = ps.clone();
+        let mode = if ctrl {
+            orchid_widgets::builtin::file_manager::SelectionMode::Toggle
+        } else {
+            orchid_widgets::builtin::file_manager::SelectionMode::Single
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ =
+                orchid_widgets::builtin::file_manager::select_entry(inst, p, &ps_for_select, mode)
+                    .await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+
+        // Acceptance criterion: clicking a file opens it in the viewer.
+        if self.fm_is_dir(inst, p, &ps).unwrap_or(false) {
+            return;
+        }
+        let Ok(fs_path) = orchid_fs::FsPath::new(ps) else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = MainWindowController::open_in_viewer_for_controller(tw.clone(), fs_path).await;
+        }));
+    }
+
+    fn on_fm_entry_shift_clicked(self: &Arc<Self>, pane: i32, path: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let ps = path.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::select_entry(
+                inst,
+                p,
+                &ps,
+                orchid_widgets::builtin::file_manager::SelectionMode::Range,
+            )
+            .await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_entry_double_clicked(self: &Arc<Self>, pane: i32, path: &SharedString, is_dir: bool) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let raw = path.to_string();
+        let tw = Arc::downgrade(self);
+        if is_dir {
+            let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
+                return;
+            };
+            let _ = slint::spawn_local(Compat::new(async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            }));
+        } else {
+            let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
+                return;
+            };
+            let tw2 = Arc::downgrade(self);
+            let _ = slint::spawn_local(Compat::new(async move {
+                let _ = MainWindowController::open_in_viewer_for_controller(tw2, fs_path).await;
+            }));
+        }
+    }
+
+    fn on_fm_entry_context(self: &Arc<Self>, _pane: i32, path: &SharedString, x: f32, y: f32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let target = path.to_string();
+        let actions = orchid_widgets::builtin::file_manager::build_for_selection(
+            &[],
+            orchid_widgets::builtin::file_manager::ContextMenuInputs::default(),
+        );
+        let menu = build_context_menu(
+            &actions,
+            &[target],
+            x,
+            y,
+            &self.locale,
+        );
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.context_menu = menu;
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_context_action(self: &Arc<Self>, action_id: &SharedString, paths: &ModelRc<SharedString>) {
+        let id = action_id.to_string();
+        let path_vec: Vec<String> = (0..paths.row_count())
+            .filter_map(|i| paths.row_data(i))
+            .map(|s| s.to_string())
+            .collect();
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::run_action(inst, &id, path_vec.clone()).await {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, "fm action");
+                    return;
+                }
+            };
+
+            if let Some(c) = tw.upgrade() {
+                match outcome {
+                    orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
+                        let mut over = c.fm_overlays.write();
+                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        entry.context_menu = empty_context_menu();
+                        entry.confirm_dialog = empty_confirm_dialog();
+                        entry.rename = empty_rename_state();
+                        drop(over);
+                        c.schedule_rebuild();
+                    }
+                    orchid_widgets::builtin::file_manager::ActionOutcome::NeedsConfirmation { message, action_id, paths } => {
+                        let dlg = FmConfirmDialog {
+                            visible: true,
+                            title: c.locale.tr("fm-confirm-title").into(),
+                            message: message.into(),
+                            confirm_label: c.locale.tr("action-confirm-yes").into(),
+                            cancel_label: c.locale.tr("action-confirm-no").into(),
+                            pending_action: action_id.into(),
+                            pending_paths: ModelRc::new(VecModel::from(
+                                paths.into_iter().map(SharedString::from).collect::<Vec<_>>()
+                            )),
+                        };
+                        let mut over = c.fm_overlays.write();
+                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        entry.confirm_dialog = dlg;
+                        entry.context_menu = empty_context_menu();
+                        drop(over);
+                        c.schedule_rebuild();
+                    }
+                    orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename { path, current_name } => {
+                        let mut over = c.fm_overlays.write();
+                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        entry.rename = FmRenameState {
+                            active: true,
+                            path: path.into(),
+                            proposed_name: current_name.into(),
+                        };
+                        entry.context_menu = empty_context_menu();
+                        drop(over);
+                        c.schedule_rebuild();
+                    }
+                    orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
+                        // Deferred: requires app handle; handled later in wiring step.
+                        warn!(path = %path, "open in viewer requested (not wired yet)");
+                    }
+                }
+            }
+        }));
+    }
+
+    fn on_fm_context_dismiss(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.context_menu = empty_context_menu();
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_confirm_yes(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let overlay = self.fm_overlays.read().get(&inst).cloned();
+        let Some(over) = overlay else { return };
+        let action = over.confirm_dialog.pending_action.to_string();
+        let paths = &over.confirm_dialog.pending_paths;
+        self.on_fm_context_action(&action.into(), paths);
+    }
+
+    fn on_fm_confirm_no(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.confirm_dialog = empty_confirm_dialog();
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_rename_commit(self: &Arc<Self>, old_path: &SharedString, new_name: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let old = old_path.to_string();
+        let newn = new_name.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::rename(inst, &old, &newn).await;
+            if let Some(c) = tw.upgrade() {
+                let mut over = c.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                entry.rename = empty_rename_state();
+                drop(over);
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_rename_cancel(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.rename = empty_rename_state();
+        drop(over);
+        self.schedule_rebuild();
     }
 }
 
@@ -2326,6 +3067,11 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-viewer").into(),
             icon: "viewer".into(),
         },
+        DockWidgetType {
+            type_id: "file-manager".into(),
+            label: locale.tr("dock-widget-fm").into(),
+            icon: "fm".into(),
+        },
     ]
 }
 
@@ -2339,6 +3085,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "media-player" | "media" => locale.tr("dock-widget-media").into(),
         "password-manager" | "password" => locale.tr("dock-widget-password").into(),
         "viewer" => locale.tr("dock-widget-viewer").into(),
+        "file-manager" => locale.tr("dock-widget-fm").into(),
         _ => locale.tr("widget-title-terminal").into(),
     }
 }
@@ -2364,6 +3111,7 @@ fn default_frame_data_extended(
     MediaModel,
     PasswordModel,
     ViewerModel,
+    FileManagerModel,
 ) {
     (
         fallback_widget_title(locale, type_id),
@@ -2382,6 +3130,7 @@ fn default_frame_data_extended(
         empty_media_model(),
         empty_password_model(),
         empty_viewer_model(locale),
+        empty_file_manager_model(locale),
     )
 }
 
@@ -2521,6 +3270,275 @@ fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         pdf: empty_viewer_pdf_model(locale),
         text: empty_viewer_text_model(),
         archive: empty_viewer_archive_model(locale),
+    }
+}
+
+#[derive(Clone)]
+struct FileManagerOverlays {
+    sidebar_items: ModelRc<FmSidebarItem>,
+    context_menu: FmContextMenu,
+    confirm_dialog: FmConfirmDialog,
+    rename: FmRenameState,
+    show_hidden: bool,
+}
+
+fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
+    FileManagerModel {
+        panes: ModelRc::new(VecModel::default()),
+        active_pane: 0,
+        dual_pane: false,
+        clipboard_indicator: SharedString::new(),
+        sidebar_items: build_default_sidebar_items(locale),
+        context_menu: empty_context_menu(),
+        confirm_dialog: empty_confirm_dialog(),
+        rename: empty_rename_state(),
+        show_hidden: false,
+    }
+}
+
+fn empty_context_menu() -> FmContextMenu {
+    FmContextMenu {
+        visible: false,
+        x: 0.0,
+        y: 0.0,
+        actions: ModelRc::new(VecModel::default()),
+        target_paths: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn empty_confirm_dialog() -> FmConfirmDialog {
+    FmConfirmDialog {
+        visible: false,
+        title: SharedString::new(),
+        message: SharedString::new(),
+        confirm_label: SharedString::new(),
+        cancel_label: SharedString::new(),
+        pending_action: SharedString::new(),
+        pending_paths: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn empty_rename_state() -> FmRenameState {
+    FmRenameState {
+        active: false,
+        path: SharedString::new(),
+        proposed_name: SharedString::new(),
+    }
+}
+
+fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem> {
+    let items = vec![
+        FmSidebarItem {
+            id: "section:favorites".into(),
+            label: locale.tr("fm-sidebar-favorites").into(),
+            icon: "★".into(),
+            indent: 0,
+            is_section_header: true,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "fav:starred".into(),
+            label: locale.tr("fm-virtual-starred").into(),
+            icon: "★".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "fav:recent".into(),
+            label: locale.tr("fm-virtual-recent").into(),
+            icon: "🕐".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "section:categories".into(),
+            label: locale.tr("fm-sidebar-categories").into(),
+            icon: "▾".into(),
+            indent: 0,
+            is_section_header: true,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "cat:images".into(),
+            label: locale.tr("fm-category-images").into(),
+            icon: "🖼".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "cat:documents".into(),
+            label: locale.tr("fm-category-documents").into(),
+            icon: "📄".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "cat:video".into(),
+            label: locale.tr("fm-category-video").into(),
+            icon: "🎬".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "cat:audio".into(),
+            label: locale.tr("fm-category-audio").into(),
+            icon: "🎵".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+        FmSidebarItem {
+            id: "cat:archives".into(),
+            label: locale.tr("fm-category-archives").into(),
+            icon: "📦".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: false,
+        },
+    ];
+    ModelRc::new(VecModel::from(items))
+}
+
+fn build_file_manager_model(
+    p: &orchid_widgets::FileManagerPayload,
+    overlays: FileManagerOverlays,
+) -> FileManagerModel {
+    let panes: Vec<FmPane> = p
+        .panes
+        .iter()
+        .map(|pp| {
+            let tabs: Vec<FmTab> = pp
+                .tabs
+                .iter()
+                .map(|t| {
+                    let entries: Vec<FmEntry> = t
+                        .entries
+                        .iter()
+                        .map(|e| {
+                            let tags: Vec<FmTagChip> = e
+                                .tags
+                                .iter()
+                                .map(|tag| FmTagChip {
+                                    label: tag.clone().into(),
+                                    color: slint::Color::from_argb_u8(255, 0x4d, 0x82, 0xff),
+                                })
+                                .collect();
+                            FmEntry {
+                                path: e.path.clone().into(),
+                                name: e.name.clone().into(),
+                                is_dir: e.is_dir,
+                                size_text: e.size_text.clone().into(),
+                                modified_text: e.modified_text.clone().into(),
+                                type_text: e.type_text.clone().into(),
+                                icon: e.icon.clone().into(),
+                                has_thumbnail: e.has_thumbnail,
+                                thumbnail_key: e.thumbnail_key.clone().unwrap_or_default().into(),
+                                is_selected: e.is_selected,
+                                is_hidden: e.is_hidden,
+                                is_encrypted: e.is_encrypted,
+                                is_managed: e.is_managed,
+                                is_starred: e.is_starred,
+                                color_label: e.color_label.clone().unwrap_or_default().into(),
+                                tags: ModelRc::new(VecModel::from(tags)),
+                            }
+                        })
+                        .collect();
+
+                    let breadcrumbs: Vec<FmBreadcrumb> = t
+                        .breadcrumbs
+                        .iter()
+                        .map(|(bp, bl)| FmBreadcrumb {
+                            path: bp.clone().into(),
+                            label: bl.clone().into(),
+                        })
+                        .collect();
+
+                    FmTab {
+                        id: t.tab_id.clone().into(),
+                        path_display: t.path_display.clone().into(),
+                        breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
+                        can_back: t.can_go_back,
+                        can_forward: t.can_go_forward,
+                        view_mode: view_mode_to_int(t.view_mode),
+                        entries: ModelRc::new(VecModel::from(entries)),
+                        selection_count: t.selection_count as i32,
+                        status_text: t.status_text.clone().into(),
+                        quick_filter: t.quick_filter.clone().into(),
+                        is_loading: t.is_loading,
+                        error: t.error.clone().unwrap_or_default().into(),
+                    }
+                })
+                .collect();
+            FmPane {
+                tabs: ModelRc::new(VecModel::from(tabs)),
+                active_tab: pp.active_tab as i32,
+            }
+        })
+        .collect();
+
+    FileManagerModel {
+        panes: ModelRc::new(VecModel::from(panes)),
+        active_pane: i32::from(p.active_pane),
+        dual_pane: p.dual_pane,
+        clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
+        sidebar_items: overlays.sidebar_items,
+        context_menu: overlays.context_menu,
+        confirm_dialog: overlays.confirm_dialog,
+        rename: overlays.rename,
+        show_hidden: overlays.show_hidden,
+    }
+}
+
+fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
+    use orchid_widgets::FmViewMode::*;
+    match vm {
+        Icons => 0,
+        List => 1,
+        Details => 2,
+        Gallery => 3,
+    }
+}
+
+fn build_context_menu(
+    actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
+    target_paths: &[String],
+    x: f32,
+    y: f32,
+    _locale: &LocaleManager,
+) -> FmContextMenu {
+    let mut actions_vec: Vec<FmContextAction> = Vec::new();
+    for a in actions {
+        actions_vec.push(FmContextAction {
+            id: a.id.clone().into(),
+            label: a.label_key.clone().into(),
+            shortcut: SharedString::new(),
+            icon: a.icon.into(),
+            enabled: a.enabled,
+            is_separator: false,
+        });
+        if a.separator_after {
+            actions_vec.push(FmContextAction {
+                id: SharedString::new(),
+                label: SharedString::new(),
+                shortcut: SharedString::new(),
+                icon: SharedString::new(),
+                enabled: false,
+                is_separator: true,
+            });
+        }
+    }
+    let paths_vec: Vec<SharedString> = target_paths.iter().cloned().map(Into::into).collect();
+    FmContextMenu {
+        visible: true,
+        x,
+        y,
+        actions: ModelRc::new(VecModel::from(actions_vec)),
+        target_paths: ModelRc::new(VecModel::from(paths_vec)),
     }
 }
 

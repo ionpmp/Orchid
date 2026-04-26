@@ -1,0 +1,125 @@
+import { Theme } from "../../theme_global.slint";
+import { FmTab } from "../../workspace/defs.slint";
+
+export component FmToolbar inherits Rectangle {
+    in property <FmTab> tab;
+
+    callback back();
+    callback forward();
+    callback up();
+    callback view-mode-cycle();
+    callback quick-filter-changed(string);
+
+    background: Theme.surface-raised;
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 4px;
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: back-ta.has-hover && tab.can-back ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+            opacity: tab.can-back ? 1.0 : 0.4;
+
+            back-ta := TouchArea {
+                enabled: tab.can-back;
+                clicked => { root.back(); }
+            }
+            Text { text: "←"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: fwd-ta.has-hover && tab.can-forward ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+            opacity: tab.can-forward ? 1.0 : 0.4;
+
+            fwd-ta := TouchArea {
+                enabled: tab.can-forward;
+                clicked => { root.forward(); }
+            }
+            Text { text: "→"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: up-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            up-ta := TouchArea {
+                clicked => { root.up(); }
+            }
+            Text { text: "↑"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Rectangle { width: 8px; }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: vm-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            vm-ta := TouchArea {
+                clicked => { root.view-mode-cycle(); }
+            }
+            Text {
+                text: tab.view-mode == 0 ? "▦"
+                    : tab.view-mode == 1 ? "≡"
+                    : tab.view-mode == 2 ? "☰"
+                    : "▢";
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle { width: 8px; }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: filter-fs.has-focus ? Theme.accent-brand : Theme.border-default;
+
+            filter-fs := FocusScope {
+                width: parent.width;
+                height: parent.height;
+                TouchArea { clicked => { filter-fs.focus(); } }
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+
+                    Text {
+                        text: "🔍";
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    TextInput {
+                        text: tab.quick-filter;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        single-line: true;
+                        horizontal-stretch: 1;
+                        edited => { root.quick-filter-changed(self.text); }
+                    }
+                }
+            }
+        }
+    }
+}
+

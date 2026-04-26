@@ -97,6 +97,29 @@ export component MainWindow inherits Window {
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
     callback viewer-archive-select(string, string);
+
+    callback fm-sidebar-clicked(string);
+    callback fm-toggle-dual-pane();
+    callback fm-pane-clicked(int);
+    callback fm-tab-clicked(int, string);
+    callback fm-tab-closed(int, string);
+    callback fm-tab-new(int);
+    callback fm-nav-back(int);
+    callback fm-nav-forward(int);
+    callback fm-nav-up(int);
+    callback fm-breadcrumb-clicked(int, string);
+    callback fm-view-mode-cycle(int);
+    callback fm-quick-filter-changed(int, string);
+    callback fm-entry-clicked(int, string, bool);
+    callback fm-entry-shift-clicked(int, string);
+    callback fm-entry-double-clicked(int, string, bool);
+    callback fm-entry-context(int, string, length, length);
+    callback fm-context-action(string, [string]);
+    callback fm-context-dismiss();
+    callback fm-confirm-yes();
+    callback fm-confirm-no();
+    callback fm-rename-commit(string, string);
+    callback fm-rename-cancel();
     callback ui-tick();
 
     VerticalLayout {
@@ -200,6 +223,29 @@ export component MainWindow inherits Window {
             viewer-archive-navigate-into(id, path) => { root.viewer-archive-navigate-into(id, path); }
             viewer-archive-navigate-up(id) => { root.viewer-archive-navigate-up(id); }
             viewer-archive-select(id, path) => { root.viewer-archive-select(id, path); }
+
+            fm-sidebar-clicked(id) => { root.fm-sidebar-clicked(id); }
+            fm-toggle-dual-pane => { root.fm-toggle-dual-pane(); }
+            fm-pane-clicked(p) => { root.fm-pane-clicked(p); }
+            fm-tab-clicked(p, id) => { root.fm-tab-clicked(p, id); }
+            fm-tab-closed(p, id) => { root.fm-tab-closed(p, id); }
+            fm-tab-new(p) => { root.fm-tab-new(p); }
+            fm-nav-back(p) => { root.fm-nav-back(p); }
+            fm-nav-forward(p) => { root.fm-nav-forward(p); }
+            fm-nav-up(p) => { root.fm-nav-up(p); }
+            fm-breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(p, path); }
+            fm-view-mode-cycle(p) => { root.fm-view-mode-cycle(p); }
+            fm-quick-filter-changed(p, q) => { root.fm-quick-filter-changed(p, q); }
+            fm-entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(p, path, ctrl); }
+            fm-entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(p, path); }
+            fm-entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(p, path, is_dir); }
+            fm-entry-context(p, path, x, y) => { root.fm-entry-context(p, path, x, y); }
+            fm-context-action(id, paths) => { root.fm-context-action(id, paths); }
+            fm-context-dismiss => { root.fm-context-dismiss(); }
+            fm-confirm-yes => { root.fm-confirm-yes(); }
+            fm-confirm-no => { root.fm-confirm-no(); }
+            fm-rename-commit(old, new) => { root.fm-rename-commit(old, new); }
+            fm-rename-cancel => { root.fm-rename-cancel(); }
         }
     }
 }

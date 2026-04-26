@@ -1,0 +1,80 @@
+import { Theme } from "../../theme_global.slint";
+import { FmContextMenu } from "../../workspace/defs.slint";
+
+export component FmContextMenu inherits Rectangle {
+    in property <FmContextMenu> menu;
+    callback action-clicked(string);
+    callback dismiss();
+
+    background: transparent;
+
+    dismiss-ta := TouchArea {
+        clicked => { root.dismiss(); }
+    }
+
+    Rectangle {
+        x: menu.x;
+        y: menu.y;
+        width: 240px;
+        height: lay.preferred-height + 8px;
+        background: Theme.surface-raised;
+        border-color: Theme.border-default;
+        border-width: 1px;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: 12px;
+        drop-shadow-color: #00000060;
+
+        lay := VerticalLayout {
+            padding: 4px;
+            spacing: 1px;
+
+            for action[i] in menu.actions : Rectangle {
+                // Always define `act-ta` so hover checks are valid.
+                act-ta := TouchArea {
+                    enabled: action.enabled && !action.is-separator;
+                    clicked => { root.action-clicked(action.id); }
+                }
+
+                height: action.is-separator ? 5px : 28px;
+                background: action.is-separator ? transparent
+                    : (act-ta.has-hover && action.enabled ? Theme.accent-brand : transparent);
+                border-radius: Theme.radius-md;
+                opacity: action.enabled ? 1.0 : 0.4;
+
+                if action.is-separator : Rectangle {
+                    y: 2px;
+                    height: 1px;
+                    width: parent.width;
+                    background: Theme.border-default;
+                }
+
+                if !action.is-separator : HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 8px;
+
+                    Text {
+                        text: action.icon;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: action.label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    if action.shortcut != "" : Text {
+                        text: action.shortcut;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
