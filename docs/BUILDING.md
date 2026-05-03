@@ -22,8 +22,8 @@ These will be listed as dependencies are added.
 ## Cloning
 
 ```bash
-git clone https://github.com/ionpmp/Orchid.git
-cd Orchid
+git clone https://github.com/PLACEHOLDER_ORG/orchid.git
+cd orchid
 ```
 
 ## Building

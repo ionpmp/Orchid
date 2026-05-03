@@ -14,7 +14,7 @@ During the MVP/pre-alpha phase, only the latest release is supported.
 **Do not open a public issue for security problems.**
 
 Send a private vulnerability report through GitHub Security Advisories:
-https://github.com/ionpmp/Orchid/security/advisories/new
+https://github.com/PLACEHOLDER_ORG/orchid/security/advisories/new
 
 Please include:
 - Description of the vulnerability

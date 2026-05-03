@@ -4,7 +4,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
-[![Status: Pre-Alpha](https://img.shields.io/badge/status-pre--alpha-red.svg)](https://github.com/ionpmp/Orchid/blob/main/docs/ROADMAP.md)
+[![Status: Pre-Alpha](https://img.shields.io/badge/status-pre--alpha-red.svg)](https://github.com/PLACEHOLDER_ORG/orchid/blob/main/docs/ROADMAP.md)
 
 **Orchid** is an alternative user environment for Windows that unifies the graphical interface and command line into a single workspace. It is designed primarily for touch devices (Surface, 2-in-1 laptops, tablets) but is equally comfortable with mouse, keyboard, and pen input.
 
@@ -59,8 +59,8 @@ Every gesture performed with a finger has a textual representation as a command.
 
 ```bash
 # Requires Rust 1.82+
-git clone https://github.com/ionpmp/Orchid.git
-cd Orchid
+git clone https://github.com/PLACEHOLDER_ORG/orchid.git
+cd orchid
 cargo build --release
 ```
 
@@ -83,8 +83,8 @@ Orchid is distributed under the [GNU Affero General Public License v3.0](LICENSE
 
 ## Community
 
-- **[Issues](https://github.com/ionpmp/Orchid/issues)** — bugs and feature requests (use the issue templates when filing)
-- **[Discussions](https://github.com/ionpmp/Orchid/discussions)** — ideas and questions
+- **[Issues](https://github.com/PLACEHOLDER_ORG/orchid/issues)** — bugs and feature requests (use the issue templates when filing)
+- **[Discussions](https://github.com/PLACEHOLDER_ORG/orchid/discussions)** — ideas and questions
 
 ---
 
