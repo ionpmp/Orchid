@@ -15,7 +15,6 @@ use std::sync::LazyLock;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use tokio::sync::Mutex;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -112,7 +111,7 @@ struct FileManagerInner {
     instance_id: Uuid,
     deps: FileManagerDeps,
     navigator: Arc<Navigator>,
-    state: Mutex<FileManagerState>,
+    state: parking_lot::Mutex<FileManagerState>,
     config: RwLock<FileManagerConfig>,
     /// Entries per tab id. Keeps dual-pane tabs independent.
     entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
@@ -143,7 +142,7 @@ impl FileManagerWidget {
                 instance_id,
                 deps,
                 navigator,
-                state: Mutex::new(state),
+                state: parking_lot::Mutex::new(state),
                 config: RwLock::new(config),
                 entries_by_tab: RwLock::new(std::collections::HashMap::new()),
                 starred: RwLock::new(std::collections::HashSet::new()),
@@ -158,7 +157,7 @@ impl FileManagerWidget {
     pub async fn refresh(&self) {
         let show_hidden = self.inner.config.read().show_hidden;
         let (left, right) = {
-            let state = self.inner.state.lock().await.clone();
+            let state = self.inner.state.lock().clone();
             let left = state.left_pane.active_tab().clone();
             let right = state
                 .right_pane
@@ -177,7 +176,7 @@ impl FileManagerWidget {
     /// Navigate the active pane's tab to `path`.
     pub async fn navigate(&self, path: orchid_fs::FsPath) {
         {
-            let mut state = self.inner.state.lock().await;
+            let mut state = self.inner.state.lock();
             state.active_tab_mut().navigate_to(path);
         }
         self.refresh().await
@@ -186,7 +185,7 @@ impl FileManagerWidget {
     /// Back one step in history.
     pub async fn go_back(&self) {
         let changed = {
-            let mut state = self.inner.state.lock().await;
+            let mut state = self.inner.state.lock();
             state.active_tab_mut().back()
         };
         if changed {
@@ -197,7 +196,7 @@ impl FileManagerWidget {
     /// Forward one step in history.
     pub async fn go_forward(&self) {
         let changed = {
-            let mut state = self.inner.state.lock().await;
+            let mut state = self.inner.state.lock();
             state.active_tab_mut().forward()
         };
         if changed {
@@ -213,7 +212,7 @@ impl FileManagerWidget {
             // state is async; keep a best-effort try_lock by spawning.
             let inner = Arc::clone(&self.inner);
             tokio::spawn(async move {
-                let mut state = inner.state.lock().await;
+                let mut state = inner.state.lock();
                 state.active_tab_mut().view_mode = mode;
                 inner.publish_refresh();
             });
@@ -258,7 +257,7 @@ impl Widget for FileManagerWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let config = self.inner.config.read().clone();
-        let state = self.inner.state.blocking_lock().clone();
+        let state = self.inner.state.lock().clone();
         let entries_map = self.inner.entries_by_tab.read().clone();
         let tab = state.active_tab();
         let tab_entries = entries_map.get(&tab.id).cloned().unwrap_or_default();
@@ -343,7 +342,7 @@ impl FileManagerInner {
     async fn refresh_all_tabs(&self) {
         let show_hidden = self.config.read().show_hidden;
         let (left, right) = {
-            let state = self.state.lock().await.clone();
+            let state = self.state.lock().clone();
             let left = state.left_pane.active_tab().clone();
             let right = state
                 .right_pane
@@ -360,7 +359,7 @@ impl FileManagerInner {
 
     async fn paste_clipboard(&self) -> WidgetResult<()> {
         let dest_dir = {
-            let state = self.state.lock().await;
+            let state = self.state.lock();
             state.active_tab().path.clone()
         };
         if is_virtual(&dest_dir) {
@@ -674,7 +673,7 @@ pub struct RunActionOpts {
 pub async fn navigate(instance_id: Uuid, pane: u8, path: orchid_fs::FsPath) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut().navigate_to(path);
@@ -685,7 +684,7 @@ pub async fn navigate(instance_id: Uuid, pane: u8, path: orchid_fs::FsPath) -> W
             state.left_pane.active_tab_mut().navigate_to(path);
         }
     }
-    inner.publish_refresh();
+    inner.refresh_all_tabs().await;
     Ok(())
 }
 
@@ -693,7 +692,7 @@ pub async fn navigate(instance_id: Uuid, pane: u8, path: orchid_fs::FsPath) -> W
 pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     let changed = {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut().back()
@@ -705,7 +704,7 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         }
     };
     if changed {
-        inner.publish_refresh();
+        inner.refresh_all_tabs().await;
     }
     Ok(())
 }
@@ -714,7 +713,7 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     let changed = {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut().forward()
@@ -726,7 +725,7 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         }
     };
     if changed {
-        inner.publish_refresh();
+        inner.refresh_all_tabs().await;
     }
     Ok(())
 }
@@ -735,7 +734,7 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 pub async fn navigate_up(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     let parent = {
-        let state = inner.state.lock().await;
+        let state = inner.state.lock();
         let tab = if pane == 1 {
             state
                 .right_pane
@@ -760,7 +759,7 @@ pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetR
         WidgetError::InvalidStateForOperation("invalid tab id".into())
     })?;
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 if let Some(idx) = r.tabs.iter().position(|t| t.id == want) {
@@ -784,7 +783,7 @@ pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResul
         WidgetError::InvalidStateForOperation("invalid tab id".into())
     })?;
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         let target = if pane == 1 {
             state.right_pane.as_mut()
         } else {
@@ -818,7 +817,7 @@ pub async fn new_tab(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
         let cfg = inner.config.read().clone();
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 let path = r.active_tab().path.clone();
@@ -849,7 +848,7 @@ pub async fn new_tab(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 pub async fn switch_active_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         state.active_pane = if pane == 1 {
             ActivePane::Right
         } else {
@@ -870,7 +869,7 @@ pub async fn toggle_dual_pane(instance_id: Uuid) -> WidgetResult<()> {
     };
     {
         let cfg = inner.config.read().clone();
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if enabled && state.right_pane.is_none() {
             let path = state.left_pane.active_tab().path.clone();
             state.right_pane = Some(PaneState::with_single_tab(TabState::new(
@@ -892,7 +891,7 @@ pub async fn toggle_dual_pane(instance_id: Uuid) -> WidgetResult<()> {
 pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         let tab = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut()
@@ -917,7 +916,7 @@ pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 pub async fn set_quick_filter(instance_id: Uuid, pane: u8, q: String) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         let tab = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut()
@@ -942,7 +941,7 @@ pub async fn select_entry(
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     let (tab_id, ordered): (Uuid, Vec<String>) = {
-        let state = inner.state.lock().await;
+        let state = inner.state.lock();
         let tab = if pane == 1 {
             state
                 .right_pane
@@ -964,7 +963,7 @@ pub async fn select_entry(
         )
     };
     {
-        let mut state = inner.state.lock().await;
+        let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 if let Some(t) = r.tabs.iter_mut().find(|t| t.id == tab_id) {
