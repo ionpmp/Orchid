@@ -33,8 +33,8 @@ pub use emulator::{
 };
 pub use error::{Result, TerminalError};
 pub use events::{
-    TerminalBell, TerminalClosed, TerminalCrashed, TerminalCwdChanged, TerminalExited,
-    TerminalOpened, TerminalOutput, TerminalTitleChanged,
+    TerminalBell, TerminalClipboardWrite, TerminalClosed, TerminalCrashed, TerminalCwdChanged,
+    TerminalExited, TerminalOpened, TerminalOutput, TerminalTitleChanged,
 };
 pub use input::{InputEncoder, MouseAction, MouseButtonReport, MouseMode};
 pub use layout::{

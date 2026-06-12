@@ -97,6 +97,20 @@ impl Event for TerminalClosed {
     }
 }
 
+/// OSC 52 — host program should place `text` on the system clipboard.
+#[derive(Debug, Clone)]
+pub struct TerminalClipboardWrite {
+    /// Session id.
+    pub session_id: Uuid,
+    /// Decoded selection (UTF-8).
+    pub text: String,
+}
+impl Event for TerminalClipboardWrite {
+    fn event_type() -> &'static str {
+        "terminal.clipboard_write"
+    }
+}
+
 /// OSC 7 — working directory change.
 #[derive(Debug, Clone)]
 pub struct TerminalCwdChanged {

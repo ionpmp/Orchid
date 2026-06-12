@@ -21,7 +21,7 @@ use uuid::Uuid;
 use vte::{Params, Perform};
 
 use crate::error::{Result, TerminalError};
-use crate::events::{TerminalBell, TerminalCwdChanged, TerminalTitleChanged};
+use crate::events::{TerminalBell, TerminalClipboardWrite, TerminalCwdChanged, TerminalTitleChanged};
 use crate::search::SearchMatch;
 
 pub use color::{resolve_color, xterm_256_color, CellColor, ColorRole, Rgba, TerminalPalette};
@@ -826,8 +826,32 @@ impl<'a> Perform for Handler<'a> {
                 }
             }
             "52" => {
-                // OSC 52: clipboard write. Deferred — we log and drop.
-                tracing::debug!("OSC 52 clipboard write dropped (not yet wired)");
+                if rest.first().is_some_and(|b| b == b"?") {
+                    return;
+                }
+                let Some(b64) = rest
+                    .iter()
+                    .rev()
+                    .find(|b| !b.is_empty())
+                    .and_then(|b| std::str::from_utf8(b).ok())
+                else {
+                    return;
+                };
+                let Ok(bytes) = decode_osc52_base64(b64) else {
+                    tracing::debug!(len = b64.len(), "OSC 52: invalid base64 payload");
+                    return;
+                };
+                let Ok(text) = String::from_utf8(bytes) else {
+                    tracing::debug!("OSC 52: clipboard payload is not UTF-8");
+                    return;
+                };
+                self.bus.publish(
+                    orchid_core::EventSource::Subsystem("terminal".into()),
+                    TerminalClipboardWrite {
+                        session_id: self.session_id,
+                        text,
+                    },
+                );
             }
             _ => {}
         }
@@ -843,6 +867,46 @@ impl<'a> Perform for Handler<'a> {
     }
     fn put(&mut self, _byte: u8) {}
     fn unhook(&mut self) {}
+}
+
+fn decode_osc52_base64(input: &str) -> std::result::Result<Vec<u8>, ()> {
+    const TABLE: [i8; 256] = {
+        let mut t = [-1i8; 256];
+        let mut i = 0u8;
+        while i < 26 {
+            t[(b'A' + i) as usize] = i as i8;
+            t[(b'a' + i) as usize] = (i + 26) as i8;
+            i += 1;
+        }
+        let mut d = 0u8;
+        while d < 10 {
+            t[(b'0' + d) as usize] = (d + 52) as i8;
+            d += 1;
+        }
+        t[b'+' as usize] = 62;
+        t[b'/' as usize] = 63;
+        t
+    };
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut bits = 0u32;
+    for &ch in input.as_bytes() {
+        if ch == b'=' {
+            break;
+        }
+        let val = TABLE[ch as usize];
+        if val < 0 {
+            continue;
+        }
+        buf = (buf << 6) | val as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+    Ok(out)
 }
 
 fn percent_decode_lossy(s: &str) -> String {
@@ -933,6 +997,40 @@ mod tests {
         let e = TerminalEmulator::new(20, 3, 100, bus(), Uuid::nil());
         e.feed(b"\x1b]0;hello world\x07");
         assert_eq!(e.title(), "hello world");
+    }
+
+    #[test]
+    fn decode_osc52_base64_roundtrip() {
+        assert_eq!(
+            decode_osc52_base64("aGVsbG8=").unwrap(),
+            b"hello".as_slice()
+        );
+        assert_eq!(decode_osc52_base64("").unwrap(), b"".as_slice());
+    }
+
+    #[test]
+    fn osc52_publishes_clipboard_write() {
+        use orchid_core::{Event, EventFilter, HandlerPriority};
+        use crate::events::TerminalClipboardWrite;
+
+        let bus = bus();
+        let received = Arc::new(Mutex::new(None::<String>));
+        let got = Arc::clone(&received);
+        let _sub = bus
+            .subscribe_sync(
+                EventFilter::of_type(TerminalClipboardWrite::event_type()),
+                HandlerPriority::Normal,
+                move |env| {
+                    if let Some(ev) = env.downcast::<TerminalClipboardWrite>() {
+                        *got.lock() = Some(ev.text.clone());
+                    }
+                },
+            )
+            .unwrap();
+
+        let e = TerminalEmulator::new(20, 3, 100, bus, Uuid::nil());
+        e.feed(b"\x1b]52;c;aGVsbG8=\x07");
+        assert_eq!(received.lock().as_deref(), Some("hello"));
     }
 
     #[test]

@@ -10,11 +10,14 @@ use parking_lot::{Mutex, RwLock};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use orchid_core::{CommandPalette, CommandRegistry, EventBus, EventBusConfig};
+use orchid_core::{
+    CommandPalette, CommandRegistry, Event, EventBus, EventBusConfig, EventFilter,
+    HandlerPriority, SubscriptionHandle,
+};
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
 use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider};
 use orchid_storage::{ConfigLoader, OrchidConfig, OrchidPaths, StateStore};
-use orchid_terminal::SessionManager;
+use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
     builtin::search::{CommandsSource, FilesSource, SearchAggregator, SearchSource, SettingsSource},
     commands::build_command_set,
@@ -55,6 +58,8 @@ pub struct OrchidApp {
     /// Filesystem provider registry (viewer, search, future file manager).
     #[allow(dead_code)]
     fs_registry: Arc<FsProviderRegistry>,
+    /// Keeps the OSC 52 → system clipboard bus handler alive.
+    _terminal_clipboard_sub: Option<SubscriptionHandle>,
 }
 
 impl std::fmt::Debug for OrchidApp {
@@ -191,11 +196,38 @@ impl OrchidApp {
             }
         }
 
-        let clipboard: Arc<dyn orchid_crypto::SecureClipboard> = match ArboardClipboard::new() {
-            Ok(cb) => Arc::new(cb),
+        let (clipboard, terminal_clipboard_sub): (
+            Arc<dyn orchid_crypto::SecureClipboard>,
+            Option<SubscriptionHandle>,
+        ) = match ArboardClipboard::new() {
+            Ok(cb) => {
+                let cb = Arc::new(cb);
+                let sub = bus
+                    .subscribe_sync(
+                        EventFilter::of_type(TerminalClipboardWrite::event_type()),
+                        HandlerPriority::Normal,
+                        {
+                            let cb = Arc::clone(&cb);
+                            move |env| {
+                                let Some(ev) = env.downcast::<TerminalClipboardWrite>() else {
+                                    return;
+                                };
+                                if let Err(e) = cb.copy(&ev.text) {
+                                    warn!(
+                                        error = %e,
+                                        session = %ev.session_id,
+                                        "terminal OSC 52 clipboard write failed"
+                                    );
+                                }
+                            }
+                        },
+                    )
+                    .map_err(|e| UiError::Slint(format!("terminal clipboard bus sub: {e}")))?;
+                (cb, Some(sub))
+            }
             Err(e) => {
                 warn!(error = %e, "clipboard unavailable; password copy will be disabled in this environment");
-                Arc::new(NullClipboard)
+                (Arc::new(NullClipboard), None)
             }
         };
 
@@ -325,6 +357,7 @@ impl OrchidApp {
             command_registry,
             group_manager,
             fs_registry,
+            _terminal_clipboard_sub: terminal_clipboard_sub,
         })
     }
 
