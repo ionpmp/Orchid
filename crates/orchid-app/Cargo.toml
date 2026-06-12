@@ -28,3 +28,6 @@ orchid-viewers.workspace = true
 orchid-widgets.workspace = true
 orchid-i18n.workspace = true
 orchid-ui.workspace = true
+
+[build-dependencies]
+winres.workspace = true

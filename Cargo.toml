@@ -163,6 +163,7 @@ slint = { version = "1", default-features = false, features = [
     "compat-1-2",
 ] }
 slint-build = "1"
+winres = "0.1"
 
 # Internal crates -- path + version keeps workspace inheritance happy.
 orchid-core = { path = "crates/orchid-core", version = "0.1.0" }

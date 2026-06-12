@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="i-fill" x1="256" y1="96" x2="256" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8B8F0"/>
+      <stop offset="1" stop-color="#7A4EA8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="#12131A"/>
+  <path
+    fill="url(#i-fill)"
+    d="M256 108 C196 108 148 156 132 212 C120 252 132 292 160 320 C188 348 220 356 256 356 C292 356 340 348 368 320 C396 292 408 252 404 212 C388 156 360 108 256 108 Z M256 168 C300 168 328 196 340 236 C348 268 340 300 316 320 C300 332 280 336 256 336 C232 336 208 332 204 320 C180 300 168 268 180 236 C192 196 220 168 256 168 Z"
+  />
+  <path
+    fill="#12131A"
+    opacity="0.85"
+    d="M256 200 C228 200 208 220 200 248 C192 276 204 304 228 320 C244 330 264 332 256 332 C248 332 268 330 284 320 C308 304 320 276 312 248 C304 220 276 200 256 200 Z"
+  />
+  <ellipse cx="256" cy="268" rx="28" ry="36" fill="#EBECF0"/>
+</svg>
