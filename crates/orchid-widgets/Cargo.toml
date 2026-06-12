@@ -38,6 +38,10 @@ orchid-search.workspace = true
 orchid-fs.workspace = true
 orchid-viewers.workspace = true
 
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = ["Foundation", "Media_Control"]
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true }

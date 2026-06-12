@@ -1,11 +1,10 @@
 //! Media-player widget wrapping the system's now-playing session.
 //!
-//! On Windows a full SMTC integration is planned but deferred until the
-//! `windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager`
-//! bindings land; today the widget ships with a cross-platform
-//! [`NullProvider`] which renders the "no session" state and rejects
-//! transport commands with [`MediaError::Unsupported`]. Downstream code
-//! can inject any other [`MediaProvider`] impl at registration time.
+//! On Windows the widget uses [`WindowsMediaProvider`] (SMTC). Other
+//! platforms ship with [`NullProvider`], which renders the "no session"
+//! state and rejects transport commands with [`MediaError::Unsupported`].
+//! Downstream code can inject any other [`MediaProvider`] impl at
+//! registration time.
 
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -23,6 +22,12 @@ use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
 use orchid_storage::{LifecycleState, WidgetSize};
+
+#[cfg(windows)]
+mod windows_provider;
+
+#[cfg(windows)]
+pub use windows_provider::WindowsMediaProvider;
 
 /// Stable type id.
 pub const TYPE_ID: &str = "media-player";
@@ -321,10 +326,17 @@ pub fn descriptor_with_provider(provider: Arc<dyn MediaProvider>) -> WidgetDescr
     base_descriptor(factory)
 }
 
-/// Descriptor with the cross-platform [`NullProvider`].
+/// Descriptor with the platform default provider.
 #[must_use]
 pub fn descriptor() -> WidgetDescriptor {
-    descriptor_with_provider(Arc::new(NullProvider))
+    #[cfg(windows)]
+    {
+        descriptor_with_provider(Arc::new(WindowsMediaProvider::new()))
+    }
+    #[cfg(not(windows))]
+    {
+        descriptor_with_provider(Arc::new(NullProvider))
+    }
 }
 
 fn base_descriptor(factory: WidgetFactory) -> WidgetDescriptor {
