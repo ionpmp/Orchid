@@ -1,6 +1,7 @@
 import { Theme } from "theme_global.slint";
 import { Strings } from "strings_global.slint";
 import { AppState } from "app_state_global.slint";
+import { WidgetCatalog } from "widget_catalog_global.slint";
 import { WorkspaceView } from "workspace/workspace.slint";
 import {
     DockWidgetType,
@@ -24,6 +25,7 @@ import {
 export { Theme } from "theme_global.slint";
 export { Strings } from "strings_global.slint";
 export { AppState } from "app_state_global.slint";
+export { WidgetCatalog } from "widget_catalog_global.slint";
 export {
     DockWidgetType,
     MediaModel,
@@ -120,6 +122,10 @@ export component MainWindow inherits Window {
     callback fm-confirm-no();
     callback fm-rename-commit(string, string);
     callback fm-rename-cancel();
+    callback canvas-long-pressed(length, length, length, length);
+    callback catalog-pick(string);
+    callback catalog-dismiss();
+    callback catalog-search-changed(string);
     callback ui-tick();
 
     VerticalLayout {
@@ -246,6 +252,10 @@ export component MainWindow inherits Window {
             fm-confirm-no => { root.fm-confirm-no(); }
             fm-rename-commit(old, new) => { root.fm-rename-commit(old, new); }
             fm-rename-cancel => { root.fm-rename-cancel(); }
+            canvas-long-pressed(cx, cy, vx, vy) => { root.canvas-long-pressed(cx, cy, vx, vy); }
+            catalog-pick(type-id) => { root.catalog-pick(type-id); }
+            catalog-dismiss => { root.catalog-dismiss(); }
+            catalog-search-changed(q) => { root.catalog-search-changed(q); }
         }
     }
 }

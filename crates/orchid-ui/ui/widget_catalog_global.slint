@@ -1,0 +1,9 @@
+import { DockWidgetType } from "workspace/defs.slint";
+
+export global WidgetCatalog {
+    in property <bool> visible;
+    in property <length> screen-x;
+    in property <length> screen-y;
+    in property <string> search-query;
+    in property <[DockWidgetType]> items;
+}

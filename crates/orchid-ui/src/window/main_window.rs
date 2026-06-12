@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use orchid_core::{ActionContext, ActionDispatcher, CommandRegistry, EventBus, ParsedCommand};
 use orchid_i18n::LocaleManager;
-use orchid_storage::{OrchidConfig, StateStore};
+use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
 use orchid_terminal::{FontMetrics, PtySize};
 use orchid_widgets::layout::PixelBounds;
@@ -36,8 +36,8 @@ use orchid_widgets::TerminalPayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
 use orchid_widgets::{ViewerPayload, WidgetPayload};
 use orchid_widgets::{
-    free_placement_from_pixel_bounds, position_from_content_top_left, LayoutEngine, PlacedWidget,
-    WidgetManager, WorkspaceManager,
+    free_placement_from_pixel_bounds, position_from_content_top_left, CreateWidgetRequest,
+    LayoutEngine, PlacedWidget, WidgetManager, WorkspaceManager,
 };
 use orchid_widgets::SharedInstance;
 use parking_lot::RwLock;
@@ -53,7 +53,8 @@ use crate::slint_generated::{
     FmRenameState, FmSidebarItem, FmTab, FmTagChip,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
-    WeatherForecastEntry, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
+    WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
+    WorkspaceSummary,
 };
 use crate::theme::ThemeManager;
 
@@ -111,6 +112,25 @@ pub struct MainWindowController {
     password_autofocus_pending: Arc<RwLock<HashMap<Uuid, bool>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
+    /// Long-press widget catalog (search + pick).
+    catalog: Arc<RwLock<CatalogUiState>>,
+    catalog_items: ModelRc<DockWidgetType>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CatalogUiState {
+    visible: bool,
+    content_x: f32,
+    content_y: f32,
+    screen_x: f32,
+    screen_y: f32,
+    search_query: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AddWidgetPlacement {
+    AutoSlot,
+    CanvasPoint { content_x: f32, content_y: f32 },
 }
 
 struct ResizeInteraction {
@@ -158,6 +178,8 @@ impl MainWindowController {
             ModelRc::new(VecModel::<WidgetFrameModel>::default());
         let workspace_dock_types: ModelRc<DockWidgetType> =
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
+        let catalog_items: ModelRc<DockWidgetType> =
+            ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let this = Arc::new(Self {
             window,
             theme,
@@ -191,9 +213,12 @@ impl MainWindowController {
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
+            catalog: Arc::new(RwLock::new(CatalogUiState::default())),
+            catalog_items,
         });
         this.apply_theme()?;
         this.apply_strings()?;
+        this.sync_widget_catalog_global();
         this.apply_initial_mode()?;
         this.wire_callbacks()?;
         Ok(this)
@@ -243,6 +268,8 @@ impl MainWindowController {
         g.set_get_started_label(mgr.tr("startup-get-started").into());
         g.set_workspace_new_label(mgr.tr("workspace-new").into());
         g.set_dock_add_label(mgr.tr("dock-add-label").into());
+        g.set_catalog_title(mgr.tr("catalog-title").into());
+        g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
 
         g.set_media_no_session(mgr.tr("media-no-session").into());
@@ -421,6 +448,38 @@ impl MainWindowController {
             move |tid| {
                 if let Some(c) = t.upgrade() {
                     c.on_dock_add(&tid);
+                }
+            }
+        });
+        self.window.on_canvas_long_pressed({
+            let t = t.clone();
+            move |cx, cy, vx, vy| {
+                if let Some(c) = t.upgrade() {
+                    c.on_canvas_long_pressed(cx, cy, vx, vy);
+                }
+            }
+        });
+        self.window.on_catalog_pick({
+            let t = t.clone();
+            move |type_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_catalog_pick(&type_id);
+                }
+            }
+        });
+        self.window.on_catalog_dismiss({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_catalog_dismiss();
+                }
+            }
+        });
+        self.window.on_catalog_search_changed({
+            let t = t.clone();
+            move |q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_catalog_search_changed(&q);
                 }
             }
         });
@@ -1115,21 +1174,64 @@ impl MainWindowController {
         });
     }
 
+    fn on_canvas_long_pressed(
+        self: &Arc<Self>,
+        content_x: f32,
+        content_y: f32,
+        viewport_x: f32,
+        viewport_y: f32,
+    ) {
+        {
+            let mut cat = self.catalog.write();
+            cat.visible = true;
+            cat.content_x = content_x;
+            cat.content_y = content_y;
+            cat.screen_x = content_x - viewport_x;
+            cat.screen_y = content_y - viewport_y;
+            cat.search_query.clear();
+        }
+        self.sync_widget_catalog_global();
+    }
+
+    fn on_catalog_dismiss(self: &Arc<Self>) {
+        if !self.catalog.read().visible {
+            return;
+        }
+        self.catalog.write().visible = false;
+        self.sync_widget_catalog_global();
+    }
+
+    fn on_catalog_search_changed(self: &Arc<Self>, query: &SharedString) {
+        self.catalog.write().search_query = query.to_string();
+        self.sync_widget_catalog_global();
+    }
+
+    fn on_catalog_pick(self: &Arc<Self>, type_id: &SharedString) {
+        let placement = {
+            let cat = self.catalog.read();
+            AddWidgetPlacement::CanvasPoint {
+                content_x: cat.content_x,
+                content_y: cat.content_y,
+            }
+        };
+        self.on_catalog_dismiss();
+        self.spawn_add_widget(type_id.as_str(), placement);
+    }
+
     fn on_dock_add(self: &Arc<Self>, type_id: &SharedString) {
-        let type_id_str = type_id.as_str();
-        if !matches!(
-            type_id_str,
-            "terminal" | "weather" | "moon" | "system" | "rss" | "search" | "media" | "password"
-                | "viewer" | "file-manager"
-        ) {
-            warn!(type_id = type_id_str, "unknown widget type from dock");
+        self.spawn_add_widget(type_id.as_str(), AddWidgetPlacement::AutoSlot);
+    }
+
+    fn spawn_add_widget(self: &Arc<Self>, type_id: &str, placement: AddWidgetPlacement) {
+        if !is_known_widget_type(type_id) {
+            warn!(type_id, "unknown widget type");
             return;
         }
         let le = self.layout_engine.clone();
         let wm = self.widget_manager.clone();
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
-        let type_id_owned = type_id_str.to_string();
+        let type_id_owned = type_id.to_string();
         let focus_search_input = type_id_owned == "search";
         let focus_password_input = type_id_owned == "password";
         let _ = slint::spawn_local(async move {
@@ -1137,12 +1239,13 @@ impl MainWindowController {
                 Ok(w) => w.id,
                 Err(_) => return,
             };
+            let size = Self::minimal_widget_size(&wm, &type_id_owned);
             let new_id = match wm
-                .create(orchid_widgets::CreateWidgetRequest {
+                .create(CreateWidgetRequest {
                     type_id: type_id_owned,
                     workspace_id: wid,
                     position: None,
-                    size: None,
+                    size: Some(size),
                     initial_lifecycle: None,
                     config_bytes: None,
                 })
@@ -1154,9 +1257,19 @@ impl MainWindowController {
                     return;
                 }
             };
-            Self::move_new_widget_to_free_slot(&le, &wm, wid, new_id).await;
+            match placement {
+                AddWidgetPlacement::AutoSlot => {
+                    Self::move_new_widget_to_free_slot(&le, &wm, wid, new_id).await;
+                }
+                AddWidgetPlacement::CanvasPoint { content_x, content_y } => {
+                    if let Some(c) = t.upgrade() {
+                        c.place_widget_at_canvas_point(wid, new_id, size, content_x, content_y)
+                            .await;
+                    }
+                }
+            }
             if let Err(e) = wm.refresh_snapshot_cache(new_id).await {
-                warn!(?e, widget_id = %new_id, "prime snapshot cache after dock add");
+                warn!(?e, widget_id = %new_id, "prime snapshot cache after add");
             }
             if let Some(c) = t.upgrade() {
                 if focus_search_input {
@@ -1168,6 +1281,68 @@ impl MainWindowController {
                 c.schedule_rebuild();
             }
         });
+    }
+
+    async fn place_widget_at_canvas_point(
+        self: &Arc<Self>,
+        workspace_id: Uuid,
+        instance_id: Uuid,
+        size: WidgetSize,
+        content_x: f32,
+        content_y: f32,
+    ) {
+        let (vw, vh) = *self.canvas_size.lock();
+        let viewport = ViewportSize {
+            width_px: vw,
+            height_px: vh,
+        };
+        let opts = self.layout_engine.options();
+        let preferred = position_from_content_top_left(viewport, &opts, content_x, content_y, size);
+        let instances = self.widget_manager.instances_for_workspace(workspace_id);
+        self.layout_engine
+            .grow_grid_to_fit_instances(workspace_id, &instances);
+        let place = if self
+            .layout_engine
+            .can_place(workspace_id, instance_id, preferred, size, &instances)
+            .is_ok()
+        {
+            preferred
+        } else {
+            match self.layout_engine.auto_place_excluding_with_growth(
+                workspace_id,
+                size,
+                &instances,
+                instance_id,
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!(?e, "catalog place: no free cell");
+                    return;
+                }
+            }
+        };
+        if let Err(e) = self.widget_manager.move_to(instance_id, place).await {
+            warn!(?e, "catalog place: move_to");
+        }
+    }
+
+    fn sync_widget_catalog_global(self: &Arc<Self>) {
+        let cat = self.catalog.read().clone();
+        let items = filter_catalog_items(&self.locale, &cat.search_query);
+        sync_vec_model(&self.catalog_items, items);
+        let g = self.window.global::<WidgetCatalog>();
+        g.set_visible(cat.visible);
+        g.set_screen_x(cat.screen_x);
+        g.set_screen_y(cat.screen_y);
+        g.set_search_query(cat.search_query.into());
+        g.set_items(self.catalog_items.clone());
+    }
+
+    fn minimal_widget_size(wm: &WidgetManager, type_id: &str) -> WidgetSize {
+        wm.registry()
+            .get(type_id)
+            .map(|d| d.min_size.unwrap_or(d.default_size))
+            .unwrap_or(WidgetSize::Medium)
     }
 
     fn on_widget_close(self: &Arc<Self>, id: &SharedString) {
@@ -3074,6 +3249,32 @@ fn base64_decode(input: &str) -> std::result::Result<Vec<u8>, ()> {
     }
 
     Ok(out)
+}
+
+fn is_known_widget_type(type_id: &str) -> bool {
+    matches!(
+        type_id,
+        "terminal"
+            | "weather"
+            | "moon"
+            | "system"
+            | "rss"
+            | "search"
+            | "media"
+            | "password"
+            | "viewer"
+            | "file-manager"
+    )
+}
+
+fn filter_catalog_items(locale: &LocaleManager, query: &str) -> Vec<DockWidgetType> {
+    let q = query.trim().to_lowercase();
+    dock_types_vec(locale)
+        .into_iter()
+        .filter(|d| {
+            q.is_empty() || d.label.as_str().to_lowercase().contains(&q)
+        })
+        .collect()
 }
 
 fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {

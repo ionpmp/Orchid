@@ -1,7 +1,9 @@
 import { Theme } from "../theme_global.slint";
+import { WidgetCatalog } from "../widget_catalog_global.slint";
 import { WidgetFrame } from "widget-frame.slint";
 import { WorkspaceSwitcher } from "workspace-switcher.slint";
 import { WidgetDock } from "widget-dock.slint";
+import { WidgetCatalogPanel } from "widget-catalog.slint";
 import { WorkspaceModel, WorkspaceSummary, WidgetFrameModel, DockWidgetType } from "defs.slint";
 
 export component WorkspaceView inherits Rectangle {
@@ -74,6 +76,12 @@ export component WorkspaceView inherits Rectangle {
     callback fm-confirm-no();
     callback fm-rename-commit(string, string);
     callback fm-rename-cancel();
+
+    callback canvas-long-pressed(length, length, length, length);
+    callback catalog-pick(string);
+    callback catalog-dismiss();
+    callback catalog-search-changed(string);
+
     background: Theme.surface-base;
 
     WorkspaceSwitcher {
@@ -181,6 +189,32 @@ export component WorkspaceView inherits Rectangle {
                     fm-confirm-no => { root.fm-confirm-no(); }
                     fm-rename-commit(old, new) => { root.fm-rename-commit(old, new); }
                     fm-rename-cancel => { root.fm-rename-cancel(); }
+                }
+            }
+        }
+
+        if WidgetCatalog.visible: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: #00000028;
+
+            catalog-backdrop := TouchArea {
+                clicked => {
+                    root.catalog-dismiss();
+                }
+            }
+
+            WidgetCatalogPanel {
+                x: min(max(WidgetCatalog.screen-x, 8px), parent.width - self.width - 8px);
+                y: min(max(WidgetCatalog.screen-y, 8px), parent.height - self.height - 8px);
+                pick(type-id) => {
+                    root.catalog-pick(type-id);
+                }
+                dismiss => {
+                    root.catalog-dismiss();
+                }
+                search-changed(q) => {
+                    root.catalog-search-changed(q);
                 }
             }
         }
