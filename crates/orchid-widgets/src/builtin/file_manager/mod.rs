@@ -115,8 +115,7 @@ struct FileManagerInner {
     config: RwLock<FileManagerConfig>,
     /// Entries per tab id. Keeps dual-pane tabs independent.
     entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
-    /// UI-level "virtual metadata" until providers persist it.
-    starred: RwLock<std::collections::HashSet<String>>,
+    /// UI-level encrypt overlay until [`EncryptedFolderEngine`] actions land.
     encrypted: RwLock<std::collections::HashSet<String>>,
     recent: RwLock<std::collections::VecDeque<String>>,
     bus: Arc<orchid_core::EventBus>,
@@ -145,7 +144,6 @@ impl FileManagerWidget {
                 state: parking_lot::Mutex::new(state),
                 config: RwLock::new(config),
                 entries_by_tab: RwLock::new(std::collections::HashMap::new()),
-                starred: RwLock::new(std::collections::HashSet::new()),
                 encrypted: RwLock::new(std::collections::HashSet::new()),
                 recent: RwLock::new(std::collections::VecDeque::new()),
                 bus,
@@ -423,19 +421,7 @@ impl FileManagerInner {
 
         let result = self.navigator.navigate(&path, show_hidden).await;
         let mut entries = result.entries;
-
-        // Apply virtual metadata overlays (star/encrypt) until provider persistence lands.
-        let starred = self.starred.read().clone();
-        let encrypted = self.encrypted.read().clone();
-        for e in entries.iter_mut() {
-            if starred.contains(e.path.as_str()) {
-                e.metadata.extended.starred = true;
-            }
-            if encrypted.contains(e.path.as_str()) {
-                e.metadata.extended.is_encrypted = true;
-            }
-        }
-
+        self.apply_entry_metadata(&mut entries);
         self.entries_by_tab.write().insert(tab.id, entries);
     }
 
@@ -469,12 +455,14 @@ impl FileManagerInner {
                 .collect();
         }
         if raw == "virtual:starred" {
-            return self
-                .starred
-                .read()
-                .iter()
+            let paths = self
+                .deps
+                .tag_manager
+                .starred_paths()
+                .unwrap_or_default();
+            let mut entries: Vec<orchid_fs::FsEntry> = paths
+                .into_iter()
                 .take(200)
-                .filter_map(|p| orchid_fs::FsPath::new(p).ok())
                 .map(|p| orchid_fs::FsEntry {
                     name: p.file_name().map(String::from).unwrap_or_default(),
                     metadata: orchid_fs::FsMetadata {
@@ -487,13 +475,33 @@ impl FileManagerInner {
                         hidden: false,
                         system: false,
                         mime: None,
-                        extended: orchid_fs::ExtendedAttributes::default(),
+                        extended: orchid_fs::ExtendedAttributes {
+                            starred: true,
+                            ..orchid_fs::ExtendedAttributes::default()
+                        },
                     },
                     path: p,
                 })
                 .collect();
+            self.apply_entry_metadata(&mut entries);
+            return entries;
         }
         Vec::new()
+    }
+
+    fn apply_entry_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
+        let encrypted_overlay = self.encrypted.read().clone();
+        let tag_manager = &self.deps.tag_manager;
+        for e in entries.iter_mut() {
+            if let Ok(Some(tag)) = tag_manager.get(&e.path) {
+                e.metadata.extended.starred = tag.starred;
+            }
+            if encrypted_overlay.contains(e.path.as_str())
+                || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
+            {
+                e.metadata.extended.is_encrypted = true;
+            }
+        }
     }
 }
 
@@ -1063,28 +1071,44 @@ pub async fn run_action_with_opts(
             return Ok(ActionOutcome::Done);
         }
         "fs.star" => {
-            let mut set = inner.starred.write();
             for p in &target_paths {
-                set.insert(p.clone());
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                inner
+                    .deps
+                    .tag_manager
+                    .set_starred(&fp, true)
+                    .map_err(map_fs_error)?;
             }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
         }
         "fs.unstar" => {
-            let mut set = inner.starred.write();
             for p in &target_paths {
-                set.remove(p);
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                inner
+                    .deps
+                    .tag_manager
+                    .set_starred(&fp, false)
+                    .map_err(map_fs_error)?;
             }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
         }
         "fs.encrypt" => {
             let mut set = inner.encrypted.write();
             for p in &target_paths {
                 set.insert(p.clone());
             }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
         }
         "fs.decrypt" => {
             let mut set = inner.encrypted.write();
             for p in &target_paths {
                 set.remove(p);
             }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
         }
         _ => {
             // Unknown actions: treat as done for MVP.
