@@ -40,7 +40,7 @@ orchid-viewers.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
-features = ["Foundation", "Media_Control"]
+features = ["Foundation", "Media_Control", "Storage_Streams"]
 
 [dev-dependencies]
 tempfile.workspace = true

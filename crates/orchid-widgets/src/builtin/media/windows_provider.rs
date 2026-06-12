@@ -4,18 +4,25 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use windows::core::HSTRING;
 use windows::Foundation::TimeSpan;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession,
     GlobalSystemMediaTransportControlsSessionManager,
+    GlobalSystemMediaTransportControlsSessionMediaProperties,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
+use windows::Storage::Streams::DataReader;
 
 use super::{MediaError, MediaProvider, MediaSession};
 
 static MANAGER: OnceLock<Result<GlobalSystemMediaTransportControlsSessionManager, String>> =
     OnceLock::new();
+static THUMB_CACHE_KEY: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static THUMB_CACHE_BYTES: OnceLock<Mutex<Option<Vec<u8>>>> = OnceLock::new();
+
+const MAX_THUMBNAIL_BYTES: u64 = 512 * 1024;
 
 /// Reads the OS now-playing session via SMTC.
 #[derive(Debug, Default, Clone)]
@@ -100,17 +107,58 @@ fn session_snapshot() -> Option<MediaSession> {
         .SourceAppUserModelId()
         .ok()
         .and_then(hstring_opt);
+    let artist = props.Artist().ok().and_then(hstring_opt);
+    let thumbnail_bytes = cached_thumbnail(&title, artist.as_deref(), &props);
 
     Some(MediaSession {
         title,
-        artist: props.Artist().ok().and_then(hstring_opt),
+        artist,
         album: props.AlbumTitle().ok().and_then(hstring_opt),
         source_app,
         position: Some(position),
         duration: Some(duration),
         is_playing,
-        thumbnail_bytes: None,
+        thumbnail_bytes,
     })
+}
+
+fn thumb_cache_key(title: &str, artist: Option<&str>) -> String {
+    format!("{}|{}", title, artist.unwrap_or(""))
+}
+
+fn cached_thumbnail(
+    title: &str,
+    artist: Option<&str>,
+    props: &GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<Vec<u8>> {
+    let key = thumb_cache_key(title, artist);
+    let key_slot = THUMB_CACHE_KEY.get_or_init(|| Mutex::new(None));
+    let bytes_slot = THUMB_CACHE_BYTES.get_or_init(|| Mutex::new(None));
+    let mut cached_key = key_slot.lock();
+    let mut cached_bytes = bytes_slot.lock();
+    if cached_key.as_deref() == Some(key.as_str()) {
+        return cached_bytes.clone();
+    }
+    let bytes = read_thumbnail(props);
+    *cached_key = Some(key);
+    *cached_bytes = bytes.clone();
+    bytes
+}
+
+fn read_thumbnail(
+    props: &GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<Vec<u8>> {
+    let thumb_ref = props.Thumbnail().ok()?;
+    let stream = thumb_ref.OpenReadAsync().ok()?.get().ok()?;
+    let size = stream.Size().ok()?.min(MAX_THUMBNAIL_BYTES);
+    if size == 0 || size > u32::MAX as u64 {
+        return None;
+    }
+    let reader = DataReader::CreateDataReader(&stream).ok()?;
+    reader.LoadAsync(size as u32).ok()?.get().ok()?;
+    let mut buf = vec![0u8; size as usize];
+    reader.ReadBytes(&mut buf).ok()?;
+    Some(buf)
 }
 
 fn with_current_session<F>(f: F) -> Result<(), MediaError>
@@ -209,5 +257,16 @@ impl MediaProvider for WindowsMediaProvider {
         })
         .await
         .map_err(|e| MediaError::ControlFailed(e.to_string()))?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::thumb_cache_key;
+
+    #[test]
+    fn thumb_cache_key_includes_title_and_artist() {
+        assert_eq!(thumb_cache_key("Song", Some("Artist")), "Song|Artist");
+        assert_eq!(thumb_cache_key("Song", None), "Song|");
     }
 }
