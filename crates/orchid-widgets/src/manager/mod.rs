@@ -172,6 +172,22 @@ impl WidgetManager {
         Ok(())
     }
 
+    /// Fill [`WidgetSnapshotCache`] for every known instance (e.g. after restore).
+    pub async fn prime_snapshot_caches(&self) -> Result<()> {
+        let ids: Vec<Uuid> = self
+            .inner
+            .instances
+            .iter()
+            .map(|e| *e.key())
+            .collect();
+        for id in ids {
+            if let Err(e) = self.refresh_snapshot_cache(id).await {
+                warn!(widget_id = %id, error = %e, "prime snapshot cache failed");
+            }
+        }
+        Ok(())
+    }
+
     fn store_snapshot(&self, id: Uuid, snap: WidgetSnapshot, force_dirty: bool) {
         let prev = self.inner.snapshot_cache.get(id);
         let changed = force_dirty

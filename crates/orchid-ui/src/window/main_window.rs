@@ -2770,7 +2770,14 @@ impl MainWindowController {
         };
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            let outcome = match orchid_widgets::builtin::file_manager::run_action(inst, &id, path_vec.clone()).await {
+            let outcome = match orchid_widgets::builtin::file_manager::run_action_with_opts(
+                inst,
+                &id,
+                path_vec.clone(),
+                orchid_widgets::builtin::file_manager::RunActionOpts::default(),
+            )
+            .await
+            {
                 Ok(o) => o,
                 Err(e) => {
                     warn!(?e, "fm action");
@@ -2821,8 +2828,16 @@ impl MainWindowController {
                         c.schedule_rebuild();
                     }
                     orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
-                        // Deferred: requires app handle; handled later in wiring step.
-                        warn!(path = %path, "open in viewer requested (not wired yet)");
+                        let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
+                            warn!(path = %path, "open in viewer: invalid path");
+                            return;
+                        };
+                        let tw2 = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            let _ =
+                                MainWindowController::open_in_viewer_for_controller(tw2, fs_path)
+                                    .await;
+                        }));
                     }
                 }
             }
@@ -2845,10 +2860,48 @@ impl MainWindowController {
             return;
         };
         let overlay = self.fm_overlays.read().get(&inst).cloned();
-        let Some(over) = overlay else { return };
+        let Some(over) = overlay else {
+            return;
+        };
         let action = over.confirm_dialog.pending_action.to_string();
-        let paths = &over.confirm_dialog.pending_paths;
-        self.on_fm_context_action(&action.into(), paths);
+        let path_vec: Vec<String> = (0..over.confirm_dialog.pending_paths.row_count())
+            .filter_map(|i| over.confirm_dialog.pending_paths.row_data(i))
+            .map(|s| s.to_string())
+            .collect();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::run_action_with_opts(
+                inst,
+                &action,
+                path_vec,
+                orchid_widgets::builtin::file_manager::RunActionOpts {
+                    skip_confirm: true,
+                },
+            )
+            .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, "fm confirm action");
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                match outcome {
+                    orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
+                        let mut over = c.fm_overlays.write();
+                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        entry.confirm_dialog = empty_confirm_dialog();
+                        entry.context_menu = empty_context_menu();
+                        drop(over);
+                        c.schedule_rebuild();
+                    }
+                    other => {
+                        warn!(?other, "unexpected outcome after fm confirm");
+                    }
+                }
+            }
+        }));
     }
 
     fn on_fm_confirm_no(self: &Arc<Self>) {

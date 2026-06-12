@@ -282,6 +282,10 @@ impl OrchidApp {
             .start()
             .await
             .map_err(|e| UiError::Slint(format!("widget sweeper: {e}")))?;
+        widget_manager
+            .prime_snapshot_caches()
+            .await
+            .map_err(|e| UiError::Slint(format!("prime widget snapshots: {e}")))?;
 
         let group_manager: Arc<GroupManager> = Arc::new(GroupManager::new(bus.clone(), storage.clone()));
         group_manager
