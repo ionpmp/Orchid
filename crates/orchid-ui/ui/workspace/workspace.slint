@@ -120,6 +120,20 @@ export component WorkspaceView inherits Rectangle {
                 height: max(root.workspace.canvas-content-height, canvas-flick.height);
                 background: Theme.surface-base;
 
+                // Behind widgets: empty canvas hits here; widgets stay on top.
+                canvas-touch := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    clicked => {
+                        root.canvas-long-pressed(
+                            self.mouse-x + canvas-flick.viewport-x,
+                            self.mouse-y + canvas-flick.viewport-y,
+                            canvas-flick.viewport-x,
+                            canvas-flick.viewport-y,
+                        );
+                    }
+                }
+
                 for w[i] in root.workspace.widgets: WidgetFrame {
                     x: w.x;
                     y: w.y;
