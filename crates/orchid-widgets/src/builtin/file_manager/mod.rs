@@ -340,6 +340,79 @@ impl FileManagerInner {
         );
     }
 
+    async fn refresh_all_tabs(&self) {
+        let show_hidden = self.config.read().show_hidden;
+        let (left, right) = {
+            let state = self.state.lock().await.clone();
+            let left = state.left_pane.active_tab().clone();
+            let right = state
+                .right_pane
+                .as_ref()
+                .map(|p| p.active_tab().clone());
+            (left, right)
+        };
+        self.refresh_tab(&left, show_hidden).await;
+        if let Some(rt) = right {
+            self.refresh_tab(&rt, show_hidden).await;
+        }
+        self.publish_refresh();
+    }
+
+    async fn paste_clipboard(&self) -> WidgetResult<()> {
+        let dest_dir = {
+            let state = self.state.lock().await;
+            state.active_tab().path.clone()
+        };
+        if is_virtual(&dest_dir) {
+            return Ok(());
+        }
+        let (sources, op) = self.deps.clipboard.paste(&dest_dir);
+        if sources.is_empty() || op == ClipboardOperation::None {
+            return Ok(());
+        }
+        let registry = &self.deps.registry;
+        for src in sources {
+            let name = src
+                .file_name()
+                .map(str::to_string)
+                .unwrap_or_else(|| "copy".to_string());
+            let dest = dest_dir.join(&name);
+            match op {
+                ClipboardOperation::Copy => {
+                    orchid_fs::operations::copy::copy(
+                        registry,
+                        &src,
+                        &dest,
+                        orchid_fs::operations::copy::CopyOptions::default(),
+                        None,
+                        None,
+                    )
+                    .await
+                    .map_err(map_fs_error)?;
+                }
+                ClipboardOperation::Cut => {
+                    orchid_fs::operations::move_::move_(registry, &src, &dest, None, None)
+                        .await
+                        .map_err(map_fs_error)?;
+                }
+                ClipboardOperation::None => break,
+            }
+        }
+        Ok(())
+    }
+
+    async fn delete_paths(&self, paths: &[String]) -> WidgetResult<()> {
+        let registry = &self.deps.registry;
+        let opts = orchid_fs::operations::delete::DeleteOptions::default();
+        for p in paths {
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            orchid_fs::operations::delete::delete(registry, &fp, opts)
+                .await
+                .map_err(map_fs_error)?;
+        }
+        Ok(())
+    }
+
     async fn refresh_tab(&self, tab: &TabState, show_hidden: bool) {
         let path = tab.path.clone();
 
@@ -584,6 +657,17 @@ fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<FileManagerInner>> {
         .get(&instance_id)
         .map(|e| Arc::clone(e.value()))
         .ok_or_else(|| WidgetError::InvalidStateForOperation("file-manager widget not live".into()))
+}
+
+fn map_fs_error(e: orchid_fs::FsError) -> WidgetError {
+    WidgetError::InvalidStateForOperation(e.to_string())
+}
+
+/// Options for [`run_action`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RunActionOpts {
+    /// When true, destructive actions skip confirmation (user already confirmed).
+    pub skip_confirm: bool,
 }
 
 /// Navigate the given `pane` (0 left, 1 right) to `path`.
@@ -915,6 +999,16 @@ pub async fn run_action(
     action_id: &str,
     target_paths: Vec<String>,
 ) -> WidgetResult<ActionOutcome> {
+    run_action_with_opts(instance_id, action_id, target_paths, RunActionOpts::default()).await
+}
+
+/// Like [`run_action`] with extra flags (e.g. skip delete confirmation).
+pub async fn run_action_with_opts(
+    instance_id: Uuid,
+    action_id: &str,
+    target_paths: Vec<String>,
+    opts: RunActionOpts,
+) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
     match action_id {
         "viewer.open" => {
@@ -938,10 +1032,9 @@ pub async fn run_action(
             inner.deps.clipboard.cut(paths);
         }
         "fs.paste" => {
-            // MVP: real copy/move is deferred until provider operations are unified.
-            if let Ok(p) = orchid_fs::FsPath::new("local:/") {
-                let _ = inner.deps.clipboard.paste(&p);
-            }
+            inner.paste_clipboard().await?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
         }
         "fs.rename" => {
             if target_paths.len() == 1 {
@@ -959,13 +1052,16 @@ pub async fn run_action(
         }
         "fs.delete" => {
             let cfg = inner.config.read().clone();
-            if cfg.confirm_delete && !target_paths.is_empty() {
+            if cfg.confirm_delete && !target_paths.is_empty() && !opts.skip_confirm {
                 return Ok(ActionOutcome::NeedsConfirmation {
                     message: format!("Delete {} items?", target_paths.len()),
                     action_id: action_id.to_string(),
                     paths: target_paths,
                 });
             }
+            inner.delete_paths(&target_paths).await?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
         }
         "fs.star" => {
             let mut set = inner.starred.write();
@@ -999,10 +1095,33 @@ pub async fn run_action(
     Ok(ActionOutcome::Done)
 }
 
-/// Commit rename (MVP: metadata-only; filesystem rename deferred).
-pub async fn rename(instance_id: Uuid, _old_path: &str, _new_name: &str) -> WidgetResult<()> {
+/// Commit rename on the backing filesystem.
+pub async fn rename(instance_id: Uuid, old_path: &str, new_name: &str) -> WidgetResult<()> {
+    if new_name.is_empty()
+        || new_name.contains('/')
+        || new_name.contains('\\')
+        || new_name.contains(':')
+    {
+        return Err(WidgetError::InvalidStateForOperation(
+            "invalid rename target".into(),
+        ));
+    }
     let inner = live_inner(instance_id)?;
-    inner.publish_refresh();
+    let old = orchid_fs::FsPath::new(old_path).map_err(map_fs_error)?;
+    let parent = old
+        .parent()
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("cannot rename root".into()))?;
+    let new_path = parent.join(new_name);
+    let provider = inner
+        .deps
+        .registry
+        .for_path(&old)
+        .ok_or_else(|| WidgetError::InvalidStateForOperation(format!("no provider for {old_path}")))?;
+    provider
+        .rename(&old, &new_path)
+        .await
+        .map_err(map_fs_error)?;
+    inner.refresh_all_tabs().await;
     Ok(())
 }
 
