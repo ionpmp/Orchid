@@ -1155,6 +1155,9 @@ impl MainWindowController {
                 }
             };
             Self::move_new_widget_to_free_slot(&le, &wm, wid, new_id).await;
+            if let Err(e) = wm.refresh_snapshot_cache(new_id).await {
+                warn!(?e, widget_id = %new_id, "prime snapshot cache after dock add");
+            }
             if let Some(c) = t.upgrade() {
                 if focus_search_input {
                     *c.search_autofocus_pending.lock() = Some(new_id);

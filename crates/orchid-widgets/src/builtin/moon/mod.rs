@@ -119,8 +119,23 @@ impl Widget for MoonWidget {
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let cfg = self.config.read().clone();
-        let data = self.data.read().clone()?;
-        let payload = render_payload(&cfg, &data);
+        let payload = match self.data.read().clone() {
+            Some(data) => render_payload(&cfg, &data),
+            None => MoonPayload {
+                phase_label: "Loading…".into(),
+                phase_icon: "moon-new",
+                illumination_text: String::new(),
+                age_text: String::new(),
+                distance_text: String::new(),
+                next_full_text: String::new(),
+                next_new_text: String::new(),
+                moonrise_text: None,
+                moonset_text: None,
+                sunrise_text: None,
+                sunset_text: None,
+                libration_text: None,
+            },
+        };
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,

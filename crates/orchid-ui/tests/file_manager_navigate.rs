@@ -48,7 +48,7 @@ async fn file_manager_lists_temp_dir_entries() {
             .widget_manager()
             .snapshot_cache()
             .get(fm_id)
-            .and_then(|x| x.as_deref().cloned())
+            .map(|x| (*x).clone())
         {
             if let orchid_widgets::WidgetPayload::FileManager(p) = &s.payload {
                 let tab = &p.panes[0].tabs[0];

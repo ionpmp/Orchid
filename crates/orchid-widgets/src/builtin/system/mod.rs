@@ -122,8 +122,16 @@ impl Widget for SystemWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let cfg = self.config.read().clone();
-        let snap = self.snapshot.read().clone()?;
-        let indicators = build_indicators(&cfg, &snap);
+        let indicators = match self.snapshot.read().clone() {
+            Some(snap) => build_indicators(&cfg, &snap),
+            None => vec![SystemIndicator {
+                label: "System".into(),
+                value_text: "Loading…".into(),
+                percent: None,
+                icon: "system-cpu",
+                status: IndicatorStatus::Normal,
+            }],
+        };
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,

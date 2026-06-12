@@ -118,6 +118,21 @@ impl Widget for WeatherWidget {
     }
 
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        let location = self.location();
+        let provider = self.provider.clone();
+        let data_slot = self.data.clone();
+        let last_error = self.last_error.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        Self::fetch_once(
+            provider,
+            location,
+            data_slot,
+            last_error,
+            bus,
+            instance_id,
+        )
+        .await;
         Ok(())
     }
 

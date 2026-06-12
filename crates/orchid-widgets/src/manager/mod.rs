@@ -2,6 +2,7 @@
 
 pub mod operations;
 pub mod persistence;
+mod snapshot_eq;
 
 use std::collections::HashSet;
 use std::mem;
@@ -25,7 +26,8 @@ use crate::events::{WidgetClosed, WidgetSnapshotUpdated};
 use crate::registry::WidgetRegistry;
 use crate::widget::instance::{SharedInstance, WidgetInstanceRuntime};
 use crate::widget::lifecycle::LifecycleController;
-use crate::widget::snapshot::{TerminalPayload, WidgetPayload, WidgetSnapshot};
+use crate::widget::snapshot::WidgetSnapshot;
+use snapshot_eq::payload_renders_equal;
 use crate::widget::WidgetSnapshotCache;
 use crate::widget::WidgetContext;
 
@@ -166,16 +168,20 @@ impl WidgetManager {
         let Some(snap) = snapshot else {
             return Ok(());
         };
-        let id = inst.id;
+        self.store_snapshot(inst.id, snap, true);
+        Ok(())
+    }
+
+    fn store_snapshot(&self, id: Uuid, snap: WidgetSnapshot, force_dirty: bool) {
         let prev = self.inner.snapshot_cache.get(id);
-        let is_new = prev
-            .as_deref()
-            .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
+        let changed = force_dirty
+            || prev
+                .as_deref()
+                .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
         self.inner.snapshot_cache.put(id, snap);
-        if is_new {
+        if changed {
             self.inner.frame_dirty.lock().insert(id);
         }
-        Ok(())
     }
 
     /// Build a [`WidgetContext`] for the given instance.
@@ -421,15 +427,6 @@ impl WidgetManager {
     }
 }
 
-fn terminal_payload_eq(a: &TerminalPayload, b: &TerminalPayload) -> bool {
-    a.cursor_col == b.cursor_col
-        && a.cursor_row == b.cursor_row
-        && a.cols == b.cols
-        && a.rows == b.rows
-        && a.cursor_visible == b.cursor_visible
-        && a.cells == b.cells
-}
-
 /// `true` if the new snapshot would render the same as the previous one.
 fn snapshot_renders_unchanged(prev: &WidgetSnapshot, new: &WidgetSnapshot) -> bool {
     if prev.title != new.title {
@@ -438,10 +435,7 @@ fn snapshot_renders_unchanged(prev: &WidgetSnapshot, new: &WidgetSnapshot) -> bo
     if prev.status != new.status {
         return false;
     }
-    match (&prev.payload, &new.payload) {
-        (WidgetPayload::Terminal(a), WidgetPayload::Terminal(b)) => terminal_payload_eq(a, b),
-        _ => false,
-    }
+    payload_renders_equal(&prev.payload, &new.payload)
 }
 
 async fn run_snapshot_pump(inner: &WidgetManagerInner) {
@@ -461,11 +455,11 @@ async fn run_snapshot_pump(inner: &WidgetManagerInner) {
         if let Some(snap) = snapshot {
             let id = inst.id;
             let prev = inner.snapshot_cache.get(id);
-            let is_new = prev
+            let changed = prev
                 .as_deref()
                 .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
             inner.snapshot_cache.put(id, snap);
-            if is_new {
+            if changed {
                 inner.frame_dirty.lock().insert(id);
             }
         }
