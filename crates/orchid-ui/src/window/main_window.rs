@@ -1443,6 +1443,7 @@ impl MainWindowController {
             row.x = fx;
             row.y = fy;
             v.set_row_data(r, row);
+            self.sync_canvas_scroll_extent();
             return;
         }
         self.schedule_rebuild();
@@ -1506,6 +1507,7 @@ impl MainWindowController {
                 height_px: vh,
             };
             let pos = position_from_content_top_left(viewport, &opts, new_x, new_y, size);
+            le.grow_grid_to_fit_placement(pos, size);
             let all = c.widget_manager.instances_for_workspace(w.id);
             if le.can_place(w.id, u, pos, size, &all).is_err() {
                 if let Some(c) = t.upgrade() {
@@ -1631,9 +1633,41 @@ impl MainWindowController {
             row.width = b.width;
             row.height = b.height;
             v.set_row_data(r, row);
+            self.sync_canvas_scroll_extent();
             return;
         }
         self.schedule_rebuild();
+    }
+
+    /// Keep the Flickable scroll extent in sync while drag/resize previews move frames
+    /// beyond the last committed layout bounds.
+    fn sync_canvas_scroll_extent(self: &Arc<Self>) {
+        let (vw, vh) = *self.canvas_size.lock();
+        let mut content_w = vw;
+        let mut content_h = vh;
+        let Some(v) = self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+        else {
+            return;
+        };
+        for r in 0..v.row_count() {
+            let Some(row) = v.row_data(r) else {
+                continue;
+            };
+            content_w = content_w.max(row.x + row.width);
+            content_h = content_h.max(row.y + row.height);
+        }
+        let app_g = self.window.global::<AppState>();
+        let mut ws = app_g.get_workspace();
+        if (ws.canvas_content_width - content_w).abs() > 0.5
+            || (ws.canvas_content_height - content_h).abs() > 0.5
+        {
+            ws.canvas_content_width = content_w;
+            ws.canvas_content_height = content_h;
+            app_g.set_workspace(ws);
+        }
     }
 
     fn on_widget_resize_ended(self: &Arc<Self>, id: &SharedString) {
@@ -1659,6 +1693,7 @@ impl MainWindowController {
                 height_px: vh,
             };
             let (new_pos, new_size) = free_placement_from_pixel_bounds(&pb, viewport, &opts);
+            le.grow_grid_to_fit_placement(new_pos, new_size);
             if let Err(e) = wm.move_to(u, new_pos).await {
                 warn!(?e, "resize move");
             }
@@ -2455,12 +2490,12 @@ impl MainWindowController {
         let snap = self
             .layout_engine
             .snapshot(w.id, &instances, view);
-        let canvas_content_w = snap.content_width_px.max(vw);
-        let canvas_content_h = snap.content_height_px.max(vh);
         let app_g = self.window.global::<AppState>();
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
         let mut frames: Vec<WidgetFrameModel> = Vec::new();
+        let mut canvas_content_w = vw;
+        let mut canvas_content_h = vh;
         let mut pty_changed_needs_rebuild = false;
         for (idx, pl) in snap.cells.iter().enumerate() {
             let mut bounds = pl.bounds;
@@ -2471,6 +2506,8 @@ impl MainWindowController {
             if let Some(ov) = ro.get(&pl.instance_id) {
                 bounds = *ov;
             }
+            canvas_content_w = canvas_content_w.max(bounds.x + bounds.width);
+            canvas_content_h = canvas_content_h.max(bounds.y + bounds.height);
             let Ok(iref) = self.widget_manager.get_instance(pl.instance_id) else {
                 continue;
             };

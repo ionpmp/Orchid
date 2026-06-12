@@ -132,6 +132,28 @@ impl LayoutEngine {
         }
     }
 
+    /// Grow the logical grid so `position` + `size` fits (e.g. after a free-form drag).
+    pub fn grow_grid_to_fit_placement(&self, position: GridPosition, size: WidgetSize) {
+        const MAX_GRID_ROWS: u16 = 512;
+        const MAX_GRID_COLS: u16 = 128;
+        let (w, h) = size_in_cells(size);
+        let mut opts = self.options.read().clone();
+        let mut changed = false;
+        let col_end = position.col.saturating_add(w);
+        let row_end = position.row.saturating_add(h);
+        if col_end > opts.grid_columns {
+            opts.grid_columns = col_end.min(MAX_GRID_COLS);
+            changed = true;
+        }
+        if row_end > opts.grid_rows {
+            opts.grid_rows = row_end.min(MAX_GRID_ROWS);
+            changed = true;
+        }
+        if changed {
+            self.set_options(opts);
+        }
+    }
+
     /// Auto-place a widget of `size` on `workspace_id`.
     ///
     /// # Errors
@@ -626,6 +648,14 @@ mod tests {
         assert!((placed.bounds.height - 192.0).abs() < 0.1);
         assert!((snap.content_width_px - 1600.0).abs() < 0.1);
         assert!((snap.content_height_px - 1000.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn grow_grid_to_fit_placement_extends_rows() {
+        let engine = LayoutEngine::new(LayoutOptions::default());
+        let pos = GridPosition { col: 0, row: 18 };
+        engine.grow_grid_to_fit_placement(pos, WidgetSize::Small);
+        assert!(engine.options().grid_rows >= 20);
     }
 
     #[test]
