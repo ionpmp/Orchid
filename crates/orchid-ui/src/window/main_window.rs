@@ -1015,6 +1015,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_sort_column_clicked({
+            let t = t.clone();
+            move |pane, col| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_sort_column_clicked(pane, col);
+                }
+            }
+        });
         self.window.on_fm_quick_filter_changed({
             let t = t.clone();
             move |pane, q| {
@@ -3001,6 +3009,21 @@ impl MainWindowController {
         }));
     }
 
+    fn on_fm_sort_column_clicked(self: &Arc<Self>, pane: i32, column: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let col = column.max(0).min(3) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::set_sort_column(inst, p, col).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
     fn on_fm_quick_filter_changed(self: &Arc<Self>, pane: i32, q: &SharedString) {
         let Some(inst) = self.find_active_fm() else {
             return;
@@ -4199,6 +4222,10 @@ fn build_file_manager_model(
         .map(|t| t.path_display.clone())
         .unwrap_or_default();
     let sidebar_items = build_sidebar_items(locale, &active_path);
+    let sort_name_label = locale.tr("fm-sort-name");
+    let sort_size_label = locale.tr("fm-sort-size");
+    let sort_modified_label = locale.tr("fm-sort-modified");
+    let sort_type_label = locale.tr("fm-sort-type");
     let panes: Vec<FmPane> = p
         .panes
         .iter()
@@ -4273,6 +4300,10 @@ fn build_file_manager_model(
                         error: t.error.clone().unwrap_or_default().into(),
                         sort_by: t.sort_by as i32,
                         sort_descending: t.sort_descending,
+                        sort_name_label: sort_name_label.clone().into(),
+                        sort_size_label: sort_size_label.clone().into(),
+                        sort_modified_label: sort_modified_label.clone().into(),
+                        sort_type_label: sort_type_label.clone().into(),
                     }
                 })
                 .collect();

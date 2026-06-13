@@ -1069,6 +1069,16 @@ fn sort_by_to_u8(sort_by: SortBy) -> u8 {
     }
 }
 
+fn sort_by_from_u8(column: u8) -> Option<SortBy> {
+    match column {
+        0 => Some(SortBy::Name),
+        1 => Some(SortBy::Size),
+        2 => Some(SortBy::Modified),
+        3 => Some(SortBy::Type),
+        _ => None,
+    }
+}
+
 fn next_sort_by(current: SortBy) -> SortBy {
     match current {
         SortBy::Name => SortBy::Size,
@@ -1653,6 +1663,34 @@ pub async fn cycle_sort(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         };
         tab.sort_by = next_sort_by(tab.sort_by);
         tab.sort_descending = false;
+    }
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+/// Set sort column for the active tab in `pane`; toggles direction when the column is unchanged.
+pub async fn set_sort_column(instance_id: Uuid, pane: u8, column: u8) -> WidgetResult<()> {
+    let sort_by = sort_by_from_u8(column).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation("invalid sort column".into())
+    })?;
+    let inner = live_inner(instance_id)?;
+    {
+        let mut state = inner.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.active_tab_mut()
+            } else {
+                state.left_pane.active_tab_mut()
+            }
+        } else {
+            state.left_pane.active_tab_mut()
+        };
+        if tab.sort_by == sort_by {
+            tab.sort_descending = !tab.sort_descending;
+        } else {
+            tab.sort_by = sort_by;
+            tab.sort_descending = false;
+        }
     }
     inner.refresh_all_tabs().await;
     Ok(())

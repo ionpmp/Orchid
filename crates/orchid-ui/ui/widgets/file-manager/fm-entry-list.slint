@@ -4,11 +4,18 @@ import { FmEntry } from "../../workspace/defs.slint";
 export component FmEntryList inherits Rectangle {
     in property <[FmEntry]> entries;
     in property <bool> details;
+    in property <int> sort-by;
+    in property <bool> sort-descending;
+    in property <string> sort-name-label;
+    in property <string> sort-size-label;
+    in property <string> sort-modified-label;
+    in property <string> sort-type-label;
 
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
     callback entry-double-clicked(string, bool);
     callback entry-context(string, length, length);
+    callback sort-column-clicked(int);
 
     background: transparent;
 
@@ -30,6 +37,93 @@ export component FmEntryList inherits Rectangle {
 
         list-stack := VerticalLayout {
             spacing: 0;
+
+            if details : Rectangle {
+                height: 28px;
+                background: Theme.surface-raised;
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border-default;
+                }
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 8px;
+
+                    Rectangle { width: 20px; height: 1px; }
+
+                    Rectangle {
+                        min-width: 240px;
+                        height: 28px;
+                        background: name-hdr-ta.has-hover ? Theme.surface-base : transparent;
+
+                        name-hdr-ta := TouchArea {
+                            clicked => { root.sort-column-clicked(0); }
+                        }
+                        Text {
+                            text: sort-name-label + (sort-by == 0 ? (sort-descending ? " ↓" : " ↑") : "");
+                            color: sort-by == 0 ? Theme.text-primary : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: sort-by == 0 ? Theme.weight-semibold : Theme.weight-regular;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 100px;
+                        height: 28px;
+                        background: size-hdr-ta.has-hover ? Theme.surface-base : transparent;
+
+                        size-hdr-ta := TouchArea {
+                            clicked => { root.sort-column-clicked(1); }
+                        }
+                        Text {
+                            text: sort-size-label + (sort-by == 1 ? (sort-descending ? " ↓" : " ↑") : "");
+                            color: sort-by == 1 ? Theme.text-primary : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: sort-by == 1 ? Theme.weight-semibold : Theme.weight-regular;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 140px;
+                        height: 28px;
+                        background: mod-hdr-ta.has-hover ? Theme.surface-base : transparent;
+
+                        mod-hdr-ta := TouchArea {
+                            clicked => { root.sort-column-clicked(2); }
+                        }
+                        Text {
+                            text: sort-modified-label + (sort-by == 2 ? (sort-descending ? " ↓" : " ↑") : "");
+                            color: sort-by == 2 ? Theme.text-primary : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: sort-by == 2 ? Theme.weight-semibold : Theme.weight-regular;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 28px;
+                        background: type-hdr-ta.has-hover ? Theme.surface-base : transparent;
+
+                        type-hdr-ta := TouchArea {
+                            clicked => { root.sort-column-clicked(3); }
+                        }
+                        Text {
+                            text: sort-type-label + (sort-by == 3 ? (sort-descending ? " ↓" : " ↑") : "");
+                            color: sort-by == 3 ? Theme.text-primary : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: sort-by == 3 ? Theme.weight-semibold : Theme.weight-regular;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
 
             for entry[i] in entries : Rectangle {
                 height: 28px;
@@ -137,4 +231,3 @@ export component FmEntryList inherits Rectangle {
         }
     }
 }
-

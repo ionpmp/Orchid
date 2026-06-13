@@ -23,6 +23,7 @@ export component FileManagerView inherits Rectangle {
     callback breadcrumb-clicked(int, string);
     callback view-mode-cycle(int);
     callback sort-cycle(int);
+    callback sort-column-clicked(int, int);
     callback quick-filter-changed(int, string);
 
     callback entry-clicked(int, string, bool);
@@ -130,6 +131,7 @@ export component FileManagerView inherits Rectangle {
                 breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                 view-mode-cycle => { root.view-mode-cycle(0); }
                 sort-cycle => { root.sort-cycle(0); }
+                sort-column-clicked(col) => { root.sort-column-clicked(0, col); }
                 quick-filter-changed(q) => { root.quick-filter-changed(0, q); }
                 entry-clicked(p, ctrl) => { root.entry-clicked(0, p, ctrl); }
                 entry-shift-clicked(p) => { root.entry-shift-clicked(0, p); }
@@ -170,6 +172,7 @@ export component FileManagerView inherits Rectangle {
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                         view-mode-cycle => { root.view-mode-cycle(0); }
                         sort-cycle => { root.sort-cycle(0); }
+                        sort-column-clicked(col) => { root.sort-column-clicked(0, col); }
                         quick-filter-changed(q) => { root.quick-filter-changed(0, q); }
                         entry-clicked(p, ctrl) => { root.entry-clicked(0, p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(0, p); }
@@ -208,6 +211,7 @@ export component FileManagerView inherits Rectangle {
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(1, p); }
                         view-mode-cycle => { root.view-mode-cycle(1); }
                         sort-cycle => { root.sort-cycle(1); }
+                        sort-column-clicked(col) => { root.sort-column-clicked(1, col); }
                         quick-filter-changed(q) => { root.quick-filter-changed(1, q); }
                         entry-clicked(p, ctrl) => { root.entry-clicked(1, p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(1, p); }

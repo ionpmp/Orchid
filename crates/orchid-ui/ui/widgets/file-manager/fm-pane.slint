@@ -22,6 +22,7 @@ export component FmPane inherits Rectangle {
     callback breadcrumb-clicked(string);
     callback view-mode-cycle();
     callback sort-cycle();
+    callback sort-column-clicked(int);
     callback quick-filter-changed(string);
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
@@ -140,10 +141,17 @@ export component FmPane inherits Rectangle {
                         height: parent.height;
                         entries: pane.tabs[pane.active-tab].entries;
                         details: pane.tabs[pane.active-tab].view-mode == 2;
+                        sort-by: pane.tabs[pane.active-tab].sort-by;
+                        sort-descending: pane.tabs[pane.active-tab].sort-descending;
+                        sort-name-label: pane.tabs[pane.active-tab].sort-name-label;
+                        sort-size-label: pane.tabs[pane.active-tab].sort-size-label;
+                        sort-modified-label: pane.tabs[pane.active-tab].sort-modified-label;
+                        sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
                         entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
                         entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
+                        sort-column-clicked(col) => { root.sort-column-clicked(col); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading

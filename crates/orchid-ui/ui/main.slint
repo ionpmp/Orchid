@@ -114,6 +114,7 @@ export component MainWindow inherits Window {
     callback fm-breadcrumb-clicked(int, string);
     callback fm-view-mode-cycle(int);
     callback fm-sort-cycle(int);
+    callback fm-sort-column-clicked(int, int);
     callback fm-quick-filter-changed(int, string);
     callback fm-entry-clicked(int, string, bool);
     callback fm-entry-shift-clicked(int, string);
@@ -255,6 +256,7 @@ export component MainWindow inherits Window {
             fm-breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(p, path); }
             fm-view-mode-cycle(p) => { root.fm-view-mode-cycle(p); }
             fm-sort-cycle(p) => { root.fm-sort-cycle(p); }
+            fm-sort-column-clicked(p, col) => { root.fm-sort-column-clicked(p, col); }
             fm-quick-filter-changed(p, q) => { root.fm-quick-filter-changed(p, q); }
             fm-entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(p, path, ctrl); }
             fm-entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(p, path); }
