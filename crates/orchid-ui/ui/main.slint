@@ -123,6 +123,8 @@ export component MainWindow inherits Window {
     callback fm-confirm-no();
     callback fm-rename-commit(string, string);
     callback fm-rename-cancel();
+    callback fm-tag-commit(string);
+    callback fm-tag-cancel();
     callback canvas-long-pressed(length, length, length, length);
     callback catalog-pick(string);
     callback catalog-dismiss();
@@ -253,6 +255,8 @@ export component MainWindow inherits Window {
             fm-confirm-no => { root.fm-confirm-no(); }
             fm-rename-commit(old, new) => { root.fm-rename-commit(old, new); }
             fm-rename-cancel => { root.fm-rename-cancel(); }
+            fm-tag-commit(tag) => { root.fm-tag-commit(tag); }
+            fm-tag-cancel => { root.fm-tag-cancel(); }
             canvas-long-pressed(cx, cy, vx, vy) => { root.canvas-long-pressed(cx, cy, vx, vy); }
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
             catalog-dismiss => { root.catalog-dismiss(); }

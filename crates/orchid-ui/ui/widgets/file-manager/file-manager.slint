@@ -5,6 +5,7 @@ import { FmPane } from "fm-pane.slint";
 import { FmContextMenu } from "fm-context-menu.slint";
 import { FmConfirmDialog } from "fm-confirm-dialog.slint";
 import { FmRenameDialog } from "fm-rename-dialog.slint";
+import { FmTagDialog } from "fm-tag-dialog.slint";
 
 export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
@@ -35,6 +36,9 @@ export component FileManagerView inherits Rectangle {
 
     callback rename-commit(string, string);
     callback rename-cancel();
+
+    callback tag-commit(string);
+    callback tag-cancel();
 
     background: transparent;
 
@@ -106,6 +110,7 @@ export component FileManagerView inherits Rectangle {
                 pane-index: 0;
                 pane: model.panes[0];
                 is-active: true;
+                clipboard-hint: model.clipboard-indicator;
                 tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                 tab-closed(idx, id) => { root.tab-closed(0, id); }
                 tab-new => { root.tab-new(0); }
@@ -137,6 +142,7 @@ export component FileManagerView inherits Rectangle {
                         pane-index: 0;
                         pane: model.panes[0];
                         is-active: model.active-pane == 0;
+                        clipboard-hint: model.clipboard-indicator;
                         tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                         tab-closed(idx, id) => { root.tab-closed(0, id); }
                         tab-new => { root.tab-new(0); }
@@ -166,6 +172,7 @@ export component FileManagerView inherits Rectangle {
                         pane-index: 1;
                         pane: model.panes[1];
                         is-active: model.active-pane == 1;
+                        clipboard-hint: model.clipboard-indicator;
                         tab-clicked(idx, id) => { root.tab-clicked(1, id); }
                         tab-closed(idx, id) => { root.tab-closed(1, id); }
                         tab-new => { root.tab-new(1); }
@@ -211,6 +218,15 @@ export component FileManagerView inherits Rectangle {
         state: model.rename;
         commit(old, new) => { root.rename-commit(old, new); }
         cancel => { root.rename-cancel(); }
+    }
+
+    if model.tag.active : FmTagDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        state: model.tag;
+        commit(tag) => { root.tag-commit(tag); }
+        cancel => { root.tag-cancel(); }
     }
 }
 

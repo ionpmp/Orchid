@@ -50,7 +50,7 @@ use crate::slint_generated::{
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
-    FmRenameState, FmSidebarItem, FmTab, FmTagChip,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
@@ -1084,6 +1084,22 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_rename_cancel();
+                }
+            }
+        });
+        self.window.on_fm_tag_commit({
+            let t = t.clone();
+            move |tag| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_tag_commit(&tag);
+                }
+            }
+        });
+        self.window.on_fm_tag_cancel({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_tag_cancel();
                 }
             }
         });
@@ -2389,6 +2405,8 @@ impl MainWindowController {
                             context_menu: empty_context_menu(),
                             confirm_dialog: empty_confirm_dialog(),
                             rename: empty_rename_state(),
+                            tag: empty_tag_state(),
+                            tag_paths: Vec::new(),
                             show_hidden: false,
                         });
                     (
@@ -2603,6 +2621,8 @@ impl MainWindowController {
                 context_menu: empty_context_menu(),
                 confirm_dialog: empty_confirm_dialog(),
                 rename: empty_rename_state(),
+                tag: empty_tag_state(),
+                tag_paths: Vec::new(),
                 show_hidden: false,
             })
     }
@@ -3029,6 +3049,8 @@ impl MainWindowController {
                         entry.context_menu = empty_context_menu();
                         entry.confirm_dialog = empty_confirm_dialog();
                         entry.rename = empty_rename_state();
+                        entry.tag = empty_tag_state();
+                        entry.tag_paths.clear();
                         drop(over);
                         c.schedule_rebuild();
                     }
@@ -3059,6 +3081,21 @@ impl MainWindowController {
                             path: path.into(),
                             proposed_name: current_name.into(),
                             title: c.locale.tr("fm-rename-title").into(),
+                            ok_label: c.locale.tr("fm-rename-ok").into(),
+                            cancel_label: c.locale.tr("fm-rename-cancel").into(),
+                        };
+                        entry.context_menu = empty_context_menu();
+                        drop(over);
+                        c.schedule_rebuild();
+                    }
+                    orchid_widgets::builtin::file_manager::ActionOutcome::NeedsTag { paths } => {
+                        let mut over = c.fm_overlays.write();
+                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        entry.tag_paths = paths;
+                        entry.tag = FmTagState {
+                            active: true,
+                            proposed_tag: SharedString::new(),
+                            title: c.locale.tr("fm-tag-add-title").into(),
                             ok_label: c.locale.tr("fm-rename-ok").into(),
                             cancel_label: c.locale.tr("fm-rename-cancel").into(),
                         };
@@ -3228,6 +3265,44 @@ impl MainWindowController {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
         entry.rename = empty_rename_state();
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_tag_commit(self: &Arc<Self>, tag: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let paths = self
+            .fm_overlays
+            .read()
+            .get(&inst)
+            .map(|o| o.tag_paths.clone())
+            .unwrap_or_default();
+        let tag_str = tag.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ =
+                orchid_widgets::builtin::file_manager::add_tag_to_paths(inst, paths, &tag_str).await;
+            if let Some(c) = tw.upgrade() {
+                let mut over = c.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                entry.tag = empty_tag_state();
+                entry.tag_paths.clear();
+                drop(over);
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_tag_cancel(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.tag = empty_tag_state();
+        entry.tag_paths.clear();
         drop(over);
         self.schedule_rebuild();
     }
@@ -3656,6 +3731,8 @@ struct FileManagerOverlays {
     context_menu: FmContextMenu,
     confirm_dialog: FmConfirmDialog,
     rename: FmRenameState,
+    tag: FmTagState,
+    tag_paths: Vec<String>,
     show_hidden: bool,
 }
 
@@ -3670,7 +3747,18 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
+        tag: empty_tag_state(),
         show_hidden: false,
+    }
+}
+
+fn empty_tag_state() -> FmTagState {
+    FmTagState {
+        active: false,
+        proposed_tag: SharedString::new(),
+        title: SharedString::new(),
+        ok_label: SharedString::new(),
+        cancel_label: SharedString::new(),
     }
 }
 
@@ -3711,6 +3799,7 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
     match path {
         "virtual:recent" => Some("fav:recent"),
         "virtual:starred" => Some("fav:starred"),
+        "virtual:tags" => Some("fav:tags"),
         "virtual:categories/images" => Some("cat:images"),
         "virtual:categories/documents" => Some("cat:documents"),
         "virtual:categories/video" => Some("cat:video"),
@@ -3738,6 +3827,14 @@ fn build_sidebar_items(locale: &LocaleManager, active_path: &str) -> ModelRc<FmS
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("fav:starred"),
+        },
+        FmSidebarItem {
+            id: "fav:tags".into(),
+            label: locale.tr("fm-virtual-tags").into(),
+            icon: "🏷".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: active_id == Some("fav:tags"),
         },
         FmSidebarItem {
             id: "fav:recent".into(),
@@ -3907,6 +4004,7 @@ fn build_file_manager_model(
         context_menu: overlays.context_menu,
         confirm_dialog: overlays.confirm_dialog,
         rename: overlays.rename,
+        tag: overlays.tag,
         show_hidden: overlays.show_hidden,
     }
 }
@@ -3930,9 +4028,14 @@ fn build_context_menu(
 ) -> FmContextMenu {
     let mut actions_vec: Vec<FmContextAction> = Vec::new();
     for a in actions {
+        let label = if a.id.starts_with("fs.tag:") {
+            a.label_key.clone().into()
+        } else {
+            locale.tr(&a.label_key).into()
+        };
         actions_vec.push(FmContextAction {
             id: a.id.clone().into(),
-            label: locale.tr(&a.label_key).into(),
+            label,
             shortcut: SharedString::new(),
             icon: a.icon.into(),
             enabled: a.enabled,

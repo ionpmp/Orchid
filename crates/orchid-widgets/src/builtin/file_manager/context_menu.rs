@@ -30,6 +30,8 @@ pub struct ContextMenuInputs {
     pub all_managed: bool,
     pub all_starred: bool,
     pub any_starred: bool,
+    /// Recent tag strings for quick-apply submenu entries.
+    pub known_tags: Vec<String>,
 }
 
 /// Build the menu from the current selection and the extra flags.
@@ -97,6 +99,16 @@ pub fn build_for_selection(
         separator_after: false,
         submenu: Vec::new(),
     });
+    for t in &inputs.known_tags {
+        items.push(ContextMenuItem {
+            id: format!("fs.tag:{t}"),
+            label_key: t.clone(),
+            icon: "action-tag",
+            enabled: has_selection,
+            separator_after: false,
+            submenu: Vec::new(),
+        });
+    }
     items.push(ContextMenuItem {
         id: "fs.color-label".into(),
         label_key: "fm-action-color-label".into(),

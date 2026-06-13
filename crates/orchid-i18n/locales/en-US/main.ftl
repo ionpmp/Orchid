@@ -194,6 +194,7 @@ fm-dual-pane-on = Dual pane
 fm-dual-pane-off = Single pane
 fm-info-close = Close
 fm-properties-title = Properties
+fm-tag-add-title = Add tag
 fm-confirm-delete = Delete { $n } items?
 fm-confirm-delete-permanent = Permanently delete { $n } items?
 fm-status-items = { $n } items

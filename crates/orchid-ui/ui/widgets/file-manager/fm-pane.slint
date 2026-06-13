@@ -10,6 +10,7 @@ export component FmPane inherits Rectangle {
     in property <FmPaneModel> pane;
     in property <int> pane-index;
     in property <bool> is-active;
+    in property <string> clipboard-hint;
 
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -125,9 +126,19 @@ export component FmPane inherits Rectangle {
                 HorizontalLayout {
                     padding-left: 8px;
                     padding-right: 8px;
+                    spacing: 12px;
+
                     Text {
                         text: pane.tabs[pane.active-tab].status-text;
                         color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+
+                    if clipboard-hint != "" : Text {
+                        text: clipboard-hint;
+                        color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }

@@ -78,6 +78,10 @@ pub enum ActionOutcome {
         title: String,
         message: String,
     },
+    /// Prompt for a tag name to apply to `paths`.
+    NeedsTag {
+        paths: Vec<String>,
+    },
 }
 
 /// Stable type id.
@@ -470,6 +474,14 @@ impl FileManagerInner {
                 .iter()
                 .filter_map(|p| orchid_fs::FsPath::new(p).ok()),
         );
+        for tag in self.deps.tag_manager.all_tags().unwrap_or_default() {
+            paths.extend(
+                self.deps
+                    .tag_manager
+                    .paths_with_tag(&tag)
+                    .unwrap_or_default(),
+            );
+        }
         paths.sort_by_key(|p| p.as_str().to_string());
         paths.dedup();
         paths
@@ -633,7 +645,54 @@ impl FileManagerInner {
         if let Some(cat) = category_for_virtual_path(raw) {
             return self.list_category(cat).await;
         }
+        if raw == "virtual:tags" {
+            return self.list_tagged_paths().await;
+        }
         Vec::new()
+    }
+
+    async fn list_tagged_paths(&self) -> Vec<orchid_fs::FsEntry> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut paths = Vec::new();
+        for tag in self.deps.tag_manager.all_tags().unwrap_or_default() {
+            for p in self
+                .deps
+                .tag_manager
+                .paths_with_tag(&tag)
+                .unwrap_or_default()
+            {
+                let key = p.as_str().to_string();
+                if seen.insert(key) {
+                    paths.push(p);
+                }
+            }
+            if paths.len() >= 200 {
+                break;
+            }
+        }
+        let mut entries: Vec<orchid_fs::FsEntry> = paths
+            .into_iter()
+            .take(200)
+            .map(|p| orchid_fs::FsEntry {
+                name: p.file_name().map(String::from).unwrap_or_default(),
+                metadata: orchid_fs::FsMetadata {
+                    kind: orchid_fs::FsEntryKind::File,
+                    size: 0,
+                    created: None,
+                    modified: None,
+                    accessed: None,
+                    readonly: false,
+                    hidden: false,
+                    system: false,
+                    mime: None,
+                    extended: orchid_fs::ExtendedAttributes::default(),
+                },
+                path: p,
+            })
+            .collect();
+        self.hydrate_entries_metadata(&mut entries).await;
+        self.apply_entry_metadata(&mut entries);
+        entries
     }
 
     fn apply_entry_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
@@ -957,6 +1016,14 @@ pub fn context_menu_for(
         any_starred: selected_entries
             .iter()
             .any(|e| e.metadata.extended.starred),
+        known_tags: inner
+            .deps
+            .tag_manager
+            .all_tags()
+            .unwrap_or_default()
+            .into_iter()
+            .take(12)
+            .collect(),
     };
     Ok((build_for_selection(&selected_entries, inputs), target_paths))
 }
@@ -1331,6 +1398,20 @@ pub async fn run_action_with_opts(
     opts: RunActionOpts,
 ) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
+    if let Some(tag) = action_id.strip_prefix("fs.tag:") {
+        if !tag.is_empty() {
+            for p in &target_paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                inner
+                    .deps
+                    .tag_manager
+                    .add_tag(&fp, tag)
+                    .map_err(map_fs_error)?;
+            }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+    }
     match action_id {
         "fs.open" => {
             let Some(p) = target_paths.first() else {
@@ -1434,6 +1515,14 @@ pub async fn run_action_with_opts(
             }
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
+        }
+        "fs.tag-add" => {
+            if target_paths.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::NeedsTag {
+                paths: target_paths,
+            });
         }
         "fs.color-label" => {
             for p in &target_paths {
@@ -1540,6 +1629,29 @@ pub async fn rename(instance_id: Uuid, old_path: &str, new_name: &str) -> Widget
     Ok(())
 }
 
+/// Apply `tag` to every path in `paths`.
+pub async fn add_tag_to_paths(
+    instance_id: Uuid,
+    paths: Vec<String>,
+    tag: &str,
+) -> WidgetResult<()> {
+    let trimmed = tag.trim();
+    if trimmed.is_empty() {
+        return Err(WidgetError::InvalidStateForOperation("empty tag".into()));
+    }
+    let inner = live_inner(instance_id)?;
+    for p in paths {
+        let fp = orchid_fs::FsPath::new(&p).map_err(map_fs_error)?;
+        inner
+            .deps
+            .tag_manager
+            .add_tag(&fp, trimmed)
+            .map_err(map_fs_error)?;
+    }
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
 /// Record a path in the recent-files list (files only).
 pub async fn touch_recent(instance_id: Uuid, path: &str) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -1554,6 +1666,7 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
     let path = match virtual_id {
         "fav:recent" => orchid_fs::FsPath::new("virtual:recent").ok(),
         "fav:starred" => orchid_fs::FsPath::new("virtual:starred").ok(),
+        "fav:tags" => orchid_fs::FsPath::new("virtual:tags").ok(),
         "cat:images" => orchid_fs::FsPath::new("virtual:categories/images").ok(),
         "cat:documents" => orchid_fs::FsPath::new("virtual:categories/documents").ok(),
         "cat:video" => orchid_fs::FsPath::new("virtual:categories/video").ok(),

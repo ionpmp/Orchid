@@ -84,6 +84,8 @@ export component WidgetFrame inherits Rectangle {
     callback fm-confirm-no();
     callback fm-rename-commit(string, string);
     callback fm-rename-cancel();
+    callback fm-tag-commit(string);
+    callback fm-tag-cancel();
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -312,6 +314,8 @@ export component WidgetFrame inherits Rectangle {
             confirm-no => { root.fm-confirm-no(); }
             rename-commit(old, new) => { root.fm-rename-commit(old, new); }
             rename-cancel => { root.fm-rename-cancel(); }
+            tag-commit(tag) => { root.fm-tag-commit(tag); }
+            tag-cancel => { root.fm-tag-cancel(); }
         }
     }
 
