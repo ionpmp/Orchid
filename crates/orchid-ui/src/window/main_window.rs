@@ -2641,6 +2641,15 @@ impl MainWindowController {
                 orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
                     .await
                     .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+                for fm in c.widget_manager.instances_for_workspace(ws_id) {
+                    if fm.type_id == orchid_widgets::builtin::file_manager::TYPE_ID {
+                        let path_str = path.as_str().to_string();
+                        let _ =
+                            orchid_widgets::builtin::file_manager::touch_recent(fm.id, &path_str)
+                                .await;
+                        break;
+                    }
+                }
                 if let Some(c2) = ctrl.upgrade() {
                     c2.schedule_rebuild();
                 }
@@ -2668,9 +2677,17 @@ impl MainWindowController {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
 
-        orchid_widgets::builtin::viewer::open_path(id, path)
+        orchid_widgets::builtin::viewer::open_path(id, path.clone())
             .await
             .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+        for inst in c.widget_manager.instances_for_workspace(ws_id) {
+            if inst.type_id == orchid_widgets::builtin::file_manager::TYPE_ID {
+                let path_str = path.as_str().to_string();
+                let _ =
+                    orchid_widgets::builtin::file_manager::touch_recent(inst.id, &path_str).await;
+                break;
+            }
+        }
         if let Some(c2) = ctrl.upgrade() {
             c2.schedule_rebuild();
         }
@@ -3041,6 +3058,9 @@ impl MainWindowController {
                             active: true,
                             path: path.into(),
                             proposed_name: current_name.into(),
+                            title: c.locale.tr("fm-rename-title").into(),
+                            ok_label: c.locale.tr("fm-rename-ok").into(),
+                            cancel_label: c.locale.tr("fm-rename-cancel").into(),
                         };
                         entry.context_menu = empty_context_menu();
                         drop(over);
@@ -3259,6 +3279,15 @@ fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<TerminalCellMode
         rows.push(ModelRc::new(VecModel::from(rowv)));
     }
     ModelRc::new(VecModel::from(rows))
+}
+
+fn fm_rgba_to_image(rgba: &[u8], width: u32, height: u32) -> Image {
+    if width == 0 || height == 0 || rgba.is_empty() {
+        return Image::default();
+    }
+    let buf =
+        slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba, width, height);
+    Image::from_rgba8(buf)
 }
 
 fn base64_decode(input: &str) -> std::result::Result<Vec<u8>, ()> {
@@ -3605,6 +3634,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         panes: ModelRc::new(VecModel::default()),
         active_pane: 0,
         dual_pane: false,
+        dual_pane_label: locale.tr("fm-dual-pane-on").into(),
         clipboard_indicator: SharedString::new(),
         sidebar_items: build_sidebar_items(locale, ""),
         context_menu: empty_context_menu(),
@@ -3641,6 +3671,9 @@ fn empty_rename_state() -> FmRenameState {
         active: false,
         path: SharedString::new(),
         proposed_name: SharedString::new(),
+        title: SharedString::new(),
+        ok_label: SharedString::new(),
+        cancel_label: SharedString::new(),
     }
 }
 
@@ -3768,6 +3801,14 @@ fn build_file_manager_model(
                                     color: slint::Color::from_argb_u8(255, 0x4d, 0x82, 0xff),
                                 })
                                 .collect();
+                            let thumb_img = if e.has_thumbnail {
+                                e.thumbnail_rgba
+                                    .as_ref()
+                                    .map(|rgba| fm_rgba_to_image(rgba, e.thumbnail_width, e.thumbnail_height))
+                                    .unwrap_or_default()
+                            } else {
+                                Image::default()
+                            };
                             FmEntry {
                                 path: e.path.clone().into(),
                                 name: e.name.clone().into(),
@@ -3778,6 +3819,7 @@ fn build_file_manager_model(
                                 icon: e.icon.clone().into(),
                                 has_thumbnail: e.has_thumbnail,
                                 thumbnail_key: e.thumbnail_key.clone().unwrap_or_default().into(),
+                                thumbnail: thumb_img,
                                 is_selected: e.is_selected,
                                 is_hidden: e.is_hidden,
                                 is_encrypted: e.is_encrypted,
@@ -3825,6 +3867,11 @@ fn build_file_manager_model(
         panes: ModelRc::new(VecModel::from(panes)),
         active_pane: i32::from(p.active_pane),
         dual_pane: p.dual_pane,
+        dual_pane_label: if p.dual_pane {
+            locale.tr("fm-dual-pane-off").into()
+        } else {
+            locale.tr("fm-dual-pane-on").into()
+        },
         clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
         sidebar_items,
         context_menu: overlays.context_menu,

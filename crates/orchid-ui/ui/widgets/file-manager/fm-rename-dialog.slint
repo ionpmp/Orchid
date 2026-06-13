@@ -29,7 +29,7 @@ export component FmRenameDialog inherits Rectangle {
             spacing: 12px;
 
             Text {
-                text: "Rename";
+                text: state.title;
                 color: Theme.text-primary;
                 font-size: Theme.font-size-lg;
                 font-weight: Theme.weight-semibold;
@@ -70,7 +70,7 @@ export component FmRenameDialog inherits Rectangle {
                     border-radius: Theme.radius-md;
                     cancel-ta := TouchArea { clicked => { root.cancel(); } }
                     Text {
-                        text: "Cancel";
+                        text: state.cancel-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
@@ -87,7 +87,7 @@ export component FmRenameDialog inherits Rectangle {
                         clicked => { root.commit(state.path, root.edited-name); }
                     }
                     Text {
-                        text: "OK";
+                        text: state.ok-label;
                         color: Theme.text-primary;
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;

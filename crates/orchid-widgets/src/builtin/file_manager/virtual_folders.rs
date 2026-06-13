@@ -6,6 +6,19 @@
 //! through the widget's navigation pipeline — this module only enumerates
 //! the "directories".
 
+use orchid_fs::{FsEntry, FsEntryKind};
+
+/// Category bucket for `virtual:categories/*` folders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum FileCategory {
+    Images,
+    Documents,
+    Video,
+    Audio,
+    Archives,
+}
+
 /// One top-level virtual folder.
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -69,6 +82,63 @@ pub fn is_virtual(path: &orchid_fs::FsPath) -> bool {
     path.scheme() == "virtual"
 }
 
+/// Map a `virtual:categories/…` path to a [`FileCategory`].
+#[must_use]
+pub fn category_for_virtual_path(raw: &str) -> Option<FileCategory> {
+    match raw {
+        "virtual:categories/images" => Some(FileCategory::Images),
+        "virtual:categories/documents" => Some(FileCategory::Documents),
+        "virtual:categories/video" => Some(FileCategory::Video),
+        "virtual:categories/audio" => Some(FileCategory::Audio),
+        "virtual:categories/archives" => Some(FileCategory::Archives),
+        _ => None,
+    }
+}
+
+/// Whether `entry` belongs in the given category virtual folder.
+#[must_use]
+pub fn entry_matches_category(entry: &FsEntry, cat: FileCategory) -> bool {
+    if matches!(entry.metadata.kind, FsEntryKind::Directory) {
+        return false;
+    }
+    let mime = entry.metadata.mime.as_deref();
+    let ext = entry.path.extension().map(|e| e.to_lowercase());
+    match cat {
+        FileCategory::Images => mime_is_prefix(mime, "image/")
+            || ext_in(&ext, &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "avif", "svg"]),
+        FileCategory::Documents => {
+            mime_is_prefix(mime, "text/")
+                || mime == Some("application/pdf")
+                || mime.map(|m| m.contains("document") || m.contains("msword") || m.contains("spreadsheet"))
+                    .unwrap_or(false)
+                || ext_in(
+                    &ext,
+                    &[
+                        "pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ppt", "pptx",
+                        "csv", "ods", "odp",
+                    ],
+                )
+        }
+        FileCategory::Video => mime_is_prefix(mime, "video/")
+            || ext_in(&ext, &["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "flv"]),
+        FileCategory::Audio => mime_is_prefix(mime, "audio/")
+            || ext_in(&ext, &["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus"]),
+        FileCategory::Archives => mime.map(|m| m.contains("zip") || m.contains("archive") || m.contains("compressed"))
+            .unwrap_or(false)
+            || ext_in(&ext, &["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "cab"]),
+    }
+}
+
+fn mime_is_prefix(mime: Option<&str>, prefix: &str) -> bool {
+    mime.map(|m| m.starts_with(prefix)).unwrap_or(false)
+}
+
+fn ext_in(ext: &Option<String>, list: &[&str]) -> bool {
+    ext.as_ref()
+        .map(|e| list.iter().any(|x| x == e))
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +156,27 @@ mod tests {
         let l = orchid_fs::FsPath::new("local:/tmp").unwrap();
         assert!(is_virtual(&v));
         assert!(!is_virtual(&l));
+    }
+
+    #[test]
+    fn category_filter_matches_image_extension() {
+        let entry = FsEntry {
+            path: orchid_fs::FsPath::new("local:/tmp/photo.png").unwrap(),
+            name: "photo.png".into(),
+            metadata: orchid_fs::FsMetadata {
+                kind: FsEntryKind::File,
+                size: 0,
+                created: None,
+                modified: None,
+                accessed: None,
+                readonly: false,
+                hidden: false,
+                system: false,
+                mime: None,
+                extended: orchid_fs::ExtendedAttributes::default(),
+            },
+        };
+        assert!(entry_matches_category(&entry, FileCategory::Images));
+        assert!(!entry_matches_category(&entry, FileCategory::Audio));
     }
 }

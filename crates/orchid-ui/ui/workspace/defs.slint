@@ -262,6 +262,7 @@ export struct FmEntry {
     icon: string,
     has-thumbnail: bool,
     thumbnail-key: string,
+    thumbnail: image,
     is-selected: bool,
     is-hidden: bool,
     is-encrypted: bool,
@@ -336,12 +337,16 @@ export struct FmRenameState {
     active: bool,
     path: string,
     proposed-name: string,
+    title: string,
+    ok-label: string,
+    cancel-label: string,
 }
 
 export struct FileManagerModel {
     panes: [FmPane],
     active-pane: int,
     dual-pane: bool,
+    dual-pane-label: string,
     clipboard-indicator: string,
     sidebar-items: [FmSidebarItem],
     context-menu: FmContextMenu,

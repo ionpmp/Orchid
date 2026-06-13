@@ -38,7 +38,10 @@ pub use navigation::{BreadcrumbSegment, NavigationResult, Navigator};
 pub use selection::SelectionModel;
 pub use state::{ActivePane, FileManagerState, PaneState, TabState};
 pub use view_mode::{config_for_mode, ViewModeConfig};
-pub use virtual_folders::{is_virtual, sidebar_catalog, VirtualFolder};
+pub use virtual_folders::{
+    category_for_virtual_path, entry_matches_category, is_virtual, sidebar_catalog, FileCategory,
+    VirtualFolder,
+};
 
 /// Selection mutation mode for UI interactions.
 #[allow(missing_docs)]
@@ -122,6 +125,8 @@ struct FileManagerInner {
     /// UI-level encrypt overlay until [`EncryptedFolderEngine`] actions land.
     encrypted: RwLock<std::collections::HashSet<String>>,
     recent: RwLock<std::collections::VecDeque<String>>,
+    /// Decoded thumbnails keyed by entry path (icon / gallery modes).
+    thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -150,6 +155,7 @@ impl FileManagerWidget {
                 entries_by_tab: RwLock::new(std::collections::HashMap::new()),
                 encrypted: RwLock::new(std::collections::HashSet::new()),
                 recent: RwLock::new(std::collections::VecDeque::new()),
+                thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
                 bus,
             }),
         }
@@ -419,22 +425,147 @@ impl FileManagerInner {
 
         if is_virtual(&path) {
             let entries = self.list_virtual(&path).await;
-            self.entries_by_tab.write().insert(tab.id, entries);
+            self.entries_by_tab.write().insert(tab.id, entries.clone());
+            self.ensure_thumbnails(tab, &entries).await;
             return;
         }
 
         let result = self.navigator.navigate(&path, show_hidden).await;
         let mut entries = result.entries;
         self.apply_entry_metadata(&mut entries);
-        self.entries_by_tab.write().insert(tab.id, entries);
+        self.entries_by_tab.write().insert(tab.id, entries.clone());
+        self.ensure_thumbnails(tab, &entries).await;
+    }
+
+    fn record_recent(&self, path: &orchid_fs::FsPath) {
+        if is_virtual(path) {
+            return;
+        }
+        if path.as_str().ends_with('/') || path.as_str().ends_with('\\') {
+            return;
+        }
+        let s = path.as_str().to_string();
+        let mut recent = self.recent.write();
+        recent.retain(|p| p != &s);
+        recent.push_front(s);
+        while recent.len() > 50 {
+            recent.pop_back();
+        }
+    }
+
+    fn collect_catalog_candidates(&self) -> Vec<orchid_fs::FsPath> {
+        let mut paths: Vec<orchid_fs::FsPath> = self
+            .deps
+            .tag_manager
+            .starred_paths()
+            .unwrap_or_default();
+        paths.extend(
+            self.recent
+                .read()
+                .iter()
+                .filter_map(|p| orchid_fs::FsPath::new(p).ok()),
+        );
+        paths.sort_by_key(|p| p.as_str().to_string());
+        paths.dedup();
+        paths
+    }
+
+    async fn hydrate_entries_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
+        for e in entries.iter_mut() {
+            let Some(provider) = self.deps.registry.for_path(&e.path) else {
+                continue;
+            };
+            if let Ok(meta) = provider.metadata(&e.path).await {
+                if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                    continue;
+                }
+                e.metadata = meta;
+            }
+        }
+    }
+
+    async fn list_category(&self, cat: FileCategory) -> Vec<orchid_fs::FsEntry> {
+        let candidates = self.collect_catalog_candidates();
+        let mut entries = Vec::new();
+        for p in candidates {
+            let Some(provider) = self.deps.registry.for_path(&p) else {
+                continue;
+            };
+            let meta = match provider.metadata(&p).await {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                continue;
+            }
+            let entry = orchid_fs::FsEntry {
+                path: p.clone(),
+                name: p.file_name().map(String::from).unwrap_or_default(),
+                metadata: meta,
+            };
+            if entry_matches_category(&entry, cat) {
+                entries.push(entry);
+            }
+            if entries.len() >= 200 {
+                break;
+            }
+        }
+        self.apply_entry_metadata(&mut entries);
+        entries
+    }
+
+    async fn ensure_thumbnails(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+        let mode_cfg = config_for_mode(tab.view_mode, 1.0);
+        if !mode_cfg.show_thumbnails {
+            return;
+        }
+        let thumb_size = viewer_thumb_size(self.config.read().thumbnail_size);
+        let mut generated = false;
+        for e in entries.iter().take(64) {
+            if !is_image_entry(e) {
+                continue;
+            }
+            let path_key = e.path.as_str().to_string();
+            if self.thumbnail_rgba.read().contains_key(&path_key) {
+                continue;
+            }
+            let modified_ms = e
+                .metadata
+                .modified
+                .map(|t| t.timestamp_millis())
+                .unwrap_or(0);
+            let key = orchid_viewers::ThumbnailService::cache_key(&e.path, modified_ms);
+            if let Ok(Some(thumb)) = self.deps.thumbnails.get_cached(&key, thumb_size).await {
+                self.thumbnail_rgba.write().insert(path_key, thumb);
+                generated = true;
+                continue;
+            }
+            let Some(provider) = self.deps.registry.for_path(&e.path) else {
+                continue;
+            };
+            let bytes = match provider.read(&e.path).await {
+                Ok(b) if b.len() <= 16 * 1024 * 1024 => b,
+                _ => continue,
+            };
+            if let Ok(thumb) = self
+                .deps
+                .thumbnails
+                .generate_from_image_bytes(key, thumb_size, bytes)
+                .await
+            {
+                self.thumbnail_rgba.write().insert(path_key, thumb);
+                generated = true;
+            }
+        }
+        if generated {
+            self.publish_refresh();
+        }
     }
 
     async fn list_virtual(&self, path: &orchid_fs::FsPath) -> Vec<orchid_fs::FsEntry> {
-        // MVP: support `virtual:recent` and `virtual:starred` lists from overlays.
-        // Everything else yields empty.
         let raw = path.as_str();
         if raw == "virtual:recent" {
-            return self
+            let mut entries: Vec<orchid_fs::FsEntry> = self
                 .recent
                 .read()
                 .iter()
@@ -457,6 +588,9 @@ impl FileManagerInner {
                     path: p,
                 })
                 .collect();
+            self.hydrate_entries_metadata(&mut entries).await;
+            self.apply_entry_metadata(&mut entries);
+            return entries;
         }
         if raw == "virtual:starred" {
             let paths = self
@@ -487,8 +621,12 @@ impl FileManagerInner {
                     path: p,
                 })
                 .collect();
+            self.hydrate_entries_metadata(&mut entries).await;
             self.apply_entry_metadata(&mut entries);
             return entries;
+        }
+        if let Some(cat) = category_for_virtual_path(raw) {
+            return self.list_category(cat).await;
         }
         Vec::new()
     }
@@ -532,29 +670,55 @@ fn build_tab_payload(
             .collect()
     };
 
+    let thumb_cache = inner.thumbnail_rgba.read();
     let entry_payloads: Vec<EntryPayload> = entries_filtered
         .into_iter()
-        .map(|e| EntryPayload {
-            path: e.path.as_str().to_string(),
-            name: e.name.clone(),
-            is_dir: matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
-            size_text: format_size(e.metadata.size),
-            modified_text: e
-                .metadata
-                .modified
-                .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
-                .unwrap_or_default(),
-            type_text: classify(&e.name, e.metadata.mime.as_deref(), matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory)),
-            icon: if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) { "folder".into() } else { "file".into() },
-            has_thumbnail: false,
-            thumbnail_key: None,
-            is_selected: tab.selection.is_selected(e.path.as_str()),
-            is_hidden: e.metadata.hidden,
-            is_encrypted: e.metadata.extended.is_encrypted,
-            is_managed: e.metadata.extended.is_managed,
-            is_starred: e.metadata.extended.starred,
-            color_label: None,
-            tags: e.metadata.extended.tags.clone(),
+        .map(|e| {
+            let path_key = e.path.as_str();
+            let (has_thumbnail, thumbnail_rgba, thumbnail_width, thumbnail_height) =
+                if let Some(t) = thumb_cache.get(path_key) {
+                    (
+                        true,
+                        Some(t.rgba.as_ref().clone()),
+                        t.width,
+                        t.height,
+                    )
+                } else {
+                    (false, None, 0, 0)
+                };
+            EntryPayload {
+                path: path_key.to_string(),
+                name: e.name.clone(),
+                is_dir: matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
+                size_text: format_size(e.metadata.size),
+                modified_text: e
+                    .metadata
+                    .modified
+                    .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+                    .unwrap_or_default(),
+                type_text: classify(
+                    &e.name,
+                    e.metadata.mime.as_deref(),
+                    matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
+                ),
+                icon: if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
+                    "folder".into()
+                } else {
+                    "file".into()
+                },
+                has_thumbnail,
+                thumbnail_key: None,
+                thumbnail_rgba,
+                thumbnail_width,
+                thumbnail_height,
+                is_selected: tab.selection.is_selected(path_key),
+                is_hidden: e.metadata.hidden,
+                is_encrypted: e.metadata.extended.is_encrypted,
+                is_managed: e.metadata.extended.is_managed,
+                is_starred: e.metadata.extended.starred,
+                color_label: None,
+                tags: e.metadata.extended.tags.clone(),
+            }
         })
         .collect();
     let selection_count = tab.selection.count() as u32;
@@ -615,6 +779,29 @@ fn classify(name: &str, mime: Option<&str>, is_dir: bool) -> String {
         .next()
         .map(|ext| format!("{} file", ext.to_uppercase()))
         .unwrap_or_else(|| "File".into())
+}
+
+fn is_image_entry(e: &orchid_fs::FsEntry) -> bool {
+    if e.metadata.mime.as_deref().map(|m| m.starts_with("image/")).unwrap_or(false) {
+        return true;
+    }
+    let ext = e
+        .path
+        .extension()
+        .map(|x| x.to_lowercase())
+        .unwrap_or_default();
+    matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tif" | "tiff" | "avif"
+    )
+}
+
+fn viewer_thumb_size(size: config::ThumbnailSize) -> orchid_viewers::ThumbnailSize {
+    match size {
+        config::ThumbnailSize::Small => orchid_viewers::ThumbnailSize::Small,
+        config::ThumbnailSize::Medium => orchid_viewers::ThumbnailSize::Medium,
+        config::ThumbnailSize::Large => orchid_viewers::ThumbnailSize::Large,
+    }
 }
 
 /// Descriptor with a default initial path of the user's home directory.
@@ -1101,15 +1288,28 @@ pub async fn run_action_with_opts(
             let Some(p) = target_paths.first() else {
                 return Ok(ActionOutcome::Done);
             };
+            if let Ok(fp) = orchid_fs::FsPath::new(p) {
+                inner.record_recent(&fp);
+            }
             return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
         }
         "fs.open-all" => {
-            if target_paths.is_empty() {
+            let mut files = Vec::new();
+            for p in target_paths {
+                let fp = orchid_fs::FsPath::new(&p).map_err(map_fs_error)?;
+                if let Some(provider) = inner.deps.registry.for_path(&fp) {
+                    if let Ok(meta) = provider.metadata(&fp).await {
+                        if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                            continue;
+                        }
+                    }
+                }
+                files.push(p);
+            }
+            if files.is_empty() {
                 return Ok(ActionOutcome::Done);
             }
-            return Ok(ActionOutcome::OpenInViewerMany {
-                paths: target_paths,
-            });
+            return Ok(ActionOutcome::OpenInViewerMany { paths: files });
         }
         "viewer.open" => {
             let Some(p) = target_paths.first() else {
@@ -1238,6 +1438,14 @@ pub async fn rename(instance_id: Uuid, old_path: &str, new_name: &str) -> Widget
         .await
         .map_err(map_fs_error)?;
     inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+/// Record a path in the recent-files list (files only).
+pub async fn touch_recent(instance_id: Uuid, path: &str) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let fp = orchid_fs::FsPath::new(path).map_err(map_fs_error)?;
+    inner.record_recent(&fp);
     Ok(())
 }
 

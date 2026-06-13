@@ -63,7 +63,15 @@ export component FmEntryList inherits Rectangle {
                         border-radius: 2px;
                     }
 
-                    Text {
+                    if entry.has-thumbnail : Image {
+                        width: 20px;
+                        height: 20px;
+                        source: entry.thumbnail;
+                        image-fit: contain;
+                        y: (parent.height - self.height) / 2;
+                    }
+
+                    if !entry.has-thumbnail : Text {
                         text: entry.is-dir ? "📁"
                             : entry.is-encrypted ? "🔒"
                             : entry.is-managed ? "🗃"

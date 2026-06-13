@@ -49,6 +49,10 @@ pub struct EntryPayload {
     pub icon: String,
     pub has_thumbnail: bool,
     pub thumbnail_key: Option<String>,
+    /// RGBA8 pixels when a thumbnail was generated for icon/gallery modes.
+    pub thumbnail_rgba: Option<Vec<u8>>,
+    pub thumbnail_width: u32,
+    pub thumbnail_height: u32,
     pub is_selected: bool,
     pub is_hidden: bool,
     pub is_encrypted: bool,
