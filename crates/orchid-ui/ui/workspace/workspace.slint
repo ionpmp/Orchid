@@ -120,17 +120,51 @@ export component WorkspaceView inherits Rectangle {
                 height: max(root.workspace.canvas-content-height, canvas-flick.height);
                 background: Theme.surface-base;
 
+                property <bool> long-press-armed: false;
+                property <length> long-press-content-x: 0;
+                property <length> long-press-content-y: 0;
+                property <length> long-press-viewport-x: 0;
+                property <length> long-press-viewport-y: 0;
+                property <length> long-press-down-x: 0;
+                property <length> long-press-down-y: 0;
+
+                long-press-timer := Timer {
+                    interval: 500ms;
+                    running: canvas-inner.long-press-armed;
+                    triggered => {
+                        canvas-inner.long-press-armed = false;
+                        root.canvas-long-pressed(
+                            canvas-inner.long-press-content-x,
+                            canvas-inner.long-press-content-y,
+                            canvas-inner.long-press-viewport-x,
+                            canvas-inner.long-press-viewport-y,
+                        );
+                    }
+                }
+
                 // Behind widgets: empty canvas hits here; widgets stay on top.
                 canvas-touch := TouchArea {
                     width: parent.width;
                     height: parent.height;
-                    clicked => {
-                        root.canvas-long-pressed(
-                            self.mouse-x + canvas-flick.viewport-x,
-                            self.mouse-y + canvas-flick.viewport-y,
-                            canvas-flick.viewport-x,
-                            canvas-flick.viewport-y,
-                        );
+                    pointer-event(event) => {
+                        if (event.kind == PointerEventKind.down) {
+                            canvas-inner.long-press-down-x = self.mouse-x;
+                            canvas-inner.long-press-down-y = self.mouse-y;
+                            canvas-inner.long-press-content-x = self.mouse-x + canvas-flick.viewport-x;
+                            canvas-inner.long-press-content-y = self.mouse-y + canvas-flick.viewport-y;
+                            canvas-inner.long-press-viewport-x = canvas-flick.viewport-x;
+                            canvas-inner.long-press-viewport-y = canvas-flick.viewport-y;
+                            canvas-inner.long-press-armed = true;
+                        } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                            canvas-inner.long-press-armed = false;
+                        }
+                    }
+                    moved => {
+                        if (canvas-inner.long-press-armed
+                            && (abs(self.mouse-x - canvas-inner.long-press-down-x) > 8px
+                                || abs(self.mouse-y - canvas-inner.long-press-down-y) > 8px)) {
+                            canvas-inner.long-press-armed = false;
+                        }
                     }
                 }
 

@@ -1,0 +1,100 @@
+import { Theme } from "../../theme_global.slint";
+import { FmRenameState } from "../../workspace/defs.slint";
+
+export component FmRenameDialog inherits Rectangle {
+    in property <FmRenameState> state;
+    callback commit(string, string);
+    callback cancel();
+
+    property <string> edited-name: state.proposed-name;
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.cancel(); }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 360px;
+        height: lay.preferred-height + 16px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #00000080;
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+
+            Text {
+                text: "Rename";
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+
+            Rectangle {
+                height: 32px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: name-fs.has-focus ? Theme.accent-brand : Theme.border-default;
+
+                name-fs := FocusScope {
+                    width: parent.width;
+                    height: parent.height;
+                    TouchArea { clicked => { name-fs.focus(); } }
+
+                    TextInput {
+                        text: root.edited-name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        single-line: true;
+                        edited => { root.edited-name = self.text; }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: cancel-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    cancel-ta := TouchArea { clicked => { root.cancel(); } }
+                    Text {
+                        text: "Cancel";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: ok-ta.has-hover ? Theme.accent-brand : #4d82ff88;
+                    border-radius: Theme.radius-md;
+                    ok-ta := TouchArea {
+                        clicked => { root.commit(state.path, root.edited-name); }
+                    }
+                    Text {
+                        text: "OK";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

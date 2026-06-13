@@ -66,6 +66,10 @@ pub enum ActionOutcome {
     OpenInViewer {
         path: String,
     },
+    /// Open each file path in the viewer (directories are skipped).
+    OpenInViewerMany {
+        paths: Vec<String>,
+    },
 }
 
 /// Stable type id.
@@ -677,6 +681,81 @@ pub struct RunActionOpts {
     pub skip_confirm: bool,
 }
 
+/// Build context-menu descriptors for a right-click on `context_path` in `pane`.
+pub fn context_menu_for(
+    instance_id: Uuid,
+    pane: u8,
+    context_path: &str,
+) -> WidgetResult<(Vec<ContextMenuItem>, Vec<String>)> {
+    let inner = live_inner(instance_id)?;
+    let (entries, target_paths) = {
+        let state = inner.state.lock();
+        let tab = active_tab_ref(&state, pane)?;
+        let tab_id = tab.id;
+        let selection = tab.selection.selected_paths();
+        let entries = inner
+            .entries_by_tab
+            .read()
+            .get(&tab_id)
+            .cloned()
+            .unwrap_or_default();
+        let target_paths = if selection.iter().any(|p| p == context_path) {
+            selection
+        } else {
+            vec![context_path.to_string()]
+        };
+        (entries, target_paths)
+    };
+    let selected_entries: Vec<orchid_fs::FsEntry> = target_paths
+        .iter()
+        .filter_map(|p| entries.iter().find(|e| e.path.as_str() == p))
+        .cloned()
+        .collect();
+    let inputs = ContextMenuInputs {
+        clipboard_has_contents: !inner.deps.clipboard.is_empty(),
+        all_encrypted: selected_entries
+            .iter()
+            .all(|e| e.metadata.extended.is_encrypted),
+        any_encrypted: selected_entries
+            .iter()
+            .any(|e| e.metadata.extended.is_encrypted),
+        all_managed: selected_entries
+            .iter()
+            .all(|e| e.metadata.extended.is_managed),
+    };
+    Ok((build_for_selection(&selected_entries, inputs), target_paths))
+}
+
+/// Select `context_path` when it is not already part of the current selection.
+pub async fn focus_context_target(
+    instance_id: Uuid,
+    pane: u8,
+    context_path: &str,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let needs_select = {
+        let state = inner.state.lock();
+        let tab = active_tab_ref(&state, pane)?;
+        !tab.selection.is_selected(context_path)
+    };
+    if needs_select {
+        select_entry(instance_id, pane, context_path, SelectionMode::Single).await?;
+    }
+    Ok(())
+}
+
+fn active_tab_ref(
+    state: &FileManagerState,
+    pane: u8,
+) -> WidgetResult<&TabState> {
+    if pane == 1 {
+        if let Some(r) = state.right_pane.as_ref() {
+            return Ok(r.active_tab());
+        }
+    }
+    Ok(state.left_pane.active_tab())
+}
+
 /// Navigate the given `pane` (0 left, 1 right) to `path`.
 pub async fn navigate(instance_id: Uuid, pane: u8, path: orchid_fs::FsPath) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -1018,6 +1097,20 @@ pub async fn run_action_with_opts(
 ) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
     match action_id {
+        "fs.open" => {
+            let Some(p) = target_paths.first() else {
+                return Ok(ActionOutcome::Done);
+            };
+            return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
+        }
+        "fs.open-all" => {
+            if target_paths.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::OpenInViewerMany {
+                paths: target_paths,
+            });
+        }
         "viewer.open" => {
             let Some(p) = target_paths.first() else {
                 return Ok(ActionOutcome::Done);

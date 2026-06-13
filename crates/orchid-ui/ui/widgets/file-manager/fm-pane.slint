@@ -100,6 +100,7 @@ export component FmPane inherits Rectangle {
                         entries: pane.tabs[pane.active-tab].entries;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
+                        entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
                         entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
                     }

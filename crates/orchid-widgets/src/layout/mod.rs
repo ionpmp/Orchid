@@ -154,6 +154,35 @@ impl LayoutEngine {
         }
     }
 
+    /// Resolve a canvas top-left in pixels to a grid cell, grow the grid to fit, then snap.
+    pub fn placement_from_content_top_left(
+        &self,
+        viewport: ViewportSize,
+        top_left_x: f32,
+        top_left_y: f32,
+        size: WidgetSize,
+    ) -> GridPosition {
+        let opts = self.options();
+        let raw = grid_cell_from_content_top_left(viewport, &opts, top_left_x, top_left_y);
+        self.grow_grid_to_fit_placement(raw, size);
+        let opts = self.options();
+        snap_position(raw, size, opts.grid_columns, opts.grid_rows)
+    }
+
+    /// Resolve free-form pixel bounds to grid placement, grow the grid, then snap.
+    pub fn placement_from_free_bounds(
+        &self,
+        bounds: &PixelBounds,
+        viewport: ViewportSize,
+    ) -> (GridPosition, WidgetSize) {
+        let opts = self.options();
+        let (raw_pos, size) = free_placement_from_pixel_bounds(bounds, viewport, &opts);
+        self.grow_grid_to_fit_placement(raw_pos, size);
+        let opts = self.options();
+        let pos = snap_position(raw_pos, size, opts.grid_columns, opts.grid_rows);
+        (pos, size)
+    }
+
     /// Auto-place a widget of `size` on `workspace_id`.
     ///
     /// # Errors
@@ -394,18 +423,13 @@ impl LayoutEngine {
     }
 }
 
-/// Converts a widget top-left in canvas pixel space to a [`GridPosition`], inverting
-/// the mapping used in [`LayoutEngine::snapshot`]:
-/// `x = col * cell_w + gutter/2`, `y = row * cell_h + gutter/2`, then applies
-/// [`grid::snap_position`] so the top-left is valid for `size` (e.g. 8×4
-/// `ExtraLarge` is clamped to `col <= grid_columns - 8`, not `grid_columns - 1`).
+/// Pixel top-left → grid cell indices (no snap to current grid size).
 #[must_use]
-pub fn position_from_content_top_left(
+pub fn grid_cell_from_content_top_left(
     viewport: ViewportSize,
     opts: &LayoutOptions,
     top_left_x: f32,
     top_left_y: f32,
-    size: WidgetSize,
 ) -> GridPosition {
     let view_rows = opts.view_rows.max(1);
     let cell_w = viewport.width_px / f32::from(opts.grid_columns);
@@ -415,8 +439,28 @@ pub fn position_from_content_top_left(
     let row_f = (top_left_y - g * 0.5) / cell_h;
     let col = (col_f.round() as i64).clamp(0, i64::from(u16::MAX)) as u16;
     let row = (row_f.round() as i64).clamp(0, i64::from(u16::MAX)) as u16;
+    GridPosition { col, row }
+}
+
+/// Converts a widget top-left in canvas pixel space to a [`GridPosition`], inverting
+/// the mapping used in [`LayoutEngine::snapshot`]:
+/// `x = col * cell_w + gutter/2`, `y = row * cell_h + gutter/2`, then applies
+/// [`grid::snap_position`] so the top-left is valid for `size` (e.g. 8×4
+/// `ExtraLarge` is clamped to `col <= grid_columns - 8`, not `grid_columns - 1`).
+///
+/// Does **not** grow the grid; use [`LayoutEngine::placement_from_content_top_left`] when
+/// dropping a widget beyond the current grid extent.
+#[must_use]
+pub fn position_from_content_top_left(
+    viewport: ViewportSize,
+    opts: &LayoutOptions,
+    top_left_x: f32,
+    top_left_y: f32,
+    size: WidgetSize,
+) -> GridPosition {
+    let raw = grid_cell_from_content_top_left(viewport, opts, top_left_x, top_left_y);
     snap_position(
-        GridPosition { col, row },
+        raw,
         size,
         opts.grid_columns,
         opts.grid_rows,
@@ -448,18 +492,9 @@ pub fn free_placement_from_pixel_bounds(
         .round()
         .max(1.0)
         .min(f32::from(opts.grid_columns)) as u16;
-    let h = h
-        .round()
-        .max(1.0)
-        .min(f32::from(opts.grid_rows)) as u16;
+    let h = h.round().max(1.0) as u16;
     let size = WidgetSize::Free { w, h };
-    let pos = position_from_content_top_left(
-        viewport,
-        opts,
-        bounds.x,
-        bounds.y,
-        size,
-    );
+    let pos = grid_cell_from_content_top_left(viewport, opts, bounds.x, bounds.y);
     (pos, size)
 }
 
@@ -656,6 +691,22 @@ mod tests {
         let pos = GridPosition { col: 0, row: 18 };
         engine.grow_grid_to_fit_placement(pos, WidgetSize::Small);
         assert!(engine.options().grid_rows >= 20);
+    }
+
+    #[test]
+    fn placement_from_content_top_left_grows_grid_before_snap() {
+        let engine = LayoutEngine::new(LayoutOptions::default());
+        let viewport = ViewportSize {
+            width_px: 1600.0,
+            height_px: 1000.0,
+        };
+        let cell_h = viewport.height_px / 10.0;
+        let y = 18.0 * cell_h + 4.0;
+        let pos = engine.placement_from_content_top_left(viewport, 4.0, y, WidgetSize::Small);
+        assert_eq!(pos.row, 18);
+        assert!(engine.options().grid_rows >= 20);
+        let snap = engine.snapshot(Uuid::new_v4(), &[], viewport);
+        assert!(snap.content_height_px > viewport.height_px);
     }
 
     #[test]

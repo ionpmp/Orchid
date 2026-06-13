@@ -28,8 +28,19 @@ export component FmEntryList inherits Rectangle {
                     : (row-ta.has-hover ? Theme.surface-raised : transparent);
 
                 row-ta := TouchArea {
-                    clicked => { root.entry-clicked(entry.path, false); }
                     double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                            if (e.modifiers.shift) {
+                                root.entry-shift-clicked(entry.path);
+                            } else {
+                                root.entry-clicked(entry.path, e.modifiers.control);
+                            }
+                        }
+                        if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                            root.entry-context(entry.path, self.mouse-x, self.mouse-y);
+                        }
+                    }
                 }
 
                 HorizontalLayout {

@@ -36,7 +36,7 @@ use orchid_widgets::TerminalPayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
 use orchid_widgets::{ViewerPayload, WidgetPayload};
 use orchid_widgets::{
-    free_placement_from_pixel_bounds, position_from_content_top_left, CreateWidgetRequest,
+    CreateWidgetRequest,
     LayoutEngine, PlacedWidget, WidgetManager, WorkspaceManager,
 };
 use orchid_widgets::SharedInstance;
@@ -1296,11 +1296,10 @@ impl MainWindowController {
             width_px: vw,
             height_px: vh,
         };
-        let opts = self.layout_engine.options();
-        let preferred = position_from_content_top_left(viewport, &opts, content_x, content_y, size);
+        let preferred = self
+            .layout_engine
+            .placement_from_content_top_left(viewport, content_x, content_y, size);
         let instances = self.widget_manager.instances_for_workspace(workspace_id);
-        self.layout_engine
-            .grow_grid_to_fit_instances(workspace_id, &instances);
         let place = if self
             .layout_engine
             .can_place(workspace_id, instance_id, preferred, size, &instances)
@@ -1488,7 +1487,6 @@ impl MainWindowController {
                 }
             };
             let (vw, vh) = *c.canvas_size.lock();
-            let opts = le.options();
             let new_x = start.x + off.0;
             let new_y = start.y + off.1;
             let inst = match wm.get_instance(u) {
@@ -1506,8 +1504,7 @@ impl MainWindowController {
                 width_px: vw,
                 height_px: vh,
             };
-            let pos = position_from_content_top_left(viewport, &opts, new_x, new_y, size);
-            le.grow_grid_to_fit_placement(pos, size);
+            let pos = le.placement_from_content_top_left(viewport, new_x, new_y, size);
             let all = c.widget_manager.instances_for_workspace(w.id);
             if le.can_place(w.id, u, pos, size, &all).is_err() {
                 if let Some(c) = t.upgrade() {
@@ -1686,14 +1683,12 @@ impl MainWindowController {
             if c.workspace_manager.active().is_err() {
                 return;
             }
-            let opts = le.options();
             let (vw, vh) = *c.canvas_size.lock();
             let viewport = ViewportSize {
                 width_px: vw,
                 height_px: vh,
             };
-            let (new_pos, new_size) = free_placement_from_pixel_bounds(&pb, viewport, &opts);
-            le.grow_grid_to_fit_placement(new_pos, new_size);
+            let (new_pos, new_size) = le.placement_from_free_bounds(&pb, viewport);
             if let Err(e) = wm.move_to(u, new_pos).await {
                 warn!(?e, "resize move");
             }
@@ -2391,7 +2386,6 @@ impl MainWindowController {
                         .get(&pl.instance_id)
                         .cloned()
                         .unwrap_or_else(|| FileManagerOverlays {
-                            sidebar_items: build_default_sidebar_items(&self.locale),
                             context_menu: empty_context_menu(),
                             confirm_dialog: empty_confirm_dialog(),
                             rename: empty_rename_state(),
@@ -2414,7 +2408,7 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
-                        build_file_manager_model(fm, overlays),
+                        build_file_manager_model(fm, overlays, &self.locale),
                     )
                 }
                 _ => (
@@ -2494,8 +2488,8 @@ impl MainWindowController {
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
         let mut frames: Vec<WidgetFrameModel> = Vec::new();
-        let mut canvas_content_w = vw;
-        let mut canvas_content_h = vh;
+        let mut canvas_content_w = snap.content_width_px.max(vw);
+        let mut canvas_content_h = snap.content_height_px.max(vh);
         let mut pty_changed_needs_rebuild = false;
         for (idx, pl) in snap.cells.iter().enumerate() {
             let mut bounds = pl.bounds;
@@ -2606,7 +2600,6 @@ impl MainWindowController {
             .get(&inst)
             .cloned()
             .unwrap_or_else(|| FileManagerOverlays {
-                sidebar_items: build_default_sidebar_items(&self.locale),
                 context_menu: empty_context_menu(),
                 confirm_dialog: empty_confirm_dialog(),
                 rename: empty_rename_state(),
@@ -2948,27 +2941,41 @@ impl MainWindowController {
         }
     }
 
-    fn on_fm_entry_context(self: &Arc<Self>, _pane: i32, path: &SharedString, x: f32, y: f32) {
+    fn on_fm_entry_context(self: &Arc<Self>, pane: i32, path: &SharedString, x: f32, y: f32) {
         let Some(inst) = self.find_active_fm() else {
             return;
         };
+        let p = pane.max(0) as u8;
         let target = path.to_string();
-        let actions = orchid_widgets::builtin::file_manager::build_for_selection(
-            &[],
-            orchid_widgets::builtin::file_manager::ContextMenuInputs::default(),
-        );
-        let menu = build_context_menu(
-            &actions,
-            &[target],
-            x,
-            y,
-            &self.locale,
-        );
+        let (actions, target_paths) = match orchid_widgets::builtin::file_manager::context_menu_for(
+            inst,
+            p,
+            &target,
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(?e, "fm context menu");
+                return;
+            }
+        };
+        let menu = build_context_menu(&actions, &target_paths, x, y, &self.locale);
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
         entry.context_menu = menu;
         drop(over);
         self.schedule_rebuild();
+
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) =
+                orchid_widgets::builtin::file_manager::focus_context_target(inst, p, &target).await
+            {
+                warn!(?e, "fm context focus");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
     }
 
     fn on_fm_context_action(self: &Arc<Self>, action_id: &SharedString, paths: &ModelRc<SharedString>) {
@@ -3049,6 +3056,24 @@ impl MainWindowController {
                             let _ =
                                 MainWindowController::open_in_viewer_for_controller(tw2, fs_path)
                                     .await;
+                        }));
+                    }
+                    orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany {
+                        paths,
+                    } => {
+                        let tw2 = Arc::downgrade(&c);
+                        let _ = slint::spawn_local(Compat::new(async move {
+                            for path in paths {
+                                let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
+                                    continue;
+                                };
+                                let _ =
+                                    MainWindowController::open_in_viewer_for_controller(
+                                        tw2.clone(),
+                                        fs_path,
+                                    )
+                                    .await;
+                            }
                         }));
                     }
                 }
@@ -3569,7 +3594,6 @@ fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
 
 #[derive(Clone)]
 struct FileManagerOverlays {
-    sidebar_items: ModelRc<FmSidebarItem>,
     context_menu: FmContextMenu,
     confirm_dialog: FmConfirmDialog,
     rename: FmRenameState,
@@ -3582,7 +3606,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         active_pane: 0,
         dual_pane: false,
         clipboard_indicator: SharedString::new(),
-        sidebar_items: build_default_sidebar_items(locale),
+        sidebar_items: build_sidebar_items(locale, ""),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
@@ -3620,7 +3644,21 @@ fn empty_rename_state() -> FmRenameState {
     }
 }
 
-fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem> {
+fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
+    match path {
+        "virtual:recent" => Some("fav:recent"),
+        "virtual:starred" => Some("fav:starred"),
+        "virtual:categories/images" => Some("cat:images"),
+        "virtual:categories/documents" => Some("cat:documents"),
+        "virtual:categories/video" => Some("cat:video"),
+        "virtual:categories/audio" => Some("cat:audio"),
+        "virtual:categories/archives" => Some("cat:archives"),
+        _ => None,
+    }
+}
+
+fn build_sidebar_items(locale: &LocaleManager, active_path: &str) -> ModelRc<FmSidebarItem> {
+    let active_id = fm_sidebar_id_for_path(active_path);
     let items = vec![
         FmSidebarItem {
             id: "section:favorites".into(),
@@ -3636,7 +3674,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "★".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("fav:starred"),
         },
         FmSidebarItem {
             id: "fav:recent".into(),
@@ -3644,7 +3682,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "🕐".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("fav:recent"),
         },
         FmSidebarItem {
             id: "section:categories".into(),
@@ -3660,7 +3698,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "🖼".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("cat:images"),
         },
         FmSidebarItem {
             id: "cat:documents".into(),
@@ -3668,7 +3706,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "📄".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("cat:documents"),
         },
         FmSidebarItem {
             id: "cat:video".into(),
@@ -3676,7 +3714,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "🎬".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("cat:video"),
         },
         FmSidebarItem {
             id: "cat:audio".into(),
@@ -3684,7 +3722,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "🎵".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("cat:audio"),
         },
         FmSidebarItem {
             id: "cat:archives".into(),
@@ -3692,7 +3730,7 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
             icon: "📦".into(),
             indent: 1,
             is_section_header: false,
-            is_active: false,
+            is_active: active_id == Some("cat:archives"),
         },
     ];
     ModelRc::new(VecModel::from(items))
@@ -3701,7 +3739,15 @@ fn build_default_sidebar_items(locale: &LocaleManager) -> ModelRc<FmSidebarItem>
 fn build_file_manager_model(
     p: &orchid_widgets::FileManagerPayload,
     overlays: FileManagerOverlays,
+    locale: &LocaleManager,
 ) -> FileManagerModel {
+    let active_path = p
+        .panes
+        .get(p.active_pane as usize)
+        .and_then(|pp| pp.tabs.get(pp.active_tab as usize))
+        .map(|t| t.path_display.clone())
+        .unwrap_or_default();
+    let sidebar_items = build_sidebar_items(locale, &active_path);
     let panes: Vec<FmPane> = p
         .panes
         .iter()
@@ -3780,7 +3826,7 @@ fn build_file_manager_model(
         active_pane: i32::from(p.active_pane),
         dual_pane: p.dual_pane,
         clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
-        sidebar_items: overlays.sidebar_items,
+        sidebar_items,
         context_menu: overlays.context_menu,
         confirm_dialog: overlays.confirm_dialog,
         rename: overlays.rename,
@@ -3803,13 +3849,13 @@ fn build_context_menu(
     target_paths: &[String],
     x: f32,
     y: f32,
-    _locale: &LocaleManager,
+    locale: &LocaleManager,
 ) -> FmContextMenu {
     let mut actions_vec: Vec<FmContextAction> = Vec::new();
     for a in actions {
         actions_vec.push(FmContextAction {
             id: a.id.clone().into(),
-            label: a.label_key.clone().into(),
+            label: locale.tr(&a.label_key).into(),
             shortcut: SharedString::new(),
             icon: a.icon.into(),
             enabled: a.enabled,

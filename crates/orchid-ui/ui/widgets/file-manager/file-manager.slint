@@ -4,6 +4,7 @@ import { FmSidebar } from "fm-sidebar.slint";
 import { FmPane } from "fm-pane.slint";
 import { FmContextMenu } from "fm-context-menu.slint";
 import { FmConfirmDialog } from "fm-confirm-dialog.slint";
+import { FmRenameDialog } from "fm-rename-dialog.slint";
 
 export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
@@ -53,11 +54,46 @@ export component FileManagerView inherits Rectangle {
                 background: Theme.border-default;
             }
 
-            FmSidebar {
+            VerticalLayout {
                 width: parent.width;
                 height: parent.height;
-                items: model.sidebar-items;
-                clicked(id) => { root.sidebar-clicked(id); }
+                spacing: 0;
+
+                Rectangle {
+                    height: 36px;
+                    background: Theme.surface-raised;
+
+                    dual-ta := TouchArea {
+                        clicked => { root.toggle-dual-pane(); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        Text {
+                            text: model.dual-pane ? "⊟" : "⊞";
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-md;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: model.dual-pane ? "Single pane" : "Dual pane";
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                FmSidebar {
+                    vertical-stretch: 1;
+                    width: parent.width;
+                    items: model.sidebar-items;
+                    clicked(id) => { root.sidebar-clicked(id); }
+                }
             }
         }
 
@@ -166,6 +202,15 @@ export component FileManagerView inherits Rectangle {
         dialog: model.confirm-dialog;
         yes => { root.confirm-yes(); }
         no => { root.confirm-no(); }
+    }
+
+    if model.rename.active : FmRenameDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        state: model.rename;
+        commit(old, new) => { root.rename-commit(old, new); }
+        cancel => { root.rename-cancel(); }
     }
 }
 

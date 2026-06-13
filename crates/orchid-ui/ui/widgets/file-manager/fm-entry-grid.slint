@@ -6,6 +6,7 @@ export component FmEntryGrid inherits Rectangle {
     in property <bool> large;
 
     callback entry-clicked(string, bool);
+    callback entry-shift-clicked(string);
     callback entry-double-clicked(string, bool);
     callback entry-context(string, length, length);
 
@@ -33,8 +34,19 @@ export component FmEntryGrid inherits Rectangle {
             border-radius: Theme.radius-md;
 
             tile-ta := TouchArea {
-                clicked => { root.entry-clicked(entry.path, false); }
                 double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                        if (e.modifiers.shift) {
+                            root.entry-shift-clicked(entry.path);
+                        } else {
+                            root.entry-clicked(entry.path, e.modifiers.control);
+                        }
+                    }
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                        root.entry-context(entry.path, self.mouse-x, self.mouse-y);
+                    }
+                }
             }
 
             VerticalLayout {
