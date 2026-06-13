@@ -16,6 +16,7 @@ export component FileManagerView inherits Rectangle {
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
     callback tab-new(int);
+    callback new-folder(int);
     callback nav-back(int);
     callback nav-forward(int);
     callback nav-up(int);
@@ -114,6 +115,7 @@ export component FileManagerView inherits Rectangle {
                 tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                 tab-closed(idx, id) => { root.tab-closed(0, id); }
                 tab-new => { root.tab-new(0); }
+                new-folder => { root.new-folder(0); }
                 nav-back => { root.nav-back(0); }
                 nav-forward => { root.nav-forward(0); }
                 nav-up => { root.nav-up(0); }
@@ -146,6 +148,7 @@ export component FileManagerView inherits Rectangle {
                         tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                         tab-closed(idx, id) => { root.tab-closed(0, id); }
                         tab-new => { root.tab-new(0); }
+                        new-folder => { root.new-folder(0); }
                         nav-back => { root.nav-back(0); }
                         nav-forward => { root.nav-forward(0); }
                         nav-up => { root.nav-up(0); }
@@ -176,6 +179,7 @@ export component FileManagerView inherits Rectangle {
                         tab-clicked(idx, id) => { root.tab-clicked(1, id); }
                         tab-closed(idx, id) => { root.tab-closed(1, id); }
                         tab-new => { root.tab-new(1); }
+                        new-folder => { root.new-folder(1); }
                         nav-back => { root.nav-back(1); }
                         nav-forward => { root.nav-forward(1); }
                         nav-up => { root.nav-up(1); }

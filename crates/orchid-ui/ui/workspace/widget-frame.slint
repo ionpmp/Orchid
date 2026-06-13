@@ -68,6 +68,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-tab-clicked(int, string);
     callback fm-tab-closed(int, string);
     callback fm-tab-new(int);
+    callback fm-new-folder(int);
     callback fm-nav-back(int);
     callback fm-nav-forward(int);
     callback fm-nav-up(int);
@@ -298,6 +299,7 @@ export component WidgetFrame inherits Rectangle {
             tab-clicked(p, id) => { root.fm-tab-clicked(p, id); }
             tab-closed(p, id) => { root.fm-tab-closed(p, id); }
             tab-new(p) => { root.fm-tab-new(p); }
+            new-folder(p) => { root.fm-new-folder(p); }
             nav-back(p) => { root.fm-nav-back(p); }
             nav-forward(p) => { root.fm-nav-forward(p); }
             nav-up(p) => { root.fm-nav-up(p); }

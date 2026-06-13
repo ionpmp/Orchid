@@ -15,6 +15,7 @@ export component FmPane inherits Rectangle {
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
     callback tab-new();
+    callback new-folder();
     callback nav-back();
     callback nav-forward();
     callback nav-up();
@@ -52,6 +53,7 @@ export component FmPane inherits Rectangle {
             FmToolbar {
                 height: 36px;
                 tab: pane.tabs[pane.active-tab];
+                new-folder => { root.new-folder(); }
                 back => { root.nav-back(); }
                 forward => { root.nav-forward(); }
                 up => { root.nav-up(); }

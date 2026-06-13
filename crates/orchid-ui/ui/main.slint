@@ -107,6 +107,7 @@ export component MainWindow inherits Window {
     callback fm-tab-clicked(int, string);
     callback fm-tab-closed(int, string);
     callback fm-tab-new(int);
+    callback fm-new-folder(int);
     callback fm-nav-back(int);
     callback fm-nav-forward(int);
     callback fm-nav-up(int);
@@ -239,6 +240,7 @@ export component MainWindow inherits Window {
             fm-tab-clicked(p, id) => { root.fm-tab-clicked(p, id); }
             fm-tab-closed(p, id) => { root.fm-tab-closed(p, id); }
             fm-tab-new(p) => { root.fm-tab-new(p); }
+            fm-new-folder(p) => { root.fm-new-folder(p); }
             fm-nav-back(p) => { root.fm-nav-back(p); }
             fm-nav-forward(p) => { root.fm-nav-forward(p); }
             fm-nav-up(p) => { root.fm-nav-up(p); }

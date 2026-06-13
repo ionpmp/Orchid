@@ -959,6 +959,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_new_folder({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_new_folder(pane);
+                }
+            }
+        });
         self.window.on_fm_nav_back({
             let t = t.clone();
             move |pane| {
@@ -2407,6 +2415,7 @@ impl MainWindowController {
                             rename: empty_rename_state(),
                             tag: empty_tag_state(),
                             tag_paths: Vec::new(),
+                            create_folder_parent: None,
                             show_hidden: false,
                         });
                     (
@@ -2623,6 +2632,7 @@ impl MainWindowController {
                 rename: empty_rename_state(),
                 tag: empty_tag_state(),
                 tag_paths: Vec::new(),
+                create_folder_parent: None,
                 show_hidden: false,
             })
     }
@@ -2801,6 +2811,26 @@ impl MainWindowController {
             let _ = orchid_widgets::builtin::file_manager::new_tab(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_new_folder(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::request_new_folder(inst, p).await {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, "fm new folder");
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                c.apply_fm_action_outcome(inst, outcome);
             }
         }));
     }
@@ -3042,122 +3072,162 @@ impl MainWindowController {
             };
 
             if let Some(c) = tw.upgrade() {
-                match outcome {
-                    orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
-                        let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
-                        entry.context_menu = empty_context_menu();
-                        entry.confirm_dialog = empty_confirm_dialog();
-                        entry.rename = empty_rename_state();
-                        entry.tag = empty_tag_state();
-                        entry.tag_paths.clear();
-                        drop(over);
-                        c.schedule_rebuild();
-                    }
-                    orchid_widgets::builtin::file_manager::ActionOutcome::NeedsConfirmation { message, action_id, paths } => {
-                        let dlg = FmConfirmDialog {
-                            visible: true,
-                            title: c.locale.tr("fm-confirm-title").into(),
-                            message: message.into(),
-                            confirm_label: c.locale.tr("action-confirm-yes").into(),
-                            cancel_label: c.locale.tr("action-confirm-no").into(),
-                            pending_action: action_id.into(),
-                            pending_paths: ModelRc::new(VecModel::from(
-                                paths.into_iter().map(SharedString::from).collect::<Vec<_>>()
-                            )),
-                        };
-                        let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
-                        entry.confirm_dialog = dlg;
-                        entry.context_menu = empty_context_menu();
-                        drop(over);
-                        c.schedule_rebuild();
-                    }
-                    orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename { path, current_name } => {
-                        let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
-                        entry.rename = FmRenameState {
-                            active: true,
-                            path: path.into(),
-                            proposed_name: current_name.into(),
-                            title: c.locale.tr("fm-rename-title").into(),
-                            ok_label: c.locale.tr("fm-rename-ok").into(),
-                            cancel_label: c.locale.tr("fm-rename-cancel").into(),
-                        };
-                        entry.context_menu = empty_context_menu();
-                        drop(over);
-                        c.schedule_rebuild();
-                    }
-                    orchid_widgets::builtin::file_manager::ActionOutcome::NeedsTag { paths } => {
-                        let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
-                        entry.tag_paths = paths;
-                        entry.tag = FmTagState {
-                            active: true,
-                            proposed_tag: SharedString::new(),
-                            title: c.locale.tr("fm-tag-add-title").into(),
-                            ok_label: c.locale.tr("fm-rename-ok").into(),
-                            cancel_label: c.locale.tr("fm-rename-cancel").into(),
-                        };
-                        entry.context_menu = empty_context_menu();
-                        drop(over);
-                        c.schedule_rebuild();
-                    }
-                    orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
+                c.apply_fm_action_outcome(inst, outcome);
+            }
+        }));
+    }
+
+    fn apply_fm_action_outcome(
+        self: &Arc<Self>,
+        inst: Uuid,
+        outcome: orchid_widgets::builtin::file_manager::ActionOutcome,
+    ) {
+        match outcome {
+            orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.context_menu = empty_context_menu();
+                entry.confirm_dialog = empty_confirm_dialog();
+                entry.rename = empty_rename_state();
+                entry.tag = empty_tag_state();
+                entry.tag_paths.clear();
+                entry.create_folder_parent = None;
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsConfirmation {
+                message,
+                action_id,
+                paths,
+            } => {
+                let dlg = FmConfirmDialog {
+                    visible: true,
+                    title: self.locale.tr("fm-confirm-title").into(),
+                    message: message.into(),
+                    confirm_label: self.locale.tr("action-confirm-yes").into(),
+                    cancel_label: self.locale.tr("action-confirm-no").into(),
+                    pending_action: action_id.into(),
+                    pending_paths: ModelRc::new(VecModel::from(
+                        paths.into_iter().map(SharedString::from).collect::<Vec<_>>(),
+                    )),
+                };
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.confirm_dialog = dlg;
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename { path, current_name } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.create_folder_parent = None;
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: path.into(),
+                    proposed_name: current_name.into(),
+                    title: self.locale.tr("fm-rename-title").into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsCreateFolder { parent } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.create_folder_parent = Some(parent);
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: SharedString::new(),
+                    proposed_name: "New folder".into(),
+                    title: self.locale.tr("fm-action-new-folder").into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsTag { paths } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.tag_paths = paths;
+                entry.tag = FmTagState {
+                    active: true,
+                    proposed_tag: SharedString::new(),
+                    title: self.locale.tr("fm-tag-add-title").into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
+                let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
+                    warn!(path = %path, "open in viewer: invalid path");
+                    return;
+                };
+                let tw2 = Arc::downgrade(self);
+                let _ = slint::spawn_local(Compat::new(async move {
+                    let _ =
+                        MainWindowController::open_in_viewer_for_controller(tw2, fs_path).await;
+                }));
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany { paths } => {
+                let tw2 = Arc::downgrade(self);
+                let _ = slint::spawn_local(Compat::new(async move {
+                    for path in paths {
                         let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
-                            warn!(path = %path, "open in viewer: invalid path");
-                            return;
+                            continue;
                         };
-                        let tw2 = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            let _ =
-                                MainWindowController::open_in_viewer_for_controller(tw2, fs_path)
-                                    .await;
-                        }));
+                        let _ = MainWindowController::open_in_viewer_for_controller(
+                            tw2.clone(),
+                            fs_path,
+                        )
+                        .await;
                     }
-                    orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany {
-                        paths,
-                    } => {
-                        let tw2 = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            for path in paths {
-                                let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
-                                    continue;
-                                };
-                                let _ =
-                                    MainWindowController::open_in_viewer_for_controller(
-                                        tw2.clone(),
-                                        fs_path,
-                                    )
-                                    .await;
-                            }
-                        }));
-                    }
-                    orchid_widgets::builtin::file_manager::ActionOutcome::ShowInfo { title, message } => {
-                        let title_text = if title == "fm-properties-title" {
-                            c.locale.tr("fm-properties-title")
-                        } else {
-                            title
-                        };
-                        let dlg = FmConfirmDialog {
-                            visible: true,
-                            title: title_text.into(),
-                            message: message.into(),
-                            confirm_label: c.locale.tr("fm-info-close").into(),
-                            cancel_label: SharedString::new(),
-                            pending_action: SharedString::new(),
-                            pending_paths: ModelRc::new(VecModel::default()),
-                        };
-                        let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
-                        entry.confirm_dialog = dlg;
-                        entry.context_menu = empty_context_menu();
-                        drop(over);
-                        c.schedule_rebuild();
+                }));
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::OpenExternally { paths } => {
+                for path in paths {
+                    let open_path = match orchid_fs::FsPath::new(&path) {
+                        Ok(fp) => fp
+                            .to_local()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .unwrap_or(path),
+                        Err(_) => path,
+                    };
+                    if let Err(e) = opener::open(&open_path) {
+                        warn!(?e, path = %open_path, "open file externally");
                     }
                 }
             }
-        }));
+            orchid_widgets::builtin::file_manager::ActionOutcome::ShowInfo { title, message } => {
+                let title_text = if title == "fm-properties-title" {
+                    self.locale.tr("fm-properties-title")
+                } else {
+                    title
+                };
+                let dlg = FmConfirmDialog {
+                    visible: true,
+                    title: title_text.into(),
+                    message: message.into(),
+                    confirm_label: self.locale.tr("fm-info-close").into(),
+                    cancel_label: SharedString::new(),
+                    pending_action: SharedString::new(),
+                    pending_paths: ModelRc::new(VecModel::default()),
+                };
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.confirm_dialog = dlg;
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+        }
     }
 
     fn on_fm_context_dismiss(self: &Arc<Self>) {
@@ -3243,6 +3313,28 @@ impl MainWindowController {
         let Some(inst) = self.find_active_fm() else {
             return;
         };
+        let create_parent = self
+            .fm_overlays
+            .read()
+            .get(&inst)
+            .and_then(|o| o.create_folder_parent.clone());
+        if let Some(parent) = create_parent {
+            let newn = new_name.to_string();
+            let tw = Arc::downgrade(self);
+            let _ = slint::spawn_local(Compat::new(async move {
+                let _ =
+                    orchid_widgets::builtin::file_manager::create_folder(inst, &parent, &newn).await;
+                if let Some(c) = tw.upgrade() {
+                    let mut over = c.fm_overlays.write();
+                    let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                    entry.rename = empty_rename_state();
+                    entry.create_folder_parent = None;
+                    drop(over);
+                    c.schedule_rebuild();
+                }
+            }));
+            return;
+        }
         let old = old_path.to_string();
         let newn = new_name.to_string();
         let tw = Arc::downgrade(self);
@@ -3265,6 +3357,7 @@ impl MainWindowController {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
         entry.rename = empty_rename_state();
+        entry.create_folder_parent = None;
         drop(over);
         self.schedule_rebuild();
     }
@@ -3733,6 +3826,7 @@ struct FileManagerOverlays {
     rename: FmRenameState,
     tag: FmTagState,
     tag_paths: Vec<String>,
+    create_folder_parent: Option<String>,
     show_hidden: bool,
 }
 
@@ -4028,8 +4122,12 @@ fn build_context_menu(
 ) -> FmContextMenu {
     let mut actions_vec: Vec<FmContextAction> = Vec::new();
     for a in actions {
-        let label = if a.id.starts_with("fs.tag:") {
-            a.label_key.clone().into()
+        let label = if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") {
+            if a.id.starts_with("fs.tag-remove:") {
+                format!("− {}", a.label_key).into()
+            } else {
+                a.label_key.clone().into()
+            }
         } else {
             locale.tr(&a.label_key).into()
         };

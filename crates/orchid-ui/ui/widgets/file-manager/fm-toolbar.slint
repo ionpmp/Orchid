@@ -4,6 +4,7 @@ import { FmTab } from "../../workspace/defs.slint";
 export component FmToolbar inherits Rectangle {
     in property <FmTab> tab;
 
+    callback new-folder();
     callback back();
     callback forward();
     callback up();
@@ -55,6 +56,18 @@ export component FmToolbar inherits Rectangle {
                 clicked => { root.up(); }
             }
             Text { text: "↑"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: nf-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            nf-ta := TouchArea {
+                clicked => { root.new-folder(); }
+            }
+            Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
         Rectangle { width: 8px; }

@@ -149,7 +149,7 @@ impl OrchidApp {
                 .map_err(|e| UiError::Slint(format!("open search index: {e}")))?,
         );
         let search_sources: Vec<Arc<dyn SearchSource>> = vec![
-            Arc::new(FilesSource::new(search_engine)),
+            Arc::new(FilesSource::new(search_engine.clone())),
             Arc::new(CommandsSource::new(command_palette)),
             Arc::new(SettingsSource::new()),
         ];
@@ -279,11 +279,37 @@ impl OrchidApp {
             orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
                 .map_err(|e| UiError::Slint(format!("thumbnail service: {e}")))?,
         );
+        let chunk_store = Arc::new(
+            orchid_crypto::ChunkStore::new(paths.chunks_dir.clone(), storage.clone())
+                .map_err(|e| UiError::Slint(format!("chunk store: {e}")))?,
+        );
+        let deduplicator = Arc::new(
+            orchid_crypto::Deduplicator::new(
+                chunk_store.clone(),
+                orchid_crypto::ChunkerConfig::default(),
+            ),
+        );
+        let file_watcher =
+            Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
+        let managed_engine = Arc::new(orchid_fs::ManagedFolderEngine::new(
+            storage.clone(),
+            chunk_store,
+            deduplicator,
+            fs_registry.clone(),
+            bus.clone(),
+            file_watcher,
+        ));
+        managed_engine
+            .start()
+            .await
+            .map_err(|e| UiError::Slint(format!("managed folder engine: {e}")))?;
         let fm_deps = orchid_widgets::builtin::file_manager::FileManagerDeps {
             registry: fs_registry.clone(),
             clipboard: Arc::new(orchid_widgets::builtin::file_manager::FileClipboard::new()),
             tag_manager,
             thumbnails,
+            search: Some(search_engine.clone()),
+            managed: Some(managed_engine),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))
