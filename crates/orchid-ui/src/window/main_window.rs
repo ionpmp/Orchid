@@ -1111,6 +1111,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_select_all({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_select_all(pane);
+                }
+            }
+        });
+        self.window.on_fm_delete_selected({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_delete_selected(pane);
+                }
+            }
+        });
         Ok(())
     }
 
@@ -2653,6 +2669,28 @@ impl MainWindowController {
             .map(|e| e.is_dir)
     }
 
+    fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(snap) = cache.get(inst).map(|s| (*s).clone()) else {
+            return Vec::new();
+        };
+        let WidgetPayload::FileManager(fm) = &snap.payload else {
+            return Vec::new();
+        };
+        let pane_idx = usize::from(pane.min(1));
+        let Some(pane) = fm.panes.get(pane_idx) else {
+            return Vec::new();
+        };
+        let Some(tab) = pane.tabs.get(pane.active_tab as usize) else {
+            return Vec::new();
+        };
+        tab.entries
+            .iter()
+            .filter(|e| e.is_selected)
+            .map(|e| e.path.clone())
+            .collect()
+    }
+
     async fn open_in_viewer_for_controller(
         ctrl: std::sync::Weak<MainWindowController>,
         path: orchid_fs::FsPath,
@@ -3399,6 +3437,60 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
+
+    fn on_fm_select_all(self: &Arc<Self>, _pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::run_action(
+                inst,
+                "fs.select-all",
+                Vec::new(),
+            )
+            .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, "fm select all");
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                c.apply_fm_action_outcome(inst, outcome);
+            }
+        }));
+    }
+
+    fn on_fm_delete_selected(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
+        if paths.is_empty() {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::run_action(
+                inst,
+                "fs.delete",
+                paths,
+            )
+            .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, "fm delete selected");
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                c.apply_fm_action_outcome(inst, outcome);
+            }
+        }));
+    }
 }
 
 /// Replace all rows in a `VecModel` wrapped by `ModelRc` without creating a new `ModelRc`, so
@@ -4113,6 +4205,14 @@ fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
     }
 }
 
+fn fm_action_shortcut(id: &str) -> &'static str {
+    match id {
+        "fs.select-all" => "Ctrl+A",
+        "fs.delete" => "Del",
+        _ => "",
+    }
+}
+
 fn build_context_menu(
     actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
     target_paths: &[String],
@@ -4134,7 +4234,7 @@ fn build_context_menu(
         actions_vec.push(FmContextAction {
             id: a.id.clone().into(),
             label,
-            shortcut: SharedString::new(),
+            shortcut: fm_action_shortcut(&a.id).into(),
             icon: a.icon.into(),
             enabled: a.enabled,
             is_separator: false,

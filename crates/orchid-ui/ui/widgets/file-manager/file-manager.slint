@@ -41,6 +41,9 @@ export component FileManagerView inherits Rectangle {
     callback tag-commit(string);
     callback tag-cancel();
 
+    callback select-all(int);
+    callback delete-selected(int);
+
     background: transparent;
 
     HorizontalLayout {
@@ -127,6 +130,8 @@ export component FileManagerView inherits Rectangle {
                 entry-double-clicked(p, is_dir) => { root.entry-double-clicked(0, p, is_dir); }
                 entry-context(p, x, y) => { root.entry-context(0, p, x, y); }
                 pane-focused => { root.pane-clicked(0); }
+                select-all => { root.select-all(0); }
+                delete-selected => { root.delete-selected(0); }
             }
 
             if model.dual-pane : HorizontalLayout {
@@ -160,6 +165,8 @@ export component FileManagerView inherits Rectangle {
                         entry-double-clicked(p, is_dir) => { root.entry-double-clicked(0, p, is_dir); }
                         entry-context(p, x, y) => { root.entry-context(0, p, x, y); }
                         pane-focused => { root.pane-clicked(0); }
+                        select-all => { root.select-all(0); }
+                        delete-selected => { root.delete-selected(0); }
                     }
                 }
 
@@ -191,6 +198,8 @@ export component FileManagerView inherits Rectangle {
                         entry-double-clicked(p, is_dir) => { root.entry-double-clicked(1, p, is_dir); }
                         entry-context(p, x, y) => { root.entry-context(1, p, x, y); }
                         pane-focused => { root.pane-clicked(1); }
+                        select-all => { root.select-all(1); }
+                        delete-selected => { root.delete-selected(1); }
                     }
                 }
             }

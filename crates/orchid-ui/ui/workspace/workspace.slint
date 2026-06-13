@@ -79,6 +79,8 @@ export component WorkspaceView inherits Rectangle {
     callback fm-rename-cancel();
     callback fm-tag-commit(string);
     callback fm-tag-cancel();
+    callback fm-select-all(int);
+    callback fm-delete-selected(int);
 
     callback canvas-long-pressed(length, length, length, length);
     callback catalog-pick(string);
@@ -243,6 +245,8 @@ export component WorkspaceView inherits Rectangle {
                     fm-rename-cancel => { root.fm-rename-cancel(); }
                     fm-tag-commit(tag) => { root.fm-tag-commit(tag); }
                     fm-tag-cancel => { root.fm-tag-cancel(); }
+                    fm-select-all(p) => { root.fm-select-all(p); }
+                    fm-delete-selected(p) => { root.fm-delete-selected(p); }
                 }
             }
         }

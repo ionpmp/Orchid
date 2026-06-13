@@ -27,11 +27,36 @@ export component FmPane inherits Rectangle {
     callback entry-double-clicked(string, bool);
     callback entry-context(string, length, length);
     callback pane-focused();
+    callback select-all();
+    callback delete-selected();
 
     background: Theme.surface-base;
 
+    pane-keys := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.is-active;
+        key-pressed(event) => {
+            if (!root.is-active) {
+                return reject;
+            }
+            if (event.modifiers.control && (event.text == "a" || event.text == "A")) {
+                root.select-all();
+                return accept;
+            }
+            if (event.text == Key.Delete) {
+                root.delete-selected();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     pane-ta := TouchArea {
-        clicked => { root.pane-focused(); }
+        clicked => {
+            root.pane-focused();
+            pane-keys.focus();
+        }
     }
 
     VerticalLayout {
