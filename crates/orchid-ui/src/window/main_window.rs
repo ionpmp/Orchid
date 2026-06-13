@@ -3124,6 +3124,10 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
 
+        if target.is_empty() {
+            return;
+        }
+
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             if let Err(e) =

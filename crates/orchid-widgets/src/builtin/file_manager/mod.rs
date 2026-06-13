@@ -1296,6 +1296,9 @@ pub fn context_menu_for(
     context_path: &str,
 ) -> WidgetResult<(Vec<ContextMenuItem>, Vec<String>)> {
     let inner = live_inner(instance_id)?;
+    if context_path.is_empty() {
+        inner.deselect_all_in_pane(pane);
+    }
     let (entries, target_paths, entry_count, selection_count) = {
         let state = inner.state.lock();
         let tab = active_tab_ref(&state, pane)?;
@@ -1309,7 +1312,9 @@ pub fn context_menu_for(
             .unwrap_or_default();
         let entry_count = inner.filtered_paths_for_tab(tab).len();
         let selection_count = tab.selection.count();
-        let target_paths = if selection.iter().any(|p| p == context_path) {
+        let target_paths = if context_path.is_empty() {
+            Vec::new()
+        } else if selection.iter().any(|p| p == context_path) {
             selection
         } else {
             vec![context_path.to_string()]

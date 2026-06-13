@@ -52,6 +52,16 @@ pub fn build_for_selection(
     let single = count == 1;
     let mut items = Vec::new();
 
+    if !has_selection {
+        items.push(item(
+            "fs.new-folder",
+            "fm-action-new-folder",
+            "action-new-folder",
+            true,
+        ));
+        items.last_mut().unwrap().separator_after = true;
+    }
+
     items.push(ContextMenuItem {
         id: if count > 1 { "fs.open-all".into() } else { "fs.open".into() },
         label_key: if count > 1 {
@@ -228,6 +238,13 @@ mod tests {
             name: name.into(),
             metadata: meta,
         }
+    }
+
+    #[test]
+    fn empty_background_offers_new_folder() {
+        let menu = build_for_selection(&[], ContextMenuInputs::default());
+        let nf = menu.iter().find(|i| i.id == "fs.new-folder").unwrap();
+        assert!(nf.enabled);
     }
 
     #[test]

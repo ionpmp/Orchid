@@ -21,7 +21,17 @@ export component FmEntryGrid inherits Rectangle {
         width: parent.width;
         height: parent.height;
         viewport-width: self.width;
-        viewport-height: ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing;
+        viewport-height: max(self.height, ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing);
+
+        bg-ta := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                    root.entry-context("", self.mouse-x, self.mouse-y);
+                }
+            }
+        }
 
         for entry[i] in entries : Rectangle {
             x: tile-spacing + (mod(i, columns) * (tile-size + tile-spacing));

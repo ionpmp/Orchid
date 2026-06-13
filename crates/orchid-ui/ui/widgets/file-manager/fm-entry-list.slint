@@ -16,7 +16,17 @@ export component FmEntryList inherits Rectangle {
         width: parent.width;
         height: parent.height;
         viewport-width: self.width;
-        viewport-height: list-stack.preferred-height;
+        viewport-height: max(self.height, list-stack.preferred-height);
+
+        bg-ta := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                    root.entry-context("", self.mouse-x, self.mouse-y);
+                }
+            }
+        }
 
         list-stack := VerticalLayout {
             spacing: 0;
