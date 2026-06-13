@@ -72,20 +72,21 @@ pub fn build_for_selection(
         icon: "action-open",
         enabled: has_selection,
         separator_after: false,
-        submenu: Vec::new(),
+        submenu: vec![
+            item(
+                "fs.open-external",
+                "fm-action-open-with",
+                "action-open-with",
+                single_file,
+            ),
+            item(
+                "viewer.open",
+                "fm-action-open-in-viewer",
+                "widget-viewer",
+                single_file,
+            ),
+        ],
     });
-    items.push(item(
-        "fs.open-external",
-        "fm-action-open-with",
-        "action-open-with",
-        single_file,
-    ));
-    items.push(item(
-        "viewer.open",
-        "fm-action-open-in-viewer",
-        "widget-viewer",
-        single_file,
-    ));
     items.last_mut().unwrap().separator_after = true;
 
     items.push(item("fs.copy", "fm-action-copy", "action-copy", has_selection));
@@ -109,28 +110,40 @@ pub fn build_for_selection(
         id: "fs.tag-add".into(),
         label_key: "fm-action-add-tag".into(),
         icon: "action-tag",
-        enabled: has_selection,
+        enabled: has_selection && !inputs.known_tags.is_empty(),
         separator_after: false,
-        submenu: Vec::new(),
+        submenu: inputs
+            .known_tags
+            .iter()
+            .map(|t| ContextMenuItem {
+                id: format!("fs.tag:{t}"),
+                label_key: t.clone(),
+                icon: "action-tag",
+                enabled: has_selection,
+                separator_after: false,
+                submenu: Vec::new(),
+            })
+            .collect(),
     });
-    for t in &inputs.known_tags {
+    if !inputs.tags_on_selection.is_empty() {
         items.push(ContextMenuItem {
-            id: format!("fs.tag:{t}"),
-            label_key: t.clone(),
+            id: "fs.tag-remove".into(),
+            label_key: "fm-action-remove-tag".into(),
             icon: "action-tag",
             enabled: has_selection,
             separator_after: false,
-            submenu: Vec::new(),
-        });
-    }
-    for t in &inputs.tags_on_selection {
-        items.push(ContextMenuItem {
-            id: format!("fs.tag-remove:{t}"),
-            label_key: t.clone(),
-            icon: "action-tag",
-            enabled: has_selection,
-            separator_after: false,
-            submenu: Vec::new(),
+            submenu: inputs
+                .tags_on_selection
+                .iter()
+                .map(|t| ContextMenuItem {
+                    id: format!("fs.tag-remove:{t}"),
+                    label_key: t.clone(),
+                    icon: "action-tag",
+                    enabled: has_selection,
+                    separator_after: false,
+                    submenu: Vec::new(),
+                })
+                .collect(),
         });
     }
     items.push(ContextMenuItem {

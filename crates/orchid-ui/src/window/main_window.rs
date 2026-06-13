@@ -4356,34 +4356,54 @@ fn fm_action_shortcut(id: &str) -> &'static str {
     }
 }
 
-fn build_context_menu(
-    actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
-    target_paths: &[String],
-    x: f32,
-    y: f32,
+fn context_menu_item_label(
+    a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
     locale: &LocaleManager,
-) -> FmContextMenu {
-    let mut actions_vec: Vec<FmContextAction> = Vec::new();
+    depth: u8,
+) -> SharedString {
+    let indent = "  ".repeat(depth as usize);
+    if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") {
+        if a.id.starts_with("fs.tag-remove:") {
+            return format!("{indent}− {}", a.label_key).into();
+        }
+        return format!("{indent}{}", a.label_key).into();
+    }
+    let mut text = locale.tr(&a.label_key);
+    if !a.submenu.is_empty() {
+        text = format!("{} ▸", text);
+    }
+    format!("{indent}{text}").into()
+}
+
+fn context_menu_item_enabled(
+    a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
+) -> bool {
+    if a.id == "fs.tag-add" || a.id == "fs.tag-remove" {
+        return false;
+    }
+    a.enabled
+}
+
+fn flatten_context_menu(
+    actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
+    locale: &LocaleManager,
+    depth: u8,
+    out: &mut Vec<FmContextAction>,
+) {
     for a in actions {
-        let label = if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") {
-            if a.id.starts_with("fs.tag-remove:") {
-                format!("− {}", a.label_key).into()
-            } else {
-                a.label_key.clone().into()
-            }
-        } else {
-            locale.tr(&a.label_key).into()
-        };
-        actions_vec.push(FmContextAction {
+        out.push(FmContextAction {
             id: a.id.clone().into(),
-            label,
+            label: context_menu_item_label(a, locale, depth),
             shortcut: fm_action_shortcut(&a.id).into(),
             icon: a.icon.into(),
-            enabled: a.enabled,
+            enabled: context_menu_item_enabled(a),
             is_separator: false,
         });
+        if !a.submenu.is_empty() {
+            flatten_context_menu(&a.submenu, locale, depth + 1, out);
+        }
         if a.separator_after {
-            actions_vec.push(FmContextAction {
+            out.push(FmContextAction {
                 id: SharedString::new(),
                 label: SharedString::new(),
                 shortcut: SharedString::new(),
@@ -4393,6 +4413,17 @@ fn build_context_menu(
             });
         }
     }
+}
+
+fn build_context_menu(
+    actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
+    target_paths: &[String],
+    x: f32,
+    y: f32,
+    locale: &LocaleManager,
+) -> FmContextMenu {
+    let mut actions_vec: Vec<FmContextAction> = Vec::new();
+    flatten_context_menu(actions, locale, 0, &mut actions_vec);
     let paths_vec: Vec<SharedString> = target_paths.iter().cloned().map(Into::into).collect();
     FmContextMenu {
         visible: true,
