@@ -12,6 +12,7 @@ export component FileManagerView inherits Rectangle {
 
     callback sidebar-clicked(string);
     callback toggle-dual-pane();
+    callback toggle-show-hidden();
     callback pane-clicked(int);
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -95,6 +96,35 @@ export component FileManagerView inherits Rectangle {
 
                         Text {
                             text: model.dual-pane-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 36px;
+                    background: Theme.surface-base;
+
+                    hidden-ta := TouchArea {
+                        clicked => { root.toggle-show-hidden(); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        Text {
+                            text: model.show-hidden ? "👁" : "👁‍🗨";
+                            color: model.show-hidden ? Theme.accent-brand : Theme.text-tertiary;
+                            font-size: Theme.font-size-md;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: model.show-hidden-label;
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
                             vertical-alignment: center;

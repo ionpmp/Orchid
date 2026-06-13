@@ -927,6 +927,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_toggle_show_hidden({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_toggle_show_hidden();
+                }
+            }
+        });
         self.window.on_fm_pane_clicked({
             let t = t.clone();
             move |pane| {
@@ -2480,7 +2488,6 @@ impl MainWindowController {
                             tag: empty_tag_state(),
                             tag_paths: Vec::new(),
                             create_folder_parent: None,
-                            show_hidden: false,
                         });
                     (
                         tstr,
@@ -2499,7 +2506,12 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
-                        build_file_manager_model(fm, overlays, &self.locale),
+                        build_file_manager_model(
+                            fm,
+                            overlays,
+                            pl.instance_id,
+                            &self.locale,
+                        ),
                     )
                 }
                 _ => (
@@ -2697,7 +2709,6 @@ impl MainWindowController {
                 tag: empty_tag_state(),
                 tag_paths: Vec::new(),
                 create_folder_parent: None,
-                show_hidden: false,
             })
     }
 
@@ -2837,6 +2848,19 @@ impl MainWindowController {
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_dual_pane(inst).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_toggle_show_hidden(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::toggle_show_hidden(inst).await;
             if let Some(c) = tw.upgrade() {
                 c.schedule_rebuild();
             }
@@ -4047,7 +4071,6 @@ struct FileManagerOverlays {
     tag: FmTagState,
     tag_paths: Vec<String>,
     create_folder_parent: Option<String>,
-    show_hidden: bool,
 }
 
 fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
@@ -4063,6 +4086,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         rename: empty_rename_state(),
         tag: empty_tag_state(),
         show_hidden: false,
+        show_hidden_label: locale.tr("fm-show-hidden-off").into(),
     }
 }
 
@@ -4213,6 +4237,7 @@ fn build_sidebar_items(locale: &LocaleManager, active_path: &str) -> ModelRc<FmS
 fn build_file_manager_model(
     p: &orchid_widgets::FileManagerPayload,
     overlays: FileManagerOverlays,
+    instance_id: Uuid,
     locale: &LocaleManager,
 ) -> FileManagerModel {
     let active_path = p
@@ -4314,6 +4339,9 @@ fn build_file_manager_model(
         })
         .collect();
 
+    let show_hidden = orchid_widgets::builtin::file_manager::show_hidden(instance_id)
+        .unwrap_or(false);
+
     FileManagerModel {
         panes: ModelRc::new(VecModel::from(panes)),
         active_pane: i32::from(p.active_pane),
@@ -4324,12 +4352,17 @@ fn build_file_manager_model(
             locale.tr("fm-dual-pane-on").into()
         },
         clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
+        show_hidden,
+        show_hidden_label: if show_hidden {
+            locale.tr("fm-show-hidden-on").into()
+        } else {
+            locale.tr("fm-show-hidden-off").into()
+        },
         sidebar_items,
         context_menu: overlays.context_menu,
         confirm_dialog: overlays.confirm_dialog,
         rename: overlays.rename,
         tag: overlays.tag,
-        show_hidden: overlays.show_hidden,
     }
 }
 

@@ -1622,6 +1622,22 @@ pub async fn toggle_dual_pane(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Whether hidden entries are listed in navigation results.
+pub fn show_hidden(instance_id: Uuid) -> WidgetResult<bool> {
+    Ok(live_inner(instance_id)?.config.read().show_hidden)
+}
+
+/// Toggle whether hidden entries are shown in listings.
+pub async fn toggle_show_hidden(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let mut cfg = inner.config.write();
+        cfg.show_hidden = !cfg.show_hidden;
+    }
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
 /// Cycle view mode for the active tab in `pane`.
 pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
