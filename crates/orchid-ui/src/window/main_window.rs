@@ -3096,6 +3096,28 @@ impl MainWindowController {
                             }
                         }));
                     }
+                    orchid_widgets::builtin::file_manager::ActionOutcome::ShowInfo { title, message } => {
+                        let title_text = if title == "fm-properties-title" {
+                            c.locale.tr("fm-properties-title")
+                        } else {
+                            title
+                        };
+                        let dlg = FmConfirmDialog {
+                            visible: true,
+                            title: title_text.into(),
+                            message: message.into(),
+                            confirm_label: c.locale.tr("fm-info-close").into(),
+                            cancel_label: SharedString::new(),
+                            pending_action: SharedString::new(),
+                            pending_paths: ModelRc::new(VecModel::default()),
+                        };
+                        let mut over = c.fm_overlays.write();
+                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        entry.confirm_dialog = dlg;
+                        entry.context_menu = empty_context_menu();
+                        drop(over);
+                        c.schedule_rebuild();
+                    }
                 }
             }
         }));
@@ -3121,6 +3143,14 @@ impl MainWindowController {
             return;
         };
         let action = over.confirm_dialog.pending_action.to_string();
+        if action.is_empty() {
+            let mut over = self.fm_overlays.write();
+            let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+            entry.confirm_dialog = empty_confirm_dialog();
+            drop(over);
+            self.schedule_rebuild();
+            return;
+        }
         let path_vec: Vec<String> = (0..over.confirm_dialog.pending_paths.row_count())
             .filter_map(|i| over.confirm_dialog.pending_paths.row_data(i))
             .map(|s| s.to_string())

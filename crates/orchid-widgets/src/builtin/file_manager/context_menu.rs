@@ -28,6 +28,8 @@ pub struct ContextMenuInputs {
     pub all_encrypted: bool,
     pub any_encrypted: bool,
     pub all_managed: bool,
+    pub all_starred: bool,
+    pub any_starred: bool,
 }
 
 /// Build the menu from the current selection and the extra flags.
@@ -103,12 +105,11 @@ pub fn build_for_selection(
         separator_after: false,
         submenu: Vec::new(),
     });
-    items.push(sep(item(
-        "fs.star",
-        "fm-action-star",
-        "action-star",
-        has_selection,
-    )));
+    items.push(sep(if inputs.any_starred && inputs.all_starred {
+        item("fs.unstar", "fm-action-unstar", "action-star", has_selection)
+    } else {
+        item("fs.star", "fm-action-star", "action-star", has_selection)
+    }));
 
     if inputs.any_encrypted {
         items.push(item(

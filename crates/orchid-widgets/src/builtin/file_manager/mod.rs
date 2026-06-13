@@ -73,6 +73,11 @@ pub enum ActionOutcome {
     OpenInViewerMany {
         paths: Vec<String>,
     },
+    /// Read-only info dialog (e.g. file properties).
+    ShowInfo {
+        title: String,
+        message: String,
+    },
 }
 
 /// Stable type id.
@@ -637,6 +642,8 @@ impl FileManagerInner {
         for e in entries.iter_mut() {
             if let Ok(Some(tag)) = tag_manager.get(&e.path) {
                 e.metadata.extended.starred = tag.starred;
+                e.metadata.extended.tags = tag.tags.clone();
+                e.metadata.extended.color_label = tag.color_label;
             }
             if encrypted_overlay.contains(e.path.as_str())
                 || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
@@ -716,7 +723,11 @@ fn build_tab_payload(
                 is_encrypted: e.metadata.extended.is_encrypted,
                 is_managed: e.metadata.extended.is_managed,
                 is_starred: e.metadata.extended.starred,
-                color_label: None,
+                color_label: e
+                    .metadata
+                    .extended
+                    .color_label
+                    .map(color_label_to_str),
                 tags: e.metadata.extended.tags.clone(),
             }
         })
@@ -801,6 +812,37 @@ fn viewer_thumb_size(size: config::ThumbnailSize) -> orchid_viewers::ThumbnailSi
         config::ThumbnailSize::Small => orchid_viewers::ThumbnailSize::Small,
         config::ThumbnailSize::Medium => orchid_viewers::ThumbnailSize::Medium,
         config::ThumbnailSize::Large => orchid_viewers::ThumbnailSize::Large,
+    }
+}
+
+fn color_label_to_str(label: orchid_storage::ColorLabel) -> String {
+    match label {
+        orchid_storage::ColorLabel::Red => "red",
+        orchid_storage::ColorLabel::Orange => "orange",
+        orchid_storage::ColorLabel::Yellow => "yellow",
+        orchid_storage::ColorLabel::Green => "green",
+        orchid_storage::ColorLabel::Blue => "blue",
+        orchid_storage::ColorLabel::Purple => "purple",
+        orchid_storage::ColorLabel::Gray => "gray",
+    }
+    .to_string()
+}
+
+fn next_color_label(current: Option<orchid_storage::ColorLabel>) -> Option<orchid_storage::ColorLabel> {
+    use orchid_storage::ColorLabel::*;
+    const ORDER: [orchid_storage::ColorLabel; 7] =
+        [Red, Orange, Yellow, Green, Blue, Purple, Gray];
+    if current.is_none() {
+        return Some(Red);
+    }
+    let idx = ORDER
+        .iter()
+        .position(|c| Some(*c) == current)
+        .unwrap_or(0);
+    if idx + 1 >= ORDER.len() {
+        None
+    } else {
+        Some(ORDER[idx + 1])
     }
 }
 
@@ -909,6 +951,12 @@ pub fn context_menu_for(
         all_managed: selected_entries
             .iter()
             .all(|e| e.metadata.extended.is_managed),
+        all_starred: selected_entries
+            .iter()
+            .all(|e| e.metadata.extended.starred),
+        any_starred: selected_entries
+            .iter()
+            .any(|e| e.metadata.extended.starred),
     };
     Ok((build_for_selection(&selected_entries, inputs), target_paths))
 }
@@ -1386,6 +1434,57 @@ pub async fn run_action_with_opts(
             }
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
+        }
+        "fs.color-label" => {
+            for p in &target_paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                let current = inner
+                    .deps
+                    .tag_manager
+                    .get(&fp)
+                    .ok()
+                    .flatten()
+                    .and_then(|t| t.color_label);
+                let next = next_color_label(current);
+                inner
+                    .deps
+                    .tag_manager
+                    .set_color(&fp, next)
+                    .map_err(map_fs_error)?;
+            }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.properties" => {
+            let mut lines = Vec::new();
+            for p in &target_paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                let name = fp.file_name().unwrap_or(p.as_str()).to_string();
+                if let Some(provider) = inner.deps.registry.for_path(&fp) {
+                    if let Ok(meta) = provider.metadata(&fp).await {
+                        let kind = if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                            "Folder"
+                        } else {
+                            "File"
+                        };
+                        let modified = meta
+                            .modified
+                            .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+                            .unwrap_or_else(|| "—".into());
+                        let mime = meta.mime.unwrap_or_else(|| "—".into());
+                        lines.push(format!(
+                            "{name}\n  Type: {kind}\n  Size: {}\n  Modified: {modified}\n  MIME: {mime}",
+                            format_size(meta.size)
+                        ));
+                        continue;
+                    }
+                }
+                lines.push(name);
+            }
+            return Ok(ActionOutcome::ShowInfo {
+                title: "fm-properties-title".to_string(),
+                message: lines.join("\n\n"),
+            });
         }
         "fs.encrypt" => {
             let mut set = inner.encrypted.write();

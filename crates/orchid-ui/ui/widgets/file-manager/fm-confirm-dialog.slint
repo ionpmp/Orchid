@@ -6,6 +6,8 @@ export component FmConfirmDialog inherits Rectangle {
     callback yes();
     callback no();
 
+    property <bool> info-only: dialog.pending-action == "" && dialog.cancel-label == "";
+
     background: #00000080;
 
     backdrop-ta := TouchArea {
@@ -44,7 +46,7 @@ export component FmConfirmDialog inherits Rectangle {
                 spacing: 8px;
                 alignment: end;
 
-                Rectangle {
+                if dialog.cancel-label != "" : Rectangle {
                     width: 96px;
                     height: 32px;
                     background: no-ta.has-hover ? Theme.surface-base : transparent;
@@ -62,7 +64,9 @@ export component FmConfirmDialog inherits Rectangle {
                 Rectangle {
                     width: 96px;
                     height: 32px;
-                    background: yes-ta.has-hover ? #ef4444 : #ef444488;
+                    background: root.info-only
+                        ? (yes-ta.has-hover ? Theme.accent-brand : #4d82ff88)
+                        : (yes-ta.has-hover ? #ef4444 : #ef444488);
                     border-radius: Theme.radius-md;
                     yes-ta := TouchArea { clicked => { root.yes(); } }
                     Text {
@@ -77,4 +81,3 @@ export component FmConfirmDialog inherits Rectangle {
         }
     }
 }
-
