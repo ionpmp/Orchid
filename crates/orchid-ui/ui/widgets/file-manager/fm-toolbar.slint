@@ -9,6 +9,7 @@ export component FmToolbar inherits Rectangle {
     callback forward();
     callback up();
     callback view-mode-cycle();
+    callback sort-cycle();
     callback quick-filter-changed(string);
 
     background: Theme.surface-raised;
@@ -71,6 +72,27 @@ export component FmToolbar inherits Rectangle {
         }
 
         Rectangle { width: 8px; }
+
+        Rectangle {
+            width: 36px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: sort-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            sort-ta := TouchArea {
+                clicked => { root.sort-cycle(); }
+            }
+            Text {
+                text: tab.sort-by == 0 ? (tab.sort-descending ? "A↓" : "A↑")
+                    : tab.sort-by == 1 ? (tab.sort-descending ? "S↓" : "S↑")
+                    : tab.sort-by == 2 ? (tab.sort-descending ? "M↓" : "M↑")
+                    : (tab.sort-descending ? "T↓" : "T↑");
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
 
         Rectangle {
             width: 28px; height: 28px;

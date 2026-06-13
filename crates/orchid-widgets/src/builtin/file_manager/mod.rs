@@ -445,7 +445,8 @@ impl FileManagerInner {
         let path = tab.path.clone();
 
         if is_virtual(&path) {
-            let entries = self.list_virtual(&path).await;
+            let mut entries = self.list_virtual(&path).await;
+            sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
             self.entries_by_tab.write().insert(tab.id, entries.clone());
             self.ensure_thumbnails(tab, &entries).await;
             return;
@@ -454,6 +455,7 @@ impl FileManagerInner {
         let result = self.navigator.navigate(&path, show_hidden).await;
         let mut entries = result.entries;
         self.apply_entry_metadata(&mut entries);
+        sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
         self.entries_by_tab.write().insert(tab.id, entries.clone());
         self.ensure_thumbnails(tab, &entries).await;
     }
@@ -1053,7 +1055,82 @@ fn build_tab_payload(
         quick_filter: tab.quick_filter.clone(),
         is_loading: false,
         error: None,
+        sort_by: sort_by_to_u8(tab.sort_by),
+        sort_descending: tab.sort_descending,
     }
+}
+
+fn sort_by_to_u8(sort_by: SortBy) -> u8 {
+    match sort_by {
+        SortBy::Name => 0,
+        SortBy::Size => 1,
+        SortBy::Modified => 2,
+        SortBy::Type => 3,
+    }
+}
+
+fn next_sort_by(current: SortBy) -> SortBy {
+    match current {
+        SortBy::Name => SortBy::Size,
+        SortBy::Size => SortBy::Modified,
+        SortBy::Modified => SortBy::Type,
+        SortBy::Type => SortBy::Name,
+    }
+}
+
+fn sort_entries(entries: &mut [orchid_fs::FsEntry], sort_by: SortBy, descending: bool) {
+    use std::cmp::Ordering;
+    entries.sort_by(|a, b| {
+        let ad = matches!(a.metadata.kind, orchid_fs::FsEntryKind::Directory);
+        let bd = matches!(b.metadata.kind, orchid_fs::FsEntryKind::Directory);
+        let dir_ord = match (ad, bd) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => Ordering::Equal,
+        };
+        if dir_ord != Ordering::Equal {
+            return if descending {
+                dir_ord.reverse()
+            } else {
+                dir_ord
+            };
+        }
+        let field = match sort_by {
+            SortBy::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            SortBy::Size => a.metadata.size.cmp(&b.metadata.size),
+            SortBy::Modified => {
+                let am = a
+                    .metadata
+                    .modified
+                    .map(|t| t.timestamp())
+                    .unwrap_or(0);
+                let bm = b
+                    .metadata
+                    .modified
+                    .map(|t| t.timestamp())
+                    .unwrap_or(0);
+                am.cmp(&bm)
+            }
+            SortBy::Type => {
+                let ae = a
+                    .path
+                    .extension()
+                    .map(|e| e.to_lowercase())
+                    .unwrap_or_default();
+                let be = b
+                    .path
+                    .extension()
+                    .map(|e| e.to_lowercase())
+                    .unwrap_or_default();
+                ae.cmp(&be).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            }
+        };
+        if descending {
+            field.reverse()
+        } else {
+            field
+        }
+    });
 }
 
 fn to_payload_mode(mode: ViewMode) -> FmViewMode {
@@ -1555,6 +1632,27 @@ pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Cycle the sort column for the active tab in `pane` (folders stay grouped first).
+pub async fn cycle_sort(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let mut state = inner.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.active_tab_mut()
+            } else {
+                state.left_pane.active_tab_mut()
+            }
+        } else {
+            state.left_pane.active_tab_mut()
+        };
+        tab.sort_by = next_sort_by(tab.sort_by);
+        tab.sort_descending = false;
+    }
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
 /// Update quick filter text.
 pub async fn set_quick_filter(instance_id: Uuid, pane: u8, q: String) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -2014,6 +2112,14 @@ pub async fn add_tag_to_paths(
 pub async fn select_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     inner.select_all_in_pane(pane);
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+/// Clear selection in `pane`'s active tab.
+pub async fn deselect_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.deselect_all_in_pane(pane);
     inner.refresh_all_tabs().await;
     Ok(())
 }

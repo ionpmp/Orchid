@@ -1007,6 +1007,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_sort_cycle({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_sort_cycle(pane);
+                }
+            }
+        });
         self.window.on_fm_quick_filter_changed({
             let t = t.clone();
             move |pane, q| {
@@ -1148,6 +1156,14 @@ impl MainWindowController {
             move |pane| {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_rename_selected(pane);
+                }
+            }
+        });
+        self.window.on_fm_deselect_all({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_deselect_all(pane);
                 }
             }
         });
@@ -2971,6 +2987,20 @@ impl MainWindowController {
         }));
     }
 
+    fn on_fm_sort_cycle(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::cycle_sort(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
     fn on_fm_quick_filter_changed(self: &Arc<Self>, pane: i32, q: &SharedString) {
         let Some(inst) = self.find_active_fm() else {
             return;
@@ -3473,6 +3503,25 @@ impl MainWindowController {
                 orchid_widgets::builtin::file_manager::select_all_in_pane(inst, p).await
             {
                 warn!(?e, "fm select all");
+                return;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_deselect_all(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) =
+                orchid_widgets::builtin::file_manager::deselect_all_in_pane(inst, p).await
+            {
+                warn!(?e, "fm deselect all");
                 return;
             }
             if let Some(c) = tw.upgrade() {
@@ -4218,6 +4267,8 @@ fn build_file_manager_model(
                         quick_filter: t.quick_filter.clone().into(),
                         is_loading: t.is_loading,
                         error: t.error.clone().unwrap_or_default().into(),
+                        sort_by: t.sort_by as i32,
+                        sort_descending: t.sort_descending,
                     }
                 })
                 .collect();
@@ -4260,6 +4311,7 @@ fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
 fn fm_action_shortcut(id: &str) -> &'static str {
     match id {
         "fs.select-all" => "Ctrl+A",
+        "fs.deselect-all" => "Esc",
         "fs.copy" => "Ctrl+C",
         "fs.paste" => "Ctrl+V",
         "fs.rename" => "F2",

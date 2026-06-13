@@ -22,6 +22,7 @@ export component FileManagerView inherits Rectangle {
     callback nav-up(int);
     callback breadcrumb-clicked(int, string);
     callback view-mode-cycle(int);
+    callback sort-cycle(int);
     callback quick-filter-changed(int, string);
 
     callback entry-clicked(int, string, bool);
@@ -46,6 +47,7 @@ export component FileManagerView inherits Rectangle {
     callback copy-selected(int);
     callback paste-clipboard(int);
     callback rename-selected(int);
+    callback deselect-all(int);
 
     background: transparent;
 
@@ -127,6 +129,7 @@ export component FileManagerView inherits Rectangle {
                 nav-up => { root.nav-up(0); }
                 breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                 view-mode-cycle => { root.view-mode-cycle(0); }
+                sort-cycle => { root.sort-cycle(0); }
                 quick-filter-changed(q) => { root.quick-filter-changed(0, q); }
                 entry-clicked(p, ctrl) => { root.entry-clicked(0, p, ctrl); }
                 entry-shift-clicked(p) => { root.entry-shift-clicked(0, p); }
@@ -138,6 +141,7 @@ export component FileManagerView inherits Rectangle {
                 copy-selected => { root.copy-selected(0); }
                 paste-clipboard => { root.paste-clipboard(0); }
                 rename-selected => { root.rename-selected(0); }
+                deselect-all => { root.deselect-all(0); }
             }
 
             if model.dual-pane : HorizontalLayout {
@@ -165,6 +169,7 @@ export component FileManagerView inherits Rectangle {
                         nav-up => { root.nav-up(0); }
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                         view-mode-cycle => { root.view-mode-cycle(0); }
+                        sort-cycle => { root.sort-cycle(0); }
                         quick-filter-changed(q) => { root.quick-filter-changed(0, q); }
                         entry-clicked(p, ctrl) => { root.entry-clicked(0, p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(0, p); }
@@ -176,6 +181,7 @@ export component FileManagerView inherits Rectangle {
                         copy-selected => { root.copy-selected(0); }
                         paste-clipboard => { root.paste-clipboard(0); }
                         rename-selected => { root.rename-selected(0); }
+                        deselect-all => { root.deselect-all(0); }
                     }
                 }
 
@@ -201,6 +207,7 @@ export component FileManagerView inherits Rectangle {
                         nav-up => { root.nav-up(1); }
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(1, p); }
                         view-mode-cycle => { root.view-mode-cycle(1); }
+                        sort-cycle => { root.sort-cycle(1); }
                         quick-filter-changed(q) => { root.quick-filter-changed(1, q); }
                         entry-clicked(p, ctrl) => { root.entry-clicked(1, p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(1, p); }
@@ -212,6 +219,7 @@ export component FileManagerView inherits Rectangle {
                         copy-selected => { root.copy-selected(1); }
                         paste-clipboard => { root.paste-clipboard(1); }
                         rename-selected => { root.rename-selected(1); }
+                        deselect-all => { root.deselect-all(1); }
                     }
                 }
             }

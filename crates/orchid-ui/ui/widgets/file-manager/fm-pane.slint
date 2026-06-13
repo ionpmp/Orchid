@@ -21,6 +21,7 @@ export component FmPane inherits Rectangle {
     callback nav-up();
     callback breadcrumb-clicked(string);
     callback view-mode-cycle();
+    callback sort-cycle();
     callback quick-filter-changed(string);
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
@@ -32,6 +33,7 @@ export component FmPane inherits Rectangle {
     callback copy-selected();
     callback paste-clipboard();
     callback rename-selected();
+    callback deselect-all();
 
     background: Theme.surface-base;
 
@@ -66,6 +68,10 @@ export component FmPane inherits Rectangle {
             }
             if (event.text == Key.Delete) {
                 root.delete-selected();
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                root.deselect-all();
                 return accept;
             }
             return reject;
@@ -103,6 +109,7 @@ export component FmPane inherits Rectangle {
                 forward => { root.nav-forward(); }
                 up => { root.nav-up(); }
                 view-mode-cycle => { root.view-mode-cycle(); }
+                sort-cycle => { root.sort-cycle(); }
                 quick-filter-changed(q) => { root.quick-filter-changed(q); }
             }
 

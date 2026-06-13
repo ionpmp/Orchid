@@ -113,6 +113,7 @@ export component MainWindow inherits Window {
     callback fm-nav-up(int);
     callback fm-breadcrumb-clicked(int, string);
     callback fm-view-mode-cycle(int);
+    callback fm-sort-cycle(int);
     callback fm-quick-filter-changed(int, string);
     callback fm-entry-clicked(int, string, bool);
     callback fm-entry-shift-clicked(int, string);
@@ -131,6 +132,8 @@ export component MainWindow inherits Window {
     callback fm-copy-selected(int);
     callback fm-paste-clipboard(int);
     callback fm-rename-selected(int);
+    callback fm-deselect-all(int);
+
     callback canvas-long-pressed(length, length, length, length);
     callback catalog-pick(string);
     callback catalog-dismiss();
@@ -251,6 +254,7 @@ export component MainWindow inherits Window {
             fm-nav-up(p) => { root.fm-nav-up(p); }
             fm-breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(p, path); }
             fm-view-mode-cycle(p) => { root.fm-view-mode-cycle(p); }
+            fm-sort-cycle(p) => { root.fm-sort-cycle(p); }
             fm-quick-filter-changed(p, q) => { root.fm-quick-filter-changed(p, q); }
             fm-entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(p, path, ctrl); }
             fm-entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(p, path); }
@@ -269,6 +273,7 @@ export component MainWindow inherits Window {
             fm-copy-selected(p) => { root.fm-copy-selected(p); }
             fm-paste-clipboard(p) => { root.fm-paste-clipboard(p); }
             fm-rename-selected(p) => { root.fm-rename-selected(p); }
+            fm-deselect-all(p) => { root.fm-deselect-all(p); }
             canvas-long-pressed(cx, cy, vx, vy) => { root.canvas-long-pressed(cx, cy, vx, vy); }
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
             catalog-dismiss => { root.catalog-dismiss(); }

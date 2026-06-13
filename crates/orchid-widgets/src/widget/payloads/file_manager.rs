@@ -34,6 +34,9 @@ pub struct TabPayload {
     pub quick_filter: String,
     pub is_loading: bool,
     pub error: Option<String>,
+    /// Sort column index: 0 name, 1 size, 2 modified, 3 type.
+    pub sort_by: u8,
+    pub sort_descending: bool,
 }
 
 /// One entry row.

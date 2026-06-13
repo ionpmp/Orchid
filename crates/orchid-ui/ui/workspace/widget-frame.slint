@@ -74,6 +74,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-nav-up(int);
     callback fm-breadcrumb-clicked(int, string);
     callback fm-view-mode-cycle(int);
+    callback fm-sort-cycle(int);
     callback fm-quick-filter-changed(int, string);
     callback fm-entry-clicked(int, string, bool);
     callback fm-entry-shift-clicked(int, string);
@@ -92,6 +93,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-copy-selected(int);
     callback fm-paste-clipboard(int);
     callback fm-rename-selected(int);
+    callback fm-deselect-all(int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -310,6 +312,7 @@ export component WidgetFrame inherits Rectangle {
             nav-up(p) => { root.fm-nav-up(p); }
             breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(p, path); }
             view-mode-cycle(p) => { root.fm-view-mode-cycle(p); }
+            sort-cycle(p) => { root.fm-sort-cycle(p); }
             quick-filter-changed(p, q) => { root.fm-quick-filter-changed(p, q); }
             entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(p, path, ctrl); }
             entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(p, path); }
@@ -328,6 +331,7 @@ export component WidgetFrame inherits Rectangle {
             copy-selected(p) => { root.fm-copy-selected(p); }
             paste-clipboard(p) => { root.fm-paste-clipboard(p); }
             rename-selected(p) => { root.fm-rename-selected(p); }
+            deselect-all(p) => { root.fm-deselect-all(p); }
         }
     }
 
