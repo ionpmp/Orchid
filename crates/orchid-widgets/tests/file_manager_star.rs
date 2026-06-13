@@ -28,6 +28,8 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         clipboard: Arc::new(FileClipboard::new()),
         tag_manager,
         thumbnails,
+        search: None,
+        managed: None,
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());

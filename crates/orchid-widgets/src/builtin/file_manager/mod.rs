@@ -39,8 +39,8 @@ pub use selection::SelectionModel;
 pub use state::{ActivePane, FileManagerState, PaneState, TabState};
 pub use view_mode::{config_for_mode, ViewModeConfig};
 pub use virtual_folders::{
-    category_for_virtual_path, entry_matches_category, is_virtual, sidebar_catalog, FileCategory,
-    VirtualFolder,
+    category_for_virtual_path, category_search_extensions, entry_matches_category, is_virtual,
+    sidebar_catalog, FileCategory, VirtualFolder,
 };
 
 /// Selection mutation mode for UI interactions.
@@ -73,6 +73,10 @@ pub enum ActionOutcome {
     OpenInViewerMany {
         paths: Vec<String>,
     },
+    /// Open files with the OS default application.
+    OpenExternally {
+        paths: Vec<String>,
+    },
     /// Read-only info dialog (e.g. file properties).
     ShowInfo {
         title: String,
@@ -81,6 +85,10 @@ pub enum ActionOutcome {
     /// Prompt for a tag name to apply to `paths`.
     NeedsTag {
         paths: Vec<String>,
+    },
+    /// Prompt for a folder name under `parent`.
+    NeedsCreateFolder {
+        parent: String,
     },
 }
 
@@ -101,6 +109,10 @@ pub struct FileManagerDeps {
     pub tag_manager: Arc<orchid_fs::TagManager>,
     /// Thumbnail service (for image previews in Icons / Gallery modes).
     pub thumbnails: Arc<orchid_viewers::ThumbnailService>,
+    /// Optional search index for category virtual folders.
+    pub search: Option<Arc<orchid_search::SearchEngine>>,
+    /// Managed-folder engine (content-addressed backup of on-disk trees).
+    pub managed: Option<Arc<orchid_fs::ManagedFolderEngine>>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -136,6 +148,8 @@ struct FileManagerInner {
     recent: RwLock<std::collections::VecDeque<String>>,
     /// Decoded thumbnails keyed by entry path (icon / gallery modes).
     thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
+    /// Cached managed-folder root paths for [`apply_entry_metadata`].
+    managed_roots: RwLock<Vec<String>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -165,6 +179,7 @@ impl FileManagerWidget {
                 encrypted: RwLock::new(std::collections::HashSet::new()),
                 recent: RwLock::new(std::collections::VecDeque::new()),
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
+                managed_roots: RwLock::new(Vec::new()),
                 bus,
             }),
         }
@@ -276,33 +291,29 @@ impl Widget for FileManagerWidget {
         let config = self.inner.config.read().clone();
         let state = self.inner.state.lock().clone();
         let entries_map = self.inner.entries_by_tab.read().clone();
-        let tab = state.active_tab();
-        let tab_entries = entries_map.get(&tab.id).cloned().unwrap_or_default();
-        let tab_payload = build_tab_payload(tab, &tab_entries, &config, &*self.inner);
-        let pane = PanePayload {
-            tabs: vec![tab_payload],
-            active_tab: 0,
-        };
+        let left_pane = build_pane_payload(
+            &state.left_pane,
+            &entries_map,
+            &config,
+            &*self.inner,
+        );
         let dual_pane = config.dual_pane;
-        let mut panes = vec![pane.clone()];
+        let mut panes = vec![left_pane];
         if dual_pane {
             if let Some(right) = &state.right_pane {
-                let right_tab = right.active_tab();
-                panes.push(PanePayload {
-                    tabs: vec![build_tab_payload(
-                        right_tab,
-                        entries_map.get(&right_tab.id).map(Vec::as_slice).unwrap_or(&[]),
-                        &config,
-                        &*self.inner,
-                    )],
-                    active_tab: 0,
-                });
+                panes.push(build_pane_payload(
+                    right,
+                    &entries_map,
+                    &config,
+                    &*self.inner,
+                ));
             }
         }
         let active_pane = match state.active_pane {
             ActivePane::Left => 0,
             ActivePane::Right => 1,
         };
+        let tab = state.active_tab();
         let clipboard_indicator = match self.inner.deps.clipboard.operation() {
             ClipboardOperation::None => None,
             op => Some(format!(
@@ -357,6 +368,7 @@ impl FileManagerInner {
     }
 
     async fn refresh_all_tabs(&self) {
+        self.refresh_managed_roots().await;
         let show_hidden = self.config.read().show_hidden;
         let (left, right) = {
             let state = self.state.lock().clone();
@@ -502,9 +514,19 @@ impl FileManagerInner {
     }
 
     async fn list_category(&self, cat: FileCategory) -> Vec<orchid_fs::FsEntry> {
-        let candidates = self.collect_catalog_candidates();
+        let mut path_keys: std::collections::HashSet<String> = self
+            .collect_catalog_candidates()
+            .into_iter()
+            .map(|p| p.as_str().to_string())
+            .collect();
+        for p in self.search_category_paths(cat).await {
+            path_keys.insert(p.as_str().to_string());
+        }
         let mut entries = Vec::new();
-        for p in candidates {
+        for key in path_keys {
+            let Ok(p) = orchid_fs::FsPath::new(&key) else {
+                continue;
+            };
             let Some(provider) = self.deps.registry.for_path(&p) else {
                 continue;
             };
@@ -516,8 +538,8 @@ impl FileManagerInner {
                 continue;
             }
             let entry = orchid_fs::FsEntry {
-                path: p.clone(),
-                name: p.file_name().map(String::from).unwrap_or_default(),
+                path: p,
+                name: key.rsplit('/').next().unwrap_or(&key).to_string(),
                 metadata: meta,
             };
             if entry_matches_category(&entry, cat) {
@@ -529,6 +551,113 @@ impl FileManagerInner {
         }
         self.apply_entry_metadata(&mut entries);
         entries
+    }
+
+    async fn search_category_paths(&self, cat: FileCategory) -> Vec<orchid_fs::FsPath> {
+        let Some(engine) = self.deps.search.as_ref() else {
+            return Vec::new();
+        };
+        let mut paths = Vec::new();
+        for ext in category_search_extensions(cat) {
+            let mut q = orchid_search::query::QueryBuilder::new()
+                .extension(*ext)
+                .limit(50)
+                .build();
+            q.only_files = true;
+            if let Ok(results) = engine.search(q).await {
+                for hit in results.hits {
+                    if let Ok(p) = orchid_fs::FsPath::new(&hit.path) {
+                        paths.push(p);
+                    }
+                }
+            }
+        }
+        paths.sort_by_key(|p| p.as_str().to_string());
+        paths.dedup();
+        paths
+    }
+
+    fn filtered_paths_for_tab(&self, tab: &TabState) -> Vec<String> {
+        let entries = self
+            .entries_by_tab
+            .read()
+            .get(&tab.id)
+            .cloned()
+            .unwrap_or_default();
+        let quick = tab.quick_filter.trim();
+        if quick.is_empty() {
+            return entries
+                .into_iter()
+                .map(|e| e.path.as_str().to_string())
+                .collect();
+        }
+        let q = quick.to_lowercase();
+        entries
+            .into_iter()
+            .filter(|e| e.name.to_lowercase().contains(&q))
+            .map(|e| e.path.as_str().to_string())
+            .collect()
+    }
+
+    fn select_all_in_pane(&self, pane: u8) {
+        let (tab_id, paths) = {
+            let state = self.state.lock();
+            let tab = match active_tab_ref(&state, pane) {
+                Ok(t) => t,
+                Err(_) => return,
+            };
+            (tab.id, self.filtered_paths_for_tab(tab))
+        };
+        let mut state = self.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.tabs.iter_mut().find(|t| t.id == tab_id)
+            } else {
+                state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
+            }
+        } else {
+            state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
+        };
+        if let Some(t) = tab {
+            t.selection.select_all(&paths);
+        }
+    }
+
+    fn deselect_all_in_pane(&self, pane: u8) {
+        let mut state = self.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.active_tab_mut()
+            } else {
+                state.left_pane.active_tab_mut()
+            }
+        } else {
+            state.left_pane.active_tab_mut()
+        };
+        tab.selection.clear();
+    }
+
+    async fn create_folder_at(&self, parent: &orchid_fs::FsPath, name: &str) -> WidgetResult<()> {
+        if name.is_empty()
+            || name.contains('/')
+            || name.contains('\\')
+            || name.contains(':')
+        {
+            return Err(WidgetError::InvalidStateForOperation(
+                "invalid folder name".into(),
+            ));
+        }
+        let new_path = parent.join(name);
+        let provider = self
+            .deps
+            .registry
+            .for_path(parent)
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no provider for parent".into()))?;
+        provider
+            .create_dir(&new_path, false)
+            .await
+            .map_err(map_fs_error)?;
+        Ok(())
     }
 
     async fn ensure_thumbnails(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
@@ -697,6 +826,7 @@ impl FileManagerInner {
 
     fn apply_entry_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
         let encrypted_overlay = self.encrypted.read().clone();
+        let managed_roots = self.managed_roots.read().clone();
         let tag_manager = &self.deps.tag_manager;
         for e in entries.iter_mut() {
             if let Ok(Some(tag)) = tag_manager.get(&e.path) {
@@ -704,12 +834,125 @@ impl FileManagerInner {
                 e.metadata.extended.tags = tag.tags.clone();
                 e.metadata.extended.color_label = tag.color_label;
             }
+            if managed_roots
+                .iter()
+                .any(|root| e.path.as_str().starts_with(root))
+            {
+                e.metadata.extended.is_managed = true;
+            }
             if encrypted_overlay.contains(e.path.as_str())
                 || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
             {
                 e.metadata.extended.is_encrypted = true;
             }
         }
+    }
+
+    async fn refresh_managed_roots(&self) {
+        let roots = if let Some(engine) = self.deps.managed.as_ref() {
+            engine
+                .list_folders()
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|f| f.enabled)
+                .map(|f| f.path.as_str().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        *self.managed_roots.write() = roots;
+    }
+
+    async fn register_managed_folder(&self, folder: &orchid_fs::FsPath) -> WidgetResult<()> {
+        let Some(engine) = self.deps.managed.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "managed folders unavailable".into(),
+            ));
+        };
+        let cfg = orchid_fs::ManagedFolderConfig {
+            path: folder.clone(),
+            chunk_size: orchid_crypto::ChunkerConfig::default(),
+            enabled: true,
+            auto_ingest: true,
+        };
+        engine.add_folder(cfg).await.map_err(map_fs_error)?;
+        Ok(())
+    }
+
+    async fn add_selection_to_managed(&self, paths: &[String]) -> WidgetResult<()> {
+        let folder = self.resolve_managed_folder_target(paths).await?;
+        self.register_managed_folder(&folder).await?;
+        if let Some(engine) = self.deps.managed.as_ref() {
+            for p in paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                if let Some(provider) = self.deps.registry.for_path(&fp) {
+                    if let Ok(meta) = provider.metadata(&fp).await {
+                        if matches!(meta.kind, orchid_fs::FsEntryKind::File) {
+                            if let Err(e) = engine.ingest(&fp).await {
+                                warn!(error = %e, path = %p, "managed ingest failed");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.refresh_managed_roots().await;
+        Ok(())
+    }
+
+    async fn resolve_managed_folder_target(
+        &self,
+        paths: &[String],
+    ) -> WidgetResult<orchid_fs::FsPath> {
+        if paths.is_empty() {
+            return Err(WidgetError::InvalidStateForOperation(
+                "no selection for managed folder".into(),
+            ));
+        }
+        let mut folder_candidates: Vec<orchid_fs::FsPath> = Vec::new();
+        for p in paths {
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            if let Some(provider) = self.deps.registry.for_path(&fp) {
+                if let Ok(meta) = provider.metadata(&fp).await {
+                    if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                        folder_candidates.push(fp);
+                        continue;
+                    }
+                }
+            }
+            let parent = fp
+                .parent()
+                .ok_or_else(|| WidgetError::InvalidStateForOperation("no parent folder".into()))?;
+            folder_candidates.push(parent);
+        }
+        let first = folder_candidates[0].as_str();
+        if !folder_candidates.iter().all(|f| f.as_str() == first) {
+            return Err(WidgetError::InvalidStateForOperation(
+                "selection spans multiple folders".into(),
+            ));
+        }
+        Ok(folder_candidates[0].clone())
+    }
+}
+
+fn build_pane_payload(
+    pane: &PaneState,
+    entries_map: &std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>,
+    config: &FileManagerConfig,
+    inner: &FileManagerInner,
+) -> PanePayload {
+    let tabs: Vec<TabPayload> = pane
+        .tabs
+        .iter()
+        .map(|tab| {
+            let entries = entries_map.get(&tab.id).map(Vec::as_slice).unwrap_or(&[]);
+            build_tab_payload(tab, entries, config, inner)
+        })
+        .collect();
+    PanePayload {
+        tabs,
+        active_tab: pane.active_tab as u32,
     }
 }
 
@@ -976,7 +1219,7 @@ pub fn context_menu_for(
     context_path: &str,
 ) -> WidgetResult<(Vec<ContextMenuItem>, Vec<String>)> {
     let inner = live_inner(instance_id)?;
-    let (entries, target_paths) = {
+    let (entries, target_paths, entry_count, selection_count) = {
         let state = inner.state.lock();
         let tab = active_tab_ref(&state, pane)?;
         let tab_id = tab.id;
@@ -987,18 +1230,26 @@ pub fn context_menu_for(
             .get(&tab_id)
             .cloned()
             .unwrap_or_default();
+        let entry_count = inner.filtered_paths_for_tab(tab).len();
+        let selection_count = tab.selection.count();
         let target_paths = if selection.iter().any(|p| p == context_path) {
             selection
         } else {
             vec![context_path.to_string()]
         };
-        (entries, target_paths)
+        (entries, target_paths, entry_count, selection_count)
     };
     let selected_entries: Vec<orchid_fs::FsEntry> = target_paths
         .iter()
         .filter_map(|p| entries.iter().find(|e| e.path.as_str() == p))
         .cloned()
         .collect();
+    let mut tag_union = std::collections::BTreeSet::new();
+    for e in &selected_entries {
+        for t in &e.metadata.extended.tags {
+            tag_union.insert(t.clone());
+        }
+    }
     let inputs = ContextMenuInputs {
         clipboard_has_contents: !inner.deps.clipboard.is_empty(),
         all_encrypted: selected_entries
@@ -1024,6 +1275,9 @@ pub fn context_menu_for(
             .into_iter()
             .take(12)
             .collect(),
+        tags_on_selection: tag_union.into_iter().take(12).collect(),
+        entry_count,
+        selection_count,
     };
     Ok((build_for_selection(&selected_entries, inputs), target_paths))
 }
@@ -1398,6 +1652,20 @@ pub async fn run_action_with_opts(
     opts: RunActionOpts,
 ) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
+    if let Some(tag) = action_id.strip_prefix("fs.tag-remove:") {
+        if !tag.is_empty() {
+            for p in &target_paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                inner
+                    .deps
+                    .tag_manager
+                    .remove_tag(&fp, tag)
+                    .map_err(map_fs_error)?;
+            }
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+    }
     if let Some(tag) = action_id.strip_prefix("fs.tag:") {
         if !tag.is_empty() {
             for p in &target_paths {
@@ -1445,6 +1713,24 @@ pub async fn run_action_with_opts(
                 return Ok(ActionOutcome::Done);
             };
             return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
+        }
+        "fs.open-external" | "fs.open-with" => {
+            let mut files = Vec::new();
+            for p in &target_paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                if let Some(provider) = inner.deps.registry.for_path(&fp) {
+                    if let Ok(meta) = provider.metadata(&fp).await {
+                        if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                            continue;
+                        }
+                    }
+                }
+                files.push(p.clone());
+            }
+            if files.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::OpenExternally { paths: files });
         }
         "fs.copy" => {
             let paths: Vec<orchid_fs::FsPath> = target_paths
@@ -1524,6 +1810,44 @@ pub async fn run_action_with_opts(
                 paths: target_paths,
             });
         }
+        "fs.select-all" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.select_all_in_pane(pane);
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.deselect-all" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.deselect_all_in_pane(pane);
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.new-folder" => {
+            let parent = {
+                let state = inner.state.lock();
+                let pane = match state.active_pane {
+                    ActivePane::Left => 0,
+                    ActivePane::Right => 1,
+                };
+                active_tab_ref(&state, pane)
+                    .map(|t| t.path.clone())
+                    .ok()
+            };
+            if let Some(parent) = parent {
+                if !is_virtual(&parent) {
+                    return Ok(ActionOutcome::NeedsCreateFolder {
+                        parent: parent.as_str().to_string(),
+                    });
+                }
+            }
+            return Ok(ActionOutcome::Done);
+        }
         "fs.color-label" => {
             for p in &target_paths {
                 let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
@@ -1583,6 +1907,11 @@ pub async fn run_action_with_opts(
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
+        "fs.add-to-managed" => {
+            inner.add_selection_to_managed(&target_paths).await?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
         "fs.decrypt" => {
             let mut set = inner.encrypted.write();
             for p in &target_paths {
@@ -1627,6 +1956,35 @@ pub async fn rename(instance_id: Uuid, old_path: &str, new_name: &str) -> Widget
         .map_err(map_fs_error)?;
     inner.refresh_all_tabs().await;
     Ok(())
+}
+
+/// Create a subfolder under `parent_path`.
+pub async fn create_folder(instance_id: Uuid, parent_path: &str, name: &str) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let parent = orchid_fs::FsPath::new(parent_path).map_err(map_fs_error)?;
+    if is_virtual(&parent) {
+        return Err(WidgetError::InvalidStateForOperation(
+            "cannot create folder in virtual location".into(),
+        ));
+    }
+    inner.create_folder_at(&parent, name).await?;
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+/// Open the new-folder dialog for `pane`'s current directory.
+pub async fn request_new_folder(instance_id: Uuid, pane: u8) -> WidgetResult<ActionOutcome> {
+    let inner = live_inner(instance_id)?;
+    let parent = {
+        let state = inner.state.lock();
+        active_tab_ref(&state, pane)?.path.clone()
+    };
+    if is_virtual(&parent) {
+        return Ok(ActionOutcome::Done);
+    }
+    Ok(ActionOutcome::NeedsCreateFolder {
+        parent: parent.as_str().to_string(),
+    })
 }
 
 /// Apply `tag` to every path in `paths`.

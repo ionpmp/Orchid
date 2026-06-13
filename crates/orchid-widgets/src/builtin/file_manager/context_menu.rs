@@ -32,6 +32,12 @@ pub struct ContextMenuInputs {
     pub any_starred: bool,
     /// Recent tag strings for quick-apply submenu entries.
     pub known_tags: Vec<String>,
+    /// Union of tags on the current selection (for remove-tag actions).
+    pub tags_on_selection: Vec<String>,
+    /// Visible entries in the active listing (after quick filter).
+    pub entry_count: usize,
+    /// Number of selected paths.
+    pub selection_count: usize,
 }
 
 /// Build the menu from the current selection and the extra flags.
@@ -58,21 +64,19 @@ pub fn build_for_selection(
         separator_after: false,
         submenu: Vec::new(),
     });
-    items.push(ContextMenuItem {
-        id: "fs.open-with".into(),
-        label_key: "fm-action-open-with".into(),
-        icon: "action-open-with",
-        enabled: single_file,
-        separator_after: true,
-        submenu: vec![ContextMenuItem {
-            id: "viewer.open".into(),
-            label_key: "fm-action-open-in-viewer".into(),
-            icon: "widget-viewer",
-            enabled: single_file,
-            separator_after: false,
-            submenu: Vec::new(),
-        }],
-    });
+    items.push(item(
+        "fs.open-external",
+        "fm-action-open-with",
+        "action-open-with",
+        single_file,
+    ));
+    items.push(item(
+        "viewer.open",
+        "fm-action-open-in-viewer",
+        "widget-viewer",
+        single_file,
+    ));
+    items.last_mut().unwrap().separator_after = true;
 
     items.push(item("fs.copy", "fm-action-copy", "action-copy", has_selection));
     items.push(item("fs.cut", "fm-action-cut", "action-cut", has_selection));
@@ -102,6 +106,16 @@ pub fn build_for_selection(
     for t in &inputs.known_tags {
         items.push(ContextMenuItem {
             id: format!("fs.tag:{t}"),
+            label_key: t.clone(),
+            icon: "action-tag",
+            enabled: has_selection,
+            separator_after: false,
+            submenu: Vec::new(),
+        });
+    }
+    for t in &inputs.tags_on_selection {
+        items.push(ContextMenuItem {
+            id: format!("fs.tag-remove:{t}"),
             label_key: t.clone(),
             icon: "action-tag",
             enabled: has_selection,
@@ -147,6 +161,19 @@ pub fn build_for_selection(
         has_selection && !inputs.all_managed,
     ));
     items.last_mut().unwrap().separator_after = true;
+
+    items.push(item(
+        "fs.select-all",
+        "fm-action-select-all",
+        "action-select-all",
+        inputs.entry_count > 0,
+    ));
+    items.push(sep(item(
+        "fs.deselect-all",
+        "fm-action-deselect-all",
+        "action-deselect",
+        inputs.selection_count > 0,
+    )));
 
     items.push(item(
         "fs.properties",

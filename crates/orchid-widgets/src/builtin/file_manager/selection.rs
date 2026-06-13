@@ -29,6 +29,19 @@ impl SelectionModel {
         self.anchor = Some(path.to_string());
     }
 
+    /// Select every path in `ordered` (typically the visible listing).
+    pub fn select_all(&mut self, ordered: &[String]) {
+        self.selected.clear();
+        for p in ordered {
+            self.selected.insert(p.clone());
+        }
+        if let Some(first) = ordered.first() {
+            self.anchor = Some(first.clone());
+        } else {
+            self.anchor = None;
+        }
+    }
+
     /// Toggle a path.
     pub fn toggle(&mut self, path: &str) {
         if !self.selected.remove(path) {
@@ -112,5 +125,15 @@ mod tests {
         s.select_single("c");
         assert_eq!(s.count(), 1);
         assert!(s.is_selected("c"));
+    }
+
+    #[test]
+    fn select_all_replaces_with_every_path() {
+        let mut s = SelectionModel::new();
+        s.toggle("a");
+        let ordered = vec!["x".into(), "y".into(), "z".into()];
+        s.select_all(&ordered);
+        assert_eq!(s.count(), 3);
+        assert!(s.is_selected("z"));
     }
 }

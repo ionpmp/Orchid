@@ -133,6 +133,23 @@ fn mime_is_prefix(mime: Option<&str>, prefix: &str) -> bool {
     mime.map(|m| m.starts_with(prefix)).unwrap_or(false)
 }
 
+/// Representative extensions used to query the search index for a category.
+#[must_use]
+pub fn category_search_extensions(cat: FileCategory) -> &'static [&'static str] {
+    match cat {
+        FileCategory::Images => &[
+            "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "avif", "svg",
+        ],
+        FileCategory::Documents => &[
+            "pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ppt", "pptx", "csv",
+            "ods", "odp",
+        ],
+        FileCategory::Video => &["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "flv"],
+        FileCategory::Audio => &["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus"],
+        FileCategory::Archives => &["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "cab"],
+    }
+}
+
 fn ext_in(ext: &Option<String>, list: &[&str]) -> bool {
     ext.as_ref()
         .map(|e| list.iter().any(|x| x == e))
