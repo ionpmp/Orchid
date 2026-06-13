@@ -2010,6 +2010,14 @@ pub async fn add_tag_to_paths(
     Ok(())
 }
 
+/// Select every visible entry in `pane`'s active tab.
+pub async fn select_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.select_all_in_pane(pane);
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
 /// Record a path in the recent-files list (files only).
 pub async fn touch_recent(instance_id: Uuid, path: &str) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

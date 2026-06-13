@@ -89,6 +89,9 @@ export component WidgetFrame inherits Rectangle {
     callback fm-tag-cancel();
     callback fm-select-all(int);
     callback fm-delete-selected(int);
+    callback fm-copy-selected(int);
+    callback fm-paste-clipboard(int);
+    callback fm-rename-selected(int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -322,6 +325,9 @@ export component WidgetFrame inherits Rectangle {
             tag-cancel => { root.fm-tag-cancel(); }
             select-all(p) => { root.fm-select-all(p); }
             delete-selected(p) => { root.fm-delete-selected(p); }
+            copy-selected(p) => { root.fm-copy-selected(p); }
+            paste-clipboard(p) => { root.fm-paste-clipboard(p); }
+            rename-selected(p) => { root.fm-rename-selected(p); }
         }
     }
 

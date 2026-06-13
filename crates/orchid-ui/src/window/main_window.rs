@@ -1127,6 +1127,30 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_copy_selected({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_copy_selected(pane);
+                }
+            }
+        });
+        self.window.on_fm_paste_clipboard({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_paste_clipboard(pane);
+                }
+            }
+        });
+        self.window.on_fm_rename_selected({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_rename_selected(pane);
+                }
+            }
+        });
         Ok(())
     }
 
@@ -3438,27 +3462,21 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_select_all(self: &Arc<Self>, _pane: i32) {
+    fn on_fm_select_all(self: &Arc<Self>, pane: i32) {
         let Some(inst) = self.find_active_fm() else {
             return;
         };
+        let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            let outcome = match orchid_widgets::builtin::file_manager::run_action(
-                inst,
-                "fs.select-all",
-                Vec::new(),
-            )
-            .await
+            if let Err(e) =
+                orchid_widgets::builtin::file_manager::select_all_in_pane(inst, p).await
             {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!(?e, "fm select all");
-                    return;
-                }
-            };
+                warn!(?e, "fm select all");
+                return;
+            }
             if let Some(c) = tw.upgrade() {
-                c.apply_fm_action_outcome(inst, outcome);
+                c.schedule_rebuild();
             }
         }));
     }
@@ -3470,19 +3488,53 @@ impl MainWindowController {
         let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
         if paths.is_empty() {
             return;
+        }
+        self.spawn_fm_action(inst, "fs.delete", paths);
+    }
+
+    fn on_fm_copy_selected(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
         };
+        let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
+        if paths.is_empty() {
+            return;
+        }
+        self.spawn_fm_action(inst, "fs.copy", paths);
+    }
+
+    fn on_fm_paste_clipboard(self: &Arc<Self>, _pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        self.spawn_fm_action(inst, "fs.paste", Vec::new());
+    }
+
+    fn on_fm_rename_selected(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
+        if paths.len() != 1 {
+            return;
+        }
+        self.spawn_fm_action(inst, "fs.rename", paths);
+    }
+
+    fn spawn_fm_action(self: &Arc<Self>, inst: Uuid, action_id: &str, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
+        let action_id = action_id.to_string();
         let _ = slint::spawn_local(Compat::new(async move {
             let outcome = match orchid_widgets::builtin::file_manager::run_action(
                 inst,
-                "fs.delete",
+                &action_id,
                 paths,
             )
             .await
             {
                 Ok(o) => o,
                 Err(e) => {
-                    warn!(?e, "fm delete selected");
+                    warn!(?e, action_id = %action_id, "fm action");
                     return;
                 }
             };
@@ -4208,7 +4260,11 @@ fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
 fn fm_action_shortcut(id: &str) -> &'static str {
     match id {
         "fs.select-all" => "Ctrl+A",
+        "fs.copy" => "Ctrl+C",
+        "fs.paste" => "Ctrl+V",
+        "fs.rename" => "F2",
         "fs.delete" => "Del",
+        "fs.new-folder" => "Ctrl+Shift+N",
         _ => "",
     }
 }

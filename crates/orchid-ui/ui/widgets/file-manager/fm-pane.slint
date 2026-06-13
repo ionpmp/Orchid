@@ -29,6 +29,9 @@ export component FmPane inherits Rectangle {
     callback pane-focused();
     callback select-all();
     callback delete-selected();
+    callback copy-selected();
+    callback paste-clipboard();
+    callback rename-selected();
 
     background: Theme.surface-base;
 
@@ -42,6 +45,23 @@ export component FmPane inherits Rectangle {
             }
             if (event.modifiers.control && (event.text == "a" || event.text == "A")) {
                 root.select-all();
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
+                root.copy-selected();
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "v" || event.text == "V")) {
+                root.paste-clipboard();
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.shift
+                && (event.text == "n" || event.text == "N")) {
+                root.new-folder();
+                return accept;
+            }
+            if (event.text == Key.F2) {
+                root.rename-selected();
                 return accept;
             }
             if (event.text == Key.Delete) {

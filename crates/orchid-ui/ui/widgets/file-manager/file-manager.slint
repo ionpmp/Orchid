@@ -43,6 +43,9 @@ export component FileManagerView inherits Rectangle {
 
     callback select-all(int);
     callback delete-selected(int);
+    callback copy-selected(int);
+    callback paste-clipboard(int);
+    callback rename-selected(int);
 
     background: transparent;
 
@@ -132,6 +135,9 @@ export component FileManagerView inherits Rectangle {
                 pane-focused => { root.pane-clicked(0); }
                 select-all => { root.select-all(0); }
                 delete-selected => { root.delete-selected(0); }
+                copy-selected => { root.copy-selected(0); }
+                paste-clipboard => { root.paste-clipboard(0); }
+                rename-selected => { root.rename-selected(0); }
             }
 
             if model.dual-pane : HorizontalLayout {
@@ -167,6 +173,9 @@ export component FileManagerView inherits Rectangle {
                         pane-focused => { root.pane-clicked(0); }
                         select-all => { root.select-all(0); }
                         delete-selected => { root.delete-selected(0); }
+                        copy-selected => { root.copy-selected(0); }
+                        paste-clipboard => { root.paste-clipboard(0); }
+                        rename-selected => { root.rename-selected(0); }
                     }
                 }
 
@@ -200,6 +209,9 @@ export component FileManagerView inherits Rectangle {
                         pane-focused => { root.pane-clicked(1); }
                         select-all => { root.select-all(1); }
                         delete-selected => { root.delete-selected(1); }
+                        copy-selected => { root.copy-selected(1); }
+                        paste-clipboard => { root.paste-clipboard(1); }
+                        rename-selected => { root.rename-selected(1); }
                     }
                 }
             }
