@@ -50,7 +50,7 @@ use crate::slint_generated::{
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
-    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
@@ -1132,6 +1132,22 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_tag_cancel();
+                }
+            }
+        });
+        self.window.on_fm_passphrase_commit({
+            let t = t.clone();
+            move |pw| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_passphrase_commit(&pw);
+                }
+            }
+        });
+        self.window.on_fm_passphrase_cancel({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_passphrase_cancel();
                 }
             }
         });
@@ -2487,6 +2503,9 @@ impl MainWindowController {
                             rename: empty_rename_state(),
                             tag: empty_tag_state(),
                             tag_paths: Vec::new(),
+                            passphrase: empty_passphrase_state(),
+                            passphrase_paths: Vec::new(),
+                            passphrase_purpose: None,
                             create_folder_parent: None,
                         });
                     (
@@ -2708,6 +2727,9 @@ impl MainWindowController {
                 rename: empty_rename_state(),
                 tag: empty_tag_state(),
                 tag_paths: Vec::new(),
+                passphrase: empty_passphrase_state(),
+                passphrase_paths: Vec::new(),
+                passphrase_purpose: None,
                 create_folder_parent: None,
             })
     }
@@ -3308,6 +3330,33 @@ impl MainWindowController {
                 drop(over);
                 self.schedule_rebuild();
             }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsPassphrase {
+                paths,
+                purpose,
+            } => {
+                let title = match purpose {
+                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Encrypt => {
+                        self.locale.tr("fm-encrypt-title")
+                    }
+                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Reveal => {
+                        self.locale.tr("fm-decrypt-title")
+                    }
+                };
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.passphrase_paths = paths;
+                entry.passphrase_purpose = Some(purpose);
+                entry.passphrase = FmPassphraseState {
+                    active: true,
+                    proposed_passphrase: SharedString::new(),
+                    title: title.into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
                 let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
                     warn!(path = %path, "open in viewer: invalid path");
@@ -3541,6 +3590,58 @@ impl MainWindowController {
         entry.tag_paths.clear();
         drop(over);
         self.schedule_rebuild();
+    }
+
+    fn on_fm_passphrase_commit(self: &Arc<Self>, passphrase: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let overlay = self.fm_overlays.read().get(&inst).cloned();
+        let Some(over) = overlay else {
+            return;
+        };
+        let purpose = over
+            .passphrase_purpose
+            .unwrap_or(orchid_widgets::builtin::file_manager::PassphrasePurpose::Encrypt);
+        let paths = over.passphrase_paths.clone();
+        let pw = passphrase.to_string();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
+                inst,
+                paths,
+                pw,
+                purpose,
+            )
+            .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, "fm passphrase");
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                c.clear_fm_passphrase_overlay(inst);
+                c.apply_fm_action_outcome(inst, outcome);
+            }
+        }));
+    }
+
+    fn on_fm_passphrase_cancel(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        self.clear_fm_passphrase_overlay(inst);
+        self.schedule_rebuild();
+    }
+
+    fn clear_fm_passphrase_overlay(self: &Arc<Self>, inst: Uuid) {
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.passphrase = empty_passphrase_state();
+        entry.passphrase_paths.clear();
+        entry.passphrase_purpose = None;
     }
 
     fn on_fm_select_all(self: &Arc<Self>, pane: i32) {
@@ -4070,6 +4171,9 @@ struct FileManagerOverlays {
     rename: FmRenameState,
     tag: FmTagState,
     tag_paths: Vec<String>,
+    passphrase: FmPassphraseState,
+    passphrase_paths: Vec<String>,
+    passphrase_purpose: Option<orchid_widgets::builtin::file_manager::PassphrasePurpose>,
     create_folder_parent: Option<String>,
 }
 
@@ -4085,8 +4189,19 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
         tag: empty_tag_state(),
+        passphrase: empty_passphrase_state(),
         show_hidden: false,
         show_hidden_label: locale.tr("fm-show-hidden-off").into(),
+    }
+}
+
+fn empty_passphrase_state() -> FmPassphraseState {
+    FmPassphraseState {
+        active: false,
+        proposed_passphrase: SharedString::new(),
+        title: SharedString::new(),
+        ok_label: SharedString::new(),
+        cancel_label: SharedString::new(),
     }
 }
 
@@ -4363,6 +4478,7 @@ fn build_file_manager_model(
         confirm_dialog: overlays.confirm_dialog,
         rename: overlays.rename,
         tag: overlays.tag,
+        passphrase: overlays.passphrase,
     }
 }
 

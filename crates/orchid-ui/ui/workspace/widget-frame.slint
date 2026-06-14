@@ -90,6 +90,8 @@ export component WidgetFrame inherits Rectangle {
     callback fm-rename-cancel();
     callback fm-tag-commit(string);
     callback fm-tag-cancel();
+    callback fm-passphrase-commit(string);
+    callback fm-passphrase-cancel();
     callback fm-select-all(int);
     callback fm-delete-selected(int);
     callback fm-copy-selected(int);
@@ -330,6 +332,8 @@ export component WidgetFrame inherits Rectangle {
             rename-cancel => { root.fm-rename-cancel(); }
             tag-commit(tag) => { root.fm-tag-commit(tag); }
             tag-cancel => { root.fm-tag-cancel(); }
+            passphrase-commit(pw) => { root.fm-passphrase-commit(pw); }
+            passphrase-cancel => { root.fm-passphrase-cancel(); }
             select-all(p) => { root.fm-select-all(p); }
             delete-selected(p) => { root.fm-delete-selected(p); }
             copy-selected(p) => { root.fm-copy-selected(p); }

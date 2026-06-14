@@ -30,6 +30,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         thumbnails,
         search: None,
         managed: None,
+        encrypted: None,
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());

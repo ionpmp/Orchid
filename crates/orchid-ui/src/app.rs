@@ -289,15 +289,31 @@ impl OrchidApp {
                 orchid_crypto::ChunkerConfig::default(),
             ),
         );
-        let file_watcher =
+        let file_watcher_managed =
             Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
+        let reveal_manager = Arc::new(
+            orchid_crypto::RevealManager::new(paths.cache_dir.join("reveal"), bus.clone()),
+        );
+        let file_watcher_encrypted =
+            Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
+        let encrypted_engine = Arc::new(orchid_fs::EncryptedFolderEngine::new(
+            storage.clone(),
+            fs_registry.clone(),
+            reveal_manager,
+            bus.clone(),
+            file_watcher_encrypted,
+        ));
+        encrypted_engine
+            .start()
+            .await
+            .map_err(|e| UiError::Slint(format!("encrypted folder engine: {e}")))?;
         let managed_engine = Arc::new(orchid_fs::ManagedFolderEngine::new(
             storage.clone(),
             chunk_store,
             deduplicator,
             fs_registry.clone(),
             bus.clone(),
-            file_watcher,
+            file_watcher_managed,
         ));
         managed_engine
             .start()
@@ -310,6 +326,7 @@ impl OrchidApp {
             thumbnails,
             search: Some(search_engine.clone()),
             managed: Some(managed_engine),
+            encrypted: Some(encrypted_engine),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

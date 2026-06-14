@@ -90,6 +90,19 @@ pub enum ActionOutcome {
     NeedsCreateFolder {
         parent: String,
     },
+    /// Prompt for a passphrase to encrypt or reveal encrypted files.
+    NeedsPassphrase {
+        paths: Vec<String>,
+        purpose: PassphrasePurpose,
+    },
+}
+
+/// Why the file manager needs a passphrase from the user.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PassphrasePurpose {
+    Encrypt,
+    Reveal,
 }
 
 /// Stable type id.
@@ -113,6 +126,8 @@ pub struct FileManagerDeps {
     pub search: Option<Arc<orchid_search::SearchEngine>>,
     /// Managed-folder engine (content-addressed backup of on-disk trees).
     pub managed: Option<Arc<orchid_fs::ManagedFolderEngine>>,
+    /// Encrypted-folder engine (age encryption + reveal sessions).
+    pub encrypted: Option<Arc<orchid_fs::EncryptedFolderEngine>>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -143,13 +158,13 @@ struct FileManagerInner {
     config: RwLock<FileManagerConfig>,
     /// Entries per tab id. Keeps dual-pane tabs independent.
     entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
-    /// UI-level encrypt overlay until [`EncryptedFolderEngine`] actions land.
-    encrypted: RwLock<std::collections::HashSet<String>>,
     recent: RwLock<std::collections::VecDeque<String>>,
     /// Decoded thumbnails keyed by entry path (icon / gallery modes).
     thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
     /// Cached managed-folder root paths for [`apply_entry_metadata`].
     managed_roots: RwLock<Vec<String>>,
+    /// Cached encrypted paths for [`apply_entry_metadata`].
+    encrypted_paths: RwLock<Vec<String>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -176,10 +191,10 @@ impl FileManagerWidget {
                 state: parking_lot::Mutex::new(state),
                 config: RwLock::new(config),
                 entries_by_tab: RwLock::new(std::collections::HashMap::new()),
-                encrypted: RwLock::new(std::collections::HashSet::new()),
                 recent: RwLock::new(std::collections::VecDeque::new()),
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
                 managed_roots: RwLock::new(Vec::new()),
+                encrypted_paths: RwLock::new(Vec::new()),
                 bus,
             }),
         }
@@ -369,6 +384,7 @@ impl FileManagerInner {
 
     async fn refresh_all_tabs(&self) {
         self.refresh_managed_roots().await;
+        self.refresh_encrypted_paths().await;
         let show_hidden = self.config.read().show_hidden;
         let (left, right) = {
             let state = self.state.lock().clone();
@@ -827,7 +843,7 @@ impl FileManagerInner {
     }
 
     fn apply_entry_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
-        let encrypted_overlay = self.encrypted.read().clone();
+        let encrypted_paths = self.encrypted_paths.read().clone();
         let managed_roots = self.managed_roots.read().clone();
         let tag_manager = &self.deps.tag_manager;
         for e in entries.iter_mut() {
@@ -842,12 +858,70 @@ impl FileManagerInner {
             {
                 e.metadata.extended.is_managed = true;
             }
-            if encrypted_overlay.contains(e.path.as_str())
+            if encrypted_paths
+                .iter()
+                .any(|p| e.path.as_str() == p || e.path.as_str().starts_with(p))
                 || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
             {
                 e.metadata.extended.is_encrypted = true;
             }
         }
+    }
+
+    async fn refresh_encrypted_paths(&self) {
+        let paths = if let Some(engine) = self.deps.encrypted.as_ref() {
+            engine
+                .list_encrypted()
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|r| r.enabled)
+                .map(|r| r.path.as_str().to_string())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        *self.encrypted_paths.write() = paths;
+    }
+
+    async fn encrypt_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<()> {
+        let Some(engine) = self.deps.encrypted.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "encryption unavailable".into(),
+            ));
+        };
+        let identity = orchid_crypto::Identity::passphrase(passphrase);
+        for p in paths {
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            if let Some(provider) = self.deps.registry.for_path(&fp) {
+                if let Ok(meta) = provider.metadata(&fp).await {
+                    if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                        continue;
+                    }
+                }
+            }
+            engine
+                .encrypt_in_place(&fp, identity.clone())
+                .await
+                .map_err(map_fs_error)?;
+        }
+        Ok(())
+    }
+
+    async fn reveal_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<Vec<String>> {
+        let Some(engine) = self.deps.encrypted.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "encryption unavailable".into(),
+            ));
+        };
+        let identity = orchid_crypto::Identity::passphrase(passphrase);
+        let mut revealed = Vec::new();
+        for p in paths {
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            let session = engine.reveal(&fp, identity.clone()).await.map_err(map_fs_error)?;
+            revealed.push(session.revealed_path.to_string_lossy().into_owned());
+        }
+        Ok(revealed)
     }
 
     async fn refresh_managed_roots(&self) {
@@ -2057,12 +2131,13 @@ pub async fn run_action_with_opts(
             });
         }
         "fs.encrypt" => {
-            let mut set = inner.encrypted.write();
-            for p in &target_paths {
-                set.insert(p.clone());
+            if target_paths.is_empty() {
+                return Ok(ActionOutcome::Done);
             }
-            inner.refresh_all_tabs().await;
-            return Ok(ActionOutcome::Done);
+            return Ok(ActionOutcome::NeedsPassphrase {
+                paths: target_paths,
+                purpose: PassphrasePurpose::Encrypt,
+            });
         }
         "fs.add-to-managed" => {
             inner.add_selection_to_managed(&target_paths).await?;
@@ -2070,12 +2145,13 @@ pub async fn run_action_with_opts(
             return Ok(ActionOutcome::Done);
         }
         "fs.decrypt" => {
-            let mut set = inner.encrypted.write();
-            for p in &target_paths {
-                set.remove(p);
+            if target_paths.is_empty() {
+                return Ok(ActionOutcome::Done);
             }
-            inner.refresh_all_tabs().await;
-            return Ok(ActionOutcome::Done);
+            return Ok(ActionOutcome::NeedsPassphrase {
+                paths: target_paths,
+                purpose: PassphrasePurpose::Reveal,
+            });
         }
         _ => {
             // Unknown actions: treat as done for MVP.
@@ -2181,6 +2257,27 @@ pub async fn deselect_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<(
     inner.deselect_all_in_pane(pane);
     inner.refresh_all_tabs().await;
     Ok(())
+}
+
+/// Apply a passphrase for encrypt or reveal after [`ActionOutcome::NeedsPassphrase`].
+pub async fn apply_passphrase(
+    instance_id: Uuid,
+    paths: Vec<String>,
+    passphrase: String,
+    purpose: PassphrasePurpose,
+) -> WidgetResult<ActionOutcome> {
+    let inner = live_inner(instance_id)?;
+    match purpose {
+        PassphrasePurpose::Encrypt => {
+            inner.encrypt_paths(&paths, &passphrase).await?;
+            inner.refresh_all_tabs().await;
+            Ok(ActionOutcome::Done)
+        }
+        PassphrasePurpose::Reveal => {
+            let revealed = inner.reveal_paths(&paths, &passphrase).await?;
+            Ok(ActionOutcome::OpenExternally { paths: revealed })
+        }
+    }
 }
 
 /// Record a path in the recent-files list (files only).

@@ -129,6 +129,8 @@ export component MainWindow inherits Window {
     callback fm-rename-cancel();
     callback fm-tag-commit(string);
     callback fm-tag-cancel();
+    callback fm-passphrase-commit(string);
+    callback fm-passphrase-cancel();
     callback fm-select-all(int);
     callback fm-delete-selected(int);
     callback fm-copy-selected(int);
@@ -272,6 +274,8 @@ export component MainWindow inherits Window {
             fm-rename-cancel => { root.fm-rename-cancel(); }
             fm-tag-commit(tag) => { root.fm-tag-commit(tag); }
             fm-tag-cancel => { root.fm-tag-cancel(); }
+            fm-passphrase-commit(pw) => { root.fm-passphrase-commit(pw); }
+            fm-passphrase-cancel => { root.fm-passphrase-cancel(); }
             fm-select-all(p) => { root.fm-select-all(p); }
             fm-delete-selected(p) => { root.fm-delete-selected(p); }
             fm-copy-selected(p) => { root.fm-copy-selected(p); }

@@ -356,6 +356,14 @@ export struct FmTagState {
     cancel-label: string,
 }
 
+export struct FmPassphraseState {
+    active: bool,
+    proposed-passphrase: string,
+    title: string,
+    ok-label: string,
+    cancel-label: string,
+}
+
 export struct FileManagerModel {
     panes: [FmPane],
     active-pane: int,
@@ -369,7 +377,7 @@ export struct FileManagerModel {
     confirm-dialog: FmConfirmDialog,
     rename: FmRenameState,
     tag: FmTagState,
-    show-hidden: bool,
+    passphrase: FmPassphraseState,
 }
 
 export struct WidgetFrameModel {

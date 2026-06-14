@@ -6,6 +6,7 @@ import { FmContextMenu } from "fm-context-menu.slint";
 import { FmConfirmDialog } from "fm-confirm-dialog.slint";
 import { FmRenameDialog } from "fm-rename-dialog.slint";
 import { FmTagDialog } from "fm-tag-dialog.slint";
+import { FmPassphraseDialog } from "fm-passphrase-dialog.slint";
 
 export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
@@ -43,6 +44,9 @@ export component FileManagerView inherits Rectangle {
 
     callback tag-commit(string);
     callback tag-cancel();
+
+    callback passphrase-commit(string);
+    callback passphrase-cancel();
 
     callback select-all(int);
     callback delete-selected(int);
@@ -294,6 +298,15 @@ export component FileManagerView inherits Rectangle {
         state: model.tag;
         commit(tag) => { root.tag-commit(tag); }
         cancel => { root.tag-cancel(); }
+    }
+
+    if model.passphrase.active : FmPassphraseDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        state: model.passphrase;
+        commit(pw) => { root.passphrase-commit(pw); }
+        cancel => { root.passphrase-cancel(); }
     }
 }
 
