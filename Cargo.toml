@@ -161,6 +161,7 @@ slint = { version = "1", default-features = false, features = [
     "renderer-software",
     "renderer-skia",
     "compat-1-2",
+    "unstable-winit-030",
 ] }
 slint-build = "1"
 winres = "0.1"

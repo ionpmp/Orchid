@@ -10,6 +10,8 @@ pub struct FileManagerPayload {
     pub clipboard_indicator: Option<String>,
     /// Registered managed-folder root paths (for sidebar).
     pub managed_roots: Vec<String>,
+    /// Short-lived ingest activity label (file name).
+    pub activity_indicator: Option<String>,
 }
 
 /// One pane (left or right) with its tabs.

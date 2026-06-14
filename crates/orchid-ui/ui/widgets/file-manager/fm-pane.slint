@@ -11,6 +11,7 @@ export component FmPane inherits Rectangle {
     in property <int> pane-index;
     in property <bool> is-active;
     in property <string> clipboard-hint;
+    in property <string> activity-hint;
     in property <FmRenameState> rename;
     in property <bool> drag-active;
     in property <string> drag-drop-target;
@@ -252,6 +253,13 @@ export component FmPane inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
+                    }
+
+                    if activity-hint != "" : Text {
+                        text: activity-hint;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
                     }
 
                     if clipboard-hint != "" : Text {

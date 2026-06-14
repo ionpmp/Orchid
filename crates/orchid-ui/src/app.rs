@@ -60,6 +60,8 @@ pub struct OrchidApp {
     fs_registry: Arc<FsProviderRegistry>,
     /// Keeps the OSC 52 → system clipboard bus handler alive.
     _terminal_clipboard_sub: Option<SubscriptionHandle>,
+    /// Refreshes file-manager UI when managed files are ingested.
+    _managed_ingest_sub: Option<SubscriptionHandle>,
 }
 
 impl std::fmt::Debug for OrchidApp {
@@ -319,6 +321,22 @@ impl OrchidApp {
             .start()
             .await
             .map_err(|e| UiError::Slint(format!("managed folder engine: {e}")))?;
+        let managed_ingest_sub = bus
+            .subscribe_async(
+                EventFilter::of_type(orchid_fs::ManagedFileIngestedEvent::event_type()),
+                HandlerPriority::Normal,
+                move |env| {
+                    let path = env
+                        .downcast_arc::<orchid_fs::ManagedFileIngestedEvent>()
+                        .map(|e| e.path.clone());
+                    async move {
+                        if let Some(path) = path {
+                            orchid_widgets::builtin::file_manager::notify_managed_ingest(&path);
+                        }
+                    }
+                },
+            )
+            .map_err(|e| UiError::Slint(format!("managed ingest bus sub: {e}")))?;
         let fm_deps = orchid_widgets::builtin::file_manager::FileManagerDeps {
             registry: fs_registry.clone(),
             clipboard: Arc::new(orchid_widgets::builtin::file_manager::FileClipboard::new()),
@@ -401,6 +419,7 @@ impl OrchidApp {
             group_manager,
             fs_registry,
             _terminal_clipboard_sub: terminal_clipboard_sub,
+            _managed_ingest_sub: Some(managed_ingest_sub),
         })
     }
 

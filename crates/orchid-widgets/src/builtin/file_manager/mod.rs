@@ -173,6 +173,8 @@ struct FileManagerInner {
     managed_roots: RwLock<Vec<String>>,
     /// Cached ingest stats per managed root path.
     managed_stats: RwLock<std::collections::HashMap<String, orchid_fs::ManagedFolderStats>>,
+    /// Last ingested file name shown briefly in the status bar.
+    ingest_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Cached encrypted paths for [`apply_entry_metadata`].
     encrypted_paths: RwLock<Vec<String>>,
     bus: Arc<orchid_core::EventBus>,
@@ -205,6 +207,7 @@ impl FileManagerWidget {
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
                 managed_roots: RwLock::new(Vec::new()),
                 managed_stats: RwLock::new(std::collections::HashMap::new()),
+                ingest_notice: RwLock::new(None),
                 encrypted_paths: RwLock::new(Vec::new()),
                 bus,
             }),
@@ -360,6 +363,7 @@ impl Widget for FileManagerWidget {
                 dual_pane,
                 clipboard_indicator,
                 managed_roots: self.inner.managed_roots.read().clone(),
+                activity_indicator: self.inner.activity_indicator_label(),
             }),
         })
     }
@@ -392,6 +396,27 @@ impl FileManagerInner {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    fn activity_indicator_label(&self) -> Option<String> {
+        let notice = self.ingest_notice.read();
+        if let Some((name, at)) = notice.as_ref() {
+            if at.elapsed() < std::time::Duration::from_secs(8) {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
+    async fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
+        let label = path
+            .file_name()
+            .map(String::from)
+            .unwrap_or_else(|| path.as_str().to_string());
+        *self.ingest_notice.write() = Some((label, std::time::Instant::now()));
+        self.publish_refresh();
+        self.refresh_managed_roots().await;
+        self.publish_refresh();
     }
 
     async fn refresh_all_tabs(&self) {
@@ -2580,6 +2605,7 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         "cat:video" => orchid_fs::FsPath::new("virtual:categories/video").ok(),
         "cat:audio" => orchid_fs::FsPath::new("virtual:categories/audio").ok(),
         "cat:archives" => orchid_fs::FsPath::new("virtual:categories/archives").ok(),
+        "net:places" => orchid_fs::FsPath::new("virtual:network").ok(),
         other if other.starts_with("managed:") => {
             let idx = other
                 .strip_prefix("managed:")
@@ -2598,4 +2624,15 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         navigate(instance_id, pane, p).await?;
     }
     Ok(())
+}
+
+/// Notify every live file-manager instance that a managed file was ingested.
+pub fn notify_managed_ingest(path: &orchid_fs::FsPath) {
+    for entry in FM_LIVE.iter() {
+        let inner = Arc::clone(entry.value());
+        let path = path.clone();
+        tokio::spawn(async move {
+            inner.handle_managed_ingest(&path).await;
+        });
+    }
 }

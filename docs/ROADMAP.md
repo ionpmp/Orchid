@@ -32,12 +32,12 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Dual-pane mode
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
-- [~] Drag-and-drop — folder rows, breadcrumbs, pane current directory (cross-pane); external DnD pending
-- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, and category buckets implemented; network mounts pending
+- [~] Drag-and-drop — folder rows, breadcrumbs, pane current directory (cross-pane), OS file drop into active pane; widget-to-widget pending
+- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories, and network placeholder; remote mounts pending
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
 - [~] Encryption integration — encrypt / decrypt / reveal in UI; age engine wired via `EncryptedFolderEngine`
-- [~] Managed folders — sidebar list, ingest stats in status bar, add/remove in context menu; live ingest progress pending
+- [~] Managed folders — sidebar list, ingest stats, live ingest toast, add/remove in context menu
 
 ### Terminal
 - [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize

@@ -22,6 +22,7 @@ use slint::Model;
 use slint::ModelRc;
 use slint::SharedString;
 use slint::VecModel;
+use slint::winit_030::WinitWindowAccessor;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
@@ -2759,6 +2760,17 @@ impl MainWindowController {
     /// Show the window and run the Slint event loop.
     pub fn run(self: Arc<Self>) -> Result<()> {
         tracing::info!("Opening main window");
+        let tw = Arc::downgrade(&self);
+        self.window.window().on_winit_window_event(move |_winit_window, event| {
+            use slint::winit_030::{EventResult, winit::event::WindowEvent};
+            if let WindowEvent::DroppedFile(path_buf) = event {
+                let path = path_buf.to_string_lossy().into_owned();
+                if let Some(c) = tw.upgrade() {
+                    c.on_os_file_dropped(path);
+                }
+            }
+            EventResult::Propagate
+        });
         self.window
             .show()
             .map_err(|e| UiError::Slint(format!("show: {e}")))?;
@@ -2826,6 +2838,44 @@ impl MainWindowController {
         let pane = fm.panes.get(pane_idx)?;
         let tab = pane.tabs.get(pane.active_tab as usize)?;
         Some(tab.path_display.clone())
+    }
+
+    fn fm_active_pane(&self, inst: Uuid) -> u8 {
+        let cache = self.widget_manager.snapshot_cache();
+        cache
+            .get(inst)
+            .and_then(|s| match &s.payload {
+                WidgetPayload::FileManager(fm) => Some(fm.active_pane),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
+    fn on_os_file_dropped(self: &Arc<Self>, path: String) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let pane = self.fm_active_pane(inst);
+        let dest = self.fm_active_tab_path(inst, pane);
+        let Some(dest) = dest.filter(|d| !d.is_empty() && !d.starts_with("virtual:")) else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) =
+                orchid_widgets::builtin::file_manager::move_paths_to_directory(
+                    inst,
+                    vec![path],
+                    &dest,
+                )
+                .await
+            {
+                warn!(?e, dest = %dest, "fm os file drop");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
     }
 
     fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
@@ -4442,6 +4492,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         dual_pane: false,
         dual_pane_label: locale.tr("fm-dual-pane-on").into(),
         clipboard_indicator: SharedString::new(),
+        activity_indicator: SharedString::new(),
         sidebar_items: build_sidebar_items(locale, "", &[]),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
@@ -4521,6 +4572,7 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
         "virtual:categories/video" => Some("cat:video"),
         "virtual:categories/audio" => Some("cat:audio"),
         "virtual:categories/archives" => Some("cat:archives"),
+        "virtual:network" => Some("net:places"),
         _ => None,
     }
 }
@@ -4653,6 +4705,22 @@ fn build_sidebar_items(
             });
         }
     }
+    items.push(FmSidebarItem {
+        id: "section:network".into(),
+        label: locale.tr("fm-sidebar-network").into(),
+        icon: "🌐".into(),
+        indent: 0,
+        is_section_header: true,
+        is_active: false,
+    });
+    items.push(FmSidebarItem {
+        id: "net:places".into(),
+        label: locale.tr("fm-sidebar-network").into(),
+        icon: "🌐".into(),
+        indent: 1,
+        is_section_header: false,
+        is_active: active_id == Some("net:places"),
+    });
     ModelRc::new(VecModel::from(items))
 }
 
@@ -4744,7 +4812,11 @@ fn build_file_manager_model(
                         status_text: t.status_text.clone().into(),
                         quick_filter: t.quick_filter.clone().into(),
                         is_loading: t.is_loading,
-                        error: t.error.clone().unwrap_or_default().into(),
+                        error: if t.path_display == "virtual:network" {
+                            locale.tr("fm-network-placeholder").into()
+                        } else {
+                            t.error.clone().unwrap_or_default().into()
+                        },
                         sort_by: t.sort_by as i32,
                         sort_descending: t.sort_descending,
                         sort_name_label: sort_name_label.clone().into(),
@@ -4766,6 +4838,16 @@ fn build_file_manager_model(
     let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
         .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
         .unwrap_or(false);
+    let activity_indicator = p
+        .activity_indicator
+        .as_ref()
+        .map(|name| {
+            locale.tr_args(
+                "fm-ingested",
+                &orchid_i18n::FluentArgs::new().with("name", name),
+            )
+        })
+        .unwrap_or_default();
 
     FileManagerModel {
         panes: ModelRc::new(VecModel::from(panes)),
@@ -4777,6 +4859,7 @@ fn build_file_manager_model(
             locale.tr("fm-dual-pane-on").into()
         },
         clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
+        activity_indicator: activity_indicator.into(),
         show_hidden,
         show_hidden_label: if show_hidden {
             locale.tr("fm-show-hidden-on").into()
