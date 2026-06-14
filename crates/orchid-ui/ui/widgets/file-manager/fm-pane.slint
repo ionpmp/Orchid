@@ -1,5 +1,5 @@
 import { Theme } from "../../theme_global.slint";
-import { FmPane as FmPaneModel } from "../../workspace/defs.slint";
+import { FmPane as FmPaneModel, FmRenameState } from "../../workspace/defs.slint";
 import { FmTabs } from "fm-tabs.slint";
 import { FmToolbar } from "fm-toolbar.slint";
 import { FmBreadcrumbs } from "fm-breadcrumbs.slint";
@@ -11,6 +11,7 @@ export component FmPane inherits Rectangle {
     in property <int> pane-index;
     in property <bool> is-active;
     in property <string> clipboard-hint;
+    in property <FmRenameState> rename;
 
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -36,6 +37,8 @@ export component FmPane inherits Rectangle {
     callback rename-selected();
     callback deselect-all();
     callback open-selected();
+    callback rename-commit(string, string);
+    callback rename-cancel();
 
     background: Theme.surface-base;
 
@@ -68,13 +71,20 @@ export component FmPane inherits Rectangle {
                 root.rename-selected();
                 return accept;
             }
+            if (rename.active && event.text == Key.Escape) {
+                root.rename-cancel();
+                return accept;
+            }
             if (event.text == Key.Delete) {
                 root.delete-selected();
                 return accept;
             }
             if (event.text == Key.Return) {
-                root.open-selected();
-                return accept;
+                if (!rename.active) {
+                    root.open-selected();
+                    return accept;
+                }
+                return reject;
             }
             if (event.text == Key.Escape) {
                 root.deselect-all();
@@ -145,6 +155,7 @@ export component FmPane inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         entries: pane.tabs[pane.active-tab].entries;
+                        rename: root.rename;
                         details: pane.tabs[pane.active-tab].view-mode == 2;
                         sort-by: pane.tabs[pane.active-tab].sort-by;
                         sort-descending: pane.tabs[pane.active-tab].sort-descending;
@@ -157,6 +168,8 @@ export component FmPane inherits Rectangle {
                         entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
                         sort-column-clicked(col) => { root.sort-column-clicked(col); }
+                        rename-commit(old, new) => { root.rename-commit(old, new); }
+                        rename-cancel => { root.rename-cancel(); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -166,11 +179,14 @@ export component FmPane inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         entries: pane.tabs[pane.active-tab].entries;
+                        rename: root.rename;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
                         entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
+                        rename-commit(old, new) => { root.rename-commit(old, new); }
+                        rename-cancel => { root.rename-cancel(); }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {

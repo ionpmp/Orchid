@@ -4,7 +4,6 @@ import { FmSidebar } from "fm-sidebar.slint";
 import { FmPane } from "fm-pane.slint";
 import { FmContextMenu } from "fm-context-menu.slint";
 import { FmConfirmDialog } from "fm-confirm-dialog.slint";
-import { FmRenameDialog } from "fm-rename-dialog.slint";
 import { FmTagDialog } from "fm-tag-dialog.slint";
 import { FmPassphraseDialog } from "fm-passphrase-dialog.slint";
 
@@ -186,6 +185,7 @@ export component FileManagerView inherits Rectangle {
                 pane: model.panes[0];
                 is-active: true;
                 clipboard-hint: model.clipboard-indicator;
+                rename: model.rename;
                 tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                 tab-closed(idx, id) => { root.tab-closed(0, id); }
                 tab-new => { root.tab-new(0); }
@@ -210,6 +210,8 @@ export component FileManagerView inherits Rectangle {
                 rename-selected => { root.rename-selected(0); }
                 deselect-all => { root.deselect-all(0); }
                 open-selected => { root.open-selected(0); }
+                rename-commit(old, new) => { root.rename-commit(old, new); }
+                rename-cancel => { root.rename-cancel(); }
             }
 
             if model.dual-pane : HorizontalLayout {
@@ -228,6 +230,7 @@ export component FileManagerView inherits Rectangle {
                         pane: model.panes[0];
                         is-active: model.active-pane == 0;
                         clipboard-hint: model.clipboard-indicator;
+                        rename: model.rename;
                         tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                         tab-closed(idx, id) => { root.tab-closed(0, id); }
                         tab-new => { root.tab-new(0); }
@@ -252,6 +255,8 @@ export component FileManagerView inherits Rectangle {
                         rename-selected => { root.rename-selected(0); }
                         deselect-all => { root.deselect-all(0); }
                         open-selected => { root.open-selected(0); }
+                        rename-commit(old, new) => { root.rename-commit(old, new); }
+                        rename-cancel => { root.rename-cancel(); }
                     }
                 }
 
@@ -268,6 +273,7 @@ export component FileManagerView inherits Rectangle {
                         pane: model.panes[1];
                         is-active: model.active-pane == 1;
                         clipboard-hint: model.clipboard-indicator;
+                        rename: model.rename;
                         tab-clicked(idx, id) => { root.tab-clicked(1, id); }
                         tab-closed(idx, id) => { root.tab-closed(1, id); }
                         tab-new => { root.tab-new(1); }
@@ -292,6 +298,8 @@ export component FileManagerView inherits Rectangle {
                         rename-selected => { root.rename-selected(1); }
                         deselect-all => { root.deselect-all(1); }
                         open-selected => { root.open-selected(1); }
+                        rename-commit(old, new) => { root.rename-commit(old, new); }
+                        rename-cancel => { root.rename-cancel(); }
                     }
                 }
             }
@@ -314,15 +322,6 @@ export component FileManagerView inherits Rectangle {
         dialog: model.confirm-dialog;
         yes => { root.confirm-yes(); }
         no => { root.confirm-no(); }
-    }
-
-    if model.rename.active : FmRenameDialog {
-        x: 0; y: 0;
-        width: parent.width;
-        height: parent.height;
-        state: model.rename;
-        commit(old, new) => { root.rename-commit(old, new); }
-        cancel => { root.rename-cancel(); }
     }
 
     if model.tag.active : FmTagDialog {

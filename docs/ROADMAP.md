@@ -29,13 +29,15 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Minimal Slint + Skia window + theming + i18n infrastructure
 
 ### File Manager
-- [ ] Dual-pane mode
-- [ ] Views (icons, list, details, gallery)
-- [ ] Tabs, breadcrumbs
+- [x] Dual-pane mode
+- [x] Views (icons, list, details, gallery)
+- [x] Tabs, breadcrumbs
 - [ ] Drag-and-drop
-- [ ] Virtual folders (Recent, Categories, Network)
-- [~] Inline rename, tags, color labels — tag / colour / star state implemented in `orchid-fs::TagManager` backed by storage; UI inline rename is File-Manager work
-- [ ] Quick filter
+- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, and category buckets implemented; network mounts pending
+- [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
+- [x] Quick filter
+- [~] Encryption integration — encrypt / decrypt / reveal in UI; age engine wired via `EncryptedFolderEngine`
+- [~] Managed folders — add-to-managed action; full dedup policy UI pending
 
 ### Terminal
 - [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize
@@ -65,12 +67,12 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — KDBX4 read/write, groups / entries / TOTP / search done in `orchid-crypto::kdbx`; widget UI pending
-- [~] File and folder encryption (age-based) — `age` + directory tar / reveal sessions done in `orchid-crypto::age_encryption`; file-manager wiring pending in `orchid-fs`
+- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; biometric and polish pending
 - [ ] Biometric unlock via Windows Hello
 
 ### Storage
 - [~] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC done in `orchid-crypto::content`; managed-folder policy layer pending in `orchid-fs`
-- [~] Deduplication in managed folders — `Deduplicator` + `FileManifest` primitives done; integration with the file manager pending
+- [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; full ingest UI pending
 
 ### Network Clients
 - [ ] SFTP / SMB / WebDAV / FTP via rclone

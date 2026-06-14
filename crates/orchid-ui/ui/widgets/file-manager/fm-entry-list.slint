@@ -1,5 +1,5 @@
 import { Theme } from "../../theme_global.slint";
-import { FmEntry } from "../../workspace/defs.slint";
+import { FmEntry, FmRenameState } from "../../workspace/defs.slint";
 
 export component FmEntryList inherits Rectangle {
     in property <[FmEntry]> entries;
@@ -10,12 +10,15 @@ export component FmEntryList inherits Rectangle {
     in property <string> sort-size-label;
     in property <string> sort-modified-label;
     in property <string> sort-type-label;
+    in property <FmRenameState> rename;
 
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
     callback entry-double-clicked(string, bool);
     callback entry-context(string, length, length);
     callback sort-column-clicked(int);
+    callback rename-commit(string, string);
+    callback rename-cancel();
 
     background: transparent;
 
@@ -185,7 +188,35 @@ export component FmEntryList inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    Text {
+                    if rename.active && entry.path == rename.path : rename-fs := FocusScope {
+                        min-width: details ? 240px : 120px;
+                        horizontal-stretch: details ? 0 : 1;
+
+                        key-pressed(e) => {
+                            if (e.text == Key.Return) {
+                                root.rename-commit(rename.path, rename-input.text);
+                                return accept;
+                            }
+                            if (e.text == Key.Escape) {
+                                root.rename-cancel();
+                                return accept;
+                            }
+                            return reject;
+                        }
+
+                        rename-input := TextInput {
+                            text: rename.proposed-name;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            single-line: true;
+                        }
+
+                        init => { rename-fs.focus(); }
+                    }
+
+                    if !rename.active || entry.path != rename.path : Text {
                         text: entry.name;
                         color: Theme.text-primary;
                         font-size: Theme.font-size-sm;
