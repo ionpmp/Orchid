@@ -10,7 +10,7 @@ use redb::ReadableTable;
 use tracing::warn;
 
 use crate::encrypted::index::{EncryptedFolderRecord, ENCRYPTED_PATHS};
-use crate::encrypted::marker::AGE_EXT;
+use crate::encrypted::marker::{looks_encrypted, AGE_EXT};
 use crate::error::{FsError, Result};
 use crate::path::FsPath;
 use crate::provider::FsProviderRegistry;
@@ -202,6 +202,42 @@ impl EncryptedFolderEngine {
         Ok(session)
     }
 
+    /// Decrypt a file in place: writes plaintext to the original path, removes
+    /// the `.age` payload and sidecar, and unmarks the encrypted record.
+    ///
+    /// # Errors
+    ///
+    /// Propagates crypto, I/O, and storage errors.
+    pub async fn decrypt_in_place(&self, path: &FsPath, identity: Identity) -> Result<()> {
+        if !looks_encrypted(path) {
+            return Err(FsError::NotEncryptedPath(path.to_string()));
+        }
+        let encrypted_os = path.to_local()?;
+        let plaintext_fs = plaintext_path_for_encrypted(path)?;
+        let plaintext_os = plaintext_fs.to_local()?;
+
+        let decryptor = orchid_crypto::Decryptor::new(identity);
+        decryptor
+            .decrypt_file(&encrypted_os, &plaintext_os)
+            .await
+            .map_err(|e| FsError::EncryptedOp(e.to_string()))?;
+
+        if let Err(e) = tokio::fs::remove_file(&encrypted_os).await {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(FsError::Io(e));
+            }
+        }
+        let meta_path = encrypted_os.with_extension("age.meta");
+        if let Err(e) = tokio::fs::remove_file(&meta_path).await {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(FsError::Io(e));
+            }
+        }
+
+        self.unmark(path).await?;
+        Ok(())
+    }
+
     /// Look up whether a path is registered as encrypted.
     ///
     /// # Errors
@@ -285,6 +321,21 @@ impl orchid_core::Event for EncryptedPathRegistered {
     fn event_type() -> &'static str {
         "fs.encrypted_registered"
     }
+}
+
+fn plaintext_path_for_encrypted(path: &FsPath) -> Result<FsPath> {
+    let s = path.as_str();
+    let plain = s
+        .strip_suffix(".age")
+        .or_else(|| {
+            if s.len() >= 4 && s[s.len() - 4..].eq_ignore_ascii_case(".age") {
+                Some(&s[..s.len() - 4])
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| FsError::NotEncryptedPath(path.to_string()))?;
+    FsPath::new(plain)
 }
 
 async fn overwrite_then_delete(path: &std::path::Path) -> Result<()> {

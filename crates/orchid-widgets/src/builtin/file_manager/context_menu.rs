@@ -74,7 +74,7 @@ pub fn build_for_selection(
         separator_after: false,
         submenu: vec![
             item(
-                "fs.open-external",
+                "fs.open-with",
                 "fm-action-open-with",
                 "action-open-with",
                 single_file,

@@ -3338,7 +3338,7 @@ impl MainWindowController {
                     orchid_widgets::builtin::file_manager::PassphrasePurpose::Encrypt => {
                         self.locale.tr("fm-encrypt-title")
                     }
-                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Reveal => {
+                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Decrypt => {
                         self.locale.tr("fm-decrypt-title")
                     }
                 };
@@ -3382,6 +3382,20 @@ impl MainWindowController {
                         .await;
                     }
                 }));
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::OpenWithPicker { paths } => {
+                for path in paths {
+                    let open_path = match orchid_fs::FsPath::new(&path) {
+                        Ok(fp) => fp
+                            .to_local()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .unwrap_or(path),
+                        Err(_) => path,
+                    };
+                    if let Err(e) = open_with_application_picker(&open_path) {
+                        warn!(?e, path = %open_path, "open with picker");
+                    }
+                }
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenExternally { paths } => {
                 for path in paths {
@@ -4490,6 +4504,26 @@ fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
         Details => 2,
         Gallery => 3,
     }
+}
+
+fn open_with_application_picker(path: &str) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("rundll32.exe")
+            .args(["shell32.dll,OpenAs_RunDLL", path])
+            .spawn()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-a", "Finder", path])
+            .spawn()?;
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        opener::open(path).map_err(|e| std::io::Error::other(e.to_string()))?;
+    }
+    Ok(())
 }
 
 fn fm_action_shortcut(id: &str) -> &'static str {

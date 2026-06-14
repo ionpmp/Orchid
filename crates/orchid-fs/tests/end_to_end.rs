@@ -252,3 +252,44 @@ async fn encrypt_in_place_then_reveal_round_trip() {
     let revealed = std::fs::read(&session.revealed_path).unwrap();
     assert_eq!(revealed, b"super secret contents");
 }
+
+#[tokio::test]
+async fn decrypt_in_place_restores_plaintext() {
+    use orchid_crypto::{Identity, RevealDuration, RevealManager};
+    let td = tempfile::tempdir().unwrap();
+    let reveal_root = td.path().join("reveal");
+
+    let storage = storage();
+    let bus = bus();
+    let registry = registry_with_local();
+    let watcher = Arc::new(FileWatcher::new(Arc::clone(&bus), Arc::clone(&registry)));
+    let reveal = Arc::new(RevealManager::new(reveal_root, Arc::clone(&bus)));
+    let engine = EncryptedFolderEngine::new(
+        Arc::clone(&storage),
+        Arc::clone(&registry),
+        Arc::clone(&reveal),
+        Arc::clone(&bus),
+        Arc::clone(&watcher),
+    );
+
+    let plain_path = td.path().join("restore.txt");
+    std::fs::write(&plain_path, b"restore me").unwrap();
+    let fs_path = FsPath::from_local(&plain_path).unwrap();
+
+    engine
+        .encrypt_in_place(&fs_path, Identity::passphrase("pw"))
+        .await
+        .unwrap();
+
+    let encrypted_os = plain_path.with_extension("txt.age");
+    let encrypted_fs = FsPath::from_local(&encrypted_os).unwrap();
+
+    engine
+        .decrypt_in_place(&encrypted_fs, Identity::passphrase("pw"))
+        .await
+        .unwrap();
+
+    assert!(plain_path.exists());
+    assert!(!encrypted_os.exists());
+    assert_eq!(std::fs::read(&plain_path).unwrap(), b"restore me");
+}

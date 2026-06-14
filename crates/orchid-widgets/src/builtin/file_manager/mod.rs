@@ -73,6 +73,10 @@ pub enum ActionOutcome {
     OpenInViewerMany {
         paths: Vec<String>,
     },
+    /// Open files with the system "Open with" application picker.
+    OpenWithPicker {
+        paths: Vec<String>,
+    },
     /// Open files with the OS default application.
     OpenExternally {
         paths: Vec<String>,
@@ -102,7 +106,7 @@ pub enum ActionOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PassphrasePurpose {
     Encrypt,
-    Reveal,
+    Decrypt,
 }
 
 /// Stable type id.
@@ -908,20 +912,21 @@ impl FileManagerInner {
         Ok(())
     }
 
-    async fn reveal_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<Vec<String>> {
+    async fn decrypt_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<()> {
         let Some(engine) = self.deps.encrypted.as_ref() else {
             return Err(WidgetError::InvalidStateForOperation(
                 "encryption unavailable".into(),
             ));
         };
         let identity = orchid_crypto::Identity::passphrase(passphrase);
-        let mut revealed = Vec::new();
         for p in paths {
             let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-            let session = engine.reveal(&fp, identity.clone()).await.map_err(map_fs_error)?;
-            revealed.push(session.revealed_path.to_string_lossy().into_owned());
+            engine
+                .decrypt_in_place(&fp, identity.clone())
+                .await
+                .map_err(map_fs_error)?;
         }
-        Ok(revealed)
+        Ok(())
     }
 
     async fn refresh_managed_roots(&self) {
@@ -1945,7 +1950,7 @@ pub async fn run_action_with_opts(
             };
             return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
         }
-        "fs.open-external" | "fs.open-with" => {
+        "fs.open-external" => {
             let mut files = Vec::new();
             for p in &target_paths {
                 let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
@@ -1962,6 +1967,24 @@ pub async fn run_action_with_opts(
                 return Ok(ActionOutcome::Done);
             }
             return Ok(ActionOutcome::OpenExternally { paths: files });
+        }
+        "fs.open-with" => {
+            let mut files = Vec::new();
+            for p in &target_paths {
+                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+                if let Some(provider) = inner.deps.registry.for_path(&fp) {
+                    if let Ok(meta) = provider.metadata(&fp).await {
+                        if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                            continue;
+                        }
+                    }
+                }
+                files.push(p.clone());
+            }
+            if files.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::OpenWithPicker { paths: files });
         }
         "fs.copy" => {
             let paths: Vec<orchid_fs::FsPath> = target_paths
@@ -2150,7 +2173,7 @@ pub async fn run_action_with_opts(
             }
             return Ok(ActionOutcome::NeedsPassphrase {
                 paths: target_paths,
-                purpose: PassphrasePurpose::Reveal,
+                purpose: PassphrasePurpose::Decrypt,
             });
         }
         _ => {
@@ -2273,9 +2296,10 @@ pub async fn apply_passphrase(
             inner.refresh_all_tabs().await;
             Ok(ActionOutcome::Done)
         }
-        PassphrasePurpose::Reveal => {
-            let revealed = inner.reveal_paths(&paths, &passphrase).await?;
-            Ok(ActionOutcome::OpenExternally { paths: revealed })
+        PassphrasePurpose::Decrypt => {
+            inner.decrypt_paths(&paths, &passphrase).await?;
+            inner.refresh_all_tabs().await;
+            Ok(ActionOutcome::Done)
         }
     }
 }
