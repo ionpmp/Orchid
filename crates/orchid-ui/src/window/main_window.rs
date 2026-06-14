@@ -2734,22 +2734,6 @@ impl MainWindowController {
             })
     }
 
-    fn fm_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> Option<bool> {
-        let cache = self.widget_manager.snapshot_cache();
-        let snap = cache.get(inst)?;
-        let ws = snap.as_ref();
-        let WidgetPayload::FileManager(fm) = &ws.payload else {
-            return None;
-        };
-        let pane_idx = usize::from(pane.min(1));
-        let pane = fm.panes.get(pane_idx)?;
-        let tab = pane.tabs.get(pane.active_tab as usize)?;
-        tab.entries
-            .iter()
-            .find(|e| e.path == path)
-            .map(|e| e.is_dir)
-    }
-
     fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
         let cache = self.widget_manager.snapshot_cache();
         let Some(snap) = cache.get(inst).map(|s| (*s).clone()) else {
@@ -3107,17 +3091,12 @@ impl MainWindowController {
             }
         }));
 
-        // Acceptance criterion: clicking a file opens it in the viewer.
-        if self.fm_is_dir(inst, p, &ps).unwrap_or(false) {
+        let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
+            .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
+        if behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
             return;
         }
-        let Ok(fs_path) = orchid_fs::FsPath::new(ps) else {
-            return;
-        };
-        let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
-            let _ = MainWindowController::open_in_viewer_for_controller(tw.clone(), fs_path).await;
-        }));
+        self.fm_dispatch_open(inst, p, ps);
     }
 
     fn on_fm_entry_shift_clicked(self: &Arc<Self>, pane: i32, path: &SharedString) {
@@ -3147,26 +3126,34 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let raw = path.to_string();
-        let tw = Arc::downgrade(self);
+        let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
+            .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
         if is_dir {
-            let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
-                return;
-            };
-            let _ = slint::spawn_local(Compat::new(async move {
-                let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
-                if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
-                }
-            }));
-        } else {
-            let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
-                return;
-            };
-            let tw2 = Arc::downgrade(self);
-            let _ = slint::spawn_local(Compat::new(async move {
-                let _ = MainWindowController::open_in_viewer_for_controller(tw2, fs_path).await;
-            }));
+            self.fm_dispatch_open(inst, p, raw);
+            return;
         }
+        if behavior == orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen {
+            self.fm_dispatch_open(inst, p, raw);
+        }
+    }
+
+    fn fm_dispatch_open(self: &Arc<Self>, inst: Uuid, pane: u8, path: String) {
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::open_path(inst, pane, &path)
+                .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(?e, path = %path, "fm open path");
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                c.apply_fm_action_outcome(inst, outcome);
+                c.schedule_rebuild();
+            }
+        }));
     }
 
     fn on_fm_entry_context(self: &Arc<Self>, pane: i32, path: &SharedString, x: f32, y: f32) {
@@ -3342,6 +3329,9 @@ impl MainWindowController {
                         self.locale.tr("fm-decrypt-title")
                     }
                     orchid_widgets::builtin::file_manager::PassphrasePurpose::Reveal => {
+                        self.locale.tr("fm-reveal-title")
+                    }
+                    orchid_widgets::builtin::file_manager::PassphrasePurpose::RevealInViewer => {
                         self.locale.tr("fm-reveal-title")
                     }
                 };

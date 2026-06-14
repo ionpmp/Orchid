@@ -107,7 +107,10 @@ pub enum ActionOutcome {
 pub enum PassphrasePurpose {
     Encrypt,
     Decrypt,
+    /// Reveal to temp and open with the OS default application.
     Reveal,
+    /// Reveal to temp and open in the built-in viewer.
+    RevealInViewer,
 }
 
 /// Stable type id.
@@ -872,6 +875,17 @@ impl FileManagerInner {
                 e.metadata.extended.is_encrypted = true;
             }
         }
+    }
+
+    fn is_path_encrypted(&self, path: &orchid_fs::FsPath) -> bool {
+        if orchid_fs::encrypted::marker::looks_encrypted(path)
+            || orchid_fs::encrypted::marker::looks_encrypted_directory(path)
+        {
+            return true;
+        }
+        self.encrypted_paths.read().iter().any(|p| {
+            path.as_str() == p || path.as_str().starts_with(p)
+        })
     }
 
     async fn refresh_encrypted_paths(&self) {
@@ -1948,9 +1962,14 @@ pub async fn run_action_with_opts(
             let Some(p) = target_paths.first() else {
                 return Ok(ActionOutcome::Done);
             };
-            if let Ok(fp) = orchid_fs::FsPath::new(p) {
-                inner.record_recent(&fp);
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            if inner.is_path_encrypted(&fp) {
+                return Ok(ActionOutcome::NeedsPassphrase {
+                    paths: vec![p.clone()],
+                    purpose: PassphrasePurpose::RevealInViewer,
+                });
             }
+            inner.record_recent(&fp);
             return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
         }
         "fs.open-all" => {
@@ -1975,6 +1994,13 @@ pub async fn run_action_with_opts(
             let Some(p) = target_paths.first() else {
                 return Ok(ActionOutcome::Done);
             };
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            if inner.is_path_encrypted(&fp) {
+                return Ok(ActionOutcome::NeedsPassphrase {
+                    paths: vec![p.clone()],
+                    purpose: PassphrasePurpose::RevealInViewer,
+                });
+            }
             return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
         }
         "fs.open-external" => {
@@ -1984,6 +2010,12 @@ pub async fn run_action_with_opts(
                 if let Some(provider) = inner.deps.registry.for_path(&fp) {
                     if let Ok(meta) = provider.metadata(&fp).await {
                         if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+                            if inner.is_path_encrypted(&fp) {
+                                return Ok(ActionOutcome::NeedsPassphrase {
+                                    paths: vec![p.clone()],
+                                    purpose: PassphrasePurpose::Reveal,
+                                });
+                            }
                             continue;
                         }
                     }
@@ -1992,6 +2024,16 @@ pub async fn run_action_with_opts(
             }
             if files.is_empty() {
                 return Ok(ActionOutcome::Done);
+            }
+            if files.iter().all(|p| {
+                orchid_fs::FsPath::new(p)
+                    .map(|fp| inner.is_path_encrypted(&fp))
+                    .unwrap_or(false)
+            }) {
+                return Ok(ActionOutcome::NeedsPassphrase {
+                    paths: files,
+                    purpose: PassphrasePurpose::Reveal,
+                });
             }
             return Ok(ActionOutcome::OpenExternally { paths: files });
         }
@@ -2005,6 +2047,12 @@ pub async fn run_action_with_opts(
                             continue;
                         }
                     }
+                }
+                if inner.is_path_encrypted(&fp) {
+                    return Ok(ActionOutcome::NeedsPassphrase {
+                        paths: vec![p.clone()],
+                        purpose: PassphrasePurpose::Reveal,
+                    });
                 }
                 files.push(p.clone());
             }
@@ -2338,7 +2386,61 @@ pub async fn apply_passphrase(
             let revealed = inner.reveal_paths(&paths, &passphrase).await?;
             Ok(ActionOutcome::OpenExternally { paths: revealed })
         }
+        PassphrasePurpose::RevealInViewer => {
+            let revealed = inner.reveal_paths(&paths, &passphrase).await?;
+            if let Some(path) = revealed.first() {
+                Ok(ActionOutcome::OpenInViewer {
+                    path: path.clone(),
+                })
+            } else {
+                Ok(ActionOutcome::Done)
+            }
+        }
     }
+}
+
+/// Current single- vs double-click open behaviour.
+pub fn click_behavior(instance_id: Uuid) -> WidgetResult<ClickBehavior> {
+    Ok(live_inner(instance_id)?.config.read().click_behavior)
+}
+
+/// Open a path from the listing (navigate directories, reveal or view files).
+pub async fn open_path(instance_id: Uuid, pane: u8, path: &str) -> WidgetResult<ActionOutcome> {
+    let inner = live_inner(instance_id)?;
+    let fp = orchid_fs::FsPath::new(path).map_err(map_fs_error)?;
+
+    let is_dir = if let Some(provider) = inner.deps.registry.for_path(&fp) {
+        provider
+            .metadata(&fp)
+            .await
+            .map(|meta| matches!(meta.kind, orchid_fs::FsEntryKind::Directory))
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    if is_dir {
+        if inner.is_path_encrypted(&fp) {
+            return Ok(ActionOutcome::NeedsPassphrase {
+                paths: vec![path.to_string()],
+                purpose: PassphrasePurpose::Reveal,
+            });
+        }
+        navigate(instance_id, pane, fp).await?;
+        return Ok(ActionOutcome::Done);
+    }
+
+    if inner.is_path_encrypted(&fp) {
+        return Ok(ActionOutcome::NeedsPassphrase {
+            paths: vec![path.to_string()],
+            purpose: PassphrasePurpose::RevealInViewer,
+        });
+    }
+
+    inner.record_recent(&fp);
+    Ok(ActionOutcome::OpenInViewer {
+        path: path.to_string(),
+    })
 }
 
 /// Record a path in the recent-files list (files only).
