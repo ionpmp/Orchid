@@ -14,6 +14,8 @@ pub struct ContextMenuItem {
     pub id: String,
     pub label_key: String,
     pub icon: &'static str,
+    /// Color swatch id for submenu rows (`red`, `orange`, …, `none`). Empty uses `icon`.
+    pub swatch_color: Option<&'static str>,
     pub enabled: bool,
     pub separator_after: bool,
     pub submenu: Vec<ContextMenuItem>,
@@ -70,6 +72,7 @@ pub fn build_for_selection(
             "fm-action-open".into()
         },
         icon: "action-open",
+        swatch_color: None,
         enabled: has_selection,
         separator_after: false,
         submenu: vec![
@@ -116,6 +119,7 @@ pub fn build_for_selection(
         id: "fs.tag-add".into(),
         label_key: "fm-action-add-tag".into(),
         icon: "action-tag",
+        swatch_color: None,
         enabled: has_selection && !inputs.known_tags.is_empty(),
         separator_after: false,
         submenu: inputs
@@ -125,6 +129,7 @@ pub fn build_for_selection(
                 id: format!("fs.tag:{t}"),
                 label_key: t.clone(),
                 icon: "action-tag",
+                swatch_color: None,
                 enabled: has_selection,
                 separator_after: false,
                 submenu: Vec::new(),
@@ -136,6 +141,7 @@ pub fn build_for_selection(
             id: "fs.tag-remove".into(),
             label_key: "fm-action-remove-tag".into(),
             icon: "action-tag",
+            swatch_color: None,
             enabled: has_selection,
             separator_after: false,
             submenu: inputs
@@ -145,6 +151,7 @@ pub fn build_for_selection(
                     id: format!("fs.tag-remove:{t}"),
                     label_key: t.clone(),
                     icon: "action-tag",
+                    swatch_color: None,
                     enabled: has_selection,
                     separator_after: false,
                     submenu: Vec::new(),
@@ -156,17 +163,18 @@ pub fn build_for_selection(
         id: "fs.color-label".into(),
         label_key: "fm-action-color-label".into(),
         icon: "action-color",
+        swatch_color: None,
         enabled: has_selection,
         separator_after: false,
         submenu: vec![
-            item("fs.color-label:red", "fm-color-red", "action-color", has_selection),
-            item("fs.color-label:orange", "fm-color-orange", "action-color", has_selection),
-            item("fs.color-label:yellow", "fm-color-yellow", "action-color", has_selection),
-            item("fs.color-label:green", "fm-color-green", "action-color", has_selection),
-            item("fs.color-label:blue", "fm-color-blue", "action-color", has_selection),
-            item("fs.color-label:purple", "fm-color-purple", "action-color", has_selection),
-            item("fs.color-label:gray", "fm-color-gray", "action-color", has_selection),
-            item("fs.color-label:none", "fm-color-none", "action-color", has_selection),
+            color_item("fs.color-label:red", "fm-color-red", "red", has_selection),
+            color_item("fs.color-label:orange", "fm-color-orange", "orange", has_selection),
+            color_item("fs.color-label:yellow", "fm-color-yellow", "yellow", has_selection),
+            color_item("fs.color-label:green", "fm-color-green", "green", has_selection),
+            color_item("fs.color-label:blue", "fm-color-blue", "blue", has_selection),
+            color_item("fs.color-label:purple", "fm-color-purple", "purple", has_selection),
+            color_item("fs.color-label:gray", "fm-color-gray", "gray", has_selection),
+            color_item("fs.color-label:none", "fm-color-none", "none", has_selection),
         ],
     });
     items.push(sep(if inputs.any_starred && inputs.all_starred {
@@ -176,6 +184,12 @@ pub fn build_for_selection(
     }));
 
     if inputs.any_encrypted {
+        items.push(item(
+            "fs.reveal",
+            "fm-action-reveal",
+            "action-reveal",
+            inputs.all_encrypted,
+        ));
         items.push(item(
             "fs.decrypt",
             "fm-action-decrypt",
@@ -228,6 +242,19 @@ fn item(id: &str, label_key: &str, icon: &'static str, enabled: bool) -> Context
         id: id.into(),
         label_key: label_key.into(),
         icon,
+        swatch_color: None,
+        enabled,
+        separator_after: false,
+        submenu: Vec::new(),
+    }
+}
+
+fn color_item(id: &str, label_key: &str, swatch: &'static str, enabled: bool) -> ContextMenuItem {
+    ContextMenuItem {
+        id: id.into(),
+        label_key: label_key.into(),
+        icon: "action-color",
+        swatch_color: Some(swatch),
         enabled,
         separator_after: false,
         submenu: Vec::new(),

@@ -3341,6 +3341,9 @@ impl MainWindowController {
                     orchid_widgets::builtin::file_manager::PassphrasePurpose::Decrypt => {
                         self.locale.tr("fm-decrypt-title")
                     }
+                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Reveal => {
+                        self.locale.tr("fm-reveal-title")
+                    }
                 };
                 let mut over = self.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
@@ -4582,6 +4585,7 @@ fn build_context_subitems(
             id: a.id.clone().into(),
             label: context_menu_item_label(a, locale),
             icon: a.icon.into(),
+            swatch_color: a.swatch_color.unwrap_or("").into(),
             enabled: a.enabled,
             is_separator: false,
         });
@@ -4590,6 +4594,7 @@ fn build_context_subitems(
                 id: SharedString::new(),
                 label: SharedString::new(),
                 icon: SharedString::new(),
+                swatch_color: SharedString::new(),
                 enabled: false,
                 is_separator: true,
             });

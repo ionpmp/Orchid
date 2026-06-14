@@ -247,10 +247,17 @@ impl EncryptedFolderEngine {
         }
         let decryptor = Decryptor::new(identity);
         let encrypted_os = path.to_local()?;
-        let session = self
-            .reveal_manager
-            .reveal(&decryptor, &encrypted_os, duration)
-            .await?;
+        let session = if looks_encrypted_directory(path) {
+            self.reveal_manager
+                .reveal_directory(&decryptor, &encrypted_os, duration)
+                .await
+                .map_err(|e| FsError::EncryptedOp(e.to_string()))?
+        } else {
+            self.reveal_manager
+                .reveal(&decryptor, &encrypted_os, duration)
+                .await
+                .map_err(|e| FsError::EncryptedOp(e.to_string()))?
+        };
         Ok(session)
     }
 

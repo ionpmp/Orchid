@@ -107,6 +107,7 @@ pub enum ActionOutcome {
 pub enum PassphrasePurpose {
     Encrypt,
     Decrypt,
+    Reveal,
 }
 
 /// Stable type id.
@@ -937,6 +938,25 @@ impl FileManagerInner {
                 .map_err(map_fs_error)?;
         }
         Ok(())
+    }
+
+    async fn reveal_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<Vec<String>> {
+        let Some(engine) = self.deps.encrypted.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "encryption unavailable".into(),
+            ));
+        };
+        let identity = orchid_crypto::Identity::passphrase(passphrase);
+        let mut revealed = Vec::with_capacity(paths.len());
+        for p in paths {
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            let session = engine
+                .reveal(&fp, identity.clone())
+                .await
+                .map_err(map_fs_error)?;
+            revealed.push(session.revealed_path.to_string_lossy().into_owned());
+        }
+        Ok(revealed)
     }
 
     async fn refresh_managed_roots(&self) {
@@ -2180,6 +2200,15 @@ pub async fn run_action_with_opts(
                 purpose: PassphrasePurpose::Decrypt,
             });
         }
+        "fs.reveal" => {
+            if target_paths.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::NeedsPassphrase {
+                paths: target_paths,
+                purpose: PassphrasePurpose::Reveal,
+            });
+        }
         _ => {
             // Unknown actions: treat as done for MVP.
         }
@@ -2304,6 +2333,10 @@ pub async fn apply_passphrase(
             inner.decrypt_paths(&paths, &passphrase).await?;
             inner.refresh_all_tabs().await;
             Ok(ActionOutcome::Done)
+        }
+        PassphrasePurpose::Reveal => {
+            let revealed = inner.reveal_paths(&paths, &passphrase).await?;
+            Ok(ActionOutcome::OpenExternally { paths: revealed })
         }
     }
 }

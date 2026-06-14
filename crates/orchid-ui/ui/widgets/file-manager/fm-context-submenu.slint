@@ -40,7 +40,22 @@ export component FmContextSubmenu inherits Rectangle {
                 padding-right: 8px;
                 spacing: 8px;
 
-                Text {
+                if child.swatch-color != "" : Rectangle {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 6px;
+                    border-width: child.swatch-color == "none" ? 1px : 0px;
+                    border-color: Theme.border-default;
+                    background: child.swatch-color == "red" ? #ef4444
+                              : child.swatch-color == "orange" ? #f97316
+                              : child.swatch-color == "yellow" ? #eab308
+                              : child.swatch-color == "green" ? #22c55e
+                              : child.swatch-color == "blue" ? #3b82f6
+                              : child.swatch-color == "purple" ? #a855f7
+                              : child.swatch-color == "gray" ? #9ca3af
+                              : transparent;
+                }
+                if child.swatch-color == "" : Text {
                     text: child.icon;
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
