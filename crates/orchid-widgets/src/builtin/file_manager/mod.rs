@@ -1758,6 +1758,20 @@ pub async fn toggle_show_hidden(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Toggle single-click vs double-click to open files.
+pub async fn toggle_click_behavior(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let mut cfg = inner.config.write();
+        cfg.click_behavior = match cfg.click_behavior {
+            ClickBehavior::DoubleToOpen => ClickBehavior::SingleToOpen,
+            ClickBehavior::SingleToOpen => ClickBehavior::DoubleToOpen,
+        };
+    }
+    inner.publish_refresh();
+    Ok(())
+}
+
 /// Cycle view mode for the active tab in `pane`.
 pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

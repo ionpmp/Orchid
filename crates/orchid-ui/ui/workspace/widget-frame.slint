@@ -65,6 +65,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-sidebar-clicked(string);
     callback fm-toggle-dual-pane();
     callback fm-toggle-show-hidden();
+    callback fm-toggle-click-behavior();
     callback fm-pane-clicked(int);
     callback fm-tab-clicked(int, string);
     callback fm-tab-closed(int, string);
@@ -98,6 +99,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-paste-clipboard(int);
     callback fm-rename-selected(int);
     callback fm-deselect-all(int);
+    callback fm-open-selected(int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -307,6 +309,7 @@ export component WidgetFrame inherits Rectangle {
             sidebar-clicked(id) => { root.fm-sidebar-clicked(id); }
             toggle-dual-pane => { root.fm-toggle-dual-pane(); }
             toggle-show-hidden => { root.fm-toggle-show-hidden(); }
+            toggle-click-behavior => { root.fm-toggle-click-behavior(); }
             pane-clicked(p) => { root.fm-pane-clicked(p); }
             tab-clicked(p, id) => { root.fm-tab-clicked(p, id); }
             tab-closed(p, id) => { root.fm-tab-closed(p, id); }
@@ -340,6 +343,7 @@ export component WidgetFrame inherits Rectangle {
             paste-clipboard(p) => { root.fm-paste-clipboard(p); }
             rename-selected(p) => { root.fm-rename-selected(p); }
             deselect-all(p) => { root.fm-deselect-all(p); }
+            open-selected(p) => { root.fm-open-selected(p); }
         }
     }
 

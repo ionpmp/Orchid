@@ -935,6 +935,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_toggle_click_behavior({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_toggle_click_behavior();
+                }
+            }
+        });
         self.window.on_fm_pane_clicked({
             let t = t.clone();
             move |pane| {
@@ -1196,6 +1204,14 @@ impl MainWindowController {
             move |pane| {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_deselect_all(pane);
+                }
+            }
+        });
+        self.window.on_fm_open_selected({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_open_selected(pane);
                 }
             }
         });
@@ -2873,6 +2889,31 @@ impl MainWindowController {
         }));
     }
 
+    fn on_fm_toggle_click_behavior(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::toggle_click_behavior(inst).await;
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_open_selected(self: &Arc<Self>, pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let paths = self.fm_selected_paths(inst, p);
+        let Some(path) = paths.first() else {
+            return;
+        };
+        self.fm_dispatch_open(inst, p, path.clone());
+    }
+
     fn on_fm_pane_clicked(self: &Arc<Self>, pane: i32) {
         let Some(inst) = self.find_active_fm() else {
             return;
@@ -4199,6 +4240,8 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         passphrase: empty_passphrase_state(),
         show_hidden: false,
         show_hidden_label: locale.tr("fm-show-hidden-off").into(),
+        single_click_open: false,
+        single_click_open_label: locale.tr("fm-click-single-off").into(),
     }
 }
 
@@ -4463,6 +4506,9 @@ fn build_file_manager_model(
 
     let show_hidden = orchid_widgets::builtin::file_manager::show_hidden(instance_id)
         .unwrap_or(false);
+    let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
+        .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
+        .unwrap_or(false);
 
     FileManagerModel {
         panes: ModelRc::new(VecModel::from(panes)),
@@ -4479,6 +4525,12 @@ fn build_file_manager_model(
             locale.tr("fm-show-hidden-on").into()
         } else {
             locale.tr("fm-show-hidden-off").into()
+        },
+        single_click_open,
+        single_click_open_label: if single_click_open {
+            locale.tr("fm-click-single-on").into()
+        } else {
+            locale.tr("fm-click-single-off").into()
         },
         sidebar_items,
         context_menu: overlays.context_menu,
