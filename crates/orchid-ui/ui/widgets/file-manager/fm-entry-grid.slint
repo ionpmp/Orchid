@@ -122,7 +122,7 @@ export component FmEntryGrid inherits Rectangle {
                     }
 
                     if !entry.has-thumbnail : Text {
-                        text: entry.is-dir ? "📁" : entry.is-encrypted ? "🔒" : "📄";
+                        text: entry.is-dir ? "📁" : entry.is-encrypted ? "🔒" : entry.is-managed ? "🗃" : "📄";
                         color: Theme.accent-brand;
                         font-size: large ? 64px : 36px;
                         horizontal-alignment: center;

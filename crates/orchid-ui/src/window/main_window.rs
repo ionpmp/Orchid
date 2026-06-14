@@ -2929,7 +2929,16 @@ impl MainWindowController {
         let Some(inst) = self.find_active_fm() else {
             return;
         };
-        let pane = 0u8;
+        let pane = {
+            let cache = self.widget_manager.snapshot_cache();
+            cache
+                .get(inst)
+                .and_then(|s| match &s.payload {
+                    WidgetPayload::FileManager(fm) => Some(fm.active_pane),
+                    _ => None,
+                })
+                .unwrap_or(0)
+        };
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             if let Err(e) = orchid_widgets::builtin::file_manager::navigate_virtual(inst, pane, &item_id).await {
@@ -4433,7 +4442,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         dual_pane: false,
         dual_pane_label: locale.tr("fm-dual-pane-on").into(),
         clipboard_indicator: SharedString::new(),
-        sidebar_items: build_sidebar_items(locale, ""),
+        sidebar_items: build_sidebar_items(locale, "", &[]),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
@@ -4516,9 +4525,33 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
     }
 }
 
-fn build_sidebar_items(locale: &LocaleManager, active_path: &str) -> ModelRc<FmSidebarItem> {
+fn managed_sidebar_label(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| path.to_string())
+}
+
+fn active_managed_sidebar_index(active_path: &str, managed_roots: &[String]) -> Option<usize> {
+    let p = std::path::Path::new(active_path);
+    for (i, root) in managed_roots.iter().enumerate() {
+        let r = std::path::Path::new(root);
+        if p == r || p.starts_with(r) {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn build_sidebar_items(
+    locale: &LocaleManager,
+    active_path: &str,
+    managed_roots: &[String],
+) -> ModelRc<FmSidebarItem> {
     let active_id = fm_sidebar_id_for_path(active_path);
-    let items = vec![
+    let active_managed = active_managed_sidebar_index(active_path, managed_roots);
+    let mut items = vec![
         FmSidebarItem {
             id: "section:favorites".into(),
             label: locale.tr("fm-sidebar-favorites").into(),
@@ -4600,6 +4633,26 @@ fn build_sidebar_items(locale: &LocaleManager, active_path: &str) -> ModelRc<FmS
             is_active: active_id == Some("cat:archives"),
         },
     ];
+    if !managed_roots.is_empty() {
+        items.push(FmSidebarItem {
+            id: "section:managed".into(),
+            label: locale.tr("fm-sidebar-managed").into(),
+            icon: "🗃".into(),
+            indent: 0,
+            is_section_header: true,
+            is_active: false,
+        });
+        for (i, root) in managed_roots.iter().enumerate() {
+            items.push(FmSidebarItem {
+                id: format!("managed:{i}").into(),
+                label: managed_sidebar_label(root).into(),
+                icon: "🗃".into(),
+                indent: 1,
+                is_section_header: false,
+                is_active: active_managed == Some(i),
+            });
+        }
+    }
     ModelRc::new(VecModel::from(items))
 }
 
@@ -4615,7 +4668,7 @@ fn build_file_manager_model(
         .and_then(|pp| pp.tabs.get(pp.active_tab as usize))
         .map(|t| t.path_display.clone())
         .unwrap_or_default();
-    let sidebar_items = build_sidebar_items(locale, &active_path);
+    let sidebar_items = build_sidebar_items(locale, &active_path, &p.managed_roots);
     let sort_name_label = locale.tr("fm-sort-name");
     let sort_size_label = locale.tr("fm-sort-size");
     let sort_modified_label = locale.tr("fm-sort-modified");

@@ -171,6 +171,8 @@ struct FileManagerInner {
     thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
     /// Cached managed-folder root paths for [`apply_entry_metadata`].
     managed_roots: RwLock<Vec<String>>,
+    /// Cached ingest stats per managed root path.
+    managed_stats: RwLock<std::collections::HashMap<String, orchid_fs::ManagedFolderStats>>,
     /// Cached encrypted paths for [`apply_entry_metadata`].
     encrypted_paths: RwLock<Vec<String>>,
     bus: Arc<orchid_core::EventBus>,
@@ -202,6 +204,7 @@ impl FileManagerWidget {
                 recent: RwLock::new(std::collections::VecDeque::new()),
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
                 managed_roots: RwLock::new(Vec::new()),
+                managed_stats: RwLock::new(std::collections::HashMap::new()),
                 encrypted_paths: RwLock::new(Vec::new()),
                 bus,
             }),
@@ -356,6 +359,7 @@ impl Widget for FileManagerWidget {
                 active_pane,
                 dual_pane,
                 clipboard_indicator,
+                managed_roots: self.inner.managed_roots.read().clone(),
             }),
         })
     }
@@ -1013,19 +1017,21 @@ impl FileManagerInner {
     }
 
     async fn refresh_managed_roots(&self) {
-        let roots = if let Some(engine) = self.deps.managed.as_ref() {
-            engine
-                .list_folders()
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|f| f.enabled)
-                .map(|f| f.path.as_str().to_string())
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let mut roots = Vec::new();
+        let mut stats = std::collections::HashMap::new();
+        if let Some(engine) = self.deps.managed.as_ref() {
+            if let Ok(folders) = engine.list_folders().await {
+                for f in folders.into_iter().filter(|f| f.enabled) {
+                    let key = f.path.as_str().to_string();
+                    roots.push(key.clone());
+                    if let Ok(st) = engine.folder_stats(&f.path).await {
+                        stats.insert(key, st);
+                    }
+                }
+            }
+        }
         *self.managed_roots.write() = roots;
+        *self.managed_stats.write() = stats;
     }
 
     async fn register_managed_folder(&self, folder: &orchid_fs::FsPath) -> WidgetResult<()> {
@@ -1213,11 +1219,22 @@ fn build_tab_payload(
         })
         .collect();
     let selection_count = tab.selection.count() as u32;
-    let status_text = format!(
-        "{} items, {} selected",
-        entry_payloads.len(),
-        selection_count
-    );
+    let status_text = if let Some(st) = inner.managed_stats.read().get(tab.path.as_str()) {
+        let saved = st.logical_bytes.saturating_sub(st.physical_bytes);
+        format!(
+            "{} items, {} selected · {} ingested, {} deduped",
+            entry_payloads.len(),
+            selection_count,
+            st.files_tracked,
+            format_size(saved),
+        )
+    } else {
+        format!(
+            "{} items, {} selected",
+            entry_payloads.len(),
+            selection_count,
+        )
+    };
     TabPayload {
         tab_id: tab.id.to_string(),
         path_display: tab.path.as_str().to_string(),
@@ -2563,6 +2580,15 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         "cat:video" => orchid_fs::FsPath::new("virtual:categories/video").ok(),
         "cat:audio" => orchid_fs::FsPath::new("virtual:categories/audio").ok(),
         "cat:archives" => orchid_fs::FsPath::new("virtual:categories/archives").ok(),
+        other if other.starts_with("managed:") => {
+            let idx = other
+                .strip_prefix("managed:")
+                .and_then(|s| s.parse::<usize>().ok());
+            let inner = live_inner(instance_id)?;
+            let roots = inner.managed_roots.read();
+            idx.and_then(|i| roots.get(i))
+                .and_then(|p| orchid_fs::FsPath::new(p).ok())
+        }
         other => {
             warn!(id = %other, "unknown virtual folder id");
             None

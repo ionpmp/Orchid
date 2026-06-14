@@ -227,6 +227,8 @@ export component FileManagerView inherits Rectangle {
                 entry-drag-cancel => { root.entry-drag-cancel(0); }
                 pane-drag-hover => { root.pane-drag-hover(0); }
                 drop-on-current-dir => { root.drop-on-current-dir(0); }
+                crumb-drag-hover(p) => { root.entry-drag-hover(0, p); }
+                crumb-drag-drop(p) => { root.entry-drag-drop(0, p); }
             }
 
             if model.dual-pane : HorizontalLayout {
@@ -282,6 +284,8 @@ export component FileManagerView inherits Rectangle {
                         entry-drag-cancel => { root.entry-drag-cancel(0); }
                         pane-drag-hover => { root.pane-drag-hover(0); }
                         drop-on-current-dir => { root.drop-on-current-dir(0); }
+                        crumb-drag-hover(p) => { root.entry-drag-hover(0, p); }
+                        crumb-drag-drop(p) => { root.entry-drag-drop(0, p); }
                     }
                 }
 
@@ -335,6 +339,8 @@ export component FileManagerView inherits Rectangle {
                         entry-drag-cancel => { root.entry-drag-cancel(1); }
                         pane-drag-hover => { root.pane-drag-hover(1); }
                         drop-on-current-dir => { root.drop-on-current-dir(1); }
+                        crumb-drag-hover(p) => { root.entry-drag-hover(1, p); }
+                        crumb-drag-drop(p) => { root.entry-drag-drop(1, p); }
                     }
                 }
             }

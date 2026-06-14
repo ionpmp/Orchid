@@ -221,6 +221,7 @@ fm-status-total-size = { $size }
 fm-quick-filter-placeholder = Filter…
 fm-sidebar-favorites = Favorites
 fm-sidebar-categories = Categories
+fm-sidebar-managed = Managed folders
 fm-sidebar-tags = Tags
 fm-sidebar-recent = Recent
 fm-sidebar-network = Network

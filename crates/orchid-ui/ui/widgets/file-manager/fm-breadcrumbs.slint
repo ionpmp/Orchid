@@ -3,7 +3,11 @@ import { FmBreadcrumb } from "../../workspace/defs.slint";
 
 export component FmBreadcrumbs inherits Rectangle {
     in property <[FmBreadcrumb]> breadcrumbs;
+    in property <bool> drag-active;
+    in property <string> drag-drop-target;
     callback clicked(string);
+    callback crumb-drag-hover(string);
+    callback crumb-drag-drop(string);
 
     background: Theme.surface-base;
 
@@ -31,9 +35,21 @@ export component FmBreadcrumbs inherits Rectangle {
                 Rectangle {
                     background: crumb-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
+                    border-width: drag-active && crumb.path == drag-drop-target ? 1px : 0px;
+                    border-color: Theme.accent-brand;
 
                     crumb-ta := TouchArea {
                         clicked => { root.clicked(crumb.path); }
+                        pointer-event(e) => {
+                            if (drag-active) {
+                                if (e.kind == PointerEventKind.move) {
+                                    root.crumb-drag-hover(crumb.path);
+                                }
+                                if (e.kind == PointerEventKind.up) {
+                                    root.crumb-drag-drop(crumb.path);
+                                }
+                            }
+                        }
                     }
 
                     HorizontalLayout {

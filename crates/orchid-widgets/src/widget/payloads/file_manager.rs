@@ -8,6 +8,8 @@ pub struct FileManagerPayload {
     pub active_pane: u8,
     pub dual_pane: bool,
     pub clipboard_indicator: Option<String>,
+    /// Registered managed-folder root paths (for sidebar).
+    pub managed_roots: Vec<String>,
 }
 
 /// One pane (left or right) with its tabs.

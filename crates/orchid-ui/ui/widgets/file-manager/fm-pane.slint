@@ -48,6 +48,8 @@ export component FmPane inherits Rectangle {
     callback entry-drag-cancel();
     callback pane-drag-hover();
     callback drop-on-current-dir();
+    callback crumb-drag-hover(string);
+    callback crumb-drag-drop(string);
 
     background: Theme.surface-base;
 
@@ -145,7 +147,11 @@ export component FmPane inherits Rectangle {
             FmBreadcrumbs {
                 height: 28px;
                 breadcrumbs: pane.tabs[pane.active-tab].breadcrumbs;
+                drag-active: root.drag-active;
+                drag-drop-target: root.drag-drop-target;
                 clicked(p) => { root.breadcrumb-clicked(p); }
+                crumb-drag-hover(p) => { root.crumb-drag-hover(p); }
+                crumb-drag-drop(p) => { root.crumb-drag-drop(p); }
             }
 
             Rectangle {
