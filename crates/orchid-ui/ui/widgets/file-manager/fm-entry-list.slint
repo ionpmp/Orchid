@@ -25,6 +25,8 @@ export component FmEntryList inherits Rectangle {
     callback entry-drag-hover(string);
     callback entry-drag-drop(string);
     callback entry-drag-cancel();
+    callback pane-drag-hover();
+    callback drop-on-current-dir();
 
     background: transparent;
 
@@ -42,6 +44,14 @@ export component FmEntryList inherits Rectangle {
             pointer-event(e) => {
                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                     root.entry-context("", self.mouse-x, self.mouse-y);
+                }
+                if (drag-active) {
+                    if (e.kind == PointerEventKind.move) {
+                        root.pane-drag-hover();
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        root.drop-on-current-dir();
+                    }
                 }
             }
         }

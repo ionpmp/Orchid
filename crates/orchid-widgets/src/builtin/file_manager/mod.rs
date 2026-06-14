@@ -1065,6 +1065,20 @@ impl FileManagerInner {
         Ok(())
     }
 
+    async fn remove_selection_from_managed(&self, paths: &[String]) -> WidgetResult<()> {
+        let Some(engine) = self.deps.managed.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "managed folders unavailable".into(),
+            ));
+        };
+        for p in paths {
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            engine.remove_folder(&fp).await.map_err(map_fs_error)?;
+        }
+        self.refresh_managed_roots().await;
+        Ok(())
+    }
+
     async fn resolve_managed_folder_target(
         &self,
         paths: &[String],
@@ -2289,6 +2303,11 @@ pub async fn run_action_with_opts(
         }
         "fs.add-to-managed" => {
             inner.add_selection_to_managed(&target_paths).await?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.remove-from-managed" => {
+            inner.remove_selection_from_managed(&target_paths).await?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }

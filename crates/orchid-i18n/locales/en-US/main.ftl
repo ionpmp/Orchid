@@ -197,6 +197,7 @@ fm-color-gray = Gray
 fm-color-none = No color
 fm-action-properties = Properties
 fm-action-add-to-managed = Add to managed folder
+fm-action-remove-from-managed = Remove from managed folders
 fm-rename-title = Rename
 fm-rename-ok = OK
 fm-rename-cancel = Cancel

@@ -59,6 +59,8 @@ export component FileManagerView inherits Rectangle {
     callback entry-drag-hover(int, string);
     callback entry-drag-drop(int, string);
     callback entry-drag-cancel(int);
+    callback pane-drag-hover(int);
+    callback drop-on-current-dir(int);
 
     background: transparent;
 
@@ -192,6 +194,7 @@ export component FileManagerView inherits Rectangle {
                 rename: model.rename;
                 drag-active: model.drag-active;
                 drag-drop-target: model.drag-drop-target;
+                drag-pane-target: model.drag-active && model.drag-target-pane == 0;
                 tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                 tab-closed(idx, id) => { root.tab-closed(0, id); }
                 tab-new => { root.tab-new(0); }
@@ -222,6 +225,8 @@ export component FileManagerView inherits Rectangle {
                 entry-drag-hover(p) => { root.entry-drag-hover(0, p); }
                 entry-drag-drop(p) => { root.entry-drag-drop(0, p); }
                 entry-drag-cancel => { root.entry-drag-cancel(0); }
+                pane-drag-hover => { root.pane-drag-hover(0); }
+                drop-on-current-dir => { root.drop-on-current-dir(0); }
             }
 
             if model.dual-pane : HorizontalLayout {
@@ -229,8 +234,9 @@ export component FileManagerView inherits Rectangle {
 
                 Rectangle {
                     horizontal-stretch: 1;
-                    border-color: model.active-pane == 0 ? Theme.accent-brand : transparent;
-                    border-width: 1px;
+                    border-color: (model.drag-active && model.drag-target-pane == 0) || model.active-pane == 0
+                        ? Theme.accent-brand : transparent;
+                    border-width: model.drag-active && model.drag-target-pane == 0 ? 2px : 1px;
                     border-radius: Theme.radius-md;
 
                     FmPane {
@@ -243,6 +249,7 @@ export component FileManagerView inherits Rectangle {
                         rename: model.rename;
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
+                        drag-pane-target: model.drag-active && model.drag-target-pane == 0;
                         tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                         tab-closed(idx, id) => { root.tab-closed(0, id); }
                         tab-new => { root.tab-new(0); }
@@ -273,13 +280,16 @@ export component FileManagerView inherits Rectangle {
                         entry-drag-hover(p) => { root.entry-drag-hover(0, p); }
                         entry-drag-drop(p) => { root.entry-drag-drop(0, p); }
                         entry-drag-cancel => { root.entry-drag-cancel(0); }
+                        pane-drag-hover => { root.pane-drag-hover(0); }
+                        drop-on-current-dir => { root.drop-on-current-dir(0); }
                     }
                 }
 
                 Rectangle {
                     horizontal-stretch: 1;
-                    border-color: model.active-pane == 1 ? Theme.accent-brand : transparent;
-                    border-width: 1px;
+                    border-color: (model.drag-active && model.drag-target-pane == 1) || model.active-pane == 1
+                        ? Theme.accent-brand : transparent;
+                    border-width: model.drag-active && model.drag-target-pane == 1 ? 2px : 1px;
                     border-radius: Theme.radius-md;
 
                     FmPane {
@@ -292,6 +302,7 @@ export component FileManagerView inherits Rectangle {
                         rename: model.rename;
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
+                        drag-pane-target: model.drag-active && model.drag-target-pane == 1;
                         tab-clicked(idx, id) => { root.tab-clicked(1, id); }
                         tab-closed(idx, id) => { root.tab-closed(1, id); }
                         tab-new => { root.tab-new(1); }
@@ -322,6 +333,8 @@ export component FileManagerView inherits Rectangle {
                         entry-drag-hover(p) => { root.entry-drag-hover(1, p); }
                         entry-drag-drop(p) => { root.entry-drag-drop(1, p); }
                         entry-drag-cancel => { root.entry-drag-cancel(1); }
+                        pane-drag-hover => { root.pane-drag-hover(1); }
+                        drop-on-current-dir => { root.drop-on-current-dir(1); }
                     }
                 }
             }

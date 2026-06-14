@@ -192,6 +192,7 @@ fm-color-gray = Серый
 fm-color-none = Без цвета
 fm-action-properties = Свойства
 fm-action-add-to-managed = Добавить в управляемую папку
+fm-action-remove-from-managed = Убрать из управляемых папок
 fm-rename-title = Переименовать
 fm-rename-ok = OK
 fm-rename-cancel = Отмена

@@ -206,12 +206,21 @@ pub fn build_for_selection(
     }
     items.last_mut().unwrap().separator_after = true;
 
-    items.push(item(
-        "fs.add-to-managed",
-        "fm-action-add-to-managed",
-        "action-managed",
-        has_selection && !inputs.all_managed,
-    ));
+    if inputs.all_managed {
+        items.push(item(
+            "fs.remove-from-managed",
+            "fm-action-remove-from-managed",
+            "action-managed",
+            has_selection,
+        ));
+    } else {
+        items.push(item(
+            "fs.add-to-managed",
+            "fm-action-add-to-managed",
+            "action-managed",
+            has_selection,
+        ));
+    }
     items.last_mut().unwrap().separator_after = true;
 
     items.push(item(

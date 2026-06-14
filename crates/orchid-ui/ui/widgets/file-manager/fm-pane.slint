@@ -14,6 +14,7 @@ export component FmPane inherits Rectangle {
     in property <FmRenameState> rename;
     in property <bool> drag-active;
     in property <string> drag-drop-target;
+    in property <bool> drag-pane-target;
 
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -45,6 +46,8 @@ export component FmPane inherits Rectangle {
     callback entry-drag-hover(string);
     callback entry-drag-drop(string);
     callback entry-drag-cancel();
+    callback pane-drag-hover();
+    callback drop-on-current-dir();
 
     background: Theme.surface-base;
 
@@ -186,6 +189,8 @@ export component FmPane inherits Rectangle {
                         entry-drag-hover(p) => { root.entry-drag-hover(p); }
                         entry-drag-drop(p) => { root.entry-drag-drop(p); }
                         entry-drag-cancel => { root.entry-drag-cancel(); }
+                        pane-drag-hover => { root.pane-drag-hover(); }
+                        drop-on-current-dir => { root.drop-on-current-dir(); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -209,6 +214,8 @@ export component FmPane inherits Rectangle {
                         entry-drag-hover(p) => { root.entry-drag-hover(p); }
                         entry-drag-drop(p) => { root.entry-drag-drop(p); }
                         entry-drag-cancel => { root.entry-drag-cancel(); }
+                        pane-drag-hover => { root.pane-drag-hover(); }
+                        drop-on-current-dir => { root.drop-on-current-dir(); }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {

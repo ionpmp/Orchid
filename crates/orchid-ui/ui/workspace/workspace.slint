@@ -96,6 +96,8 @@ export component WorkspaceView inherits Rectangle {
     callback fm-entry-drag-hover(int, string);
     callback fm-entry-drag-drop(int, string);
     callback fm-entry-drag-cancel(int);
+    callback fm-pane-drag-hover(int);
+    callback fm-drop-on-current-dir(int);
 
     callback canvas-long-pressed(length, length, length, length);
     callback catalog-pick(string);
@@ -277,6 +279,8 @@ export component WorkspaceView inherits Rectangle {
                     fm-entry-drag-hover(p, path) => { root.fm-entry-drag-hover(p, path); }
                     fm-entry-drag-drop(p, path) => { root.fm-entry-drag-drop(p, path); }
                     fm-entry-drag-cancel(p) => { root.fm-entry-drag-cancel(p); }
+                    fm-pane-drag-hover(p) => { root.fm-pane-drag-hover(p); }
+                    fm-drop-on-current-dir(p) => { root.fm-drop-on-current-dir(p); }
                 }
             }
         }

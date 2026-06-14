@@ -104,6 +104,8 @@ export component WidgetFrame inherits Rectangle {
     callback fm-entry-drag-hover(int, string);
     callback fm-entry-drag-drop(int, string);
     callback fm-entry-drag-cancel(int);
+    callback fm-pane-drag-hover(int);
+    callback fm-drop-on-current-dir(int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -352,6 +354,8 @@ export component WidgetFrame inherits Rectangle {
             entry-drag-hover(p, path) => { root.fm-entry-drag-hover(p, path); }
             entry-drag-drop(p, path) => { root.fm-entry-drag-drop(p, path); }
             entry-drag-cancel(p) => { root.fm-entry-drag-cancel(p); }
+            pane-drag-hover(p) => { root.fm-pane-drag-hover(p); }
+            drop-on-current-dir(p) => { root.fm-drop-on-current-dir(p); }
         }
     }
 
