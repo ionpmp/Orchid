@@ -4515,9 +4515,17 @@ fn open_with_application_picker(path: &str) -> std::io::Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
-            .arg(path)
-            .spawn()?;
+        let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!(
+            r#"set appPath to POSIX path of (choose file with prompt "Open with" of type {{"com.apple.application-bundle"}})
+do shell script "open -a " & quoted form of appPath & " " & quoted form of "{escaped}""#
+        );
+        let output = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .output()?;
+        if !output.status.success() {
+            return Ok(());
+        }
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
@@ -4543,9 +4551,12 @@ fn context_menu_item_label(
     a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
     locale: &LocaleManager,
 ) -> SharedString {
-    if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") {
+    if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") || a.id.starts_with("fs.color-label:") {
         if a.id.starts_with("fs.tag-remove:") {
             return format!("− {}", a.label_key).into();
+        }
+        if a.id.starts_with("fs.color-label:") {
+            return locale.tr(&a.label_key).into();
         }
         return a.label_key.clone().into();
     }
@@ -4555,7 +4566,7 @@ fn context_menu_item_label(
 fn context_menu_item_enabled(
     a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
 ) -> bool {
-    if a.id == "fs.tag-add" || a.id == "fs.tag-remove" {
+    if a.id == "fs.tag-add" || a.id == "fs.tag-remove" || a.id == "fs.color-label" {
         return false;
     }
     a.enabled

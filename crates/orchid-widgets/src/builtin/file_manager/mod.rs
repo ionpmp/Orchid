@@ -1296,21 +1296,18 @@ fn color_label_to_str(label: orchid_storage::ColorLabel) -> String {
     .to_string()
 }
 
-fn next_color_label(current: Option<orchid_storage::ColorLabel>) -> Option<orchid_storage::ColorLabel> {
-    use orchid_storage::ColorLabel::*;
-    const ORDER: [orchid_storage::ColorLabel; 7] =
-        [Red, Orange, Yellow, Green, Blue, Purple, Gray];
-    if current.is_none() {
-        return Some(Red);
-    }
-    let idx = ORDER
-        .iter()
-        .position(|c| Some(*c) == current)
-        .unwrap_or(0);
-    if idx + 1 >= ORDER.len() {
-        None
-    } else {
-        Some(ORDER[idx + 1])
+fn color_label_from_action_id(action_id: &str) -> Option<orchid_storage::ColorLabel> {
+    use orchid_storage::ColorLabel;
+    match action_id.strip_prefix("fs.color-label:") {
+        Some("red") => Some(ColorLabel::Red),
+        Some("orange") => Some(ColorLabel::Orange),
+        Some("yellow") => Some(ColorLabel::Yellow),
+        Some("green") => Some(ColorLabel::Green),
+        Some("blue") => Some(ColorLabel::Blue),
+        Some("purple") => Some(ColorLabel::Purple),
+        Some("gray") => Some(ColorLabel::Gray),
+        Some("none") | Some("clear") => None,
+        _ => None,
     }
 }
 
@@ -2103,20 +2100,17 @@ pub async fn run_action_with_opts(
             return Ok(ActionOutcome::Done);
         }
         "fs.color-label" => {
+            // Parent row only opens the flyout submenu.
+            return Ok(ActionOutcome::Done);
+        }
+        action_id if action_id.starts_with("fs.color-label:") => {
+            let color = color_label_from_action_id(action_id);
             for p in &target_paths {
                 let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                let current = inner
-                    .deps
-                    .tag_manager
-                    .get(&fp)
-                    .ok()
-                    .flatten()
-                    .and_then(|t| t.color_label);
-                let next = next_color_label(current);
                 inner
                     .deps
                     .tag_manager
-                    .set_color(&fp, next)
+                    .set_color(&fp, color)
                     .map_err(map_fs_error)?;
             }
             inner.refresh_all_tabs().await;

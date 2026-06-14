@@ -158,7 +158,16 @@ pub fn build_for_selection(
         icon: "action-color",
         enabled: has_selection,
         separator_after: false,
-        submenu: Vec::new(),
+        submenu: vec![
+            item("fs.color-label:red", "fm-color-red", "action-color", has_selection),
+            item("fs.color-label:orange", "fm-color-orange", "action-color", has_selection),
+            item("fs.color-label:yellow", "fm-color-yellow", "action-color", has_selection),
+            item("fs.color-label:green", "fm-color-green", "action-color", has_selection),
+            item("fs.color-label:blue", "fm-color-blue", "action-color", has_selection),
+            item("fs.color-label:purple", "fm-color-purple", "action-color", has_selection),
+            item("fs.color-label:gray", "fm-color-gray", "action-color", has_selection),
+            item("fs.color-label:none", "fm-color-none", "action-color", has_selection),
+        ],
     });
     items.push(sep(if inputs.any_starred && inputs.all_starred {
         item("fs.unstar", "fm-action-unstar", "action-star", has_selection)
