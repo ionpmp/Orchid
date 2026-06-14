@@ -5,6 +5,10 @@ export component FmEntryGrid inherits Rectangle {
     in property <[FmEntry]> entries;
     in property <bool> large;
     in property <FmRenameState> rename;
+    in property <bool> drag-active;
+    in property <string> drag-drop-target;
+
+    property <string> pressing-path: "";
 
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
@@ -12,6 +16,10 @@ export component FmEntryGrid inherits Rectangle {
     callback entry-context(string, length, length);
     callback rename-commit(string, string);
     callback rename-cancel();
+    callback entry-drag-start(string);
+    callback entry-drag-hover(string);
+    callback entry-drag-drop(string);
+    callback entry-drag-cancel();
 
     property <length> tile-size: large ? 220px : 100px;
     property <length> tile-height: large ? 240px : 120px;
@@ -45,6 +53,8 @@ export component FmEntryGrid inherits Rectangle {
                 ? Theme.accent-brand
                 : (tile-ta.has-hover ? Theme.surface-raised : transparent);
             border-radius: Theme.radius-md;
+            border-width: drag-active && entry.is-dir && entry.path == drag-drop-target ? 2px : 0px;
+            border-color: Theme.accent-brand;
 
             tile-ta := TouchArea {
                 double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
@@ -55,6 +65,27 @@ export component FmEntryGrid inherits Rectangle {
                         } else {
                             root.entry-clicked(entry.path, e.modifiers.control);
                         }
+                        if (entry.is-selected) {
+                            root.pressing-path = entry.path;
+                        }
+                    }
+                    if (pressing-path != "" && e.kind == PointerEventKind.move) {
+                        root.entry-drag-start(pressing-path);
+                        root.pressing-path = "";
+                    }
+                    if (drag-active && entry.is-dir) {
+                        if (e.kind == PointerEventKind.move) {
+                            root.entry-drag-hover(entry.path);
+                        }
+                        if (e.kind == PointerEventKind.up) {
+                            root.entry-drag-drop(entry.path);
+                        }
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        if (drag-active && !entry.is-dir) {
+                            root.entry-drag-cancel();
+                        }
+                        root.pressing-path = "";
                     }
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                         root.entry-context(entry.path, self.mouse-x, self.mouse-y);

@@ -453,6 +453,45 @@ impl FileManagerInner {
         Ok(())
     }
 
+    async fn move_paths_into_directory(
+        &self,
+        sources: &[String],
+        dest_dir: &orchid_fs::FsPath,
+    ) -> WidgetResult<()> {
+        if is_virtual(dest_dir) {
+            return Err(WidgetError::InvalidStateForOperation(
+                "cannot drop into virtual folder".into(),
+            ));
+        }
+        let registry = &self.deps.registry;
+        let dest_str = dest_dir.as_str();
+        for p in sources {
+            let src = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            if &src == dest_dir {
+                continue;
+            }
+            let src_str = src.as_str();
+            if dest_str.len() > src_str.len() {
+                let rest = &dest_str[src_str.len()..];
+                if rest.starts_with('/') || rest.starts_with('\\') {
+                    continue;
+                }
+            }
+            let name = src
+                .file_name()
+                .map(str::to_string)
+                .unwrap_or_else(|| "moved".to_string());
+            let dest = dest_dir.join(&name);
+            if src == dest {
+                continue;
+            }
+            orchid_fs::operations::move_::move_(registry, &src, &dest, None, None)
+                .await
+                .map_err(map_fs_error)?;
+        }
+        Ok(())
+    }
+
     async fn delete_paths(&self, paths: &[String]) -> WidgetResult<()> {
         let registry = &self.deps.registry;
         let opts = orchid_fs::operations::delete::DeleteOptions::default();
@@ -2455,6 +2494,34 @@ pub async fn open_path(instance_id: Uuid, pane: u8, path: &str) -> WidgetResult<
     Ok(ActionOutcome::OpenInViewer {
         path: path.to_string(),
     })
+}
+
+/// Move `sources` into directory `dest_dir` (drag-and-drop target).
+pub async fn move_paths_to_directory(
+    instance_id: Uuid,
+    sources: Vec<String>,
+    dest_dir: &str,
+) -> WidgetResult<()> {
+    if sources.is_empty() {
+        return Ok(());
+    }
+    let inner = live_inner(instance_id)?;
+    let dest = orchid_fs::FsPath::new(dest_dir).map_err(map_fs_error)?;
+    if let Some(provider) = inner.deps.registry.for_path(&dest) {
+        let meta = provider.metadata(&dest).await.map_err(map_fs_error)?;
+        if !matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
+            return Err(WidgetError::InvalidStateForOperation(
+                "drop target is not a directory".into(),
+            ));
+        }
+    } else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "drop target unavailable".into(),
+        ));
+    }
+    inner.move_paths_into_directory(&sources, &dest).await?;
+    inner.refresh_all_tabs().await;
+    Ok(())
 }
 
 /// Record a path in the recent-files list (files only).

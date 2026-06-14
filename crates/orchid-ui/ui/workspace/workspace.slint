@@ -92,6 +92,10 @@ export component WorkspaceView inherits Rectangle {
     callback fm-rename-selected(int);
     callback fm-deselect-all(int);
     callback fm-open-selected(int);
+    callback fm-entry-drag-start(int, string);
+    callback fm-entry-drag-hover(int, string);
+    callback fm-entry-drag-drop(int, string);
+    callback fm-entry-drag-cancel(int);
 
     callback canvas-long-pressed(length, length, length, length);
     callback catalog-pick(string);
@@ -269,6 +273,10 @@ export component WorkspaceView inherits Rectangle {
                     fm-rename-selected(p) => { root.fm-rename-selected(p); }
                     fm-deselect-all(p) => { root.fm-deselect-all(p); }
                     fm-open-selected(p) => { root.fm-open-selected(p); }
+                    fm-entry-drag-start(p, path) => { root.fm-entry-drag-start(p, path); }
+                    fm-entry-drag-hover(p, path) => { root.fm-entry-drag-hover(p, path); }
+                    fm-entry-drag-drop(p, path) => { root.fm-entry-drag-drop(p, path); }
+                    fm-entry-drag-cancel(p) => { root.fm-entry-drag-cancel(p); }
                 }
             }
         }

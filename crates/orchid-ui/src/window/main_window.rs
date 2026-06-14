@@ -1215,6 +1215,38 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_entry_drag_start({
+            let t = t.clone();
+            move |pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_drag_start(pane, &path);
+                }
+            }
+        });
+        self.window.on_fm_entry_drag_hover({
+            let t = t.clone();
+            move |pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_drag_hover(pane, &path);
+                }
+            }
+        });
+        self.window.on_fm_entry_drag_drop({
+            let t = t.clone();
+            move |pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_drag_drop(pane, &path);
+                }
+            }
+        });
+        self.window.on_fm_entry_drag_cancel({
+            let t = t.clone();
+            move |pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_drag_cancel(pane);
+                }
+            }
+        });
         Ok(())
     }
 
@@ -2523,6 +2555,9 @@ impl MainWindowController {
                             passphrase_paths: Vec::new(),
                             passphrase_purpose: None,
                             create_folder_parent: None,
+                            drag_active: false,
+                            drag_paths: Vec::new(),
+                            drag_drop_target: String::new(),
                         });
                     (
                         tstr,
@@ -2747,7 +2782,19 @@ impl MainWindowController {
                 passphrase_paths: Vec::new(),
                 passphrase_purpose: None,
                 create_folder_parent: None,
+                drag_active: false,
+                drag_paths: Vec::new(),
+                drag_drop_target: String::new(),
             })
+    }
+
+    fn clear_fm_drag(&self, inst: Uuid) {
+        let mut over = self.fm_overlays.write();
+        if let Some(entry) = over.get_mut(&inst) {
+            entry.drag_active = false;
+            entry.drag_paths.clear();
+            entry.drag_drop_target.clear();
+        }
     }
 
     fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
@@ -2912,6 +2959,83 @@ impl MainWindowController {
             return;
         };
         self.fm_dispatch_open(inst, p, path.clone());
+    }
+
+    fn on_fm_entry_drag_start(self: &Arc<Self>, pane: i32, _path: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let paths = self.fm_selected_paths(inst, p);
+        if paths.is_empty() {
+            return;
+        }
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        entry.drag_active = true;
+        entry.drag_paths = paths;
+        entry.drag_drop_target.clear();
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_entry_drag_hover(self: &Arc<Self>, _pane: i32, folder: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        if !entry.drag_active {
+            return;
+        }
+        entry.drag_drop_target = folder.to_string();
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_entry_drag_drop(self: &Arc<Self>, _pane: i32, folder: &SharedString) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let folder_path = folder.to_string();
+        let paths = {
+            let over = self.fm_overlays.read();
+            over.get(&inst)
+                .filter(|e| e.drag_active)
+                .map(|e| e.drag_paths.clone())
+                .unwrap_or_default()
+        };
+        if paths.is_empty() {
+            self.clear_fm_drag(inst);
+            self.schedule_rebuild();
+            return;
+        }
+        self.clear_fm_drag(inst);
+        self.schedule_rebuild();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) =
+                orchid_widgets::builtin::file_manager::move_paths_to_directory(
+                    inst,
+                    paths,
+                    &folder_path,
+                )
+                .await
+            {
+                warn!(?e, dest = %folder_path, "fm drag drop");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_fm_entry_drag_cancel(self: &Arc<Self>, _pane: i32) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        self.clear_fm_drag(inst);
+        self.schedule_rebuild();
     }
 
     fn on_fm_pane_clicked(self: &Arc<Self>, pane: i32) {
@@ -4223,6 +4347,9 @@ struct FileManagerOverlays {
     passphrase_paths: Vec<String>,
     passphrase_purpose: Option<orchid_widgets::builtin::file_manager::PassphrasePurpose>,
     create_folder_parent: Option<String>,
+    drag_active: bool,
+    drag_paths: Vec<String>,
+    drag_drop_target: String,
 }
 
 fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
@@ -4242,6 +4369,8 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         show_hidden_label: locale.tr("fm-show-hidden-off").into(),
         single_click_open: false,
         single_click_open_label: locale.tr("fm-click-single-off").into(),
+        drag_active: false,
+        drag_drop_target: SharedString::new(),
     }
 }
 
@@ -4532,6 +4661,8 @@ fn build_file_manager_model(
         } else {
             locale.tr("fm-click-single-off").into()
         },
+        drag_active: overlays.drag_active,
+        drag_drop_target: overlays.drag_drop_target.clone().into(),
         sidebar_items,
         context_menu: overlays.context_menu,
         confirm_dialog: overlays.confirm_dialog,

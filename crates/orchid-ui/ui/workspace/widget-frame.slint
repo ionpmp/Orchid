@@ -100,6 +100,10 @@ export component WidgetFrame inherits Rectangle {
     callback fm-rename-selected(int);
     callback fm-deselect-all(int);
     callback fm-open-selected(int);
+    callback fm-entry-drag-start(int, string);
+    callback fm-entry-drag-hover(int, string);
+    callback fm-entry-drag-drop(int, string);
+    callback fm-entry-drag-cancel(int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -344,6 +348,10 @@ export component WidgetFrame inherits Rectangle {
             rename-selected(p) => { root.fm-rename-selected(p); }
             deselect-all(p) => { root.fm-deselect-all(p); }
             open-selected(p) => { root.fm-open-selected(p); }
+            entry-drag-start(p, path) => { root.fm-entry-drag-start(p, path); }
+            entry-drag-hover(p, path) => { root.fm-entry-drag-hover(p, path); }
+            entry-drag-drop(p, path) => { root.fm-entry-drag-drop(p, path); }
+            entry-drag-cancel(p) => { root.fm-entry-drag-cancel(p); }
         }
     }
 

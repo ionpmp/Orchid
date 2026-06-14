@@ -12,6 +12,8 @@ export component FmPane inherits Rectangle {
     in property <bool> is-active;
     in property <string> clipboard-hint;
     in property <FmRenameState> rename;
+    in property <bool> drag-active;
+    in property <string> drag-drop-target;
 
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -39,6 +41,10 @@ export component FmPane inherits Rectangle {
     callback open-selected();
     callback rename-commit(string, string);
     callback rename-cancel();
+    callback entry-drag-start(string);
+    callback entry-drag-hover(string);
+    callback entry-drag-drop(string);
+    callback entry-drag-cancel();
 
     background: Theme.surface-base;
 
@@ -73,6 +79,10 @@ export component FmPane inherits Rectangle {
             }
             if (rename.active && event.text == Key.Escape) {
                 root.rename-cancel();
+                return accept;
+            }
+            if (drag-active && event.text == Key.Escape) {
+                root.entry-drag-cancel();
                 return accept;
             }
             if (event.text == Key.Delete) {
@@ -156,6 +166,8 @@ export component FmPane inherits Rectangle {
                         height: parent.height;
                         entries: pane.tabs[pane.active-tab].entries;
                         rename: root.rename;
+                        drag-active: root.drag-active;
+                        drag-drop-target: root.drag-drop-target;
                         details: pane.tabs[pane.active-tab].view-mode == 2;
                         sort-by: pane.tabs[pane.active-tab].sort-by;
                         sort-descending: pane.tabs[pane.active-tab].sort-descending;
@@ -170,6 +182,10 @@ export component FmPane inherits Rectangle {
                         sort-column-clicked(col) => { root.sort-column-clicked(col); }
                         rename-commit(old, new) => { root.rename-commit(old, new); }
                         rename-cancel => { root.rename-cancel(); }
+                        entry-drag-start(p) => { root.entry-drag-start(p); }
+                        entry-drag-hover(p) => { root.entry-drag-hover(p); }
+                        entry-drag-drop(p) => { root.entry-drag-drop(p); }
+                        entry-drag-cancel => { root.entry-drag-cancel(); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -180,6 +196,8 @@ export component FmPane inherits Rectangle {
                         height: parent.height;
                         entries: pane.tabs[pane.active-tab].entries;
                         rename: root.rename;
+                        drag-active: root.drag-active;
+                        drag-drop-target: root.drag-drop-target;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
                         entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
@@ -187,6 +205,10 @@ export component FmPane inherits Rectangle {
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
                         rename-commit(old, new) => { root.rename-commit(old, new); }
                         rename-cancel => { root.rename-cancel(); }
+                        entry-drag-start(p) => { root.entry-drag-start(p); }
+                        entry-drag-hover(p) => { root.entry-drag-hover(p); }
+                        entry-drag-drop(p) => { root.entry-drag-drop(p); }
+                        entry-drag-cancel => { root.entry-drag-cancel(); }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {
