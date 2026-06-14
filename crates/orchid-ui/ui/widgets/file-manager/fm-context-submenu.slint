@@ -1,0 +1,59 @@
+import { Theme } from "../../theme_global.slint";
+import { FmContextSubitem } from "../../workspace/defs.slint";
+
+export component FmContextSubmenu inherits Rectangle {
+    in property <[FmContextSubitem]> actions;
+    callback action-clicked(string);
+
+    background: Theme.surface-raised;
+    border-color: Theme.border-default;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: #00000060;
+
+    VerticalLayout {
+        padding: 4px;
+        spacing: 1px;
+
+        for child in actions : Rectangle {
+            height: child.is-separator ? 5px : 28px;
+            background: child-ta.has-hover && child.enabled && !child.is-separator
+                ? Theme.accent-brand : transparent;
+            border-radius: Theme.radius-md;
+            opacity: child.enabled ? 1.0 : 0.4;
+
+            child-ta := TouchArea {
+                enabled: child.enabled && !child.is-separator;
+                clicked => { root.action-clicked(child.id); }
+            }
+
+            if child.is-separator : Rectangle {
+                y: 2px;
+                height: 1px;
+                width: parent.width;
+                background: Theme.border-default;
+            }
+
+            if !child.is-separator : HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 8px;
+
+                Text {
+                    text: child.icon;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: child.label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+}

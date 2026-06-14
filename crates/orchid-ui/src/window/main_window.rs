@@ -50,7 +50,7 @@ use crate::slint_generated::{
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
-    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmContextSubitem,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
@@ -4516,7 +4516,7 @@ fn open_with_application_picker(path: &str) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .args(["-a", "Finder", path])
+            .arg(path)
             .spawn()?;
     }
     #[cfg(not(any(windows, target_os = "macos")))]
@@ -4542,20 +4542,14 @@ fn fm_action_shortcut(id: &str) -> &'static str {
 fn context_menu_item_label(
     a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
     locale: &LocaleManager,
-    depth: u8,
 ) -> SharedString {
-    let indent = "  ".repeat(depth as usize);
     if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") {
         if a.id.starts_with("fs.tag-remove:") {
-            return format!("{indent}− {}", a.label_key).into();
+            return format!("− {}", a.label_key).into();
         }
-        return format!("{indent}{}", a.label_key).into();
+        return a.label_key.clone().into();
     }
-    let mut text = locale.tr(&a.label_key);
-    if !a.submenu.is_empty() {
-        text = format!("{} ▸", text);
-    }
-    format!("{indent}{text}").into()
+    locale.tr(&a.label_key).into()
 }
 
 fn context_menu_item_enabled(
@@ -4567,24 +4561,49 @@ fn context_menu_item_enabled(
     a.enabled
 }
 
-fn flatten_context_menu(
+fn build_context_subitems(
     actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
     locale: &LocaleManager,
-    depth: u8,
-    out: &mut Vec<FmContextAction>,
-) {
+) -> Vec<FmContextSubitem> {
+    let mut out = Vec::new();
     for a in actions {
+        out.push(FmContextSubitem {
+            id: a.id.clone().into(),
+            label: context_menu_item_label(a, locale),
+            icon: a.icon.into(),
+            enabled: a.enabled,
+            is_separator: false,
+        });
+        if a.separator_after {
+            out.push(FmContextSubitem {
+                id: SharedString::new(),
+                label: SharedString::new(),
+                icon: SharedString::new(),
+                enabled: false,
+                is_separator: true,
+            });
+        }
+    }
+    out
+}
+
+fn build_context_menu_actions(
+    actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
+    locale: &LocaleManager,
+) -> Vec<FmContextAction> {
+    let mut out = Vec::new();
+    for a in actions {
+        let children = build_context_subitems(&a.submenu, locale);
         out.push(FmContextAction {
             id: a.id.clone().into(),
-            label: context_menu_item_label(a, locale, depth),
+            label: context_menu_item_label(a, locale),
             shortcut: fm_action_shortcut(&a.id).into(),
             icon: a.icon.into(),
             enabled: context_menu_item_enabled(a),
             is_separator: false,
+            has_submenu: !a.submenu.is_empty(),
+            children: ModelRc::new(VecModel::from(children)),
         });
-        if !a.submenu.is_empty() {
-            flatten_context_menu(&a.submenu, locale, depth + 1, out);
-        }
         if a.separator_after {
             out.push(FmContextAction {
                 id: SharedString::new(),
@@ -4593,9 +4612,12 @@ fn flatten_context_menu(
                 icon: SharedString::new(),
                 enabled: false,
                 is_separator: true,
+                has_submenu: false,
+                children: ModelRc::new(VecModel::default()),
             });
         }
     }
+    out
 }
 
 fn build_context_menu(
@@ -4605,8 +4627,7 @@ fn build_context_menu(
     y: f32,
     locale: &LocaleManager,
 ) -> FmContextMenu {
-    let mut actions_vec: Vec<FmContextAction> = Vec::new();
-    flatten_context_menu(actions, locale, 0, &mut actions_vec);
+    let actions_vec = build_context_menu_actions(actions, locale);
     let paths_vec: Vec<SharedString> = target_paths.iter().cloned().map(Into::into).collect();
     FmContextMenu {
         visible: true,

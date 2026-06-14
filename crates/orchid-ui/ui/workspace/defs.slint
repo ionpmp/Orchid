@@ -312,6 +312,14 @@ export struct FmSidebarItem {
     is-active: bool,
 }
 
+export struct FmContextSubitem {
+    id: string,
+    label: string,
+    icon: string,
+    enabled: bool,
+    is-separator: bool,
+}
+
 export struct FmContextAction {
     id: string,
     label: string,
@@ -319,6 +327,8 @@ export struct FmContextAction {
     icon: string,
     enabled: bool,
     is-separator: bool,
+    has-submenu: bool,
+    children: [FmContextSubitem],
 }
 
 export struct FmContextMenu {

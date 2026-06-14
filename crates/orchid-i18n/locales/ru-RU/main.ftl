@@ -162,6 +162,7 @@ fm-sort-type = Тип
 fm-action-open = Открыть
 fm-action-open-all = Открыть все
 fm-action-open-with = Открыть с помощью…
+fm-action-open-default = Открыть в приложении по умолчанию
 fm-action-open-in-viewer = Открыть в просмотрщике Orchid
 fm-action-copy = Копировать
 fm-action-cut = Вырезать

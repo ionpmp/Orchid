@@ -1,5 +1,6 @@
 import { Theme } from "../../theme_global.slint";
 import { FmContextMenu } from "../../workspace/defs.slint";
+import { FmContextSubmenu } from "fm-context-submenu.slint";
 
 export component FmContextMenu inherits Rectangle {
     in property <FmContextMenu> menu;
@@ -23,23 +24,30 @@ export component FmContextMenu inherits Rectangle {
         border-radius: Theme.radius-md;
         drop-shadow-blur: 12px;
         drop-shadow-color: #00000060;
+        clip: false;
 
         lay := VerticalLayout {
             padding: 4px;
             spacing: 1px;
 
             for action[i] in menu.actions : Rectangle {
-                // Always define `act-ta` so hover checks are valid.
+                height: action.is-separator ? 5px : 28px;
+                clip: false;
+
                 act-ta := TouchArea {
-                    enabled: action.enabled && !action.is-separator;
-                    clicked => { root.action-clicked(action.id); }
+                    enabled: (action.enabled && !action.is-separator)
+                        || (action.has-submenu && !action.is-separator);
+                    clicked => {
+                        if (action.enabled && !action.is-separator) {
+                            root.action-clicked(action.id);
+                        }
+                    }
                 }
 
-                height: action.is-separator ? 5px : 28px;
                 background: action.is-separator ? transparent
                     : (act-ta.has-hover && action.enabled ? Theme.accent-brand : transparent);
                 border-radius: Theme.radius-md;
-                opacity: action.enabled ? 1.0 : 0.4;
+                opacity: action.enabled || action.has-submenu ? 1.0 : 0.4;
 
                 if action.is-separator : Rectangle {
                     y: 2px;
@@ -72,9 +80,22 @@ export component FmContextMenu inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }
+                    if action.has-submenu : Text {
+                        text: "▸";
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if action.has-submenu && act-ta.has-hover : FmContextSubmenu {
+                    x: parent.width - 2px;
+                    y: 0;
+                    width: 220px;
+                    actions: action.children;
+                    action-clicked(id) => { root.action-clicked(id); }
                 }
             }
         }
     }
 }
-

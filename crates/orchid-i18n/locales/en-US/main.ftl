@@ -167,6 +167,7 @@ fm-sort-type = Type
 fm-action-open = Open
 fm-action-open-all = Open all
 fm-action-open-with = Open with…
+fm-action-open-default = Open with default app
 fm-action-open-in-viewer = Open in Orchid Viewer
 fm-action-copy = Copy
 fm-action-cut = Cut
