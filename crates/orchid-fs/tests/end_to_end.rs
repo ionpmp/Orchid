@@ -293,3 +293,47 @@ async fn decrypt_in_place_restores_plaintext() {
     assert!(!encrypted_os.exists());
     assert_eq!(std::fs::read(&plain_path).unwrap(), b"restore me");
 }
+
+#[tokio::test]
+async fn encrypt_directory_in_place_round_trip() {
+    use orchid_crypto::{Identity, RevealManager};
+    let td = tempfile::tempdir().unwrap();
+    let reveal_root = td.path().join("reveal");
+
+    let storage = storage();
+    let bus = bus();
+    let registry = registry_with_local();
+    let watcher = Arc::new(FileWatcher::new(Arc::clone(&bus), Arc::clone(&registry)));
+    let reveal = Arc::new(RevealManager::new(reveal_root, Arc::clone(&bus)));
+    let engine = EncryptedFolderEngine::new(
+        Arc::clone(&storage),
+        Arc::clone(&registry),
+        Arc::clone(&reveal),
+        Arc::clone(&bus),
+        Arc::clone(&watcher),
+    );
+
+    let folder = td.path().join("secrets");
+    std::fs::create_dir(&folder).unwrap();
+    std::fs::write(folder.join("a.txt"), b"alpha").unwrap();
+    std::fs::create_dir(folder.join("nested")).unwrap();
+    std::fs::write(folder.join("nested/b.txt"), b"beta").unwrap();
+
+    let fs_path = FsPath::from_local(&folder).unwrap();
+    engine
+        .encrypt_directory_in_place(&fs_path, Identity::passphrase("pw"))
+        .await
+        .unwrap();
+
+    assert!(!folder.join("a.txt").exists());
+    assert!(orchid_fs::encrypted::marker::looks_encrypted_directory(&fs_path));
+
+    engine
+        .decrypt_in_place(&fs_path, Identity::passphrase("pw"))
+        .await
+        .unwrap();
+
+    assert_eq!(std::fs::read(folder.join("a.txt")).unwrap(), b"alpha");
+    assert_eq!(std::fs::read(folder.join("nested/b.txt")).unwrap(), b"beta");
+    assert!(!orchid_fs::encrypted::marker::looks_encrypted_directory(&fs_path));
+}

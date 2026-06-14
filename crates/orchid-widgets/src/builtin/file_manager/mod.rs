@@ -866,6 +866,7 @@ impl FileManagerInner {
                 .iter()
                 .any(|p| e.path.as_str() == p || e.path.as_str().starts_with(p))
                 || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
+                || orchid_fs::encrypted::marker::looks_encrypted_directory(&e.path)
             {
                 e.metadata.extended.is_encrypted = true;
             }
@@ -897,17 +898,26 @@ impl FileManagerInner {
         let identity = orchid_crypto::Identity::passphrase(passphrase);
         for p in paths {
             let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-            if let Some(provider) = self.deps.registry.for_path(&fp) {
-                if let Ok(meta) = provider.metadata(&fp).await {
-                    if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
-                        continue;
-                    }
-                }
+            let is_dir = if let Some(provider) = self.deps.registry.for_path(&fp) {
+                provider
+                    .metadata(&fp)
+                    .await
+                    .map(|meta| matches!(meta.kind, orchid_fs::FsEntryKind::Directory))
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+            if is_dir {
+                engine
+                    .encrypt_directory_in_place(&fp, identity.clone())
+                    .await
+                    .map_err(map_fs_error)?;
+            } else {
+                engine
+                    .encrypt_in_place(&fp, identity.clone())
+                    .await
+                    .map_err(map_fs_error)?;
             }
-            engine
-                .encrypt_in_place(&fp, identity.clone())
-                .await
-                .map_err(map_fs_error)?;
         }
         Ok(())
     }

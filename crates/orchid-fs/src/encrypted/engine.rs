@@ -10,7 +10,7 @@ use redb::ReadableTable;
 use tracing::warn;
 
 use crate::encrypted::index::{EncryptedFolderRecord, ENCRYPTED_PATHS};
-use crate::encrypted::marker::{looks_encrypted, AGE_EXT};
+use crate::encrypted::marker::{looks_encrypted, looks_encrypted_directory, AGE_EXT};
 use crate::error::{FsError, Result};
 use crate::path::FsPath;
 use crate::provider::FsProviderRegistry;
@@ -174,6 +174,58 @@ impl EncryptedFolderEngine {
         Ok(())
     }
 
+    /// Encrypt a directory tree in place: tar+age the contents into marker
+    /// files inside the folder, then remove the plaintext tree.
+    ///
+    /// # Errors
+    ///
+    /// Propagates crypto and I/O errors.
+    pub async fn encrypt_directory_in_place(
+        &self,
+        path: &FsPath,
+        identity: Identity,
+    ) -> Result<()> {
+        let src = path.to_local()?;
+        let meta = tokio::fs::metadata(&src).await?;
+        if !meta.is_dir() {
+            return Err(FsError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "encrypt_directory_in_place requires a directory",
+            )));
+        }
+
+        let parent = src
+            .parent()
+            .ok_or_else(|| FsError::Io(std::io::Error::other("directory has no parent")))?;
+        let base = src
+            .file_name()
+            .ok_or_else(|| FsError::Io(std::io::Error::other("directory has no name")))?;
+        let temp = parent.join(format!("{}.orchid-encrypting", base.to_string_lossy()));
+
+        if temp.exists() {
+            if temp.is_dir() {
+                tokio::fs::remove_dir_all(&temp).await?;
+            } else {
+                tokio::fs::remove_file(&temp).await?;
+            }
+        }
+
+        let encryptor = Encryptor::new(identity.clone());
+        encryptor.encrypt_directory(&src, &temp).await.map_err(|e| FsError::EncryptedOp(e.to_string()))?;
+
+        tokio::fs::remove_dir_all(&src).await?;
+        tokio::fs::rename(&temp, &src).await?;
+
+        self.mark_encrypted(EncryptedFolderConfig {
+            path: path.clone(),
+            identity,
+            reveal_duration: RevealDuration::FiveMinutes,
+            enabled: true,
+        })
+        .await?;
+        Ok(())
+    }
+
     /// Open `path` in a reveal session.
     ///
     /// # Errors
@@ -209,6 +261,9 @@ impl EncryptedFolderEngine {
     ///
     /// Propagates crypto, I/O, and storage errors.
     pub async fn decrypt_in_place(&self, path: &FsPath, identity: Identity) -> Result<()> {
+        if looks_encrypted_directory(path) {
+            return self.decrypt_directory_in_place(path, identity).await;
+        }
         if !looks_encrypted(path) {
             return Err(FsError::NotEncryptedPath(path.to_string()));
         }
@@ -233,6 +288,37 @@ impl EncryptedFolderEngine {
                 return Err(FsError::Io(e));
             }
         }
+
+        self.unmark(path).await?;
+        Ok(())
+    }
+
+    async fn decrypt_directory_in_place(&self, path: &FsPath, identity: Identity) -> Result<()> {
+        let src = path.to_local()?;
+        let parent = src
+            .parent()
+            .ok_or_else(|| FsError::Io(std::io::Error::other("directory has no parent")))?;
+        let base = src
+            .file_name()
+            .ok_or_else(|| FsError::Io(std::io::Error::other("directory has no name")))?;
+        let temp = parent.join(format!("{}.orchid-decrypting", base.to_string_lossy()));
+
+        if temp.exists() {
+            if temp.is_dir() {
+                tokio::fs::remove_dir_all(&temp).await?;
+            } else {
+                tokio::fs::remove_file(&temp).await?;
+            }
+        }
+
+        let decryptor = Decryptor::new(identity);
+        decryptor
+            .decrypt_directory(&src, &temp)
+            .await
+            .map_err(|e| FsError::EncryptedOp(e.to_string()))?;
+
+        tokio::fs::remove_dir_all(&src).await?;
+        tokio::fs::rename(&temp, &src).await?;
 
         self.unmark(path).await?;
         Ok(())
