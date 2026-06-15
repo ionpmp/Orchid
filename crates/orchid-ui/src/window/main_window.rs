@@ -26,8 +26,11 @@ use slint::winit_030::WinitWindowAccessor;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
-use orchid_core::{ActionContext, ActionDispatcher, CommandRegistry, EventBus, ParsedCommand};
-use orchid_i18n::LocaleManager;
+use orchid_core::{
+    ActionContext, ActionDispatcher, CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter,
+    HandlerPriority, ParsedCommand, SubscriptionHandle,
+};
+use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
 use orchid_terminal::{FontMetrics, PtySize};
@@ -71,7 +74,8 @@ pub struct MainWindowController {
     config: Arc<RwLock<OrchidConfig>>,
     storage: Arc<StateStore>,
     command_registry: Arc<CommandRegistry>,
-    _bus: Arc<EventBus>,
+    bus: Arc<EventBus>,
+    _config_reload_sub: SubscriptionHandle,
     widget_manager: Arc<WidgetManager>,
     workspace_manager: Arc<WorkspaceManager>,
     layout_engine: Arc<LayoutEngine>,
@@ -92,6 +96,8 @@ pub struct MainWindowController {
     canvas_size: Arc<Mutex<(f32, f32)>>,
     /// When true, a later [`MainWindow::on_ui_tick`] flushes [`rebuild_workspace_model`].
     rebuild_pending: Arc<AtomicBool>,
+    /// Set when `config.toml` hot-reload completes; applied on the next UI tick.
+    config_reload_pending: Arc<AtomicBool>,
     /// Last `Window::scale_factor` used to raster the terminal; when it changes, we re-raster.
     last_window_scale: parking_lot::Mutex<f32>,
     /// Last (cols, rows) applied to each terminal from [`Self::on_terminal_viewport`], to avoid
@@ -206,6 +212,20 @@ impl MainWindowController {
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let catalog_items: ModelRc<DockWidgetType> =
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
+        let config_reload_pending = Arc::new(AtomicBool::new(false));
+        let config_reload_flag = config_reload_pending.clone();
+        let config_reload_sub = bus
+            .subscribe_async(
+                EventFilter::of_type(ConfigUpdated::event_type()),
+                HandlerPriority::Normal,
+                move |_env| {
+                    let flag = config_reload_flag.clone();
+                    async move {
+                        flag.store(true, Ordering::Release);
+                    }
+                },
+            )
+            .map_err(|e| UiError::Slint(format!("config reload sub: {e}")))?;
         let this = Arc::new(Self {
             window,
             theme,
@@ -213,7 +233,8 @@ impl MainWindowController {
             config,
             storage,
             command_registry,
-            _bus: bus,
+            bus,
+            _config_reload_sub: config_reload_sub,
             widget_manager: widget_manager.clone(),
             workspace_manager: workspace_manager.clone(),
             layout_engine: layout_engine.clone(),
@@ -229,6 +250,7 @@ impl MainWindowController {
             resize_state: Arc::new(Mutex::new(None)),
             canvas_size: Arc::new(Mutex::new((800.0, 500.0))),
             rebuild_pending: Arc::new(AtomicBool::new(false)),
+            config_reload_pending,
             last_window_scale: parking_lot::Mutex::new(0.0),
             last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
             workspace_workspaces,
@@ -259,6 +281,10 @@ impl MainWindowController {
 
     fn apply_theme(self: &Arc<Self>) -> Result<()> {
         let theme = self.theme.current();
+        let cfg = self.config.read();
+        let scale = cfg.appearance.density.ui_scale()
+            * cfg.appearance.font_scale.clamp(0.75, 2.0);
+        drop(cfg);
         let g = self.window.global::<Theme>();
         let t = &theme.tokens;
         let c = &t.color;
@@ -272,17 +298,17 @@ impl MainWindowController {
         g.set_font_family_sans(t.typography.font_family_sans.clone().into());
         g.set_font_family_mono(t.typography.font_family_mono.clone().into());
         let sz = &t.typography;
-        g.set_font_size_sm(sz.size_sm);
-        g.set_font_size_md(sz.size_md);
-        g.set_font_size_lg(sz.size_lg);
-        g.set_font_size_xl(sz.size_xl);
-        g.set_font_size_2xl(sz.size_2xl);
-        g.set_font_size_3xl(sz.size_3xl);
+        g.set_font_size_sm(sz.size_sm * scale);
+        g.set_font_size_md(sz.size_md * scale);
+        g.set_font_size_lg(sz.size_lg * scale);
+        g.set_font_size_xl(sz.size_xl * scale);
+        g.set_font_size_2xl(sz.size_2xl * scale);
+        g.set_font_size_3xl(sz.size_3xl * scale);
         g.set_weight_regular(i32::from(sz.weight_regular));
         g.set_weight_medium(i32::from(sz.weight_medium));
         g.set_weight_semibold(i32::from(sz.weight_semibold));
-        g.set_radius_md(t.radius.md);
-        g.set_spacing_unit(t.spacing.unit);
+        g.set_radius_md(t.radius.md * scale);
+        g.set_spacing_unit(t.spacing.unit * scale);
         Ok(())
     }
 
@@ -321,19 +347,43 @@ impl MainWindowController {
         Ok(())
     }
 
-    fn apply_initial_mode(self: &Arc<Self>) -> Result<()> {
+    /// Status-bar labels for theme, language, and density.
+    fn apply_app_state_status(self: &Arc<Self>) -> Result<()> {
         let g = self.window.global::<AppState>();
         let th = self.theme.current();
         let language = self.locale.current();
         let density = self.config.read().appearance.density;
-        let key = match density {
-            orchid_storage::Density::Touch => "density-touch",
-            orchid_storage::Density::Mouse => "density-mouse",
-            orchid_storage::Density::Hybrid => "density-hybrid",
-        };
         g.set_current_theme_id(th.meta.id.clone().into());
         g.set_current_language(language.as_str().into());
-        g.set_current_density(self.locale.tr(key).into());
+        g.set_current_density(self.locale.tr(density_i18n_key(density)).into());
+        Ok(())
+    }
+
+    /// Re-apply theme, locale, and density after a hot config reload.
+    fn apply_hot_config(self: &Arc<Self>) -> Result<()> {
+        let cfg = self.config.read();
+        if let Ok(lang) = LocaleId::parse(&cfg.locale.language) {
+            self.locale.set_current(lang);
+        }
+        if let Err(e) = self.theme.set_current(&cfg.appearance.theme) {
+            warn!(
+                configured = %cfg.appearance.theme,
+                error = %e,
+                "unknown theme id after config reload"
+            );
+        }
+        drop(cfg);
+        self.apply_theme()?;
+        self.apply_strings()?;
+        self.apply_app_state_status()?;
+        self.sync_widget_catalog_global();
+        self.schedule_rebuild();
+        Ok(())
+    }
+
+    fn apply_initial_mode(self: &Arc<Self>) -> Result<()> {
+        let g = self.window.global::<AppState>();
+        self.apply_app_state_status()?;
         let wss = self.workspace_manager.list();
         // Any persisted workspace is enough to enter workspace shell (canvas may
         // be empty after the user closed every widget).
@@ -408,6 +458,11 @@ impl MainWindowController {
             let t = t.clone();
             move || {
                 if let Some(c) = t.upgrade() {
+                    if c.config_reload_pending.swap(false, Ordering::AcqRel) {
+                        if let Err(e) = c.apply_hot_config() {
+                            warn!(?e, "config hot-reload");
+                        }
+                    }
                     let canvas_size_mismatch = c.sync_canvas_size_from_winit();
                     let scale = c.window.window().scale_factor();
                     let scale_changed = {
@@ -2221,7 +2276,7 @@ impl MainWindowController {
                     }
                 };
                 let ctx = ActionContext::new(
-                    self._bus.clone(),
+                    self.bus.clone(),
                     self.storage.clone(),
                     self.config.clone(),
                 );
@@ -5243,6 +5298,14 @@ fn build_file_manager_model(
         rename: overlays.rename,
         tag: overlays.tag,
         passphrase: overlays.passphrase,
+    }
+}
+
+fn density_i18n_key(density: orchid_storage::Density) -> &'static str {
+    match density {
+        orchid_storage::Density::Touch => "density-touch",
+        orchid_storage::Density::Mouse => "density-mouse",
+        orchid_storage::Density::Hybrid => "density-hybrid",
     }
 }
 

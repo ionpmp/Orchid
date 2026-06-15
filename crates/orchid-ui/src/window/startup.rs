@@ -63,6 +63,10 @@ impl StartupWindowController {
 
     fn apply_theme(&self) {
         let theme = self.theme.current();
+        let cfg = self.config.read();
+        let scale = cfg.appearance.density.ui_scale()
+            * cfg.appearance.font_scale.clamp(0.75, 2.0);
+        drop(cfg);
         let g = self.window.global::<Theme>();
         let tokens = &theme.tokens;
         let c = &tokens.color;
@@ -77,18 +81,18 @@ impl StartupWindowController {
 
         g.set_font_family_sans(tokens.typography.font_family_sans.clone().into());
         g.set_font_family_mono(tokens.typography.font_family_mono.clone().into());
-        g.set_font_size_sm(tokens.typography.size_sm);
-        g.set_font_size_md(tokens.typography.size_md);
-        g.set_font_size_lg(tokens.typography.size_lg);
-        g.set_font_size_xl(tokens.typography.size_xl);
-        g.set_font_size_2xl(tokens.typography.size_2xl);
-        g.set_font_size_3xl(tokens.typography.size_3xl);
+        g.set_font_size_sm(tokens.typography.size_sm * scale);
+        g.set_font_size_md(tokens.typography.size_md * scale);
+        g.set_font_size_lg(tokens.typography.size_lg * scale);
+        g.set_font_size_xl(tokens.typography.size_xl * scale);
+        g.set_font_size_2xl(tokens.typography.size_2xl * scale);
+        g.set_font_size_3xl(tokens.typography.size_3xl * scale);
         g.set_weight_regular(i32::from(tokens.typography.weight_regular));
         g.set_weight_medium(i32::from(tokens.typography.weight_medium));
         g.set_weight_semibold(i32::from(tokens.typography.weight_semibold));
 
-        g.set_radius_md(tokens.radius.md);
-        g.set_spacing_unit(tokens.spacing.unit);
+        g.set_radius_md(tokens.radius.md * scale);
+        g.set_spacing_unit(tokens.spacing.unit * scale);
     }
 
     fn apply_strings(&self) {

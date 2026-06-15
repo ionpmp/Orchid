@@ -27,7 +27,7 @@ pub mod priority;
 pub mod subscription;
 
 pub use bus::{EventBus, EventBusConfig, EventBusMetrics, SlowConsumerPolicy};
-pub use event::{AppShuttingDown, AppStarted, Event, EventEnvelope, EventSource};
+pub use event::{AppShuttingDown, AppStarted, ConfigUpdated, Event, EventEnvelope, EventSource};
 pub use priority::HandlerPriority;
 pub use subscription::{EventFilter, SubscriptionHandle, SubscriptionId};
 

@@ -160,6 +160,16 @@ impl Event for AppShuttingDown {
     }
 }
 
+/// Emitted after `config.toml` is reloaded and validated.
+#[derive(Debug, Clone)]
+pub struct ConfigUpdated;
+
+impl Event for ConfigUpdated {
+    fn event_type() -> &'static str {
+        "app.config_updated"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

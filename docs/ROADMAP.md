@@ -84,7 +84,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] Universal search (files + commands + settings) — file search complete; command-palette hookup and settings-index integration pending
 
 ### UX
-- [ ] Theming (light/dark, density modes, hot-reload) — density + theme keys live in `OrchidConfig`; renderer-side wiring pending
+- [~] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml
 - [ ] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast)
 - [ ] Internationalization (11 languages, RTL)
 - [ ] Adaptive layouts (profiles for different screens)

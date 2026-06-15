@@ -54,7 +54,7 @@ pub use command::{
 };
 pub use error::{CoreError, Result};
 pub use event::{
-    AppShuttingDown, AppStarted, Event, EventBus, EventBusConfig, EventBusMetrics,
+    AppShuttingDown, AppStarted, ConfigUpdated, Event, EventBus, EventBusConfig, EventBusMetrics,
     EventEnvelope, EventFilter, EventSource, HandlerPriority, SlowConsumerPolicy,
     SubscriptionHandle, SubscriptionId,
 };

@@ -11,7 +11,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use orchid_core::{
-    CommandPalette, CommandRegistry, Event, EventBus, EventBusConfig, EventFilter,
+    CommandPalette, CommandRegistry, ConfigUpdated, Event, EventBus, EventBusConfig, EventFilter,
     HandlerPriority, SubscriptionHandle,
 };
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
@@ -457,6 +457,7 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("config watcher: {e}")))?;
         let config_reload = config.clone();
         let mounts_reload = network_mounts.clone();
+        let bus_reload = bus.clone();
         tokio::spawn(async move {
             loop {
                 match config_rx.recv().await {
@@ -465,6 +466,10 @@ impl OrchidApp {
                         *config_reload.write() = new_cfg.clone();
                         *mounts_reload.write() = new_cfg.file_manager.network_mounts.clone();
                         orchid_widgets::builtin::file_manager::refresh_all_instances().await;
+                        bus_reload.publish(
+                            orchid_core::EventSource::System,
+                            ConfigUpdated,
+                        );
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,

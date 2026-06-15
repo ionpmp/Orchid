@@ -100,6 +100,18 @@ pub enum Density {
     Hybrid,
 }
 
+impl Density {
+    /// UI scale relative to hybrid (40 dp baseline per design doc).
+    #[must_use]
+    pub fn ui_scale(self) -> f32 {
+        match self {
+            Self::Touch => 1.2,
+            Self::Hybrid => 1.0,
+            Self::Mouse => 0.8,
+        }
+    }
+}
+
 /// Input device preferences.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
