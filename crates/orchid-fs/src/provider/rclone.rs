@@ -1,0 +1,420 @@
+//! Read-only network filesystem access via the `rclone` CLI.
+
+use std::path::Path;
+use std::process::Stdio;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
+use serde::Deserialize;
+use tokio::process::Command;
+
+use crate::entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
+use crate::error::{FsError, Result};
+use crate::path::FsPath;
+use crate::provider::{FsCapabilities, FsProvider, ProviderId};
+
+/// Schemes served by [`RcloneProvider`].
+pub const RCLONE_SCHEMES: &[&str] = &["sftp", "smb", "webdav", "ftp"];
+
+/// Network provider backed by `rclone lsjson` / `rclone cat`.
+pub struct RcloneProvider {
+    id: ProviderId,
+    scheme: &'static str,
+    mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
+    rclone_bin: String,
+}
+
+impl RcloneProvider {
+    /// Build a provider for one URL scheme.
+    #[must_use]
+    pub fn new(
+        scheme: &'static str,
+        mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
+    ) -> Self {
+        Self {
+            id: ProviderId::new(format!("rclone-{scheme}")),
+            scheme,
+            mounts,
+            rclone_bin: std::env::var("RCLONE_BIN").unwrap_or_else(|_| "rclone".into()),
+        }
+    }
+
+    fn resolve_mount(&self, path: &FsPath) -> Result<ResolvedMount> {
+        let path_key = path.as_str();
+        let mounts = self.mounts.read();
+        let mut winner: Option<(usize, String, usize)> = None;
+        for (i, mount) in mounts.iter().enumerate() {
+            if !mount.enabled {
+                continue;
+            }
+            let Some(root) = normalize_mount_uri(&mount.uri) else {
+                continue;
+            };
+            let Ok(root_path) = FsPath::new(&root) else {
+                continue;
+            };
+            if root_path.scheme() != self.scheme {
+                continue;
+            }
+            if path_key == root {
+                if winner.as_ref().map(|(_, _, score)| *score).unwrap_or(0) < root.len() {
+                    winner = Some((i, String::new(), root.len()));
+                }
+            } else if let Some(rest) = path_key.strip_prefix(&format!("{root}/")) {
+                let rel = rest.trim_start_matches('/').to_string();
+                if winner.as_ref().map(|(_, _, score)| *score).unwrap_or(0) < root.len() {
+                    winner = Some((i, rel, root.len()));
+                }
+            }
+        }
+        let Some((idx, rel, _)) = winner else {
+            return Err(FsError::ProviderNotMounted(path.as_str().to_string()));
+        };
+        let mount = mounts
+            .get(idx)
+            .cloned()
+            .ok_or_else(|| FsError::ProviderNotMounted(path.as_str().to_string()))?;
+        Ok(ResolvedMount {
+            mount,
+            relative_path: rel,
+        })
+    }
+
+    async fn rclone_remote_spec(&self, resolved: &ResolvedMount) -> Result<String> {
+        if let Some(remote) = resolved.mount.rclone_remote.as_deref() {
+            let tail = resolved.relative_path.trim_start_matches('/');
+            return if tail.is_empty() {
+                Ok(format!("{remote}:"))
+            } else {
+                Ok(format!("{remote}:{tail}"))
+            };
+        }
+        let Some(root) = normalize_mount_uri(&resolved.mount.uri) else {
+            return Err(FsError::InvalidPath {
+                reason: format!("invalid mount uri: {}", resolved.mount.uri),
+            });
+        };
+        let Ok(root_path) = FsPath::new(&root) else {
+            return Err(FsError::InvalidPath {
+                reason: format!("invalid mount uri: {}", resolved.mount.uri),
+            });
+        };
+        let body = root_path.as_str()[root_path.scheme().len() + 1..].trim_start_matches('/');
+        let (host_part, root_tail) = body.split_once('/').unwrap_or((body, ""));
+        let mut params = vec![format!("host={host_part}")];
+        if let Some(user) = resolved.mount.user.as_deref().filter(|u| !u.is_empty()) {
+            params.push(format!("user={user}"));
+        }
+        if let Some(pass) = resolved.mount.password.as_deref().filter(|p| !p.is_empty()) {
+            params.push(format!("pass={pass}"));
+        }
+        let subpath = if !resolved.relative_path.is_empty() {
+            if root_tail.is_empty() {
+                resolved.relative_path.trim_start_matches('/').to_string()
+            } else {
+                format!(
+                    "{}/{}",
+                    root_tail.trim_end_matches('/'),
+                    resolved.relative_path.trim_start_matches('/')
+                )
+            }
+        } else {
+            root_tail.trim_start_matches('/').to_string()
+        };
+        let param_str = params.join(",");
+        if subpath.is_empty() {
+            Ok(format!(":{},{}:", self.scheme, param_str))
+        } else {
+            Ok(format!(":{},{}:{subpath}", self.scheme, param_str))
+        }
+    }
+
+    async fn run_lsjson(&self, remote: &str) -> Result<Vec<RcloneEntry>> {
+        let output = Command::new(&self.rclone_bin)
+            .args(["lsjson", remote])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    FsError::InvalidPath {
+                        reason: format!(
+                            "`{}` not found; install rclone and ensure it is on PATH (or set RCLONE_BIN)",
+                            self.rclone_bin
+                        ),
+                    }
+                } else {
+                    FsError::Io(e)
+                }
+            })?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(FsError::InvalidPath {
+                reason: format!("rclone lsjson failed: {}", stderr.trim()),
+            });
+        }
+        if output.stdout.is_empty() {
+            return Ok(Vec::new());
+        }
+        serde_json::from_slice(&output.stdout).map_err(|e| FsError::InvalidPath {
+            reason: format!("rclone lsjson parse error: {e}"),
+        })
+    }
+
+    fn entry_from_rclone(&self, parent: &FsPath, row: &RcloneEntry) -> Result<FsEntry> {
+        let name = row.name.clone();
+        let child = parent.join(&name);
+        let modified = row
+            .mod_time
+            .as_deref()
+            .and_then(parse_rclone_time);
+        Ok(FsEntry {
+            name: name.clone(),
+            path: child,
+            metadata: FsMetadata {
+                kind: if row.is_dir {
+                    FsEntryKind::Directory
+                } else {
+                    FsEntryKind::File
+                },
+                size: row.size.unwrap_or(0),
+                created: None,
+                modified,
+                accessed: None,
+                readonly: false,
+                hidden: name_starts_hidden(&name),
+                system: false,
+                mime: row.mime_type.clone(),
+                extended: ExtendedAttributes::default(),
+            },
+        })
+    }
+}
+
+struct ResolvedMount {
+    mount: orchid_storage::NetworkMountConfig,
+    relative_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RcloneEntry {
+    #[serde(rename = "Name", default)]
+    name: String,
+    #[serde(rename = "IsDir", default)]
+    is_dir: bool,
+    #[serde(rename = "Size", default)]
+    size: Option<u64>,
+    #[serde(rename = "ModTime", default)]
+    mod_time: Option<String>,
+    #[serde(rename = "MimeType", default)]
+    mime_type: Option<String>,
+}
+
+#[async_trait]
+impl FsProvider for RcloneProvider {
+    fn id(&self) -> &ProviderId {
+        &self.id
+    }
+
+    fn scheme(&self) -> &'static str {
+        self.scheme
+    }
+
+    async fn list(&self, path: &FsPath) -> Result<Vec<FsEntry>> {
+        let resolved = self.resolve_mount(path)?;
+        let remote = self.rclone_remote_spec(&resolved).await?;
+        let rows = self.run_lsjson(&remote).await?;
+        rows.iter()
+            .map(|row| self.entry_from_rclone(path, row))
+            .collect()
+    }
+
+    async fn metadata(&self, path: &FsPath) -> Result<FsMetadata> {
+        let parent = path
+            .parent()
+            .ok_or_else(|| FsError::NotFound(path.as_str().to_string()))?;
+        let name = path
+            .file_name()
+            .ok_or_else(|| FsError::NotFound(path.as_str().to_string()))?;
+        let entries = self.list(&parent).await?;
+        entries
+            .into_iter()
+            .find(|e| e.name == name)
+            .map(|e| e.metadata)
+            .ok_or_else(|| FsError::NotFound(path.as_str().to_string()))
+    }
+
+    async fn exists(&self, path: &FsPath) -> Result<bool> {
+        match self.metadata(path).await {
+            Ok(_) => Ok(true),
+            Err(FsError::NotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn read(&self, path: &FsPath) -> Result<Vec<u8>> {
+        let resolved = self.resolve_mount(path)?;
+        let remote = self.rclone_remote_spec(&resolved).await?;
+        let output = Command::new(&self.rclone_bin)
+            .args(["cat", &remote])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(FsError::Io)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(FsError::InvalidPath {
+                reason: format!("rclone cat failed: {}", stderr.trim()),
+            });
+        }
+        Ok(output.stdout)
+    }
+
+    async fn read_stream(
+        &self,
+        path: &FsPath,
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Unpin + Send>> {
+        let bytes = self.read(path).await?;
+        Ok(Box::new(std::io::Cursor::new(bytes)))
+    }
+
+    async fn write(&self, _path: &FsPath, _bytes: &[u8]) -> Result<()> {
+        Err(FsError::PermissionDenied(
+            "network paths are read-only until rclone write support lands".into(),
+        ))
+    }
+
+    async fn write_stream(
+        &self,
+        _path: &FsPath,
+    ) -> Result<Box<dyn tokio::io::AsyncWrite + Unpin + Send>> {
+        Err(FsError::PermissionDenied(
+            "network paths are read-only until rclone write support lands".into(),
+        ))
+    }
+
+    async fn create_dir(&self, _path: &FsPath, _recursive: bool) -> Result<()> {
+        Err(FsError::PermissionDenied(
+            "network paths are read-only until rclone write support lands".into(),
+        ))
+    }
+
+    async fn rename(&self, _from: &FsPath, _to: &FsPath) -> Result<()> {
+        Err(FsError::PermissionDenied(
+            "network paths are read-only until rclone write support lands".into(),
+        ))
+    }
+
+    async fn remove(&self, _path: &FsPath, _recursive: bool) -> Result<()> {
+        Err(FsError::PermissionDenied(
+            "network paths are read-only until rclone write support lands".into(),
+        ))
+    }
+
+    async fn watch(
+        &self,
+        _path: &FsPath,
+    ) -> Result<Option<Box<dyn crate::provider::FsWatcherHandle>>> {
+        Ok(None)
+    }
+
+    fn capabilities(&self) -> FsCapabilities {
+        FsCapabilities {
+            supports_rename: false,
+            supports_symlinks: false,
+            supports_permissions: false,
+            supports_extended_attrs: false,
+            supports_native_watch: false,
+            case_sensitive: true,
+            supports_random_write: false,
+        }
+    }
+}
+
+/// Register one [`RcloneProvider`] per supported scheme.
+pub fn register_rclone_providers(
+    registry: &crate::provider::FsProviderRegistry,
+    mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
+) -> Result<()> {
+    for scheme in RCLONE_SCHEMES {
+        registry.register(Arc::new(RcloneProvider::new(scheme, mounts.clone()))
+            as Arc<dyn FsProvider>)?;
+    }
+    Ok(())
+}
+
+/// Convert `sftp://host/path` or `sftp:host/path` into canonical Orchid path syntax.
+#[must_use]
+pub fn normalize_mount_uri(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with("://") {
+        return None;
+    }
+    if let Some(colon) = trimmed.find("://") {
+        let scheme = &trimmed[..colon];
+        let rest = trimmed[colon + 3..].trim_start_matches('/');
+        let (auth_host, path) = split_auth_host_path(rest);
+        let host = auth_host
+            .split('@')
+            .next_back()
+            .unwrap_or(auth_host)
+            .split(':')
+            .next()
+            .unwrap_or(auth_host);
+        let candidate = if path.is_empty() {
+            format!("{scheme}:{host}")
+        } else {
+            format!("{scheme}:{host}/{path}")
+        };
+        return FsPath::new(&candidate).ok().map(|p| p.as_str().to_string());
+    }
+    FsPath::new(trimmed)
+        .ok()
+        .map(|p| p.as_str().to_string())
+}
+
+fn split_auth_host_path(rest: &str) -> (&str, &str) {
+    if let Some(slash) = rest.find('/') {
+        (&rest[..slash], rest[slash + 1..].trim_start_matches('/'))
+    } else {
+        (rest, "")
+    }
+}
+
+fn parse_rclone_time(s: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+fn name_starts_hidden(name: &str) -> bool {
+    Path::new(name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with('.'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_sftp_url() {
+        assert_eq!(
+            normalize_mount_uri("sftp://user@myserver/home/alice"),
+            Some("sftp:myserver/home/alice".into())
+        );
+    }
+
+    #[test]
+    fn normalize_sftp_colon_form() {
+        assert_eq!(
+            normalize_mount_uri("sftp:myserver/home/alice"),
+            Some("sftp:myserver/home/alice".into())
+        );
+    }
+}

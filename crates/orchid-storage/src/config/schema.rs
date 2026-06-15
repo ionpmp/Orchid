@@ -223,6 +223,12 @@ pub struct NetworkMountConfig {
     pub name: String,
     /// Mount URI (`sftp:host/path` or `sftp://host/path`).
     pub uri: String,
+    /// Optional username for on-the-fly rclone connection strings.
+    pub user: Option<String>,
+    /// Optional password for on-the-fly rclone connection strings.
+    pub password: Option<String>,
+    /// When set, use this rclone.conf remote name instead of parsing `uri`.
+    pub rclone_remote: Option<String>,
     /// When false, the mount is hidden from the UI.
     pub enabled: bool,
 }
@@ -232,6 +238,9 @@ impl Default for NetworkMountConfig {
         Self {
             name: String::new(),
             uri: String::new(),
+            user: None,
+            password: None,
+            rclone_remote: None,
             enabled: true,
         }
     }

@@ -6,6 +6,7 @@
 //! transparently.
 
 pub mod local;
+pub mod rclone;
 pub mod registry;
 
 use std::sync::Arc;
@@ -19,6 +20,7 @@ use crate::error::Result;
 use crate::path::FsPath;
 
 pub use local::LocalProvider;
+pub use rclone::{normalize_mount_uri, register_rclone_providers, RcloneProvider, RCLONE_SCHEMES};
 pub use registry::FsProviderRegistry;
 
 /// Identifier for a registered provider.

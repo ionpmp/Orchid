@@ -2871,7 +2871,12 @@ impl MainWindowController {
         None
     }
 
-    fn widget_at_canvas_point(&self, content_x: f32, content_y: f32, type_id: &str) -> Option<Uuid> {
+    fn widget_bounds_at_canvas_point(
+        &self,
+        content_x: f32,
+        content_y: f32,
+        type_id: &str,
+    ) -> Option<(Uuid, orchid_widgets::PixelBounds)> {
         let w = self.workspace_manager.active().ok()?;
         let (vw, vh) = *self.canvas_size.lock();
         let instances = self.widget_manager.instances_for_workspace(w.id);
@@ -2901,7 +2906,7 @@ impl MainWindowController {
             }
             if let Ok(inst) = self.widget_manager.get_instance(pl.instance_id) {
                 if inst.type_id == type_id {
-                    return Some(pl.instance_id);
+                    return Some((pl.instance_id, b));
                 }
             }
         }
@@ -2974,16 +2979,19 @@ impl MainWindowController {
             })
     }
 
-    fn pointer_over_viewer(&self) -> bool {
+    fn pointer_over_viewer_content(&self) -> bool {
         let Some((cx, cy)) = self.last_canvas_pointer.lock().clone() else {
             return false;
         };
-        self.widget_at_canvas_point(
+        let Some((_inst, bounds)) = self.widget_bounds_at_canvas_point(
             cx,
             cy,
             orchid_widgets::builtin::viewer::TYPE_ID,
-        )
-        .is_some()
+        ) else {
+            return false;
+        };
+        let content_top = bounds.y + Self::WIDGET_FRAME_HEADER_PX;
+        cy >= content_top && cy < bounds.y + bounds.height
     }
 
     fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
@@ -3086,7 +3094,7 @@ impl MainWindowController {
             self.schedule_rebuild();
             return;
         }
-        if self.pointer_over_viewer() {
+        if self.pointer_over_viewer_content() {
             self.clear_fm_drag(source_inst);
             self.schedule_rebuild();
             self.fm_open_paths_in_viewer(paths);
@@ -4912,6 +4920,20 @@ fn active_network_sidebar_index(
         .position(|m| m.uri == active_path)
 }
 
+fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedString {
+    match error {
+        Some("network-placeholder") => locale.tr("fm-network-placeholder").into(),
+        Some(err) if err.contains("no provider for scheme") => {
+            locale.tr("fm-network-no-provider").into()
+        }
+        Some(err) if err.contains("not found; install rclone") => {
+            locale.tr("fm-network-rclone-missing").into()
+        }
+        Some(err) => err.into(),
+        None => SharedString::new(),
+    }
+}
+
 fn build_sidebar_items(
     locale: &LocaleManager,
     active_path: &str,
@@ -5141,11 +5163,7 @@ fn build_file_manager_model(
                         status_text: t.status_text.clone().into(),
                         quick_filter: t.quick_filter.clone().into(),
                         is_loading: t.is_loading,
-                        error: if t.error.as_deref() == Some("network-placeholder") {
-                            locale.tr("fm-network-placeholder").into()
-                        } else {
-                            t.error.clone().unwrap_or_default().into()
-                        },
+                        error: fm_tab_error_text(locale, t.error.as_deref()),
                         sort_by: t.sort_by as i32,
                         sort_descending: t.sort_descending,
                         sort_name_label: sort_name_label.clone().into(),

@@ -15,7 +15,7 @@ use orchid_core::{
     HandlerPriority, SubscriptionHandle,
 };
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
-use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider};
+use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider, register_rclone_providers};
 use orchid_storage::{ConfigLoader, OrchidConfig, OrchidPaths, StateStore};
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
@@ -266,6 +266,11 @@ impl OrchidApp {
         fs_registry
             .register(Arc::new(LocalProvider::new()) as Arc<dyn FsProvider>)
             .map_err(|e| UiError::Slint(format!("register local fs provider: {e}")))?;
+        let network_mounts = Arc::new(RwLock::new(
+            config.read().file_manager.network_mounts.clone(),
+        ));
+        register_rclone_providers(&fs_registry, network_mounts.clone())
+            .map_err(|e| UiError::Slint(format!("register rclone providers: {e}")))?;
         let syntax_highlighter = Arc::new(orchid_viewers::SyntaxHighlighter::new());
         widget_registry
             .register(orchid_widgets::builtin::viewer::descriptor(
@@ -345,9 +350,7 @@ impl OrchidApp {
             search: Some(search_engine.clone()),
             managed: Some(managed_engine),
             encrypted: Some(encrypted_engine),
-            network_mounts: Arc::new(RwLock::new(
-                config.read().file_manager.network_mounts.clone(),
-            )),
+            network_mounts,
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

@@ -72,6 +72,9 @@ clear-clipboard-seconds = 30
 # [[file-manager.network-mounts]]
 # name = "Home SFTP"
 # uri = "sftp://myserver/home/alice"
+# user = "alice"
+# password = "secret"
+# rclone-remote = "myserver"
 # enabled = true
 "#;
 

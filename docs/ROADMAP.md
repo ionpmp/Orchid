@@ -33,7 +33,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
 - [~] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (move/copy with Ctrl), FM→viewer, cross-widget FM move; scroll-aware hit-test
-- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; network mounts from config.toml; rclone provider pending
+- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; network mounts from config.toml with read-only rclone browse
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
 - [~] Encryption integration — encrypt / decrypt / reveal in UI; age engine wired via `EncryptedFolderEngine`
@@ -75,7 +75,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; full ingest UI pending
 
 ### Network Clients
-- [ ] SFTP / SMB / WebDAV / FTP via rclone
+- [~] SFTP / SMB / WebDAV / FTP via rclone — read-only browse via `RcloneProvider`; write ops pending
 - [ ] Virtual folders in file manager
 
 ### Search

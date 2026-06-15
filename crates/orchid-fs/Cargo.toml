@@ -36,6 +36,7 @@ trash.workspace = true
 orchid-core.workspace = true
 orchid-storage.workspace = true
 orchid-crypto.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
