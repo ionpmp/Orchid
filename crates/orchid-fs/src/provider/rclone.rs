@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::Deserialize;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use crate::entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
@@ -90,7 +91,23 @@ impl RcloneProvider {
     }
 
     async fn run_rclone(&self, args: &[&str]) -> Result<()> {
-        let output = Command::new(&self.rclone_bin)
+        let output = self.spawn_rclone(args).await?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(FsError::InvalidPath {
+                reason: format!(
+                    "rclone {} failed: {}",
+                    args.first().copied().unwrap_or(""),
+                    stderr.trim()
+                ),
+            })
+        }
+    }
+
+    async fn spawn_rclone(&self, args: &[&str]) -> Result<std::process::Output> {
+        Command::new(&self.rclone_bin)
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -107,7 +124,76 @@ impl RcloneProvider {
                 } else {
                     FsError::Io(e)
                 }
+            })
+    }
+
+    /// Run `rclone copy` (or similar long transfers) and stream `--stats-one-line`
+    /// progress to the sink when provided.
+    async fn run_rclone_with_progress(
+        &self,
+        args: &[&str],
+        progress: Option<&ProgressSink>,
+        dest_path: &FsPath,
+    ) -> Result<()> {
+        let mut cmd_args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        if cmd_args.first().map(String::as_str) == Some("copy") {
+            cmd_args.push("--stats-one-line".into());
+            cmd_args.push("--stats".into());
+            cmd_args.push("500ms".into());
+        }
+
+        let arg_refs: Vec<&str> = cmd_args.iter().map(String::as_str).collect();
+        let mut child = Command::new(&self.rclone_bin)
+            .args(&arg_refs)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    FsError::InvalidPath {
+                        reason: format!(
+                            "`{}` not found; install rclone and ensure it is on PATH (or set RCLONE_BIN)",
+                            self.rclone_bin
+                        ),
+                    }
+                } else {
+                    FsError::Io(e)
+                }
             })?;
+
+        if let (Some(sink), Some(stderr)) = (progress.cloned(), child.stderr.take()) {
+            let dest = dest_path.clone();
+            let mut reader = BufReader::new(stderr).lines();
+            let progress_task = tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if let Some(pct) = parse_rclone_stats_percent(&line) {
+                        sink.send(OperationProgress {
+                            total_bytes: 100,
+                            processed_bytes: pct,
+                            current_path: dest.clone(),
+                            items_processed: 0,
+                            items_total: 0,
+                        });
+                    }
+                }
+            });
+            let status = child.wait().await.map_err(FsError::Io)?;
+            progress_task.abort();
+            let _ = progress_task.await;
+            if status.success() {
+                return Ok(());
+            }
+            return Err(FsError::InvalidPath {
+                reason: format!(
+                    "rclone {} failed: exit {}",
+                    args.first().copied().unwrap_or(""),
+                    status.code().unwrap_or(-1)
+                ),
+            });
+        }
+
+        let output = child.wait_with_output().await.map_err(FsError::Io)?;
         if output.status.success() {
             Ok(())
         } else {
@@ -493,17 +579,20 @@ impl FsProvider for RcloneProvider {
         };
 
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        self.run_rclone(&arg_refs).await?;
-
-        if let Some(p) = progress {
-            let size = meta.size;
-            p.send(OperationProgress {
-                total_bytes: size,
-                processed_bytes: size,
-                current_path: to.clone(),
-                items_processed: 1,
-                items_total: 1,
-            });
+        if is_dir {
+            self.run_rclone_with_progress(&arg_refs, progress, to).await?;
+        } else {
+            self.run_rclone(&arg_refs).await?;
+            if let Some(p) = progress {
+                let size = meta.size;
+                p.send(OperationProgress {
+                    total_bytes: size,
+                    processed_bytes: size,
+                    current_path: to.clone(),
+                    items_processed: 1,
+                    items_total: 1,
+                });
+            }
         }
         Ok(true)
     }
@@ -542,6 +631,17 @@ impl Drop for RcloneWriteHandle {
     fn drop(&mut self) {
         let _ = self.child.start_kill();
     }
+}
+
+/// Parse `Transferred: …, 42%, …` from `rclone --stats-one-line` stderr.
+fn parse_rclone_stats_percent(line: &str) -> Option<u64> {
+    if !line.contains("Transferred:") {
+        return None;
+    }
+    line.split(',')
+        .map(str::trim)
+        .find(|part| part.ends_with('%'))
+        .and_then(|part| part.trim_end_matches('%').trim().parse().ok())
 }
 
 /// Register one [`RcloneProvider`] per supported scheme.
@@ -624,6 +724,16 @@ mod tests {
         assert_eq!(
             normalize_mount_uri("sftp:myserver/home/alice"),
             Some("sftp:myserver/home/alice".into())
+        );
+    }
+
+    #[test]
+    fn parse_stats_percent() {
+        assert_eq!(
+            parse_rclone_stats_percent(
+                "Transferred:   	          1.234 GiB / 5.678 GiB, 22%, 1.234 MiB/s, ETA 4m12s"
+            ),
+            Some(22)
         );
     }
 }

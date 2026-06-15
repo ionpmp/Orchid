@@ -3019,6 +3019,10 @@ impl MainWindowController {
                 }
                 if let Ok(inst) = self.widget_manager.get_instance(pl.instance_id) {
                     if inst.type_id == "file-manager" {
+                        let content_top = b.y + Self::WIDGET_FRAME_HEADER_PX;
+                        if cy < content_top {
+                            continue;
+                        }
                         let pane = self.fm_pane_at_point(pl.instance_id, cx, b);
                         return Some((pl.instance_id, pane));
                     }
@@ -4978,16 +4982,35 @@ fn active_network_sidebar_index(
 }
 
 fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedString {
-    match error {
-        Some("network-placeholder") => locale.tr("fm-network-placeholder").into(),
-        Some(err) if err.contains("no provider for scheme") => {
-            locale.tr("fm-network-no-provider").into()
+    let Some(err) = error else {
+        return SharedString::new();
+    };
+    let lower = err.to_ascii_lowercase();
+    match err {
+        "network-placeholder" => locale.tr("fm-network-placeholder").into(),
+        _ if err.contains("no provider for scheme") => locale.tr("fm-network-no-provider").into(),
+        _ if err.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing").into(),
+        _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount").into(),
+        _ if lower.contains("authentication")
+            || lower.contains("access denied")
+            || lower.contains("login failed")
+            || lower.contains("401") =>
+        {
+            locale.tr("fm-network-auth-failed").into()
         }
-        Some(err) if err.contains("not found; install rclone") => {
-            locale.tr("fm-network-rclone-missing").into()
+        _ if lower.contains("permission denied") || lower.contains("forbidden") || lower.contains("403") => {
+            locale.tr("fm-network-permission-denied").into()
         }
-        Some(err) => err.into(),
-        None => SharedString::new(),
+        _ if lower.contains("connection refused")
+            || lower.contains("timed out")
+            || lower.contains("timeout")
+            || lower.contains("no such host")
+            || lower.contains("network is unreachable")
+            || lower.contains("could not connect") =>
+        {
+            locale.tr("fm-network-connection-failed").into()
+        }
+        _ => err.into(),
     }
 }
 
