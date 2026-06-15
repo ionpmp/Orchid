@@ -1,4 +1,4 @@
-//! Read-only network filesystem access via the `rclone` CLI.
+//! Network filesystem access via the `rclone` CLI.
 
 use std::path::Path;
 use std::process::Stdio;
@@ -12,8 +12,10 @@ use tokio::process::Command;
 
 use crate::entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
 use crate::error::{FsError, Result};
+use crate::operations::copy::CopyOptions;
+use crate::operations::progress::{OperationProgress, ProgressSink};
 use crate::path::FsPath;
-use crate::provider::{FsCapabilities, FsProvider, ProviderId};
+use crate::provider::{FsCapabilities, FsProvider, FsProviderRegistry, ProviderId};
 
 /// Schemes served by [`RcloneProvider`].
 pub const RCLONE_SCHEMES: &[&str] = &["sftp", "smb", "webdav", "ftp"];
@@ -416,6 +418,94 @@ impl FsProvider for RcloneProvider {
             case_sensitive: true,
             supports_random_write: false,
         }
+    }
+
+    async fn copy_cross_scheme(
+        &self,
+        registry: &FsProviderRegistry,
+        from: &FsPath,
+        to: &FsPath,
+        options: CopyOptions,
+        progress: Option<&ProgressSink>,
+    ) -> Result<bool> {
+        let (_local_path, remote_path, local_is_src) = match (from.is_local(), to.is_local()) {
+            (true, false) if to.scheme() == self.scheme && self.resolve_mount(to).is_ok() => {
+                (from, to, true)
+            }
+            (false, true) if from.scheme() == self.scheme && self.resolve_mount(from).is_ok() => {
+                (from, to, false)
+            }
+            _ => return Ok(false),
+        };
+
+        if !options.overwrite {
+            let dst = registry
+                .for_path(to)
+                .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
+            if dst.exists(to).await? {
+                return Err(FsError::AlreadyExists(to.to_string()));
+            }
+        }
+
+        let meta = if local_is_src {
+            registry
+                .for_path(from)
+                .ok_or_else(|| FsError::ProviderNotMounted(from.to_string()))?
+                .metadata(from)
+                .await?
+        } else {
+            self.metadata(from).await?
+        };
+
+        let local_os = if local_is_src {
+            from.to_local()?
+        } else {
+            to.to_local()?
+        };
+        let local_arg = local_os
+            .to_str()
+            .ok_or_else(|| FsError::InvalidPath {
+                reason: format!("non-UTF8 local path: {}", local_os.display()),
+            })?;
+        let remote_spec = self.remote_for_path(remote_path).await?;
+
+        let is_dir = matches!(meta.kind, FsEntryKind::Directory);
+        let args: Vec<String> = if is_dir {
+            if local_is_src {
+                vec![
+                    "copy".into(),
+                    local_arg.into(),
+                    remote_spec,
+                    "--create-empty-src-dirs".into(),
+                ]
+            } else {
+                vec![
+                    "copy".into(),
+                    remote_spec,
+                    local_arg.into(),
+                    "--create-empty-src-dirs".into(),
+                ]
+            }
+        } else if local_is_src {
+            vec!["copyto".into(), local_arg.into(), remote_spec]
+        } else {
+            vec!["copyto".into(), remote_spec, local_arg.into()]
+        };
+
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        self.run_rclone(&arg_refs).await?;
+
+        if let Some(p) = progress {
+            let size = meta.size;
+            p.send(OperationProgress {
+                total_bytes: size,
+                processed_bytes: size,
+                current_path: to.clone(),
+                items_processed: 1,
+                items_total: 1,
+            });
+        }
+        Ok(true)
     }
 }
 

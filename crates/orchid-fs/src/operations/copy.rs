@@ -61,6 +61,25 @@ pub async fn copy(
         .for_path(to)
         .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
 
+    if from.scheme() != to.scheme() {
+        if let Some(provider) = registry.for_path(from) {
+            if provider
+                .copy_cross_scheme(registry, from, to, options, progress)
+                .await?
+            {
+                return Ok(());
+            }
+        }
+        if let Some(provider) = registry.for_path(to) {
+            if provider
+                .copy_cross_scheme(registry, from, to, options, progress)
+                .await?
+            {
+                return Ok(());
+            }
+        }
+    }
+
     let src_meta = src_provider.metadata(from).await?;
     if matches!(src_meta.kind, crate::entry::FsEntryKind::Directory) {
         copy_directory(

@@ -636,7 +636,7 @@ impl FileManagerInner {
         self.publish_refresh();
     }
 
-    async fn paste_clipboard(&self) -> WidgetResult<()> {
+    async fn paste_clipboard(self: &Arc<Self>) -> WidgetResult<()> {
         let dest_dir = {
             let state = self.state.lock();
             state.active_tab().path.clone()
@@ -648,35 +648,9 @@ impl FileManagerInner {
         if sources.is_empty() || op == ClipboardOperation::None {
             return Ok(());
         }
-        let registry = &self.deps.registry;
-        for src in sources {
-            let name = src
-                .file_name()
-                .map(str::to_string)
-                .unwrap_or_else(|| "copy".to_string());
-            let dest = dest_dir.join(&name);
-            match op {
-                ClipboardOperation::Copy => {
-                    orchid_fs::operations::copy::copy(
-                        registry,
-                        &src,
-                        &dest,
-                        orchid_fs::operations::copy::CopyOptions::default(),
-                        None,
-                        None,
-                    )
-                    .await
-                    .map_err(map_fs_error)?;
-                }
-                ClipboardOperation::Cut => {
-                    orchid_fs::operations::move_::move_(registry, &src, &dest, None, None)
-                        .await
-                        .map_err(map_fs_error)?;
-                }
-                ClipboardOperation::None => break,
-            }
-        }
-        Ok(())
+        let paths: Vec<String> = sources.iter().map(|p| p.as_str().to_string()).collect();
+        let is_copy = op == ClipboardOperation::Copy;
+        self.transfer_paths(&paths, &dest_dir, is_copy).await
     }
 
     async fn delete_paths(&self, paths: &[String]) -> WidgetResult<()> {

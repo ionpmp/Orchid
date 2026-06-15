@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::entry::{FsEntry, FsMetadata};
 use crate::error::Result;
+use crate::operations::copy::CopyOptions;
+use crate::operations::progress::ProgressSink;
 use crate::path::FsPath;
 
 pub use local::LocalProvider;
@@ -164,6 +166,20 @@ pub trait FsProvider: Send + Sync + 'static {
 
     /// Feature matrix.
     fn capabilities(&self) -> FsCapabilities;
+
+    /// Copy across schemes when this provider can delegate natively (e.g.
+    /// `rclone copyto` between local disk and a network mount). Returns
+    /// `Ok(true)` when handled; `Ok(false)` to fall back to generic streaming.
+    async fn copy_cross_scheme(
+        &self,
+        _registry: &FsProviderRegistry,
+        _from: &FsPath,
+        _to: &FsPath,
+        _options: CopyOptions,
+        _progress: Option<&ProgressSink>,
+    ) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 /// Convenience alias for shared providers.
