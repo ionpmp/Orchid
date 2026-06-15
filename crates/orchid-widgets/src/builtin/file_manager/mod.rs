@@ -186,7 +186,19 @@ struct FileManagerInner {
     encrypted_paths: RwLock<Vec<String>>,
     /// Last navigation error per tab (shown in the pane error banner).
     tab_errors: RwLock<std::collections::HashMap<Uuid, Option<String>>>,
+    /// Copy/move progress for drag-and-drop and OS file drops.
+    transfer: RwLock<TransferState>,
     bus: Arc<orchid_core::EventBus>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct TransferState {
+    active: bool,
+    is_copy: bool,
+    current_name: String,
+    processed_bytes: u64,
+    total_bytes: u64,
+    last_publish: Option<std::time::Instant>,
 }
 
 impl FileManagerWidget {
@@ -221,6 +233,7 @@ impl FileManagerWidget {
                 ingest_current: RwLock::new(None),
                 encrypted_paths: RwLock::new(Vec::new()),
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
+                transfer: RwLock::new(TransferState::default()),
                 bus,
             }),
         }
@@ -369,7 +382,9 @@ impl Widget for FileManagerWidget {
             widget_type: TYPE_ID,
             title: tab.path.as_str().to_string(),
             status: WidgetStatus::Ready,
-            payload: WidgetPayload::FileManager(FileManagerPayload {
+            payload: WidgetPayload::FileManager({
+                let transfer = self.inner.transfer.read().clone();
+                FileManagerPayload {
                 panes,
                 active_pane,
                 dual_pane,
@@ -378,6 +393,19 @@ impl Widget for FileManagerWidget {
                 network_mounts: self.inner.network_mount_payloads(),
                 activity_indicator: self.inner.activity_indicator_label(),
                 ingest_in_flight: self.inner.ingest_in_flight.load(Ordering::Relaxed),
+                transfer_active: transfer.active,
+                transfer_progress: if transfer.active && transfer.total_bytes > 0 {
+                    (transfer.processed_bytes as f32 / transfer.total_bytes as f32).min(1.0)
+                } else {
+                    0.0
+                },
+                transfer_is_copy: transfer.is_copy,
+                transfer_current: if transfer.active {
+                    Some(transfer.current_name.clone())
+                } else {
+                    None
+                },
+            }
             }),
         })
     }
@@ -466,7 +494,7 @@ impl FileManagerInner {
         self.publish_refresh();
     }
 
-    async fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
+    async     fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
         self.handle_managed_ingest_finished();
         let label = path
             .file_name()
@@ -476,6 +504,116 @@ impl FileManagerInner {
         self.publish_refresh();
         self.refresh_managed_roots().await;
         self.publish_refresh();
+    }
+
+    fn begin_transfer(&self, is_copy: bool) {
+        *self.transfer.write() = TransferState {
+            active: true,
+            is_copy,
+            ..TransferState::default()
+        };
+        self.publish_refresh();
+    }
+
+    fn apply_transfer_progress(&self, p: &orchid_fs::OperationProgress) {
+        let name = p
+            .current_path
+            .file_name()
+            .map(str::to_string)
+            .unwrap_or_default();
+        let should_publish = {
+            let mut st = self.transfer.write();
+            st.active = true;
+            st.current_name = name;
+            st.processed_bytes = p.processed_bytes;
+            st.total_bytes = p.total_bytes;
+            st.last_publish
+                .map(|t| t.elapsed() >= std::time::Duration::from_millis(100))
+                .unwrap_or(true)
+        };
+        if should_publish {
+            self.transfer.write().last_publish = Some(std::time::Instant::now());
+            self.publish_refresh();
+        }
+    }
+
+    fn end_transfer(&self) {
+        *self.transfer.write() = TransferState::default();
+        self.publish_refresh();
+    }
+
+    async fn transfer_paths(
+        self: &Arc<Self>,
+        sources: &[String],
+        dest_dir: &orchid_fs::FsPath,
+        is_copy: bool,
+    ) -> WidgetResult<()> {
+        if is_virtual(dest_dir) {
+            return Err(WidgetError::InvalidStateForOperation(
+                "cannot drop into virtual folder".into(),
+            ));
+        }
+        self.begin_transfer(is_copy);
+        let (sink, mut rx) = orchid_fs::ProgressSink::channel();
+        let inner = Arc::clone(self);
+        let progress_task = tokio::spawn(async move {
+            while let Some(p) = rx.recv().await {
+                inner.apply_transfer_progress(&p);
+            }
+        });
+
+        let registry = &self.deps.registry;
+        let dest_str = dest_dir.as_str();
+        let mut result = Ok(());
+        for p in sources {
+            let src = match orchid_fs::FsPath::new(p) {
+                Ok(fp) => fp,
+                Err(e) => {
+                    result = Err(map_fs_error(e));
+                    break;
+                }
+            };
+            if &src == dest_dir {
+                continue;
+            }
+            let src_str = src.as_str();
+            if dest_str.len() > src_str.len() {
+                let rest = &dest_str[src_str.len()..];
+                if rest.starts_with('/') || rest.starts_with('\\') {
+                    continue;
+                }
+            }
+            let name = src
+                .file_name()
+                .map(str::to_string)
+                .unwrap_or_else(|| if is_copy { "copy".into() } else { "moved".into() });
+            let dest = dest_dir.join(&name);
+            if src == dest {
+                continue;
+            }
+            let op = if is_copy {
+                orchid_fs::operations::copy::copy(
+                    registry,
+                    &src,
+                    &dest,
+                    orchid_fs::operations::copy::CopyOptions::default(),
+                    Some(&sink),
+                    None,
+                )
+                .await
+            } else {
+                orchid_fs::operations::move_::move_(registry, &src, &dest, Some(&sink), None).await
+            };
+            if let Err(e) = op {
+                result = Err(map_fs_error(e));
+                break;
+            }
+        }
+
+        drop(sink);
+        let _ = progress_task.await;
+        self.end_transfer();
+        result
     }
 
     async fn refresh_all_tabs(&self) {
@@ -537,91 +675,6 @@ impl FileManagerInner {
                 }
                 ClipboardOperation::None => break,
             }
-        }
-        Ok(())
-    }
-
-    async fn move_paths_into_directory(
-        &self,
-        sources: &[String],
-        dest_dir: &orchid_fs::FsPath,
-    ) -> WidgetResult<()> {
-        if is_virtual(dest_dir) {
-            return Err(WidgetError::InvalidStateForOperation(
-                "cannot drop into virtual folder".into(),
-            ));
-        }
-        let registry = &self.deps.registry;
-        let dest_str = dest_dir.as_str();
-        for p in sources {
-            let src = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-            if &src == dest_dir {
-                continue;
-            }
-            let src_str = src.as_str();
-            if dest_str.len() > src_str.len() {
-                let rest = &dest_str[src_str.len()..];
-                if rest.starts_with('/') || rest.starts_with('\\') {
-                    continue;
-                }
-            }
-            let name = src
-                .file_name()
-                .map(str::to_string)
-                .unwrap_or_else(|| "moved".to_string());
-            let dest = dest_dir.join(&name);
-            if src == dest {
-                continue;
-            }
-            orchid_fs::operations::move_::move_(registry, &src, &dest, None, None)
-                .await
-                .map_err(map_fs_error)?;
-        }
-        Ok(())
-    }
-
-    async fn copy_paths_into_directory(
-        &self,
-        sources: &[String],
-        dest_dir: &orchid_fs::FsPath,
-    ) -> WidgetResult<()> {
-        if is_virtual(dest_dir) {
-            return Err(WidgetError::InvalidStateForOperation(
-                "cannot drop into virtual folder".into(),
-            ));
-        }
-        let registry = &self.deps.registry;
-        let dest_str = dest_dir.as_str();
-        for p in sources {
-            let src = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-            if &src == dest_dir {
-                continue;
-            }
-            let src_str = src.as_str();
-            if dest_str.len() > src_str.len() {
-                let rest = &dest_str[src_str.len()..];
-                if rest.starts_with('/') || rest.starts_with('\\') {
-                    continue;
-                }
-            }
-            let name = src
-                .file_name()
-                .map(str::to_string)
-                .unwrap_or_else(|| "copy".to_string());
-            let dest = dest_dir.join(&name);
-            if src == dest {
-                continue;
-            }
-            orchid_fs::operations::copy::copy(
-                registry,
-                &src,
-                &dest,
-                orchid_fs::operations::copy::CopyOptions::default(),
-                None,
-                None,
-            )
-            .await
-            .map_err(map_fs_error)?;
         }
         Ok(())
     }
@@ -2736,7 +2789,7 @@ pub async fn move_paths_to_directory(
             "drop target unavailable".into(),
         ));
     }
-    inner.move_paths_into_directory(&sources, &dest).await?;
+    inner.transfer_paths(&sources, &dest, false).await?;
     inner.refresh_all_tabs().await;
     Ok(())
 }
@@ -2764,7 +2817,7 @@ pub async fn copy_paths_to_directory(
             "drop target unavailable".into(),
         ));
     }
-    inner.copy_paths_into_directory(&sources, &dest).await?;
+    inner.transfer_paths(&sources, &dest, true).await?;
     inner.refresh_all_tabs().await;
     Ok(())
 }

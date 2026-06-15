@@ -4863,6 +4863,8 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         dual_pane_label: locale.tr("fm-dual-pane-on").into(),
         clipboard_indicator: SharedString::new(),
         activity_indicator: SharedString::new(),
+        transfer_active: false,
+        transfer_progress: 0.0,
         sidebar_items: build_sidebar_items(locale, "", &[], &[]),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
@@ -5240,7 +5242,23 @@ fn build_file_manager_model(
     let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
         .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
         .unwrap_or(false);
-    let activity_indicator = if p.ingest_in_flight > 0 {
+    let activity_indicator = if p.transfer_active {
+        let percent = (p.transfer_progress * 100.0).round() as u32;
+        let key = if p.transfer_is_copy {
+            "fm-copying"
+        } else {
+            "fm-moving"
+        };
+        locale.tr_args(
+            key,
+            &orchid_i18n::FluentArgs::new()
+                .with(
+                    "name",
+                    p.transfer_current.as_deref().unwrap_or(""),
+                )
+                .with("percent", percent.to_string()),
+        )
+    } else if p.ingest_in_flight > 0 {
         if let Some(name) = p.activity_indicator.as_ref().filter(|s| !s.is_empty()) {
             locale.tr_args(
                 "fm-ingesting",
@@ -5277,6 +5295,8 @@ fn build_file_manager_model(
         },
         clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
         activity_indicator: activity_indicator.into(),
+        transfer_active: p.transfer_active,
+        transfer_progress: p.transfer_progress,
         show_hidden,
         show_hidden_label: if show_hidden {
             locale.tr("fm-show-hidden-on").into()

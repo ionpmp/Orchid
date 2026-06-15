@@ -12,6 +12,8 @@ export component FmPane inherits Rectangle {
     in property <bool> is-active;
     in property <string> clipboard-hint;
     in property <string> activity-hint;
+    in property <bool> transfer-active;
+    in property <float> transfer-progress;
     in property <FmRenameState> rename;
     in property <bool> drag-active;
     in property <string> drag-drop-target;
@@ -240,33 +242,45 @@ export component FmPane inherits Rectangle {
             }
 
             Rectangle {
-                height: 24px;
+                height: transfer-active && transfer-progress > 0 ? 27px : 24px;
                 background: Theme.surface-raised;
-                HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 12px;
-
-                    Text {
-                        text: pane.tabs[pane.active-tab].status-text;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
+                VerticalLayout {
+                    if transfer-active && transfer-progress > 0 : Rectangle {
+                        height: 3px;
+                        background: Theme.border-default;
+                        Rectangle {
+                            width: parent.width * transfer-progress;
+                            height: parent.height;
+                            background: Theme.accent-brand;
+                        }
                     }
 
-                    if activity-hint != "" : Text {
-                        text: activity-hint;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 12px;
 
-                    if clipboard-hint != "" : Text {
-                        text: clipboard-hint;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                        Text {
+                            text: pane.tabs[pane.active-tab].status-text;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        if activity-hint != "" : Text {
+                            text: activity-hint;
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+
+                        if clipboard-hint != "" : Text {
+                            text: clipboard-hint;
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }

@@ -192,6 +192,8 @@ export component FileManagerView inherits Rectangle {
                 is-active: true;
                 clipboard-hint: model.clipboard-indicator;
                 activity-hint: model.activity-indicator;
+                transfer-active: model.transfer-active;
+                transfer-progress: model.transfer-progress;
                 rename: model.rename;
                 drag-active: model.drag-active;
                 drag-drop-target: model.drag-drop-target;
@@ -250,6 +252,8 @@ export component FileManagerView inherits Rectangle {
                         is-active: model.active-pane == 0;
                         clipboard-hint: model.clipboard-indicator;
                 activity-hint: model.activity-indicator;
+                transfer-active: model.transfer-active;
+                transfer-progress: model.transfer-progress;
                         rename: model.rename;
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
@@ -306,6 +310,8 @@ export component FileManagerView inherits Rectangle {
                         is-active: model.active-pane == 1;
                         clipboard-hint: model.clipboard-indicator;
                 activity-hint: model.activity-indicator;
+                transfer-active: model.transfer-active;
+                transfer-progress: model.transfer-progress;
                         rename: model.rename;
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;

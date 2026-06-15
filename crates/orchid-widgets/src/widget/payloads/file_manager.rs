@@ -16,6 +16,14 @@ pub struct FileManagerPayload {
     pub activity_indicator: Option<String>,
     /// Number of managed files currently being ingested.
     pub ingest_in_flight: u32,
+    /// Copy/move transfer in progress.
+    pub transfer_active: bool,
+    /// 0.0–1.0 byte progress when [`Self::transfer_active`].
+    pub transfer_progress: f32,
+    /// True when the active transfer is a copy (false = move).
+    pub transfer_is_copy: bool,
+    /// File name currently being copied or moved.
+    pub transfer_current: Option<String>,
 }
 
 /// One configured network mount surfaced in the FM payload.
