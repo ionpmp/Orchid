@@ -18,4 +18,7 @@ pub mod engine;
 pub(crate) mod index;
 
 pub use config::{ManagedFolderConfig, ManagedFolderStats};
-pub use engine::{ManagedFileIngestedEvent, ManagedFolderEngine};
+pub use engine::{
+    ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
+    ManagedFolderEngine,
+};

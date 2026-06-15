@@ -26,7 +26,8 @@ pub use encrypted::{
 pub use entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
 pub use error::{FsError, Result};
 pub use managed::{
-    ManagedFileIngestedEvent, ManagedFolderConfig, ManagedFolderEngine, ManagedFolderStats,
+    ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
+    ManagedFolderConfig, ManagedFolderEngine, ManagedFolderStats,
 };
 pub use mime::guess_mime;
 pub use operations::{

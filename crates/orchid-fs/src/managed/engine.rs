@@ -18,6 +18,30 @@ use crate::provider::FsProviderRegistry;
 use crate::watcher::events::{FsCreatedEvent, FsModifiedEvent};
 use crate::watcher::FileWatcher;
 
+/// Emitted when ingestion of a managed file begins.
+#[derive(Debug, Clone)]
+pub struct ManagedFileIngestStartedEvent {
+    /// Path being ingested.
+    pub path: FsPath,
+}
+impl orchid_core::Event for ManagedFileIngestStartedEvent {
+    fn event_type() -> &'static str {
+        "fs.managed_ingest_started"
+    }
+}
+
+/// Emitted when ingestion fails (after [`ManagedFileIngestStartedEvent`]).
+#[derive(Debug, Clone)]
+pub struct ManagedFileIngestFailedEvent {
+    /// Path that failed to ingest.
+    pub path: FsPath,
+}
+impl orchid_core::Event for ManagedFileIngestFailedEvent {
+    fn event_type() -> &'static str {
+        "fs.managed_ingest_failed"
+    }
+}
+
 /// Emitted when a file inside a managed folder has been ingested.
 #[derive(Debug, Clone)]
 pub struct ManagedFileIngestedEvent {
@@ -171,8 +195,36 @@ impl ManagedFolderEngine {
     ///
     /// Propagates crypto / storage errors.
     pub async fn ingest(&self, path: &FsPath) -> Result<FileManifest> {
-        let os_path = path.to_local()?;
-        let manifest = self.inner.deduplicator.ingest_file(&os_path).await?;
+        self.inner.bus.publish(
+            orchid_core::EventSource::Subsystem("fs.managed".into()),
+            ManagedFileIngestStartedEvent {
+                path: path.clone(),
+            },
+        );
+        let os_path = match path.to_local() {
+            Ok(p) => p,
+            Err(e) => {
+                self.inner.bus.publish(
+                    orchid_core::EventSource::Subsystem("fs.managed".into()),
+                    ManagedFileIngestFailedEvent {
+                        path: path.clone(),
+                    },
+                );
+                return Err(e);
+            }
+        };
+        let manifest = match self.inner.deduplicator.ingest_file(&os_path).await {
+            Ok(m) => m,
+            Err(e) => {
+                self.inner.bus.publish(
+                    orchid_core::EventSource::Subsystem("fs.managed".into()),
+                    ManagedFileIngestFailedEvent {
+                        path: path.clone(),
+                    },
+                );
+                return Err(e.into());
+            }
+        };
         let manifest_id = manifest.id;
 
         let db = self.inner.storage.raw_database();
@@ -187,7 +239,15 @@ impl ManagedFolderEngine {
                 .insert(path.as_str(), &manifest)
                 .map_err(|e| FsError::Storage(e.into()))?;
         }
-        txn.commit().map_err(|e| FsError::Storage(e.into()))?;
+        if let Err(e) = txn.commit().map_err(|e| FsError::Storage(e.into())) {
+            self.inner.bus.publish(
+                orchid_core::EventSource::Subsystem("fs.managed".into()),
+                ManagedFileIngestFailedEvent {
+                    path: path.clone(),
+                },
+            );
+            return Err(e);
+        }
 
         self.inner.bus.publish(
             orchid_core::EventSource::Subsystem("fs.managed".into()),

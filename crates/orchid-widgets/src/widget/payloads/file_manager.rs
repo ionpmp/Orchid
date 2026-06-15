@@ -14,6 +14,8 @@ pub struct FileManagerPayload {
     pub network_mounts: Vec<NetworkMountPayload>,
     /// Short-lived ingest activity label (file name).
     pub activity_indicator: Option<String>,
+    /// Number of managed files currently being ingested.
+    pub ingest_in_flight: u32,
 }
 
 /// One configured network mount surfaced in the FM payload.

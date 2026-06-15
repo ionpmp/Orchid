@@ -9,6 +9,7 @@ pub mod state;
 pub mod view_mode;
 pub mod virtual_folders;
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -177,6 +178,10 @@ struct FileManagerInner {
     managed_stats: RwLock<std::collections::HashMap<String, orchid_fs::ManagedFolderStats>>,
     /// Last ingested file name shown briefly in the status bar.
     ingest_notice: RwLock<Option<(String, std::time::Instant)>>,
+    /// Managed ingest operations in progress (across all instances).
+    ingest_in_flight: AtomicU32,
+    /// File name currently being ingested (best-effort label).
+    ingest_current: RwLock<Option<String>>,
     /// Cached encrypted paths for [`apply_entry_metadata`].
     encrypted_paths: RwLock<Vec<String>>,
     /// Last navigation error per tab (shown in the pane error banner).
@@ -212,6 +217,8 @@ impl FileManagerWidget {
                 managed_roots: RwLock::new(Vec::new()),
                 managed_stats: RwLock::new(std::collections::HashMap::new()),
                 ingest_notice: RwLock::new(None),
+                ingest_in_flight: AtomicU32::new(0),
+                ingest_current: RwLock::new(None),
                 encrypted_paths: RwLock::new(Vec::new()),
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
                 bus,
@@ -370,6 +377,7 @@ impl Widget for FileManagerWidget {
                 managed_roots: self.inner.managed_roots.read().clone(),
                 network_mounts: self.inner.network_mount_payloads(),
                 activity_indicator: self.inner.activity_indicator_label(),
+                ingest_in_flight: self.inner.ingest_in_flight.load(Ordering::Relaxed),
             }),
         })
     }
@@ -404,16 +412,6 @@ impl FileManagerInner {
         );
     }
 
-    fn activity_indicator_label(&self) -> Option<String> {
-        let notice = self.ingest_notice.read();
-        if let Some((name, at)) = notice.as_ref() {
-            if at.elapsed() < std::time::Duration::from_secs(8) {
-                return Some(name.clone());
-            }
-        }
-        None
-    }
-
     fn enabled_network_mounts(&self) -> Vec<orchid_storage::NetworkMountConfig> {
         self.deps
             .network_mounts
@@ -437,7 +435,39 @@ impl FileManagerInner {
             .collect()
     }
 
+    fn activity_indicator_label(&self) -> Option<String> {
+        if self.ingest_in_flight.load(Ordering::Relaxed) > 0 {
+            return self.ingest_current.read().clone();
+        }
+        let notice = self.ingest_notice.read();
+        if let Some((name, at)) = notice.as_ref() {
+            if at.elapsed() < std::time::Duration::from_secs(8) {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
+    fn handle_managed_ingest_started(&self, path: &orchid_fs::FsPath) {
+        self.ingest_in_flight.fetch_add(1, Ordering::Relaxed);
+        let label = path
+            .file_name()
+            .map(String::from)
+            .unwrap_or_else(|| path.as_str().to_string());
+        *self.ingest_current.write() = Some(label);
+        self.publish_refresh();
+    }
+
+    fn handle_managed_ingest_finished(&self) {
+        let prev = self.ingest_in_flight.fetch_sub(1, Ordering::Relaxed);
+        if prev <= 1 {
+            *self.ingest_current.write() = None;
+        }
+        self.publish_refresh();
+    }
+
     async fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
+        self.handle_managed_ingest_finished();
         let label = path
             .file_name()
             .map(String::from)
@@ -2801,6 +2831,21 @@ pub async fn refresh_all_instances() {
         tokio::spawn(async move {
             inner.refresh_all_tabs().await;
         });
+    }
+}
+
+/// Notify every live file-manager instance that managed ingest started.
+pub fn notify_managed_ingest_started(path: &orchid_fs::FsPath) {
+    for entry in FM_LIVE.iter() {
+        entry.value().handle_managed_ingest_started(path);
+    }
+}
+
+/// Notify every live file-manager instance that managed ingest failed.
+pub fn notify_managed_ingest_failed(path: &orchid_fs::FsPath) {
+    let _ = path;
+    for entry in FM_LIVE.iter() {
+        entry.value().handle_managed_ingest_finished();
     }
 }
 

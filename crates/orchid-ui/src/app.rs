@@ -62,6 +62,8 @@ pub struct OrchidApp {
     _terminal_clipboard_sub: Option<SubscriptionHandle>,
     /// Refreshes file-manager UI when managed files are ingested.
     _managed_ingest_sub: Option<SubscriptionHandle>,
+    _managed_ingest_started_sub: Option<SubscriptionHandle>,
+    _managed_ingest_failed_sub: Option<SubscriptionHandle>,
     /// Shared network mount list (hot-reloaded from config.toml).
     #[allow(dead_code)] // held for lifetime; FM and rclone providers hold clones
     network_mounts: Arc<RwLock<Vec<NetworkMountConfig>>>,
@@ -347,6 +349,42 @@ impl OrchidApp {
                 },
             )
             .map_err(|e| UiError::Slint(format!("managed ingest bus sub: {e}")))?;
+        let managed_ingest_started_sub = bus
+            .subscribe_async(
+                EventFilter::of_type(orchid_fs::ManagedFileIngestStartedEvent::event_type()),
+                HandlerPriority::Normal,
+                move |env| {
+                    let path = env
+                        .downcast_arc::<orchid_fs::ManagedFileIngestStartedEvent>()
+                        .map(|e| e.path.clone());
+                    async move {
+                        if let Some(path) = path {
+                            orchid_widgets::builtin::file_manager::notify_managed_ingest_started(
+                                &path,
+                            );
+                        }
+                    }
+                },
+            )
+            .map_err(|e| UiError::Slint(format!("managed ingest started sub: {e}")))?;
+        let managed_ingest_failed_sub = bus
+            .subscribe_async(
+                EventFilter::of_type(orchid_fs::ManagedFileIngestFailedEvent::event_type()),
+                HandlerPriority::Normal,
+                move |env| {
+                    let path = env
+                        .downcast_arc::<orchid_fs::ManagedFileIngestFailedEvent>()
+                        .map(|e| e.path.clone());
+                    async move {
+                        if let Some(path) = path {
+                            orchid_widgets::builtin::file_manager::notify_managed_ingest_failed(
+                                &path,
+                            );
+                        }
+                    }
+                },
+            )
+            .map_err(|e| UiError::Slint(format!("managed ingest failed sub: {e}")))?;
         let fm_deps = orchid_widgets::builtin::file_manager::FileManagerDeps {
             registry: fs_registry.clone(),
             clipboard: Arc::new(orchid_widgets::builtin::file_manager::FileClipboard::new()),
@@ -451,6 +489,8 @@ impl OrchidApp {
             fs_registry,
             _terminal_clipboard_sub: terminal_clipboard_sub,
             _managed_ingest_sub: Some(managed_ingest_sub),
+            _managed_ingest_started_sub: Some(managed_ingest_started_sub),
+            _managed_ingest_failed_sub: Some(managed_ingest_failed_sub),
             network_mounts,
             _config_watcher: config_watcher,
         })

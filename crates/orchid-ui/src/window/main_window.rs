@@ -5185,16 +5185,31 @@ fn build_file_manager_model(
     let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
         .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
         .unwrap_or(false);
-    let activity_indicator = p
-        .activity_indicator
-        .as_ref()
-        .map(|name| {
+    let activity_indicator = if p.ingest_in_flight > 0 {
+        if let Some(name) = p.activity_indicator.as_ref().filter(|s| !s.is_empty()) {
             locale.tr_args(
-                "fm-ingested",
-                &orchid_i18n::FluentArgs::new().with("name", name),
+                "fm-ingesting",
+                &orchid_i18n::FluentArgs::new()
+                    .with("name", name.as_str())
+                    .with("count", p.ingest_in_flight.to_string()),
             )
-        })
-        .unwrap_or_default();
+        } else {
+            locale.tr_args(
+                "fm-ingesting-count",
+                &orchid_i18n::FluentArgs::new().with("count", p.ingest_in_flight.to_string()),
+            )
+        }
+    } else {
+        p.activity_indicator
+            .as_ref()
+            .map(|name| {
+                locale.tr_args(
+                    "fm-ingested",
+                    &orchid_i18n::FluentArgs::new().with("name", name.as_str()),
+                )
+            })
+            .unwrap_or_default()
+    };
 
     FileManagerModel {
         panes: ModelRc::new(VecModel::from(panes)),
