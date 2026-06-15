@@ -32,7 +32,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Dual-pane mode
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
-- [~] Drag-and-drop — folder rows, breadcrumbs, pane current directory (cross-pane), OS file drop into active pane; widget-to-widget pending
+- [~] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (pointer-targeted FM pane), FM → viewer drop; widget-to-widget move pending
 - [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories, and network placeholder; remote mounts pending
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter

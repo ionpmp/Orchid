@@ -61,6 +61,7 @@ use crate::theme::ThemeManager;
 
 /// Top switcher (40) + bottom dock (64) = canvas height in [`workspace.slint`].
 const CANVAS_INSET_H: f32 = 40.0 + 64.0;
+const WORKSPACE_SWITCHER_H: f32 = 40.0;
 
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
@@ -113,6 +114,10 @@ pub struct MainWindowController {
     password_autofocus_pending: Arc<RwLock<HashMap<Uuid, bool>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
+    /// Last interacted file-manager instance and pane (for drop targeting).
+    fm_focus: Arc<Mutex<Option<(Uuid, u8)>>>,
+    /// Last pointer position in workspace canvas coordinates (content space).
+    last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
     /// Long-press widget catalog (search + pick).
     catalog: Arc<RwLock<CatalogUiState>>,
     catalog_items: ModelRc<DockWidgetType>,
@@ -214,6 +219,8 @@ impl MainWindowController {
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
+            fm_focus: Arc::new(Mutex::new(None)),
+            last_canvas_pointer: Arc::new(Mutex::new(None)),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             catalog_items,
         });
@@ -2763,11 +2770,27 @@ impl MainWindowController {
         let tw = Arc::downgrade(&self);
         self.window.window().on_winit_window_event(move |_winit_window, event| {
             use slint::winit_030::{EventResult, winit::event::WindowEvent};
-            if let WindowEvent::DroppedFile(path_buf) = event {
-                let path = path_buf.to_string_lossy().into_owned();
-                if let Some(c) = tw.upgrade() {
-                    c.on_os_file_dropped(path);
+            match event {
+                WindowEvent::CursorMoved { position, .. } => {
+                    if let Some(c) = tw.upgrade() {
+                        let win = c.window.window();
+                        let scale = win.scale_factor();
+                        let logical: slint::winit_030::winit::dpi::LogicalPosition<f64> =
+                            position.to_logical(f64::from(scale));
+                        let canvas_y = logical.y - f64::from(WORKSPACE_SWITCHER_H);
+                        if canvas_y >= 0.0 {
+                            *c.last_canvas_pointer.lock() =
+                                Some((logical.x as f32, canvas_y as f32));
+                        }
+                    }
                 }
+                WindowEvent::DroppedFile(path_buf) => {
+                    let path = path_buf.to_string_lossy().into_owned();
+                    if let Some(c) = tw.upgrade() {
+                        c.on_os_file_dropped(path);
+                    }
+                }
+                _ => {}
             }
             EventResult::Propagate
         });
@@ -2786,7 +2809,14 @@ impl MainWindowController {
         Ok(())
     }
 
+    fn set_fm_focus(&self, inst: Uuid, pane: u8) {
+        *self.fm_focus.lock() = Some((inst, pane));
+    }
+
     fn find_active_fm(&self) -> Option<Uuid> {
+        if let Some((id, _)) = *self.fm_focus.lock() {
+            return Some(id);
+        }
         let w = self.workspace_manager.active().ok()?;
         for inst in self.widget_manager.instances_for_workspace(w.id) {
             if inst.type_id == "file-manager" {
@@ -2794,6 +2824,172 @@ impl MainWindowController {
             }
         }
         None
+    }
+
+    fn widget_at_canvas_point(&self, content_x: f32, content_y: f32, type_id: &str) -> Option<Uuid> {
+        let w = self.workspace_manager.active().ok()?;
+        let (vw, vh) = *self.canvas_size.lock();
+        let instances = self.widget_manager.instances_for_workspace(w.id);
+        self.layout_engine
+            .grow_grid_to_fit_instances(w.id, &instances);
+        let snap = self.layout_engine.snapshot(
+            w.id,
+            &instances,
+            orchid_widgets::ViewportSize {
+                width_px: vw,
+                height_px: vh,
+            },
+        );
+        let off = self.drag_offset.lock();
+        for pl in snap.cells.iter().rev() {
+            let mut b = pl.bounds;
+            if let Some((dx, dy)) = off.get(&pl.instance_id) {
+                b.x += dx;
+                b.y += dy;
+            }
+            if content_x < b.x
+                || content_y < b.y
+                || content_x >= b.x + b.width
+                || content_y >= b.y + b.height
+            {
+                continue;
+            }
+            if let Ok(inst) = self.widget_manager.get_instance(pl.instance_id) {
+                if inst.type_id == type_id {
+                    return Some(pl.instance_id);
+                }
+            }
+        }
+        None
+    }
+
+    fn fm_pane_at_point(&self, inst: Uuid, content_x: f32, bounds: PixelBounds) -> u8 {
+        let dual = self
+            .widget_manager
+            .snapshot_cache()
+            .get(inst)
+            .and_then(|s| match &s.payload {
+                WidgetPayload::FileManager(fm) => Some(fm.dual_pane),
+                _ => None,
+            })
+            .unwrap_or(false);
+        if !dual {
+            return (*self.fm_focus.lock())
+                .map(|(_, p)| p)
+                .unwrap_or_else(|| self.fm_active_pane(inst));
+        }
+        let local_x = content_x - bounds.x;
+        if local_x < bounds.width / 2.0 {
+            0
+        } else {
+            1
+        }
+    }
+
+    fn fm_drop_target(&self) -> Option<(Uuid, u8)> {
+        if let (Some((cx, cy)), Ok(w)) =
+            (*self.last_canvas_pointer.lock(), self.workspace_manager.active())
+        {
+            let (vw, vh) = *self.canvas_size.lock();
+            let instances = self.widget_manager.instances_for_workspace(w.id);
+            self.layout_engine
+                .grow_grid_to_fit_instances(w.id, &instances);
+            let snap = self.layout_engine.snapshot(
+                w.id,
+                &instances,
+                orchid_widgets::ViewportSize {
+                    width_px: vw,
+                    height_px: vh,
+                },
+            );
+            let off = self.drag_offset.lock();
+            for pl in snap.cells.iter().rev() {
+                let mut b = pl.bounds;
+                if let Some((dx, dy)) = off.get(&pl.instance_id) {
+                    b.x += dx;
+                    b.y += dy;
+                }
+                if cx < b.x || cy < b.y || cx >= b.x + b.width || cy >= b.y + b.height {
+                    continue;
+                }
+                if let Ok(inst) = self.widget_manager.get_instance(pl.instance_id) {
+                    if inst.type_id == "file-manager" {
+                        let pane = self.fm_pane_at_point(pl.instance_id, cx, b);
+                        return Some((pl.instance_id, pane));
+                    }
+                }
+            }
+        }
+        self.fm_focus
+            .lock()
+            .clone()
+            .or_else(|| {
+                self.find_active_fm()
+                    .map(|id| (id, self.fm_active_pane(id)))
+            })
+    }
+
+    fn pointer_over_viewer(&self) -> bool {
+        let Some((cx, cy)) = self.last_canvas_pointer.lock().clone() else {
+            return false;
+        };
+        self.widget_at_canvas_point(
+            cx,
+            cy,
+            orchid_widgets::builtin::viewer::TYPE_ID,
+        )
+        .is_some()
+    }
+
+    fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            for p in paths {
+                let Ok(fp) = orchid_fs::FsPath::new(&p) else {
+                    continue;
+                };
+                if fp.scheme() == "virtual" {
+                    continue;
+                }
+                let os = std::path::Path::new(&p);
+                if os.is_dir() {
+                    continue;
+                }
+                if !os.is_file() {
+                    continue;
+                }
+                let _ = Self::open_in_viewer_for_controller(tw.clone(), fp).await;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn fm_complete_drag_drop(self: &Arc<Self>, inst: Uuid, dest: Option<String>) {
+        let paths = {
+            let over = self.fm_overlays.read();
+            over.get(&inst)
+                .filter(|e| e.drag_active)
+                .map(|e| e.drag_paths.clone())
+                .unwrap_or_default()
+        };
+        if paths.is_empty() {
+            self.clear_fm_drag(inst);
+            self.schedule_rebuild();
+            return;
+        }
+        if self.pointer_over_viewer() {
+            self.clear_fm_drag(inst);
+            self.schedule_rebuild();
+            self.fm_open_paths_in_viewer(paths);
+            return;
+        }
+        self.clear_fm_drag(inst);
+        self.schedule_rebuild();
+        if let Some(dest) = dest.filter(|d| !d.is_empty() && !d.starts_with("virtual:")) {
+            self.fm_dispatch_drag_move(inst, paths, dest);
+        }
     }
 
     fn ensure_fm_overlays(&self, inst: Uuid) -> FileManagerOverlays {
@@ -2852,14 +3048,14 @@ impl MainWindowController {
     }
 
     fn on_os_file_dropped(self: &Arc<Self>, path: String) {
-        let Some(inst) = self.find_active_fm() else {
+        let Some((inst, pane)) = self.fm_drop_target() else {
             return;
         };
-        let pane = self.fm_active_pane(inst);
         let dest = self.fm_active_tab_path(inst, pane);
         let Some(dest) = dest.filter(|d| !d.is_empty() && !d.starts_with("virtual:")) else {
             return;
         };
+        self.set_fm_focus(inst, pane);
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             if let Err(e) =
@@ -3056,6 +3252,7 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
+        self.set_fm_focus(inst, p);
         let paths = self.fm_selected_paths(inst, p);
         if paths.is_empty() {
             return;
@@ -3105,21 +3302,7 @@ impl MainWindowController {
             return;
         };
         let folder_path = folder.to_string();
-        let paths = {
-            let over = self.fm_overlays.read();
-            over.get(&inst)
-                .filter(|e| e.drag_active)
-                .map(|e| e.drag_paths.clone())
-                .unwrap_or_default()
-        };
-        if paths.is_empty() {
-            self.clear_fm_drag(inst);
-            self.schedule_rebuild();
-            return;
-        }
-        self.clear_fm_drag(inst);
-        self.schedule_rebuild();
-        self.fm_dispatch_drag_move(inst, paths, folder_path);
+        self.fm_complete_drag_drop(inst, Some(folder_path));
     }
 
     fn on_fm_pane_drag_hover(self: &Arc<Self>, pane: i32) {
@@ -3142,24 +3325,9 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
-        let paths = {
-            let over = self.fm_overlays.read();
-            over.get(&inst)
-                .filter(|e| e.drag_active)
-                .map(|e| e.drag_paths.clone())
-                .unwrap_or_default()
-        };
-        if paths.is_empty() {
-            self.clear_fm_drag(inst);
-            self.schedule_rebuild();
-            return;
-        }
+        self.set_fm_focus(inst, p);
         let dest = self.fm_active_tab_path(inst, p);
-        self.clear_fm_drag(inst);
-        self.schedule_rebuild();
-        if let Some(dest) = dest.filter(|d| !d.is_empty()) {
-            self.fm_dispatch_drag_move(inst, paths, dest);
-        }
+        self.fm_complete_drag_drop(inst, dest);
     }
 
     fn on_fm_entry_drag_cancel(self: &Arc<Self>, _pane: i32) {
@@ -3175,6 +3343,7 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
+        self.set_fm_focus(inst, p);
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::switch_active_pane(inst, p).await;
@@ -3371,6 +3540,7 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
+        self.set_fm_focus(inst, p);
         let ps = path.to_string();
         let ps_for_select = ps.clone();
         let mode = if ctrl {
