@@ -227,6 +227,7 @@ fm-ingested = Ingested: { $name }
 fm-sidebar-tags = Tags
 fm-sidebar-recent = Recent
 fm-sidebar-network = Network
+fm-sidebar-network-all = All places
 fm-category-images = Images
 fm-category-documents = Documents
 fm-category-video = Video

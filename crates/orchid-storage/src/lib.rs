@@ -36,9 +36,9 @@ pub mod paths;
 pub mod state;
 
 pub use config::{
-    AppearanceConfig, Config, ConfigLoader, ConfigWatcher, Density, GeneralConfig, Hand,
-    InputConfig, LocaleConfig, OrchidConfig, PenDoubleTapAction, PrivacyConfig, ShortcutsConfig,
-    DEFAULT_CONFIG_TOML,
+    AppearanceConfig, Config, ConfigLoader, ConfigWatcher, Density, FileManagerSectionConfig,
+    GeneralConfig, Hand, InputConfig, LocaleConfig, NetworkMountConfig, OrchidConfig,
+    PenDoubleTapAction, PrivacyConfig, ShortcutsConfig, DEFAULT_CONFIG_TOML,
 };
 pub use error::{Result, StorageError};
 pub use paths::OrchidPaths;

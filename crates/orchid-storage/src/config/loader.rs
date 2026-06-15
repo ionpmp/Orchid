@@ -65,6 +65,14 @@ first-day-of-week = 1
 record-action-history = true
 history-retention-days = 90
 clear-clipboard-seconds = 30
+
+# [file-manager]
+# Remote mounts shown under the file manager Network sidebar.
+# Use Orchid path syntax (`sftp:host/path`) or a URL (`sftp://host/path`).
+# [[file-manager.network-mounts]]
+# name = "Home SFTP"
+# uri = "sftp://myserver/home/alice"
+# enabled = true
 "#;
 
 /// Load / save / reload API for the TOML configuration.

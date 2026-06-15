@@ -23,7 +23,7 @@ use crate::error::WidgetError;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    EntryPayload, FileManagerPayload, FmViewMode, PanePayload, TabPayload,
+    EntryPayload, FileManagerPayload, FmViewMode, NetworkMountPayload, PanePayload, TabPayload,
 };
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
@@ -136,6 +136,8 @@ pub struct FileManagerDeps {
     pub managed: Option<Arc<orchid_fs::ManagedFolderEngine>>,
     /// Encrypted-folder engine (age encryption + reveal sessions).
     pub encrypted: Option<Arc<orchid_fs::EncryptedFolderEngine>>,
+    /// Configured remote mounts from `config.toml` `[file-manager]`.
+    pub network_mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -363,6 +365,7 @@ impl Widget for FileManagerWidget {
                 dual_pane,
                 clipboard_indicator,
                 managed_roots: self.inner.managed_roots.read().clone(),
+                network_mounts: self.inner.network_mount_payloads(),
                 activity_indicator: self.inner.activity_indicator_label(),
             }),
         })
@@ -406,6 +409,29 @@ impl FileManagerInner {
             }
         }
         None
+    }
+
+    fn enabled_network_mounts(&self) -> Vec<orchid_storage::NetworkMountConfig> {
+        self.deps
+            .network_mounts
+            .read()
+            .iter()
+            .filter(|m| m.enabled && !m.uri.trim().is_empty())
+            .cloned()
+            .collect()
+    }
+
+    fn network_mount_payloads(&self) -> Vec<NetworkMountPayload> {
+        self.enabled_network_mounts()
+            .into_iter()
+            .filter_map(|m| {
+                let uri = normalize_mount_uri(&m.uri)?;
+                Some(NetworkMountPayload {
+                    name: network_mount_display_name(&m, &uri),
+                    uri,
+                })
+            })
+            .collect()
     }
 
     async fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
@@ -917,7 +943,36 @@ impl FileManagerInner {
         if raw == "virtual:tags" {
             return self.list_tagged_paths().await;
         }
+        if raw == "virtual:network" {
+            return self.list_network_mounts();
+        }
         Vec::new()
+    }
+
+    fn list_network_mounts(&self) -> Vec<orchid_fs::FsEntry> {
+        self.enabled_network_mounts()
+            .into_iter()
+            .filter_map(|m| {
+                let uri = normalize_mount_uri(&m.uri)?;
+                let path = orchid_fs::FsPath::new(&uri).ok()?;
+                Some(orchid_fs::FsEntry {
+                    name: network_mount_display_name(&m, &uri),
+                    metadata: orchid_fs::FsMetadata {
+                        kind: orchid_fs::FsEntryKind::Directory,
+                        size: 0,
+                        created: None,
+                        modified: None,
+                        accessed: None,
+                        readonly: false,
+                        hidden: false,
+                        system: false,
+                        mime: None,
+                        extended: orchid_fs::ExtendedAttributes::default(),
+                    },
+                    path,
+                })
+            })
+            .collect()
     }
 
     async fn list_tagged_paths(&self) -> Vec<orchid_fs::FsEntry> {
@@ -1306,6 +1361,11 @@ fn build_tab_payload(
             selection_count,
         )
     };
+    let error = if tab.path.as_str() == "virtual:network" && entry_payloads.is_empty() {
+        Some("network-placeholder".into())
+    } else {
+        None
+    };
     TabPayload {
         tab_id: tab.id.to_string(),
         path_display: tab.path.as_str().to_string(),
@@ -1318,7 +1378,7 @@ fn build_tab_payload(
         status_text,
         quick_filter: tab.quick_filter.clone(),
         is_loading: false,
-        error: None,
+        error,
         sort_by: sort_by_to_u8(tab.sort_by),
         sort_descending: tab.sort_descending,
     }
@@ -2688,6 +2748,20 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         "cat:audio" => orchid_fs::FsPath::new("virtual:categories/audio").ok(),
         "cat:archives" => orchid_fs::FsPath::new("virtual:categories/archives").ok(),
         "net:places" => orchid_fs::FsPath::new("virtual:network").ok(),
+        other if other.starts_with("net:") && other != "net:places" => {
+            let idx = other
+                .strip_prefix("net:")
+                .and_then(|s| s.parse::<usize>().ok());
+            let inner = live_inner(instance_id)?;
+            idx.and_then(|i| {
+                inner
+                    .enabled_network_mounts()
+                    .into_iter()
+                    .nth(i)
+                    .and_then(|m| normalize_mount_uri(&m.uri))
+                    .and_then(|uri| orchid_fs::FsPath::new(&uri).ok())
+            })
+        }
         other if other.starts_with("managed:") => {
             let idx = other
                 .strip_prefix("managed:")
@@ -2717,4 +2791,35 @@ pub fn notify_managed_ingest(path: &orchid_fs::FsPath) {
             inner.handle_managed_ingest(&path).await;
         });
     }
+}
+
+/// Convert `sftp://host/path` or `sftp:host/path` into a canonical [`FsPath`] string.
+fn normalize_mount_uri(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("://") {
+        return None;
+    }
+    if let Some(colon) = trimmed.find("://") {
+        let scheme = &trimmed[..colon];
+        let body = trimmed[colon + 3..].trim_start_matches('/');
+        let candidate = format!("{scheme}:{body}");
+        return orchid_fs::FsPath::new(&candidate).ok().map(|p| p.as_str().to_string());
+    }
+    orchid_fs::FsPath::new(trimmed)
+        .ok()
+        .map(|p| p.as_str().to_string())
+}
+
+fn network_mount_display_name(m: &orchid_storage::NetworkMountConfig, uri: &str) -> String {
+    if !m.name.trim().is_empty() {
+        return m.name.trim().to_string();
+    }
+    orchid_fs::FsPath::new(uri)
+        .ok()
+        .and_then(|p| p.file_name().map(String::from))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| uri.to_string())
 }

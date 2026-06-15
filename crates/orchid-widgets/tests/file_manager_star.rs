@@ -31,6 +31,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         search: None,
         managed: None,
         encrypted: None,
+        network_mounts: Arc::new(RwLock::new(Vec::new())),
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());

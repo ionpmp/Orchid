@@ -27,6 +27,8 @@ pub struct OrchidConfig {
     pub locale: LocaleConfig,
     /// History retention and clipboard privacy controls.
     pub privacy: PrivacyConfig,
+    /// File-manager global settings (network mounts, etc.).
+    pub file_manager: FileManagerSectionConfig,
 }
 
 /// Application-wide toggles that don't fit any other section.
@@ -201,6 +203,36 @@ impl Default for PrivacyConfig {
             record_action_history: true,
             history_retention_days: 90,
             clear_clipboard_seconds: 30,
+        }
+    }
+}
+
+/// Global file-manager settings stored in `config.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct FileManagerSectionConfig {
+    /// Remote folder mounts listed under the Network sidebar (rclone pending).
+    pub network_mounts: Vec<NetworkMountConfig>,
+}
+
+/// One configured remote mount (SFTP, SMB, WebDAV, …).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct NetworkMountConfig {
+    /// Display name in the sidebar and virtual network folder.
+    pub name: String,
+    /// Mount URI (`sftp:host/path` or `sftp://host/path`).
+    pub uri: String,
+    /// When false, the mount is hidden from the UI.
+    pub enabled: bool,
+}
+
+impl Default for NetworkMountConfig {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            uri: String::new(),
+            enabled: true,
         }
     }
 }

@@ -16,7 +16,7 @@ pub mod viewer;
 pub mod weather;
 
 pub use file_manager::{
-    EntryPayload, FileManagerPayload, FmViewMode, PanePayload, TabPayload,
+    EntryPayload, FileManagerPayload, FmViewMode, NetworkMountPayload, PanePayload, TabPayload,
 };
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;

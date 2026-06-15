@@ -122,6 +122,8 @@ pub struct MainWindowController {
     canvas_scroll: Arc<Mutex<(f32, f32)>>,
     /// Last winit keyboard modifier state (Ctrl+drop → copy).
     keyboard_modifiers: Arc<Mutex<slint::winit_030::winit::keyboard::ModifiersState>>,
+    /// Pending OS file-drop paths batched across rapid `DroppedFile` events.
+    os_drop_batch: Arc<Mutex<OsDropBatch>>,
     /// Long-press widget catalog (search + pick).
     catalog: Arc<RwLock<CatalogUiState>>,
     catalog_items: ModelRc<DockWidgetType>,
@@ -156,6 +158,20 @@ enum PasswordCopyKind {
     Password,
     Username,
     Totp,
+}
+
+struct OsDropBatch {
+    paths: Vec<String>,
+    generation: u64,
+}
+
+impl Default for OsDropBatch {
+    fn default() -> Self {
+        Self {
+            paths: Vec::new(),
+            generation: 0,
+        }
+    }
 }
 
 impl MainWindowController {
@@ -229,6 +245,7 @@ impl MainWindowController {
             keyboard_modifiers: Arc::new(Mutex::new(
                 slint::winit_030::winit::keyboard::ModifiersState::empty(),
             )),
+            os_drop_batch: Arc::new(Mutex::new(OsDropBatch::default())),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             catalog_items,
         });
@@ -2815,7 +2832,7 @@ impl MainWindowController {
                 WindowEvent::DroppedFile(path_buf) => {
                     let path = path_buf.to_string_lossy().into_owned();
                     if let Some(c) = tw.upgrade() {
-                        c.on_os_file_dropped(path);
+                        c.queue_os_file_drop(path);
                     }
                 }
                 _ => {}
@@ -3144,7 +3161,34 @@ impl MainWindowController {
             .unwrap_or(0)
     }
 
-    fn on_os_file_dropped(self: &Arc<Self>, path: String) {
+    fn queue_os_file_drop(self: &Arc<Self>, path: String) {
+        let generation = {
+            let mut batch = self.os_drop_batch.lock();
+            batch.paths.push(path);
+            batch.generation += 1;
+            batch.generation
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+            let Some(c) = tw.upgrade() else {
+                return;
+            };
+            let paths = {
+                let mut batch = c.os_drop_batch.lock();
+                if batch.generation != generation {
+                    return;
+                }
+                std::mem::take(&mut batch.paths)
+            };
+            if paths.is_empty() {
+                return;
+            }
+            c.on_os_files_dropped(paths);
+        }));
+    }
+
+    fn on_os_files_dropped(self: &Arc<Self>, paths: Vec<String>) {
         let Some((inst, pane)) = self.fm_drop_target() else {
             return;
         };
@@ -3162,14 +3206,14 @@ impl MainWindowController {
             let result = if copy {
                 orchid_widgets::builtin::file_manager::copy_paths_to_directory(
                     inst,
-                    vec![path],
+                    paths,
                     &dest,
                 )
                 .await
             } else {
                 orchid_widgets::builtin::file_manager::move_paths_to_directory(
                     inst,
-                    vec![path],
+                    paths,
                     &dest,
                 )
                 .await
@@ -4756,7 +4800,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         dual_pane_label: locale.tr("fm-dual-pane-on").into(),
         clipboard_indicator: SharedString::new(),
         activity_indicator: SharedString::new(),
-        sidebar_items: build_sidebar_items(locale, "", &[]),
+        sidebar_items: build_sidebar_items(locale, "", &[], &[]),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
@@ -4859,13 +4903,24 @@ fn active_managed_sidebar_index(active_path: &str, managed_roots: &[String]) -> 
     None
 }
 
+fn active_network_sidebar_index(
+    active_path: &str,
+    network_mounts: &[orchid_widgets::NetworkMountPayload],
+) -> Option<usize> {
+    network_mounts
+        .iter()
+        .position(|m| m.uri == active_path)
+}
+
 fn build_sidebar_items(
     locale: &LocaleManager,
     active_path: &str,
     managed_roots: &[String],
+    network_mounts: &[orchid_widgets::NetworkMountPayload],
 ) -> ModelRc<FmSidebarItem> {
     let active_id = fm_sidebar_id_for_path(active_path);
     let active_managed = active_managed_sidebar_index(active_path, managed_roots);
+    let active_network = active_network_sidebar_index(active_path, network_mounts);
     let mut items = vec![
         FmSidebarItem {
             id: "section:favorites".into(),
@@ -4978,12 +5033,22 @@ fn build_sidebar_items(
     });
     items.push(FmSidebarItem {
         id: "net:places".into(),
-        label: locale.tr("fm-sidebar-network").into(),
+        label: locale.tr("fm-sidebar-network-all").into(),
         icon: "🌐".into(),
         indent: 1,
         is_section_header: false,
-        is_active: active_id == Some("net:places"),
+        is_active: active_id == Some("net:places") && active_network.is_none(),
     });
+    for (i, mount) in network_mounts.iter().enumerate() {
+        items.push(FmSidebarItem {
+            id: format!("net:{i}").into(),
+            label: mount.name.clone().into(),
+            icon: "🔗".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: active_network == Some(i),
+        });
+    }
     ModelRc::new(VecModel::from(items))
 }
 
@@ -4999,7 +5064,8 @@ fn build_file_manager_model(
         .and_then(|pp| pp.tabs.get(pp.active_tab as usize))
         .map(|t| t.path_display.clone())
         .unwrap_or_default();
-    let sidebar_items = build_sidebar_items(locale, &active_path, &p.managed_roots);
+    let sidebar_items =
+        build_sidebar_items(locale, &active_path, &p.managed_roots, &p.network_mounts);
     let sort_name_label = locale.tr("fm-sort-name");
     let sort_size_label = locale.tr("fm-sort-size");
     let sort_modified_label = locale.tr("fm-sort-modified");
@@ -5075,7 +5141,7 @@ fn build_file_manager_model(
                         status_text: t.status_text.clone().into(),
                         quick_filter: t.quick_filter.clone().into(),
                         is_loading: t.is_loading,
-                        error: if t.path_display == "virtual:network" {
+                        error: if t.error.as_deref() == Some("network-placeholder") {
                             locale.tr("fm-network-placeholder").into()
                         } else {
                             t.error.clone().unwrap_or_default().into()

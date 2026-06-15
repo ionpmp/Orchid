@@ -345,6 +345,9 @@ impl OrchidApp {
             search: Some(search_engine.clone()),
             managed: Some(managed_engine),
             encrypted: Some(encrypted_engine),
+            network_mounts: Arc::new(RwLock::new(
+                config.read().file_manager.network_mounts.clone(),
+            )),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

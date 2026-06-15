@@ -222,6 +222,7 @@ fm-ingested = Загружено: { $name }
 fm-sidebar-tags = Теги
 fm-sidebar-recent = Недавние
 fm-sidebar-network = Сеть
+fm-sidebar-network-all = Все места
 fm-category-images = Изображения
 fm-category-documents = Документы
 fm-category-video = Видео

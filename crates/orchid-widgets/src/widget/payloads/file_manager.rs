@@ -10,8 +10,18 @@ pub struct FileManagerPayload {
     pub clipboard_indicator: Option<String>,
     /// Registered managed-folder root paths (for sidebar).
     pub managed_roots: Vec<String>,
+    /// Configured network mounts (name + canonical URI) for sidebar / virtual folder.
+    pub network_mounts: Vec<NetworkMountPayload>,
     /// Short-lived ingest activity label (file name).
     pub activity_indicator: Option<String>,
+}
+
+/// One configured network mount surfaced in the FM payload.
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct NetworkMountPayload {
+    pub name: String,
+    pub uri: String,
 }
 
 /// One pane (left or right) with its tabs.
