@@ -347,8 +347,9 @@ fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
             }
         }
     }
-    if let Some(clip) = &p.clipboard_indicator {
-        lines.push(clip.clone());
+    if p.clipboard_count > 0 {
+        let op = if p.clipboard_is_cut { "cut" } else { "copy" };
+        lines.push(format!("{} entries ({op}) ready to paste", p.clipboard_count));
     }
     lines
 }

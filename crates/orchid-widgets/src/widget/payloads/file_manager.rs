@@ -7,7 +7,10 @@ pub struct FileManagerPayload {
     pub panes: Vec<PanePayload>,
     pub active_pane: u8,
     pub dual_pane: bool,
-    pub clipboard_indicator: Option<String>,
+    /// Staged clipboard entry count (`0` = hidden).
+    pub clipboard_count: u32,
+    /// `true` when clipboard holds a cut (not copy).
+    pub clipboard_is_cut: bool,
     /// Registered managed-folder root paths (for sidebar).
     pub managed_roots: Vec<String>,
     /// Configured network mounts (name + canonical URI) for sidebar / virtual folder.

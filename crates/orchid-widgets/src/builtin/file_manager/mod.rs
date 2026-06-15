@@ -371,13 +371,12 @@ impl Widget for FileManagerWidget {
             ActivePane::Right => 1,
         };
         let tab = state.active_tab();
-        let clipboard_indicator = match self.inner.deps.clipboard.operation() {
-            ClipboardOperation::None => None,
-            op => Some(format!(
-                "{} {} ready to paste",
-                self.inner.deps.clipboard.len(),
-                if op == ClipboardOperation::Cut { "entries (cut)" } else { "entries" }
-            )),
+        let clip_op = self.inner.deps.clipboard.operation();
+        let clip_count = self.inner.deps.clipboard.len();
+        let (clipboard_count, clipboard_is_cut) = match clip_op {
+            ClipboardOperation::None => (0, false),
+            ClipboardOperation::Copy => (clip_count as u32, false),
+            ClipboardOperation::Cut => (clip_count as u32, true),
         };
 
         Some(WidgetSnapshot {
@@ -391,7 +390,8 @@ impl Widget for FileManagerWidget {
                 panes,
                 active_pane,
                 dual_pane,
-                clipboard_indicator,
+                clipboard_count,
+                clipboard_is_cut,
                 managed_roots: self.inner.managed_roots.read().clone(),
                 network_mounts: self.inner.network_mount_payloads(),
                 activity_indicator: self.inner.activity_indicator_label(),

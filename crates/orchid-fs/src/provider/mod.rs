@@ -180,6 +180,18 @@ pub trait FsProvider: Send + Sync + 'static {
     ) -> Result<bool> {
         Ok(false)
     }
+
+    /// Move across schemes when this provider can delegate natively (e.g.
+    /// `rclone moveto`). Returns `Ok(true)` when handled.
+    async fn move_cross_scheme(
+        &self,
+        _registry: &FsProviderRegistry,
+        _from: &FsPath,
+        _to: &FsPath,
+        _progress: Option<&ProgressSink>,
+    ) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 /// Convenience alias for shared providers.

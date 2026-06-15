@@ -5317,6 +5317,20 @@ fn build_file_manager_model(
             .unwrap_or_default()
     };
 
+    let clipboard_indicator = if p.clipboard_count > 0 {
+        let key = if p.clipboard_is_cut {
+            "fm-clipboard-cut"
+        } else {
+            "fm-clipboard-copy"
+        };
+        locale.tr_args(
+            key,
+            &orchid_i18n::FluentArgs::new().with("count", p.clipboard_count.to_string()),
+        )
+    } else {
+        String::new()
+    };
+
     FileManagerModel {
         panes: ModelRc::new(VecModel::from(panes)),
         active_pane: i32::from(p.active_pane),
@@ -5326,7 +5340,7 @@ fn build_file_manager_model(
         } else {
             locale.tr("fm-dual-pane-on").into()
         },
-        clipboard_indicator: p.clipboard_indicator.clone().unwrap_or_default().into(),
+        clipboard_indicator: clipboard_indicator.into(),
         activity_indicator: activity_indicator.into(),
         transfer_active: p.transfer_active,
         transfer_progress: p.transfer_progress,

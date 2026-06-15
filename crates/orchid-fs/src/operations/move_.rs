@@ -45,6 +45,23 @@ pub async fn move_(
             // cross-volume renames on Windows (ERROR_NOT_SAME_DEVICE = 17).
             Err(_) => {}
         }
+    } else {
+        if let Some(provider) = registry.for_path(from) {
+            if provider
+                .move_cross_scheme(registry, from, to, progress)
+                .await?
+            {
+                return Ok(());
+            }
+        }
+        if let Some(provider) = registry.for_path(to) {
+            if provider
+                .move_cross_scheme(registry, from, to, progress)
+                .await?
+            {
+                return Ok(());
+            }
+        }
     }
 
     // Slow path: copy then delete source.
