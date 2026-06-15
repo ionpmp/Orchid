@@ -2794,6 +2794,16 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
     Ok(())
 }
 
+/// Refresh every live file-manager instance (e.g. after config hot-reload).
+pub async fn refresh_all_instances() {
+    for entry in FM_LIVE.iter() {
+        let inner = Arc::clone(entry.value());
+        tokio::spawn(async move {
+            inner.refresh_all_tabs().await;
+        });
+    }
+}
+
 /// Notify every live file-manager instance that a managed file was ingested.
 pub fn notify_managed_ingest(path: &orchid_fs::FsPath) {
     for entry in FM_LIVE.iter() {

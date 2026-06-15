@@ -16,7 +16,7 @@ use orchid_core::{
 };
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
 use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider, register_rclone_providers};
-use orchid_storage::{ConfigLoader, OrchidConfig, OrchidPaths, StateStore};
+use orchid_storage::{ConfigLoader, ConfigWatcher, NetworkMountConfig, OrchidConfig, OrchidPaths, StateStore};
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
     builtin::search::{CommandsSource, FilesSource, SearchAggregator, SearchSource, SettingsSource},
@@ -62,6 +62,11 @@ pub struct OrchidApp {
     _terminal_clipboard_sub: Option<SubscriptionHandle>,
     /// Refreshes file-manager UI when managed files are ingested.
     _managed_ingest_sub: Option<SubscriptionHandle>,
+    /// Shared network mount list (hot-reloaded from config.toml).
+    #[allow(dead_code)] // held for lifetime; FM and rclone providers hold clones
+    network_mounts: Arc<RwLock<Vec<NetworkMountConfig>>>,
+    /// Keeps the config watcher background task alive.
+    _config_watcher: ConfigWatcher,
 }
 
 impl std::fmt::Debug for OrchidApp {
@@ -350,7 +355,7 @@ impl OrchidApp {
             search: Some(search_engine.clone()),
             managed: Some(managed_engine),
             encrypted: Some(encrypted_engine),
-            network_mounts,
+            network_mounts: network_mounts.clone(),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))
@@ -409,6 +414,26 @@ impl OrchidApp {
             "orchid subsystems ready"
         );
 
+        let (config_watcher, mut config_rx) = ConfigWatcher::start(paths.config_file.clone())
+            .await
+            .map_err(|e| UiError::Slint(format!("config watcher: {e}")))?;
+        let config_reload = config.clone();
+        let mounts_reload = network_mounts.clone();
+        tokio::spawn(async move {
+            loop {
+                match config_rx.recv().await {
+                    Ok(new_cfg) => {
+                        info!("config.toml reloaded");
+                        *config_reload.write() = new_cfg.clone();
+                        *mounts_reload.write() = new_cfg.file_manager.network_mounts.clone();
+                        orchid_widgets::builtin::file_manager::refresh_all_instances().await;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+
         Ok(Self {
             paths,
             config,
@@ -426,6 +451,8 @@ impl OrchidApp {
             fs_registry,
             _terminal_clipboard_sub: terminal_clipboard_sub,
             _managed_ingest_sub: Some(managed_ingest_sub),
+            network_mounts,
+            _config_watcher: config_watcher,
         })
     }
 

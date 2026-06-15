@@ -82,6 +82,44 @@ impl RcloneProvider {
         })
     }
 
+    async fn remote_for_path(&self, path: &FsPath) -> Result<String> {
+        let resolved = self.resolve_mount(path)?;
+        self.rclone_remote_spec(&resolved).await
+    }
+
+    async fn run_rclone(&self, args: &[&str]) -> Result<()> {
+        let output = Command::new(&self.rclone_bin)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    FsError::InvalidPath {
+                        reason: format!(
+                            "`{}` not found; install rclone and ensure it is on PATH (or set RCLONE_BIN)",
+                            self.rclone_bin
+                        ),
+                    }
+                } else {
+                    FsError::Io(e)
+                }
+            })?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(FsError::InvalidPath {
+                reason: format!(
+                    "rclone {} failed: {}",
+                    args.first().copied().unwrap_or(""),
+                    stderr.trim()
+                ),
+            })
+        }
+    }
+
     async fn rclone_remote_spec(&self, resolved: &ResolvedMount) -> Result<String> {
         if let Some(remote) = resolved.mount.rclone_remote.as_deref() {
             let tail = resolved.relative_path.trim_start_matches('/');
@@ -282,37 +320,83 @@ impl FsProvider for RcloneProvider {
         Ok(Box::new(std::io::Cursor::new(bytes)))
     }
 
-    async fn write(&self, _path: &FsPath, _bytes: &[u8]) -> Result<()> {
-        Err(FsError::PermissionDenied(
-            "network paths are read-only until rclone write support lands".into(),
-        ))
+    async fn write(&self, path: &FsPath, bytes: &[u8]) -> Result<()> {
+        let remote = self.remote_for_path(path).await?;
+        let mut child = Command::new(&self.rclone_bin)
+            .args(["rcat", &remote])
+            .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    FsError::InvalidPath {
+                        reason: format!(
+                            "`{}` not found; install rclone and ensure it is on PATH (or set RCLONE_BIN)",
+                            self.rclone_bin
+                        ),
+                    }
+                } else {
+                    FsError::Io(e)
+                }
+            })?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin.write_all(bytes).await.map_err(FsError::Io)?;
+        }
+        let output = child.wait_with_output().await.map_err(FsError::Io)?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(FsError::InvalidPath {
+                reason: format!("rclone rcat failed: {}", stderr.trim()),
+            })
+        }
     }
 
     async fn write_stream(
         &self,
-        _path: &FsPath,
+        path: &FsPath,
     ) -> Result<Box<dyn tokio::io::AsyncWrite + Unpin + Send>> {
-        Err(FsError::PermissionDenied(
-            "network paths are read-only until rclone write support lands".into(),
-        ))
+        let remote = self.remote_for_path(path).await?;
+        let mut child = Command::new(&self.rclone_bin)
+            .args(["rcat", &remote])
+            .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(FsError::Io)?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| FsError::InvalidPath {
+                reason: "rclone rcat stdin unavailable".into(),
+            })?;
+        Ok(Box::new(RcloneWriteHandle { child, stdin }))
     }
 
-    async fn create_dir(&self, _path: &FsPath, _recursive: bool) -> Result<()> {
-        Err(FsError::PermissionDenied(
-            "network paths are read-only until rclone write support lands".into(),
-        ))
+    async fn create_dir(&self, path: &FsPath, _recursive: bool) -> Result<()> {
+        let remote = self.remote_for_path(path).await?;
+        self.run_rclone(&["mkdir", &remote]).await
     }
 
-    async fn rename(&self, _from: &FsPath, _to: &FsPath) -> Result<()> {
-        Err(FsError::PermissionDenied(
-            "network paths are read-only until rclone write support lands".into(),
-        ))
+    async fn rename(&self, from: &FsPath, to: &FsPath) -> Result<()> {
+        let src = self.remote_for_path(from).await?;
+        let dst = self.remote_for_path(to).await?;
+        self.run_rclone(&["moveto", &src, &dst]).await
     }
 
-    async fn remove(&self, _path: &FsPath, _recursive: bool) -> Result<()> {
-        Err(FsError::PermissionDenied(
-            "network paths are read-only until rclone write support lands".into(),
-        ))
+    async fn remove(&self, path: &FsPath, recursive: bool) -> Result<()> {
+        let remote = self.remote_for_path(path).await?;
+        if recursive {
+            return self.run_rclone(&["purge", &remote]).await;
+        }
+        match self.metadata(path).await {
+            Ok(meta) if matches!(meta.kind, FsEntryKind::Directory) => {
+                self.run_rclone(&["rmdir", &remote]).await
+            }
+            Ok(_) => self.run_rclone(&["deletefile", &remote]).await,
+            Err(e) => Err(e),
+        }
     }
 
     async fn watch(
@@ -324,7 +408,7 @@ impl FsProvider for RcloneProvider {
 
     fn capabilities(&self) -> FsCapabilities {
         FsCapabilities {
-            supports_rename: false,
+            supports_rename: true,
             supports_symlinks: false,
             supports_permissions: false,
             supports_extended_attrs: false,
@@ -332,6 +416,41 @@ impl FsProvider for RcloneProvider {
             case_sensitive: true,
             supports_random_write: false,
         }
+    }
+}
+
+struct RcloneWriteHandle {
+    child: tokio::process::Child,
+    stdin: tokio::process::ChildStdin,
+}
+
+impl tokio::io::AsyncWrite for RcloneWriteHandle {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.stdin).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.stdin).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.stdin).poll_shutdown(cx)
+    }
+}
+
+impl Drop for RcloneWriteHandle {
+    fn drop(&mut self) {
+        let _ = self.child.start_kill();
     }
 }
 
