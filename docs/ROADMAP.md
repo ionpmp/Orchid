@@ -36,7 +36,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
-- [~] Encryption integration — encrypt / decrypt / reveal in UI; localized status + success toast; age engine wired via `EncryptedFolderEngine`
+- [~] Encryption integration — encrypt / decrypt / reveal in UI; localized status + success/error toast; passphrase retry on wrong password; age engine wired via `EncryptedFolderEngine`
 - [~] Managed folders — sidebar list, localized ingest stats in status bar, in-flight indicator + toast, add/remove in context menu
 
 ### Terminal
@@ -67,7 +67,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — KDBX4 read/write, groups / entries / TOTP / search done in `orchid-crypto::kdbx`; widget UI pending
-- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; biometric and polish pending
+- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase errors; biometric polish pending
 - [ ] Biometric unlock via Windows Hello
 
 ### Storage

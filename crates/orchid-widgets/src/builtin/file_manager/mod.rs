@@ -190,6 +190,8 @@ struct FileManagerInner {
     transfer: RwLock<TransferState>,
     /// Last failed transfer message (brief status-bar toast).
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
+    /// Last passphrase failure (brief status-bar toast while dialog is open).
+    passphrase_error: RwLock<Option<(String, std::time::Instant)>>,
     /// Brief success notice (`i18n` key + optional name argument).
     activity_notice_key: RwLock<Option<String>>,
     activity_notice_name: RwLock<Option<String>>,
@@ -241,6 +243,7 @@ impl FileManagerWidget {
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
+                passphrase_error: RwLock::new(None),
                 activity_notice_key: RwLock::new(None),
                 activity_notice_name: RwLock::new(None),
                 activity_notice_at: RwLock::new(None),
@@ -416,6 +419,7 @@ impl Widget for FileManagerWidget {
                     None
                 },
                 transfer_error: self.inner.transfer_error_label(),
+                passphrase_error: self.inner.passphrase_error_label(),
                 activity_notice_key: self.inner.activity_notice_key(),
                 activity_notice_name: self.inner.activity_notice_name(),
             }
@@ -514,6 +518,25 @@ impl FileManagerInner {
     fn set_transfer_notice(&self, message: String) {
         *self.transfer_notice.write() = Some((message, std::time::Instant::now()));
         self.publish_refresh();
+    }
+
+    fn passphrase_error_label(&self) -> Option<String> {
+        let notice = self.passphrase_error.read();
+        if let Some((msg, at)) = notice.as_ref() {
+            if at.elapsed() < std::time::Duration::from_secs(8) {
+                return Some(msg.clone());
+            }
+        }
+        None
+    }
+
+    fn set_passphrase_error(&self, message: String) {
+        *self.passphrase_error.write() = Some((message, std::time::Instant::now()));
+        self.publish_refresh();
+    }
+
+    fn clear_passphrase_error(&self) {
+        *self.passphrase_error.write() = None;
     }
 
     fn activity_indicator_label(&self) -> Option<String> {
@@ -1747,6 +1770,18 @@ fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<FileManagerInner>> {
 
 fn map_fs_error(e: orchid_fs::FsError) -> WidgetError {
     WidgetError::InvalidStateForOperation(e.to_string())
+}
+
+/// Report a passphrase failure to the status bar (dialog may stay open for retry).
+pub fn report_passphrase_error(instance_id: Uuid, message: String) -> WidgetResult<()> {
+    live_inner(instance_id)?.set_passphrase_error(message);
+    Ok(())
+}
+
+/// Clear the passphrase failure toast.
+pub fn clear_passphrase_error(instance_id: Uuid) -> WidgetResult<()> {
+    live_inner(instance_id)?.clear_passphrase_error();
+    Ok(())
 }
 
 /// Options for [`run_action`].

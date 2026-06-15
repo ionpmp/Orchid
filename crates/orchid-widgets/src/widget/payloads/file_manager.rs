@@ -29,6 +29,8 @@ pub struct FileManagerPayload {
     pub transfer_current: Option<String>,
     /// Recent transfer failure (raw message; localize in UI).
     pub transfer_error: Option<String>,
+    /// Passphrase dialog failure (raw message; localize in UI).
+    pub passphrase_error: Option<String>,
     /// Short-lived localized notice key (encrypt/decrypt/managed).
     pub activity_notice_key: Option<String>,
     pub activity_notice_name: Option<String>,

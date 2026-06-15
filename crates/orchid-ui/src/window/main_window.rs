@@ -4129,6 +4129,11 @@ impl MainWindowController {
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
+                if let Err(e) =
+                    orchid_widgets::builtin::file_manager::clear_passphrase_error(inst)
+                {
+                    warn!(?e, "fm clear passphrase error");
+                }
                 entry.context_menu = empty_context_menu();
                 drop(over);
                 self.schedule_rebuild();
@@ -4390,11 +4395,21 @@ impl MainWindowController {
         let Some(over) = overlay else {
             return;
         };
+        let pw = passphrase.to_string();
+        if pw.trim().is_empty() {
+            if let Err(e) = orchid_widgets::builtin::file_manager::report_passphrase_error(
+                inst,
+                "passphrase required".into(),
+            ) {
+                warn!(?e, "fm passphrase empty");
+            }
+            self.schedule_rebuild();
+            return;
+        }
         let purpose = over
             .passphrase_purpose
             .unwrap_or(orchid_widgets::builtin::file_manager::PassphrasePurpose::Encrypt);
         let paths = over.passphrase_paths.clone();
-        let pw = passphrase.to_string();
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
@@ -4407,7 +4422,22 @@ impl MainWindowController {
             {
                 Ok(o) => o,
                 Err(e) => {
+                    let msg = e.to_string();
                     warn!(?e, "fm passphrase");
+                    if let Some(c) = tw.upgrade() {
+                        if let Err(report) =
+                            orchid_widgets::builtin::file_manager::report_passphrase_error(
+                                inst,
+                                msg.clone(),
+                            )
+                        {
+                            warn!(?report, "fm passphrase error report");
+                        }
+                        if !is_passphrase_retryable(&msg) {
+                            c.clear_fm_passphrase_overlay(inst);
+                        }
+                        c.schedule_rebuild();
+                    }
                     return;
                 }
             };
@@ -4432,6 +4462,11 @@ impl MainWindowController {
         entry.passphrase = empty_passphrase_state();
         entry.passphrase_paths.clear();
         entry.passphrase_purpose = None;
+        drop(over);
+        if let Err(e) = orchid_widgets::builtin::file_manager::clear_passphrase_error(inst) {
+            warn!(?e, "fm clear passphrase error");
+        }
+        self.schedule_rebuild();
     }
 
     fn on_fm_select_all(self: &Arc<Self>, pane: i32) {
@@ -5123,8 +5158,16 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if lower.contains("cannot drop into virtual folder") => locale.tr("fm-transfer-virtual-dest"),
         _ if lower.contains("encryption unavailable") => locale.tr("fm-encryption-unavailable"),
         _ if lower.contains("managed folders unavailable") => locale.tr("fm-managed-unavailable"),
+        _ if lower.contains("invalid passphrase") => locale.tr("fm-passphrase-invalid"),
+        _ if lower.contains("passphrase required") => locale.tr("fm-passphrase-required"),
+        _ if lower.contains("age decryption failed") => locale.tr("fm-decryption-failed"),
         _ => err.to_string(),
     }
+}
+
+fn is_passphrase_retryable(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("invalid passphrase") || lower.contains("passphrase required")
 }
 
 fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPayload) -> String {
@@ -5425,6 +5468,11 @@ fn build_file_manager_model(
     } else if let Some(err) = p.transfer_error.as_ref() {
         locale.tr_args(
             "fm-transfer-failed",
+            &orchid_i18n::FluentArgs::new().with("reason", fm_localized_error(locale, err)),
+        )
+    } else if let Some(err) = p.passphrase_error.as_ref() {
+        locale.tr_args(
+            "fm-passphrase-failed",
             &orchid_i18n::FluentArgs::new().with("reason", fm_localized_error(locale, err)),
         )
     } else if p.ingest_in_flight > 0 {
