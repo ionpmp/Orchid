@@ -51,6 +51,7 @@ export component FmPane inherits Rectangle {
     callback entry-drag-cancel();
     callback pane-drag-hover();
     callback drop-on-current-dir();
+    callback entry-drag-scroll(length, length, length, length);
     callback crumb-drag-hover(string);
     callback crumb-drag-drop(string);
 
@@ -200,6 +201,7 @@ export component FmPane inherits Rectangle {
                         entry-drag-cancel => { root.entry-drag-cancel(); }
                         pane-drag-hover => { root.pane-drag-hover(); }
                         drop-on-current-dir => { root.drop-on-current-dir(); }
+                        drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -225,6 +227,7 @@ export component FmPane inherits Rectangle {
                         entry-drag-cancel => { root.entry-drag-cancel(); }
                         pane-drag-hover => { root.pane-drag-hover(); }
                         drop-on-current-dir => { root.drop-on-current-dir(); }
+                        drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {

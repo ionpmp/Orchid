@@ -27,16 +27,23 @@ export component FmEntryList inherits Rectangle {
     callback entry-drag-cancel();
     callback pane-drag-hover();
     callback drop-on-current-dir();
+    callback drag-scroll-changed(length, length, length, length);
 
     background: transparent;
 
     property <string> pressing-path: "";
 
-    Flickable {
+    list-flick := Flickable {
         width: parent.width;
         height: parent.height;
         viewport-width: self.width;
         viewport-height: max(self.height, list-stack.preferred-height);
+
+        changed viewport-y => {
+            if (drag-active) {
+                root.drag-scroll-changed(bg-ta.mouse-x, bg-ta.mouse-y, self.viewport-y, self.width);
+            }
+        }
 
         bg-ta := TouchArea {
             width: parent.width;

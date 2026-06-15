@@ -61,6 +61,7 @@ export component FileManagerView inherits Rectangle {
     callback entry-drag-cancel(int);
     callback pane-drag-hover(int);
     callback drop-on-current-dir(int);
+    callback entry-drag-scroll(int, length, length, length, length);
 
     background: transparent;
 
@@ -230,6 +231,7 @@ export component FileManagerView inherits Rectangle {
                 entry-drag-cancel => { root.entry-drag-cancel(0); }
                 pane-drag-hover => { root.pane-drag-hover(0); }
                 drop-on-current-dir => { root.drop-on-current-dir(0); }
+                entry-drag-scroll(mx, my, vy, w) => { root.entry-drag-scroll(0, mx, my, vy, w); }
                 crumb-drag-hover(p) => { root.entry-drag-hover(0, p); }
                 crumb-drag-drop(p) => { root.entry-drag-drop(0, p); }
             }
@@ -290,6 +292,7 @@ export component FileManagerView inherits Rectangle {
                         entry-drag-cancel => { root.entry-drag-cancel(0); }
                         pane-drag-hover => { root.pane-drag-hover(0); }
                         drop-on-current-dir => { root.drop-on-current-dir(0); }
+                        entry-drag-scroll(mx, my, vy, w) => { root.entry-drag-scroll(0, mx, my, vy, w); }
                         crumb-drag-hover(p) => { root.entry-drag-hover(0, p); }
                         crumb-drag-drop(p) => { root.entry-drag-drop(0, p); }
                     }
@@ -348,6 +351,7 @@ export component FileManagerView inherits Rectangle {
                         entry-drag-cancel => { root.entry-drag-cancel(1); }
                         pane-drag-hover => { root.pane-drag-hover(1); }
                         drop-on-current-dir => { root.drop-on-current-dir(1); }
+                        entry-drag-scroll(mx, my, vy, w) => { root.entry-drag-scroll(1, mx, my, vy, w); }
                         crumb-drag-hover(p) => { root.entry-drag-hover(1, p); }
                         crumb-drag-drop(p) => { root.entry-drag-drop(1, p); }
                     }

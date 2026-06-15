@@ -1359,6 +1359,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_entry_drag_scroll({
+            let t = t.clone();
+            move |pane, mouse_x, mouse_y, viewport_y, width| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_entry_drag_scroll(pane, mouse_x, mouse_y, viewport_y, width);
+                }
+            }
+        });
         Ok(())
     }
 
@@ -3491,15 +3499,119 @@ impl MainWindowController {
         let Some(inst) = self.find_active_fm() else {
             return;
         };
+        self.set_fm_drag_hover(inst, pane, folder.to_string());
+    }
+
+    fn set_fm_drag_hover(self: &Arc<Self>, inst: Uuid, pane: i32, folder: String) {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
         if !entry.drag_active {
             return;
         }
-        entry.drag_drop_target = folder.to_string();
+        entry.drag_drop_target = folder;
         entry.drag_target_pane = pane;
         drop(over);
         self.schedule_rebuild();
+    }
+
+    fn clear_fm_drag_hover_to_pane(self: &Arc<Self>, inst: Uuid, pane: i32) {
+        let mut over = self.fm_overlays.write();
+        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        if !entry.drag_active {
+            return;
+        }
+        entry.drag_drop_target.clear();
+        entry.drag_target_pane = pane;
+        drop(over);
+        self.schedule_rebuild();
+    }
+
+    fn on_fm_entry_drag_scroll(
+        self: &Arc<Self>,
+        pane: i32,
+        mouse_x: f32,
+        mouse_y: f32,
+        viewport_y: f32,
+        width: f32,
+    ) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let drag_active = self
+            .fm_overlays
+            .read()
+            .get(&inst)
+            .map(|o| o.drag_active)
+            .unwrap_or(false);
+        if !drag_active {
+            return;
+        }
+        let p = pane.max(0) as u8;
+        if let Some(path) = self.fm_drag_hover_path_at_pointer(
+            inst,
+            p,
+            mouse_x,
+            mouse_y,
+            viewport_y,
+            width,
+        ) {
+            self.set_fm_drag_hover(inst, pane, path);
+        } else {
+            self.clear_fm_drag_hover_to_pane(inst, pane);
+        }
+    }
+
+    fn fm_drag_hover_path_at_pointer(
+        &self,
+        inst: Uuid,
+        pane: u8,
+        mouse_x: f32,
+        mouse_y: f32,
+        viewport_y: f32,
+        width: f32,
+    ) -> Option<String> {
+        let snap = self.widget_manager.snapshot_cache().get(inst)?;
+        let fm = match &snap.payload {
+            WidgetPayload::FileManager(fm) => fm,
+            _ => return None,
+        };
+        let pp = fm.panes.get(pane as usize)?;
+        let tab = pp.tabs.get(pp.active_tab as usize)?;
+        let content_y = mouse_y + viewport_y;
+
+        use orchid_widgets::FmViewMode::*;
+        match tab.view_mode {
+            List => {
+                let row = (content_y / 28.0).floor() as usize;
+                tab.entries.get(row).filter(|e| e.is_dir).map(|e| e.path.clone())
+            }
+            Details => {
+                if content_y < 28.0 {
+                    return None;
+                }
+                let row = ((content_y - 28.0) / 28.0).floor() as usize;
+                tab.entries.get(row).filter(|e| e.is_dir).map(|e| e.path.clone())
+            }
+            Icons | Gallery => {
+                let large = tab.view_mode == Gallery;
+                let tile_spacing = 8.0;
+                let tile_size = if large { 220.0 } else { 100.0 };
+                let tile_height = if large { 240.0 } else { 120.0 };
+                let columns = ((width - tile_spacing) / (tile_size + tile_spacing))
+                    .floor()
+                    .max(1.0) as usize;
+                let col = ((mouse_x - tile_spacing) / (tile_size + tile_spacing)).floor() as i32;
+                let row = ((content_y - tile_spacing) / (tile_height + tile_spacing)).floor() as i32;
+                if col < 0 || row < 0 {
+                    return None;
+                }
+                let idx = row as usize * columns + col as usize;
+                tab.entries
+                    .get(idx)
+                    .filter(|e| e.is_dir)
+                    .map(|e| e.path.clone())
+            }
+        }
     }
 
     fn on_fm_entry_drag_drop(self: &Arc<Self>, _pane: i32, folder: &SharedString) {

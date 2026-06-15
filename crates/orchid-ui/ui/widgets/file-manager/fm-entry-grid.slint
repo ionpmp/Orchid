@@ -22,6 +22,7 @@ export component FmEntryGrid inherits Rectangle {
     callback entry-drag-cancel();
     callback pane-drag-hover();
     callback drop-on-current-dir();
+    callback drag-scroll-changed(length, length, length, length);
 
     property <length> tile-size: large ? 220px : 100px;
     property <length> tile-height: large ? 240px : 120px;
@@ -30,11 +31,17 @@ export component FmEntryGrid inherits Rectangle {
 
     background: transparent;
 
-    Flickable {
+    grid-flick := Flickable {
         width: parent.width;
         height: parent.height;
         viewport-width: self.width;
         viewport-height: max(self.height, ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing);
+
+        changed viewport-y => {
+            if (drag-active) {
+                root.drag-scroll-changed(bg-ta.mouse-x, bg-ta.mouse-y, self.viewport-y, self.width);
+            }
+        }
 
         bg-ta := TouchArea {
             width: parent.width;
