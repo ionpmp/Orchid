@@ -120,6 +120,8 @@ pub struct MainWindowController {
     last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
     /// Canvas flickable scroll offset (content coordinates).
     canvas_scroll: Arc<Mutex<(f32, f32)>>,
+    /// Last winit keyboard modifier state (Ctrl+drop → copy).
+    keyboard_modifiers: Arc<Mutex<slint::winit_030::winit::keyboard::ModifiersState>>,
     /// Long-press widget catalog (search + pick).
     catalog: Arc<RwLock<CatalogUiState>>,
     catalog_items: ModelRc<DockWidgetType>,
@@ -224,6 +226,9 @@ impl MainWindowController {
             fm_focus: Arc::new(Mutex::new(None)),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
+            keyboard_modifiers: Arc::new(Mutex::new(
+                slint::winit_030::winit::keyboard::ModifiersState::empty(),
+            )),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             catalog_items,
         });
@@ -2802,6 +2807,11 @@ impl MainWindowController {
                         }
                     }
                 }
+                WindowEvent::ModifiersChanged(modifiers) => {
+                    if let Some(c) = tw.upgrade() {
+                        *c.keyboard_modifiers.lock() = modifiers.state();
+                    }
+                }
                 WindowEvent::DroppedFile(path_buf) => {
                     let path = path_buf.to_string_lossy().into_owned();
                     if let Some(c) = tw.upgrade() {
@@ -2984,23 +2994,33 @@ impl MainWindowController {
         }));
     }
 
-    fn fm_dispatch_drag_move(
+    fn fm_dispatch_drag_transfer(
         self: &Arc<Self>,
         source_inst: Uuid,
         target_inst: Uuid,
         paths: Vec<String>,
         dest: String,
+        copy: bool,
     ) {
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            if let Err(e) = orchid_widgets::builtin::file_manager::move_paths_to_directory(
-                target_inst,
-                paths,
-                &dest,
-            )
+            let result = if copy {
+                orchid_widgets::builtin::file_manager::copy_paths_to_directory(
+                    target_inst,
+                    paths,
+                    &dest,
+                )
                 .await
-            {
-                warn!(?e, dest = %dest, "fm drag drop");
+            } else {
+                orchid_widgets::builtin::file_manager::move_paths_to_directory(
+                    target_inst,
+                    paths,
+                    &dest,
+                )
+                .await
+            };
+            if let Err(e) = result {
+                warn!(?e, dest = %dest, copy, "fm drag drop");
             }
             if source_inst != target_inst {
                 let _ =
@@ -3062,7 +3082,11 @@ impl MainWindowController {
         };
         self.clear_fm_drag(source_inst);
         self.schedule_rebuild();
-        self.fm_dispatch_drag_move(source_inst, target_inst, paths, dest);
+        let copy = self
+            .keyboard_modifiers
+            .lock()
+            .contains(slint::winit_030::winit::keyboard::ModifiersState::CONTROL);
+        self.fm_dispatch_drag_transfer(source_inst, target_inst, paths, dest, copy);
     }
 
     fn ensure_fm_overlays(&self, inst: Uuid) -> FileManagerOverlays {
@@ -3129,17 +3153,29 @@ impl MainWindowController {
             return;
         };
         self.set_fm_focus(inst, pane);
+        let copy = self
+            .keyboard_modifiers
+            .lock()
+            .contains(slint::winit_030::winit::keyboard::ModifiersState::CONTROL);
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            if let Err(e) =
+            let result = if copy {
+                orchid_widgets::builtin::file_manager::copy_paths_to_directory(
+                    inst,
+                    vec![path],
+                    &dest,
+                )
+                .await
+            } else {
                 orchid_widgets::builtin::file_manager::move_paths_to_directory(
                     inst,
                     vec![path],
                     &dest,
                 )
                 .await
-            {
-                warn!(?e, dest = %dest, "fm os file drop");
+            };
+            if let Err(e) = result {
+                warn!(?e, dest = %dest, copy, "fm os file drop");
             }
             if let Some(c) = tw.upgrade() {
                 c.schedule_rebuild();
