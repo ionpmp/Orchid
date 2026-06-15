@@ -36,6 +36,7 @@ pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
     EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, MediaPlayerPayload,
     MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView, PasswordEntryView,
+    ManagedFolderSidebarPayload,
     PasswordManagerPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator,
     SystemPayload, TabPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
     WeatherPayload, WeatherStatusTag,

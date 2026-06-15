@@ -24,7 +24,8 @@ use crate::error::WidgetError;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    EntryPayload, FileManagerPayload, FmViewMode, NetworkMountPayload, PanePayload, TabPayload,
+    EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload,
+    NetworkMountPayload, PanePayload, TabPayload,
 };
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
@@ -192,6 +193,8 @@ struct FileManagerInner {
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Last passphrase failure (brief status-bar toast while dialog is open).
     passphrase_error: RwLock<Option<(String, std::time::Instant)>>,
+    /// Last managed ingest failure (file name for status-bar toast).
+    ingest_error: RwLock<Option<(String, std::time::Instant)>>,
     /// Brief success notice (`i18n` key + optional name argument).
     activity_notice_key: RwLock<Option<String>>,
     activity_notice_name: RwLock<Option<String>>,
@@ -244,6 +247,7 @@ impl FileManagerWidget {
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
                 passphrase_error: RwLock::new(None),
+                ingest_error: RwLock::new(None),
                 activity_notice_key: RwLock::new(None),
                 activity_notice_name: RwLock::new(None),
                 activity_notice_at: RwLock::new(None),
@@ -402,7 +406,7 @@ impl Widget for FileManagerWidget {
                 dual_pane,
                 clipboard_count,
                 clipboard_is_cut,
-                managed_roots: self.inner.managed_roots.read().clone(),
+                managed_folders: self.inner.managed_folder_payloads(),
                 network_mounts: self.inner.network_mount_payloads(),
                 activity_indicator: self.inner.activity_indicator_label(),
                 ingest_in_flight: self.inner.ingest_in_flight.load(Ordering::Relaxed),
@@ -420,6 +424,7 @@ impl Widget for FileManagerWidget {
                 },
                 transfer_error: self.inner.transfer_error_label(),
                 passphrase_error: self.inner.passphrase_error_label(),
+                ingest_error: self.inner.ingest_error_label(),
                 activity_notice_key: self.inner.activity_notice_key(),
                 activity_notice_name: self.inner.activity_notice_name(),
             }
@@ -476,6 +481,26 @@ impl FileManagerInner {
                     name: network_mount_display_name(&m, &uri),
                     uri,
                 })
+            })
+            .collect()
+    }
+
+    fn managed_folder_payloads(&self) -> Vec<ManagedFolderSidebarPayload> {
+        let roots = self.managed_roots.read().clone();
+        let stats = self.managed_stats.read();
+        roots
+            .into_iter()
+            .map(|path| {
+                let st = stats.get(&path);
+                let files_tracked = st.map(|s| s.files_tracked as u32).unwrap_or(0);
+                let dedup_bytes = st
+                    .map(|s| s.logical_bytes.saturating_sub(s.physical_bytes))
+                    .unwrap_or(0);
+                ManagedFolderSidebarPayload {
+                    path,
+                    files_tracked,
+                    dedup_bytes,
+                }
             })
             .collect()
     }
@@ -539,6 +564,25 @@ impl FileManagerInner {
         *self.passphrase_error.write() = None;
     }
 
+    fn ingest_error_label(&self) -> Option<String> {
+        let notice = self.ingest_error.read();
+        if let Some((name, at)) = notice.as_ref() {
+            if at.elapsed() < std::time::Duration::from_secs(8) {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
+    fn set_ingest_error(&self, name: String) {
+        *self.ingest_error.write() = Some((name, std::time::Instant::now()));
+        self.publish_refresh();
+    }
+
+    fn clear_ingest_error(&self) {
+        *self.ingest_error.write() = None;
+    }
+
     fn activity_indicator_label(&self) -> Option<String> {
         if self.ingest_in_flight.load(Ordering::Relaxed) > 0 {
             return self.ingest_current.read().clone();
@@ -570,8 +614,18 @@ impl FileManagerInner {
         self.publish_refresh();
     }
 
+    fn handle_managed_ingest_failed(&self, path: &orchid_fs::FsPath) {
+        self.handle_managed_ingest_finished();
+        let name = path
+            .file_name()
+            .map(String::from)
+            .unwrap_or_else(|| path.as_str().to_string());
+        self.set_ingest_error(name);
+    }
+
     async fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
         self.handle_managed_ingest_finished();
+        self.clear_ingest_error();
         let label = path
             .file_name()
             .map(String::from)
@@ -2972,9 +3026,8 @@ pub fn notify_managed_ingest_started(path: &orchid_fs::FsPath) {
 
 /// Notify every live file-manager instance that managed ingest failed.
 pub fn notify_managed_ingest_failed(path: &orchid_fs::FsPath) {
-    let _ = path;
     for entry in FM_LIVE.iter() {
-        entry.value().handle_managed_ingest_finished();
+        entry.value().handle_managed_ingest_failed(path);
     }
 }
 

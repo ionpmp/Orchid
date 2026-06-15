@@ -11,8 +11,8 @@ pub struct FileManagerPayload {
     pub clipboard_count: u32,
     /// `true` when clipboard holds a cut (not copy).
     pub clipboard_is_cut: bool,
-    /// Registered managed-folder root paths (for sidebar).
-    pub managed_roots: Vec<String>,
+    /// Registered managed folders (path + ingest stats for sidebar).
+    pub managed_folders: Vec<ManagedFolderSidebarPayload>,
     /// Configured network mounts (name + canonical URI) for sidebar / virtual folder.
     pub network_mounts: Vec<NetworkMountPayload>,
     /// Short-lived ingest activity label (file name).
@@ -31,6 +31,8 @@ pub struct FileManagerPayload {
     pub transfer_error: Option<String>,
     /// Passphrase dialog failure (raw message; localize in UI).
     pub passphrase_error: Option<String>,
+    /// Recent managed ingest failure (file name; localize in UI).
+    pub ingest_error: Option<String>,
     /// Short-lived localized notice key (encrypt/decrypt/managed).
     pub activity_notice_key: Option<String>,
     pub activity_notice_name: Option<String>,
@@ -42,6 +44,15 @@ pub struct FileManagerPayload {
 pub struct NetworkMountPayload {
     pub name: String,
     pub uri: String,
+}
+
+/// One managed folder surfaced in the FM sidebar.
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct ManagedFolderSidebarPayload {
+    pub path: String,
+    pub files_tracked: u32,
+    pub dedup_bytes: u64,
 }
 
 /// One pane (left or right) with its tabs.

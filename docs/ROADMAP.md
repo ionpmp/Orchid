@@ -37,7 +37,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
 - [~] Encryption integration — encrypt / decrypt / reveal in UI; localized status + success/error toast; passphrase retry on wrong password; age engine wired via `EncryptedFolderEngine`
-- [~] Managed folders — sidebar list, localized ingest stats in status bar, in-flight indicator + toast, add/remove in context menu
+- [~] Managed folders — sidebar with ingest stats, localized ingest failure toast, status bar stats, in-flight indicator + toast, add/remove in context menu
 
 ### Terminal
 - [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize
@@ -72,7 +72,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Storage
 - [~] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC done in `orchid-crypto::content`; managed-folder policy layer pending in `orchid-fs`
-- [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; full ingest UI pending
+- [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; ingest failure UX + sidebar stats in UI
 
 ### Network Clients
 - [~] SFTP / SMB / WebDAV / FTP via rclone — browse + read/write via `RcloneProvider`; credentials via config or rclone.conf remote

@@ -5100,7 +5100,7 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
     }
 }
 
-fn managed_sidebar_label(path: &str) -> String {
+fn managed_sidebar_name(path: &str) -> String {
     std::path::Path::new(path)
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -5108,10 +5108,31 @@ fn managed_sidebar_label(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-fn active_managed_sidebar_index(active_path: &str, managed_roots: &[String]) -> Option<usize> {
+fn managed_sidebar_label(
+    locale: &LocaleManager,
+    folder: &orchid_widgets::ManagedFolderSidebarPayload,
+) -> String {
+    let name = managed_sidebar_name(&folder.path);
+    if folder.files_tracked > 0 {
+        locale.tr_args(
+            "fm-sidebar-managed-folder",
+            &orchid_i18n::FluentArgs::new()
+                .with("name", name.as_str())
+                .with("count", folder.files_tracked.to_string())
+                .with("dedup", format_byte_size(folder.dedup_bytes)),
+        )
+    } else {
+        name
+    }
+}
+
+fn active_managed_sidebar_index(
+    active_path: &str,
+    managed_folders: &[orchid_widgets::ManagedFolderSidebarPayload],
+) -> Option<usize> {
     let p = std::path::Path::new(active_path);
-    for (i, root) in managed_roots.iter().enumerate() {
-        let r = std::path::Path::new(root);
+    for (i, folder) in managed_folders.iter().enumerate() {
+        let r = std::path::Path::new(&folder.path);
         if p == r || p.starts_with(r) {
             return Some(i);
         }
@@ -5158,6 +5179,9 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if lower.contains("cannot drop into virtual folder") => locale.tr("fm-transfer-virtual-dest"),
         _ if lower.contains("encryption unavailable") => locale.tr("fm-encryption-unavailable"),
         _ if lower.contains("managed folders unavailable") => locale.tr("fm-managed-unavailable"),
+        _ if lower.contains("no selection for managed folder") => locale.tr("fm-managed-no-selection"),
+        _ if lower.contains("not a managed folder") => locale.tr("fm-not-managed-folder"),
+        _ if lower.contains("managed folder conflict") => locale.tr("fm-managed-conflict"),
         _ if lower.contains("invalid passphrase") => locale.tr("fm-passphrase-invalid"),
         _ if lower.contains("passphrase required") => locale.tr("fm-passphrase-required"),
         _ if lower.contains("age decryption failed") => locale.tr("fm-decryption-failed"),
@@ -5201,11 +5225,11 @@ fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedStrin
 fn build_sidebar_items(
     locale: &LocaleManager,
     active_path: &str,
-    managed_roots: &[String],
+    managed_folders: &[orchid_widgets::ManagedFolderSidebarPayload],
     network_mounts: &[orchid_widgets::NetworkMountPayload],
 ) -> ModelRc<FmSidebarItem> {
     let active_id = fm_sidebar_id_for_path(active_path);
-    let active_managed = active_managed_sidebar_index(active_path, managed_roots);
+    let active_managed = active_managed_sidebar_index(active_path, managed_folders);
     let active_network = active_network_sidebar_index(active_path, network_mounts);
     let mut items = vec![
         FmSidebarItem {
@@ -5289,7 +5313,7 @@ fn build_sidebar_items(
             is_active: active_id == Some("cat:archives"),
         },
     ];
-    if !managed_roots.is_empty() {
+    if !managed_folders.is_empty() {
         items.push(FmSidebarItem {
             id: "section:managed".into(),
             label: locale.tr("fm-sidebar-managed").into(),
@@ -5298,10 +5322,10 @@ fn build_sidebar_items(
             is_section_header: true,
             is_active: false,
         });
-        for (i, root) in managed_roots.iter().enumerate() {
+        for (i, folder) in managed_folders.iter().enumerate() {
             items.push(FmSidebarItem {
                 id: format!("managed:{i}").into(),
-                label: managed_sidebar_label(root).into(),
+                label: managed_sidebar_label(locale, folder).into(),
                 icon: "🗃".into(),
                 indent: 1,
                 is_section_header: false,
@@ -5351,7 +5375,7 @@ fn build_file_manager_model(
         .map(|t| t.path_display.clone())
         .unwrap_or_default();
     let sidebar_items =
-        build_sidebar_items(locale, &active_path, &p.managed_roots, &p.network_mounts);
+        build_sidebar_items(locale, &active_path, &p.managed_folders, &p.network_mounts);
     let sort_name_label = locale.tr("fm-sort-name");
     let sort_size_label = locale.tr("fm-sort-size");
     let sort_modified_label = locale.tr("fm-sort-modified");
@@ -5474,6 +5498,11 @@ fn build_file_manager_model(
         locale.tr_args(
             "fm-passphrase-failed",
             &orchid_i18n::FluentArgs::new().with("reason", fm_localized_error(locale, err)),
+        )
+    } else if let Some(name) = p.ingest_error.as_ref() {
+        locale.tr_args(
+            "fm-ingest-failed",
+            &orchid_i18n::FluentArgs::new().with("name", name.as_str()),
         )
     } else if p.ingest_in_flight > 0 {
         if let Some(name) = p.activity_indicator.as_ref().filter(|s| !s.is_empty()) {
