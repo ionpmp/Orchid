@@ -36,8 +36,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
-- [~] Encryption integration — encrypt / decrypt / reveal in UI; age engine wired via `EncryptedFolderEngine`
-- [~] Managed folders — sidebar list, ingest stats, in-flight ingest indicator + toast, add/remove in context menu
+- [~] Encryption integration — encrypt / decrypt / reveal in UI; localized status + success toast; age engine wired via `EncryptedFolderEngine`
+- [~] Managed folders — sidebar list, localized ingest stats in status bar, in-flight indicator + toast, add/remove in context menu
 
 ### Terminal
 - [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize

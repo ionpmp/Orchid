@@ -326,6 +326,24 @@ fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
     }
 }
 
+fn format_byte_size(n: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    if n == 0 {
+        return "0 B".to_string();
+    }
+    let mut size = n as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{} {}", n, UNITS[unit])
+    } else {
+        format!("{:.1} {}", size, UNITS[unit])
+    }
+}
+
 fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
     let mut lines = Vec::new();
     for (idx, pane) in p.panes.iter().enumerate() {
@@ -335,7 +353,25 @@ fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
                 if idx == 0 { "L" } else { "R" },
                 tab.path_display
             ));
-            lines.push(tab.status_text.clone());
+            if let Some(tracked) = tab.managed_files_tracked {
+                let dedup = tab
+                    .managed_dedup_bytes
+                    .map(|b| format_byte_size(b))
+                    .unwrap_or_default();
+                lines.push(format!(
+                    "{} items, {} selected · {} ingested, {} deduped",
+                    tab.item_count,
+                    tab.selection_count,
+                    tracked,
+                    dedup
+                ));
+            } else {
+                lines.push(format!(
+                    "{} items, {} selected",
+                    tab.item_count,
+                    tab.selection_count
+                ));
+            }
             for entry in tab.entries.iter().take(20) {
                 lines.push(format!(
                     "{} {} {} {}",

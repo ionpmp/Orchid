@@ -29,6 +29,9 @@ pub struct FileManagerPayload {
     pub transfer_current: Option<String>,
     /// Recent transfer failure (raw message; localize in UI).
     pub transfer_error: Option<String>,
+    /// Short-lived localized notice key (encrypt/decrypt/managed).
+    pub activity_notice_key: Option<String>,
+    pub activity_notice_name: Option<String>,
 }
 
 /// One configured network mount surfaced in the FM payload.
@@ -59,7 +62,10 @@ pub struct TabPayload {
     pub view_mode: FmViewMode,
     pub entries: Vec<EntryPayload>,
     pub selection_count: u32,
-    pub status_text: String,
+    pub item_count: u32,
+    /// Managed-folder ingest stats when viewing a registered root.
+    pub managed_files_tracked: Option<u32>,
+    pub managed_dedup_bytes: Option<u64>,
     pub quick_filter: String,
     pub is_loading: bool,
     pub error: Option<String>,

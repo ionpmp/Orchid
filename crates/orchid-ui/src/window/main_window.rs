@@ -5121,7 +5121,31 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         }
         _ if lower.contains("already exists") => locale.tr("fm-transfer-already-exists"),
         _ if lower.contains("cannot drop into virtual folder") => locale.tr("fm-transfer-virtual-dest"),
+        _ if lower.contains("encryption unavailable") => locale.tr("fm-encryption-unavailable"),
+        _ if lower.contains("managed folders unavailable") => locale.tr("fm-managed-unavailable"),
         _ => err.to_string(),
+    }
+}
+
+fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPayload) -> String {
+    if let (Some(tracked), Some(dedup_bytes)) =
+        (t.managed_files_tracked, t.managed_dedup_bytes)
+    {
+        locale.tr_args(
+            "fm-status-managed",
+            &orchid_i18n::FluentArgs::new()
+                .with("items", t.item_count.to_string())
+                .with("selected", t.selection_count.to_string())
+                .with("tracked", tracked.to_string())
+                .with("dedup", format_byte_size(dedup_bytes)),
+        )
+    } else {
+        locale.tr_args(
+            "fm-status-bar",
+            &orchid_i18n::FluentArgs::new()
+                .with("items", t.item_count.to_string())
+                .with("selected", t.selection_count.to_string()),
+        )
     }
 }
 
@@ -5357,7 +5381,7 @@ fn build_file_manager_model(
                         view_mode: view_mode_to_int(t.view_mode),
                         entries: ModelRc::new(VecModel::from(entries)),
                         selection_count: t.selection_count as i32,
-                        status_text: t.status_text.clone().into(),
+                        status_text: fm_build_tab_status_text(locale, t).into(),
                         quick_filter: t.quick_filter.clone().into(),
                         is_loading: t.is_loading,
                         error: fm_tab_error_text(locale, t.error.as_deref()),
@@ -5417,6 +5441,12 @@ fn build_file_manager_model(
                 &orchid_i18n::FluentArgs::new().with("count", p.ingest_in_flight.to_string()),
             )
         }
+    } else if let Some(key) = p.activity_notice_key.as_ref() {
+        let args = match p.activity_notice_name.as_ref() {
+            Some(name) => orchid_i18n::FluentArgs::new().with("name", name.as_str()),
+            None => orchid_i18n::FluentArgs::new(),
+        };
+        locale.tr_args(key, &args)
     } else {
         p.activity_indicator
             .as_ref()

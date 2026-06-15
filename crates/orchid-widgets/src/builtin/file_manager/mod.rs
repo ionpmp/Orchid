@@ -190,6 +190,10 @@ struct FileManagerInner {
     transfer: RwLock<TransferState>,
     /// Last failed transfer message (brief status-bar toast).
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
+    /// Brief success notice (`i18n` key + optional name argument).
+    activity_notice_key: RwLock<Option<String>>,
+    activity_notice_name: RwLock<Option<String>>,
+    activity_notice_at: RwLock<Option<std::time::Instant>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -237,6 +241,9 @@ impl FileManagerWidget {
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
+                activity_notice_key: RwLock::new(None),
+                activity_notice_name: RwLock::new(None),
+                activity_notice_at: RwLock::new(None),
                 bus,
             }),
         }
@@ -409,6 +416,8 @@ impl Widget for FileManagerWidget {
                     None
                 },
                 transfer_error: self.inner.transfer_error_label(),
+                activity_notice_key: self.inner.activity_notice_key(),
+                activity_notice_name: self.inner.activity_notice_name(),
             }
             }),
         })
@@ -465,6 +474,31 @@ impl FileManagerInner {
                 })
             })
             .collect()
+    }
+
+    fn set_activity_notice(&self, key: &str, name: Option<String>) {
+        *self.activity_notice_key.write() = Some(key.to_string());
+        *self.activity_notice_name.write() = name;
+        *self.activity_notice_at.write() = Some(std::time::Instant::now());
+        self.publish_refresh();
+    }
+
+    fn activity_notice_key(&self) -> Option<String> {
+        let at = *self.activity_notice_at.read();
+        if at.map(|t| t.elapsed() < std::time::Duration::from_secs(8)).unwrap_or(false) {
+            self.activity_notice_key.read().clone()
+        } else {
+            None
+        }
+    }
+
+    fn activity_notice_name(&self) -> Option<String> {
+        let at = *self.activity_notice_at.read();
+        if at.map(|t| t.elapsed() < std::time::Duration::from_secs(8)).unwrap_or(false) {
+            self.activity_notice_name.read().clone()
+        } else {
+            None
+        }
     }
 
     fn transfer_error_label(&self) -> Option<String> {
@@ -1189,6 +1223,13 @@ impl FileManagerInner {
                     .map_err(map_fs_error)?;
             }
         }
+        self.refresh_encrypted_paths().await;
+        let name = paths
+            .first()
+            .and_then(|p| p.rsplit(['/', '\\']).next())
+            .unwrap_or("files")
+            .to_string();
+        self.set_activity_notice("fm-encrypted", Some(name));
         Ok(())
     }
 
@@ -1206,6 +1247,13 @@ impl FileManagerInner {
                 .await
                 .map_err(map_fs_error)?;
         }
+        self.refresh_encrypted_paths().await;
+        let name = paths
+            .first()
+            .and_then(|p| p.rsplit(['/', '\\']).next())
+            .unwrap_or("files")
+            .to_string();
+        self.set_activity_notice("fm-decrypted", Some(name));
         Ok(())
     }
 
@@ -1280,6 +1328,7 @@ impl FileManagerInner {
             }
         }
         self.refresh_managed_roots().await;
+        self.set_activity_notice("fm-managed-added", None);
         Ok(())
     }
 
@@ -1294,6 +1343,7 @@ impl FileManagerInner {
             engine.remove_folder(&fp).await.map_err(map_fs_error)?;
         }
         self.refresh_managed_roots().await;
+        self.set_activity_notice("fm-managed-removed", None);
         Ok(())
     }
 
@@ -1431,22 +1481,15 @@ fn build_tab_payload(
         })
         .collect();
     let selection_count = tab.selection.count() as u32;
-    let status_text = if let Some(st) = inner.managed_stats.read().get(tab.path.as_str()) {
-        let saved = st.logical_bytes.saturating_sub(st.physical_bytes);
-        format!(
-            "{} items, {} selected · {} ingested, {} deduped",
-            entry_payloads.len(),
-            selection_count,
-            st.files_tracked,
-            format_size(saved),
-        )
-    } else {
-        format!(
-            "{} items, {} selected",
-            entry_payloads.len(),
-            selection_count,
-        )
-    };
+    let item_count = entry_payloads.len() as u32;
+    let managed_stats_guard = inner.managed_stats.read();
+    let managed_stats = managed_stats_guard.get(tab.path.as_str());
+    let (managed_files_tracked, managed_dedup_bytes) = managed_stats
+        .map(|st| {
+            let saved = st.logical_bytes.saturating_sub(st.physical_bytes);
+            (Some(st.files_tracked as u32), Some(saved))
+        })
+        .unwrap_or((None, None));
     let error = if tab.path.as_str() == "virtual:network" && entry_payloads.is_empty() {
         Some("network-placeholder".into())
     } else {
@@ -1466,7 +1509,9 @@ fn build_tab_payload(
         view_mode: to_payload_mode(tab.view_mode),
         entries: entry_payloads,
         selection_count,
-        status_text,
+        item_count,
+        managed_files_tracked,
+        managed_dedup_bytes,
         quick_filter: tab.quick_filter.clone(),
         is_loading: false,
         error,
