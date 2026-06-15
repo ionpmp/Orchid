@@ -147,6 +147,7 @@ export component MainWindow inherits Window {
     callback fm-drop-on-current-dir(int);
 
     callback canvas-long-pressed(length, length, length, length);
+    callback canvas-scrolled(length, length);
     callback catalog-pick(string);
     callback catalog-dismiss();
     callback catalog-search-changed(string);
@@ -299,6 +300,7 @@ export component MainWindow inherits Window {
             fm-pane-drag-hover(p) => { root.fm-pane-drag-hover(p); }
             fm-drop-on-current-dir(p) => { root.fm-drop-on-current-dir(p); }
             canvas-long-pressed(cx, cy, vx, vy) => { root.canvas-long-pressed(cx, cy, vx, vy); }
+            canvas-scrolled(vx, vy) => { root.canvas-scrolled(vx, vy); }
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
             catalog-dismiss => { root.catalog-dismiss(); }
             catalog-search-changed(q) => { root.catalog-search-changed(q); }

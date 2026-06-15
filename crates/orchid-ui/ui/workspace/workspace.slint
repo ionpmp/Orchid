@@ -100,6 +100,7 @@ export component WorkspaceView inherits Rectangle {
     callback fm-drop-on-current-dir(int);
 
     callback canvas-long-pressed(length, length, length, length);
+    callback canvas-scrolled(length, length);
     callback catalog-pick(string);
     callback catalog-dismiss();
     callback catalog-search-changed(string);
@@ -135,6 +136,13 @@ export component WorkspaceView inherits Rectangle {
             height: parent.height;
             viewport-width: max(root.workspace.canvas-content-width, self.width);
             viewport-height: max(root.workspace.canvas-content-height, self.height);
+
+            changed viewport-x => {
+                root.canvas-scrolled(canvas-flick.viewport-x, canvas-flick.viewport-y);
+            }
+            changed viewport-y => {
+                root.canvas-scrolled(canvas-flick.viewport-x, canvas-flick.viewport-y);
+            }
 
             // Must match viewport-*: `parent` here is not reliably the full scroll extent (Slint Flickable).
             canvas-inner := Rectangle {

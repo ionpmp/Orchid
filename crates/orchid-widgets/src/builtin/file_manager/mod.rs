@@ -2557,6 +2557,14 @@ pub async fn open_path(instance_id: Uuid, pane: u8, path: &str) -> WidgetResult<
     })
 }
 
+/// Refresh every tab in a live file-manager instance.
+pub async fn refresh_instance(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.refresh_all_tabs().await;
+    inner.publish_refresh();
+    Ok(())
+}
+
 /// Move `sources` into directory `dest_dir` (drag-and-drop target).
 pub async fn move_paths_to_directory(
     instance_id: Uuid,

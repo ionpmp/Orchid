@@ -118,6 +118,8 @@ pub struct MainWindowController {
     fm_focus: Arc<Mutex<Option<(Uuid, u8)>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
     last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
+    /// Canvas flickable scroll offset (content coordinates).
+    canvas_scroll: Arc<Mutex<(f32, f32)>>,
     /// Long-press widget catalog (search + pick).
     catalog: Arc<RwLock<CatalogUiState>>,
     catalog_items: ModelRc<DockWidgetType>,
@@ -221,6 +223,7 @@ impl MainWindowController {
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
             fm_focus: Arc::new(Mutex::new(None)),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
+            canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             catalog_items,
         });
@@ -464,6 +467,14 @@ impl MainWindowController {
             move |cx, cy, vx, vy| {
                 if let Some(c) = t.upgrade() {
                     c.on_canvas_long_pressed(cx, cy, vx, vy);
+                }
+            }
+        });
+        self.window.on_canvas_scrolled({
+            let t = t.clone();
+            move |vx, vy| {
+                if let Some(c) = t.upgrade() {
+                    c.on_canvas_scrolled(vx, vy);
                 }
             }
         });
@@ -1375,6 +1386,10 @@ impl MainWindowController {
             cat.search_query.clear();
         }
         self.sync_widget_catalog_global();
+    }
+
+    fn on_canvas_scrolled(&self, viewport_x: f32, viewport_y: f32) {
+        *self.canvas_scroll.lock() = (viewport_x, viewport_y);
     }
 
     fn on_catalog_dismiss(self: &Arc<Self>) {
@@ -2779,8 +2794,11 @@ impl MainWindowController {
                             position.to_logical(f64::from(scale));
                         let canvas_y = logical.y - f64::from(WORKSPACE_SWITCHER_H);
                         if canvas_y >= 0.0 {
-                            *c.last_canvas_pointer.lock() =
-                                Some((logical.x as f32, canvas_y as f32));
+                            let (scroll_x, scroll_y) = *c.canvas_scroll.lock();
+                            *c.last_canvas_pointer.lock() = Some((
+                                logical.x as f32 + scroll_x,
+                                canvas_y as f32 + scroll_y,
+                            ));
                         }
                     }
                 }
@@ -2966,30 +2984,85 @@ impl MainWindowController {
         }));
     }
 
-    fn fm_complete_drag_drop(self: &Arc<Self>, inst: Uuid, dest: Option<String>) {
+    fn fm_dispatch_drag_move(
+        self: &Arc<Self>,
+        source_inst: Uuid,
+        target_inst: Uuid,
+        paths: Vec<String>,
+        dest: String,
+    ) {
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = orchid_widgets::builtin::file_manager::move_paths_to_directory(
+                target_inst,
+                paths,
+                &dest,
+            )
+                .await
+            {
+                warn!(?e, dest = %dest, "fm drag drop");
+            }
+            if source_inst != target_inst {
+                let _ =
+                    orchid_widgets::builtin::file_manager::refresh_instance(source_inst).await;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn fm_resolve_move_dest(
+        &self,
+        source_inst: Uuid,
+        hinted_dest: Option<String>,
+    ) -> Option<(Uuid, String)> {
+        let hinted = hinted_dest.filter(|d| !d.is_empty() && !d.starts_with("virtual:"));
+        let drop_target = self.fm_drop_target();
+        match (hinted, drop_target) {
+            (Some(dest), Some((fm, pane))) if fm == source_inst => Some((source_inst, dest)),
+            (Some(dest), _) => {
+                let fm = drop_target.map(|(f, _)| f).unwrap_or(source_inst);
+                Some((fm, dest))
+            }
+            (None, Some((fm, pane))) => {
+                let path = self.fm_active_tab_path(fm, pane)?;
+                if path.is_empty() || path.starts_with("virtual:") {
+                    return None;
+                }
+                Some((fm, path))
+            }
+            (None, None) => None,
+        }
+    }
+
+    fn fm_complete_drag_drop(self: &Arc<Self>, source_inst: Uuid, hinted_dest: Option<String>) {
         let paths = {
             let over = self.fm_overlays.read();
-            over.get(&inst)
+            over.get(&source_inst)
                 .filter(|e| e.drag_active)
                 .map(|e| e.drag_paths.clone())
                 .unwrap_or_default()
         };
         if paths.is_empty() {
-            self.clear_fm_drag(inst);
+            self.clear_fm_drag(source_inst);
             self.schedule_rebuild();
             return;
         }
         if self.pointer_over_viewer() {
-            self.clear_fm_drag(inst);
+            self.clear_fm_drag(source_inst);
             self.schedule_rebuild();
             self.fm_open_paths_in_viewer(paths);
             return;
         }
-        self.clear_fm_drag(inst);
+        let Some((target_inst, dest)) = self.fm_resolve_move_dest(source_inst, hinted_dest) else {
+            self.clear_fm_drag(source_inst);
+            self.schedule_rebuild();
+            return;
+        };
+        self.clear_fm_drag(source_inst);
         self.schedule_rebuild();
-        if let Some(dest) = dest.filter(|d| !d.is_empty() && !d.starts_with("virtual:")) {
-            self.fm_dispatch_drag_move(inst, paths, dest);
-        }
+        self.fm_dispatch_drag_move(source_inst, target_inst, paths, dest);
     }
 
     fn ensure_fm_overlays(&self, inst: Uuid) -> FileManagerOverlays {
@@ -3282,21 +3355,6 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn fm_dispatch_drag_move(self: &Arc<Self>, inst: Uuid, paths: Vec<String>, dest: String) {
-        let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
-            if let Err(e) =
-                orchid_widgets::builtin::file_manager::move_paths_to_directory(inst, paths, &dest)
-                    .await
-            {
-                warn!(?e, dest = %dest, "fm drag drop");
-            }
-            if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
-            }
-        }));
-    }
-
     fn on_fm_entry_drag_drop(self: &Arc<Self>, _pane: i32, folder: &SharedString) {
         let Some(inst) = self.find_active_fm() else {
             return;
@@ -3321,13 +3379,12 @@ impl MainWindowController {
     }
 
     fn on_fm_drop_on_current_dir(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+        let Some(source) = self.find_active_fm() else {
             return;
         };
         let p = pane.max(0) as u8;
-        self.set_fm_focus(inst, p);
-        let dest = self.fm_active_tab_path(inst, p);
-        self.fm_complete_drag_drop(inst, dest);
+        self.set_fm_focus(source, p);
+        self.fm_complete_drag_drop(source, None);
     }
 
     fn on_fm_entry_drag_cancel(self: &Arc<Self>, _pane: i32) {
