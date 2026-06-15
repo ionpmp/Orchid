@@ -24,6 +24,8 @@ pub struct FileManagerPayload {
     pub transfer_is_copy: bool,
     /// File name currently being copied or moved.
     pub transfer_current: Option<String>,
+    /// Recent transfer failure (raw message; localize in UI).
+    pub transfer_error: Option<String>,
 }
 
 /// One configured network mount surfaced in the FM payload.

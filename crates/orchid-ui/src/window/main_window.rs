@@ -4981,25 +4981,22 @@ fn active_network_sidebar_index(
         .position(|m| m.uri == active_path)
 }
 
-fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedString {
-    let Some(err) = error else {
-        return SharedString::new();
-    };
+fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
     let lower = err.to_ascii_lowercase();
     match err {
-        "network-placeholder" => locale.tr("fm-network-placeholder").into(),
-        _ if err.contains("no provider for scheme") => locale.tr("fm-network-no-provider").into(),
-        _ if err.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing").into(),
-        _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount").into(),
+        "network-placeholder" => locale.tr("fm-network-placeholder"),
+        _ if err.contains("no provider for scheme") => locale.tr("fm-network-no-provider"),
+        _ if err.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing"),
+        _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount"),
         _ if lower.contains("authentication")
             || lower.contains("access denied")
             || lower.contains("login failed")
             || lower.contains("401") =>
         {
-            locale.tr("fm-network-auth-failed").into()
+            locale.tr("fm-network-auth-failed")
         }
         _ if lower.contains("permission denied") || lower.contains("forbidden") || lower.contains("403") => {
-            locale.tr("fm-network-permission-denied").into()
+            locale.tr("fm-network-permission-denied")
         }
         _ if lower.contains("connection refused")
             || lower.contains("timed out")
@@ -5008,10 +5005,18 @@ fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedStrin
             || lower.contains("network is unreachable")
             || lower.contains("could not connect") =>
         {
-            locale.tr("fm-network-connection-failed").into()
+            locale.tr("fm-network-connection-failed")
         }
-        _ => err.into(),
+        _ if lower.contains("already exists") => locale.tr("fm-transfer-already-exists"),
+        _ if lower.contains("cannot drop into virtual folder") => locale.tr("fm-transfer-virtual-dest"),
+        _ => err.to_string(),
     }
+}
+
+fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedString {
+    error
+        .map(|e| fm_localized_error(locale, e).into())
+        .unwrap_or_default()
 }
 
 fn build_sidebar_items(
@@ -5280,6 +5285,11 @@ fn build_file_manager_model(
                     p.transfer_current.as_deref().unwrap_or(""),
                 )
                 .with("percent", percent.to_string()),
+        )
+    } else if let Some(err) = p.transfer_error.as_ref() {
+        locale.tr_args(
+            "fm-transfer-failed",
+            &orchid_i18n::FluentArgs::new().with("reason", fm_localized_error(locale, err)),
         )
     } else if p.ingest_in_flight > 0 {
         if let Some(name) = p.activity_indicator.as_ref().filter(|s| !s.is_empty()) {

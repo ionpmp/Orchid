@@ -188,6 +188,8 @@ struct FileManagerInner {
     tab_errors: RwLock<std::collections::HashMap<Uuid, Option<String>>>,
     /// Copy/move progress for drag-and-drop and OS file drops.
     transfer: RwLock<TransferState>,
+    /// Last failed transfer message (brief status-bar toast).
+    transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -234,6 +236,7 @@ impl FileManagerWidget {
                 encrypted_paths: RwLock::new(Vec::new()),
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
+                transfer_notice: RwLock::new(None),
                 bus,
             }),
         }
@@ -405,6 +408,7 @@ impl Widget for FileManagerWidget {
                 } else {
                     None
                 },
+                transfer_error: self.inner.transfer_error_label(),
             }
             }),
         })
@@ -463,6 +467,21 @@ impl FileManagerInner {
             .collect()
     }
 
+    fn transfer_error_label(&self) -> Option<String> {
+        let notice = self.transfer_notice.read();
+        if let Some((msg, at)) = notice.as_ref() {
+            if at.elapsed() < std::time::Duration::from_secs(8) {
+                return Some(msg.clone());
+            }
+        }
+        None
+    }
+
+    fn set_transfer_notice(&self, message: String) {
+        *self.transfer_notice.write() = Some((message, std::time::Instant::now()));
+        self.publish_refresh();
+    }
+
     fn activity_indicator_label(&self) -> Option<String> {
         if self.ingest_in_flight.load(Ordering::Relaxed) > 0 {
             return self.ingest_current.read().clone();
@@ -494,7 +513,7 @@ impl FileManagerInner {
         self.publish_refresh();
     }
 
-    async     fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
+    async fn handle_managed_ingest(&self, path: &orchid_fs::FsPath) {
         self.handle_managed_ingest_finished();
         let label = path
             .file_name()
@@ -613,6 +632,9 @@ impl FileManagerInner {
         drop(sink);
         let _ = progress_task.await;
         self.end_transfer();
+        if let Err(ref e) = result {
+            self.set_transfer_notice(e.to_string());
+        }
         result
     }
 
