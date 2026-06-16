@@ -21,6 +21,7 @@
 pub mod clipboard;
 pub mod palette;
 pub mod render;
+pub mod stored_layout;
 pub mod view;
 pub mod widget;
 

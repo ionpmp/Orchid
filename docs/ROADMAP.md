@@ -57,7 +57,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Widget: Media player (audio/video)
 - [ ] Widget: RSS feed
 - [ ] Widget: Password manager
-- [x] Widget: Terminal — end-to-end with Slint tab strip, split panes, draggable dividers, and live raster painting
+- [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, live raster painting, and persisted tab/split layout across unload
 
 ### Viewers
 - [ ] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW)

@@ -43,6 +43,17 @@ pub struct TerminalWidgetState {
     pub working_directory: Option<String>,
     /// Optional title hint.
     pub title: Option<String>,
+    /// Tab / split layout captured on last save (respawned on restore).
+    #[serde(default)]
+    pub layout: Option<super::stored_layout::StoredLayoutRoot>,
+}
+
+/// v1 persisted state (before layout field) for bincode migration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TerminalWidgetStateV1 {
+    backend: StoredBackend,
+    working_directory: Option<String>,
+    title: Option<String>,
 }
 
 /// Serializable snapshot of a [`BackendKind`] — kept narrow so v1 of the
@@ -228,20 +239,62 @@ impl Widget for TerminalWidget {
             pixel_width: 0,
             pixel_height: 0,
         };
-        let session_id = self
-            .deps
-            .sessions
-            .open(spec.clone(), size)
-            .await
-            .map_err(|e| WidgetError::CreationFailed(format!("terminal spawn failed: {e}")))?;
+
+        let layout = if let Some(stored) = self.state.layout.as_ref() {
+            let leaf_count = stored.leaf_count();
+            if leaf_count == 0 {
+                return Err(WidgetError::InvalidStateForOperation(
+                    "stored terminal layout is empty".into(),
+                ));
+            }
+            let mut session_ids = Vec::with_capacity(leaf_count);
+            for _ in 0..leaf_count {
+                let sid = self
+                    .deps
+                    .sessions
+                    .open(spec.clone(), size)
+                    .await
+                    .map_err(|e| {
+                        WidgetError::CreationFailed(format!("terminal restore spawn failed: {e}"))
+                    })?;
+                session_ids.push(sid);
+            }
+            super::stored_layout::stored_to_layout(stored, &session_ids)
+        } else {
+            let session_id = self
+                .deps
+                .sessions
+                .open(spec.clone(), size)
+                .await
+                .map_err(|e| WidgetError::CreationFailed(format!("terminal spawn failed: {e}")))?;
+            LayoutRoot::new(session_id)
+        };
+
+        let focused = layout
+            .focused_session()
+            .or_else(|| {
+                layout
+                    .tabs
+                    .tabs
+                    .first()
+                    .and_then(|t| {
+                        let mut leaves = Vec::new();
+                        t.root.leaves(&mut leaves);
+                        leaves.first().copied()
+                    })
+            })
+            .ok_or_else(|| {
+                WidgetError::InvalidStateForOperation("terminal layout has no sessions".into())
+            })?;
+
         self.deps
             .layouts
             .lock()
-            .insert(self.instance_id, LayoutRoot::new(session_id));
+            .insert(self.instance_id, layout);
         self.deps
             .session_routing
             .lock()
-            .insert(self.instance_id, session_id);
+            .insert(self.instance_id, focused);
         self.state.backend = StoredBackend::from_spec(&spec);
         Ok(())
     }
@@ -381,6 +434,10 @@ impl Widget for TerminalWidget {
     }
 
     fn save_state(&self) -> Result<Vec<u8>> {
+        let layout = self
+            .layout()
+            .as_ref()
+            .map(super::stored_layout::layout_to_stored);
         let focused = self.layout().and_then(|l| l.focused_session());
         let state = TerminalWidgetState {
             backend: self.state.backend.clone(),
@@ -395,13 +452,23 @@ impl Widget for TerminalWidget {
                 .and_then(|sid| self.deps.sessions.get(sid).ok())
                 .map(|s| s.emulator.title())
                 .filter(|t| !t.is_empty()),
+            layout,
         };
         config::save_state(&state)
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> Result<()> {
-        let state: TerminalWidgetState = config::restore_state(bytes)?;
-        self.state = state;
+        if let Ok(state) = config::restore_state::<TerminalWidgetState>(bytes) {
+            self.state = state;
+            return Ok(());
+        }
+        let legacy: TerminalWidgetStateV1 = config::restore_state(bytes)?;
+        self.state = TerminalWidgetState {
+            backend: legacy.backend,
+            working_directory: legacy.working_directory,
+            title: legacy.title,
+            layout: None,
+        };
         Ok(())
     }
 
@@ -798,14 +865,53 @@ mod tests {
 
     #[test]
     fn state_bincode_roundtrip() {
+        use crate::widgets::terminal::stored_layout::{
+            StoredLayoutRoot, StoredSplitDirection, StoredSplitNode, StoredTab,
+        };
+
         let s = TerminalWidgetState {
             backend: StoredBackend::PowerShell,
             working_directory: Some("C:/".into()),
             title: Some("pwsh".into()),
+            layout: Some(StoredLayoutRoot {
+                active_tab: 0,
+                tabs: vec![StoredTab {
+                    id: Uuid::new_v4(),
+                    title: "pwsh".into(),
+                    root: StoredSplitNode::Split {
+                        direction: StoredSplitDirection::Horizontal,
+                        ratio: 0.6,
+                        first: Box::new(StoredSplitNode::Leaf),
+                        second: Box::new(StoredSplitNode::Leaf),
+                    },
+                    focus_leaf: Some(1),
+                }],
+            }),
         };
         let bytes = config::save_state(&s).unwrap();
         let back: TerminalWidgetState = config::restore_state(&bytes).unwrap();
         assert!(matches!(back.backend, StoredBackend::PowerShell));
         assert_eq!(back.working_directory.as_deref(), Some("C:/"));
+        assert_eq!(back.layout.as_ref().unwrap().tabs[0].focus_leaf, Some(1));
+    }
+
+    #[test]
+    fn state_v1_migration() {
+        let v1 = TerminalWidgetStateV1 {
+            backend: StoredBackend::PowerShell,
+            working_directory: Some("C:/".into()),
+            title: None,
+        };
+        let bytes = config::save_state(&v1).unwrap();
+        assert!(config::restore_state::<TerminalWidgetState>(&bytes).is_err());
+        let legacy: TerminalWidgetStateV1 = config::restore_state(&bytes).unwrap();
+        let migrated = TerminalWidgetState {
+            backend: legacy.backend,
+            working_directory: legacy.working_directory,
+            title: legacy.title,
+            layout: None,
+        };
+        assert!(migrated.layout.is_none());
+        assert_eq!(migrated.working_directory.as_deref(), Some("C:/"));
     }
 }
