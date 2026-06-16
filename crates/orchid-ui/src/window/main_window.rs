@@ -37,7 +37,6 @@ use orchid_terminal::SplitDirection;
 use orchid_terminal::{FontMetrics};
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
-use orchid_widgets::TerminalDividerPayload;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::TerminalPanePayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
