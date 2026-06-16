@@ -41,8 +41,9 @@ pub use selection::SelectionModel;
 pub use state::{ActivePane, FileManagerState, PaneState, TabState};
 pub use view_mode::{config_for_mode, ViewModeConfig};
 pub use virtual_folders::{
-    category_for_virtual_path, category_search_extensions, entry_matches_category, is_virtual,
-    sidebar_catalog, FileCategory, VirtualFolder,
+    category_for_virtual_path, category_search_extensions, empty_placeholder_for_path,
+    entry_matches_category, is_virtual, label_key_for_virtual_path, sidebar_catalog, FileCategory,
+    VirtualFolder,
 };
 
 /// Selection mutation mode for UI interactions.
@@ -1567,8 +1568,17 @@ fn build_tab_payload(
             (Some(st.files_tracked as u32), Some(saved))
         })
         .unwrap_or((None, None));
-    let error = if tab.path.as_str() == "virtual:network" && entry_payloads.is_empty() {
-        Some("network-placeholder".into())
+    let error = if entry_payloads.is_empty() {
+        virtual_folders::empty_placeholder_for_path(tab.path.as_str())
+            .map(String::from)
+            .or_else(|| {
+                inner
+                    .tab_errors
+                    .read()
+                    .get(&tab.id)
+                    .cloned()
+                    .flatten()
+            })
     } else {
         inner
             .tab_errors

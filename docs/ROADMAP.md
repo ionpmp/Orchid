@@ -33,11 +33,11 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
 - [x] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (move/copy with Ctrl), FM→viewer content zone, cross-widget FM move, transfer progress + failure toast; canvas + FM content-zone hit-test; wheel-scroll during drag
-- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
+- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; localized breadcrumbs + empty states; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
 - [~] Encryption integration — encrypt / decrypt / reveal in UI; localized status + success/error toast; passphrase retry on wrong password; age engine wired via `EncryptedFolderEngine`
-- [~] Managed folders — sidebar with ingest stats, localized ingest failure toast, status bar stats, in-flight indicator + toast, add/remove in context menu
+- [x] Managed folders — sidebar with ingest stats, localized ingest failure toast, status bar stats, in-flight indicator + toast, add/remove in context menu
 
 ### Terminal
 - [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize
@@ -75,8 +75,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; ingest failure UX + sidebar stats in UI
 
 ### Network Clients
-- [~] SFTP / SMB / WebDAV / FTP via rclone — browse + read/write via `RcloneProvider`; credentials via config or rclone.conf remote
-- [ ] Virtual folders in file manager
+- [~] SFTP / SMB / WebDAV / FTP via rclone — browse + read/write via `RcloneProvider`; credentials via config or rclone.conf remote; network virtual folder in FM sidebar
 
 ### Search
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown

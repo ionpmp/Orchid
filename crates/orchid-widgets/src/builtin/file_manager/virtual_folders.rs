@@ -95,6 +95,37 @@ pub fn category_for_virtual_path(raw: &str) -> Option<FileCategory> {
     }
 }
 
+/// Fluent key for the display label of a virtual path, when known.
+#[must_use]
+pub fn label_key_for_virtual_path(raw: &str) -> Option<&'static str> {
+    match raw {
+        "virtual:recent" => Some("fm-virtual-recent"),
+        "virtual:starred" => Some("fm-virtual-starred"),
+        "virtual:tags" => Some("fm-virtual-tags"),
+        "virtual:categories" => Some("fm-sidebar-categories"),
+        "virtual:categories/images" => Some("fm-category-images"),
+        "virtual:categories/documents" => Some("fm-category-documents"),
+        "virtual:categories/video" => Some("fm-category-video"),
+        "virtual:categories/audio" => Some("fm-category-audio"),
+        "virtual:categories/archives" => Some("fm-category-archives"),
+        "virtual:network" => Some("fm-sidebar-network-all"),
+        _ => None,
+    }
+}
+
+/// Sentinel error token shown when a virtual folder has no entries yet.
+#[must_use]
+pub fn empty_placeholder_for_path(raw: &str) -> Option<&'static str> {
+    match raw {
+        "virtual:recent" => Some("virtual-empty-recent"),
+        "virtual:starred" => Some("virtual-empty-starred"),
+        "virtual:tags" => Some("virtual-empty-tags"),
+        "virtual:network" => Some("network-placeholder"),
+        path if category_for_virtual_path(path).is_some() => Some("virtual-empty-category"),
+        _ => None,
+    }
+}
+
 /// Whether `entry` belongs in the given category virtual folder.
 #[must_use]
 pub fn entry_matches_category(entry: &FsEntry, cat: FileCategory) -> bool {
@@ -173,6 +204,19 @@ mod tests {
         let l = orchid_fs::FsPath::new("local:/tmp").unwrap();
         assert!(is_virtual(&v));
         assert!(!is_virtual(&l));
+    }
+
+    #[test]
+    fn label_key_maps_virtual_paths() {
+        assert_eq!(
+            label_key_for_virtual_path("virtual:recent"),
+            Some("fm-virtual-recent")
+        );
+        assert_eq!(
+            label_key_for_virtual_path("virtual:categories/images"),
+            Some("fm-category-images")
+        );
+        assert!(label_key_for_virtual_path("local:/tmp").is_none());
     }
 
     #[test]

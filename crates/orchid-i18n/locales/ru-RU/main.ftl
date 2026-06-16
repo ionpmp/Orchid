@@ -263,6 +263,11 @@ fm-category-archives = Архивы
 fm-virtual-recent = Недавние
 fm-virtual-starred = Избранное
 fm-virtual-tags = Теги
+fm-virtual-recent-empty = Недавних файлов пока нет. Откройте файлы — они появятся здесь.
+fm-virtual-starred-empty = Избранных файлов пока нет. Отметьте звёздочкой через контекстное меню.
+fm-virtual-tags-empty = Файлов с тегами пока нет. Добавьте теги через контекстное меню.
+fm-virtual-category-empty = В этой категории подходящих файлов не найдено.
+fm-virtual-create-denied = Нельзя создавать папки в виртуальном расположении
 fm-empty-folder = Папка пуста
 fm-error-access = Нет доступа к этому расположению
 

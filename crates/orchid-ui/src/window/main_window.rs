@@ -5153,6 +5153,10 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
     let lower = err.to_ascii_lowercase();
     match err {
         "network-placeholder" => locale.tr("fm-network-placeholder"),
+        "virtual-empty-recent" => locale.tr("fm-virtual-recent-empty"),
+        "virtual-empty-starred" => locale.tr("fm-virtual-starred-empty"),
+        "virtual-empty-tags" => locale.tr("fm-virtual-tags-empty"),
+        "virtual-empty-category" => locale.tr("fm-virtual-category-empty"),
         _ if err.contains("no provider for scheme") => locale.tr("fm-network-no-provider"),
         _ if err.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing"),
         _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount"),
@@ -5177,6 +5181,9 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         }
         _ if lower.contains("already exists") => locale.tr("fm-transfer-already-exists"),
         _ if lower.contains("cannot drop into virtual folder") => locale.tr("fm-transfer-virtual-dest"),
+        _ if lower.contains("cannot create folder in virtual location") => {
+            locale.tr("fm-virtual-create-denied")
+        }
         _ if lower.contains("encryption unavailable") => locale.tr("fm-encryption-unavailable"),
         _ if lower.contains("managed folders unavailable") => locale.tr("fm-managed-unavailable"),
         _ if lower.contains("no selection for managed folder") => locale.tr("fm-managed-no-selection"),
@@ -5214,6 +5221,18 @@ fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPaylo
                 .with("selected", t.selection_count.to_string()),
         )
     }
+}
+
+fn fm_virtual_path_display(locale: &LocaleManager, path: &str) -> String {
+    orchid_widgets::builtin::file_manager::label_key_for_virtual_path(path)
+        .map(|key| locale.tr(key))
+        .unwrap_or_else(|| path.to_string())
+}
+
+fn fm_virtual_breadcrumb_label(locale: &LocaleManager, path: &str, fallback: &str) -> String {
+    orchid_widgets::builtin::file_manager::label_key_for_virtual_path(path)
+        .map(|key| locale.tr(key))
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedString {
@@ -5435,13 +5454,13 @@ fn build_file_manager_model(
                         .iter()
                         .map(|(bp, bl)| FmBreadcrumb {
                             path: bp.clone().into(),
-                            label: bl.clone().into(),
+                            label: fm_virtual_breadcrumb_label(locale, bp, bl).into(),
                         })
                         .collect();
 
                     FmTab {
                         id: t.tab_id.clone().into(),
-                        path_display: t.path_display.clone().into(),
+                        path_display: fm_virtual_path_display(locale, &t.path_display).into(),
                         breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
                         can_back: t.can_go_back,
                         can_forward: t.can_go_forward,

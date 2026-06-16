@@ -268,6 +268,11 @@ fm-category-archives = Archives
 fm-virtual-recent = Recent
 fm-virtual-starred = Starred
 fm-virtual-tags = Tags
+fm-virtual-recent-empty = No recent files yet. Open files to see them here.
+fm-virtual-starred-empty = No starred files yet. Star items from the context menu.
+fm-virtual-tags-empty = No tagged files yet. Add tags from the context menu.
+fm-virtual-category-empty = No matching files found in this category.
+fm-virtual-create-denied = Cannot create folders in a virtual location
 fm-empty-folder = This folder is empty
 fm-error-access = Cannot access this location
 
