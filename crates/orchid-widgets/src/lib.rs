@@ -27,7 +27,8 @@ pub use widget::descriptor::{WidgetCategory, WidgetDescriptor, WidgetFactory};
 pub use widget::instance::{SharedInstance, WidgetInstanceRuntime};
 pub use widget::lifecycle::LifecycleController;
 pub use widget::snapshot::{
-    TerminalPayload, TerminalPayloadCell, WidgetPayload, WidgetSnapshot, WidgetStatus,
+    TerminalPayload, TerminalPayloadCell, TerminalTabPayload, WidgetPayload, WidgetSnapshot,
+    WidgetStatus,
 };
 pub use widget::WidgetSnapshotCache;
 pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};

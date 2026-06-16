@@ -19,16 +19,15 @@ use async_trait::async_trait;
 use orchid_core::EventBus;
 use orchid_storage::{LifecycleState, StateStore, WidgetSize};
 use orchid_terminal::{
-    resolve_color, BackendKind, BackendSpec, CellFlags, ColorRole, PtySize, Rgba,
+    resolve_color, BackendKind, BackendSpec, CellFlags, ColorRole, LayoutRoot, PtySize, Rgba,
     SessionManager, TerminalPalette,
 };
 use orchid_widgets::{
-    widget::config, Result, TerminalPayload, TerminalPayloadCell, Widget, WidgetCapabilities,
-    WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
+    widget::config, Result, TerminalPayload, TerminalPayloadCell, TerminalTabPayload, Widget,
+    WidgetCapabilities, WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 /// Stable type id for the terminal widget.
@@ -128,6 +127,8 @@ pub struct TerminalWidgetDeps {
     /// `on_close` / `on_unload` so the main window can route key events and
     /// pixel resizes to the right PTY session.
     pub session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
+    /// Per-widget tab layout (maps instance id → sessions + active tab).
+    pub layouts: Arc<Mutex<HashMap<Uuid, LayoutRoot>>>,
 }
 
 impl std::fmt::Debug for TerminalWidgetDeps {
@@ -141,9 +142,6 @@ pub struct TerminalWidget {
     instance_id: Uuid,
     deps: TerminalWidgetDeps,
     state: TerminalWidgetState,
-    /// Live session id once `on_create` runs. `OnceCell` keeps the widget
-    /// trivially `Send`/`Sync` without adding a second mutex.
-    session_id: OnceCell<Uuid>,
     /// Most recent session size. Updated on `on_resize`.
     size_cells: RwLock<(u16, u16)>,
 }
@@ -152,7 +150,6 @@ impl std::fmt::Debug for TerminalWidget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TerminalWidget")
             .field("instance_id", &self.instance_id)
-            .field("session_id", &self.session_id.get())
             .finish_non_exhaustive()
     }
 }
@@ -165,8 +162,45 @@ impl TerminalWidget {
             instance_id,
             deps,
             state: TerminalWidgetState::default(),
-            session_id: OnceCell::new(),
             size_cells: RwLock::new(default_size_cells()),
+        }
+    }
+
+    fn layout(&self) -> Option<LayoutRoot> {
+        self.deps.layouts.lock().get(&self.instance_id).cloned()
+    }
+
+    fn set_routing_to_focused(&self) {
+        let Some(layout) = self.layout() else {
+            return;
+        };
+        if let Some(sid) = layout.focused_session() {
+            self.deps
+                .session_routing
+                .lock()
+                .insert(self.instance_id, sid);
+        }
+    }
+
+    fn sessions_in_layout(layout: &LayoutRoot) -> Vec<Uuid> {
+        let mut out = Vec::new();
+        for tab in &layout.tabs.tabs {
+            tab.root.leaves(&mut out);
+        }
+        out
+    }
+
+    async fn close_all_sessions(&self) {
+        let sessions = self
+            .layout()
+            .map(|layout| Self::sessions_in_layout(&layout))
+            .unwrap_or_default();
+        self.deps.layouts.lock().remove(&self.instance_id);
+        self.deps.session_routing.lock().remove(&self.instance_id);
+        for sid in sessions {
+            if let Err(e) = self.deps.sessions.close(sid).await {
+                tracing::warn!(session_id = %sid, error = %e, "terminal close session failed");
+            }
         }
     }
 }
@@ -182,7 +216,7 @@ impl Widget for TerminalWidget {
     }
 
     async fn on_create(&mut self, _ctx: &WidgetContext) -> Result<()> {
-        if self.session_id.get().is_some() {
+        if self.deps.layouts.lock().contains_key(&self.instance_id) {
             return Ok(());
         }
         let spec = self.state.backend.to_spec();
@@ -199,15 +233,14 @@ impl Widget for TerminalWidget {
             .open(spec.clone(), size)
             .await
             .map_err(|e| WidgetError::CreationFailed(format!("terminal spawn failed: {e}")))?;
-        self.session_id
-            .set(session_id)
-            .map_err(|_| WidgetError::InvalidStateForOperation("session_id already set".into()))?;
+        self.deps
+            .layouts
+            .lock()
+            .insert(self.instance_id, LayoutRoot::new(session_id));
         self.deps
             .session_routing
             .lock()
             .insert(self.instance_id, session_id);
-        // Record the chosen backend so save_state reflects what is really
-        // running.
         self.state.backend = StoredBackend::from_spec(&spec);
         Ok(())
     }
@@ -224,54 +257,58 @@ impl Widget for TerminalWidget {
     }
 
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> Result<()> {
-        // Close the underlying session to free memory. `on_create` will
-        // respawn on the way back to Active.
-        if let Some(sid) = self.session_id.take() {
-            self.deps.session_routing.lock().remove(&self.instance_id);
-            if let Err(e) = self.deps.sessions.close(sid).await {
-                tracing::warn!(session_id = %sid, error = %e, "terminal on_unload close failed");
-            }
-        } else {
-            self.deps.session_routing.lock().remove(&self.instance_id);
-        }
+        self.close_all_sessions().await;
         Ok(())
     }
 
     async fn on_close(&mut self, _ctx: &WidgetContext) -> Result<()> {
-        if let Some(sid) = self.session_id.take() {
-            self.deps.session_routing.lock().remove(&self.instance_id);
-            if let Err(e) = self.deps.sessions.close(sid).await {
-                tracing::warn!(session_id = %sid, error = %e, "terminal on_close failed");
-            }
-        } else {
-            self.deps.session_routing.lock().remove(&self.instance_id);
-        }
+        self.close_all_sessions().await;
         Ok(())
     }
 
     async fn on_resize(&mut self, _ctx: &WidgetContext, size: WidgetSize) -> Result<()> {
         let (cols, rows) = widget_size_to_terminal_grid(size);
         *self.size_cells.write() = (cols, rows);
-        if let Some(sid) = self.session_id.get().copied() {
-            if let Ok(session) = self.deps.sessions.get(sid) {
-                let pty_size = PtySize {
-                    cols,
-                    rows,
-                    pixel_width: 0,
-                    pixel_height: 0,
-                };
-                let _ = session.resize(pty_size);
+        let pty_size = PtySize {
+            cols,
+            rows,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        if let Some(layout) = self.layout() {
+            for sid in Self::sessions_in_layout(&layout) {
+                if let Ok(session) = self.deps.sessions.get(sid) {
+                    let _ = session.resize(pty_size);
+                }
             }
         }
         Ok(())
     }
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let sid = self.session_id.get().copied()?;
+        let mut layout = self.deps.layouts.lock().get(&self.instance_id)?.clone();
+        let sid = layout.focused_session()?;
         let session = self.deps.sessions.get(sid).ok()?;
+        sync_tab_titles(&mut layout, &self.deps.sessions);
+        self.deps
+            .layouts
+            .lock()
+            .insert(self.instance_id, layout.clone());
         let grid = session.emulator.snapshot();
         let palette = self.deps.palette.read().clone();
-        let terminal = grid_to_payload(&grid, &palette);
+        let mut terminal = grid_to_payload(&grid, &palette);
+        let snap = layout.snapshot();
+        terminal.tabs = snap
+            .tabs
+            .iter()
+            .enumerate()
+            .map(|(i, t)| TerminalTabPayload {
+                tab_id: t.id.to_string(),
+                title: t.title.clone(),
+                is_active: i == snap.active_tab,
+            })
+            .collect();
+        terminal.active_tab = snap.active_tab as u32;
         let title = {
             let t = session.emulator.title();
             if t.is_empty() {
@@ -290,22 +327,17 @@ impl Widget for TerminalWidget {
     }
 
     fn save_state(&self) -> Result<Vec<u8>> {
+        let focused = self.layout().and_then(|l| l.focused_session());
         let state = TerminalWidgetState {
             backend: self.state.backend.clone(),
-            working_directory: self
-                .session_id
-                .get()
-                .copied()
+            working_directory: focused
                 .and_then(|sid| self.deps.sessions.get(sid).ok())
                 .and_then(|s| {
                     s.emulator
                         .working_directory()
                         .and_then(|p| p.to_str().map(String::from))
                 }),
-            title: self
-                .session_id
-                .get()
-                .copied()
+            title: focused
                 .and_then(|sid| self.deps.sessions.get(sid).ok())
                 .map(|s| s.emulator.title())
                 .filter(|t| !t.is_empty()),
@@ -420,7 +452,122 @@ fn grid_to_payload(
         cursor_col: grid.cursor.col,
         cursor_row: grid.cursor.row,
         cursor_visible: grid.cursor.visible,
+        tabs: Vec::new(),
+        active_tab: 0,
     }
+}
+
+fn sync_tab_titles(layout: &mut LayoutRoot, sessions: &SessionManager) {
+    for tab in &mut layout.tabs.tabs {
+        let Some(focus) = tab.focus else {
+            continue;
+        };
+        if let Ok(session) = sessions.get(focus) {
+            let t = session.emulator.title();
+            tab.title = if t.is_empty() {
+                session.spec.display_name()
+            } else {
+                t
+            };
+        }
+    }
+}
+
+fn backend_for_layout(deps: &TerminalWidgetDeps, layout: &LayoutRoot) -> BackendSpec {
+    layout
+        .focused_session()
+        .and_then(|sid| deps.sessions.get(sid).ok())
+        .map(|s| s.spec.clone())
+        .unwrap_or_else(BackendSpec::powershell)
+}
+
+/// Open a new tab in the terminal widget identified by `instance_id`.
+pub async fn add_tab(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    let spec = backend_for_layout(deps, layout);
+    let size = PtySize {
+        cols: 80,
+        rows: 24,
+        pixel_width: 0,
+        pixel_height: 0,
+    };
+    let session_id = deps
+        .sessions
+        .open(spec, size)
+        .await
+        .map_err(|e| WidgetError::CreationFailed(format!("terminal tab spawn failed: {e}")))?;
+    let idx = layout.add_tab(session_id);
+    layout.active_tab = idx;
+    drop(layouts);
+    deps.session_routing
+        .lock()
+        .insert(instance_id, session_id);
+    Ok(())
+}
+
+/// Switch the active tab in a terminal widget.
+pub fn switch_tab(deps: &TerminalWidgetDeps, instance_id: Uuid, tab_index: usize) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    if tab_index >= layout.tabs.tabs.len() {
+        return Err(WidgetError::InvalidStateForOperation(
+            "tab index out of range".into(),
+        ));
+    }
+    layout.active_tab = tab_index;
+    let sid = layout
+        .focused_session()
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("no focused session".into()))?;
+    drop(layouts);
+    deps.session_routing.lock().insert(instance_id, sid);
+    Ok(())
+}
+
+/// Close a tab and its backing session.
+pub async fn close_tab(
+    deps: &TerminalWidgetDeps,
+    instance_id: Uuid,
+    tab_index: usize,
+) -> Result<()> {
+    let closed_sessions = {
+        let mut layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get_mut(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        let tab = layout
+            .tabs
+            .tabs
+            .get(tab_index)
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("tab index out of range".into()))?;
+        let mut sessions = Vec::new();
+        tab.root.leaves(&mut sessions);
+        layout.close_tab(tab_index).map_err(|e| {
+            WidgetError::InvalidStateForOperation(format!("close tab: {e}"))
+        })?;
+        sessions
+    };
+    for sid in closed_sessions {
+        if let Err(e) = deps.sessions.close(sid).await {
+            tracing::warn!(session_id = %sid, error = %e, "terminal close tab session failed");
+        }
+    }
+    if let Some(sid) = deps.layouts.lock().get(&instance_id).and_then(|l| l.focused_session()) {
+        deps.session_routing.lock().insert(instance_id, sid);
+    } else {
+        deps.session_routing.lock().remove(&instance_id);
+    }
+    Ok(())
 }
 
 fn rgba_to_bytes(rgba: Rgba) -> [u8; 4] {

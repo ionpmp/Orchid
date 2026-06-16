@@ -80,6 +80,21 @@ pub struct TerminalPayload {
     pub cursor_row: u16,
     /// Whether the cursor should be drawn.
     pub cursor_visible: bool,
+    /// Tab strip entries for the Slint terminal chrome.
+    pub tabs: Vec<TerminalTabPayload>,
+    /// Active tab index in [`Self::tabs`].
+    pub active_tab: u32,
+}
+
+/// One tab in the terminal widget tab strip.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminalTabPayload {
+    /// Stable tab id (UUID string).
+    pub tab_id: String,
+    /// Display title (shell name or OSC title).
+    pub title: String,
+    /// Whether this tab is currently selected.
+    pub is_active: bool,
 }
 
 /// Single terminal cell with resolved colours, ready to render.

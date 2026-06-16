@@ -48,11 +48,13 @@ use parking_lot::RwLock;
 
 use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
+use crate::widgets::terminal::{add_tab, close_tab, switch_tab, TerminalWidgetDeps};
 use crate::terminal_raster;
 use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
-    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, Theme,
+    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalTabModel,
+    Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
     FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmContextSubitem,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
@@ -81,6 +83,7 @@ pub struct MainWindowController {
     layout_engine: Arc<LayoutEngine>,
     session_manager: Arc<SessionManager>,
     session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
+    terminal_deps: TerminalWidgetDeps,
     font_metrics: FontMetrics,
     /// When [`Self::font_metrics`] is from system font resolution, the same `fontdue` face for
     /// [`crate::terminal_raster`]. Otherwise the terminal falls back to a blank `Image` layer.
@@ -195,6 +198,7 @@ impl MainWindowController {
         layout_engine: Arc<LayoutEngine>,
         session_manager: Arc<SessionManager>,
         session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
+        terminal_deps: TerminalWidgetDeps,
     ) -> Result<Arc<Self>> {
         let window = MainWindow::new()
             .map_err(|e| UiError::Slint(format!("failed to create MainWindow: {e}")))?;
@@ -240,6 +244,7 @@ impl MainWindowController {
             layout_engine: layout_engine.clone(),
             session_manager: session_manager.clone(),
             session_routing,
+            terminal_deps,
             font_metrics,
             mono_font,
             mono_font_glyph_fallback,
@@ -648,6 +653,30 @@ impl MainWindowController {
             move |id, w, h| {
                 if let Some(c) = t.upgrade() {
                     c.on_terminal_viewport(&id, w, h);
+                }
+            }
+        });
+        self.window.on_terminal_tab_clicked({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_tab_clicked(&id, idx);
+                }
+            }
+        });
+        self.window.on_terminal_tab_closed({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_tab_closed(&id, idx);
+                }
+            }
+        });
+        self.window.on_terminal_tab_new({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_tab_new(&id);
                 }
             }
         });
@@ -2340,6 +2369,62 @@ impl MainWindowController {
         }
     }
 
+    fn on_terminal_tab_clicked(self: &Arc<Self>, id: &SharedString, tab_idx: i32) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        if tab_idx < 0 {
+            return;
+        }
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let idx = tab_idx as usize;
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = switch_tab(&deps, inst, idx) {
+                warn!(?e, %inst, tab_idx = idx, "terminal tab switch");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_terminal_tab_new(self: &Arc<Self>, id: &SharedString) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = add_tab(&deps, inst).await {
+                warn!(?e, %inst, "terminal tab add");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_terminal_tab_closed(self: &Arc<Self>, id: &SharedString, tab_idx: i32) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        if tab_idx < 0 {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let idx = tab_idx as usize;
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = close_tab(&deps, inst, idx).await {
+                warn!(?e, %inst, tab_idx = idx, "terminal tab close");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
     fn patch_workspace_frames(self: &Arc<Self>, ids: &[Uuid]) -> Result<()> {
@@ -2732,6 +2817,19 @@ impl MainWindowController {
         } else {
             default_frame_data_extended(&self.locale, iref.type_id.as_str())
         };
+        let (terminal_tabs, terminal_active_tab) = if iref.type_id == "terminal" {
+            if let Some(ws) = cached.as_deref() {
+                if let WidgetPayload::Terminal(t) = &ws.payload {
+                    build_terminal_tab_models(t)
+                } else {
+                    default_terminal_tab_models()
+                }
+            } else {
+                default_terminal_tab_models()
+            }
+        } else {
+            default_terminal_tab_models()
+        };
         let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
         WidgetFrameModel {
             instance_id: pl.instance_id.to_string().into(),
@@ -2751,6 +2849,8 @@ impl MainWindowController {
             terminal_cell_width: cw,
             terminal_cell_height: ch,
             terminal_pixels: tpix,
+            terminal_tabs,
+            terminal_active_tab,
             weather: weather_model,
             moon: moon_model,
             system: system_model,
@@ -4635,6 +4735,23 @@ fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<TerminalCellMode
         rows.push(ModelRc::new(VecModel::from(rowv)));
     }
     ModelRc::new(VecModel::from(rows))
+}
+
+fn build_terminal_tab_models(t: &TerminalPayload) -> (ModelRc<TerminalTabModel>, i32) {
+    let tabs: Vec<TerminalTabModel> = t
+        .tabs
+        .iter()
+        .map(|tab| TerminalTabModel {
+            tab_id: tab.tab_id.clone().into(),
+            title: tab.title.clone().into(),
+            is_active: tab.is_active,
+        })
+        .collect();
+    (ModelRc::new(VecModel::from(tabs)), t.active_tab as i32)
+}
+
+fn default_terminal_tab_models() -> (ModelRc<TerminalTabModel>, i32) {
+    (ModelRc::new(VecModel::default()), 0)
 }
 
 fn fm_rgba_to_image(rgba: &[u8], width: u32, height: u32) -> Image {

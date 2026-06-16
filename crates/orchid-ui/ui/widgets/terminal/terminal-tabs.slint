@@ -1,0 +1,85 @@
+import { Theme } from "../../theme_global.slint";
+import { TerminalTabModel } from "../../workspace/defs.slint";
+
+export component TerminalTabs inherits Rectangle {
+    in property <[TerminalTabModel]> tabs;
+    in property <int> active-tab;
+
+    callback tab-clicked(int);
+    callback tab-closed(int);
+    callback tab-new();
+
+    height: 29px;
+    background: Theme.surface-raised;
+
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+
+        for tab[i] in tabs : Rectangle {
+            width: 140px;
+            height: 25px;
+            background: i == active-tab ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            tab-ta := TouchArea {
+                clicked => { root.tab-clicked(i); }
+            }
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 4px;
+                spacing: 4px;
+
+                Text {
+                    text: tab.title;
+                    color: i == active-tab ? Theme.text-primary : Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+
+                Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: close-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: 9px;
+
+                    close-ta := TouchArea {
+                        clicked => { root.tab-closed(i); }
+                    }
+
+                    Text {
+                        text: "×";
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 28px;
+            height: 25px;
+            background: new-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            new-ta := TouchArea {
+                clicked => { root.tab-new(); }
+            }
+
+            Text {
+                text: "+";
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

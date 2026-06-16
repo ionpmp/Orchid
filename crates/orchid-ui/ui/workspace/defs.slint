@@ -14,6 +14,12 @@ export struct TerminalCellModel {
     bold: bool,
 }
 
+export struct TerminalTabModel {
+    tab-id: string,
+    title: string,
+    is-active: bool,
+}
+
 export struct WeatherForecastEntry {
     day-label: string,
     high-text: string,
@@ -420,6 +426,8 @@ export struct WidgetFrameModel {
     terminal-cell-height: length,
     /// fontdue-rastered terminal (same font as font metrics; avoids Skia per-cell text mismatch).
     terminal-pixels: image,
+    terminal-tabs: [TerminalTabModel],
+    terminal-active-tab: int,
 
     weather: WeatherModel,
     moon: MoonModel,

@@ -1,6 +1,7 @@
 import { Theme } from "../theme_global.slint";
 import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
+import { TerminalTabs } from "../widgets/terminal/terminal-tabs.slint";
 import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
 import { SystemView } from "../widgets/system.slint";
@@ -23,6 +24,9 @@ export component WidgetFrame inherits Rectangle {
     callback resize-ended();
     callback terminal-key-pressed(string);
     callback terminal-viewport-changed(length, length);
+    callback terminal-tab-clicked(int);
+    callback terminal-tab-closed(int);
+    callback terminal-tab-new();
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -195,27 +199,38 @@ export component WidgetFrame inherits Rectangle {
         height: parent.height - 32px;
         background: Theme.surface-base;
 
-        if model.type-id == "terminal" : Rectangle {
+        if model.type-id == "terminal" : VerticalLayout {
             width: parent.width;
             height: parent.height;
-            // Viewport must track terminal content only. Emitting on the shared `content` area
-            // fired for every widget and on drag-induced layout noise (x/y) → PTY/rebuild loop.
-            changed width => { root.terminal-viewport-changed(self.width, self.height); }
-            changed height => { root.terminal-viewport-changed(self.width, self.height); }
+            spacing: 0;
 
-            TerminalView {
-                width: parent.width;
-                height: parent.height;
-                cols: model.terminal-cols;
-                rows: model.terminal-rows;
-                cells: model.terminal-cells;
-                pixels: model.terminal-pixels;
-                cursor-col: model.terminal-cursor-col;
-                cursor-row: model.terminal-cursor-row;
-                cursor-visible: model.terminal-cursor-visible;
-                cell-width: model.terminal-cell-width;
-                cell-height: model.terminal-cell-height;
-                key-pressed(text) => { root.terminal-key-pressed(text); }
+            TerminalTabs {
+                tabs: model.terminal-tabs;
+                active-tab: model.terminal-active-tab;
+                tab-clicked(idx) => { root.terminal-tab-clicked(idx); }
+                tab-closed(idx) => { root.terminal-tab-closed(idx); }
+                tab-new => { root.terminal-tab-new(); }
+            }
+
+            viewport := Rectangle {
+                vertical-stretch: 1;
+                changed width => { root.terminal-viewport-changed(self.width, self.height); }
+                changed height => { root.terminal-viewport-changed(self.width, self.height); }
+
+                TerminalView {
+                    width: parent.width;
+                    height: parent.height;
+                    cols: model.terminal-cols;
+                    rows: model.terminal-rows;
+                    cells: model.terminal-cells;
+                    pixels: model.terminal-pixels;
+                    cursor-col: model.terminal-cursor-col;
+                    cursor-row: model.terminal-cursor-row;
+                    cursor-visible: model.terminal-cursor-visible;
+                    cell-width: model.terminal-cell-width;
+                    cell-height: model.terminal-cell-height;
+                    key-pressed(text) => { root.terminal-key-pressed(text); }
+                }
             }
         }
 

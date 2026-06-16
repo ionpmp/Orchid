@@ -21,6 +21,9 @@ export component WorkspaceView inherits Rectangle {
     callback widget-resize-ended(string);
     callback terminal-key-pressed(string, string);
     callback terminal-viewport-changed(string, length, length);
+    callback terminal-tab-clicked(string, int);
+    callback terminal-tab-closed(string, int);
+    callback terminal-tab-new(string);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -214,6 +217,9 @@ export component WorkspaceView inherits Rectangle {
                     resize-ended => { root.widget-resize-ended(w.instance-id); }
                     terminal-key-pressed(text) => { root.terminal-key-pressed(w.instance-id, text); }
                     terminal-viewport-changed(w_, h_) => { root.terminal-viewport-changed(w.instance-id, w_, h_); }
+                    terminal-tab-clicked(idx) => { root.terminal-tab-clicked(w.instance-id, idx); }
+                    terminal-tab-closed(idx) => { root.terminal-tab-closed(w.instance-id, idx); }
+                    terminal-tab-new => { root.terminal-tab-new(w.instance-id); }
                     rss-item-clicked(link) => { root.rss-item-clicked(link); }
                     search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
                     search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }

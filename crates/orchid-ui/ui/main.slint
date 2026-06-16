@@ -69,6 +69,9 @@ export component MainWindow inherits Window {
     callback widget-resize-ended(string);
     callback terminal-key-pressed(string, string);
     callback terminal-viewport-changed(string, length, length);
+    callback terminal-tab-clicked(string, int);
+    callback terminal-tab-closed(string, int);
+    callback terminal-tab-new(string);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -224,6 +227,9 @@ export component MainWindow inherits Window {
             widget-resize-ended(id) => { root.widget-resize-ended(id); }
             terminal-key-pressed(id, text) => { root.terminal-key-pressed(id, text); }
             terminal-viewport-changed(id, w, h) => { root.terminal-viewport-changed(id, w, h); }
+            terminal-tab-clicked(id, idx) => { root.terminal-tab-clicked(id, idx); }
+            terminal-tab-closed(id, idx) => { root.terminal-tab-closed(id, idx); }
+            terminal-tab-new(id) => { root.terminal-tab-new(id); }
             rss-item-clicked(link) => { root.rss-item-clicked(link); }
             search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
             search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }

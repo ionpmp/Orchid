@@ -49,6 +49,7 @@ pub struct OrchidApp {
     layout_engine: Arc<LayoutEngine>,
     session_manager: Arc<SessionManager>,
     session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
+    terminal_deps: TerminalWidgetDeps,
     /// Shared command registry (search + future palette UI).
     #[allow(dead_code)]
     command_registry: Arc<CommandRegistry>,
@@ -125,15 +126,18 @@ impl OrchidApp {
         let widget_registry: Arc<WidgetRegistry> = Arc::new(WidgetRegistry::new());
 
         let terminal_palette = Arc::new(RwLock::new(palette_from_theme(&theme.current())));
+        let terminal_layouts: Arc<Mutex<HashMap<Uuid, orchid_terminal::LayoutRoot>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         let terminal_deps = TerminalWidgetDeps {
             sessions: session_manager.clone(),
             palette: terminal_palette,
             bus: bus.clone(),
             storage: storage.clone(),
             session_routing: session_routing.clone(),
+            layouts: terminal_layouts,
         };
         widget_registry
-            .register(terminal_descriptor(terminal_deps))
+            .register(terminal_descriptor(terminal_deps.clone()))
             .map_err(|e| UiError::Slint(format!("register terminal: {e}")))?;
 
         let http = reqwest::Client::builder()
@@ -489,6 +493,7 @@ impl OrchidApp {
             layout_engine,
             session_manager,
             session_routing,
+            terminal_deps,
             command_registry,
             group_manager,
             fs_registry,
@@ -570,6 +575,7 @@ impl OrchidApp {
             self.layout_engine.clone(),
             self.session_manager.clone(),
             self.session_routing.clone(),
+            self.terminal_deps.clone(),
         )?;
         c.run()?;
         Ok(())
