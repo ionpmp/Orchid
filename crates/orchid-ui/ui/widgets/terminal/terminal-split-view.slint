@@ -1,0 +1,67 @@
+import { Theme } from "../../theme_global.slint";
+import { TerminalPaneModel } from "../../workspace/defs.slint";
+import { TerminalView } from "../../workspace/terminal-view.slint";
+
+export component TerminalSplitView inherits Rectangle {
+    in property <[TerminalPaneModel]> panes;
+    in property <length> cell-width;
+    in property <length> cell-height;
+
+    callback pane-clicked(string);
+    callback pane-closed(string);
+    callback key-pressed(string);
+
+    for pane[i] in panes : Rectangle {
+        x: parent.width * pane.left;
+        y: parent.height * pane.top;
+        width: parent.width * (pane.right - pane.left);
+        height: parent.height * (pane.bottom - pane.top);
+        clip: true;
+        background: Theme.surface-base;
+        border-width: pane.is-focused ? 1px : 0px;
+        border-color: Theme.accent-brand;
+
+        TerminalView {
+            width: parent.width;
+            height: parent.height;
+            input-enabled: pane.is-focused;
+            cols: pane.cols;
+            rows: pane.rows;
+            cells: pane.cells;
+            pixels: pane.pixels;
+            cursor-col: pane.cursor-col;
+            cursor-row: pane.cursor-row;
+            cursor-visible: pane.cursor-visible;
+            cell-width: root.cell-width;
+            cell-height: root.cell-height;
+            key-pressed(text) => { root.key-pressed(text); }
+        }
+
+        if !pane.is-focused : TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.pane-clicked(pane.session-id); }
+        }
+
+        if pane.show-close : Rectangle {
+            x: parent.width - 20px;
+            y: 2px;
+            width: 18px;
+            height: 18px;
+            background: close-ta.has-hover ? Theme.surface-raised : transparent;
+            border-radius: 9px;
+
+            close-ta := TouchArea {
+                clicked => { root.pane-closed(pane.session-id); }
+            }
+
+            Text {
+                text: "×";
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

@@ -17,6 +17,8 @@ export component TerminalView inherits Rectangle {
     in property <length> cell-width;
     in property <length> cell-height;
 
+    in property <bool> input-enabled: true;
+
     callback key-pressed(string);
 
     background: Theme.surface-base;
@@ -39,7 +41,7 @@ export component TerminalView inherits Rectangle {
         // Match canvas so a stray space is invisible; raster is drawn in the `Image` below.
         color: Theme.surface-base;
         text-cursor-width: 0px;
-        enabled: true;
+        enabled: root.input-enabled;
         read-only: false;
         // Handle keys in two ways: (1) when `key-pressed` has `event.text` (or a Key.* match),
         // `accept` and send to the PTY; (2) when the platform gives an empty `event.text` for

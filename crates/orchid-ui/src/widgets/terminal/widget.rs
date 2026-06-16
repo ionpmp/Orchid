@@ -20,10 +20,11 @@ use orchid_core::EventBus;
 use orchid_storage::{LifecycleState, StateStore, WidgetSize};
 use orchid_terminal::{
     resolve_color, BackendKind, BackendSpec, CellFlags, ColorRole, LayoutRoot, PtySize, Rgba,
-    SessionManager, TerminalPalette,
+    SessionManager, SplitDirection, TerminalPalette,
 };
 use orchid_widgets::{
-    widget::config, Result, TerminalPayload, TerminalPayloadCell, TerminalTabPayload, Widget,
+    widget::config, Result, TerminalPayload, TerminalPayloadCell, TerminalPanePayload,
+    TerminalTabPayload, Widget,
     WidgetCapabilities, WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 use parking_lot::{Mutex, RwLock};
@@ -287,17 +288,50 @@ impl Widget for TerminalWidget {
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let mut layout = self.deps.layouts.lock().get(&self.instance_id)?.clone();
-        let sid = layout.focused_session()?;
-        let session = self.deps.sessions.get(sid).ok()?;
         sync_tab_titles(&mut layout, &self.deps.sessions);
         self.deps
             .layouts
             .lock()
             .insert(self.instance_id, layout.clone());
-        let grid = session.emulator.snapshot();
+        let focused = layout.focused_session()?;
         let palette = self.deps.palette.read().clone();
-        let mut terminal = grid_to_payload(&grid, &palette);
         let snap = layout.snapshot();
+        let active_tab = snap
+            .tabs
+            .get(snap.active_tab)
+            .map(|t| t.panes.len())
+            .unwrap_or(1);
+        let multi_pane = active_tab > 1;
+        let mut panes = Vec::new();
+        if let Some(tab_snap) = snap.tabs.get(snap.active_tab) {
+            for pane_snap in &tab_snap.panes {
+                let sid = pane_snap.session;
+                if let Ok(session) = self.deps.sessions.get(sid) {
+                    let grid = session.emulator.snapshot();
+                    let pane_terminal = grid_to_payload(&grid, &palette);
+                    panes.push(TerminalPanePayload {
+                        session_id: sid.to_string(),
+                        left: pane_snap.bounds.left,
+                        top: pane_snap.bounds.top,
+                        right: pane_snap.bounds.right,
+                        bottom: pane_snap.bounds.bottom,
+                        is_focused: tab_snap.focused == Some(sid),
+                        show_close: multi_pane,
+                        cols: pane_terminal.cols,
+                        rows: pane_terminal.rows,
+                        cells: pane_terminal.cells,
+                        cursor_col: pane_terminal.cursor_col,
+                        cursor_row: pane_terminal.cursor_row,
+                        cursor_visible: pane_terminal.cursor_visible,
+                    });
+                }
+            }
+        }
+        let Ok(session) = self.deps.sessions.get(focused) else {
+            return None;
+        };
+        let grid = session.emulator.snapshot();
+        let mut terminal = grid_to_payload(&grid, &palette);
         terminal.tabs = snap
             .tabs
             .iter()
@@ -309,6 +343,7 @@ impl Widget for TerminalWidget {
             })
             .collect();
         terminal.active_tab = snap.active_tab as u32;
+        terminal.panes = panes;
         let title = {
             let t = session.emulator.title();
             if t.is_empty() {
@@ -454,6 +489,7 @@ fn grid_to_payload(
         cursor_visible: grid.cursor.visible,
         tabs: Vec::new(),
         active_tab: 0,
+        panes: Vec::new(),
     }
 }
 
@@ -507,6 +543,120 @@ pub async fn add_tab(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()>
     deps.session_routing
         .lock()
         .insert(instance_id, session_id);
+    Ok(())
+}
+
+/// Split the focused pane horizontally (side-by-side).
+pub async fn split_horizontal(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
+    split_pane(deps, instance_id, SplitDirection::Horizontal).await
+}
+
+/// Split the focused pane vertically (stacked).
+pub async fn split_vertical(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
+    split_pane(deps, instance_id, SplitDirection::Vertical).await
+}
+
+async fn split_pane(
+    deps: &TerminalWidgetDeps,
+    instance_id: Uuid,
+    direction: SplitDirection,
+) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    let spec = backend_for_layout(deps, layout);
+    let size = PtySize {
+        cols: 80,
+        rows: 24,
+        pixel_width: 0,
+        pixel_height: 0,
+    };
+    let session_id = deps
+        .sessions
+        .open(spec, size)
+        .await
+        .map_err(|e| WidgetError::CreationFailed(format!("terminal split spawn failed: {e}")))?;
+    layout
+        .split(direction, session_id)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("split: {e}")))?;
+    drop(layouts);
+    deps.session_routing
+        .lock()
+        .insert(instance_id, session_id);
+    Ok(())
+}
+
+/// Focus a pane by session id within the active tab.
+pub fn focus_pane(deps: &TerminalWidgetDeps, instance_id: Uuid, session_id: Uuid) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    let tab = layout
+        .tabs
+        .tabs
+        .get_mut(layout.active_tab)
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("no active tab".into()))?;
+    let mut leaves = Vec::new();
+    tab.root.leaves(&mut leaves);
+    if !leaves.iter().any(|s| *s == session_id) {
+        return Err(WidgetError::InvalidStateForOperation(
+            "session not in active tab".into(),
+        ));
+    }
+    tab.focus = Some(session_id);
+    drop(layouts);
+    deps.session_routing.lock().insert(instance_id, session_id);
+    Ok(())
+}
+
+/// Close a pane and its backing session (merges splits when needed).
+pub async fn close_pane(
+    deps: &TerminalWidgetDeps,
+    instance_id: Uuid,
+    session_id: Uuid,
+) -> Result<()> {
+    let closed = {
+        let mut layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get_mut(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        let tab = layout
+            .tabs
+            .tabs
+            .get_mut(layout.active_tab)
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no active tab".into()))?;
+        if tab.root.leaf_count() <= 1 {
+            return Err(WidgetError::InvalidStateForOperation(
+                "cannot close last pane in tab".into(),
+            ));
+        }
+        tab.focus = Some(session_id);
+        layout
+            .close_focus()
+            .map_err(|e| WidgetError::InvalidStateForOperation(format!("close pane: {e}")))?;
+        session_id
+    };
+    if let Err(e) = deps.sessions.close(closed).await {
+        tracing::warn!(session_id = %closed, error = %e, "terminal close pane session failed");
+    }
+    if let Some(sid) = deps
+        .layouts
+        .lock()
+        .get(&instance_id)
+        .and_then(|l| l.focused_session())
+    {
+        deps.session_routing.lock().insert(instance_id, sid);
+    } else {
+        deps.session_routing.lock().remove(&instance_id);
+    }
     Ok(())
 }
 

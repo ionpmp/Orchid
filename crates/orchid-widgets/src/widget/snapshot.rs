@@ -84,6 +84,39 @@ pub struct TerminalPayload {
     pub tabs: Vec<TerminalTabPayload>,
     /// Active tab index in [`Self::tabs`].
     pub active_tab: u32,
+    /// Panes in the active tab (fractional layout + per-pane grid).
+    pub panes: Vec<TerminalPanePayload>,
+}
+
+/// One pane in the active tab's split tree.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerminalPanePayload {
+    /// Backing PTY session id (UUID string).
+    pub session_id: String,
+    /// Left edge as a fraction of the tab viewport (`0.0..=1.0`).
+    pub left: f32,
+    /// Top edge.
+    pub top: f32,
+    /// Right edge.
+    pub right: f32,
+    /// Bottom edge.
+    pub bottom: f32,
+    /// Whether this pane has keyboard focus.
+    pub is_focused: bool,
+    /// Whether the pane close affordance should be shown.
+    pub show_close: bool,
+    /// Grid columns for this pane.
+    pub cols: u16,
+    /// Grid rows.
+    pub rows: u16,
+    /// Cell data in row-major order.
+    pub cells: Vec<TerminalPayloadCell>,
+    /// Cursor column.
+    pub cursor_col: u16,
+    /// Cursor row.
+    pub cursor_row: u16,
+    /// Cursor visibility.
+    pub cursor_visible: bool,
 }
 
 /// One tab in the terminal widget tab strip.

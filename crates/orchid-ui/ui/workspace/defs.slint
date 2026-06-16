@@ -20,6 +20,23 @@ export struct TerminalTabModel {
     is-active: bool,
 }
 
+export struct TerminalPaneModel {
+    session-id: string,
+    left: float,
+    top: float,
+    right: float,
+    bottom: float,
+    is-focused: bool,
+    show-close: bool,
+    cols: int,
+    rows: int,
+    cells: [[TerminalCellModel]],
+    pixels: image,
+    cursor-col: int,
+    cursor-row: int,
+    cursor-visible: bool,
+}
+
 export struct WeatherForecastEntry {
     day-label: string,
     high-text: string,
@@ -428,6 +445,7 @@ export struct WidgetFrameModel {
     terminal-pixels: image,
     terminal-tabs: [TerminalTabModel],
     terminal-active-tab: int,
+    terminal-panes: [TerminalPaneModel],
 
     weather: WeatherModel,
     moon: MoonModel,

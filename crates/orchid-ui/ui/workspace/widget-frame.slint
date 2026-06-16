@@ -2,6 +2,7 @@ import { Theme } from "../theme_global.slint";
 import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
 import { TerminalTabs } from "../widgets/terminal/terminal-tabs.slint";
+import { TerminalSplitView } from "../widgets/terminal/terminal-split-view.slint";
 import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
 import { SystemView } from "../widgets/system.slint";
@@ -27,6 +28,10 @@ export component WidgetFrame inherits Rectangle {
     callback terminal-tab-clicked(int);
     callback terminal-tab-closed(int);
     callback terminal-tab-new();
+    callback terminal-split-horizontal();
+    callback terminal-split-vertical();
+    callback terminal-pane-clicked(string);
+    callback terminal-pane-closed(string);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -210,6 +215,8 @@ export component WidgetFrame inherits Rectangle {
                 tab-clicked(idx) => { root.terminal-tab-clicked(idx); }
                 tab-closed(idx) => { root.terminal-tab-closed(idx); }
                 tab-new => { root.terminal-tab-new(); }
+                split-horizontal => { root.terminal-split-horizontal(); }
+                split-vertical => { root.terminal-split-vertical(); }
             }
 
             viewport := Rectangle {
@@ -217,18 +224,14 @@ export component WidgetFrame inherits Rectangle {
                 changed width => { root.terminal-viewport-changed(self.width, self.height); }
                 changed height => { root.terminal-viewport-changed(self.width, self.height); }
 
-                TerminalView {
+                TerminalSplitView {
                     width: parent.width;
                     height: parent.height;
-                    cols: model.terminal-cols;
-                    rows: model.terminal-rows;
-                    cells: model.terminal-cells;
-                    pixels: model.terminal-pixels;
-                    cursor-col: model.terminal-cursor-col;
-                    cursor-row: model.terminal-cursor-row;
-                    cursor-visible: model.terminal-cursor-visible;
+                    panes: model.terminal-panes;
                     cell-width: model.terminal-cell-width;
                     cell-height: model.terminal-cell-height;
+                    pane-clicked(sid) => { root.terminal-pane-clicked(sid); }
+                    pane-closed(sid) => { root.terminal-pane-closed(sid); }
                     key-pressed(text) => { root.terminal-key-pressed(text); }
                 }
             }

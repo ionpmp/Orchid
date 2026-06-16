@@ -8,6 +8,8 @@ export component TerminalTabs inherits Rectangle {
     callback tab-clicked(int);
     callback tab-closed(int);
     callback tab-new();
+    callback split-horizontal();
+    callback split-vertical();
 
     height: 29px;
     background: Theme.surface-raised;
@@ -60,6 +62,44 @@ export component TerminalTabs inherits Rectangle {
                         vertical-alignment: center;
                     }
                 }
+            }
+        }
+
+        Rectangle {
+            width: 28px;
+            height: 25px;
+            background: split-h-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            split-h-ta := TouchArea {
+                clicked => { root.split-horizontal(); }
+            }
+
+            Text {
+                text: "▥";
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            width: 28px;
+            height: 25px;
+            background: split-v-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            split-v-ta := TouchArea {
+                clicked => { root.split-vertical(); }
+            }
+
+            Text {
+                text: "▤";
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
             }
         }
 

@@ -23,7 +23,7 @@ pub use descriptor::{WidgetCategory, WidgetDescriptor, WidgetFactory};
 pub use instance::WidgetInstanceRuntime;
 pub use lifecycle::LifecycleController;
 pub use snapshot::{
-    TerminalPayload, TerminalPayloadCell, TerminalTabPayload, WidgetPayload, WidgetSnapshot,
+    TerminalPayload, TerminalPayloadCell, TerminalPanePayload, TerminalTabPayload, WidgetPayload, WidgetSnapshot,
     WidgetStatus,
 };
 pub use snapshot_cache::WidgetSnapshotCache;

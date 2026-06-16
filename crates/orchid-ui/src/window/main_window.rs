@@ -33,10 +33,11 @@ use orchid_core::{
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
-use orchid_terminal::{FontMetrics, PtySize};
+use orchid_terminal::{FontMetrics};
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::TerminalPayload;
+use orchid_widgets::TerminalPanePayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
 use orchid_widgets::{ViewerPayload, WidgetPayload};
 use orchid_widgets::{
@@ -48,12 +49,16 @@ use parking_lot::RwLock;
 
 use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
-use crate::widgets::terminal::{add_tab, close_tab, switch_tab, TerminalWidgetDeps};
+use crate::widgets::terminal::{
+    add_tab, close_pane, close_tab, focus_pane, split_horizontal, split_vertical, switch_tab,
+    TerminalWidgetDeps,
+};
 use crate::terminal_raster;
 use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
-    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalTabModel,
+    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalPaneModel,
+    TerminalTabModel,
     Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
     FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmContextSubitem,
@@ -677,6 +682,38 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     c.on_terminal_tab_new(&id);
+                }
+            }
+        });
+        self.window.on_terminal_split_horizontal({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_split_horizontal(&id);
+                }
+            }
+        });
+        self.window.on_terminal_split_vertical({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_split_vertical(&id);
+                }
+            }
+        });
+        self.window.on_terminal_pane_clicked({
+            let t = t.clone();
+            move |id, sid| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_pane_clicked(&id, &sid);
+                }
+            }
+        });
+        self.window.on_terminal_pane_closed({
+            let t = t.clone();
+            move |id, sid| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_pane_closed(&id, &sid);
                 }
             }
         });
@@ -2017,39 +2054,140 @@ impl MainWindowController {
     /// Content area of [`widget-frame.slint`] below the title bar (`height - 32px`); must match
     /// what `terminal-viewport-changed` would report as `w`/`h`.
     const WIDGET_FRAME_HEADER_PX: f32 = 32.0;
+    /// Height of [`terminal-tabs.slint`] inside the terminal widget content area.
+    const TERMINAL_TAB_BAR_PX: f32 = 29.0;
 
-    /// Resize the PTY grid to the terminal's content `Rectangle` size. Slint's `changed` on that
-    /// area often does not run for the *first* layout, so this is also invoked from
-    /// [`rebuild_workspace_model`]. Returns `true` if the TTY was actually resized.
+    /// Resize PTY grids for every pane in the active tab to match the terminal viewport.
+    /// Returns `true` if any session was resized.
     fn resize_terminal_pty_to_content(
         self: &Arc<Self>,
         inst: Uuid,
-        content_w: f32,
-        content_h: f32,
+        viewport_w: f32,
+        viewport_h: f32,
     ) -> bool {
-        let w = content_w.max(1.0);
-        let h = content_h.max(1.0);
-        let pty: PtySize = self.font_metrics.fit(w, h);
-        {
-            let last = self.last_terminal_viewport_pty.lock();
-            if last.get(&inst) == Some(&(pty.cols, pty.rows)) {
-                return false;
-            }
-        }
-        let Some(sid) = self.session_routing.lock().get(&inst).copied() else {
-            return false;
-        };
-        let Ok(s) = self.session_manager.get(sid) else {
-            return false;
-        };
-        if let Err(e) = s.resize(pty) {
-            warn!(?e, "pty");
-            return false;
-        }
-        self.last_terminal_viewport_pty
+        let w = viewport_w.max(1.0);
+        let h = viewport_h.max(1.0);
+        let layout = self
+            .terminal_deps
+            .layouts
             .lock()
-            .insert(inst, (pty.cols, pty.rows));
-        true
+            .get(&inst)
+            .cloned();
+        let Some(layout) = layout else {
+            return false;
+        };
+        let snap = layout.snapshot();
+        let Some(tab) = snap.tabs.get(snap.active_tab) else {
+            return false;
+        };
+        if tab.panes.is_empty() {
+            return false;
+        }
+        let mut any = false;
+        for pane in &tab.panes {
+            let pw = w * (pane.bounds.right - pane.bounds.left);
+            let ph = h * (pane.bounds.bottom - pane.bounds.top);
+            let pty = self.font_metrics.fit(pw.max(1.0), ph.max(1.0));
+            {
+                let last = self.last_terminal_viewport_pty.lock();
+                if last.get(&pane.session) == Some(&(pty.cols, pty.rows)) {
+                    continue;
+                }
+            }
+            let Ok(s) = self.session_manager.get(pane.session) else {
+                continue;
+            };
+            if let Err(e) = s.resize(pty) {
+                warn!(?e, "pty");
+                continue;
+            }
+            self.last_terminal_viewport_pty
+                .lock()
+                .insert(pane.session, (pty.cols, pty.rows));
+            any = true;
+        }
+        any
+    }
+
+    fn raster_terminal_payload(&self, t: &TerminalPayload) -> Image {
+        if let Some(ref f) = self.mono_font {
+            let size_md = self.theme.current().tokens.typography.size_md;
+            let acc = self.theme.current().tokens.color.accent_brand;
+            let ccol = [acc.r, acc.g, acc.b, acc.a];
+            let cw = self.font_metrics.cell_width_px as u32;
+            let ch = self.font_metrics.cell_height_px as u32;
+            let scale = self.window.window().scale_factor();
+            let glyph_fb = self.mono_font_glyph_fallback.as_ref();
+            terminal_raster::render_terminal(
+                t,
+                f,
+                glyph_fb,
+                size_md,
+                cw,
+                ch,
+                scale,
+                ccol,
+            )
+            .unwrap_or_default()
+        } else {
+            Image::default()
+        }
+    }
+
+    fn build_terminal_pane_models(&self, t: &TerminalPayload) -> ModelRc<TerminalPaneModel> {
+        let panes: Vec<TerminalPaneModel> = if t.panes.is_empty() {
+            let mini = TerminalPayload {
+                cols: t.cols,
+                rows: t.rows,
+                cells: t.cells.clone(),
+                cursor_col: t.cursor_col,
+                cursor_row: t.cursor_row,
+                cursor_visible: t.cursor_visible,
+                tabs: Vec::new(),
+                active_tab: 0,
+                panes: Vec::new(),
+            };
+            vec![TerminalPaneModel {
+                session_id: SharedString::new(),
+                left: 0.0,
+                top: 0.0,
+                right: 1.0,
+                bottom: 1.0,
+                is_focused: true,
+                show_close: false,
+                cols: i32::from(t.cols),
+                rows: i32::from(t.rows),
+                cells: build_terminal_model(&mini),
+                pixels: self.raster_terminal_payload(&mini),
+                cursor_col: i32::from(t.cursor_col),
+                cursor_row: i32::from(t.cursor_row),
+                cursor_visible: t.cursor_visible,
+            }]
+        } else {
+            t.panes
+                .iter()
+                .map(|p| {
+                    let mini = pane_payload_to_terminal(p);
+                    TerminalPaneModel {
+                        session_id: p.session_id.clone().into(),
+                        left: p.left,
+                        top: p.top,
+                        right: p.right,
+                        bottom: p.bottom,
+                        is_focused: p.is_focused,
+                        show_close: p.show_close,
+                        cols: i32::from(p.cols),
+                        rows: i32::from(p.rows),
+                        cells: build_terminal_model(&mini),
+                        pixels: self.raster_terminal_payload(&mini),
+                        cursor_col: i32::from(p.cursor_col),
+                        cursor_row: i32::from(p.cursor_row),
+                        cursor_visible: p.cursor_visible,
+                    }
+                })
+                .collect()
+        };
+        ModelRc::new(VecModel::from(panes))
     }
 
     fn on_terminal_key(self: &Arc<Self>, id: &SharedString, text: &SharedString) {
@@ -2425,6 +2563,76 @@ impl MainWindowController {
         }));
     }
 
+    fn on_terminal_split_horizontal(self: &Arc<Self>, id: &SharedString) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = split_horizontal(&deps, inst).await {
+                warn!(?e, %inst, "terminal split horizontal");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_terminal_split_vertical(self: &Arc<Self>, id: &SharedString) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = split_vertical(&deps, inst).await {
+                warn!(?e, %inst, "terminal split vertical");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_terminal_pane_clicked(self: &Arc<Self>, id: &SharedString, session_id: &SharedString) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let Ok(sid) = Uuid::parse_str(session_id.as_str()) else {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = focus_pane(&deps, inst, sid) {
+                warn!(?e, %inst, %sid, "terminal pane focus");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
+    fn on_terminal_pane_closed(self: &Arc<Self>, id: &SharedString, session_id: &SharedString) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let Ok(sid) = Uuid::parse_str(session_id.as_str()) else {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = close_pane(&deps, inst, sid).await {
+                warn!(?e, %inst, %sid, "terminal pane close");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+    }
+
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
     fn patch_workspace_frames(self: &Arc<Self>, ids: &[Uuid]) -> Result<()> {
@@ -2476,7 +2684,8 @@ impl MainWindowController {
             };
             if iref.type_id == "terminal" && !ro.contains_key(id) {
                 let cw = bounds.width.max(1.0);
-                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
+                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX)
+                    .max(1.0);
                 let _ = self.resize_terminal_pty_to_content(*id, cw, ch);
             }
             let new_row = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
@@ -2830,6 +3039,19 @@ impl MainWindowController {
         } else {
             default_terminal_tab_models()
         };
+        let terminal_panes = if iref.type_id == "terminal" {
+            if let Some(ws) = cached.as_deref() {
+                if let WidgetPayload::Terminal(t) = &ws.payload {
+                    self.build_terminal_pane_models(t)
+                } else {
+                    default_terminal_pane_models()
+                }
+            } else {
+                default_terminal_pane_models()
+            }
+        } else {
+            default_terminal_pane_models()
+        };
         let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
         WidgetFrameModel {
             instance_id: pl.instance_id.to_string().into(),
@@ -2851,6 +3073,7 @@ impl MainWindowController {
             terminal_pixels: tpix,
             terminal_tabs,
             terminal_active_tab,
+            terminal_panes,
             weather: weather_model,
             moon: moon_model,
             system: system_model,
@@ -2905,7 +3128,8 @@ impl MainWindowController {
             };
             if iref.type_id == "terminal" && !ro.contains_key(&pl.instance_id) {
                 let cw = bounds.width.max(1.0);
-                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX).max(1.0);
+                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX)
+                    .max(1.0);
                 if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
                     pty_changed_needs_rebuild = true;
                 }
@@ -4752,6 +4976,24 @@ fn build_terminal_tab_models(t: &TerminalPayload) -> (ModelRc<TerminalTabModel>,
 
 fn default_terminal_tab_models() -> (ModelRc<TerminalTabModel>, i32) {
     (ModelRc::new(VecModel::default()), 0)
+}
+
+fn default_terminal_pane_models() -> ModelRc<TerminalPaneModel> {
+    ModelRc::new(VecModel::default())
+}
+
+fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPayload {
+    TerminalPayload {
+        cols: p.cols,
+        rows: p.rows,
+        cells: p.cells.clone(),
+        cursor_col: p.cursor_col,
+        cursor_row: p.cursor_row,
+        cursor_visible: p.cursor_visible,
+        tabs: Vec::new(),
+        active_tab: 0,
+        panes: Vec::new(),
+    }
 }
 
 fn fm_rgba_to_image(rgba: &[u8], width: u32, height: u32) -> Image {
