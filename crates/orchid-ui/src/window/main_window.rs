@@ -4104,20 +4104,7 @@ impl MainWindowController {
                 paths,
                 purpose,
             } => {
-                let title = match purpose {
-                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Encrypt => {
-                        self.locale.tr("fm-encrypt-title")
-                    }
-                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Decrypt => {
-                        self.locale.tr("fm-decrypt-title")
-                    }
-                    orchid_widgets::builtin::file_manager::PassphrasePurpose::Reveal => {
-                        self.locale.tr("fm-reveal-title")
-                    }
-                    orchid_widgets::builtin::file_manager::PassphrasePurpose::RevealInViewer => {
-                        self.locale.tr("fm-reveal-title")
-                    }
-                };
+                let (title, hint, ok_label) = fm_passphrase_dialog_labels(self.locale.as_ref(), purpose);
                 let mut over = self.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
                 entry.passphrase_paths = paths;
@@ -4126,7 +4113,8 @@ impl MainWindowController {
                     active: true,
                     proposed_passphrase: SharedString::new(),
                     title: title.into(),
-                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    hint: hint.into(),
+                    ok_label: ok_label.into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
                 if let Err(e) =
@@ -5032,11 +5020,36 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
     }
 }
 
+fn fm_passphrase_dialog_labels(
+    locale: &LocaleManager,
+    purpose: orchid_widgets::builtin::file_manager::PassphrasePurpose,
+) -> (String, String, String) {
+    use orchid_widgets::builtin::file_manager::PassphrasePurpose;
+    match purpose {
+        PassphrasePurpose::Encrypt => (
+            locale.tr("fm-encrypt-title"),
+            locale.tr("fm-passphrase-encrypt-hint"),
+            locale.tr("fm-action-encrypt"),
+        ),
+        PassphrasePurpose::Decrypt => (
+            locale.tr("fm-decrypt-title"),
+            locale.tr("fm-passphrase-decrypt-hint"),
+            locale.tr("fm-action-decrypt"),
+        ),
+        PassphrasePurpose::Reveal | PassphrasePurpose::RevealInViewer => (
+            locale.tr("fm-reveal-title"),
+            locale.tr("fm-passphrase-reveal-hint"),
+            locale.tr("fm-action-reveal"),
+        ),
+    }
+}
+
 fn empty_passphrase_state() -> FmPassphraseState {
     FmPassphraseState {
         active: false,
         proposed_passphrase: SharedString::new(),
         title: SharedString::new(),
+        hint: SharedString::new(),
         ok_label: SharedString::new(),
         cancel_label: SharedString::new(),
     }

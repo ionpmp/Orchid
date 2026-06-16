@@ -33,10 +33,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
 - [x] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (move/copy with Ctrl), FM→viewer content zone, cross-widget FM move, transfer progress + failure toast; canvas + FM content-zone hit-test; wheel-scroll during drag
-- [~] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; localized breadcrumbs + empty states; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
+- [x] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; localized breadcrumbs + empty states; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
-- [~] Encryption integration — encrypt / decrypt / reveal in UI; localized status + success/error toast; passphrase retry on wrong password; age engine wired via `EncryptedFolderEngine`
+- [x] Encryption integration — encrypt / decrypt / reveal in UI; localized passphrase dialog + status toasts; retry on wrong password; age engine via `EncryptedFolderEngine`
 - [x] Managed folders — sidebar with ingest stats, localized ingest failure toast, status bar stats, in-flight indicator + toast, add/remove in context menu
 
 ### Terminal
@@ -67,7 +67,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — KDBX4 read/write, groups / entries / TOTP / search done in `orchid-crypto::kdbx`; widget UI pending
-- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase errors; biometric polish pending
+- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase UX; Windows Hello unlock pending
 - [ ] Biometric unlock via Windows Hello
 
 ### Storage

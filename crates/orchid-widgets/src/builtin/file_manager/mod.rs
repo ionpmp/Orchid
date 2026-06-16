@@ -1351,6 +1351,12 @@ impl FileManagerInner {
                 .map_err(map_fs_error)?;
             revealed.push(session.revealed_path.to_string_lossy().into_owned());
         }
+        let name = paths
+            .first()
+            .and_then(|p| p.rsplit(['/', '\\']).next())
+            .unwrap_or("files")
+            .to_string();
+        self.set_activity_notice("fm-revealed", Some(name));
         Ok(revealed)
     }
 

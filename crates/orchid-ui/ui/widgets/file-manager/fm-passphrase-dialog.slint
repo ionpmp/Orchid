@@ -35,6 +35,13 @@ export component FmPassphraseDialog inherits Rectangle {
                 font-weight: Theme.weight-semibold;
             }
 
+            if state.hint != "" : Text {
+                text: state.hint;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
             Rectangle {
                 height: 32px;
                 background: Theme.surface-base;
