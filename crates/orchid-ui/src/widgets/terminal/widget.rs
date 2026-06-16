@@ -23,8 +23,8 @@ use orchid_terminal::{
     SessionManager, SplitDirection, TerminalPalette,
 };
 use orchid_widgets::{
-    widget::config, Result, TerminalPayload, TerminalPayloadCell, TerminalPanePayload,
-    TerminalTabPayload, Widget,
+    widget::config, Result, TerminalDividerPayload, TerminalPayload, TerminalPayloadCell,
+    TerminalPanePayload, TerminalTabPayload, Widget,
     WidgetCapabilities, WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 use parking_lot::{Mutex, RwLock};
@@ -303,6 +303,7 @@ impl Widget for TerminalWidget {
             .unwrap_or(1);
         let multi_pane = active_tab > 1;
         let mut panes = Vec::new();
+        let mut dividers = Vec::new();
         if let Some(tab_snap) = snap.tabs.get(snap.active_tab) {
             for pane_snap in &tab_snap.panes {
                 let sid = pane_snap.session;
@@ -326,6 +327,23 @@ impl Widget for TerminalWidget {
                     });
                 }
             }
+            dividers = tab_snap
+                .dividers
+                .iter()
+                .map(|d| TerminalDividerPayload {
+                    first_session_id: d.first_session.to_string(),
+                    second_session_id: d.second_session.to_string(),
+                    horizontal: d.direction == orchid_terminal::SplitDirection::Horizontal,
+                    left: d.bounds.left,
+                    top: d.bounds.top,
+                    right: d.bounds.right,
+                    bottom: d.bounds.bottom,
+                    parent_left: d.parent_bounds.left,
+                    parent_top: d.parent_bounds.top,
+                    parent_right: d.parent_bounds.right,
+                    parent_bottom: d.parent_bounds.bottom,
+                })
+                .collect();
         }
         let Ok(session) = self.deps.sessions.get(focused) else {
             return None;
@@ -344,6 +362,7 @@ impl Widget for TerminalWidget {
             .collect();
         terminal.active_tab = snap.active_tab as u32;
         terminal.panes = panes;
+        terminal.dividers = dividers;
         let title = {
             let t = session.emulator.title();
             if t.is_empty() {
@@ -490,6 +509,7 @@ fn grid_to_payload(
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),
+        dividers: Vec::new(),
     }
 }
 
@@ -657,6 +677,26 @@ pub async fn close_pane(
     } else {
         deps.session_routing.lock().remove(&instance_id);
     }
+    Ok(())
+}
+
+/// Set the split ratio between two adjacent panes in the active tab.
+pub fn set_split_ratio(
+    deps: &TerminalWidgetDeps,
+    instance_id: Uuid,
+    first_session: Uuid,
+    second_session: Uuid,
+    ratio: f32,
+) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    layout
+        .set_split_ratio(first_session, second_session, ratio)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("set split ratio: {e}")))?;
     Ok(())
 }
 

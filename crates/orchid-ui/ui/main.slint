@@ -76,6 +76,7 @@ export component MainWindow inherits Window {
     callback terminal-split-vertical(string);
     callback terminal-pane-clicked(string, string);
     callback terminal-pane-closed(string, string);
+    callback terminal-split-drag-moved(string, string, string, float, float);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -238,6 +239,9 @@ export component MainWindow inherits Window {
             terminal-split-vertical(id) => { root.terminal-split-vertical(id); }
             terminal-pane-clicked(id, sid) => { root.terminal-pane-clicked(id, sid); }
             terminal-pane-closed(id, sid) => { root.terminal-pane-closed(id, sid); }
+            terminal-split-drag-moved(id, a, b, fx, fy) => {
+                root.terminal-split-drag-moved(id, a, b, fx, fy);
+            }
             rss-item-clicked(link) => { root.rss-item-clicked(link); }
             search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
             search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }

@@ -33,9 +33,11 @@ use orchid_core::{
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
+use orchid_terminal::SplitDirection;
 use orchid_terminal::{FontMetrics};
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
+use orchid_widgets::TerminalDividerPayload;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::TerminalPanePayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
@@ -50,15 +52,15 @@ use parking_lot::RwLock;
 use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
 use crate::widgets::terminal::{
-    add_tab, close_pane, close_tab, focus_pane, split_horizontal, split_vertical, switch_tab,
-    TerminalWidgetDeps,
+    add_tab, close_pane, close_tab, focus_pane, set_split_ratio, split_horizontal, split_vertical,
+    switch_tab, TerminalWidgetDeps,
 };
 use crate::terminal_raster;
 use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
     PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
-    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalPaneModel,
-    TerminalTabModel,
+    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalDividerModel,
+    TerminalPaneModel, TerminalTabModel,
     Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
     FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmContextSubitem,
@@ -714,6 +716,14 @@ impl MainWindowController {
             move |id, sid| {
                 if let Some(c) = t.upgrade() {
                     c.on_terminal_pane_closed(&id, &sid);
+                }
+            }
+        });
+        self.window.on_terminal_split_drag_moved({
+            let t = t.clone();
+            move |id, first, second, fx, fy| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_split_drag_moved(&id, &first, &second, fx, fy);
                 }
             }
         });
@@ -2146,6 +2156,7 @@ impl MainWindowController {
                 tabs: Vec::new(),
                 active_tab: 0,
                 panes: Vec::new(),
+                dividers: Vec::new(),
             };
             vec![TerminalPaneModel {
                 session_id: SharedString::new(),
@@ -2633,6 +2644,63 @@ impl MainWindowController {
         }));
     }
 
+    fn on_terminal_split_drag_moved(
+        self: &Arc<Self>,
+        id: &SharedString,
+        first: &SharedString,
+        second: &SharedString,
+        fx: f32,
+        fy: f32,
+    ) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let Ok(first_uuid) = Uuid::parse_str(first.as_str()) else {
+            return;
+        };
+        let Ok(second_uuid) = Uuid::parse_str(second.as_str()) else {
+            return;
+        };
+        let ratio = {
+            let layouts = self.terminal_deps.layouts.lock();
+            let Some(layout) = layouts.get(&inst) else {
+                return;
+            };
+            let snap = layout.snapshot();
+            let Some(tab) = snap.tabs.get(snap.active_tab) else {
+                return;
+            };
+            let Some(div) = tab
+                .dividers
+                .iter()
+                .find(|d| d.first_session == first_uuid && d.second_session == second_uuid)
+            else {
+                return;
+            };
+            match div.direction {
+                SplitDirection::Horizontal => {
+                    let pw = div.parent_bounds.right - div.parent_bounds.left;
+                    if pw <= 0.0 {
+                        return;
+                    }
+                    ((fx - div.parent_bounds.left) / pw).clamp(0.05, 0.95)
+                }
+                SplitDirection::Vertical => {
+                    let ph = div.parent_bounds.bottom - div.parent_bounds.top;
+                    if ph <= 0.0 {
+                        return;
+                    }
+                    ((fy - div.parent_bounds.top) / ph).clamp(0.05, 0.95)
+                }
+            }
+        };
+        let deps = self.terminal_deps.clone();
+        if let Err(e) = set_split_ratio(&deps, inst, first_uuid, second_uuid, ratio) {
+            warn!(?e, %inst, %first_uuid, %second_uuid, "terminal split drag");
+        }
+        self.schedule_rebuild();
+    }
+
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
     fn patch_workspace_frames(self: &Arc<Self>, ids: &[Uuid]) -> Result<()> {
@@ -3052,6 +3120,19 @@ impl MainWindowController {
         } else {
             default_terminal_pane_models()
         };
+        let terminal_dividers = if iref.type_id == "terminal" {
+            if let Some(ws) = cached.as_deref() {
+                if let WidgetPayload::Terminal(t) = &ws.payload {
+                    build_terminal_divider_models(t)
+                } else {
+                    default_terminal_divider_models()
+                }
+            } else {
+                default_terminal_divider_models()
+            }
+        } else {
+            default_terminal_divider_models()
+        };
         let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
         WidgetFrameModel {
             instance_id: pl.instance_id.to_string().into(),
@@ -3074,6 +3155,7 @@ impl MainWindowController {
             terminal_tabs,
             terminal_active_tab,
             terminal_panes,
+            terminal_dividers,
             weather: weather_model,
             moon: moon_model,
             system: system_model,
@@ -4982,6 +5064,31 @@ fn default_terminal_pane_models() -> ModelRc<TerminalPaneModel> {
     ModelRc::new(VecModel::default())
 }
 
+fn build_terminal_divider_models(t: &TerminalPayload) -> ModelRc<TerminalDividerModel> {
+    let dividers: Vec<TerminalDividerModel> = t
+        .dividers
+        .iter()
+        .map(|d| TerminalDividerModel {
+            first_session_id: d.first_session_id.clone().into(),
+            second_session_id: d.second_session_id.clone().into(),
+            horizontal: d.horizontal,
+            left: d.left,
+            top: d.top,
+            right: d.right,
+            bottom: d.bottom,
+            parent_left: d.parent_left,
+            parent_top: d.parent_top,
+            parent_right: d.parent_right,
+            parent_bottom: d.parent_bottom,
+        })
+        .collect();
+    ModelRc::new(VecModel::from(dividers))
+}
+
+fn default_terminal_divider_models() -> ModelRc<TerminalDividerModel> {
+    ModelRc::new(VecModel::default())
+}
+
 fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPayload {
     TerminalPayload {
         cols: p.cols,
@@ -4993,6 +5100,7 @@ fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPayload {
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),
+        dividers: Vec::new(),
     }
 }
 

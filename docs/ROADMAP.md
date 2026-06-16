@@ -42,7 +42,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### Terminal
 - [x] PTY backend — `orchid-terminal::pty` wraps `portable-pty` with async reader / writer tasks and live resize
 - [x] Terminal emulation — custom `vte`-based emulator (SGR, cursor, erase, scroll regions, OSC 0/2/7, DSR). Migration to `alacritty_terminal` for advanced features (vi mode, regex scrollback search) is planned for v1.x
-- [~] Tabs + splits — tab strip + split-pane layout in Slint (▥/▤ split, pane focus/close); draggable split ratios still pending
+- [x] Tabs + splits — tab strip, split panes (▥/▤), draggable dividers, pane focus/close
 - [x] PowerShell, cmd, WSL backends — all three plus `Custom` variant covered by `BackendSpec`
 - [x] SSH sessions — `SshTarget` parses `ssh://` URIs and produces correct argv (jump hosts, identity files, extra args)
 - [ ] Inline graphics (sixel + kitty) — deferred to v1.x
@@ -57,7 +57,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Widget: Media player (audio/video)
 - [ ] Widget: RSS feed
 - [ ] Widget: Password manager
-- [~] Widget: Terminal — end-to-end with Slint tab strip, split panes, and live raster painting; draggable split ratios still pending
+- [x] Widget: Terminal — end-to-end with Slint tab strip, split panes, draggable dividers, and live raster painting
 
 ### Viewers
 - [ ] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW)

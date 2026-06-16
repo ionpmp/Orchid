@@ -48,6 +48,7 @@ pub(crate) fn terminal_payload_eq(a: &TerminalPayload, b: &TerminalPayload) -> b
         && a.active_tab == b.active_tab
         && a.tabs == b.tabs
         && a.panes == b.panes
+        && a.dividers == b.dividers
         && a.cells == b.cells
 }
 

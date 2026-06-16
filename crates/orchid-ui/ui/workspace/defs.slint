@@ -37,6 +37,20 @@ export struct TerminalPaneModel {
     cursor-visible: bool,
 }
 
+export struct TerminalDividerModel {
+    first-session-id: string,
+    second-session-id: string,
+    horizontal: bool,
+    left: float,
+    top: float,
+    right: float,
+    bottom: float,
+    parent-left: float,
+    parent-top: float,
+    parent-right: float,
+    parent-bottom: float,
+}
+
 export struct WeatherForecastEntry {
     day-label: string,
     high-text: string,
@@ -446,6 +460,7 @@ export struct WidgetFrameModel {
     terminal-tabs: [TerminalTabModel],
     terminal-active-tab: int,
     terminal-panes: [TerminalPaneModel],
+    terminal-dividers: [TerminalDividerModel],
 
     weather: WeatherModel,
     moon: MoonModel,

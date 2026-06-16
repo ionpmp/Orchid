@@ -1,15 +1,17 @@
 import { Theme } from "../../theme_global.slint";
-import { TerminalPaneModel } from "../../workspace/defs.slint";
+import { TerminalPaneModel, TerminalDividerModel } from "../../workspace/defs.slint";
 import { TerminalView } from "../../workspace/terminal-view.slint";
 
 export component TerminalSplitView inherits Rectangle {
     in property <[TerminalPaneModel]> panes;
+    in property <[TerminalDividerModel]> dividers;
     in property <length> cell-width;
     in property <length> cell-height;
 
     callback pane-clicked(string);
     callback pane-closed(string);
     callback key-pressed(string);
+    callback split-drag-moved(string, string, float, float);
 
     for pane[i] in panes : Rectangle {
         x: parent.width * pane.left;
@@ -61,6 +63,24 @@ export component TerminalSplitView inherits Rectangle {
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
                 vertical-alignment: center;
+            }
+        }
+    }
+
+    for div in dividers : Rectangle {
+        x: parent.width * div.left;
+        y: parent.height * div.top;
+        width: div.horizontal ? max(parent.width * (div.right - div.left), 6px) : parent.width * (div.right - div.left);
+        height: !div.horizontal ? max(parent.height * (div.bottom - div.top), 6px) : parent.height * (div.bottom - div.top);
+        background: div-ta.has-hover || div-ta.pressed ? Theme.accent-brand : Theme.border-default;
+
+        div-ta := TouchArea {
+            moved => {
+                if (self.pressed) {
+                    let fx = (parent.x + self.mouse-x) / root.width;
+                    let fy = (parent.y + self.mouse-y) / root.height;
+                    root.split-drag-moved(div.first-session-id, div.second-session-id, fx, fy);
+                }
             }
         }
     }

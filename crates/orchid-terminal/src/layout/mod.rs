@@ -153,6 +153,23 @@ impl LayoutRoot {
             .and_then(focused_session)
     }
 
+    /// Update the split ratio between two adjacent panes identified by their
+    /// session ids (`first` in the left/top half, `second` in the right/bottom).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TerminalError::LayoutInvariant`] when the sessions are not
+    /// direct siblings in the split tree.
+    pub fn set_split_ratio(&mut self, first: Uuid, second: Uuid, ratio: f32) -> Result<()> {
+        let tab = self
+            .tabs
+            .tabs
+            .get_mut(self.active_tab)
+            .ok_or_else(|| TerminalError::LayoutInvariant("no active tab".into()))?;
+        set_split_ratio_between(&mut tab.root, first, second, ratio)?;
+        Ok(())
+    }
+
     /// UI-friendly snapshot of the whole layout.
     #[must_use]
     pub fn snapshot(&self) -> LayoutSnapshot {
@@ -164,6 +181,7 @@ impl LayoutRoot {
                 id: t.id,
                 title: t.title.clone(),
                 panes: pane_snapshot(&t.root, (0.0, 0.0), (1.0, 1.0)),
+                dividers: divider_snapshot(&t.root, (0.0, 0.0), (1.0, 1.0)),
                 focused: t.focus,
             })
             .collect();
@@ -205,8 +223,27 @@ pub struct TabSnapshot {
     pub title: String,
     /// Flat list of panes.
     pub panes: Vec<PaneSnapshot>,
+    /// Draggable split dividers in the active tab layout.
+    pub dividers: Vec<DividerSnapshot>,
     /// Focused session.
     pub focused: Option<Uuid>,
+}
+
+/// A draggable divider between two adjacent panes.
+#[derive(Debug, Clone)]
+pub struct DividerSnapshot {
+    /// Session in the left / top half of the split.
+    pub first_session: Uuid,
+    /// Session in the right / bottom half.
+    pub second_session: Uuid,
+    /// Split orientation.
+    pub direction: SplitDirection,
+    /// Current ratio allocated to [`Self::first_session`]'s half.
+    pub ratio: f32,
+    /// Fractional bounds of the draggable hit strip.
+    pub bounds: PaneBounds,
+    /// Parent region of the split node (for ratio math during drag).
+    pub parent_bounds: PaneBounds,
 }
 
 /// Top-level layout snapshot.
@@ -274,6 +311,136 @@ fn close_leaf(node: &mut SplitNode, target: Uuid) -> bool {
                 return true;
             }
             close_leaf(first, target) || close_leaf(second, target)
+        }
+    }
+}
+
+fn contains_session(node: &SplitNode, session: Uuid) -> bool {
+    match node {
+        SplitNode::Leaf { session: s } => *s == session,
+        SplitNode::Split { first, second, .. } => {
+            contains_session(first, session) || contains_session(second, session)
+        }
+    }
+}
+
+fn boundary_session_last(node: &SplitNode) -> Option<Uuid> {
+    let mut leaves = Vec::new();
+    node.leaves(&mut leaves);
+    leaves.last().copied()
+}
+
+fn boundary_session_first(node: &SplitNode) -> Option<Uuid> {
+    let mut leaves = Vec::new();
+    node.leaves(&mut leaves);
+    leaves.first().copied()
+}
+
+fn set_split_ratio_between(
+    node: &mut SplitNode,
+    first: Uuid,
+    second: Uuid,
+    ratio: f32,
+) -> Result<()> {
+    match node {
+        SplitNode::Leaf { .. } => Err(TerminalError::LayoutInvariant(
+            "sessions are not adjacent in split tree".into(),
+        )),
+        SplitNode::Split {
+            direction: _,
+            ratio: r,
+            first: f,
+            second: s,
+        } => {
+            if contains_session(f, first) && contains_session(s, second) {
+                *r = ratio.clamp(0.05, 0.95);
+                return Ok(());
+            }
+            if set_split_ratio_between(f, first, second, ratio).is_ok() {
+                return Ok(());
+            }
+            set_split_ratio_between(s, first, second, ratio)
+        }
+    }
+}
+
+const DIVIDER_HIT_EPS: f32 = 0.008;
+
+fn divider_snapshot(
+    node: &SplitNode,
+    start: (f32, f32),
+    end: (f32, f32),
+) -> Vec<DividerSnapshot> {
+    match node {
+        SplitNode::Leaf { .. } => Vec::new(),
+        SplitNode::Split {
+            direction,
+            ratio,
+            first,
+            second,
+        } => {
+            let r = ratio.clamp(0.05, 0.95);
+            let parent_bounds = PaneBounds {
+                left: start.0,
+                top: start.1,
+                right: end.0,
+                bottom: end.1,
+            };
+            let mut out = divider_snapshot(first, start, match direction {
+                SplitDirection::Horizontal => {
+                    let mid = start.0 + (end.0 - start.0) * r;
+                    (mid, end.1)
+                }
+                SplitDirection::Vertical => {
+                    let mid = start.1 + (end.1 - start.1) * r;
+                    (end.0, mid)
+                }
+            });
+            out.extend(divider_snapshot(
+                second,
+                match direction {
+                    SplitDirection::Horizontal => {
+                        let mid = start.0 + (end.0 - start.0) * r;
+                        (mid, start.1)
+                    }
+                    SplitDirection::Vertical => {
+                        let mid = start.1 + (end.1 - start.1) * r;
+                        (start.0, mid)
+                    }
+                },
+                end,
+            ));
+            let first_session = boundary_session_last(first).unwrap_or(Uuid::nil());
+            let second_session = boundary_session_first(second).unwrap_or(Uuid::nil());
+            let bounds = match direction {
+                SplitDirection::Horizontal => {
+                    let mid = start.0 + (end.0 - start.0) * r;
+                    PaneBounds {
+                        left: mid - DIVIDER_HIT_EPS,
+                        top: start.1,
+                        right: mid + DIVIDER_HIT_EPS,
+                        bottom: end.1,
+                    }
+                }
+                SplitDirection::Vertical => {
+                    let mid = start.1 + (end.1 - start.1) * r;
+                    PaneBounds {
+                        left: start.0,
+                        top: mid - DIVIDER_HIT_EPS,
+                        right: end.0,
+                        bottom: mid + DIVIDER_HIT_EPS,
+                    }
+                }
+            };
+            out.push(DividerSnapshot {
+                first_session,
+                second_session,
+                direction: *direction,
+                ratio: r,
+                bounds,
+                parent_bounds,
+            });
+            out
         }
     }
 }
@@ -350,6 +517,20 @@ mod tests {
     fn cannot_close_last_tab() {
         let mut layout = LayoutRoot::new(Uuid::new_v4());
         assert!(layout.close_tab(0).is_err());
+    }
+
+    #[test]
+    fn set_split_ratio_between_adjacent_panes() {
+        let s1 = Uuid::new_v4();
+        let s2 = Uuid::new_v4();
+        let mut layout = LayoutRoot::new(s1);
+        layout.split(SplitDirection::Horizontal, s2).unwrap();
+        layout.set_split_ratio(s1, s2, 0.7).unwrap();
+        let snap = layout.snapshot();
+        let div = &snap.tabs[0].dividers[0];
+        assert_eq!(div.first_session, s1);
+        assert_eq!(div.second_session, s2);
+        assert!((div.ratio - 0.7).abs() < 0.001);
     }
 
     #[test]

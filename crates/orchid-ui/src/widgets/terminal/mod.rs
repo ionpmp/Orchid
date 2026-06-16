@@ -29,7 +29,7 @@ pub use palette::{palette_from_flavor, palette_from_theme, ThemeFlavor};
 pub use render::{snapshot_to_cells, RenderCell};
 pub use view::TerminalWidgetView;
 pub use widget::{
-    add_tab, close_pane, close_tab, focus_pane, split_horizontal, split_vertical, switch_tab,
-    terminal_descriptor, StoredBackend, TerminalWidget, TerminalWidgetDeps, TerminalWidgetState,
-    TERMINAL_TYPE_ID,
+    add_tab, close_pane, close_tab, focus_pane, set_split_ratio, split_horizontal, split_vertical,
+    switch_tab, terminal_descriptor, StoredBackend, TerminalWidget, TerminalWidgetDeps,
+    TerminalWidgetState, TERMINAL_TYPE_ID,
 };

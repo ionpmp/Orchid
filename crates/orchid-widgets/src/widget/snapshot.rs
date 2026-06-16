@@ -86,6 +86,8 @@ pub struct TerminalPayload {
     pub active_tab: u32,
     /// Panes in the active tab (fractional layout + per-pane grid).
     pub panes: Vec<TerminalPanePayload>,
+    /// Draggable split dividers in the active tab.
+    pub dividers: Vec<TerminalDividerPayload>,
 }
 
 /// One pane in the active tab's split tree.
@@ -117,6 +119,33 @@ pub struct TerminalPanePayload {
     pub cursor_row: u16,
     /// Cursor visibility.
     pub cursor_visible: bool,
+}
+
+/// Draggable divider between two terminal panes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerminalDividerPayload {
+    /// Session in the left / top half.
+    pub first_session_id: String,
+    /// Session in the right / bottom half.
+    pub second_session_id: String,
+    /// `true` when the split is horizontal (vertical bar divider).
+    pub horizontal: bool,
+    /// Hit-strip left edge (fraction of viewport).
+    pub left: f32,
+    /// Hit-strip top edge.
+    pub top: f32,
+    /// Hit-strip right edge.
+    pub right: f32,
+    /// Hit-strip bottom edge.
+    pub bottom: f32,
+    /// Parent split region left edge.
+    pub parent_left: f32,
+    /// Parent split region top edge.
+    pub parent_top: f32,
+    /// Parent split region right edge.
+    pub parent_right: f32,
+    /// Parent split region bottom edge.
+    pub parent_bottom: f32,
 }
 
 /// One tab in the terminal widget tab strip.
