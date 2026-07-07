@@ -9,6 +9,7 @@
 //! the jank fixed in task 11B-Fix.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -68,7 +69,8 @@ use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary, CommandPaletteGlobal, SettingsGlobal,
+    WorkspaceSummary, CommandPaletteGlobal, SettingsFieldRow, SettingsGlobal,
+    SettingsSectionEntry,
 };
 use crate::theme::ThemeManager;
 
@@ -78,6 +80,15 @@ const COMMAND_PALETTE_LIMIT: usize = 50;
 /// Top switcher (40) + bottom dock (64) = canvas height in [`workspace.slint`].
 const CANVAS_INSET_H: f32 = 40.0 + 64.0;
 const WORKSPACE_SWITCHER_H: f32 = 40.0;
+
+const SETTINGS_SECTION_IDS: &[&str] = &[
+    "general",
+    "appearance",
+    "input",
+    "shortcuts",
+    "locale",
+    "privacy",
+];
 
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
@@ -151,6 +162,9 @@ pub struct MainWindowController {
     palette: Arc<RwLock<PaletteUiState>>,
     palette_candidates: ModelRc<SearchCandidateEntry>,
     settings: Arc<RwLock<SettingsUiState>>,
+    config_file_path: PathBuf,
+    settings_sections: ModelRc<SettingsSectionEntry>,
+    settings_fields: ModelRc<SettingsFieldRow>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -219,6 +233,7 @@ impl MainWindowController {
         theme: Arc<ThemeManager>,
         locale: Arc<LocaleManager>,
         config: Arc<RwLock<OrchidConfig>>,
+        config_file_path: PathBuf,
         storage: Arc<StateStore>,
         bus: Arc<EventBus>,
         command_registry: Arc<CommandRegistry>,
@@ -248,6 +263,10 @@ impl MainWindowController {
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let palette_candidates: ModelRc<SearchCandidateEntry> =
             ModelRc::new(VecModel::<SearchCandidateEntry>::default());
+        let settings_sections: ModelRc<SettingsSectionEntry> =
+            ModelRc::new(VecModel::<SettingsSectionEntry>::default());
+        let settings_fields: ModelRc<SettingsFieldRow> =
+            ModelRc::new(VecModel::<SettingsFieldRow>::default());
         let config_reload_pending = Arc::new(AtomicBool::new(false));
         let config_reload_flag = config_reload_pending.clone();
         let config_reload_sub = bus
@@ -311,6 +330,9 @@ impl MainWindowController {
             palette: Arc::new(RwLock::new(PaletteUiState::default())),
             palette_candidates,
             settings: Arc::new(RwLock::new(SettingsUiState::default())),
+            config_file_path,
+            settings_sections,
+            settings_fields,
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -377,6 +399,7 @@ impl MainWindowController {
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
+        g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
 
         g.set_media_no_session(mgr.tr("media-no-session").into());
 
@@ -425,6 +448,9 @@ impl MainWindowController {
         self.apply_strings()?;
         self.apply_app_state_status()?;
         self.sync_widget_catalog_global();
+        if self.settings.read().visible {
+            self.sync_settings_global();
+        }
         self.schedule_rebuild();
         Ok(())
     }
@@ -664,6 +690,14 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_settings_dismiss();
+                }
+            }
+        });
+        self.window.on_settings_section_selected({
+            let t = t.clone();
+            move |idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_settings_section_selected(idx);
                 }
             }
         });
@@ -1817,25 +1851,40 @@ impl MainWindowController {
 
     fn sync_settings_global(self: &Arc<Self>) {
         let st = self.settings.read().clone();
-        let title = if st.section.is_empty() {
-            self.locale.tr("settings-panel-title").into()
+        let section = if st.section.is_empty() {
+            SETTINGS_SECTION_IDS[0].to_string()
         } else {
-            let key = format!("settings.section.{}", st.section);
-            self.locale.tr(&key).into()
+            st.section.clone()
         };
-        let body = self.locale.tr("settings-panel-coming-soon").into();
+        let title_key = format!("settings.section.{}", section);
+        let title = self.locale.tr(&title_key).into();
+        let hint = self.locale.tr("settings-panel-hint").into();
+        let cfg = self.config.read();
+        let fields = build_settings_fields(&section, &cfg, &self.locale);
+        drop(cfg);
+        sync_vec_model(&self.settings_sections, build_settings_sections(&self.locale));
+        sync_vec_model(&self.settings_fields, fields);
         let g = self.window.global::<SettingsGlobal>();
         g.set_visible(st.visible);
-        g.set_section_title(title);
-        g.set_body_text(body);
+        g.set_panel_title(title);
+        g.set_hint_text(hint);
+        g.set_config_path(self.config_file_path.display().to_string().into());
+        g.set_selected_section_index(settings_section_index(&section));
+        g.set_sections(self.settings_sections.clone());
+        g.set_fields(self.settings_fields.clone());
     }
 
     fn open_settings(self: &Arc<Self>, section: &str) {
         self.on_command_palette_dismiss();
+        let section = if SETTINGS_SECTION_IDS.iter().any(|&id| id == section) {
+            section.to_string()
+        } else {
+            SETTINGS_SECTION_IDS[0].to_string()
+        };
         {
             let mut st = self.settings.write();
             st.visible = true;
-            st.section = section.to_string();
+            st.section = section;
         }
         self.sync_settings_global();
     }
@@ -1845,6 +1894,14 @@ impl MainWindowController {
             return;
         }
         self.settings.write().visible = false;
+        self.sync_settings_global();
+    }
+
+    fn on_settings_section_selected(self: &Arc<Self>, idx: i32) {
+        if !self.settings.read().visible {
+            return;
+        }
+        self.settings.write().section = settings_section_id(idx).to_string();
         self.sync_settings_global();
     }
 
@@ -1944,6 +2001,10 @@ impl MainWindowController {
     }
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
+        if cmd_id == "settings.open" {
+            self.open_settings("general");
+            return;
+        }
         let action = match self
             .command_registry
             .build_action(cmd_id, ParsedCommand::default())
@@ -1983,6 +2044,14 @@ impl MainWindowController {
                 warn!(?e, "close");
             }
             if let Some(c) = t.upgrade() {
+                if c
+                    .fm_focus
+                    .lock()
+                    .is_some_and(|(fm_id, _)| fm_id == u)
+                {
+                    *c.fm_focus.lock() = None;
+                }
+                c.fm_overlays.write().remove(&u);
                 c.drag_offset.lock().remove(&u);
                 c.drag_start_bounds.lock().remove(&u);
                 c.drag_grab.lock().remove(&u);
@@ -3637,17 +3706,30 @@ impl MainWindowController {
         *self.fm_focus.lock() = Some((inst, pane));
     }
 
+    fn fm_instances_on_active_workspace(&self) -> Vec<Uuid> {
+        let Ok(w) = self.workspace_manager.active() else {
+            return Vec::new();
+        };
+        self.widget_manager
+            .instances_for_workspace(w.id)
+            .into_iter()
+            .filter(|inst| inst.type_id == "file-manager")
+            .map(|inst| inst.id)
+            .collect()
+    }
+
     fn find_active_fm(&self) -> Option<Uuid> {
-        if let Some((id, _)) = *self.fm_focus.lock() {
-            return Some(id);
+        let fm_ids = self.fm_instances_on_active_workspace();
+        if fm_ids.is_empty() {
+            *self.fm_focus.lock() = None;
+            return None;
         }
-        let w = self.workspace_manager.active().ok()?;
-        for inst in self.widget_manager.instances_for_workspace(w.id) {
-            if inst.type_id == "file-manager" {
-                return Some(inst.id);
+        if let Some((id, _)) = *self.fm_focus.lock() {
+            if fm_ids.contains(&id) {
+                return Some(id);
             }
         }
-        None
+        Some(fm_ids[0])
     }
 
     fn widget_bounds_at_canvas_point(
@@ -4188,7 +4270,7 @@ impl MainWindowController {
         let Some(path) = paths.first() else {
             return;
         };
-        self.fm_dispatch_open(inst, p, path.clone());
+        self.fm_dispatch_open(inst, p, path.clone(), false);
     }
 
     fn on_fm_entry_drag_start(self: &Arc<Self>, pane: i32, _path: &SharedString) {
@@ -4595,7 +4677,7 @@ impl MainWindowController {
         if behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
             return;
         }
-        self.fm_dispatch_open(inst, p, ps);
+        self.fm_dispatch_open(inst, p, ps, false);
     }
 
     fn on_fm_entry_shift_clicked(self: &Arc<Self>, pane: i32, path: &SharedString) {
@@ -4628,19 +4710,21 @@ impl MainWindowController {
         let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
             .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
         if is_dir {
-            self.fm_dispatch_open(inst, p, raw);
+            self.fm_dispatch_open(inst, p, raw, true);
             return;
         }
         if behavior == orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen {
-            self.fm_dispatch_open(inst, p, raw);
+            self.fm_dispatch_open(inst, p, raw, false);
         }
     }
 
-    fn fm_dispatch_open(self: &Arc<Self>, inst: Uuid, pane: u8, path: String) {
+    fn fm_dispatch_open(self: &Arc<Self>, inst: Uuid, pane: u8, path: String, is_dir: bool) {
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            let outcome = match orchid_widgets::builtin::file_manager::open_path(inst, pane, &path)
-                .await
+            let outcome = match orchid_widgets::builtin::file_manager::open_path(
+                inst, pane, &path, is_dir,
+            )
+            .await
             {
                 Ok(o) => o,
                 Err(e) => {
@@ -6594,6 +6678,195 @@ fn density_i18n_key(density: orchid_storage::Density) -> &'static str {
         orchid_storage::Density::Mouse => "density-mouse",
         orchid_storage::Density::Hybrid => "density-hybrid",
     }
+}
+
+fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSectionEntry> {
+    SETTINGS_SECTION_IDS
+        .iter()
+        .map(|id| {
+            let key = format!("settings.section.{id}");
+            SettingsSectionEntry {
+                id: (*id).into(),
+                label: locale.tr(&key).into(),
+            }
+        })
+        .collect()
+}
+
+fn settings_section_index(section: &str) -> i32 {
+    SETTINGS_SECTION_IDS
+        .iter()
+        .position(|&id| id == section)
+        .map_or(0, |i| i as i32)
+}
+
+fn settings_section_id(index: i32) -> &'static str {
+    SETTINGS_SECTION_IDS
+        .get(index as usize)
+        .copied()
+        .unwrap_or(SETTINGS_SECTION_IDS[0])
+}
+
+fn build_settings_fields(
+    section: &str,
+    cfg: &OrchidConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let yes = locale.tr("settings-value-yes");
+    let no = locale.tr("settings-value-no");
+    let fmt_bool = |value: bool| -> SharedString {
+        if value {
+            yes.clone().into()
+        } else {
+            no.clone().into()
+        }
+    };
+    let mut rows = Vec::new();
+    let mut push = |key: &str, value: SharedString| {
+        rows.push(SettingsFieldRow {
+            label: locale.tr(key).into(),
+            value,
+        });
+    };
+
+    match section {
+        "general" => {
+            push("settings-field-auto-update", fmt_bool(cfg.general.auto_update));
+            push("settings-field-telemetry", fmt_bool(cfg.general.telemetry));
+            push(
+                "settings-field-open-on-startup",
+                fmt_bool(cfg.general.open_on_startup),
+            );
+        }
+        "appearance" => {
+            push("settings-field-theme", cfg.appearance.theme.clone().into());
+            push(
+                "settings-field-density",
+                locale.tr(density_i18n_key(cfg.appearance.density)).into(),
+            );
+            push(
+                "settings-field-font-family",
+                cfg.appearance
+                    .font_family
+                    .clone()
+                    .unwrap_or_else(|| locale.tr("settings-value-system-default"))
+                    .into(),
+            );
+            push(
+                "settings-field-font-scale",
+                format!("{:.2}", cfg.appearance.font_scale).into(),
+            );
+            push(
+                "settings-field-reduce-motion",
+                fmt_bool(cfg.appearance.reduce_motion),
+            );
+            push(
+                "settings-field-follow-system-theme",
+                fmt_bool(cfg.appearance.follow_system_theme),
+            );
+            push("settings-field-dark-theme", cfg.appearance.dark_theme.clone().into());
+            push("settings-field-light-theme", cfg.appearance.light_theme.clone().into());
+        }
+        "input" => {
+            push(
+                "settings-field-primary-hand",
+                locale
+                    .tr(match cfg.input.primary_hand {
+                        orchid_storage::Hand::Left => "settings-value-hand-left",
+                        orchid_storage::Hand::Right => "settings-value-hand-right",
+                    })
+                    .into(),
+            );
+            push(
+                "settings-field-mirror-edge-swipes",
+                fmt_bool(cfg.input.mirror_edge_swipes),
+            );
+            push(
+                "settings-field-haptic-feedback",
+                fmt_bool(cfg.input.haptic_feedback),
+            );
+            push(
+                "settings-field-palm-rejection",
+                fmt_bool(cfg.input.palm_rejection),
+            );
+            push(
+                "settings-field-pen-double-tap",
+                locale
+                    .tr(match cfg.input.pen_double_tap_action {
+                        orchid_storage::PenDoubleTapAction::None => {
+                            "settings-value-pen-double-tap-none"
+                        }
+                        orchid_storage::PenDoubleTapAction::SwitchTool => {
+                            "settings-value-pen-double-tap-switch-tool"
+                        }
+                        orchid_storage::PenDoubleTapAction::Erase => {
+                            "settings-value-pen-double-tap-erase"
+                        }
+                    })
+                    .into(),
+            );
+        }
+        "shortcuts" => {
+            if cfg.shortcuts.overrides.is_empty() {
+                push(
+                    "settings-field-shortcut-overrides",
+                    locale.tr("settings-value-none").into(),
+                );
+            } else {
+                let mut pairs: Vec<_> = cfg.shortcuts.overrides.iter().collect();
+                pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+                for (cmd, shortcut) in pairs {
+                    rows.push(SettingsFieldRow {
+                        label: (*cmd).clone().into(),
+                        value: shortcut.clone().into(),
+                    });
+                }
+            }
+        }
+        "locale" => {
+            push("settings-field-language", cfg.locale.language.clone().into());
+            push(
+                "settings-field-date-format",
+                cfg.locale
+                    .date_format
+                    .clone()
+                    .unwrap_or_else(|| locale.tr("settings-value-default"))
+                    .into(),
+            );
+            push(
+                "settings-field-time-format",
+                cfg.locale
+                    .time_format
+                    .clone()
+                    .unwrap_or_else(|| locale.tr("settings-value-default"))
+                    .into(),
+            );
+            let dow = if cfg.locale.first_day_of_week == 0 {
+                "settings-value-sunday"
+            } else {
+                "settings-value-monday"
+            };
+            push("settings-field-first-day-of-week", locale.tr(dow).into());
+        }
+        "privacy" => {
+            push(
+                "settings-field-record-action-history",
+                fmt_bool(cfg.privacy.record_action_history),
+            );
+            push(
+                "settings-field-history-retention-days",
+                format!("{}", cfg.privacy.history_retention_days).into(),
+            );
+            let clip = if cfg.privacy.clear_clipboard_seconds == 0 {
+                locale.tr("settings-value-disabled").into()
+            } else {
+                format!("{} s", cfg.privacy.clear_clipboard_seconds).into()
+            };
+            push("settings-field-clear-clipboard-seconds", clip);
+        }
+        _ => {}
+    }
+    rows
 }
 
 fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {

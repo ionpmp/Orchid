@@ -145,8 +145,51 @@ settings.section.privacy = Конфиденциальность
 
 # ---- Settings panel ----
 settings-panel-title = Настройки
+settings-panel-hint = Значения пока только для просмотра. Чтобы изменить настройки, отредактируйте config.toml — изменения подхватятся автоматически.
 settings-panel-coming-soon = Полноценный редактор этого раздела пока недоступен. Пока что редактируйте config.toml напрямую.
 settings-panel-ok = Закрыть
+
+settings-value-yes = Да
+settings-value-no = Нет
+settings-value-none = Нет
+settings-value-default = По умолчанию
+settings-value-disabled = Отключено
+settings-value-system-default = Системный шрифт
+settings-value-hand-left = Левая
+settings-value-hand-right = Правая
+settings-value-pen-double-tap-none = Нет
+settings-value-pen-double-tap-switch-tool = Сменить инструмент
+settings-value-pen-double-tap-erase = Стереть
+settings-value-sunday = Воскресенье
+settings-value-monday = Понедельник
+
+settings-field-auto-update = Автообновление
+settings-field-telemetry = Телеметрия
+settings-field-open-on-startup = Запускать при входе
+settings-field-theme = Тема
+settings-field-density = Плотность интерфейса
+settings-field-font-family = Шрифт
+settings-field-font-scale = Масштаб шрифта
+settings-field-reduce-motion = Уменьшить анимацию
+settings-field-follow-system-theme = Следовать системной теме
+settings-field-dark-theme = Тёмная тема
+settings-field-light-theme = Светлая тема
+settings-field-primary-hand = Основная рука
+settings-field-mirror-edge-swipes = Зеркалить жесты с края
+settings-field-haptic-feedback = Тактильная отдача
+settings-field-palm-rejection = Игнорировать ладонь
+settings-field-pen-double-tap = Двойное касание пером
+settings-field-shortcut-overrides = Переопределения горячих клавиш
+settings-field-language = Язык
+settings-field-date-format = Формат даты
+settings-field-time-format = Формат времени
+settings-field-first-day-of-week = Первый день недели
+settings-field-record-action-history = Записывать историю действий
+settings-field-history-retention-days = Хранение истории (дней)
+settings-field-clear-clipboard-seconds = Очищать буфер после копирования
+
+command.settings.open.name = Открыть настройки
+command.settings.open.desc = Показать панель настроек
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Разделить горизонтально (Ctrl+Shift+H)

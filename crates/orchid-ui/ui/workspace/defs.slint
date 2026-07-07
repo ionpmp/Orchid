@@ -437,6 +437,16 @@ export struct FileManagerModel {
     passphrase: FmPassphraseState,
 }
 
+export struct SettingsSectionEntry {
+    id: string,
+    label: string,
+}
+
+export struct SettingsFieldRow {
+    label: string,
+    value: string,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,

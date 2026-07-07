@@ -4,6 +4,7 @@ import { SettingsGlobal } from "settings_global.slint";
 
 export component SettingsPanel inherits Rectangle {
     callback dismiss();
+    callback section-selected(int);
 
     background: Theme.surface-raised;
     border-radius: Theme.radius-md;
@@ -13,40 +14,119 @@ export component SettingsPanel inherits Rectangle {
     drop-shadow-color: #00000060;
     clip: true;
 
-    VerticalLayout {
-        padding: 20px;
-        spacing: 12px;
+    HorizontalLayout {
+        padding: 0;
+        spacing: 0;
 
-        Text {
-            text: SettingsGlobal.section-title;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-lg;
-            font-weight: Theme.weight-semibold;
-        }
-
-        Text {
-            text: SettingsGlobal.body-text;
-            color: Theme.text-secondary;
-            font-size: Theme.font-size-md;
-            wrap: word-wrap;
-            vertical-stretch: 1;
-        }
-
+        // Section sidebar
         Rectangle {
-            height: 36px;
-            background: Theme.accent-brand;
+            width: 148px;
+            background: Theme.surface-base;
             border-radius: Theme.radius-md;
 
-            TouchArea {
-                clicked => { root.dismiss(); }
+            VerticalLayout {
+                padding: 8px;
+                spacing: 2px;
+
+                for sec[i] in SettingsGlobal.sections: Rectangle {
+                    height: 36px;
+                    background:
+                        i == SettingsGlobal.selected-section-index
+                            ? Theme.surface-raised
+                            : (sec-ta.has-hover ? Theme.surface-raised : transparent);
+                    border-radius: Theme.radius-md;
+
+                    sec-ta := TouchArea {
+                        clicked => {
+                            root.section-selected(i);
+                        }
+                    }
+
+                    Text {
+                        x: 12px;
+                        text: sec.label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Content
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            horizontal-stretch: 1;
+
+            Text {
+                text: SettingsGlobal.panel-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
             }
 
             Text {
-                text: Strings.settings_panel_ok;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                text: SettingsGlobal.hint-text;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
+            if SettingsGlobal.config-path != "" : Text {
+                text: SettingsGlobal.config-path;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
+            Flickable {
+                vertical-stretch: 1;
+                viewport-width: parent.width;
+                viewport-height: field-list.preferred-height;
+
+                field-list := VerticalLayout {
+                    width: parent.viewport-width;
+                    spacing: 8px;
+
+                    for row in SettingsGlobal.fields: HorizontalLayout {
+                        spacing: 12px;
+
+                        Text {
+                            width: 42%;
+                            text: row.label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            horizontal-stretch: 1;
+                            text: row.value;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 36px;
+                background: Theme.accent-brand;
+                border-radius: Theme.radius-md;
+
+                TouchArea {
+                    clicked => { root.dismiss(); }
+                }
+
+                Text {
+                    text: Strings.settings_panel_ok;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
         }
     }

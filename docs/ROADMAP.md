@@ -80,7 +80,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### Search
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown
 - [x] File watcher for incremental updates — `IndexFsSubscriber` consumes `fs.created/modified/deleted/renamed/tags_changed` events, extracts text/PDF content, enqueues into `IndexScheduler`
-- [~] Universal search (files + commands + settings) — settings sections open a placeholder panel; full editor pending
+- [~] Universal search (files + commands + settings) — settings sections open read-only config panel; full editor pending
 
 ### UX
 - [~] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml

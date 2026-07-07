@@ -150,8 +150,51 @@ settings.section.privacy = Privacy
 
 # ---- Settings panel ----
 settings-panel-title = Settings
+settings-panel-hint = Values are read-only for now. Edit config.toml directly to change settings; changes reload automatically.
 settings-panel-coming-soon = The full settings editor for this section is not available yet. Edit config.toml directly for now.
 settings-panel-ok = Close
+
+settings-value-yes = Yes
+settings-value-no = No
+settings-value-none = None
+settings-value-default = Default
+settings-value-disabled = Disabled
+settings-value-system-default = System default
+settings-value-hand-left = Left
+settings-value-hand-right = Right
+settings-value-pen-double-tap-none = None
+settings-value-pen-double-tap-switch-tool = Switch tool
+settings-value-pen-double-tap-erase = Erase
+settings-value-sunday = Sunday
+settings-value-monday = Monday
+
+settings-field-auto-update = Auto update
+settings-field-telemetry = Telemetry
+settings-field-open-on-startup = Open on startup
+settings-field-theme = Theme
+settings-field-density = Density
+settings-field-font-family = Font family
+settings-field-font-scale = Font scale
+settings-field-reduce-motion = Reduce motion
+settings-field-follow-system-theme = Follow system theme
+settings-field-dark-theme = Dark theme
+settings-field-light-theme = Light theme
+settings-field-primary-hand = Primary hand
+settings-field-mirror-edge-swipes = Mirror edge swipes
+settings-field-haptic-feedback = Haptic feedback
+settings-field-palm-rejection = Palm rejection
+settings-field-pen-double-tap = Pen double-tap
+settings-field-shortcut-overrides = Shortcut overrides
+settings-field-language = Language
+settings-field-date-format = Date format
+settings-field-time-format = Time format
+settings-field-first-day-of-week = First day of week
+settings-field-record-action-history = Record action history
+settings-field-history-retention-days = History retention (days)
+settings-field-clear-clipboard-seconds = Clear clipboard after copy
+
+command.settings.open.name = Open settings
+command.settings.open.desc = Show the settings panel
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)

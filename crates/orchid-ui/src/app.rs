@@ -25,6 +25,7 @@ use orchid_widgets::{
 };
 use secrecy::SecretString;
 
+use crate::commands::build_ui_command_set;
 use crate::error::{Result, UiError};
 use crate::theme::ThemeManager;
 use crate::widgets::terminal::ArboardClipboard;
@@ -462,6 +463,13 @@ impl OrchidApp {
                 .map_err(|e| UiError::Slint(format!("register command {cmd_id}: {e}")))?;
         }
 
+        for (desc, factory) in build_ui_command_set() {
+            let cmd_id = desc.id.clone();
+            command_registry
+                .register(desc, factory)
+                .map_err(|e| UiError::Slint(format!("register command {cmd_id}: {e}")))?;
+        }
+
         apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts.overrides);
 
         info!(
@@ -582,6 +590,7 @@ impl OrchidApp {
             self.theme.clone(),
             self.locale.clone(),
             self.config.clone(),
+            self.paths.config_file.clone(),
             self.storage.clone(),
             self.bus.clone(),
             self.command_registry.clone(),

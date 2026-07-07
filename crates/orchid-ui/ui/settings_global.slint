@@ -1,5 +1,11 @@
+import { SettingsSectionEntry, SettingsFieldRow } from "workspace/defs.slint";
+
 export global SettingsGlobal {
     in property <bool> visible;
-    in property <string> section-title;
-    in property <string> body-text;
+    in property <string> panel-title;
+    in property <string> hint-text;
+    in property <string> config-path;
+    in property <int> selected-section-index;
+    in property <[SettingsSectionEntry]> sections;
+    in property <[SettingsFieldRow]> fields;
 }

@@ -5,6 +5,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod app;
+mod commands;
 pub mod error;
 mod slint_generated;
 pub mod theme;

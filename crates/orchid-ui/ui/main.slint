@@ -172,6 +172,7 @@ export component MainWindow inherits Window {
     callback command-palette-selection-changed(int);
     callback command-palette-dismiss();
     callback settings-dismiss();
+    callback settings-section-selected(int);
     callback ui-tick();
 
     VerticalLayout {
@@ -386,12 +387,15 @@ export component MainWindow inherits Window {
                 }
 
                 SettingsPanel {
-                    width: min(parent.width - 48px, 480px);
-                    height: min(parent.height - 120px, 360px);
+                    width: min(parent.width - 48px, 720px);
+                    height: min(parent.height - 80px, 480px);
                     x: (parent.width - self.width) / 2;
-                    y: parent.height * 0.15;
+                    y: (parent.height - self.height) / 2;
                     dismiss => {
                         root.settings-dismiss();
+                    }
+                    section-selected(idx) => {
+                        root.settings-section-selected(idx);
                     }
                 }
             }
