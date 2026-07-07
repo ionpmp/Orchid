@@ -2,8 +2,8 @@
 
 use crate::widget::payloads::{
     MediaPlayerPayload, MoonPayload, PasswordEntryDetailView, PasswordEntryView,
-    PasswordManagerPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator,
-    SystemPayload, UniversalSearchPayload, WeatherForecastDay, WeatherPayload,
+    PasswordManagerPayload, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView,
+    SystemIndicator, SystemPayload, UniversalSearchPayload, WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -33,6 +33,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::MediaPlayer(a), WidgetPayload::MediaPlayer(b)) => media_payload_eq(a, b),
         (WidgetPayload::PasswordManager(a), WidgetPayload::PasswordManager(b)) => {
             password_payload_eq(a, b)
+        }
+        (WidgetPayload::RecentFiles(a), WidgetPayload::RecentFiles(b)) => {
+            recent_files_payload_eq(a, b)
         }
         // Viewer / file-manager carry large trees; treat inequality as the safe default.
         _ => false,
@@ -204,6 +207,20 @@ fn password_payload_eq(a: &PasswordManagerPayload, b: &PasswordManagerPayload) -
             (Some(sa), Some(sb)) => password_detail_eq(sa, sb),
             _ => false,
         }
+}
+
+fn recent_files_payload_eq(a: &RecentFilesPayload, b: &RecentFilesPayload) -> bool {
+    a.items.len() == b.items.len()
+        && a
+            .items
+            .iter()
+            .zip(b.items.iter())
+            .all(|(x, y)| {
+                x.id == y.id
+                    && x.name == y.name
+                    && x.path == y.path
+                    && x.opened_text == y.opened_text
+            })
 }
 
 #[cfg(test)]

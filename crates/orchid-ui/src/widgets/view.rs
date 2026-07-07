@@ -104,8 +104,19 @@ impl SlintPayload {
             WidgetPayload::PasswordManager(p) => Self::Text(password_to_text_lines(p)),
             WidgetPayload::Viewer(p) => Self::Text(viewer_to_text_lines(p)),
             WidgetPayload::FileManager(p) => Self::Text(file_manager_to_text_lines(p)),
+            WidgetPayload::RecentFiles(p) => Self::Text(recent_files_to_text_lines(p)),
         }
     }
+}
+
+fn recent_files_to_text_lines(p: &orchid_widgets::RecentFilesPayload) -> Vec<String> {
+    if p.items.is_empty() {
+        return vec!["No recent files".into()];
+    }
+    p.items
+        .iter()
+        .map(|it| format!("{} ({})", it.name, it.opened_text))
+        .collect()
 }
 
 fn weather_to_text_lines(w: &WeatherPayload) -> Vec<String> {

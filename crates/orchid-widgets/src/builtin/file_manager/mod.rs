@@ -141,6 +141,8 @@ pub struct FileManagerDeps {
     pub encrypted: Option<Arc<orchid_fs::EncryptedFolderEngine>>,
     /// Configured remote mounts from `config.toml` `[file-manager]`.
     pub network_mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
+    /// Application-wide recent-files list.
+    pub recent_files: Arc<crate::recent_files::RecentFilesStore>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -171,7 +173,6 @@ struct FileManagerInner {
     config: RwLock<FileManagerConfig>,
     /// Entries per tab id. Keeps dual-pane tabs independent.
     entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
-    recent: RwLock<std::collections::VecDeque<String>>,
     /// Decoded thumbnails keyed by entry path (icon / gallery modes).
     thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
     /// Cached managed-folder root paths for [`apply_entry_metadata`].
@@ -236,7 +237,6 @@ impl FileManagerWidget {
                 state: parking_lot::Mutex::new(state),
                 config: RwLock::new(config),
                 entries_by_tab: RwLock::new(std::collections::HashMap::new()),
-                recent: RwLock::new(std::collections::VecDeque::new()),
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
                 managed_roots: RwLock::new(Vec::new()),
                 managed_stats: RwLock::new(std::collections::HashMap::new()),
@@ -823,19 +823,9 @@ impl FileManagerInner {
     }
 
     fn record_recent(&self, path: &orchid_fs::FsPath) {
-        if is_virtual(path) {
-            return;
-        }
-        if path.as_str().ends_with('/') || path.as_str().ends_with('\\') {
-            return;
-        }
-        let s = path.as_str().to_string();
-        let mut recent = self.recent.write();
-        recent.retain(|p| p != &s);
-        recent.push_front(s);
-        while recent.len() > 50 {
-            recent.pop_back();
-        }
+        self.deps
+            .recent_files
+            .touch(path, Some(&self.bus));
     }
 
     fn collect_catalog_candidates(&self) -> Vec<orchid_fs::FsPath> {
@@ -845,10 +835,11 @@ impl FileManagerInner {
             .starred_paths()
             .unwrap_or_default();
         paths.extend(
-            self.recent
-                .read()
-                .iter()
-                .filter_map(|p| orchid_fs::FsPath::new(p).ok()),
+            self.deps
+                .recent_files
+                .paths()
+                .into_iter()
+                .filter_map(|p| orchid_fs::FsPath::new(&p).ok()),
         );
         for tag in self.deps.tag_manager.all_tags().unwrap_or_default() {
             paths.extend(
@@ -1076,11 +1067,12 @@ impl FileManagerInner {
         let raw = path.as_str();
         if raw == "virtual:recent" {
             let mut entries: Vec<orchid_fs::FsEntry> = self
-                .recent
-                .read()
-                .iter()
+                .deps
+                .recent_files
+                .paths()
+                .into_iter()
                 .take(50)
-                .filter_map(|p| orchid_fs::FsPath::new(p).ok())
+                .filter_map(|p| orchid_fs::FsPath::new(&p).ok())
                 .map(|p| orchid_fs::FsEntry {
                     name: p.file_name().map(String::from).unwrap_or_default(),
                     metadata: orchid_fs::FsMetadata {
@@ -2418,15 +2410,11 @@ pub async fn run_action_with_opts(
             let Some(p) = target_paths.first() else {
                 return Ok(ActionOutcome::Done);
             };
-            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-            if inner.is_path_encrypted(&fp) {
-                return Ok(ActionOutcome::NeedsPassphrase {
-                    paths: vec![p.clone()],
-                    purpose: PassphrasePurpose::RevealInViewer,
-                });
-            }
-            inner.record_recent(&fp);
-            return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            return open_path(instance_id, pane, p, false).await;
         }
         "fs.open-all" => {
             let mut files = Vec::new();
@@ -2866,19 +2854,16 @@ pub fn click_behavior(instance_id: Uuid) -> WidgetResult<ClickBehavior> {
 }
 
 /// Open a path from the listing (navigate directories, reveal or view files).
-pub async fn open_path(instance_id: Uuid, pane: u8, path: &str) -> WidgetResult<ActionOutcome> {
+pub async fn open_path(
+    instance_id: Uuid,
+    pane: u8,
+    path: &str,
+    is_dir_hint: bool,
+) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
     let fp = orchid_fs::FsPath::new(path).map_err(map_fs_error)?;
 
-    let is_dir = if let Some(provider) = inner.deps.registry.for_path(&fp) {
-        provider
-            .metadata(&fp)
-            .await
-            .map(|meta| matches!(meta.kind, orchid_fs::FsEntryKind::Directory))
-            .unwrap_or(false)
-    } else {
-        false
-    };
+    let is_dir = entry_is_directory(&inner, &fp, is_dir_hint).await;
 
     if is_dir {
         if inner.is_path_encrypted(&fp) {
@@ -2902,6 +2887,25 @@ pub async fn open_path(instance_id: Uuid, pane: u8, path: &str) -> WidgetResult<
     Ok(ActionOutcome::OpenInViewer {
         path: path.to_string(),
     })
+}
+
+async fn entry_is_directory(
+    inner: &FileManagerInner,
+    fp: &orchid_fs::FsPath,
+    is_dir_hint: bool,
+) -> bool {
+    if is_virtual(fp) {
+        let raw = fp.as_str();
+        return is_dir_hint
+            || category_for_virtual_path(raw).is_some()
+            || label_key_for_virtual_path(raw).is_some();
+    }
+    if let Some(provider) = inner.deps.registry.for_path(fp) {
+        if let Ok(meta) = provider.metadata(fp).await {
+            return matches!(meta.kind, orchid_fs::FsEntryKind::Directory);
+        }
+    }
+    is_dir_hint
 }
 
 /// Refresh every tab in a live file-manager instance.

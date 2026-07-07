@@ -21,6 +21,9 @@ widget-system-desc = CPU, memory, disk, network, and battery indicators
 widget-rss-name = News Feed
 widget-rss-desc = RSS and Atom news feeds
 
+widget-recent-files-name = Recent Files
+widget-recent-files-desc = Recently opened files across Orchid
+
 widget-search-name = Universal Search
 widget-search-desc = Search files, run commands, open settings
 
@@ -92,6 +95,7 @@ system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 
 # ---- RSS ----
 rss-no-feeds = No feeds configured
+recent-files-empty = No recent files yet. Open files in the viewer or file manager to see them here.
 rss-error-summary = { $n } of { $total } feeds failed to update
 rss-item-published-minutes = { $m }m ago
 rss-item-published-hours = { $h }h ago
@@ -400,6 +404,7 @@ dock-widget-weather = Weather
 dock-widget-moon = Moon
 dock-widget-system = System
 dock-widget-rss = News
+dock-widget-recent-files = Recent
 dock-widget-search = Search
 dock-widget-media = Media
 dock-widget-password = Passwords

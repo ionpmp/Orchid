@@ -63,6 +63,8 @@ pub enum WidgetPayload {
     Viewer(crate::widget::payloads::ViewerPayload),
     /// File manager widget.
     FileManager(crate::widget::payloads::FileManagerPayload),
+    /// Recent files widget.
+    RecentFiles(crate::widget::payloads::RecentFilesPayload),
 }
 
 /// Terminal-specific payload carried inside [`WidgetPayload::Terminal`].

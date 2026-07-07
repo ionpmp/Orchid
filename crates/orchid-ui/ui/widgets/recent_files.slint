@@ -1,0 +1,80 @@
+import { Theme } from "../theme_global.slint";
+import { RecentFilesModel } from "../workspace/defs.slint";
+
+export component RecentFilesView inherits Rectangle {
+    in property <RecentFilesModel> model;
+
+    callback item-clicked(string);
+
+    background: transparent;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        if !model.has-items : VerticalLayout {
+            alignment: center;
+            vertical-stretch: 1;
+
+            Text {
+                text: model.empty-state-text;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+            }
+        }
+
+        if model.has-items : Flickable {
+            vertical-stretch: 1;
+            horizontal-stretch: 1;
+            interactive: true;
+            viewport-width: self.width;
+            viewport-height: list.preferred-height.max(self.height);
+
+            list := VerticalLayout {
+                width: parent.viewport-width;
+                spacing: 0px;
+
+                for item[i] in model.items : Rectangle {
+                    height: 64px;
+                    background: item-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+
+                    item-ta := TouchArea {
+                        clicked => {
+                            root.item-clicked(item.path);
+                        }
+                    }
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: item.name;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-semibold;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            text: item.path;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            text: item.opened;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

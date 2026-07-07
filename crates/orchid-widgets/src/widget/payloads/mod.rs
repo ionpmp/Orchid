@@ -9,6 +9,7 @@ pub mod file_manager;
 pub mod media;
 pub mod moon;
 pub mod password;
+pub mod recent_files;
 pub mod rss;
 pub mod search;
 pub mod system;
@@ -22,6 +23,7 @@ pub use file_manager::{
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
 pub use password::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload};
+pub use recent_files::{RecentFileItemView, RecentFilesPayload};
 pub use rss::{RssItemView, RssPayload};
 pub use search::{SearchCandidateView, UniversalSearchPayload};
 pub use system::{IndicatorStatus, SystemIndicator, SystemPayload};

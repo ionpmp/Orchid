@@ -52,7 +52,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Widget: Weather
 - [ ] Widget: Moon (astronomy)
 - [ ] Widget: System indicators
-- [ ] Widget: Files (recent)
+- [~] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [~] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [ ] Widget: Media player (audio/video)
 - [ ] Widget: RSS feed

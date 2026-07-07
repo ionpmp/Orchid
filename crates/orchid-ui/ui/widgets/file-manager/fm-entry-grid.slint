@@ -73,43 +73,6 @@ export component FmEntryGrid inherits Rectangle {
             border-width: drag-active && entry.is-dir && entry.path == drag-drop-target ? 2px : 0px;
             border-color: Theme.accent-brand;
 
-            tile-ta := TouchArea {
-                double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
-                pointer-event(e) => {
-                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                        if (e.modifiers.shift) {
-                            root.entry-shift-clicked(entry.path);
-                        } else {
-                            root.entry-clicked(entry.path, e.modifiers.control);
-                        }
-                        if (entry.is-selected) {
-                            root.pressing-path = entry.path;
-                        }
-                    }
-                    if (pressing-path != "" && e.kind == PointerEventKind.move) {
-                        root.entry-drag-start(pressing-path);
-                        root.pressing-path = "";
-                    }
-                    if (drag-active && entry.is-dir) {
-                        if (e.kind == PointerEventKind.move) {
-                            root.entry-drag-hover(entry.path);
-                        }
-                        if (e.kind == PointerEventKind.up) {
-                            root.entry-drag-drop(entry.path);
-                        }
-                    }
-                    if (e.kind == PointerEventKind.up) {
-                        if (drag-active && !entry.is-dir) {
-                            root.entry-drag-cancel();
-                        }
-                        root.pressing-path = "";
-                    }
-                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
-                        root.entry-context(entry.path, self.mouse-x, self.mouse-y);
-                    }
-                }
-            }
-
             VerticalLayout {
                 padding: 6px;
                 spacing: 4px;
@@ -180,6 +143,46 @@ export component FmEntryGrid inherits Rectangle {
                 text: "★";
                 color: #eab308;
                 font-size: Theme.font-size-sm;
+            }
+
+            tile-ta := TouchArea {
+                width: 100%;
+                height: 100%;
+                enabled: !(rename.active && entry.path == rename.path);
+                double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                        if (e.modifiers.shift) {
+                            root.entry-shift-clicked(entry.path);
+                        } else {
+                            root.entry-clicked(entry.path, e.modifiers.control);
+                        }
+                        if (entry.is-selected) {
+                            root.pressing-path = entry.path;
+                        }
+                    }
+                    if (pressing-path != "" && e.kind == PointerEventKind.move) {
+                        root.entry-drag-start(pressing-path);
+                        root.pressing-path = "";
+                    }
+                    if (drag-active && entry.is-dir) {
+                        if (e.kind == PointerEventKind.move) {
+                            root.entry-drag-hover(entry.path);
+                        }
+                        if (e.kind == PointerEventKind.up) {
+                            root.entry-drag-drop(entry.path);
+                        }
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        if (drag-active && !entry.is-dir) {
+                            root.entry-drag-cancel();
+                        }
+                        root.pressing-path = "";
+                    }
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                        root.entry-context(entry.path, self.mouse-x, self.mouse-y);
+                    }
+                }
             }
         }
     }

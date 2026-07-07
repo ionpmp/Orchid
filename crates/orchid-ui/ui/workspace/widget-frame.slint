@@ -7,6 +7,7 @@ import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
 import { SystemView } from "../widgets/system.slint";
 import { RssView } from "../widgets/rss.slint";
+import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
 import { MediaView } from "../widgets/media.slint";
 import { PasswordView } from "../widgets/password.slint";
@@ -35,6 +36,7 @@ export component WidgetFrame inherits Rectangle {
     callback terminal-split-drag-moved(string, string, float, float);
     callback terminal-shortcut(string);
     callback rss-item-clicked(string);
+    callback recent-files-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
     callback search-selection-changed(string, int);
@@ -267,6 +269,13 @@ export component WidgetFrame inherits Rectangle {
             height: parent.height;
             model: root.model.rss;
             item-clicked(link) => { root.rss-item-clicked(link); }
+        }
+
+        if model.type-id == "recent-files" : RecentFilesView {
+            width: parent.width;
+            height: parent.height;
+            model: root.model.recent-files;
+            item-clicked(path) => { root.recent-files-item-clicked(path); }
         }
 
         if model.type-id == "universal-search" || model.type-id == "search" : SearchView {

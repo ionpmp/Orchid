@@ -43,9 +43,8 @@ use orchid_widgets::TerminalPayload;
 use orchid_widgets::TerminalPanePayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
 use orchid_widgets::{ViewerPayload, WidgetPayload};
-use orchid_widgets::{
-    CreateWidgetRequest,
-    LayoutEngine, PlacedWidget, WidgetManager, WorkspaceManager,
+use orchid_widgets::{CreateWidgetRequest,
+    LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager, WorkspaceManager,
 };
 use orchid_widgets::SharedInstance;
 use parking_lot::RwLock;
@@ -60,7 +59,8 @@ use crate::widgets::terminal::{
 use crate::terminal_raster;
 use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
-    PasswordEntryItem, PasswordModel, PasswordTagChip, RssItemEntry, RssModel, SearchCandidateEntry,
+    PasswordEntryItem, PasswordModel, PasswordTagChip, RecentFileItemEntry, RecentFilesModel,
+    RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalDividerModel,
     TerminalPaneModel, TerminalTabModel,
     Theme,
@@ -165,6 +165,7 @@ pub struct MainWindowController {
     config_file_path: PathBuf,
     settings_sections: ModelRc<SettingsSectionEntry>,
     settings_fields: ModelRc<SettingsFieldRow>,
+    recent_files: Arc<RecentFilesStore>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -234,6 +235,7 @@ impl MainWindowController {
         locale: Arc<LocaleManager>,
         config: Arc<RwLock<OrchidConfig>>,
         config_file_path: PathBuf,
+        recent_files: Arc<RecentFilesStore>,
         storage: Arc<StateStore>,
         bus: Arc<EventBus>,
         command_registry: Arc<CommandRegistry>,
@@ -333,6 +335,7 @@ impl MainWindowController {
             config_file_path,
             settings_sections,
             settings_fields,
+            recent_files,
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -850,6 +853,14 @@ impl MainWindowController {
             move |link| {
                 if let Some(c) = t.upgrade() {
                     c.on_rss_item_clicked(&link);
+                }
+            }
+        });
+        self.window.on_recent_files_item_clicked({
+            let t = t.clone();
+            move |path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_recent_files_item_clicked(&path);
                 }
             }
         });
@@ -2586,6 +2597,23 @@ impl MainWindowController {
         }
     }
 
+    fn on_recent_files_item_clicked(self: &Arc<Self>, path: &SharedString) {
+        let s = path.as_str();
+        if s.is_empty() {
+            return;
+        }
+        let Ok(fp) = orchid_fs::FsPath::new(s) else {
+            return;
+        };
+        let path_label = s.to_string();
+        let ctrl = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp).await {
+                warn!(?e, path = %path_label, "open recent file in viewer");
+            }
+        }));
+    }
+
     fn on_media_play_pause(self: &Arc<Self>) {
         let Some((inst_id, is_playing)) = self.find_active_media_widget() else {
             return;
@@ -3144,6 +3172,7 @@ impl MainWindowController {
             media_model,
             password_model,
             viewer_model,
+            recent_files_model,
             file_manager_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
@@ -3188,6 +3217,7 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
+                        empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
                     )
                 }
@@ -3208,6 +3238,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::Moon(m) => (
@@ -3227,6 +3258,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
@@ -3246,6 +3278,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::RssFeed(r) => (
@@ -3265,6 +3298,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::UniversalSearch(s) => {
@@ -3299,6 +3333,7 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
+                        empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
                     )
                 }
@@ -3319,6 +3354,7 @@ impl MainWindowController {
                     build_media_model(m),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::PasswordManager(p) => {
@@ -3349,6 +3385,7 @@ impl MainWindowController {
                         empty_media_model(),
                         build_password_model(p, toast, autofocus),
                         empty_viewer_model(&self.locale),
+                        empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
                     )
                 }
@@ -3369,6 +3406,27 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     build_viewer_model(v, &self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                ),
+                WidgetPayload::RecentFiles(r) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(),
+                    empty_moon_model(),
+                    empty_system_model(),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(),
+                    empty_password_model(),
+                    empty_viewer_model(&self.locale),
+                    build_recent_files_model(r, &self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
                 WidgetPayload::FileManager(fm) => {
@@ -3409,6 +3467,7 @@ impl MainWindowController {
                         empty_media_model(),
                         empty_password_model(),
                         empty_viewer_model(&self.locale),
+                        empty_recent_files_model(&self.locale),
                         build_file_manager_model(
                             fm,
                             overlays,
@@ -3434,6 +3493,7 @@ impl MainWindowController {
                     empty_media_model(),
                     empty_password_model(),
                     empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
                 ),
             }
@@ -3510,6 +3570,7 @@ impl MainWindowController {
             media: media_model,
             password: password_model,
             viewer: viewer_model,
+            recent_files: recent_files_model,
             file_manager: file_manager_model,
         }
     }
@@ -4140,15 +4201,7 @@ impl MainWindowController {
                 orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
                     .await
                     .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
-                for fm in c.widget_manager.instances_for_workspace(ws_id) {
-                    if fm.type_id == orchid_widgets::builtin::file_manager::TYPE_ID {
-                        let path_str = path.as_str().to_string();
-                        let _ =
-                            orchid_widgets::builtin::file_manager::touch_recent(fm.id, &path_str)
-                                .await;
-                        break;
-                    }
-                }
+                c.recent_files.touch(&path, Some(&c.bus));
                 if let Some(c2) = ctrl.upgrade() {
                     c2.schedule_rebuild();
                 }
@@ -4179,14 +4232,7 @@ impl MainWindowController {
         orchid_widgets::builtin::viewer::open_path(id, path.clone())
             .await
             .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
-        for inst in c.widget_manager.instances_for_workspace(ws_id) {
-            if inst.type_id == orchid_widgets::builtin::file_manager::TYPE_ID {
-                let path_str = path.as_str().to_string();
-                let _ =
-                    orchid_widgets::builtin::file_manager::touch_recent(inst.id, &path_str).await;
-                break;
-            }
-        }
+        c.recent_files.touch(&path, Some(&c.bus));
         if let Some(c2) = ctrl.upgrade() {
             c2.schedule_rebuild();
         }
@@ -5759,6 +5805,7 @@ fn is_known_widget_type(type_id: &str) -> bool {
             | "moon"
             | "system"
             | "rss"
+            | "recent-files"
             | "search"
             | "media"
             | "password"
@@ -5805,6 +5852,11 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             icon: "rss".into(),
         },
         DockWidgetType {
+            type_id: "recent-files".into(),
+            label: locale.tr("dock-widget-recent-files").into(),
+            icon: "recent-files".into(),
+        },
+        DockWidgetType {
             type_id: "search".into(),
             label: locale.tr("dock-widget-search").into(),
             icon: "search".into(),
@@ -5838,6 +5890,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "moon" => locale.tr("dock-widget-moon").into(),
         "system" => locale.tr("dock-widget-system").into(),
         "rss" => locale.tr("dock-widget-rss").into(),
+        "recent-files" => locale.tr("dock-widget-recent-files").into(),
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
         "media-player" | "media" => locale.tr("dock-widget-media").into(),
         "password-manager" | "password" => locale.tr("dock-widget-password").into(),
@@ -5868,6 +5921,7 @@ fn default_frame_data_extended(
     MediaModel,
     PasswordModel,
     ViewerModel,
+    RecentFilesModel,
     FileManagerModel,
 ) {
     (
@@ -5887,6 +5941,7 @@ fn default_frame_data_extended(
         empty_media_model(),
         empty_password_model(),
         empty_viewer_model(locale),
+        empty_recent_files_model(locale),
         empty_file_manager_model(locale),
     )
 }
@@ -5951,6 +6006,36 @@ fn build_rss_model(p: &orchid_widgets::RssPayload, locale: &LocaleManager) -> Rs
         error_summary: p.error_summary.clone().unwrap_or_default().into(),
         has_items,
         empty_state_text: locale.tr("rss-no-feeds").into(),
+    }
+}
+
+fn empty_recent_files_model(locale: &LocaleManager) -> RecentFilesModel {
+    RecentFilesModel {
+        items: ModelRc::new(VecModel::default()),
+        has_items: false,
+        empty_state_text: locale.tr("recent-files-empty").into(),
+    }
+}
+
+fn build_recent_files_model(
+    p: &orchid_widgets::RecentFilesPayload,
+    locale: &LocaleManager,
+) -> RecentFilesModel {
+    let items: Vec<RecentFileItemEntry> = p
+        .items
+        .iter()
+        .map(|it| RecentFileItemEntry {
+            id: it.id.clone().into(),
+            name: it.name.clone().into(),
+            path: it.path.clone().into(),
+            opened: it.opened_text.clone().into(),
+        })
+        .collect();
+    let has_items = !items.is_empty();
+    RecentFilesModel {
+        items: ModelRc::new(VecModel::from(items)),
+        has_items,
+        empty_state_text: locale.tr("recent-files-empty").into(),
     }
 }
 

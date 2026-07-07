@@ -70,6 +70,8 @@ pub struct OrchidApp {
     /// Shared network mount list (hot-reloaded from config.toml).
     #[allow(dead_code)] // held for lifetime; FM and rclone providers hold clones
     network_mounts: Arc<RwLock<Vec<NetworkMountConfig>>>,
+    /// Application-wide recent-files list.
+    recent_files: Arc<orchid_widgets::RecentFilesStore>,
     /// Keeps the config watcher background task alive.
     _config_watcher: ConfigWatcher,
 }
@@ -391,6 +393,7 @@ impl OrchidApp {
                 },
             )
             .map_err(|e| UiError::Slint(format!("managed ingest failed sub: {e}")))?;
+        let recent_files = orchid_widgets::RecentFilesStore::new(50);
         let fm_deps = orchid_widgets::builtin::file_manager::FileManagerDeps {
             registry: fs_registry.clone(),
             clipboard: Arc::new(orchid_widgets::builtin::file_manager::FileClipboard::new()),
@@ -400,10 +403,16 @@ impl OrchidApp {
             managed: Some(managed_engine),
             encrypted: Some(encrypted_engine),
             network_mounts: network_mounts.clone(),
+            recent_files: recent_files.clone(),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))
             .map_err(|e| UiError::Slint(format!("register file manager: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::recent_files::descriptor(
+                recent_files.clone(),
+            ))
+            .map_err(|e| UiError::Slint(format!("register recent files: {e}")))?;
 
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,
@@ -525,6 +534,7 @@ impl OrchidApp {
             _managed_ingest_started_sub: Some(managed_ingest_started_sub),
             _managed_ingest_failed_sub: Some(managed_ingest_failed_sub),
             network_mounts,
+            recent_files,
             _config_watcher: config_watcher,
         })
     }
@@ -547,6 +557,7 @@ impl OrchidApp {
                 orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
                     .await
                     .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+                self.recent_files.touch(&path, Some(&self.bus));
                 return Ok(inst.id);
             }
         }
@@ -571,9 +582,11 @@ impl OrchidApp {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
 
-        orchid_widgets::builtin::viewer::open_path(id, path)
+        orchid_widgets::builtin::viewer::open_path(id, path.clone())
             .await
             .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+
+        self.recent_files.touch(&path, Some(&self.bus));
 
         Ok(id)
     }
@@ -591,6 +604,7 @@ impl OrchidApp {
             self.locale.clone(),
             self.config.clone(),
             self.paths.config_file.clone(),
+            self.recent_files.clone(),
             self.storage.clone(),
             self.bus.clone(),
             self.command_registry.clone(),

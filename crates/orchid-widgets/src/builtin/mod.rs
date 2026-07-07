@@ -13,6 +13,7 @@ pub mod file_manager;
 pub mod media;
 pub mod moon;
 pub mod password;
+pub mod recent_files;
 pub mod rss;
 pub mod search;
 pub mod system;

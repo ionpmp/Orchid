@@ -11,6 +11,7 @@ pub mod events;
 pub mod group;
 pub mod layout;
 pub mod manager;
+pub mod recent_files;
 pub mod registry;
 pub mod widget;
 pub mod workspace;
@@ -39,7 +40,7 @@ pub use widget::payloads::{
     EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, MediaPlayerPayload,
     MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView, PasswordEntryView,
     ManagedFolderSidebarPayload,
-    PasswordManagerPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator,
+    PasswordManagerPayload, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator,
     SystemPayload, TabPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
     WeatherPayload, WeatherStatusTag,
 };
@@ -47,6 +48,7 @@ pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 
 pub use commands::build_command_set;
 pub use manager::operations::CreateWidgetRequest;
+pub use recent_files::{RecentFileEntry, RecentFilesStore, RecentFilesUpdated};
 pub use manager::{WidgetManager, WidgetManagerOptions};
 
 /// Crate version.

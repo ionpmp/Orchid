@@ -7,7 +7,7 @@ use orchid_core::{EventBus, EventBusConfig};
 use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider, TagManager};
 use orchid_storage::StateStore;
 use orchid_widgets::builtin::file_manager::{self, FileClipboard, FileManagerDeps};
-use orchid_widgets::{CreateWidgetRequest, WidgetManager, WidgetManagerOptions, WidgetPayload, WidgetRegistry};
+use orchid_widgets::{CreateWidgetRequest, RecentFilesStore, WidgetManager, WidgetManagerOptions, WidgetPayload, WidgetRegistry};
 use parking_lot::RwLock;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -32,6 +32,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         managed: None,
         encrypted: None,
         network_mounts: Arc::new(RwLock::new(Vec::new())),
+        recent_files: RecentFilesStore::new(50),
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());

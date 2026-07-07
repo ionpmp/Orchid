@@ -113,6 +113,19 @@ export struct RssModel {
     empty-state-text: string,
 }
 
+export struct RecentFileItemEntry {
+    id: string,
+    name: string,
+    path: string,
+    opened: string,
+}
+
+export struct RecentFilesModel {
+    items: [RecentFileItemEntry],
+    has-items: bool,
+    empty-state-text: string,
+}
+
 export struct SearchCandidateEntry {
     id: string,
     source-name: string,
@@ -476,6 +489,7 @@ export struct WidgetFrameModel {
     moon: MoonModel,
     system: SystemModel,
     rss: RssModel,
+    recent-files: RecentFilesModel,
     search: SearchModel,
     media: MediaModel,
     password: PasswordModel,
