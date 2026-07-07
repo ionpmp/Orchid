@@ -65,6 +65,14 @@ export component FileManagerView inherits Rectangle {
 
     background: transparent;
 
+    pure function fm-dual-pane-glyph(dual: bool) -> string {
+        return dual ? "▢▢" : "▢";
+    }
+
+    pure function fm-hidden-glyph(show-hidden: bool) -> string {
+        return show-hidden ? "◉" : "○";
+    }
+
     HorizontalLayout {
         spacing: 0;
 
@@ -100,7 +108,7 @@ export component FileManagerView inherits Rectangle {
                         spacing: 6px;
 
                         Text {
-                            text: model.dual-pane ? "⊟" : "⊞";
+                            text: fm-dual-pane-glyph(model.dual-pane);
                             color: Theme.accent-brand;
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;
@@ -129,7 +137,7 @@ export component FileManagerView inherits Rectangle {
                         spacing: 6px;
 
                         Text {
-                            text: model.show-hidden ? "👁" : "👁‍🗨";
+                            text: fm-hidden-glyph(model.show-hidden);
                             color: model.show-hidden ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;

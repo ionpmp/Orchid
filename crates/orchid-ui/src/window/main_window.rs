@@ -166,6 +166,7 @@ pub struct MainWindowController {
     settings_sections: ModelRc<SettingsSectionEntry>,
     settings_fields: ModelRc<SettingsFieldRow>,
     recent_files: Arc<RecentFilesStore>,
+    password_vault: Arc<orchid_crypto::PasswordVault>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -236,6 +237,7 @@ impl MainWindowController {
         config: Arc<RwLock<OrchidConfig>>,
         config_file_path: PathBuf,
         recent_files: Arc<RecentFilesStore>,
+        password_vault: Arc<orchid_crypto::PasswordVault>,
         storage: Arc<StateStore>,
         bus: Arc<EventBus>,
         command_registry: Arc<CommandRegistry>,
@@ -336,6 +338,7 @@ impl MainWindowController {
             settings_sections,
             settings_fields,
             recent_files,
+            password_vault,
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -417,6 +420,10 @@ impl MainWindowController {
         g.set_password_label_totp(mgr.tr("password-label-totp").into());
         g.set_password_action_copy(mgr.tr("password-action-copy").into());
         g.set_password_action_open(mgr.tr("password-action-open").into());
+        g.set_password_unlock_label(mgr.tr("password-unlock-label").into());
+        g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());
+        g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
+        g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
         Ok(())
     }
 
@@ -959,6 +966,22 @@ impl MainWindowController {
             move |url| {
                 if let Some(c) = t.upgrade() {
                     c.on_password_open_url(&url);
+                }
+            }
+        });
+        self.window.on_password_unlock_submit({
+            let t = t.clone();
+            move |passphrase| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_unlock_submit(&passphrase);
+                }
+            }
+        });
+        self.window.on_password_unlock_biometric({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_unlock_biometric();
                 }
             }
         });
@@ -2751,6 +2774,46 @@ impl MainWindowController {
         if let Err(e) = opener::open(&url_str) {
             warn!(?e, "failed to open URL");
         }
+    }
+
+    fn on_password_unlock_submit(self: &Arc<Self>, passphrase: &SharedString) {
+        let pass = passphrase.to_string();
+        if pass.is_empty() {
+            return;
+        }
+        let vault = self.password_vault.clone();
+        let bus = self.bus.clone();
+        match orchid_widgets::builtin::password::unlock_with_passphrase(vault, bus, &pass) {
+            Ok(()) => {}
+            Err(e) => orchid_widgets::builtin::password::record_unlock_error(e),
+        }
+        self.schedule_rebuild_after_password_unlock();
+    }
+
+    fn on_password_unlock_biometric(self: &Arc<Self>) {
+        let prompt = self.locale.tr("password-unlock-biometric-prompt");
+        let vault = self.password_vault.clone();
+        let bus = self.bus.clone();
+        match orchid_widgets::builtin::password::unlock_with_biometric(vault, bus, &prompt) {
+            Ok(()) => {}
+            Err(e) => orchid_widgets::builtin::password::record_unlock_error(e),
+        }
+        self.schedule_rebuild_after_password_unlock();
+    }
+
+    fn schedule_rebuild_after_password_unlock(self: &Arc<Self>) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            self.schedule_rebuild();
+            return;
+        };
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = wm.refresh_snapshot_cache(inst_id).await;
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
     }
 
     fn find_active_password_widget(&self) -> Option<Uuid> {
@@ -6088,6 +6151,8 @@ fn empty_password_model() -> PasswordModel {
     PasswordModel {
         is_unlocked: false,
         lock_reason: SharedString::new(),
+        biometric_available: false,
+        unlock_error: SharedString::new(),
         entries: ModelRc::new(VecModel::default()),
         selected: empty_password_detail(),
         search_query: SharedString::new(),
@@ -6405,7 +6470,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "section:favorites".into(),
             label: locale.tr("fm-sidebar-favorites").into(),
-            icon: "★".into(),
+            icon: "sidebar-favorites".into(),
             indent: 0,
             is_section_header: true,
             is_active: false,
@@ -6413,7 +6478,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "fav:starred".into(),
             label: locale.tr("fm-virtual-starred").into(),
-            icon: "★".into(),
+            icon: "sidebar-starred".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("fav:starred"),
@@ -6421,7 +6486,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "fav:tags".into(),
             label: locale.tr("fm-virtual-tags").into(),
-            icon: "🏷".into(),
+            icon: "sidebar-tags".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("fav:tags"),
@@ -6429,7 +6494,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "fav:recent".into(),
             label: locale.tr("fm-virtual-recent").into(),
-            icon: "🕐".into(),
+            icon: "sidebar-recent".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("fav:recent"),
@@ -6437,7 +6502,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "section:categories".into(),
             label: locale.tr("fm-sidebar-categories").into(),
-            icon: "▾".into(),
+            icon: "sidebar-categories".into(),
             indent: 0,
             is_section_header: true,
             is_active: false,
@@ -6445,7 +6510,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "cat:images".into(),
             label: locale.tr("fm-category-images").into(),
-            icon: "🖼".into(),
+            icon: "sidebar-images".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("cat:images"),
@@ -6453,7 +6518,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "cat:documents".into(),
             label: locale.tr("fm-category-documents").into(),
-            icon: "📄".into(),
+            icon: "sidebar-documents".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("cat:documents"),
@@ -6461,7 +6526,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "cat:video".into(),
             label: locale.tr("fm-category-video").into(),
-            icon: "🎬".into(),
+            icon: "sidebar-video".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("cat:video"),
@@ -6469,7 +6534,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "cat:audio".into(),
             label: locale.tr("fm-category-audio").into(),
-            icon: "🎵".into(),
+            icon: "sidebar-audio".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("cat:audio"),
@@ -6477,7 +6542,7 @@ fn build_sidebar_items(
         FmSidebarItem {
             id: "cat:archives".into(),
             label: locale.tr("fm-category-archives").into(),
-            icon: "📦".into(),
+            icon: "sidebar-archives".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("cat:archives"),
@@ -6487,7 +6552,7 @@ fn build_sidebar_items(
         items.push(FmSidebarItem {
             id: "section:managed".into(),
             label: locale.tr("fm-sidebar-managed").into(),
-            icon: "🗃".into(),
+            icon: "sidebar-managed".into(),
             indent: 0,
             is_section_header: true,
             is_active: false,
@@ -6496,7 +6561,7 @@ fn build_sidebar_items(
             items.push(FmSidebarItem {
                 id: format!("managed:{i}").into(),
                 label: managed_sidebar_label(locale, folder).into(),
-                icon: "🗃".into(),
+                icon: "sidebar-managed".into(),
                 indent: 1,
                 is_section_header: false,
                 is_active: active_managed == Some(i),
@@ -6506,7 +6571,7 @@ fn build_sidebar_items(
     items.push(FmSidebarItem {
         id: "section:network".into(),
         label: locale.tr("fm-sidebar-network").into(),
-        icon: "🌐".into(),
+        icon: "sidebar-network".into(),
         indent: 0,
         is_section_header: true,
         is_active: false,
@@ -6514,7 +6579,7 @@ fn build_sidebar_items(
     items.push(FmSidebarItem {
         id: "net:places".into(),
         label: locale.tr("fm-sidebar-network-all").into(),
-        icon: "🌐".into(),
+        icon: "sidebar-network".into(),
         indent: 1,
         is_section_header: false,
         is_active: active_id == Some("net:places") && active_network.is_none(),
@@ -6523,7 +6588,7 @@ fn build_sidebar_items(
         items.push(FmSidebarItem {
             id: format!("net:{i}").into(),
             label: mount.name.clone().into(),
-            icon: "🔗".into(),
+            icon: "sidebar-mount".into(),
             indent: 1,
             is_section_header: false,
             is_active: active_network == Some(i),
@@ -7509,6 +7574,8 @@ fn build_password_model(
     PasswordModel {
         is_unlocked: p.is_unlocked,
         lock_reason: p.lock_reason.clone().unwrap_or_default().into(),
+        biometric_available: p.biometric_available,
+        unlock_error: p.unlock_error.clone().unwrap_or_default().into(),
         entries: ModelRc::new(VecModel::from(entries)),
         selected,
         search_query: p.search_query.clone().into(),

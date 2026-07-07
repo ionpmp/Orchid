@@ -53,6 +53,7 @@ fn embed_windows_icon() {
     #[cfg(windows)]
     {
         let icon = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/logo/orchid-icon.ico");
+        println!("cargo:rerun-if-changed={}", icon.display());
         if icon.is_file() {
             let mut res = winres::WindowsResource::new();
             res.set_icon(icon.to_str().expect("icon path utf-8"));
