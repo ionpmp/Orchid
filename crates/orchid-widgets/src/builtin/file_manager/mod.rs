@@ -143,6 +143,8 @@ pub struct FileManagerDeps {
     pub network_mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
     /// Application-wide recent-files list.
     pub recent_files: Arc<crate::recent_files::RecentFilesStore>,
+    /// DPAPI-backed passphrase for Windows Hello unlock of encrypted files.
+    pub fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -2820,32 +2822,37 @@ pub async fn apply_passphrase(
     purpose: PassphrasePurpose,
 ) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
-    match purpose {
+    let outcome = match purpose {
         PassphrasePurpose::Encrypt => {
             inner.encrypt_paths(&paths, &passphrase).await?;
             inner.refresh_all_tabs().await;
-            Ok(ActionOutcome::Done)
+            ActionOutcome::Done
         }
         PassphrasePurpose::Decrypt => {
             inner.decrypt_paths(&paths, &passphrase).await?;
             inner.refresh_all_tabs().await;
-            Ok(ActionOutcome::Done)
+            ActionOutcome::Done
         }
         PassphrasePurpose::Reveal => {
             let revealed = inner.reveal_paths(&paths, &passphrase).await?;
-            Ok(ActionOutcome::OpenExternally { paths: revealed })
+            ActionOutcome::OpenExternally { paths: revealed }
         }
         PassphrasePurpose::RevealInViewer => {
             let revealed = inner.reveal_paths(&paths, &passphrase).await?;
             if let Some(path) = revealed.first() {
-                Ok(ActionOutcome::OpenInViewer {
+                ActionOutcome::OpenInViewer {
                     path: path.clone(),
-                })
+                }
             } else {
-                Ok(ActionOutcome::Done)
+                ActionOutcome::Done
             }
         }
-    }
+    };
+    let _ = inner
+        .deps
+        .fm_passphrase_vault
+        .save_passphrase(secrecy::SecretString::new(passphrase));
+    Ok(outcome)
 }
 
 /// Current single- vs double-click open behaviour.

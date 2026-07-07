@@ -33,6 +33,9 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         encrypted: None,
         network_mounts: Arc::new(RwLock::new(Vec::new())),
         recent_files: RecentFilesStore::new(50),
+        fm_passphrase_vault: orchid_crypto::FmPassphraseVault::new(
+            tempfile::tempdir().unwrap().path().to_path_buf(),
+        ),
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());

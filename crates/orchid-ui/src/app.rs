@@ -73,6 +73,8 @@ pub struct OrchidApp {
     recent_files: Arc<orchid_widgets::RecentFilesStore>,
     /// KDBX password vault (unlock via passphrase or Windows Hello).
     password_vault: Arc<orchid_crypto::PasswordVault>,
+    /// FM encrypted-folder passphrase vault (Windows Hello).
+    fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
     /// Keeps the config watcher background task alive.
     _config_watcher: ConfigWatcher,
 }
@@ -250,6 +252,7 @@ impl OrchidApp {
         };
 
         let password_vault = orchid_crypto::PasswordVault::new(paths.data_dir.clone());
+        let fm_passphrase_vault = orchid_crypto::FmPassphraseVault::new(paths.data_dir.clone());
         #[cfg(debug_assertions)]
         if !password_vault.db_exists() {
             use secrecy::SecretString;
@@ -392,6 +395,7 @@ impl OrchidApp {
             encrypted: Some(encrypted_engine),
             network_mounts: network_mounts.clone(),
             recent_files: recent_files.clone(),
+            fm_passphrase_vault: fm_passphrase_vault.clone(),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))
@@ -524,6 +528,7 @@ impl OrchidApp {
             network_mounts,
             recent_files,
             password_vault,
+            fm_passphrase_vault,
             _config_watcher: config_watcher,
         })
     }
@@ -595,6 +600,7 @@ impl OrchidApp {
             self.paths.config_file.clone(),
             self.recent_files.clone(),
             self.password_vault.clone(),
+            self.fm_passphrase_vault.clone(),
             self.storage.clone(),
             self.bus.clone(),
             self.command_registry.clone(),

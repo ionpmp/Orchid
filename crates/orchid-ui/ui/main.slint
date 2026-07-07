@@ -150,6 +150,7 @@ export component MainWindow inherits Window {
     callback fm-tag-cancel();
     callback fm-passphrase-commit(string);
     callback fm-passphrase-cancel();
+    callback fm-passphrase-biometric();
     callback fm-select-all(int);
     callback fm-delete-selected(int);
     callback fm-copy-selected(int);
@@ -329,6 +330,7 @@ export component MainWindow inherits Window {
             fm-tag-cancel => { root.fm-tag-cancel(); }
             fm-passphrase-commit(pw) => { root.fm-passphrase-commit(pw); }
             fm-passphrase-cancel => { root.fm-passphrase-cancel(); }
+            fm-passphrase-biometric => { root.fm-passphrase-biometric(); }
             fm-select-all(p) => { root.fm-select-all(p); }
             fm-delete-selected(p) => { root.fm-delete-selected(p); }
             fm-copy-selected(p) => { root.fm-copy-selected(p); }

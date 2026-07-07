@@ -65,7 +65,7 @@ pub use kdbx::{
 };
 pub use random::{fill_secure, random_bytes, random_uuid};
 pub use secret::{SecretBytes, ZeroizingBytes};
-pub use vault::PasswordVault;
+pub use vault::{FmPassphraseVault, PasswordVault};
 
 /// Crate version.
 ///

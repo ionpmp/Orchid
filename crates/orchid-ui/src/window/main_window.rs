@@ -16,6 +16,7 @@ use std::time::Instant;
 
 use async_compat::Compat;
 use parking_lot::Mutex;
+use secrecy::ExposeSecret;
 use slint::Color;
 use slint::ComponentHandle;
 use slint::Image;
@@ -167,6 +168,7 @@ pub struct MainWindowController {
     settings_fields: ModelRc<SettingsFieldRow>,
     recent_files: Arc<RecentFilesStore>,
     password_vault: Arc<orchid_crypto::PasswordVault>,
+    fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -238,6 +240,7 @@ impl MainWindowController {
         config_file_path: PathBuf,
         recent_files: Arc<RecentFilesStore>,
         password_vault: Arc<orchid_crypto::PasswordVault>,
+        fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
         storage: Arc<StateStore>,
         bus: Arc<EventBus>,
         command_registry: Arc<CommandRegistry>,
@@ -339,6 +342,7 @@ impl MainWindowController {
             settings_fields,
             recent_files,
             password_vault,
+            fm_passphrase_vault,
         });
         this.apply_theme()?;
         this.apply_strings()?;
@@ -1480,6 +1484,14 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_passphrase_cancel();
+                }
+            }
+        });
+        self.window.on_fm_passphrase_biometric({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_passphrase_biometric();
                 }
             }
         });
@@ -5025,6 +5037,8 @@ impl MainWindowController {
                     hint: hint.into(),
                     ok_label: ok_label.into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                    biometric_available: self.fm_passphrase_vault.biometric_unlock_available(),
+                    biometric_label: self.locale.tr("fm-passphrase-biometric").into(),
                 };
                 if let Err(e) =
                     orchid_widgets::builtin::file_manager::clear_passphrase_error(inst)
@@ -5351,6 +5365,74 @@ impl MainWindowController {
         };
         self.clear_fm_passphrase_overlay(inst);
         self.schedule_rebuild();
+    }
+
+    fn on_fm_passphrase_biometric(self: &Arc<Self>) {
+        let Some(inst) = self.find_active_fm() else {
+            return;
+        };
+        let overlay = self.fm_overlays.read().get(&inst).cloned();
+        let Some(over) = overlay else {
+            return;
+        };
+        let purpose = over
+            .passphrase_purpose
+            .unwrap_or(orchid_widgets::builtin::file_manager::PassphrasePurpose::Reveal);
+        let paths = over.passphrase_paths.clone();
+        let prompt = self.locale.tr("fm-passphrase-biometric-prompt");
+        let passphrase = match self
+            .fm_passphrase_vault
+            .load_passphrase_after_biometric(&prompt)
+        {
+            Ok(p) => p.expose_secret().to_string(),
+            Err(e) => {
+                let msg = e.to_string();
+                warn!(?e, "fm passphrase biometric");
+                if let Err(report) =
+                    orchid_widgets::builtin::file_manager::report_passphrase_error(inst, msg.clone())
+                {
+                    warn!(?report, "fm passphrase error report");
+                }
+                self.schedule_rebuild();
+                return;
+            }
+        };
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
+                inst,
+                paths,
+                passphrase,
+                purpose,
+            )
+            .await
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    let msg = e.to_string();
+                    warn!(?e, "fm passphrase biometric apply");
+                    if let Some(c) = tw.upgrade() {
+                        if let Err(report) =
+                            orchid_widgets::builtin::file_manager::report_passphrase_error(
+                                inst,
+                                msg.clone(),
+                            )
+                        {
+                            warn!(?report, "fm passphrase error report");
+                        }
+                        if !is_passphrase_retryable(&msg) {
+                            c.clear_fm_passphrase_overlay(inst);
+                        }
+                        c.schedule_rebuild();
+                    }
+                    return;
+                }
+            };
+            if let Some(c) = tw.upgrade() {
+                c.clear_fm_passphrase_overlay(inst);
+                c.apply_fm_action_outcome(inst, outcome);
+            }
+        }));
     }
 
     fn clear_fm_passphrase_overlay(self: &Arc<Self>, inst: Uuid) {
@@ -6255,6 +6337,8 @@ fn empty_passphrase_state() -> FmPassphraseState {
         hint: SharedString::new(),
         ok_label: SharedString::new(),
         cancel_label: SharedString::new(),
+        biometric_available: false,
+        biometric_label: SharedString::new(),
     }
 }
 

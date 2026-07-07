@@ -47,6 +47,7 @@ export component FileManagerView inherits Rectangle {
 
     callback passphrase-commit(string);
     callback passphrase-cancel();
+    callback passphrase-biometric();
 
     callback select-all(int);
     callback delete-selected(int);
@@ -402,6 +403,7 @@ export component FileManagerView inherits Rectangle {
         state: model.passphrase;
         commit(pw) => { root.passphrase-commit(pw); }
         cancel => { root.passphrase-cancel(); }
+        biometric => { root.passphrase-biometric(); }
     }
 }
 

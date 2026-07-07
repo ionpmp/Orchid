@@ -11,8 +11,13 @@ use crate::error::{CryptoError, Result};
 use crate::kdbx::PasswordDatabase;
 use crate::secret::dpapi;
 
+pub mod fm_passphrase;
+
+pub use fm_passphrase::FmPassphraseVault;
+
 const MASTER_KEY_FILE: &str = "passwords.master.dpapi";
 const KDBX_FILE: &str = "passwords.kdbx";
+const PASSWORD_VAULT_DPAPI_DESC: &str = "Orchid password vault";
 
 /// Shared handle to the optional unlocked KDBX database.
 #[derive(Debug)]
@@ -79,7 +84,11 @@ impl PasswordVault {
         } else {
             PasswordDatabase::create(&self.db_path, master.clone())?
         };
-        let _ = save_master_key(&self.key_path, master.expose_secret().as_bytes());
+        let _ = save_dpapi_blob(
+            &self.key_path,
+            master.expose_secret().as_bytes(),
+            PASSWORD_VAULT_DPAPI_DESC,
+        );
         *self.database.write() = Some(Arc::new(db));
         Ok(())
     }
@@ -99,7 +108,7 @@ impl PasswordVault {
                 return Err(CryptoError::BiometricFailed("verification failed".into()));
             }
         }
-        let master = load_master_key(&self.key_path)?;
+        let master = load_dpapi_blob(&self.key_path)?;
         let db = PasswordDatabase::open(&self.db_path, master)?;
         *self.database.write() = Some(Arc::new(db));
         Ok(())
@@ -111,15 +120,28 @@ impl PasswordVault {
     }
 }
 
-fn save_master_key(path: &Path, master_utf8: &[u8]) -> Result<()> {
-    match dpapi::protect(master_utf8, Some("Orchid password vault")) {
+pub(crate) fn verify_biometric(prompt: &str) -> Result<()> {
+    match biometric::verify_user(prompt)? {
+        BiometricVerification::Verified => Ok(()),
+        BiometricVerification::Cancelled => Err(CryptoError::BiometricCancelled),
+        BiometricVerification::DeviceBusy => {
+            Err(CryptoError::BiometricFailed("device busy".into()))
+        }
+        BiometricVerification::Failed => {
+            Err(CryptoError::BiometricFailed("verification failed".into()))
+        }
+    }
+}
+
+pub(crate) fn save_dpapi_blob(path: &Path, plaintext: &[u8], description: &str) -> Result<()> {
+    match dpapi::protect(plaintext, Some(description)) {
         Ok(protected) => std::fs::write(path, protected).map_err(Into::into),
         Err(CryptoError::DpapiUnavailable) => Ok(()),
         Err(e) => Err(e),
     }
 }
 
-fn load_master_key(path: &Path) -> Result<SecretString> {
+pub(crate) fn load_dpapi_blob(path: &Path) -> Result<SecretString> {
     let blob = std::fs::read(path)?;
     let plain = dpapi::unprotect(&blob)?;
     let s = String::from_utf8(plain.into_inner()).map_err(|e| CryptoError::Dpapi(e.to_string()))?;

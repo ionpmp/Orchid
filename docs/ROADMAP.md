@@ -67,8 +67,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — vault unlock UI (passphrase + Windows Hello via DPAPI master key); KDBX4 read/write, groups / entries / TOTP / search in `orchid-crypto::kdbx`
-- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase UX; Windows Hello unlock pending
-- [~] Biometric unlock via Windows Hello — password vault Hello gate + DPAPI-wrapped master key; FM encrypted-folder Hello pending
+- [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase UX + Windows Hello on FM passphrase dialog
+- [~] Biometric unlock via Windows Hello — password vault + FM encrypted-folder passphrase via DPAPI
 
 ### Storage
 - [~] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC done in `orchid-crypto::content`; managed-folder policy layer pending in `orchid-fs`
