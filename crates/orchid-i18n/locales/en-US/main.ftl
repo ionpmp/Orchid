@@ -199,6 +199,8 @@ settings-field-clear-clipboard-seconds = Clear clipboard after copy
 
 command.settings.open.name = Open settings
 command.settings.open.desc = Show the settings panel
+command.password.lock.name = Lock password vault
+command.password.lock.desc = Clear the unlocked password database from memory
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)
@@ -433,6 +435,7 @@ password-label-notes = Notes
 password-label-totp = TOTP
 password-action-copy = Copy
 password-action-open = Open
+password-action-lock = Lock
 
 password-username-copied = Username copied
 

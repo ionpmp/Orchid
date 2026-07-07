@@ -52,23 +52,23 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Widget: Weather
 - [ ] Widget: Moon (astronomy)
 - [ ] Widget: System indicators
-- [~] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
+- [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [~] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [ ] Widget: Media player (audio/video)
 - [ ] Widget: RSS feed
-- [ ] Widget: Password manager
+- [~] Widget: Password manager — unlock UI (passphrase + Hello), search, copy, TOTP; lock vault button + command
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
-- [ ] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW)
+- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate in viewer widget; HEIC/SVG/RAW pending
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, fit width/page, zoom; requires bundled `pdfium.dll`
 - [ ] Text with syntax highlighting (Tree-sitter)
 - [ ] Archives (browse + extract)
 
 ### Security
-- [~] Password manager (KDBX4 format, custom UX) — vault unlock UI (passphrase + Windows Hello via DPAPI master key); KDBX4 read/write, groups / entries / TOTP / search in `orchid-crypto::kdbx`
+- [~] Password manager (KDBX4 format, custom UX) — vault unlock/lock UI (passphrase + Windows Hello); KDBX4 read/write, groups / entries / TOTP / search in `orchid-crypto::kdbx`
 - [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase UX + Windows Hello on FM passphrase dialog
-- [~] Biometric unlock via Windows Hello — password vault + FM encrypted-folder passphrase via DPAPI
+- [x] Biometric unlock via Windows Hello — password vault + FM encrypted-folder passphrase via DPAPI
 
 ### Storage
 - [~] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC done in `orchid-crypto::content`; managed-folder policy layer pending in `orchid-fs`

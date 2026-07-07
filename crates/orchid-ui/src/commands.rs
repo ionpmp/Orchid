@@ -10,7 +10,7 @@ use orchid_core::{
 
 /// Commands handled primarily by the main window (palette + shortcuts).
 pub fn build_ui_command_set() -> Vec<(CommandDescriptor, ActionFactory)> {
-    vec![settings_open_command()]
+    vec![settings_open_command(), password_lock_command()]
 }
 
 fn settings_open_command() -> (CommandDescriptor, ActionFactory) {
@@ -32,6 +32,25 @@ fn settings_open_command() -> (CommandDescriptor, ActionFactory) {
     (descriptor, factory)
 }
 
+fn password_lock_command() -> (CommandDescriptor, ActionFactory) {
+    let descriptor = CommandDescriptor {
+        id: "password.lock".into(),
+        display_name_key: "command.password.lock.name".into(),
+        description_key: Some("command.password.lock.desc".into()),
+        category: CommandCategory::Settings,
+        default_shortcut: None,
+        terminal_invocation: Some(TerminalInvocation {
+            verb: "password lock".into(),
+            args: Vec::new(),
+        }),
+        icon_name: Some("password".into()),
+    };
+    let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
+        Ok(Box::new(PasswordLockAction) as Box<dyn Action>)
+    });
+    (descriptor, factory)
+}
+
 struct SettingsOpenAction;
 
 #[async_trait]
@@ -44,6 +63,24 @@ impl Action for SettingsOpenAction {
     }
     fn command_text(&self) -> String {
         "orc settings open".into()
+    }
+    async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
+        Ok(ActionOutcome::ok())
+    }
+}
+
+struct PasswordLockAction;
+
+#[async_trait]
+impl Action for PasswordLockAction {
+    fn id(&self) -> &'static str {
+        "password.lock"
+    }
+    fn display_name_key(&self) -> &'static str {
+        "command.password.lock.name"
+    }
+    fn command_text(&self) -> String {
+        "orc password lock".into()
     }
     async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
         Ok(ActionOutcome::ok())

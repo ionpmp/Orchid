@@ -102,6 +102,24 @@ pub fn unlock_with_biometric(
     Ok(())
 }
 
+/// Lock the vault and refresh live password widgets.
+pub fn lock_vault(vault: Arc<orchid_crypto::PasswordVault>, bus: Arc<orchid_core::EventBus>) {
+    vault.lock();
+    notify_vault_locked(&bus);
+}
+
+fn notify_vault_locked(bus: &orchid_core::EventBus) {
+    for entry in PASSWORD_LIVE.iter() {
+        entry.value().on_vault_locked();
+        bus.publish(
+            orchid_core::EventSource::Widget(*entry.key()),
+            WidgetSnapshotUpdated {
+                instance_id: *entry.key(),
+            },
+        );
+    }
+}
+
 fn notify_vault_unlocked(vault: &orchid_crypto::PasswordVault, bus: &orchid_core::EventBus) {
     for entry in PASSWORD_LIVE.iter() {
         entry.value().on_vault_unlocked(vault);
@@ -207,6 +225,15 @@ impl PasswordHandle {
         if vault.is_unlocked() {
             self.refresh_entries(None);
         }
+    }
+
+    fn on_vault_locked(&self) {
+        let mut state = self.state.write();
+        state.entries.clear();
+        state.selected_id = None;
+        state.error = None;
+        state.unlock_error = None;
+        state.search_query.clear();
     }
 
     fn refresh_entries(&self, query: Option<String>) {

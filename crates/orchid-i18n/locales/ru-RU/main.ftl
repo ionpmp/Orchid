@@ -194,6 +194,8 @@ settings-field-clear-clipboard-seconds = Очищать буфер после к
 
 command.settings.open.name = Открыть настройки
 command.settings.open.desc = Показать панель настроек
+command.password.lock.name = Заблокировать хранилище паролей
+command.password.lock.desc = Очистить разблокированную базу паролей из памяти
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Разделить горизонтально (Ctrl+Shift+H)
@@ -426,6 +428,7 @@ password-label-notes = Заметки
 password-label-totp = TOTP
 password-action-copy = Копировать
 password-action-open = Открыть
+password-action-lock = Заблокировать
 
 password-username-copied = Имя пользователя скопировано
 

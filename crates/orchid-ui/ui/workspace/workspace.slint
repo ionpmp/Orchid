@@ -46,6 +46,7 @@ export component WorkspaceView inherits Rectangle {
     callback password-open-url(string);
     callback password-unlock-submit(string);
     callback password-unlock-biometric();
+    callback password-lock-vault();
 
     callback viewer-image-zoom-in(string);
     callback viewer-image-zoom-out(string);
@@ -254,6 +255,7 @@ export component WorkspaceView inherits Rectangle {
                     password-open-url(url) => { root.password-open-url(url); }
                     password-unlock-submit(pw) => { root.password-unlock-submit(pw); }
                     password-unlock-biometric => { root.password-unlock-biometric(); }
+                    password-lock-vault => { root.password-lock-vault(); }
                     viewer-image-zoom-in(id) => { root.viewer-image-zoom-in(id); }
                     viewer-image-zoom-out(id) => { root.viewer-image-zoom-out(id); }
                     viewer-image-fit(id) => { root.viewer-image-fit(id); }

@@ -424,6 +424,7 @@ impl MainWindowController {
         g.set_password_label_totp(mgr.tr("password-label-totp").into());
         g.set_password_action_copy(mgr.tr("password-action-copy").into());
         g.set_password_action_open(mgr.tr("password-action-open").into());
+        g.set_password_action_lock(mgr.tr("password-action-lock").into());
         g.set_password_unlock_label(mgr.tr("password-unlock-label").into());
         g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());
         g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
@@ -986,6 +987,14 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_password_unlock_biometric();
+                }
+            }
+        });
+        self.window.on_password_lock_vault({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_lock_vault();
                 }
             }
         });
@@ -2051,6 +2060,10 @@ impl MainWindowController {
             self.open_settings("general");
             return;
         }
+        if cmd_id == "password.lock" {
+            self.on_password_lock_vault();
+            return;
+        }
         let action = match self
             .command_registry
             .build_action(cmd_id, ParsedCommand::default())
@@ -2826,6 +2839,14 @@ impl MainWindowController {
                 c.schedule_rebuild();
             }
         }));
+    }
+
+    fn on_password_lock_vault(self: &Arc<Self>) {
+        orchid_widgets::builtin::password::lock_vault(
+            self.password_vault.clone(),
+            self.bus.clone(),
+        );
+        self.schedule_rebuild_after_password_unlock();
     }
 
     fn find_active_password_widget(&self) -> Option<Uuid> {
