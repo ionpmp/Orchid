@@ -190,6 +190,19 @@ export struct PasswordDetail {
     tags: [PasswordTagChip],
 }
 
+export struct PasswordAddDialogState {
+    visible: bool,
+    title: string,
+    title-label: string,
+    username-label: string,
+    password-label: string,
+    url-label: string,
+    submit-label: string,
+    cancel-label: string,
+    error: string,
+    request-autofocus: bool,
+}
+
 export struct PasswordModel {
     is-unlocked: bool,
     lock-reason: string,
@@ -201,6 +214,7 @@ export struct PasswordModel {
     toast-message: string,
     toast-visible: bool,
     request-autofocus: bool,
+    add-dialog: PasswordAddDialogState,
 }
 
 export struct ViewerSyntaxSegment {

@@ -118,6 +118,27 @@ impl PasswordVault {
     pub fn lock(&self) {
         *self.database.write() = None;
     }
+
+    /// Persist unsaved KDBX changes using the DPAPI-stored master key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CryptoError::KdbxOpen`] when the vault is locked,
+    /// [`CryptoError::MasterKeyNotStored`] when no master key blob exists,
+    /// and propagates KDBX / I/O errors from [`PasswordDatabase::change_master`].
+    pub fn persist(&self) -> Result<()> {
+        let Some(db) = self.database() else {
+            return Err(CryptoError::KdbxOpen("vault is locked".into()));
+        };
+        if !db.is_dirty() {
+            return Ok(());
+        }
+        if !self.has_stored_master() {
+            return Err(CryptoError::MasterKeyNotStored);
+        }
+        let master = load_dpapi_blob(&self.key_path)?;
+        db.change_master(master)
+    }
 }
 
 pub(crate) fn verify_biometric(prompt: &str) -> Result<()> {

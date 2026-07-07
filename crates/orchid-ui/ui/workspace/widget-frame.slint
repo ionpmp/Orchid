@@ -56,6 +56,9 @@ export component WidgetFrame inherits Rectangle {
     callback password-unlock-submit(string);
     callback password-unlock-biometric();
     callback password-lock-vault();
+    callback password-add-entry-request();
+    callback password-add-entry-commit(string, string, string, string);
+    callback password-add-entry-cancel();
 
     callback viewer-image-zoom-in(string);
     callback viewer-image-zoom-out(string);
@@ -315,6 +318,11 @@ export component WidgetFrame inherits Rectangle {
             unlock-submit(pw) => { root.password-unlock-submit(pw); }
             unlock-biometric => { root.password-unlock-biometric(); }
             lock-vault => { root.password-lock-vault(); }
+            add-entry-request => { root.password-add-entry-request(); }
+            add-entry-commit(title, username, password, url) => {
+                root.password-add-entry-commit(title, username, password, url);
+            }
+            add-entry-cancel => { root.password-add-entry-cancel(); }
         }
 
         if model.type-id == "viewer" : Rectangle {

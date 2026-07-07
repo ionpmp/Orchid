@@ -133,6 +133,12 @@ impl StartupWindowController {
         g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());
         g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
         g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
+        g.set_password_action_add(mgr.tr("password-action-add").into());
+        g.set_password_add_title(mgr.tr("password-add-title").into());
+        g.set_password_add_submit(mgr.tr("password-add-submit").into());
+        g.set_password_add_cancel(mgr.tr("password-add-cancel").into());
+        g.set_password_add_error_title(mgr.tr("password-add-error-title").into());
+        g.set_password_entry_added(mgr.tr("password-entry-added").into());
     }
 
     fn apply_app_state(&self) {

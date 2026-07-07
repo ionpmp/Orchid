@@ -434,6 +434,7 @@ viewer-archive-select-preview = Select a file to preview
 viewer-archive-binary-preview = Binary file, { $size }
 
 password-select-entry = Select an entry
+password-label-title = Title
 password-label-username = Username
 password-label-password = Password
 password-label-url = URL
@@ -442,6 +443,12 @@ password-label-totp = TOTP
 password-action-copy = Copy
 password-action-open = Open
 password-action-lock = Lock
+password-action-add = Add
+password-add-title = New entry
+password-add-submit = Save
+password-add-cancel = Cancel
+password-add-error-title = Title is required
+password-entry-added = Entry saved
 
 password-username-copied = Username copied
 

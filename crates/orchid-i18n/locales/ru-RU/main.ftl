@@ -427,6 +427,7 @@ viewer-archive-select-preview = Выберите файл для предпро�
 viewer-archive-binary-preview = Бинарный файл, { $size }
 
 password-select-entry = Выберите запись
+password-label-title = Название
 password-label-username = Имя пользователя
 password-label-password = Пароль
 password-label-url = URL
@@ -435,6 +436,12 @@ password-label-totp = TOTP
 password-action-copy = Копировать
 password-action-open = Открыть
 password-action-lock = Заблокировать
+password-action-add = Добавить
+password-add-title = Новая запись
+password-add-submit = Сохранить
+password-add-cancel = Отмена
+password-add-error-title = Укажите название
+password-entry-added = Запись сохранена
 
 password-username-copied = Имя пользователя скопировано
 

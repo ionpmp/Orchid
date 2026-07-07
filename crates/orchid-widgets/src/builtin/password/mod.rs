@@ -1,10 +1,10 @@
 //! Password-manager widget.
 //!
-//! The widget is list + search + copy only; add / edit / generate UIs
-//! ship in a later task. The database is expected to already be
-//! unlocked — the unlock dialog is a separate piece of UI that the
-//! widget does not own.
+//! Supports list, search, copy, and creating new entries. Edit / generate UIs
+//! ship in a later task. The database is expected to already be unlocked —
+//! the unlock dialog is a separate piece of UI that the widget does not own.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -73,6 +73,22 @@ pub async fn copy_totp(instance_id: Uuid, entry_id: &str) -> Result<(), String> 
         .map(|r| Arc::clone(r.value()))
         .ok_or_else(|| "password widget not live".to_string())?;
     inner.copy_totp(entry_id).await
+}
+
+/// Create a new vault entry, persist to disk, and refresh the live widget.
+pub fn create_entry(
+    instance_id: Uuid,
+    vault: Arc<orchid_crypto::PasswordVault>,
+    title: String,
+    username: String,
+    password: String,
+    url: Option<String>,
+) -> Result<Uuid, String> {
+    let inner = PASSWORD_LIVE
+        .get(&instance_id)
+        .map(|r| Arc::clone(r.value()))
+        .ok_or_else(|| "password widget not live".to_string())?;
+    inner.create_entry(vault, title, username, password, url)
 }
 
 /// Unlock the vault with a master passphrase and refresh live widgets.
@@ -352,6 +368,49 @@ impl PasswordHandle {
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    fn create_entry(
+        &self,
+        vault: Arc<orchid_crypto::PasswordVault>,
+        title: String,
+        username: String,
+        password: String,
+        url: Option<String>,
+    ) -> Result<Uuid, String> {
+        let title = title.trim().to_string();
+        if title.is_empty() {
+            return Err("title required".into());
+        }
+        let db = vault.database().ok_or_else(|| "vault locked".to_string())?;
+        let group_id = db.root_group().map_err(|e| e.to_string())?.id;
+        let now = Utc::now();
+        let id = Uuid::new_v4();
+        let entry = orchid_crypto::PasswordEntry {
+            id,
+            title,
+            username,
+            password: secrecy::SecretString::new(password),
+            url: url.filter(|s| !s.trim().is_empty()),
+            notes: None,
+            tags: Vec::new(),
+            custom_fields: BTreeMap::new(),
+            totp: None,
+            created_at: now,
+            modified_at: now,
+            group_id,
+        };
+        db.add_entry(entry).map_err(|e| e.to_string())?;
+        vault.persist().map_err(|e| e.to_string())?;
+        self.refresh_entries(None);
+        self.state.write().selected_id = Some(id);
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+        Ok(id)
     }
 }
 

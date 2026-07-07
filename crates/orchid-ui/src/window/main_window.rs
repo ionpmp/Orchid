@@ -59,7 +59,8 @@ use crate::widgets::terminal::{
 };
 use crate::terminal_raster;
 use crate::slint_generated::{
-    AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordDetail,
+    AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordAddDialogState,
+    PasswordDetail,
     PasswordEntryItem, PasswordModel, PasswordTagChip, RecentFileItemEntry, RecentFilesModel,
     RssItemEntry, RssModel, SearchCandidateEntry,
     SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalDividerModel,
@@ -144,6 +145,8 @@ pub struct MainWindowController {
     password_toasts: Arc<RwLock<HashMap<Uuid, (String, bool)>>>,
     /// One-shot autofocus request for password search input after dock creation.
     password_autofocus_pending: Arc<RwLock<HashMap<Uuid, bool>>>,
+    /// Per password-manager instance: add-entry dialog overlay state.
+    password_add_dialogs: Arc<RwLock<HashMap<Uuid, PasswordAddDialogOverlay>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
     /// Last interacted file-manager instance and pane (for drop targeting).
@@ -171,6 +174,13 @@ pub struct MainWindowController {
     recent_files: Arc<RecentFilesStore>,
     password_vault: Arc<orchid_crypto::PasswordVault>,
     fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PasswordAddDialogOverlay {
+    visible: bool,
+    error: Option<String>,
+    request_autofocus: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -326,6 +336,7 @@ impl MainWindowController {
             search_autofocus_pending: Arc::new(Mutex::new(None)),
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
+            password_add_dialogs: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
             fm_focus: Arc::new(Mutex::new(None)),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
@@ -432,6 +443,12 @@ impl MainWindowController {
         g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());
         g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
         g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
+        g.set_password_action_add(mgr.tr("password-action-add").into());
+        g.set_password_add_title(mgr.tr("password-add-title").into());
+        g.set_password_add_submit(mgr.tr("password-add-submit").into());
+        g.set_password_add_cancel(mgr.tr("password-add-cancel").into());
+        g.set_password_add_error_title(mgr.tr("password-add-error-title").into());
+        g.set_password_entry_added(mgr.tr("password-entry-added").into());
         Ok(())
     }
 
@@ -998,6 +1015,30 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_password_lock_vault();
+                }
+            }
+        });
+        self.window.on_password_add_entry_request({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_add_entry_request();
+                }
+            }
+        });
+        self.window.on_password_add_entry_commit({
+            let t = t.clone();
+            move |title, username, password, url| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_add_entry_commit(&title, &username, &password, &url);
+                }
+            }
+        });
+        self.window.on_password_add_entry_cancel({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_add_entry_cancel();
                 }
             }
         });
@@ -2233,6 +2274,7 @@ impl MainWindowController {
                 c.search_selection.write().remove(&u);
                 c.password_toasts.write().remove(&u);
                 c.password_autofocus_pending.write().remove(&u);
+                c.password_add_dialogs.write().remove(&u);
                 c.schedule_rebuild();
             }
         });
@@ -2964,6 +3006,85 @@ impl MainWindowController {
         self.schedule_rebuild_after_password_unlock();
     }
 
+    fn on_password_add_entry_request(self: &Arc<Self>) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        self.password_add_dialogs.write().insert(
+            inst_id,
+            PasswordAddDialogOverlay {
+                visible: true,
+                error: None,
+                request_autofocus: true,
+            },
+        );
+        self.schedule_rebuild_after_password_unlock();
+    }
+
+    fn on_password_add_entry_commit(
+        self: &Arc<Self>,
+        title: &SharedString,
+        username: &SharedString,
+        password: &SharedString,
+        url: &SharedString,
+    ) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        let url_opt = if url.is_empty() {
+            None
+        } else {
+            Some(url.to_string())
+        };
+        match orchid_widgets::builtin::password::create_entry(
+            inst_id,
+            self.password_vault.clone(),
+            title.to_string(),
+            username.to_string(),
+            password.to_string(),
+            url_opt,
+        ) {
+            Ok(_) => {
+                self.password_add_dialogs.write().remove(&inst_id);
+                let msg = self.locale.tr("password-entry-added");
+                self.password_toasts.write().insert(inst_id, (msg, true));
+                self.schedule_rebuild_after_password_unlock();
+                let t = Arc::downgrade(self);
+                let _ = slint::spawn_local(Compat::new(async move {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    if let Some(c) = t.upgrade() {
+                        c.password_toasts.write().remove(&inst_id);
+                        c.schedule_rebuild_after_password_unlock();
+                    }
+                }));
+            }
+            Err(e) => {
+                let error = if e == "title required" {
+                    self.locale.tr("password-add-error-title")
+                } else {
+                    e
+                };
+                self.password_add_dialogs.write().insert(
+                    inst_id,
+                    PasswordAddDialogOverlay {
+                        visible: true,
+                        error: Some(error),
+                        request_autofocus: false,
+                    },
+                );
+                self.schedule_rebuild_after_password_unlock();
+            }
+        }
+    }
+
+    fn on_password_add_entry_cancel(self: &Arc<Self>) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        self.password_add_dialogs.write().remove(&inst_id);
+        self.schedule_rebuild_after_password_unlock();
+    }
+
     fn find_active_password_widget(&self) -> Option<Uuid> {
         let w = self.workspace_manager.active().ok()?;
         for inst in self.widget_manager.instances_for_workspace(w.id) {
@@ -3426,7 +3547,7 @@ impl MainWindowController {
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(),
-                        empty_password_model(),
+                        empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
@@ -3447,7 +3568,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3467,7 +3588,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3487,7 +3608,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3507,7 +3628,7 @@ impl MainWindowController {
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3542,7 +3663,7 @@ impl MainWindowController {
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
                         empty_media_model(),
-                        empty_password_model(),
+                        empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
@@ -3563,7 +3684,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     build_media_model(m),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3578,6 +3699,21 @@ impl MainWindowController {
                         .unwrap_or(false);
                     if autofocus {
                         self.password_autofocus_pending.write().remove(&pl.instance_id);
+                    }
+                    let add_dialog = self
+                        .password_add_dialogs
+                        .read()
+                        .get(&pl.instance_id)
+                        .cloned()
+                        .unwrap_or_default();
+                    if add_dialog.request_autofocus {
+                        self.password_add_dialogs.write().insert(
+                            pl.instance_id,
+                            PasswordAddDialogOverlay {
+                                request_autofocus: false,
+                                ..add_dialog.clone()
+                            },
+                        );
                     }
                     (
                         tstr,
@@ -3594,7 +3730,7 @@ impl MainWindowController {
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(),
-                        build_password_model(p, toast, autofocus),
+                        build_password_model(p, toast, autofocus, add_dialog, &self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
@@ -3615,7 +3751,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     build_viewer_model(v, &self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3635,7 +3771,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     build_recent_files_model(r, &self.locale),
                     empty_file_manager_model(&self.locale),
@@ -3676,7 +3812,7 @@ impl MainWindowController {
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(),
-                        empty_password_model(),
+                        empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         build_file_manager_model(
@@ -3702,7 +3838,7 @@ impl MainWindowController {
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
-                    empty_password_model(),
+                    empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
@@ -6231,7 +6367,7 @@ fn default_frame_data_extended(
         empty_rss_model(locale),
         empty_search_model(locale),
         empty_media_model(),
-        empty_password_model(),
+        empty_password_model(locale),
         empty_viewer_model(locale),
         empty_recent_files_model(locale),
         empty_file_manager_model(locale),
@@ -6399,7 +6535,22 @@ fn empty_password_detail() -> PasswordDetail {
     }
 }
 
-fn empty_password_model() -> PasswordModel {
+fn empty_password_add_dialog(locale: &LocaleManager) -> PasswordAddDialogState {
+    PasswordAddDialogState {
+        visible: false,
+        title: locale.tr("password-add-title").into(),
+        title_label: locale.tr("password-label-title").into(),
+        username_label: locale.tr("password-label-username").into(),
+        password_label: locale.tr("password-label-password").into(),
+        url_label: locale.tr("password-label-url").into(),
+        submit_label: locale.tr("password-add-submit").into(),
+        cancel_label: locale.tr("password-add-cancel").into(),
+        error: SharedString::new(),
+        request_autofocus: false,
+    }
+}
+
+fn empty_password_model(locale: &LocaleManager) -> PasswordModel {
     PasswordModel {
         is_unlocked: false,
         lock_reason: SharedString::new(),
@@ -6411,6 +6562,7 @@ fn empty_password_model() -> PasswordModel {
         toast_message: SharedString::new(),
         toast_visible: false,
         request_autofocus: false,
+        add_dialog: empty_password_add_dialog(locale),
     }
 }
 
@@ -7818,6 +7970,8 @@ fn build_password_model(
     p: &orchid_widgets::PasswordManagerPayload,
     toast: Option<(String, bool)>,
     autofocus: bool,
+    add_dialog: PasswordAddDialogOverlay,
+    locale: &LocaleManager,
 ) -> PasswordModel {
     let entries: Vec<PasswordEntryItem> = p
         .entries
@@ -7863,6 +8017,11 @@ fn build_password_model(
 
     let (toast_msg, toast_vis) = toast.unwrap_or((String::new(), false));
 
+    let mut dialog = empty_password_add_dialog(locale);
+    dialog.visible = add_dialog.visible;
+    dialog.error = add_dialog.error.unwrap_or_default().into();
+    dialog.request_autofocus = add_dialog.request_autofocus;
+
     PasswordModel {
         is_unlocked: p.is_unlocked,
         lock_reason: p.lock_reason.clone().unwrap_or_default().into(),
@@ -7874,6 +8033,7 @@ fn build_password_model(
         toast_message: toast_msg.into(),
         toast_visible: toast_vis,
         request_autofocus: autofocus,
+        add_dialog: dialog,
     }
 }
 
