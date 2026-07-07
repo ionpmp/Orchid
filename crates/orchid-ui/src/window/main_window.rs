@@ -3174,7 +3174,7 @@ impl MainWindowController {
             new_idx.clamp(0, (count - 1) as i32)
         };
         self.search_selection.write().insert(instance_id, clamped);
-        self.schedule_rebuild();
+        let _ = self.patch_workspace_frames(&[instance_id]);
     }
 
     fn on_terminal_viewport(self: &Arc<Self>, id: &SharedString, w: f32, h: f32) {

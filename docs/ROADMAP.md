@@ -53,10 +53,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators
 - [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
-- [~] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
+- [x] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [ ] Widget: Media player (audio/video)
 - [x] Widget: RSS feed
-- [~] Widget: Password manager — unlock UI (passphrase + Hello), search, copy, TOTP, add entry; lock vault button + command
+- [x] Widget: Password manager — unlock UI (passphrase + Hello), search, copy, TOTP, add entry; lock vault button + command
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
