@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_compat::Compat;
 use parking_lot::Mutex;
@@ -154,6 +154,8 @@ pub struct MainWindowController {
     canvas_scroll: Arc<Mutex<(f32, f32)>>,
     /// Last winit keyboard modifier state (Ctrl+drop → copy).
     keyboard_modifiers: Arc<Mutex<slint::winit_030::winit::keyboard::ModifiersState>>,
+    /// Leader-key chord window deadline; `None` when not armed.
+    leader_pending_until: Arc<Mutex<Option<Instant>>>,
     /// Pending OS file-drop paths batched across rapid `DroppedFile` events.
     os_drop_batch: Arc<Mutex<OsDropBatch>>,
     /// Long-press widget catalog (search + pick).
@@ -331,6 +333,7 @@ impl MainWindowController {
             keyboard_modifiers: Arc::new(Mutex::new(
                 slint::winit_030::winit::keyboard::ModifiersState::empty(),
             )),
+            leader_pending_until: Arc::new(Mutex::new(None)),
             os_drop_batch: Arc::new(Mutex::new(OsDropBatch::default())),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             catalog_items,
@@ -1902,6 +1905,91 @@ impl MainWindowController {
             .unwrap_or_else(|| Shortcut::parse("Ctrl+Shift+P").expect("valid default shortcut"))
     }
 
+    fn leader_key_shortcut(&self) -> Option<Shortcut> {
+        let key = self.config.read().shortcuts.leader_key.as_ref()?;
+        if key.is_empty() {
+            return None;
+        }
+        Shortcut::parse(key).ok()
+    }
+
+    fn clear_leader_pending(&self) {
+        *self.leader_pending_until.lock() = None;
+    }
+
+    fn try_activate_leader(
+        &self,
+        mods: slint::winit_030::winit::keyboard::ModifiersState,
+        logical: &slint::winit_030::winit::keyboard::Key,
+    ) -> bool {
+        let Some(sc) = self.leader_key_shortcut() else {
+            return false;
+        };
+        if !winit_modifiers_match(sc.modifiers, mods) || !winit_key_matches(sc.key, logical) {
+            return false;
+        }
+        let timeout_ms = self.config.read().shortcuts.leader_timeout_ms;
+        *self.leader_pending_until.lock() =
+            Some(Instant::now() + Duration::from_millis(timeout_ms));
+        debug!(target: "orchid_ui::shortcuts", "leader-key armed");
+        true
+    }
+
+    fn try_leader_chord(
+        &self,
+        mods: slint::winit_030::winit::keyboard::ModifiersState,
+        logical: &slint::winit_030::winit::keyboard::Key,
+    ) -> Option<String> {
+        use slint::winit_030::winit::keyboard::{Key, NamedKey};
+        {
+            let guard = self.leader_pending_until.lock();
+            let until = *guard?;
+            if Instant::now() > until {
+                drop(guard);
+                self.clear_leader_pending();
+                return None;
+            }
+        }
+
+        if mods.control_key() || mods.alt_key() || mods.super_key() {
+            self.clear_leader_pending();
+            return None;
+        }
+
+        let key_str = match logical {
+            Key::Character(s) => {
+                let ch = s.chars().next()?;
+                if ch.is_ascii_alphabetic() {
+                    ch.to_ascii_lowercase().to_string()
+                } else {
+                    self.clear_leader_pending();
+                    return None;
+                }
+            }
+            Key::Named(NamedKey::Escape) => {
+                self.clear_leader_pending();
+                return None;
+            }
+            _ => {
+                self.clear_leader_pending();
+                return None;
+            }
+        };
+
+        let cmd_id = self
+            .config
+            .read()
+            .shortcuts
+            .leader_bindings
+            .get(&key_str)
+            .cloned();
+        self.clear_leader_pending();
+        if let Some(ref id) = cmd_id {
+            debug!(target: "orchid_ui::shortcuts", cmd_id = %id, key = %key_str, "leader chord");
+        }
+        cmd_id
+    }
+
     fn apply_command_shortcut_overrides(self: &Arc<Self>) {
         let overrides = self.config.read().shortcuts.overrides.clone();
         if overrides.is_empty() {
@@ -2078,6 +2166,10 @@ impl MainWindowController {
     }
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
+        if cmd_id == "command-palette" {
+            self.toggle_command_palette();
+            return;
+        }
         if cmd_id == "settings.open" {
             self.open_settings("general");
             return;
@@ -3836,8 +3928,18 @@ impl MainWindowController {
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {
                                 c.on_settings_dismiss();
+                            } else if c.leader_pending_until.lock().is_some()
+                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                            {
+                                c.clear_leader_pending();
                             } else {
                                 let mods = *c.keyboard_modifiers.lock();
+                                if let Some(cmd_id) = c.try_leader_chord(mods, &event.logical_key)
+                                {
+                                    c.dispatch_registry_shortcut(cmd_id);
+                                } else if c.try_activate_leader(mods, &event.logical_key) {
+                                    // leader armed; consume without dispatching
+                                } else {
                                 let palette_sc = c.command_palette_shortcut();
                                 if winit_modifiers_match(palette_sc.modifiers, mods)
                                     && winit_key_matches(palette_sc.key, &event.logical_key)
@@ -3851,6 +3953,7 @@ impl MainWindowController {
                                     {
                                         c.dispatch_registry_shortcut(cmd_id);
                                     }
+                                }
                                 }
                             }
                         }
@@ -7084,6 +7187,35 @@ fn build_settings_fields(
             );
         }
         "shortcuts" => {
+            push(
+                "settings-field-leader-key",
+                cfg
+                    .shortcuts
+                    .leader_key
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| locale.tr("settings-value-none"))
+                    .into(),
+            );
+            push(
+                "settings-field-leader-timeout",
+                format!("{} ms", cfg.shortcuts.leader_timeout_ms).into(),
+            );
+            if cfg.shortcuts.leader_bindings.is_empty() {
+                push(
+                    "settings-field-leader-bindings",
+                    locale.tr("settings-value-none").into(),
+                );
+            } else {
+                let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
+                pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+                for (key, cmd) in pairs {
+                    rows.push(SettingsFieldRow {
+                        label: format!("leader → {key}").into(),
+                        value: cmd.clone().into(),
+                    });
+                }
+            }
             if cfg.shortcuts.overrides.is_empty() {
                 push(
                     "settings-field-shortcut-overrides",

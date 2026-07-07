@@ -52,6 +52,11 @@ pen-double-tap-action = "switch-tool"
 # Example:
 # overrides = { command-palette = "Ctrl+Shift+P" }
 overrides = {}
+# Leader-key mode: press leader-key, then a letter within leader-timeout-ms.
+leader-key = "Ctrl+Shift+Space"
+leader-timeout-ms = 1200
+# leader-key = "" disables leader mode.
+# leader-bindings = { p = "command-palette", s = "settings.open" }
 
 [locale]
 # BCP 47 language tag.

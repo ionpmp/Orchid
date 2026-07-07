@@ -162,13 +162,52 @@ pub enum PenDoubleTapAction {
     Erase,
 }
 
-/// User-configured keyboard shortcut overrides.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// User-configured keyboard shortcut overrides and leader-key mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct ShortcutsConfig {
     /// Map of command identifier (e.g. `"command-palette"`) to a shortcut
     /// string like `"Ctrl+Shift+P"`.
     pub overrides: HashMap<String, String>,
+    /// Leader-key combo (e.g. `"Ctrl+Shift+Space"`). `None` or empty disables
+    /// leader mode.
+    #[serde(default = "default_leader_key")]
+    pub leader_key: Option<String>,
+    /// Milliseconds to wait for the second key after the leader combo.
+    #[serde(default = "default_leader_timeout_ms")]
+    pub leader_timeout_ms: u64,
+    /// Map of single-letter keys to command ids fired after the leader combo.
+    #[serde(default = "default_leader_bindings")]
+    pub leader_bindings: HashMap<String, String>,
+}
+
+impl Default for ShortcutsConfig {
+    fn default() -> Self {
+        Self {
+            overrides: HashMap::new(),
+            leader_key: default_leader_key(),
+            leader_timeout_ms: default_leader_timeout_ms(),
+            leader_bindings: default_leader_bindings(),
+        }
+    }
+}
+
+fn default_leader_key() -> Option<String> {
+    Some("Ctrl+Shift+Space".into())
+}
+
+fn default_leader_timeout_ms() -> u64 {
+    1200
+}
+
+fn default_leader_bindings() -> HashMap<String, String> {
+    HashMap::from([
+        ("p".into(), "command-palette".into()),
+        ("s".into(), "settings.open".into()),
+        ("l".into(), "password.lock".into()),
+        ("n".into(), "workspace.switch_next".into()),
+        ("b".into(), "workspace.switch_previous".into()),
+    ])
 }
 
 /// Locale, formatting, and calendar preferences.
@@ -389,6 +428,20 @@ mod tests {
         let mut cfg = OrchidConfig::default();
         cfg.privacy.history_retention_days = 100_000;
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn shortcuts_config_defaults_include_leader_mode() {
+        let cfg = ShortcutsConfig::default();
+        assert_eq!(cfg.leader_key.as_deref(), Some("Ctrl+Shift+Space"));
+        assert_eq!(cfg.leader_timeout_ms, 1200);
+        assert_eq!(cfg.leader_bindings.get("p").map(String::as_str), Some("command-palette"));
+    }
+
+    #[test]
+    fn shortcuts_config_backward_compat() {
+        let cfg: OrchidConfig = toml::from_str("[shortcuts]\noverrides = {}").unwrap();
+        assert!(cfg.shortcuts.leader_bindings.contains_key("s"));
     }
 
     #[test]

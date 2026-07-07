@@ -88,7 +88,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Internationalization (11 languages, RTL)
 - [ ] Adaptive layouts (profiles for different screens)
 - [~] Gestures (touch, pen, mouse) — recogniser + default binding set done in `orchid-core`; real input plumbing pending in `orchid-ui`
-- [~] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, and user override application done; leader-key mode + chord tracking pending
+- [x] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, user override application, and configurable leader-key chord dispatch (`Ctrl+Shift+Space` + letter)
 - [x] Command palette — Ctrl+Shift+P overlay with fuzzy search and command dispatch
 - [ ] Onboarding tour, hint mode
 
