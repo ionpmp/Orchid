@@ -89,7 +89,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Adaptive layouts (profiles for different screens)
 - [~] Gestures (touch, pen, mouse) — recogniser + default binding set done in `orchid-core`; real input plumbing pending in `orchid-ui`
 - [~] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, and user override application done; leader-key mode + chord tracking pending
-- [~] Command palette — fuzzy search engine and result types done in `orchid-core`; palette UI pending in `orchid-ui`
+- [x] Command palette — Ctrl+Shift+P overlay with fuzzy search and command dispatch
 - [ ] Onboarding tour, hint mode
 
 ### Additional

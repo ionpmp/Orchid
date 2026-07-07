@@ -102,6 +102,10 @@ search-source-files = Файлы
 search-source-commands = Команды
 search-source-settings = Настройки
 
+# ---- Command palette ----
+command-palette-placeholder = Выполнить команду…
+command-palette-empty = Все команды
+
 # ---- Media player ----
 media-no-session = Нет активного воспроизведения
 media-play = Воспроизвести

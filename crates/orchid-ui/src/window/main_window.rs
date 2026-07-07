@@ -27,8 +27,9 @@ use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use orchid_core::{
-    ActionContext, ActionDispatcher, CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter,
-    HandlerPriority, ParsedCommand, SubscriptionHandle,
+    ActionContext, ActionDispatcher, CommandDescriptor, CommandPalette, CommandRegistry,
+    ConfigUpdated, Event, EventBus, EventFilter, HandlerPriority, ParsedCommand, Shortcut,
+    SubscriptionHandle,
 };
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
@@ -67,9 +68,12 @@ use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary,
+    WorkspaceSummary, CommandPaletteGlobal,
 };
 use crate::theme::ThemeManager;
+
+/// Max command palette hits (fuzzy search or browse).
+const COMMAND_PALETTE_LIMIT: usize = 50;
 
 /// Top switcher (40) + bottom dock (64) = canvas height in [`workspace.slint`].
 const CANVAS_INSET_H: f32 = 40.0 + 64.0;
@@ -143,6 +147,9 @@ pub struct MainWindowController {
     /// Long-press widget catalog (search + pick).
     catalog: Arc<RwLock<CatalogUiState>>,
     catalog_items: ModelRc<DockWidgetType>,
+    command_palette: Arc<CommandPalette>,
+    palette: Arc<RwLock<PaletteUiState>>,
+    palette_candidates: ModelRc<SearchCandidateEntry>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -153,6 +160,14 @@ struct CatalogUiState {
     screen_x: f32,
     screen_y: f32,
     search_query: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PaletteUiState {
+    visible: bool,
+    query: String,
+    selected_index: i32,
+    request_autofocus: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -200,6 +215,7 @@ impl MainWindowController {
         storage: Arc<StateStore>,
         bus: Arc<EventBus>,
         command_registry: Arc<CommandRegistry>,
+        command_palette: Arc<CommandPalette>,
         widget_manager: Arc<WidgetManager>,
         workspace_manager: Arc<WorkspaceManager>,
         layout_engine: Arc<LayoutEngine>,
@@ -223,6 +239,8 @@ impl MainWindowController {
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let catalog_items: ModelRc<DockWidgetType> =
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
+        let palette_candidates: ModelRc<SearchCandidateEntry> =
+            ModelRc::new(VecModel::<SearchCandidateEntry>::default());
         let config_reload_pending = Arc::new(AtomicBool::new(false));
         let config_reload_flag = config_reload_pending.clone();
         let config_reload_sub = bus
@@ -244,6 +262,7 @@ impl MainWindowController {
             config,
             storage,
             command_registry,
+            command_palette: command_palette.clone(),
             bus,
             _config_reload_sub: config_reload_sub,
             widget_manager: widget_manager.clone(),
@@ -282,10 +301,13 @@ impl MainWindowController {
             os_drop_batch: Arc::new(Mutex::new(OsDropBatch::default())),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             catalog_items,
+            palette: Arc::new(RwLock::new(PaletteUiState::default())),
+            palette_candidates,
         });
         this.apply_theme()?;
         this.apply_strings()?;
         this.sync_widget_catalog_global();
+        this.sync_command_palette_global();
         this.apply_initial_mode()?;
         this.wire_callbacks()?;
         Ok(this)
@@ -588,6 +610,38 @@ impl MainWindowController {
             move |q| {
                 if let Some(c) = t.upgrade() {
                     c.on_catalog_search_changed(&q);
+                }
+            }
+        });
+        self.window.on_command_palette_query_changed({
+            let t = t.clone();
+            move |q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_command_palette_query_changed(&q);
+                }
+            }
+        });
+        self.window.on_command_palette_candidate_activated({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_command_palette_candidate_activated(&id);
+                }
+            }
+        });
+        self.window.on_command_palette_selection_changed({
+            let t = t.clone();
+            move |idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_command_palette_selection_changed(idx);
+                }
+            }
+        });
+        self.window.on_command_palette_dismiss({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_command_palette_dismiss();
                 }
             }
         });
@@ -1705,6 +1759,133 @@ impl MainWindowController {
         g.set_items(self.catalog_items.clone());
     }
 
+    fn command_palette_shortcut(&self) -> Shortcut {
+        self.config
+            .read()
+            .shortcuts
+            .overrides
+            .get("command-palette")
+            .and_then(|s| Shortcut::parse(s).ok())
+            .unwrap_or_else(|| Shortcut::parse("Ctrl+Shift+P").expect("valid default shortcut"))
+    }
+
+    fn sync_command_palette_global(self: &Arc<Self>) {
+        let st = self.palette.read().clone();
+        let candidates = build_palette_candidates(
+            &self.command_palette,
+            &self.command_registry,
+            &self.locale,
+            &st.query,
+            COMMAND_PALETTE_LIMIT,
+        );
+        sync_vec_model(&self.palette_candidates, candidates);
+        let count = self.palette_candidates.row_count();
+        let selected = if count == 0 {
+            -1
+        } else {
+            st.selected_index.clamp(0, count as i32 - 1)
+        };
+        let g = self.window.global::<CommandPaletteGlobal>();
+        g.set_visible(st.visible);
+        g.set_model(SearchModel {
+            query: st.query.clone().into(),
+            candidates: self.palette_candidates.clone(),
+            is_searching: false,
+            error: SharedString::new(),
+            selected_index: selected,
+            placeholder_text: self.locale.tr("command-palette-placeholder").into(),
+            empty_state_text: self.locale.tr("command-palette-empty").into(),
+            no_results_text: self.locale.tr("search-no-results-short").into(),
+            searching_text: self.locale.tr("search-searching").into(),
+            request_autofocus: st.request_autofocus,
+        });
+        if st.request_autofocus {
+            self.palette.write().request_autofocus = false;
+        }
+    }
+
+    fn toggle_command_palette(self: &Arc<Self>) {
+        if self.palette.read().visible {
+            self.on_command_palette_dismiss();
+        } else {
+            self.open_command_palette();
+        }
+    }
+
+    fn open_command_palette(self: &Arc<Self>) {
+        {
+            let mut st = self.palette.write();
+            st.visible = true;
+            st.query.clear();
+            st.selected_index = 0;
+            st.request_autofocus = true;
+        }
+        self.sync_command_palette_global();
+    }
+
+    fn on_command_palette_dismiss(self: &Arc<Self>) {
+        if !self.palette.read().visible {
+            return;
+        }
+        self.palette.write().visible = false;
+        self.sync_command_palette_global();
+    }
+
+    fn on_command_palette_query_changed(self: &Arc<Self>, query: &SharedString) {
+        {
+            let mut st = self.palette.write();
+            st.query = query.to_string();
+            st.selected_index = 0;
+        }
+        self.sync_command_palette_global();
+    }
+
+    fn on_command_palette_selection_changed(self: &Arc<Self>, new_idx: i32) {
+        let count = self.palette_candidates.row_count();
+        let clamped = if count == 0 {
+            -1
+        } else {
+            new_idx.clamp(0, count as i32 - 1)
+        };
+        self.palette.write().selected_index = clamped;
+        self.sync_command_palette_global();
+    }
+
+    fn on_command_palette_candidate_activated(self: &Arc<Self>, cmd_id: &SharedString) {
+        let id = cmd_id.to_string();
+        if id.is_empty() {
+            return;
+        }
+        self.on_command_palette_dismiss();
+        let this = Arc::clone(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            this.dispatch_command(&id).await;
+            this.schedule_rebuild();
+        }));
+    }
+
+    async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
+        let action = match self
+            .command_registry
+            .build_action(cmd_id, ParsedCommand::default())
+        {
+            Ok(a) => a,
+            Err(e) => {
+                warn!(?e, cmd_id = %cmd_id, "build command action");
+                return;
+            }
+        };
+        let ctx = ActionContext::new(
+            self.bus.clone(),
+            self.storage.clone(),
+            self.config.clone(),
+        );
+        let dispatcher = ActionDispatcher::new();
+        if let Err(e) = dispatcher.dispatch(action, &ctx).await {
+            warn!(?e, cmd_id = %cmd_id, "dispatch command");
+        }
+    }
+
     fn minimal_widget_size(wm: &WidgetManager, type_id: &str) -> WidgetSize {
         wm.registry()
             .get(type_id)
@@ -2459,25 +2640,7 @@ impl MainWindowController {
                 }
             }
             ActionTarget::RunCommand(cmd_id) => {
-                let action = match self
-                    .command_registry
-                    .build_action(&cmd_id, ParsedCommand::default())
-                {
-                    Ok(a) => a,
-                    Err(e) => {
-                        warn!(?e, cmd_id = %cmd_id, "build command action");
-                        return;
-                    }
-                };
-                let ctx = ActionContext::new(
-                    self.bus.clone(),
-                    self.storage.clone(),
-                    self.config.clone(),
-                );
-                let dispatcher = ActionDispatcher::new();
-                if let Err(e) = dispatcher.dispatch(action, &ctx).await {
-                    warn!(?e, "dispatch command from search");
-                }
+                self.dispatch_command(&cmd_id).await;
             }
             ActionTarget::OpenSettings(section) => {
                 debug!(section = %section, "open settings from search (not wired to UI yet)");
@@ -2501,7 +2664,7 @@ impl MainWindowController {
         let clamped = if count == 0 {
             -1
         } else {
-            new_idx.clamp(0, count - 1)
+            new_idx.clamp(0, (count - 1) as i32)
         };
         self.search_selection.write().insert(instance_id, clamped);
         self.schedule_rebuild();
@@ -3332,6 +3495,27 @@ impl MainWindowController {
                 WindowEvent::ModifiersChanged(modifiers) => {
                     if let Some(c) = tw.upgrade() {
                         *c.keyboard_modifiers.lock() = modifiers.state();
+                    }
+                }
+                WindowEvent::KeyboardInput { event, .. } => {
+                    use slint::winit_030::winit::event::ElementState;
+                    use slint::winit_030::winit::keyboard::{Key, NamedKey};
+                    if event.state == ElementState::Pressed {
+                        if let Some(c) = tw.upgrade() {
+                            if c.palette.read().visible
+                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                            {
+                                c.on_command_palette_dismiss();
+                            } else {
+                                let shortcut = c.command_palette_shortcut();
+                                let mods = *c.keyboard_modifiers.lock();
+                                if winit_modifiers_match(shortcut.modifiers, mods)
+                                    && winit_key_matches(shortcut.key, &event.logical_key)
+                                {
+                                    c.toggle_command_palette();
+                                }
+                            }
+                        }
                     }
                 }
                 WindowEvent::DroppedFile(path_buf) => {
@@ -5018,6 +5202,135 @@ fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
             v.push(row);
         }
     }
+}
+
+fn build_palette_candidates(
+    palette: &CommandPalette,
+    registry: &CommandRegistry,
+    locale: &LocaleManager,
+    query: &str,
+    limit: usize,
+) -> Vec<SearchCandidateEntry> {
+    if query.trim().is_empty() {
+        palette
+            .browse()
+            .into_iter()
+            .take(limit)
+            .map(|desc| palette_entry_from_descriptor(&desc, registry, locale))
+            .collect()
+    } else {
+        palette
+            .search(query, limit)
+            .into_iter()
+            .map(|hit| palette_entry_from_descriptor(&hit.descriptor, registry, locale))
+            .collect()
+    }
+}
+
+fn palette_entry_from_descriptor(
+    desc: &CommandDescriptor,
+    registry: &CommandRegistry,
+    locale: &LocaleManager,
+) -> SearchCandidateEntry {
+    let shortcut = registry
+        .effective_shortcut(&desc.id)
+        .or(desc.default_shortcut.clone())
+        .map(|s| s.to_string());
+    let subtitle: SharedString = desc
+        .terminal_invocation
+        .as_ref()
+        .map(|t| format!("orc {}", t.verb))
+        .unwrap_or_default()
+        .into();
+    SearchCandidateEntry {
+        id: desc.id.clone().into(),
+        source_name: locale.tr("search-source-commands").into(),
+        source_icon: "commands".into(),
+        title: locale.tr(&desc.display_name_key).into(),
+        subtitle,
+        shortcut: shortcut.unwrap_or_default().into(),
+    }
+}
+
+fn winit_modifiers_match(
+    shortcut_mods: orchid_core::Modifiers,
+    state: slint::winit_030::winit::keyboard::ModifiersState,
+) -> bool {
+    use orchid_core::Modifiers;
+    state.control_key() == shortcut_mods.contains(Modifiers::CTRL)
+        && state.shift_key() == shortcut_mods.contains(Modifiers::SHIFT)
+        && state.alt_key() == shortcut_mods.contains(Modifiers::ALT)
+        && state.super_key() == shortcut_mods.contains(Modifiers::WIN)
+}
+
+fn winit_key_matches(
+    shortcut_key: orchid_core::Key,
+    logical: &slint::winit_030::winit::keyboard::Key,
+) -> bool {
+    use orchid_core::Key as Ok;
+    use slint::winit_030::winit::keyboard::{Key, NamedKey};
+    match (shortcut_key, logical) {
+        (Ok::Char(c), Key::Character(s)) => s.as_str().eq_ignore_ascii_case(&c.to_string()),
+        (Ok::Escape, Key::Named(NamedKey::Escape)) => true,
+        (Ok::Enter, Key::Named(NamedKey::Enter)) => true,
+        (Ok::Tab, Key::Named(NamedKey::Tab)) => true,
+        (Ok::Backspace, Key::Named(NamedKey::Backspace)) => true,
+        (Ok::Delete, Key::Named(NamedKey::Delete)) => true,
+        (Ok::Insert, Key::Named(NamedKey::Insert)) => true,
+        (Ok::Home, Key::Named(NamedKey::Home)) => true,
+        (Ok::End, Key::Named(NamedKey::End)) => true,
+        (Ok::PageUp, Key::Named(NamedKey::PageUp)) => true,
+        (Ok::PageDown, Key::Named(NamedKey::PageDown)) => true,
+        (Ok::ArrowUp, Key::Named(NamedKey::ArrowUp)) => true,
+        (Ok::ArrowDown, Key::Named(NamedKey::ArrowDown)) => true,
+        (Ok::ArrowLeft, Key::Named(NamedKey::ArrowLeft)) => true,
+        (Ok::ArrowRight, Key::Named(NamedKey::ArrowRight)) => true,
+        (Ok::Space, Key::Named(NamedKey::Space)) => true,
+        (Ok::F(n), Key::Named(named)) => winit_named_f_index(named) == Some(n),
+        _ => false,
+    }
+}
+
+fn winit_named_f_index(key: &slint::winit_030::winit::keyboard::NamedKey) -> Option<u8> {
+    use slint::winit_030::winit::keyboard::NamedKey;
+    Some(match key {
+        NamedKey::F1 => 1,
+        NamedKey::F2 => 2,
+        NamedKey::F3 => 3,
+        NamedKey::F4 => 4,
+        NamedKey::F5 => 5,
+        NamedKey::F6 => 6,
+        NamedKey::F7 => 7,
+        NamedKey::F8 => 8,
+        NamedKey::F9 => 9,
+        NamedKey::F10 => 10,
+        NamedKey::F11 => 11,
+        NamedKey::F12 => 12,
+        NamedKey::F13 => 13,
+        NamedKey::F14 => 14,
+        NamedKey::F15 => 15,
+        NamedKey::F16 => 16,
+        NamedKey::F17 => 17,
+        NamedKey::F18 => 18,
+        NamedKey::F19 => 19,
+        NamedKey::F20 => 20,
+        NamedKey::F21 => 21,
+        NamedKey::F22 => 22,
+        NamedKey::F23 => 23,
+        NamedKey::F24 => 24,
+        NamedKey::F25 => 25,
+        NamedKey::F26 => 26,
+        NamedKey::F27 => 27,
+        NamedKey::F28 => 28,
+        NamedKey::F29 => 29,
+        NamedKey::F30 => 30,
+        NamedKey::F31 => 31,
+        NamedKey::F32 => 32,
+        NamedKey::F33 => 33,
+        NamedKey::F34 => 34,
+        NamedKey::F35 => 35,
+        _ => return None,
+    })
 }
 
 /// Empty [`WorkspaceModel`] for startup mode or when no layout is available yet.

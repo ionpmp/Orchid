@@ -1,0 +1,36 @@
+import { Theme } from "theme_global.slint";
+import { CommandPaletteGlobal } from "command_palette_global.slint";
+import { SearchView } from "widgets/search.slint";
+
+export component CommandPalettePanel inherits Rectangle {
+    callback query-changed(string);
+    callback candidate-activated(string);
+    callback selection-changed(int);
+    callback dismiss();
+
+    background: Theme.surface-raised;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.border-default;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: #00000060;
+    clip: true;
+
+    SearchView {
+        width: 100%;
+        height: 100%;
+        model: CommandPaletteGlobal.model;
+        query-changed(q) => {
+            root.query-changed(q);
+        }
+        candidate-activated(id) => {
+            root.candidate-activated(id);
+        }
+        selection-changed(idx) => {
+            root.selection-changed(idx);
+        }
+        escape-pressed => {
+            root.dismiss();
+        }
+    }
+}

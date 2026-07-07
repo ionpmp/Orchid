@@ -50,9 +50,10 @@ pub struct OrchidApp {
     session_manager: Arc<SessionManager>,
     session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
     terminal_deps: TerminalWidgetDeps,
-    /// Shared command registry (search + future palette UI).
-    #[allow(dead_code)]
+    /// Shared command registry (search + command palette UI).
     command_registry: Arc<CommandRegistry>,
+    /// Fuzzy command search (palette + universal search commands source).
+    command_palette: Arc<CommandPalette>,
     /// Group manager backing widget-related commands.
     #[allow(dead_code)]
     group_manager: Arc<GroupManager>,
@@ -163,7 +164,7 @@ impl OrchidApp {
         );
         let search_sources: Vec<Arc<dyn SearchSource>> = vec![
             Arc::new(FilesSource::new(search_engine.clone())),
-            Arc::new(CommandsSource::new(command_palette)),
+            Arc::new(CommandsSource::new(command_palette.clone())),
             Arc::new(SettingsSource::new()),
         ];
         let search_aggregator: Arc<SearchAggregator> = Arc::new(SearchAggregator::new(search_sources));
@@ -495,6 +496,7 @@ impl OrchidApp {
             session_routing,
             terminal_deps,
             command_registry,
+            command_palette,
             group_manager,
             fs_registry,
             _terminal_clipboard_sub: terminal_clipboard_sub,
@@ -570,6 +572,7 @@ impl OrchidApp {
             self.storage.clone(),
             self.bus.clone(),
             self.command_registry.clone(),
+            self.command_palette.clone(),
             self.widget_manager.clone(),
             self.workspace_manager.clone(),
             self.layout_engine.clone(),

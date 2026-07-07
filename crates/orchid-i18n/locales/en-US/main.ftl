@@ -107,6 +107,10 @@ search-source-files = Files
 search-source-commands = Commands
 search-source-settings = Settings
 
+# ---- Command palette ----
+command-palette-placeholder = Run a command...
+command-palette-empty = All commands
+
 # ---- Media player ----
 media-no-session = No media playing
 media-play = Play

@@ -8,6 +8,7 @@ export component SearchView inherits Rectangle {
     callback query-changed(string);
     callback candidate-activated(string);
     callback selection-changed(int);
+    callback escape-pressed();
 
     background: transparent;
 
@@ -84,6 +85,10 @@ export component SearchView inherits Rectangle {
                         vertical-alignment: center;
                         single-line: true;
                         key-pressed(event) => {
+                            if (event.text == Key.Escape) {
+                                root.escape-pressed();
+                                return accept;
+                            }
                             if (event.text == Key.DownArrow) {
                                 root.selection-changed(model.selected-index + 1);
                                 return accept;

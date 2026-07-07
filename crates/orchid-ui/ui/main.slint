@@ -2,6 +2,8 @@ import { Theme } from "theme_global.slint";
 import { Strings } from "strings_global.slint";
 import { AppState } from "app_state_global.slint";
 import { WidgetCatalog } from "widget_catalog_global.slint";
+import { CommandPaletteGlobal } from "command_palette_global.slint";
+import { CommandPalettePanel } from "command-palette.slint";
 import { WorkspaceView } from "workspace/workspace.slint";
 import {
     DockWidgetType,
@@ -26,6 +28,7 @@ export { Theme } from "theme_global.slint";
 export { Strings } from "strings_global.slint";
 export { AppState } from "app_state_global.slint";
 export { WidgetCatalog } from "widget_catalog_global.slint";
+export { CommandPaletteGlobal } from "command_palette_global.slint";
 export {
     DockWidgetType,
     MediaModel,
@@ -161,6 +164,10 @@ export component MainWindow inherits Window {
     callback catalog-pick(string);
     callback catalog-dismiss();
     callback catalog-search-changed(string);
+    callback command-palette-query-changed(string);
+    callback command-palette-candidate-activated(string);
+    callback command-palette-selection-changed(int);
+    callback command-palette-dismiss();
     callback ui-tick();
 
     VerticalLayout {
@@ -215,12 +222,16 @@ export component MainWindow inherits Window {
             }
         }
 
-        if AppState.mode == 1: WorkspaceView {
+        if AppState.mode == 1: Rectangle {
             width: 100%;
             height: 100%;
             vertical-stretch: 1;
             horizontal-stretch: 1;
-            workspace: AppState.workspace;
+
+            WorkspaceView {
+                width: 100%;
+                height: 100%;
+                workspace: AppState.workspace;
             workspace-clicked(id) => { root.workspace-clicked(id); }
             workspace-create-clicked => { root.workspace-create-clicked(); }
             dock-add-clicked(type-id) => { root.dock-add-clicked(type-id); }
@@ -326,6 +337,38 @@ export component MainWindow inherits Window {
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
             catalog-dismiss => { root.catalog-dismiss(); }
             catalog-search-changed(q) => { root.catalog-search-changed(q); }
+            }
+
+            if CommandPaletteGlobal.visible: Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #00000050;
+
+                palette-backdrop := TouchArea {
+                    clicked => {
+                        root.command-palette-dismiss();
+                    }
+                }
+
+                CommandPalettePanel {
+                    width: min(parent.width - 32px, 560px);
+                    height: min(parent.height - 120px, 420px);
+                    x: (parent.width - self.width) / 2;
+                    y: parent.height * 0.12;
+                    query-changed(q) => {
+                        root.command-palette-query-changed(q);
+                    }
+                    candidate-activated(id) => {
+                        root.command-palette-candidate-activated(id);
+                    }
+                    selection-changed(idx) => {
+                        root.command-palette-selection-changed(idx);
+                    }
+                    dismiss => {
+                        root.command-palette-dismiss();
+                    }
+                }
+            }
         }
     }
 }
