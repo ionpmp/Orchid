@@ -33,6 +33,7 @@ export component WidgetFrame inherits Rectangle {
     callback terminal-pane-clicked(string);
     callback terminal-pane-closed(string);
     callback terminal-split-drag-moved(string, string, float, float);
+    callback terminal-shortcut(string);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -237,6 +238,7 @@ export component WidgetFrame inherits Rectangle {
                     split-drag-moved(a, b, fx, fy) => {
                         root.terminal-split-drag-moved(a, b, fx, fy);
                     }
+                    shortcut(action) => { root.terminal-shortcut(action); }
                     key-pressed(text) => { root.terminal-key-pressed(text); }
                 }
             }

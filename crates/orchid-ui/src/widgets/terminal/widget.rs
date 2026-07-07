@@ -747,6 +747,100 @@ pub async fn close_pane(
     Ok(())
 }
 
+/// Cycle focus to the next pane in the active tab.
+pub fn focus_next_pane(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    layout.focus_next();
+    let sid = layout
+        .focused_session()
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("no focused session".into()))?;
+    drop(layouts);
+    deps.session_routing.lock().insert(instance_id, sid);
+    Ok(())
+}
+
+/// Cycle focus to the previous pane in the active tab.
+pub fn focus_previous_pane(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    layout.focus_previous();
+    let sid = layout
+        .focused_session()
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("no focused session".into()))?;
+    drop(layouts);
+    deps.session_routing.lock().insert(instance_id, sid);
+    Ok(())
+}
+
+/// Switch to the next or previous tab (`delta` = ±1).
+pub fn switch_tab_relative(
+    deps: &TerminalWidgetDeps,
+    instance_id: Uuid,
+    delta: i32,
+) -> Result<()> {
+    let mut layouts = deps.layouts.lock();
+    let Some(layout) = layouts.get_mut(&instance_id) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "terminal layout not found".into(),
+        ));
+    };
+    let n = layout.tabs.tabs.len();
+    if n == 0 {
+        return Err(WidgetError::InvalidStateForOperation("no tabs".into()));
+    }
+    let next = (layout.active_tab as i32 + delta).rem_euclid(n as i32) as usize;
+    layout.active_tab = next;
+    let sid = layout
+        .focused_session()
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("no focused session".into()))?;
+    drop(layouts);
+    deps.session_routing.lock().insert(instance_id, sid);
+    Ok(())
+}
+
+/// Close the focused pane when split, otherwise close the active tab.
+pub async fn close_focused_pane_or_tab(
+    deps: &TerminalWidgetDeps,
+    instance_id: Uuid,
+) -> Result<()> {
+    let (multi_pane, focused, active_tab, tab_count) = {
+        let layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        let tab = layout
+            .tabs
+            .tabs
+            .get(layout.active_tab)
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no active tab".into()))?;
+        let multi = tab.root.leaf_count() > 1;
+        let focused = layout
+            .focused_session()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no focused session".into()))?;
+        (multi, focused, layout.active_tab, layout.tabs.tabs.len())
+    };
+    if multi_pane {
+        close_pane(deps, instance_id, focused).await
+    } else if tab_count > 1 {
+        close_tab(deps, instance_id, active_tab).await
+    } else {
+        Err(WidgetError::InvalidStateForOperation(
+            "cannot close last tab".into(),
+        ))
+    }
+}
+
 /// Set the split ratio between two adjacent panes in the active tab.
 pub fn set_split_ratio(
     deps: &TerminalWidgetDeps,

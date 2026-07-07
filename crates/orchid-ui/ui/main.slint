@@ -77,6 +77,7 @@ export component MainWindow inherits Window {
     callback terminal-pane-clicked(string, string);
     callback terminal-pane-closed(string, string);
     callback terminal-split-drag-moved(string, string, string, float, float);
+    callback terminal-shortcut(string, string);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -242,6 +243,7 @@ export component MainWindow inherits Window {
             terminal-split-drag-moved(id, a, b, fx, fy) => {
                 root.terminal-split-drag-moved(id, a, b, fx, fy);
             }
+            terminal-shortcut(id, action) => { root.terminal-shortcut(id, action); }
             rss-item-clicked(link) => { root.rss-item-clicked(link); }
             search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
             search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }

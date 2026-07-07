@@ -11,6 +11,7 @@ export component TerminalSplitView inherits Rectangle {
     callback pane-clicked(string);
     callback pane-closed(string);
     callback key-pressed(string);
+    callback shortcut(string);
     callback split-drag-moved(string, string, float, float);
 
     for pane[i] in panes : Rectangle {
@@ -37,6 +38,7 @@ export component TerminalSplitView inherits Rectangle {
             cell-width: root.cell-width;
             cell-height: root.cell-height;
             key-pressed(text) => { root.key-pressed(text); }
+            shortcut(action) => { root.shortcut(action); }
         }
 
         if !pane.is-focused : TouchArea {

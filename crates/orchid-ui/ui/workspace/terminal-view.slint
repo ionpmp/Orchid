@@ -20,6 +20,7 @@ export component TerminalView inherits Rectangle {
     in property <bool> input-enabled: true;
 
     callback key-pressed(string);
+    callback shortcut(string);
 
     background: Theme.surface-base;
 
@@ -49,6 +50,44 @@ export component TerminalView inherits Rectangle {
         // the new buffer and clears. Never `accept` without having forwarded — that swallowed
         // @/#/$ on Windows+TextInput.
         key-pressed(event) => {
+            if (root.input-enabled) {
+                if (event.modifiers.control && event.modifiers.shift) {
+                    if (event.text == "h" || event.text == "H") {
+                        root.shortcut("split-h");
+                        return accept;
+                    }
+                    if (event.text == "j" || event.text == "J") {
+                        root.shortcut("split-v");
+                        return accept;
+                    }
+                    if (event.text == "t" || event.text == "T") {
+                        root.shortcut("tab-new");
+                        return accept;
+                    }
+                    if (event.text == "w" || event.text == "W") {
+                        root.shortcut("close");
+                        return accept;
+                    }
+                    if (event.text == Key.RightArrow) {
+                        root.shortcut("focus-next");
+                        return accept;
+                    }
+                    if (event.text == Key.LeftArrow) {
+                        root.shortcut("focus-prev");
+                        return accept;
+                    }
+                }
+                if (event.modifiers.control && !event.modifiers.shift) {
+                    if (event.text == Key.PageDown) {
+                        root.shortcut("tab-next");
+                        return accept;
+                    }
+                    if (event.text == Key.PageUp) {
+                        root.shortcut("tab-prev");
+                        return accept;
+                    }
+                }
+            }
             if (event.text == Key.Return) {
                 root.key-pressed("\u{d}");
             } else if (event.text == Key.Tab) {

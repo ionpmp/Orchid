@@ -29,6 +29,7 @@ export component WorkspaceView inherits Rectangle {
     callback terminal-pane-clicked(string, string);
     callback terminal-pane-closed(string, string);
     callback terminal-split-drag-moved(string, string, string, float, float);
+    callback terminal-shortcut(string, string);
     callback rss-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -232,6 +233,7 @@ export component WorkspaceView inherits Rectangle {
                     terminal-split-drag-moved(a, b, fx, fy) => {
                         root.terminal-split-drag-moved(w.instance-id, a, b, fx, fy);
                     }
+                    terminal-shortcut(action) => { root.terminal-shortcut(w.instance-id, action); }
                     rss-item-clicked(link) => { root.rss-item-clicked(link); }
                     search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
                     search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }

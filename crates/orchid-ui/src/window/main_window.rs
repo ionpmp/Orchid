@@ -51,8 +51,9 @@ use parking_lot::RwLock;
 use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
 use crate::widgets::terminal::{
-    add_tab, close_pane, close_tab, focus_pane, set_split_ratio, split_horizontal, split_vertical,
-    switch_tab, TerminalWidgetDeps,
+    add_tab, close_focused_pane_or_tab, close_pane, close_tab, focus_next_pane, focus_pane,
+    focus_previous_pane, set_split_ratio, split_horizontal, split_vertical, switch_tab,
+    switch_tab_relative, TerminalWidgetDeps,
 };
 use crate::terminal_raster;
 use crate::slint_generated::{
@@ -723,6 +724,14 @@ impl MainWindowController {
             move |id, first, second, fx, fy| {
                 if let Some(c) = t.upgrade() {
                     c.on_terminal_split_drag_moved(&id, &first, &second, fx, fy);
+                }
+            }
+        });
+        self.window.on_terminal_shortcut({
+            let t = t.clone();
+            move |id, action| {
+                if let Some(c) = t.upgrade() {
+                    c.on_terminal_shortcut(&id, &action);
                 }
             }
         });
@@ -2698,6 +2707,34 @@ impl MainWindowController {
             warn!(?e, %inst, %first_uuid, %second_uuid, "terminal split drag");
         }
         self.schedule_rebuild();
+    }
+
+    fn on_terminal_shortcut(self: &Arc<Self>, id: &SharedString, action: &SharedString) {
+        let Ok(inst) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let deps = self.terminal_deps.clone();
+        let tw = Arc::downgrade(self);
+        let act = action.to_string();
+        let _ = slint::spawn_local(Compat::new(async move {
+            let result = match act.as_str() {
+                "split-h" => split_horizontal(&deps, inst).await,
+                "split-v" => split_vertical(&deps, inst).await,
+                "tab-new" => add_tab(&deps, inst).await,
+                "close" => close_focused_pane_or_tab(&deps, inst).await,
+                "focus-next" => focus_next_pane(&deps, inst),
+                "focus-prev" => focus_previous_pane(&deps, inst),
+                "tab-next" => switch_tab_relative(&deps, inst, 1),
+                "tab-prev" => switch_tab_relative(&deps, inst, -1),
+                _ => Ok(()),
+            };
+            if let Err(e) = result {
+                warn!(?e, %inst, action = %act, "terminal shortcut");
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
     }
 
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
