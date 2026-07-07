@@ -31,7 +31,8 @@ static SEARCH_LIVE: LazyLock<DashMap<Uuid, Arc<Inner>>> = LazyLock::new(DashMap:
 
 /// Push a query update into the widget debouncer for `instance_id`.
 ///
-/// No-op if the instance is not a live universal-search widget.
+/// Restarts the debouncer when it was stopped (e.g. after close). No-op when
+/// the instance is not a live universal-search widget.
 pub fn universal_search_push_query(instance_id: Uuid, query: String) {
     if let Some(inner) = SEARCH_LIVE.get(&instance_id) {
         let inner = inner.clone();
@@ -226,11 +227,12 @@ impl Widget for UniversalSearchWidget {
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.stop_debouncer();
+        // Keep the debouncer alive while the widget is visible but idle. Stopping
+        // it here caused missed results when the UI pushed queries without a
+        // matching `on_activate` (see docs/universal-search-issue.md).
         Ok(())
     }
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.stop_debouncer();
         Ok(())
     }
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
@@ -394,6 +396,28 @@ mod live_tests {
             instance_id,
             workspace_id: Uuid::new_v4(),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn push_query_after_sleep_still_populates_candidates() {
+        let bus = Arc::new(EventBus::new(EventBusConfig::default()));
+        let id = Uuid::new_v4();
+        let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+        let mut w = UniversalSearchWidget::new(id, Some(agg), bus.clone());
+        let ctx = test_ctx(id, bus);
+        w.on_activate(&ctx).await.expect("activate");
+        w.on_sleep(&ctx).await.expect("sleep");
+
+        universal_search_push_query(id, "hello".into());
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let snap = w.snapshot().expect("snapshot");
+        let p = match snap.payload {
+            WidgetPayload::UniversalSearch(p) => p,
+            _ => panic!("expected UniversalSearch payload"),
+        };
+        assert_eq!(p.query, "hello");
+        assert_eq!(p.candidates.len(), 1);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
