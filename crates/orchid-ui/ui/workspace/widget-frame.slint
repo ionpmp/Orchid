@@ -77,6 +77,8 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
     callback viewer-archive-select(string, string);
+    callback viewer-archive-extract-selected(string);
+    callback viewer-archive-extract-all(string);
 
     callback fm-sidebar-clicked(string);
     callback fm-toggle-dual-pane();
@@ -345,6 +347,8 @@ export component WidgetFrame inherits Rectangle {
                 archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
                 archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }
                 archive-select(path) => { root.viewer-archive-select(root.model.instance-id, path); }
+                archive-extract-selected => { root.viewer-archive-extract-selected(root.model.instance-id); }
+                archive-extract-all => { root.viewer-archive-extract-all(root.model.instance-id); }
 
             }
         }

@@ -21,6 +21,7 @@ pub struct ArchiveViewer {
     current_inner_path: RwLock<String>,
     selected_entry: RwLock<Option<String>>,
     preview_cache: Mutex<Option<(String, Vec<u8>)>>,
+    last_status: RwLock<Option<String>>,
 }
 
 impl std::fmt::Debug for ArchiveViewer {
@@ -50,7 +51,21 @@ impl ArchiveViewer {
             current_inner_path: RwLock::new(String::new()),
             selected_entry: RwLock::new(None),
             preview_cache: Mutex::new(None),
+            last_status: RwLock::new(None),
         }
+    }
+
+    fn clear_status(&self) {
+        *self.last_status.write() = None;
+    }
+
+    fn local_path(&self) -> Result<std::path::PathBuf> {
+        self.path
+            .read()
+            .as_ref()
+            .ok_or_else(|| ViewerError::ArchiveEntryNotFound("no archive open".into()))?
+            .to_local()
+            .map_err(ViewerError::Fs)
     }
 
     /// Descend into a subfolder. `folder_path` is an inner-archive path
@@ -68,6 +83,7 @@ impl ArchiveViewer {
             *cur = format!("{trimmed}/");
         }
         *self.selected_entry.write() = None;
+        self.clear_status();
         Ok(())
     }
 
@@ -87,6 +103,7 @@ impl ArchiveViewer {
             None => cur.clear(),
         }
         *self.selected_entry.write() = None;
+        self.clear_status();
         Ok(())
     }
 
@@ -108,6 +125,7 @@ impl ArchiveViewer {
             .ok_or_else(|| ViewerError::ArchiveEntryNotFound(entry_path.into()))?;
         *self.selected_entry.write() = Some(entry_path.to_string());
         *self.preview_cache.lock() = None;
+        self.clear_status();
         if !entry.is_dir && entry.size <= 256 * 1024 {
             // Best-effort preview fetch. We re-open the archive from the
             // path because our reader trait currently lacks cheap cloning.
@@ -155,6 +173,55 @@ impl ArchiveViewer {
         };
         let reader = orchid_fs::open_archive(&local)?;
         Ok(reader.extract_all(output).await?)
+    }
+
+    /// Extract the selected file next to the archive on disk.
+    pub async fn extract_selected_to_sibling(&self) -> Result<std::path::PathBuf> {
+        let selected = self
+            .selected_entry
+            .read()
+            .clone()
+            .ok_or_else(|| ViewerError::ArchiveEntryNotFound("nothing selected".into()))?;
+        let entry = self
+            .entries
+            .read()
+            .iter()
+            .find(|e| e.path == selected)
+            .cloned()
+            .ok_or_else(|| ViewerError::ArchiveEntryNotFound(selected.clone()))?;
+        if entry.is_dir {
+            return Err(ViewerError::ArchiveEntryNotFound(
+                "cannot extract a folder".into(),
+            ));
+        }
+        let local = self.local_path()?;
+        let file_name = selected.rsplit('/').next().unwrap_or(selected.as_str());
+        let output = local
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(file_name);
+        self.extract_entry(&selected, &output).await?;
+        *self.last_status.write() = Some(format!("Extracted to {}", output.display()));
+        Ok(output)
+    }
+
+    /// Extract all entries into `{archive_stem}_extracted/` beside the archive.
+    pub async fn extract_all_to_sibling(&self) -> Result<(std::path::PathBuf, u64)> {
+        let local = self.local_path()?;
+        let stem = local
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("archive");
+        let output = local
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(format!("{stem}_extracted"));
+        let count = self.extract_all(&output).await?;
+        *self.last_status.write() = Some(format!(
+            "Extracted {count} entries to {}",
+            output.display()
+        ));
+        Ok((output, count))
     }
 
     fn compute_preview(&self) -> Option<ArchivePreview> {
@@ -228,6 +295,8 @@ impl Viewer for ArchiveViewer {
         *self.entries.write() = entries;
         *self.current_inner_path.write() = String::new();
         *self.selected_entry.write() = None;
+        *self.preview_cache.lock() = None;
+        *self.last_status.write() = None;
         *self.path.write() = Some(path);
         Ok(())
     }
@@ -239,6 +308,7 @@ impl Viewer for ArchiveViewer {
         *self.current_inner_path.write() = String::new();
         *self.selected_entry.write() = None;
         *self.preview_cache.lock() = None;
+        *self.last_status.write() = None;
         *self.path.write() = None;
         Ok(())
     }
@@ -266,7 +336,11 @@ impl Viewer for ArchiveViewer {
         // Preview is best-effort — only valid when a reader is held.
         let preview = self.compute_preview();
         let total = entries_guard.len() as u32;
-        let info = format!("{format}, {total} entries");
+        let info = self
+            .last_status
+            .read()
+            .clone()
+            .unwrap_or_else(|| format!("{format}, {total} entries"));
         ViewerSnapshot::Archive(ArchiveSnapshot {
             path_display,
             format,

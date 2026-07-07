@@ -7,6 +7,8 @@ export component ViewerArchiveView inherits Rectangle {
     callback navigate-into(string);
     callback navigate-up();
     callback select(string);
+    callback extract-selected();
+    callback extract-all();
 
     background: transparent;
 
@@ -45,6 +47,67 @@ export component ViewerArchiveView inherits Rectangle {
                     wrap: no-wrap;
                     overflow: elide;
                 }
+
+                Rectangle {
+                    height: 28px;
+                    background: extract-all-ta.has-hover ? Theme.accent-brand : Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+
+                    extract-all-ta := TouchArea {
+                        clicked => { root.extract-all(); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.extract-all-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 28px;
+                    background:
+                        !model.has-file-selected ? Theme.surface-base :
+                        (extract-sel-ta.has-hover ? Theme.accent-brand : Theme.surface-raised);
+                    border-radius: Theme.radius-md;
+
+                    extract-sel-ta := TouchArea {
+                        enabled: model.has-file-selected;
+                        clicked => { root.extract-selected(); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.extract-selected-label;
+                            color: model.has-file-selected ? Theme.text-primary : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        if model.info-text != "" : Rectangle {
+            height: 24px;
+            background: Theme.surface-raised;
+
+            Text {
+                x: 8px;
+                width: parent.width - 16px;
+                text: model.info-text;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                wrap: no-wrap;
+                overflow: elide;
             }
         }
 

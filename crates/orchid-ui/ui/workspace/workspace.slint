@@ -66,6 +66,8 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
     callback viewer-archive-select(string, string);
+    callback viewer-archive-extract-selected(string);
+    callback viewer-archive-extract-all(string);
 
     callback fm-sidebar-clicked(string);
     callback fm-toggle-dual-pane();
@@ -274,6 +276,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-archive-navigate-into(id, path) => { root.viewer-archive-navigate-into(id, path); }
                     viewer-archive-navigate-up(id) => { root.viewer-archive-navigate-up(id); }
                     viewer-archive-select(id, path) => { root.viewer-archive-select(id, path); }
+                    viewer-archive-extract-selected(id) => { root.viewer-archive-extract-selected(id); }
+                    viewer-archive-extract-all(id) => { root.viewer-archive-extract-all(id); }
 
                     fm-sidebar-clicked(id) => { root.fm-sidebar-clicked(id); }
                     fm-toggle-dual-pane => { root.fm-toggle-dual-pane(); }

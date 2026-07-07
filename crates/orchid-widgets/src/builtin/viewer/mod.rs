@@ -457,6 +457,47 @@ pub async fn archive_select(instance_id: Uuid, path: String) -> WidgetResult<()>
     Ok(())
 }
 
+/// Archive: extract the selected file beside the archive.
+pub async fn archive_extract_selected(instance_id: Uuid) -> WidgetResult<String> {
+    let inner = live_inner(instance_id)?;
+    let dest = {
+        let mut guard = inner.viewer.lock().await;
+        let v = guard
+            .as_mut()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+        let ar = v
+            .as_any_mut()
+            .downcast_mut::<ArchiveViewer>()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("not an archive".into()))?;
+        ar.extract_selected_to_sibling()
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+    };
+    inner.refresh_snapshot().await;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Archive: extract all entries into a sibling folder.
+pub async fn archive_extract_all(instance_id: Uuid) -> WidgetResult<String> {
+    let inner = live_inner(instance_id)?;
+    let dest = {
+        let mut guard = inner.viewer.lock().await;
+        let v = guard
+            .as_mut()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+        let ar = v
+            .as_any_mut()
+            .downcast_mut::<ArchiveViewer>()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("not an archive".into()))?;
+        ar.extract_all_to_sibling()
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+            .0
+    };
+    inner.refresh_snapshot().await;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 /// Text: scroll by whole lines.
 pub async fn text_scroll(instance_id: Uuid, delta: i32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

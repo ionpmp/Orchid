@@ -27,6 +27,8 @@ export component ViewerView inherits Rectangle {
     callback archive-navigate-into(string);
     callback archive-navigate-up();
     callback archive-select(string);
+    callback archive-extract-selected();
+    callback archive-extract-all();
 
     background: transparent;
 
@@ -101,5 +103,7 @@ export component ViewerView inherits Rectangle {
         navigate-into(path) => { root.archive-navigate-into(path); }
         navigate-up => { root.archive-navigate-up(); }
         select(path) => { root.archive-select(path); }
+        extract-selected => { root.archive-extract-selected(); }
+        extract-all => { root.archive-extract-all(); }
     }
 }

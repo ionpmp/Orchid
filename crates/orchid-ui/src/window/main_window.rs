@@ -1247,6 +1247,28 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_archive_extract_selected({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::archive_extract_selected(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_archive_extract_all({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::archive_extract_all(inst));
+                    }
+                }
+            }
+        });
 
         self.window.on_fm_sidebar_clicked({
             let t = t.clone();
@@ -7335,6 +7357,9 @@ fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
         breadcrumbs: ModelRc::new(VecModel::default()),
         entries: ModelRc::new(VecModel::default()),
         selected_path: SharedString::new(),
+        has_file_selected: false,
+        extract_all_label: locale.tr("viewer-archive-extract-all").into(),
+        extract_selected_label: locale.tr("viewer-archive-extract-selected").into(),
         preview_kind: 0,
         preview_text: locale.tr("viewer-archive-select-preview").into(),
         preview_binary_size: SharedString::new(),
@@ -7580,6 +7605,9 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
         ),
     };
 
+    let has_file_selected = !s.selected_path.is_empty()
+        && s.entries.iter().any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
+
     ViewerArchiveModel {
         format: s.format.clone().into(),
         total_entries: s.total_entries as i32,
@@ -7587,6 +7615,9 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
         breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
         entries: ModelRc::new(VecModel::from(entries)),
         selected_path: s.selected_path.clone().into(),
+        has_file_selected,
+        extract_all_label: locale.tr("viewer-archive-extract-all").into(),
+        extract_selected_label: locale.tr("viewer-archive-extract-selected").into(),
         preview_kind,
         preview_text,
         preview_binary_size: preview_binary,

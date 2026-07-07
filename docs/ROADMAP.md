@@ -62,8 +62,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### Viewers
 - [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate in viewer widget; HEIC/SVG/RAW pending
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, fit width/page, zoom; requires bundled `pdfium.dll`
-- [ ] Text with syntax highlighting (Tree-sitter)
-- [ ] Archives (browse + extract)
+- [~] Text with syntax highlighting (Tree-sitter) — `TextViewer` + `SyntaxHighlighter` in viewer widget; edit mode pending
+- [~] Archives (browse + extract) — browse + preview wired; extract selected/all to sibling folder in viewer toolbar
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — vault unlock/lock UI (passphrase + Windows Hello); KDBX4 read/write, groups / entries / TOTP / search in `orchid-crypto::kdbx`
