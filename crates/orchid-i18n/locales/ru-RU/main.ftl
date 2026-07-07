@@ -106,6 +106,35 @@ search-source-settings = Настройки
 command-palette-placeholder = Выполнить команду…
 command-palette-empty = Все команды
 
+# ---- Registered commands ----
+command.widget.create.name = Создать виджет
+command.widget.create.desc = Добавить новый виджет на рабочее пространство
+command.widget.create.arg.type = Id типа виджета (например terminal, weather)
+
+command.widget.close.name = Закрыть виджет
+command.widget.close.desc = Закрыть экземпляр виджета
+
+command.widget.move.name = Переместить виджет
+command.widget.resize.name = Изменить размер виджета
+command.widget.focus_next.name = Следующий виджет
+command.widget.show_all.name = Показать все виджеты
+command.widget.group.dissolve.name = Разгруппировать виджеты
+
+command.workspace.create.name = Создать рабочее пространство
+command.workspace.delete.name = Удалить рабочее пространство
+command.workspace.switch_to.name = Перейти к рабочему пространству
+command.workspace.switch_next.name = Следующее рабочее пространство
+command.workspace.switch_previous.name = Предыдущее рабочее пространство
+
+command.terminal.split_horizontal.name = Горизонтальное разделение терминала
+command.terminal.split_vertical.name = Вертикальное разделение терминала
+command.terminal.tab_new.name = Новая вкладка терминала
+command.terminal.close.name = Закрыть панель или вкладку терминала
+command.terminal.focus_next_pane.name = Следующая панель терминала
+command.terminal.focus_previous_pane.name = Предыдущая панель терминала
+command.terminal.tab_next.name = Следующая вкладка терминала
+command.terminal.tab_previous.name = Предыдущая вкладка терминала
+
 # ---- Media player ----
 media-no-session = Нет активного воспроизведения
 media-play = Воспроизвести

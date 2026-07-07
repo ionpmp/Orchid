@@ -606,27 +606,38 @@ fn backend_for_layout(deps: &TerminalWidgetDeps, layout: &LayoutRoot) -> Backend
 
 /// Open a new tab in the terminal widget identified by `instance_id`.
 pub async fn add_tab(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
-    let mut layouts = deps.layouts.lock();
-    let Some(layout) = layouts.get_mut(&instance_id) else {
-        return Err(WidgetError::InvalidStateForOperation(
-            "terminal layout not found".into(),
-        ));
-    };
-    let spec = backend_for_layout(deps, layout);
-    let size = PtySize {
-        cols: 80,
-        rows: 24,
-        pixel_width: 0,
-        pixel_height: 0,
+    let (spec, size) = {
+        let layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        (
+            backend_for_layout(deps, layout),
+            PtySize {
+                cols: 80,
+                rows: 24,
+                pixel_width: 0,
+                pixel_height: 0,
+            },
+        )
     };
     let session_id = deps
         .sessions
         .open(spec, size)
         .await
         .map_err(|e| WidgetError::CreationFailed(format!("terminal tab spawn failed: {e}")))?;
-    let idx = layout.add_tab(session_id);
-    layout.active_tab = idx;
-    drop(layouts);
+    {
+        let mut layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get_mut(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        let idx = layout.add_tab(session_id);
+        layout.active_tab = idx;
+    }
     deps.session_routing
         .lock()
         .insert(instance_id, session_id);
@@ -648,28 +659,39 @@ async fn split_pane(
     instance_id: Uuid,
     direction: SplitDirection,
 ) -> Result<()> {
-    let mut layouts = deps.layouts.lock();
-    let Some(layout) = layouts.get_mut(&instance_id) else {
-        return Err(WidgetError::InvalidStateForOperation(
-            "terminal layout not found".into(),
-        ));
-    };
-    let spec = backend_for_layout(deps, layout);
-    let size = PtySize {
-        cols: 80,
-        rows: 24,
-        pixel_width: 0,
-        pixel_height: 0,
+    let (spec, size) = {
+        let layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        (
+            backend_for_layout(deps, layout),
+            PtySize {
+                cols: 80,
+                rows: 24,
+                pixel_width: 0,
+                pixel_height: 0,
+            },
+        )
     };
     let session_id = deps
         .sessions
         .open(spec, size)
         .await
         .map_err(|e| WidgetError::CreationFailed(format!("terminal split spawn failed: {e}")))?;
-    layout
-        .split(direction, session_id)
-        .map_err(|e| WidgetError::InvalidStateForOperation(format!("split: {e}")))?;
-    drop(layouts);
+    {
+        let mut layouts = deps.layouts.lock();
+        let Some(layout) = layouts.get_mut(&instance_id) else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "terminal layout not found".into(),
+            ));
+        };
+        layout
+            .split(direction, session_id)
+            .map_err(|e| WidgetError::InvalidStateForOperation(format!("split: {e}")))?;
+    }
     deps.session_routing
         .lock()
         .insert(instance_id, session_id);

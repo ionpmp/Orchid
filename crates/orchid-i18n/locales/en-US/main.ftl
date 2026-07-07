@@ -111,6 +111,35 @@ search-source-settings = Settings
 command-palette-placeholder = Run a command...
 command-palette-empty = All commands
 
+# ---- Registered commands ----
+command.widget.create.name = Create widget
+command.widget.create.desc = Add a new widget to the workspace
+command.widget.create.arg.type = Widget type id (e.g. terminal, weather)
+
+command.widget.close.name = Close widget
+command.widget.close.desc = Close a widget instance
+
+command.widget.move.name = Move widget
+command.widget.resize.name = Resize widget
+command.widget.focus_next.name = Focus next widget
+command.widget.show_all.name = Show all widgets
+command.widget.group.dissolve.name = Dissolve widget group
+
+command.workspace.create.name = Create workspace
+command.workspace.delete.name = Delete workspace
+command.workspace.switch_to.name = Switch to workspace
+command.workspace.switch_next.name = Next workspace
+command.workspace.switch_previous.name = Previous workspace
+
+command.terminal.split_horizontal.name = Split terminal horizontally
+command.terminal.split_vertical.name = Split terminal vertically
+command.terminal.tab_new.name = New terminal tab
+command.terminal.close.name = Close terminal pane or tab
+command.terminal.focus_next_pane.name = Focus next terminal pane
+command.terminal.focus_previous_pane.name = Focus previous terminal pane
+command.terminal.tab_next.name = Next terminal tab
+command.terminal.tab_previous.name = Previous terminal tab
+
 # ---- Media player ----
 media-no-session = No media playing
 media-play = Play

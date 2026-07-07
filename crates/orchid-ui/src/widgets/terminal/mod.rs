@@ -19,12 +19,14 @@
 //! present in the workspace; see the crate README.
 
 pub mod clipboard;
+pub mod commands;
 pub mod palette;
 pub mod render;
 pub mod stored_layout;
 pub mod view;
 pub mod widget;
 
+pub use commands::build_terminal_command_set;
 pub use clipboard::ArboardClipboard;
 pub use palette::{palette_from_flavor, palette_from_theme, ThemeFlavor};
 pub use render::{snapshot_to_cells, RenderCell};

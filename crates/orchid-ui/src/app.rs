@@ -28,7 +28,7 @@ use secrecy::SecretString;
 use crate::error::{Result, UiError};
 use crate::theme::ThemeManager;
 use crate::widgets::terminal::ArboardClipboard;
-use crate::widgets::terminal::palette::palette_from_theme;
+use crate::widgets::terminal::{build_terminal_command_set, palette::palette_from_theme};
 use crate::widgets::terminal::terminal_descriptor;
 use crate::widgets::terminal::TerminalWidgetDeps;
 use crate::window::main_window::MainWindowController;
@@ -444,6 +444,17 @@ impl OrchidApp {
             workspace_manager.clone(),
             group_manager.clone(),
             widget_manager.registry().clone(),
+        ) {
+            let cmd_id = desc.id.clone();
+            command_registry
+                .register(desc, factory)
+                .map_err(|e| UiError::Slint(format!("register command {cmd_id}: {e}")))?;
+        }
+
+        for (desc, factory) in build_terminal_command_set(
+            terminal_deps.clone(),
+            widget_manager.clone(),
+            workspace_manager.clone(),
         ) {
             let cmd_id = desc.id.clone();
             command_registry

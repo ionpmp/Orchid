@@ -3507,12 +3507,27 @@ impl MainWindowController {
                             {
                                 c.on_command_palette_dismiss();
                             } else {
-                                let shortcut = c.command_palette_shortcut();
                                 let mods = *c.keyboard_modifiers.lock();
-                                if winit_modifiers_match(shortcut.modifiers, mods)
-                                    && winit_key_matches(shortcut.key, &event.logical_key)
+                                let palette_sc = c.command_palette_shortcut();
+                                if winit_modifiers_match(palette_sc.modifiers, mods)
+                                    && winit_key_matches(palette_sc.key, &event.logical_key)
                                 {
                                     c.toggle_command_palette();
+                                } else if let Some(shortcut) =
+                                    winit_to_shortcut(mods, &event.logical_key)
+                                {
+                                    if let Some(cmd_id) =
+                                        resolve_registry_shortcut(&c.command_registry, &shortcut)
+                                    {
+                                        if cmd_id.starts_with("terminal.") {
+                                            let this = Arc::clone(&c);
+                                            let cmd = cmd_id;
+                                            let _ = slint::spawn_local(Compat::new(async move {
+                                                this.dispatch_command(&cmd).await;
+                                                this.schedule_rebuild();
+                                            }));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -5250,6 +5265,69 @@ fn palette_entry_from_descriptor(
         subtitle,
         shortcut: shortcut.unwrap_or_default().into(),
     }
+}
+
+fn resolve_registry_shortcut(
+    registry: &CommandRegistry,
+    shortcut: &Shortcut,
+) -> Option<String> {
+    registry.list_all().into_iter().find_map(|desc| {
+        registry
+            .effective_shortcut(&desc.id)
+            .filter(|s| s == shortcut)
+            .map(|_| desc.id)
+    })
+}
+
+fn winit_to_shortcut(
+    state: slint::winit_030::winit::keyboard::ModifiersState,
+    logical: &slint::winit_030::winit::keyboard::Key,
+) -> Option<Shortcut> {
+    use orchid_core::{Key as Ok, Modifiers};
+    use slint::winit_030::winit::keyboard::{Key, NamedKey};
+
+    let mut modifiers = Modifiers::empty();
+    if state.control_key() {
+        modifiers |= Modifiers::CTRL;
+    }
+    if state.shift_key() {
+        modifiers |= Modifiers::SHIFT;
+    }
+    if state.alt_key() {
+        modifiers |= Modifiers::ALT;
+    }
+    if state.super_key() {
+        modifiers |= Modifiers::WIN;
+    }
+
+    let key = match logical {
+        Key::Character(s) => {
+            let ch = s.chars().next()?;
+            if ch.is_ascii_alphabetic() {
+                Ok::Char(ch.to_ascii_lowercase())
+            } else {
+                Ok::Char(ch)
+            }
+        }
+        Key::Named(NamedKey::Escape) => Ok::Escape,
+        Key::Named(NamedKey::Enter) => Ok::Enter,
+        Key::Named(NamedKey::Tab) => Ok::Tab,
+        Key::Named(NamedKey::Backspace) => Ok::Backspace,
+        Key::Named(NamedKey::Delete) => Ok::Delete,
+        Key::Named(NamedKey::Insert) => Ok::Insert,
+        Key::Named(NamedKey::Home) => Ok::Home,
+        Key::Named(NamedKey::End) => Ok::End,
+        Key::Named(NamedKey::PageUp) => Ok::PageUp,
+        Key::Named(NamedKey::PageDown) => Ok::PageDown,
+        Key::Named(NamedKey::ArrowUp) => Ok::ArrowUp,
+        Key::Named(NamedKey::ArrowDown) => Ok::ArrowDown,
+        Key::Named(NamedKey::ArrowLeft) => Ok::ArrowLeft,
+        Key::Named(NamedKey::ArrowRight) => Ok::ArrowRight,
+        Key::Named(NamedKey::Space) => Ok::Space,
+        Key::Named(named) => Ok::F(winit_named_f_index(named)?),
+        _ => return None,
+    };
+    Some(Shortcut::new(modifiers, key))
 }
 
 fn winit_modifiers_match(
