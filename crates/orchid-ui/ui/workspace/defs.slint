@@ -193,6 +193,8 @@ export struct PasswordDetail {
 export struct PasswordModel {
     is-unlocked: bool,
     lock-reason: string,
+    biometric-available: bool,
+    unlock-error: string,
     entries: [PasswordEntryItem],
     selected: PasswordDetail,
     search-query: string,

@@ -214,6 +214,11 @@ media-previous = Previous
 
 # ---- Password manager ----
 password-locked = Database is locked
+password-unlock-label = Master password
+password-unlock-placeholder = Enter master password
+password-unlock-submit = Unlock
+password-unlock-biometric = Windows Hello
+password-unlock-biometric-prompt = Unlock password vault
 password-search-placeholder = Search entries...
 password-no-entries = No entries yet
 password-copy-password = Copy password

@@ -75,11 +75,67 @@ pub async fn copy_totp(instance_id: Uuid, entry_id: &str) -> Result<(), String> 
     inner.copy_totp(entry_id).await
 }
 
-/// Handle to the shared password database + clipboard.
+/// Unlock the vault with a master passphrase and refresh live widgets.
+pub fn unlock_with_passphrase(
+    vault: Arc<orchid_crypto::PasswordVault>,
+    bus: Arc<orchid_core::EventBus>,
+    passphrase: &str,
+) -> Result<(), String> {
+    use secrecy::SecretString;
+    vault
+        .unlock_with_passphrase(SecretString::new(passphrase.to_string()))
+        .map_err(|e| e.to_string())?;
+    notify_vault_unlocked(&vault, &bus);
+    Ok(())
+}
+
+/// Unlock the vault via Windows Hello and refresh live widgets.
+pub fn unlock_with_biometric(
+    vault: Arc<orchid_crypto::PasswordVault>,
+    bus: Arc<orchid_core::EventBus>,
+    prompt: &str,
+) -> Result<(), String> {
+    vault
+        .unlock_with_biometric(prompt)
+        .map_err(|e| e.to_string())?;
+    notify_vault_unlocked(&vault, &bus);
+    Ok(())
+}
+
+fn notify_vault_unlocked(vault: &orchid_crypto::PasswordVault, bus: &orchid_core::EventBus) {
+    for entry in PASSWORD_LIVE.iter() {
+        entry.value().on_vault_unlocked(vault);
+        bus.publish(
+            orchid_core::EventSource::Widget(*entry.key()),
+            WidgetSnapshotUpdated {
+                instance_id: *entry.key(),
+            },
+        );
+    }
+}
+
+fn set_unlock_error(message: String) {
+    for entry in PASSWORD_LIVE.iter() {
+        entry.value().state.write().unlock_error = Some(message.clone());
+        entry.value().bus.publish(
+            orchid_core::EventSource::Widget(*entry.key()),
+            WidgetSnapshotUpdated {
+                instance_id: *entry.key(),
+            },
+        );
+    }
+}
+
+/// Record a failed unlock attempt on live widgets.
+pub fn record_unlock_error(message: String) {
+    set_unlock_error(message);
+}
+
+/// Handle to the shared password vault + clipboard.
 #[derive(Clone)]
 pub struct PasswordDeps {
-    /// Unlocked KDBX database.
-    pub database: Arc<orchid_crypto::PasswordDatabase>,
+    /// Locked/unlocked vault.
+    pub vault: Arc<orchid_crypto::PasswordVault>,
     /// Secure clipboard used for auto-clearing copies.
     pub clipboard: Arc<dyn orchid_crypto::SecureClipboard>,
 }
@@ -102,6 +158,7 @@ struct State {
     search_query: String,
     selected_id: Option<Uuid>,
     error: Option<String>,
+    unlock_error: Option<String>,
 }
 
 struct PasswordHandle {
@@ -145,13 +202,30 @@ impl PasswordManagerWidget {
 }
 
 impl PasswordHandle {
+    fn on_vault_unlocked(&self, vault: &orchid_crypto::PasswordVault) {
+        self.state.write().unlock_error = None;
+        if vault.is_unlocked() {
+            self.refresh_entries(None);
+        }
+    }
+
     fn refresh_entries(&self, query: Option<String>) {
+        let Some(db) = self.deps.vault.database() else {
+            let mut state = self.state.write();
+            state.entries.clear();
+            state.selected_id = None;
+            state.error = None;
+            if let Some(new_q) = query {
+                state.search_query = new_q;
+            }
+            return;
+        };
         let q = match &query {
             Some(q) => q.clone(),
             None => self.state.read().search_query.clone(),
         };
         let (entries, err) = if q.trim().is_empty() {
-            match self.deps.database.list_entries(None) {
+            match db.list_entries(None) {
                 Ok(v) => (v, None),
                 Err(e) => (Vec::new(), Some(e.to_string())),
             }
@@ -161,7 +235,7 @@ impl PasswordHandle {
                 limit: Some(200),
                 ..Default::default()
             };
-            match self.deps.database.search(&search) {
+            match db.search(&search) {
                 Ok(hits) => (hits.into_iter().map(|h| h.entry).collect::<Vec<_>>(), None),
                 Err(e) => (Vec::new(), Some(e.to_string())),
             }
@@ -194,10 +268,13 @@ impl PasswordHandle {
     }
 
     async fn copy_password(&self, id_str: &str) -> Result<(), String> {
-        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
-        let entry = self
+        let db = self
             .deps
-            .database
+            .vault
+            .database()
+            .ok_or_else(|| "vault locked".to_string())?;
+        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
+        let entry = db
             .get_entry(id)
             .map_err(|e| e.to_string())?;
         self.deps
@@ -209,12 +286,13 @@ impl PasswordHandle {
     }
 
     async fn copy_username(&self, id_str: &str) -> Result<(), String> {
-        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
-        let entry = self
+        let db = self
             .deps
-            .database
-            .get_entry(id)
-            .map_err(|e| e.to_string())?;
+            .vault
+            .database()
+            .ok_or_else(|| "vault locked".to_string())?;
+        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
+        let entry = db.get_entry(id).map_err(|e| e.to_string())?;
         self.deps
             .clipboard
             .copy_with_auto_clear(
@@ -227,12 +305,13 @@ impl PasswordHandle {
     }
 
     async fn copy_totp(&self, id_str: &str) -> Result<(), String> {
-        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
-        let entry = self
+        let db = self
             .deps
-            .database
-            .get_entry(id)
-            .map_err(|e| e.to_string())?;
+            .vault
+            .database()
+            .ok_or_else(|| "vault locked".to_string())?;
+        let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
+        let entry = db.get_entry(id).map_err(|e| e.to_string())?;
         let Some(cfg) = entry.totp else {
             return Err("no TOTP".into());
         };
@@ -304,7 +383,7 @@ impl Widget for PasswordManagerWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let state = self.inner.state.read().clone();
-        let payload = build_payload(&state);
+        let payload = build_payload(&state, &self.inner.deps.vault);
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
@@ -332,7 +411,7 @@ impl Widget for PasswordManagerWidget {
     }
 }
 
-fn build_payload(state: &State) -> PasswordManagerPayload {
+fn build_payload(state: &State, vault: &orchid_crypto::PasswordVault) -> PasswordManagerPayload {
     let entries = state
         .entries
         .iter()
@@ -353,11 +432,17 @@ fn build_payload(state: &State) -> PasswordManagerPayload {
         .map(build_detail);
 
     PasswordManagerPayload {
-        is_unlocked: state.error.is_none(),
-        lock_reason: state.error.clone(),
+        is_unlocked: vault.is_unlocked() && state.error.is_none(),
+        lock_reason: if vault.is_unlocked() {
+            state.error.clone()
+        } else {
+            None
+        },
         entries,
         selected,
         search_query: state.search_query.clone(),
+        biometric_available: vault.biometric_unlock_available(),
+        unlock_error: state.unlock_error.clone(),
     }
 }
 
@@ -407,10 +492,10 @@ fn relative_from(at: chrono::DateTime<chrono::Utc>) -> String {
 /// Descriptor that wires a shared database + clipboard into every instance.
 #[must_use]
 pub fn descriptor(
-    database: Arc<orchid_crypto::PasswordDatabase>,
+    vault: Arc<orchid_crypto::PasswordVault>,
     clipboard: Arc<dyn orchid_crypto::SecureClipboard>,
 ) -> WidgetDescriptor {
-    let deps = PasswordDeps { database, clipboard };
+    let deps = PasswordDeps { vault, clipboard };
     let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, _bytes| {
         Ok(Box::new(PasswordManagerWidget::new(
             ctx.instance_id,

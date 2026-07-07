@@ -195,6 +195,8 @@ fn password_detail_eq(a: &PasswordEntryDetailView, b: &PasswordEntryDetailView) 
 fn password_payload_eq(a: &PasswordManagerPayload, b: &PasswordManagerPayload) -> bool {
     a.is_unlocked == b.is_unlocked
         && a.lock_reason == b.lock_reason
+        && a.biometric_available == b.biometric_available
+        && a.unlock_error == b.unlock_error
         && a.search_query == b.search_query
         && a.entries.len() == b.entries.len()
         && a

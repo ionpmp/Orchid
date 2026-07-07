@@ -92,6 +92,22 @@ pub enum CryptoError {
     #[error("DPAPI is unavailable on this platform")]
     DpapiUnavailable,
 
+    /// Biometric verification is unavailable on this platform or device.
+    #[error("biometric verification is unavailable")]
+    BiometricUnavailable,
+
+    /// The user cancelled biometric verification.
+    #[error("biometric verification cancelled")]
+    BiometricCancelled,
+
+    /// Biometric verification failed.
+    #[error("biometric verification failed: {0}")]
+    BiometricFailed(String),
+
+    /// No DPAPI-wrapped master key exists yet (unlock with passphrase first).
+    #[error("no stored master key for biometric unlock")]
+    MasterKeyNotStored,
+
     // --- Generic -------------------------------------------------------
     /// A filesystem I/O operation failed.
     #[error(transparent)]

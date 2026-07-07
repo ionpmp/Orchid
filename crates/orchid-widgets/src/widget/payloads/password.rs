@@ -17,6 +17,10 @@ pub struct PasswordManagerPayload {
     pub selected: Option<PasswordEntryDetailView>,
     /// Current search query.
     pub search_query: String,
+    /// Whether Windows Hello unlock is offered in the UI.
+    pub biometric_available: bool,
+    /// Last unlock attempt error message (if any).
+    pub unlock_error: Option<String>,
 }
 
 /// Summary row in the entry list. No passwords are exposed.

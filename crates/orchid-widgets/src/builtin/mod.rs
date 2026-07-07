@@ -54,7 +54,7 @@ pub fn register_all(
     registry: &WidgetRegistry,
     http: reqwest::Client,
     search_aggregator: Arc<search::SearchAggregator>,
-    password_db: Arc<orchid_crypto::PasswordDatabase>,
+    password_vault: Arc<orchid_crypto::PasswordVault>,
     clipboard: Arc<dyn orchid_crypto::SecureClipboard>,
 ) -> Result<()> {
     registry.register(weather::descriptor(http.clone()))?;
@@ -63,6 +63,6 @@ pub fn register_all(
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor(search_aggregator))?;
     registry.register(media::descriptor())?;
-    registry.register(password::descriptor(password_db, clipboard))?;
+    registry.register(password::descriptor(password_vault, clipboard))?;
     Ok(())
 }

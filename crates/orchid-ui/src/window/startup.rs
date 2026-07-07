@@ -128,6 +128,10 @@ impl StartupWindowController {
         g.set_password_label_totp(mgr.tr("password-label-totp").into());
         g.set_password_action_copy(mgr.tr("password-action-copy").into());
         g.set_password_action_open(mgr.tr("password-action-open").into());
+        g.set_password_unlock_label(mgr.tr("password-unlock-label").into());
+        g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());
+        g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
+        g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
     }
 
     fn apply_app_state(&self) {

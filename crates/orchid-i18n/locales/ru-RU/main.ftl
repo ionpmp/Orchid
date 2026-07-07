@@ -209,6 +209,11 @@ media-previous = Предыдущий
 
 # ---- Password manager ----
 password-locked = База паролей заблокирована
+password-unlock-label = Мастер-пароль
+password-unlock-placeholder = Введите мастер-пароль
+password-unlock-submit = Разблокировать
+password-unlock-biometric = Windows Hello
+password-unlock-biometric-prompt = Разблокировать хранилище паролей
 password-search-placeholder = Поиск записей…
 password-no-entries = Записей пока нет
 password-copy-password = Скопировать пароль

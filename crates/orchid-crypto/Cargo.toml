@@ -51,6 +51,8 @@ features = [
     "Win32_Security_Cryptography",
     "Win32_Foundation",
     "Win32_System_Memory",
+    "Foundation",
+    "Security_Credentials_UI",
 ]
 
 [dev-dependencies]

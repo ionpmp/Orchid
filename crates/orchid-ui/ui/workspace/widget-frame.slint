@@ -53,6 +53,8 @@ export component WidgetFrame inherits Rectangle {
     callback password-copy-username(string);
     callback password-copy-totp(string);
     callback password-open-url(string);
+    callback password-unlock-submit(string);
+    callback password-unlock-biometric();
 
     callback viewer-image-zoom-in(string);
     callback viewer-image-zoom-out(string);
@@ -306,6 +308,8 @@ export component WidgetFrame inherits Rectangle {
             copy-username(id) => { root.password-copy-username(id); }
             copy-totp(id) => { root.password-copy-totp(id); }
             open-url(url) => { root.password-open-url(url); }
+            unlock-submit(pw) => { root.password-unlock-submit(pw); }
+            unlock-biometric => { root.password-unlock-biometric(); }
         }
 
         if model.type-id == "viewer" : Rectangle {

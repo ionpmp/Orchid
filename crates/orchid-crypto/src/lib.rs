@@ -36,15 +36,21 @@
 #![allow(clippy::result_large_err)]
 
 pub mod age_encryption;
+pub mod biometric;
 pub mod content;
 pub mod error;
 pub mod kdbx;
 pub mod random;
 pub mod secret;
+pub mod vault;
 
 pub use age_encryption::{
     Decryptor, EncryptedFileMeta, Encryptor, Identity, IdentityKind, RevealClosed,
     RevealDuration, RevealExpired, RevealManager, RevealSession, RevealStarted,
+};
+pub use biometric::{
+    check_availability as check_biometric_availability, verify_user as verify_biometric_user,
+    BiometricAvailability, BiometricVerification,
 };
 pub use content::{
     from_hex, hash_bytes, hash_file, hex, Chunk, ChunkRef, ChunkRefInfo, ChunkStore, Chunker,
@@ -59,6 +65,7 @@ pub use kdbx::{
 };
 pub use random::{fill_secure, random_bytes, random_uuid};
 pub use secret::{SecretBytes, ZeroizingBytes};
+pub use vault::PasswordVault;
 
 /// Crate version.
 ///

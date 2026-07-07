@@ -23,7 +23,6 @@ use orchid_widgets::{
     commands::build_command_set,
     GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry, WorkspaceManager,
 };
-use secrecy::SecretString;
 
 use crate::commands::build_ui_command_set;
 use crate::error::{Result, UiError};
@@ -72,6 +71,8 @@ pub struct OrchidApp {
     network_mounts: Arc<RwLock<Vec<NetworkMountConfig>>>,
     /// Application-wide recent-files list.
     recent_files: Arc<orchid_widgets::RecentFilesStore>,
+    /// KDBX password vault (unlock via passphrase or Windows Hello).
+    password_vault: Arc<orchid_crypto::PasswordVault>,
     /// Keeps the config watcher background task alive.
     _config_watcher: ConfigWatcher,
 }
@@ -248,33 +249,20 @@ impl OrchidApp {
             }
         };
 
-        let pw_db_path = paths.data_dir.join("passwords.kdbx");
-        let master = SecretString::new("orchid-dev".to_string());
-        let password_db: Arc<orchid_crypto::PasswordDatabase> = if pw_db_path.exists() {
-            Arc::new(
-                orchid_crypto::PasswordDatabase::open(&pw_db_path, master.clone())
-                    .or_else(|_| orchid_crypto::PasswordDatabase::create(&pw_db_path, master.clone()))
-                    .map_err(|e| UiError::Slint(format!("open password db: {e}")))?,
-            )
-        } else {
-            #[cfg(debug_assertions)]
-            {
-                Arc::new(
-                    orchid_crypto::PasswordDatabase::create(&pw_db_path, master.clone())
-                        .map_err(|e| UiError::Slint(format!("create password db: {e}")))?,
-                )
-            }
-            #[cfg(not(debug_assertions))]
-            {
-                Arc::new(
-                    orchid_crypto::PasswordDatabase::create(&pw_db_path, master.clone())
-                        .map_err(|e| UiError::Slint(format!("create password db: {e}")))?,
-                )
-            }
-        };
+        let password_vault = orchid_crypto::PasswordVault::new(paths.data_dir.clone());
+        #[cfg(debug_assertions)]
+        if !password_vault.db_exists() {
+            use secrecy::SecretString;
+            password_vault
+                .unlock_with_passphrase(SecretString::new("orchid-dev".to_string()))
+                .map_err(|e| UiError::Slint(format!("dev password vault: {e}")))?;
+        }
 
         widget_registry
-            .register(orchid_widgets::builtin::password::descriptor(password_db, clipboard))
+            .register(orchid_widgets::builtin::password::descriptor(
+                password_vault.clone(),
+                clipboard,
+            ))
             .map_err(|e| UiError::Slint(format!("register password: {e}")))?;
 
         let fs_registry: Arc<FsProviderRegistry> = Arc::new(FsProviderRegistry::new());
@@ -535,6 +523,7 @@ impl OrchidApp {
             _managed_ingest_failed_sub: Some(managed_ingest_failed_sub),
             network_mounts,
             recent_files,
+            password_vault,
             _config_watcher: config_watcher,
         })
     }
@@ -605,6 +594,7 @@ impl OrchidApp {
             self.config.clone(),
             self.paths.config_file.clone(),
             self.recent_files.clone(),
+            self.password_vault.clone(),
             self.storage.clone(),
             self.bus.clone(),
             self.command_registry.clone(),
