@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::error::{Result as WidgetResult, WidgetError};
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{IndicatorStatus, SystemIndicator, SystemPayload};
+use crate::widget::payloads::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
@@ -125,8 +125,11 @@ impl Widget for SystemWidget {
         let indicators = match self.snapshot.read().clone() {
             Some(snap) => build_indicators(&cfg, &snap),
             None => vec![SystemIndicator {
-                label: "System".into(),
-                value_text: "Loading…".into(),
+                kind: SystemIndicatorKind::Cpu,
+                name_suffix: None,
+                value_text: String::new(),
+                network_up: None,
+                network_down: None,
                 percent: None,
                 icon: "system-cpu",
                 status: IndicatorStatus::Normal,
@@ -137,7 +140,10 @@ impl Widget for SystemWidget {
             widget_type: TYPE_ID,
             title: "System".into(),
             status: WidgetStatus::Ready,
-            payload: WidgetPayload::SystemIndicators(SystemPayload { indicators }),
+            payload: WidgetPayload::SystemIndicators(SystemPayload {
+                indicators,
+                is_loading: self.snapshot.read().is_none(),
+            }),
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
@@ -186,8 +192,11 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
 
     if cfg.show_cpu {
         out.push(SystemIndicator {
-            label: "CPU".into(),
+            kind: SystemIndicatorKind::Cpu,
+            name_suffix: None,
             value_text: format!("{:.0}%", snap.cpu_total_percent),
+            network_up: None,
+            network_down: None,
             percent: Some(snap.cpu_total_percent),
             icon: "system-cpu",
             status: bucket_pct(snap.cpu_total_percent, 75.0, 90.0),
@@ -197,12 +206,15 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
     if cfg.show_memory && snap.memory_total_bytes > 0 {
         let pct = (snap.memory_used_bytes as f32 / snap.memory_total_bytes as f32) * 100.0;
         out.push(SystemIndicator {
-            label: "Memory".into(),
+            kind: SystemIndicatorKind::Memory,
+            name_suffix: None,
             value_text: format!(
                 "{} / {}",
                 format_bytes(snap.memory_used_bytes),
                 format_bytes(snap.memory_total_bytes)
             ),
+            network_up: None,
+            network_down: None,
             percent: Some(pct),
             icon: "system-memory",
             status: bucket_pct(pct, 80.0, 95.0),
@@ -220,12 +232,15 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
             }
             let pct = (d.used_bytes as f32 / d.total_bytes as f32) * 100.0;
             out.push(SystemIndicator {
-                label: format!("Disk {}", d.mount),
+                kind: SystemIndicatorKind::Disk,
+                name_suffix: Some(d.mount.clone()),
                 value_text: format!(
                     "{} / {}",
                     format_bytes(d.used_bytes),
                     format_bytes(d.total_bytes)
                 ),
+                network_up: None,
+                network_down: None,
                 percent: Some(pct),
                 icon: "system-disk",
                 status: bucket_pct(pct, 85.0, 95.0),
@@ -239,16 +254,12 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
             if !selector.is_empty() && !selector.iter().any(|name| name == &n.interface) {
                 continue;
             }
-            if n.total_downloaded_bytes == 0 && n.total_uploaded_bytes == 0 {
-                continue;
-            }
             out.push(SystemIndicator {
-                label: format!("Network {}", n.interface),
-                value_text: format!(
-                    "↑ {}/s  ↓ {}/s",
-                    format_bytes(n.upload_bps as u64),
-                    format_bytes(n.download_bps as u64)
-                ),
+                kind: SystemIndicatorKind::Network,
+                name_suffix: Some(n.interface.clone()),
+                value_text: String::new(),
+                network_up: Some(format_bytes(n.upload_bps as u64)),
+                network_down: Some(format_bytes(n.download_bps as u64)),
                 percent: None,
                 icon: "system-network",
                 status: IndicatorStatus::Normal,
@@ -260,10 +271,17 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
         if let Some(b) = &snap.battery {
             let pct = b.percent as f32;
             out.push(SystemIndicator {
-                label: "Battery".into(),
+                kind: SystemIndicatorKind::Battery,
+                name_suffix: None,
                 value_text: format!("{}%", b.percent),
+                network_up: None,
+                network_down: None,
                 percent: Some(pct),
-                icon: if b.charging { "system-battery-charging" } else { "system-battery" },
+                icon: if b.charging {
+                    "system-battery-charging"
+                } else {
+                    "system-battery"
+                },
                 status: bucket_low(pct, 20.0, 10.0),
             });
         }
@@ -271,8 +289,11 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
 
     if cfg.show_uptime {
         out.push(SystemIndicator {
-            label: "Uptime".into(),
+            kind: SystemIndicatorKind::Uptime,
+            name_suffix: None,
             value_text: format_duration_secs(snap.uptime_seconds),
+            network_up: None,
+            network_down: None,
             percent: None,
             icon: "system-uptime",
             status: IndicatorStatus::Normal,
@@ -365,18 +386,18 @@ mod tests {
     fn cpu_thresholds_bucket_correctly() {
         let cfg = SystemConfig::default();
         let indicators = build_indicators(&cfg, &snap(20.0));
-        let cpu = indicators.iter().find(|i| i.label == "CPU").unwrap();
+        let cpu = indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap();
         assert_eq!(cpu.status, IndicatorStatus::Normal);
 
         let indicators = build_indicators(&cfg, &snap(80.0));
         assert_eq!(
-            indicators.iter().find(|i| i.label == "CPU").unwrap().status,
+            indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap().status,
             IndicatorStatus::Warning
         );
 
         let indicators = build_indicators(&cfg, &snap(95.0));
         assert_eq!(
-            indicators.iter().find(|i| i.label == "CPU").unwrap().status,
+            indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap().status,
             IndicatorStatus::Critical
         );
     }

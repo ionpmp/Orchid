@@ -40,7 +40,7 @@ pub use widget::payloads::{
     EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, MediaPlayerPayload,
     MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView, PasswordEntryView,
     ManagedFolderSidebarPayload,
-    PasswordManagerPayload, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator,
+    PasswordManagerPayload, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator, SystemIndicatorKind,
     SystemPayload, TabPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
     WeatherPayload, WeatherStatusTag,
 };

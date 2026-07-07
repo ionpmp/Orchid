@@ -192,7 +192,7 @@ impl Widget for WeatherWidget {
                 } else {
                     crate::widget::payloads::WeatherStatusTag::Stale
                 };
-                let payload = render_payload(&config, &data, status, now);
+                let payload = render_payload(&config, &data, status);
                 let title = data.location.name.clone();
                 (payload, title)
             }
@@ -200,13 +200,15 @@ impl Widget for WeatherWidget {
                 crate::widget::payloads::WeatherPayload {
                     location_name: config.location.name.clone(),
                     current_temp_text: "—".into(),
-                    feels_like_text: None,
-                    condition_label: WeatherCondition::Unknown.default_label().into(),
+                    feels_like_temp: None,
+                    condition_key: WeatherCondition::Unknown.ftl_key(),
                     condition_icon: WeatherCondition::Unknown.icon(),
-                    humidity_text: None,
-                    wind_text: None,
+                    humidity_percent: None,
+                    wind_speed_kph: None,
+                    wind_direction: None,
                     forecast: Vec::new(),
-                    last_updated_text: "Error loading weather".into(),
+                    fetched_at: None,
+                    is_loading: false,
                     status: crate::widget::payloads::WeatherStatusTag::Error,
                 },
                 config.location.name.clone(),
@@ -215,13 +217,15 @@ impl Widget for WeatherWidget {
                 crate::widget::payloads::WeatherPayload {
                     location_name: config.location.name.clone(),
                     current_temp_text: "—".into(),
-                    feels_like_text: None,
-                    condition_label: "Loading…".into(),
+                    feels_like_temp: None,
+                    condition_key: WeatherCondition::Unknown.ftl_key(),
                     condition_icon: WeatherCondition::Unknown.icon(),
-                    humidity_text: None,
-                    wind_text: None,
+                    humidity_percent: None,
+                    wind_speed_kph: None,
+                    wind_direction: None,
                     forecast: Vec::new(),
-                    last_updated_text: "Loading…".into(),
+                    fetched_at: None,
+                    is_loading: true,
                     status: crate::widget::payloads::WeatherStatusTag::Offline,
                 },
                 config.location.name.clone(),
@@ -266,40 +270,34 @@ fn render_payload(
     config: &WeatherConfig,
     data: &WeatherData,
     status: crate::widget::payloads::WeatherStatusTag,
-    now: chrono::DateTime<Utc>,
 ) -> crate::widget::payloads::WeatherPayload {
     let temp_text = format_temperature(data.current.temperature_c, config.units);
-    let feels_like_text = data
+    let feels_like_temp = data
         .current
         .feels_like_c
-        .map(|t| format!("Feels {}", format_temperature(t, config.units)));
-    let humidity_text = data.current.humidity.map(|h| format!("{h}%"));
-    let wind_text = data.current.wind_speed_kph.map(|kph| {
-        let dir = data.current.wind_direction_deg.map(wind_direction_label).unwrap_or("");
-        if dir.is_empty() {
-            format!("{:.0} km/h", kph)
-        } else {
-            format!("{:.0} km/h {}", kph, dir)
-        }
-    });
+        .map(|t| format_temperature(t, config.units));
     let forecast = data
         .forecast
         .iter()
         .enumerate()
         .map(|(i, d)| render_forecast_day(i, d, config))
         .collect();
-    let last_updated_text = format_relative(now, data.fetched_at);
 
     crate::widget::payloads::WeatherPayload {
         location_name: data.location.name.clone(),
         current_temp_text: temp_text,
-        feels_like_text,
-        condition_label: data.current.condition.default_label().into(),
+        feels_like_temp,
+        condition_key: data.current.condition.ftl_key(),
         condition_icon: data.current.condition.icon(),
-        humidity_text,
-        wind_text,
+        humidity_percent: data.current.humidity,
+        wind_speed_kph: data.current.wind_speed_kph,
+        wind_direction: data
+            .current
+            .wind_direction_deg
+            .map(|deg| wind_direction_label(deg).to_string()),
         forecast,
-        last_updated_text,
+        fetched_at: Some(data.fetched_at),
+        is_loading: false,
         status,
     }
 }
@@ -309,19 +307,17 @@ fn render_forecast_day(
     day: &DailyForecast,
     config: &WeatherConfig,
 ) -> crate::widget::payloads::WeatherForecastDay {
-    let day_label = match idx {
-        0 => "Today".to_string(),
-        1 => "Tomorrow".to_string(),
-        _ => day.date.format("%a").to_string(),
-    };
     crate::widget::payloads::WeatherForecastDay {
-        day_label,
+        day_index: idx as u8,
+        weekday_label: if idx >= 2 {
+            Some(day.date.format("%a").to_string())
+        } else {
+            None
+        },
         high_text: format_temperature(day.high_c, config.units),
         low_text: format_temperature(day.low_c, config.units),
         condition_icon: day.condition.icon(),
-        precipitation_probability_text: day
-            .precipitation_probability
-            .map(|p| format!("{p}%")),
+        precipitation_probability: day.precipitation_probability,
     }
 }
 
@@ -329,19 +325,6 @@ fn format_temperature(c: f32, units: TemperatureUnit) -> String {
     match units {
         TemperatureUnit::Celsius => format!("{:.0}°C", c),
         TemperatureUnit::Fahrenheit => format!("{:.0}°F", celsius_to_fahrenheit(c)),
-    }
-}
-
-fn format_relative(now: chrono::DateTime<Utc>, then: chrono::DateTime<Utc>) -> String {
-    let secs = (now - then).num_seconds().max(0);
-    if secs < 60 {
-        "Updated just now".into()
-    } else if secs < 60 * 60 {
-        format!("Updated {}m ago", secs / 60)
-    } else if secs < 60 * 60 * 24 {
-        format!("Updated {}h ago", secs / 3600)
-    } else {
-        format!("Updated {}d ago", secs / 86400)
     }
 }
 

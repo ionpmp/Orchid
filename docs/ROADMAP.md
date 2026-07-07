@@ -49,9 +49,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Widgets
 - [~] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge. The Slint workspace dashboard (drag / resize / dock / switcher, app bootstrap) remains blocked on a dedicated UI-shell task (shared `Theme` global, `LocaleManager`, `StartupWindowController`).
-- [ ] Widget: Weather
-- [ ] Widget: Moon (astronomy)
-- [ ] Widget: System indicators
+- [x] Widget: Weather
+- [x] Widget: Moon (astronomy)
+- [x] Widget: System indicators
 - [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [~] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [ ] Widget: Media player (audio/video)

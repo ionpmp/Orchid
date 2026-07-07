@@ -59,6 +59,9 @@ weather-status-error = Error loading weather
 weather-updated-just-now = Updated just now
 weather-updated-minutes = Updated { $m }m ago
 weather-updated-hours = Updated { $h }h ago
+weather-updated-days = Updated { $d }d ago
+weather-loading = Loading weather…
+weather-feels-like = Feels like { $temp }
 weather-humidity-label = Humidity
 weather-wind-label = Wind
 
@@ -81,6 +84,7 @@ moon-moonset = Moonset: { $time }
 moon-sunrise = Sunrise: { $time }
 moon-sunset = Sunset: { $time }
 moon-libration = Libration: { $lat }°, { $lon }°
+moon-loading = Calculating moon data…
 
 # ---- System ----
 system-cpu-label = CPU
@@ -92,6 +96,7 @@ system-uptime-label = Uptime
 system-battery-charging = Charging
 system-battery-time-remaining = { $time } remaining
 system-network-rate = ↑ { $up }/s  ↓ { $down }/s
+system-loading = Loading system metrics…
 
 # ---- RSS ----
 rss-no-feeds = No feeds configured

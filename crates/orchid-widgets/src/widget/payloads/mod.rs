@@ -26,6 +26,6 @@ pub use password::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPa
 pub use recent_files::{RecentFileItemView, RecentFilesPayload};
 pub use rss::{RssItemView, RssPayload};
 pub use search::{SearchCandidateView, UniversalSearchPayload};
-pub use system::{IndicatorStatus, SystemIndicator, SystemPayload};
+pub use system::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
 pub use viewer::ViewerPayload;
 pub use weather::{WeatherForecastDay, WeatherPayload, WeatherStatusTag};

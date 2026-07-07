@@ -3541,9 +3541,9 @@ impl MainWindowController {
                         i32::from(t.cursor_col),
                         i32::from(t.cursor_row),
                         t.cursor_visible,
-                        empty_weather_model(),
-                        empty_moon_model(),
-                        empty_system_model(),
+                        empty_weather_model(&self.locale),
+                        empty_moon_model(&self.locale),
+                        empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(),
@@ -3563,8 +3563,8 @@ impl MainWindowController {
                     0,
                     true,
                     build_weather_model(w, &self.locale),
-                    empty_moon_model(),
-                    empty_system_model(),
+                    empty_moon_model(&self.locale),
+                    empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -3582,9 +3582,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
+                    empty_weather_model(&self.locale),
                     build_moon_model(m, &self.locale),
-                    empty_system_model(),
+                    empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -3602,9 +3602,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
-                    empty_moon_model(),
-                    build_system_model(s),
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    build_system_model(s, &self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -3622,9 +3622,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
-                    empty_moon_model(),
-                    empty_system_model(),
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_system_model(&self.locale),
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -3657,9 +3657,9 @@ impl MainWindowController {
                         0,
                         0,
                         true,
-                        empty_weather_model(),
-                        empty_moon_model(),
-                        empty_system_model(),
+                        empty_weather_model(&self.locale),
+                        empty_moon_model(&self.locale),
+                        empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
                         empty_media_model(),
@@ -3678,9 +3678,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
-                    empty_moon_model(),
-                    empty_system_model(),
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     build_media_model(m),
@@ -3724,9 +3724,9 @@ impl MainWindowController {
                         0,
                         0,
                         true,
-                        empty_weather_model(),
-                        empty_moon_model(),
-                        empty_system_model(),
+                        empty_weather_model(&self.locale),
+                        empty_moon_model(&self.locale),
+                        empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(),
@@ -3745,9 +3745,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
-                    empty_moon_model(),
-                    empty_system_model(),
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -3765,9 +3765,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
-                    empty_moon_model(),
-                    empty_system_model(),
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -3806,9 +3806,9 @@ impl MainWindowController {
                         0,
                         0,
                         true,
-                        empty_weather_model(),
-                        empty_moon_model(),
-                        empty_system_model(),
+                        empty_weather_model(&self.locale),
+                        empty_moon_model(&self.locale),
+                        empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(),
@@ -3832,9 +3832,9 @@ impl MainWindowController {
                     0,
                     0,
                     true,
-                    empty_weather_model(),
-                    empty_moon_model(),
-                    empty_system_model(),
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(),
@@ -6361,9 +6361,9 @@ fn default_frame_data_extended(
         0,
         0,
         true,
-        empty_weather_model(),
-        empty_moon_model(),
-        empty_system_model(),
+        empty_weather_model(locale),
+        empty_moon_model(locale),
+        empty_system_model(locale),
         empty_rss_model(locale),
         empty_search_model(locale),
         empty_media_model(),
@@ -6374,33 +6374,39 @@ fn default_frame_data_extended(
     )
 }
 
-fn empty_weather_model() -> WeatherModel {
+fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
     WeatherModel {
         location: SharedString::new(),
         current_temp: SharedString::new(),
-        condition_label: SharedString::new(),
+        condition_label: locale.tr("weather-loading").into(),
         condition_icon: SharedString::new(),
         feels_like: SharedString::new(),
         humidity: SharedString::new(),
         wind: SharedString::new(),
         forecast: ModelRc::new(VecModel::default()),
-        last_updated: SharedString::new(),
-        status: 0,
+        last_updated: locale.tr("weather-loading").into(),
+        status: 2,
     }
 }
 
-fn empty_moon_model() -> MoonModel {
+fn empty_moon_model(locale: &LocaleManager) -> MoonModel {
     MoonModel {
-        phase_label: SharedString::new(),
+        phase_label: locale.tr("moon-loading").into(),
         phase_icon: SharedString::new(),
         illumination: SharedString::new(),
         values: ModelRc::new(VecModel::default()),
     }
 }
 
-fn empty_system_model() -> SystemModel {
+fn empty_system_model(locale: &LocaleManager) -> SystemModel {
     SystemModel {
-        indicators: ModelRc::new(VecModel::default()),
+        indicators: ModelRc::new(VecModel::from(vec![SystemIndicatorEntry {
+            label: locale.tr("system-loading").into(),
+            value_text: SharedString::new(),
+            percent: -1.0,
+            icon: SharedString::new(),
+            status: 0,
+        }])),
     }
 }
 
@@ -8092,35 +8098,107 @@ fn build_search_model(
 }
 
 fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManager) -> WeatherModel {
+    let condition_label = if p.is_loading {
+        locale.tr("weather-loading")
+    } else if p.status == orchid_widgets::WeatherStatusTag::Error {
+        locale.tr("weather-status-error")
+    } else {
+        locale.tr(p.condition_key)
+    };
+
     let forecast: Vec<WeatherForecastEntry> = p
         .forecast
         .iter()
-        .map(|d| WeatherForecastEntry {
-            day_label: d.day_label.clone().into(),
-            high_text: d.high_text.clone().into(),
-            low_text: d.low_text.clone().into(),
-            icon: d.condition_icon.into(),
-            precip_text: d
-                .precipitation_probability_text
-                .clone()
-                .unwrap_or_default()
-                .into(),
+        .map(|d| {
+            let day_label = match d.day_index {
+                0 => locale.tr("weather-day-today"),
+                1 => locale.tr("weather-day-tomorrow"),
+                _ => d.weekday_label.clone().unwrap_or_default(),
+            };
+            WeatherForecastEntry {
+                day_label: day_label.into(),
+                high_text: d.high_text.clone().into(),
+                low_text: d.low_text.clone().into(),
+                icon: d.condition_icon.into(),
+                precip_text: d
+                    .precipitation_probability
+                    .map(|pct| format!("{pct}%"))
+                    .unwrap_or_default()
+                    .into(),
+            }
         })
         .collect();
 
-    let _ = locale;
+    let feels_like = p
+        .feels_like_temp
+        .as_ref()
+        .map(|temp| {
+            locale
+                .tr_args(
+                    "weather-feels-like",
+                    &orchid_i18n::FluentArgs::new().with("temp", temp.clone()),
+                )
+        })
+        .unwrap_or_default();
+
+    let humidity = p
+        .humidity_percent
+        .map(|h| format!("{h}%"))
+        .unwrap_or_default();
+
+    let wind = match (p.wind_speed_kph, p.wind_direction.as_deref()) {
+        (Some(kph), Some(dir)) if !dir.is_empty() => format!("{kph:.0} km/h {dir}"),
+        (Some(kph), _) => format!("{kph:.0} km/h"),
+        _ => String::new(),
+    };
+
+    let last_updated = if p.is_loading {
+        locale.tr("weather-loading")
+    } else if p.status == orchid_widgets::WeatherStatusTag::Error {
+        locale.tr("weather-status-error")
+    } else {
+        p.fetched_at
+            .map(|at| format_weather_updated(at, locale))
+            .unwrap_or_default()
+    };
 
     WeatherModel {
         location: p.location_name.clone().into(),
-        current_temp: p.current_temp_text.clone().into(),
-        condition_label: p.condition_label.clone().into(),
+        current_temp: if p.is_loading {
+            SharedString::new()
+        } else {
+            p.current_temp_text.clone().into()
+        },
+        condition_label: condition_label.into(),
         condition_icon: p.condition_icon.into(),
-        feels_like: p.feels_like_text.clone().unwrap_or_default().into(),
-        humidity: p.humidity_text.clone().unwrap_or_default().into(),
-        wind: p.wind_text.clone().unwrap_or_default().into(),
+        feels_like: feels_like.into(),
+        humidity: humidity.into(),
+        wind: wind.into(),
         forecast: ModelRc::new(VecModel::from(forecast)),
-        last_updated: p.last_updated_text.clone().into(),
+        last_updated: last_updated.into(),
         status: weather_status_to_int(&p.status),
+    }
+}
+
+fn format_weather_updated(at: chrono::DateTime<chrono::Utc>, locale: &LocaleManager) -> String {
+    let secs = (chrono::Utc::now() - at).num_seconds().max(0);
+    if secs < 60 {
+        locale.tr("weather-updated-just-now")
+    } else if secs < 3600 {
+        locale.tr_args(
+            "weather-updated-minutes",
+            &orchid_i18n::FluentArgs::new().with("m", (secs / 60).to_string()),
+        )
+    } else if secs < 86400 {
+        locale.tr_args(
+            "weather-updated-hours",
+            &orchid_i18n::FluentArgs::new().with("h", (secs / 3600).to_string()),
+        )
+    } else {
+        locale.tr_args(
+            "weather-updated-days",
+            &orchid_i18n::FluentArgs::new().with("d", (secs / 86400).to_string()),
+        )
     }
 }
 
@@ -8167,71 +8245,143 @@ fn weather_status_to_int(s: &orchid_widgets::WeatherStatusTag) -> i32 {
 }
 
 fn build_moon_model(p: &orchid_widgets::MoonPayload, locale: &LocaleManager) -> MoonModel {
-    let mut values = vec![
-        MoonValueEntry {
-            label: locale.tr("moon-age-label").into(),
-            value: p.age_text.clone().into(),
-        },
-        MoonValueEntry {
-            label: locale.tr("moon-distance-label").into(),
-            value: p.distance_text.clone().into(),
-        },
-        MoonValueEntry {
-            label: locale.tr("moon-next-full-label").into(),
-            value: p.next_full_text.clone().into(),
-        },
-        MoonValueEntry {
-            label: locale.tr("moon-next-new-label").into(),
-            value: p.next_new_text.clone().into(),
-        },
-    ];
+    let phase_label = if p.is_loading {
+        locale.tr("moon-loading")
+    } else {
+        locale.tr(p.phase_key)
+    };
 
-    if let Some(t) = &p.moonrise_text {
+    let illumination = p
+        .illumination_percent
+        .map(|pct| {
+            locale.tr_args(
+                "moon-illumination",
+                &orchid_i18n::FluentArgs::new().with("pct", format!("{pct:.0}")),
+            )
+        })
+        .unwrap_or_default();
+
+    let mut values = Vec::new();
+    if let Some(days) = p.age_days {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-age-label").into(),
+            value: locale
+                .tr_args(
+                    "moon-age",
+                    &orchid_i18n::FluentArgs::new().with("days", format!("{days:.1}")),
+                )
+                .into(),
+        });
+    }
+    if let Some(km) = p.distance_km {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-distance-label").into(),
+            value: locale
+                .tr_args(
+                    "moon-distance",
+                    &orchid_i18n::FluentArgs::new().with("km", format!("{km:.0}")),
+                )
+                .into(),
+        });
+    }
+    if let Some(ref date) = p.next_full_date {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-next-full-label").into(),
+            value: locale
+                .tr_args(
+                    "moon-next-full",
+                    &orchid_i18n::FluentArgs::new().with("date", date.clone()),
+                )
+                .into(),
+        });
+    }
+    if let Some(ref date) = p.next_new_date {
+        values.push(MoonValueEntry {
+            label: locale.tr("moon-next-new-label").into(),
+            value: locale
+                .tr_args(
+                    "moon-next-new",
+                    &orchid_i18n::FluentArgs::new().with("date", date.clone()),
+                )
+                .into(),
+        });
+    }
+    if let Some(ref time) = p.moonrise_time {
         values.push(MoonValueEntry {
             label: locale.tr("moon-moonrise-label").into(),
-            value: t.clone().into(),
+            value: locale
+                .tr_args(
+                    "moon-moonrise",
+                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
+                )
+                .into(),
         });
     }
-    if let Some(t) = &p.moonset_text {
+    if let Some(ref time) = p.moonset_time {
         values.push(MoonValueEntry {
             label: locale.tr("moon-moonset-label").into(),
-            value: t.clone().into(),
+            value: locale
+                .tr_args(
+                    "moon-moonset",
+                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
+                )
+                .into(),
         });
     }
-    if let Some(t) = &p.sunrise_text {
+    if let Some(ref time) = p.sunrise_time {
         values.push(MoonValueEntry {
             label: locale.tr("moon-sunrise-label").into(),
-            value: t.clone().into(),
+            value: locale
+                .tr_args(
+                    "moon-sunrise",
+                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
+                )
+                .into(),
         });
     }
-    if let Some(t) = &p.sunset_text {
+    if let Some(ref time) = p.sunset_time {
         values.push(MoonValueEntry {
             label: locale.tr("moon-sunset-label").into(),
-            value: t.clone().into(),
+            value: locale
+                .tr_args(
+                    "moon-sunset",
+                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
+                )
+                .into(),
         });
     }
-    if let Some(t) = &p.libration_text {
+    if let (Some(lat), Some(lon)) = (p.libration_lat_deg, p.libration_lon_deg) {
         values.push(MoonValueEntry {
             label: locale.tr("moon-libration-label").into(),
-            value: t.clone().into(),
+            value: locale
+                .tr_args(
+                    "moon-libration",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("lat", format!("{lat:.1}"))
+                        .with("lon", format!("{lon:.1}")),
+                )
+                .into(),
         });
     }
 
     MoonModel {
-        phase_label: p.phase_label.clone().into(),
+        phase_label: phase_label.into(),
         phase_icon: p.phase_icon.into(),
-        illumination: p.illumination_text.clone().into(),
+        illumination: illumination.into(),
         values: ModelRc::new(VecModel::from(values)),
     }
 }
 
-fn build_system_model(p: &orchid_widgets::SystemPayload) -> SystemModel {
+fn build_system_model(p: &orchid_widgets::SystemPayload, locale: &LocaleManager) -> SystemModel {
+    if p.is_loading {
+        return empty_system_model(locale);
+    }
     let indicators: Vec<SystemIndicatorEntry> = p
         .indicators
         .iter()
         .map(|i| SystemIndicatorEntry {
-            label: i.label.clone().into(),
-            value_text: i.value_text.clone().into(),
+            label: system_indicator_label(i, locale),
+            value_text: system_indicator_value(i, locale),
             percent: i
                 .percent
                 .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
@@ -8243,6 +8393,56 @@ fn build_system_model(p: &orchid_widgets::SystemPayload) -> SystemModel {
 
     SystemModel {
         indicators: ModelRc::new(VecModel::from(indicators)),
+    }
+}
+
+fn system_indicator_label(
+    i: &orchid_widgets::SystemIndicator,
+    locale: &LocaleManager,
+) -> SharedString {
+    use orchid_widgets::SystemIndicatorKind;
+    match i.kind {
+        SystemIndicatorKind::Cpu => locale.tr("system-cpu-label").into(),
+        SystemIndicatorKind::Memory => locale.tr("system-memory-label").into(),
+        SystemIndicatorKind::Disk => locale
+            .tr_args(
+                "system-disk-label",
+                &orchid_i18n::FluentArgs::new().with(
+                    "mount",
+                    i.name_suffix.clone().unwrap_or_default(),
+                ),
+            )
+            .into(),
+        SystemIndicatorKind::Network => locale
+            .tr_args(
+                "system-network-label",
+                &orchid_i18n::FluentArgs::new().with(
+                    "name",
+                    i.name_suffix.clone().unwrap_or_default(),
+                ),
+            )
+            .into(),
+        SystemIndicatorKind::Battery => locale.tr("system-battery-label").into(),
+        SystemIndicatorKind::Uptime => locale.tr("system-uptime-label").into(),
+    }
+}
+
+fn system_indicator_value(
+    i: &orchid_widgets::SystemIndicator,
+    locale: &LocaleManager,
+) -> SharedString {
+    use orchid_widgets::SystemIndicatorKind;
+    if i.kind == SystemIndicatorKind::Network {
+        locale
+            .tr_args(
+                "system-network-rate",
+                &orchid_i18n::FluentArgs::new()
+                    .with("up", i.network_up.clone().unwrap_or_default())
+                    .with("down", i.network_down.clone().unwrap_or_default()),
+            )
+            .into()
+    } else {
+        i.value_text.clone().into()
     }
 }
 

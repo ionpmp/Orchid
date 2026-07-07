@@ -122,65 +122,90 @@ fn recent_files_to_text_lines(p: &orchid_widgets::RecentFilesPayload) -> Vec<Str
 fn weather_to_text_lines(w: &WeatherPayload) -> Vec<String> {
     let mut lines = vec![
         w.location_name.clone(),
-        format!("{} — {}", w.current_temp_text, w.condition_label),
+        format!("{} — {}", w.current_temp_text, w.condition_key),
     ];
-    if let Some(ref f) = w.feels_like_text {
-        lines.push(f.clone());
+    if let Some(ref f) = w.feels_like_temp {
+        lines.push(format!("Feels {f}"));
     }
-    if let Some(ref h) = w.humidity_text {
-        lines.push(h.clone());
+    if let Some(h) = w.humidity_percent {
+        lines.push(format!("{h}%"));
     }
-    if let Some(ref wind) = w.wind_text {
-        lines.push(wind.clone());
+    if let Some(kph) = w.wind_speed_kph {
+        let dir = w.wind_direction.as_deref().unwrap_or("");
+        if dir.is_empty() {
+            lines.push(format!("{kph:.0} km/h"));
+        } else {
+            lines.push(format!("{kph:.0} km/h {dir}"));
+        }
     }
     for day in &w.forecast {
-        let mut s = format!("{}: {} / {}", day.day_label, day.high_text, day.low_text);
-        if let Some(ref p) = day.precipitation_probability_text {
+        let mut s = format!("Day {}: {} / {}", day.day_index, day.high_text, day.low_text);
+        if let Some(p) = day.precipitation_probability {
             s.push_str(" · ");
-            s.push_str(p);
+            s.push_str(&format!("{p}%"));
         }
         lines.push(s);
     }
-    lines.push(w.last_updated_text.clone());
+    if let Some(at) = w.fetched_at {
+        lines.push(format!("Fetched at {at}"));
+    }
     lines
 }
 
 fn moon_to_text_lines(m: &MoonPayload) -> Vec<String> {
-    let mut lines = vec![
-        m.phase_label.clone(),
-        m.illumination_text.clone(),
-        m.age_text.clone(),
-        m.distance_text.clone(),
-        m.next_full_text.clone(),
-        m.next_new_text.clone(),
-    ];
-    if let Some(ref t) = m.moonrise_text {
-        lines.push(t.clone());
+    let mut lines = vec![m.phase_key.to_string()];
+    if let Some(pct) = m.illumination_percent {
+        lines.push(format!("{pct:.0}% illuminated"));
     }
-    if let Some(ref t) = m.moonset_text {
-        lines.push(t.clone());
+    if let Some(days) = m.age_days {
+        lines.push(format!("Age: {days:.1} days"));
     }
-    if let Some(ref t) = m.sunrise_text {
-        lines.push(t.clone());
+    if let Some(km) = m.distance_km {
+        lines.push(format!("Distance: {km:.0} km"));
     }
-    if let Some(ref t) = m.sunset_text {
-        lines.push(t.clone());
+    if let Some(ref d) = m.next_full_date {
+        lines.push(format!("Next full: {d}"));
     }
-    if let Some(ref t) = m.libration_text {
-        lines.push(t.clone());
+    if let Some(ref d) = m.next_new_date {
+        lines.push(format!("Next new: {d}"));
+    }
+    if let Some(ref t) = m.moonrise_time {
+        lines.push(format!("Moonrise: {t}"));
+    }
+    if let Some(ref t) = m.moonset_time {
+        lines.push(format!("Moonset: {t}"));
+    }
+    if let Some(ref t) = m.sunrise_time {
+        lines.push(format!("Sunrise: {t}"));
+    }
+    if let Some(ref t) = m.sunset_time {
+        lines.push(format!("Sunset: {t}"));
+    }
+    if let (Some(lat), Some(lon)) = (m.libration_lat_deg, m.libration_lon_deg) {
+        lines.push(format!("Libration: {lat:.1}°, {lon:.1}°"));
     }
     lines
 }
 
 fn system_to_text_lines(s: &SystemPayload) -> Vec<String> {
+    use orchid_widgets::SystemIndicatorKind;
     s.indicators
         .iter()
         .map(|i| {
-            let mut line = format!("{}: {}", i.label, i.value_text);
-            if let Some(p) = i.percent {
-                line.push_str(&format!(" ({p:.0}%)"));
+            if i.kind == SystemIndicatorKind::Network {
+                format!(
+                    "{:?}: ↑ {} ↓ {}",
+                    i.name_suffix,
+                    i.network_up.as_deref().unwrap_or("—"),
+                    i.network_down.as_deref().unwrap_or("—")
+                )
+            } else {
+                let mut line = format!("{:?}: {}", i.kind, i.value_text);
+                if let Some(p) = i.percent {
+                    line.push_str(&format!(" ({p:.0}%)"));
+                }
+                line
             }
-            line
         })
         .collect()
 }

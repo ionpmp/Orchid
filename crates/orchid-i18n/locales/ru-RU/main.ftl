@@ -54,6 +54,9 @@ weather-status-error = Ошибка загрузки погоды
 weather-updated-just-now = Обновлено только что
 weather-updated-minutes = Обновлено { $m } мин. назад
 weather-updated-hours = Обновлено { $h } ч. назад
+weather-updated-days = Обновлено { $d } дн. назад
+weather-loading = Загрузка погоды…
+weather-feels-like = Ощущается как { $temp }
 weather-humidity-label = Влажность
 weather-wind-label = Ветер
 
@@ -76,6 +79,7 @@ moon-moonset = Заход Луны: { $time }
 moon-sunrise = Восход Солнца: { $time }
 moon-sunset = Заход Солнца: { $time }
 moon-libration = Либрация: { $lat }°, { $lon }°
+moon-loading = Расчёт данных о Луне…
 
 # ---- System ----
 system-cpu-label = ЦП
@@ -87,6 +91,7 @@ system-uptime-label = Аптайм
 system-battery-charging = Заряжается
 system-battery-time-remaining = осталось { $time }
 system-network-rate = ↑ { $up }/с  ↓ { $down }/с
+system-loading = Загрузка системных метрик…
 
 # ---- RSS ----
 rss-no-feeds = Нет настроенных лент

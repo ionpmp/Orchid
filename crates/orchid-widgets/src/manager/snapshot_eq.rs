@@ -58,22 +58,25 @@ pub(crate) fn terminal_payload_eq(a: &TerminalPayload, b: &TerminalPayload) -> b
 fn weather_payload_eq(a: &WeatherPayload, b: &WeatherPayload) -> bool {
     a.location_name == b.location_name
         && a.current_temp_text == b.current_temp_text
-        && a.feels_like_text == b.feels_like_text
-        && a.condition_label == b.condition_label
+        && a.feels_like_temp == b.feels_like_temp
+        && a.condition_key == b.condition_key
         && a.condition_icon == b.condition_icon
-        && a.humidity_text == b.humidity_text
-        && a.wind_text == b.wind_text
+        && a.humidity_percent == b.humidity_percent
+        && opt_f32_eq(a.wind_speed_kph, b.wind_speed_kph)
+        && a.wind_direction == b.wind_direction
         && forecast_eq(&a.forecast, &b.forecast)
-        && a.last_updated_text == b.last_updated_text
+        && a.fetched_at == b.fetched_at
+        && a.is_loading == b.is_loading
         && a.status == b.status
 }
 
 fn weather_forecast_day_eq(a: &WeatherForecastDay, b: &WeatherForecastDay) -> bool {
-    a.day_label == b.day_label
+    a.day_index == b.day_index
+        && a.weekday_label == b.weekday_label
         && a.high_text == b.high_text
         && a.low_text == b.low_text
         && a.condition_icon == b.condition_icon
-        && a.precipitation_probability_text == b.precipitation_probability_text
+        && a.precipitation_probability == b.precipitation_probability
 }
 
 fn forecast_eq(a: &[WeatherForecastDay], b: &[WeatherForecastDay]) -> bool {
@@ -85,35 +88,57 @@ fn forecast_eq(a: &[WeatherForecastDay], b: &[WeatherForecastDay]) -> bool {
 }
 
 fn moon_payload_eq(a: &MoonPayload, b: &MoonPayload) -> bool {
-    a.phase_label == b.phase_label
+    a.phase_key == b.phase_key
         && a.phase_icon == b.phase_icon
-        && a.illumination_text == b.illumination_text
-        && a.age_text == b.age_text
-        && a.distance_text == b.distance_text
-        && a.next_full_text == b.next_full_text
-        && a.next_new_text == b.next_new_text
-        && a.moonrise_text == b.moonrise_text
-        && a.moonset_text == b.moonset_text
-        && a.sunrise_text == b.sunrise_text
-        && a.sunset_text == b.sunset_text
-        && a.libration_text == b.libration_text
+        && opt_f32_eq(a.illumination_percent, b.illumination_percent)
+        && opt_f32_eq(a.age_days, b.age_days)
+        && opt_f64_eq(a.distance_km, b.distance_km)
+        && a.next_full_date == b.next_full_date
+        && a.next_new_date == b.next_new_date
+        && a.moonrise_time == b.moonrise_time
+        && a.moonset_time == b.moonset_time
+        && a.sunrise_time == b.sunrise_time
+        && a.sunset_time == b.sunset_time
+        && opt_f64_eq(a.libration_lat_deg, b.libration_lat_deg)
+        && opt_f64_eq(a.libration_lon_deg, b.libration_lon_deg)
+        && a.is_loading == b.is_loading
 }
 
 fn system_indicator_eq(a: &SystemIndicator, b: &SystemIndicator) -> bool {
-    a.label == b.label
+    a.kind == b.kind
+        && a.name_suffix == b.name_suffix
         && a.value_text == b.value_text
-        && a.percent == b.percent
+        && a.network_up == b.network_up
+        && a.network_down == b.network_down
+        && opt_f32_eq(a.percent, b.percent)
         && a.icon == b.icon
         && a.status == b.status
 }
 
 fn system_payload_eq(a: &SystemPayload, b: &SystemPayload) -> bool {
-    a.indicators.len() == b.indicators.len()
+    a.is_loading == b.is_loading
+        && a.indicators.len() == b.indicators.len()
         && a
             .indicators
             .iter()
             .zip(b.indicators.iter())
             .all(|(x, y)| system_indicator_eq(x, y))
+}
+
+fn opt_f32_eq(a: Option<f32>, b: Option<f32>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => x.to_bits() == y.to_bits(),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn opt_f64_eq(a: Option<f64>, b: Option<f64>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => x.to_bits() == y.to_bits(),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 fn rss_item_eq(a: &RssItemView, b: &RssItemView) -> bool {
@@ -238,13 +263,15 @@ mod tests {
         let a = WidgetPayload::Weather(WeatherPayload {
             location_name: "Home".into(),
             current_temp_text: "20°C".into(),
-            feels_like_text: None,
-            condition_label: "Clear".into(),
+            feels_like_temp: None,
+            condition_key: "weather-condition-clear",
             condition_icon: "weather-clear",
-            humidity_text: None,
-            wind_text: None,
+            humidity_percent: None,
+            wind_speed_kph: None,
+            wind_direction: None,
             forecast: Vec::new(),
-            last_updated_text: "Updated just now".into(),
+            fetched_at: None,
+            is_loading: false,
             status: WeatherStatusTag::Fresh,
         });
         let mut b = a.clone();
@@ -259,13 +286,15 @@ mod tests {
         let a = WidgetPayload::Weather(WeatherPayload {
             location_name: "Home".into(),
             current_temp_text: "20°C".into(),
-            feels_like_text: None,
-            condition_label: "Clear".into(),
+            feels_like_temp: None,
+            condition_key: "weather-condition-clear",
             condition_icon: "weather-clear",
-            humidity_text: None,
-            wind_text: None,
+            humidity_percent: None,
+            wind_speed_kph: None,
+            wind_direction: None,
             forecast: Vec::new(),
-            last_updated_text: "Updated just now".into(),
+            fetched_at: None,
+            is_loading: false,
             status: WeatherStatusTag::Fresh,
         });
         let b = a.clone();

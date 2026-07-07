@@ -122,18 +122,20 @@ impl Widget for MoonWidget {
         let payload = match self.data.read().clone() {
             Some(data) => render_payload(&cfg, &data),
             None => MoonPayload {
-                phase_label: "Loading…".into(),
-                phase_icon: "moon-new",
-                illumination_text: String::new(),
-                age_text: String::new(),
-                distance_text: String::new(),
-                next_full_text: String::new(),
-                next_new_text: String::new(),
-                moonrise_text: None,
-                moonset_text: None,
-                sunrise_text: None,
-                sunset_text: None,
-                libration_text: None,
+                phase_key: MoonPhase::NewMoon.ftl_key(),
+                phase_icon: MoonPhase::NewMoon.icon(),
+                illumination_percent: None,
+                age_days: None,
+                distance_km: None,
+                next_full_date: None,
+                next_new_date: None,
+                moonrise_time: None,
+                moonset_time: None,
+                sunrise_time: None,
+                sunset_time: None,
+                libration_lat_deg: None,
+                libration_lon_deg: None,
+                is_loading: true,
             },
         };
         Some(WidgetSnapshot {
@@ -173,33 +175,36 @@ fn render_payload(cfg: &MoonConfig, data: &MoonData) -> MoonPayload {
     let fmt_time = |t: chrono::DateTime<Utc>| t.format("%H:%M").to_string();
     let fmt_date = |t: chrono::DateTime<Utc>| t.format("%b %d").to_string();
     MoonPayload {
-        phase_label: data.phase_name.default_label().into(),
+        phase_key: data.phase_name.ftl_key(),
         phase_icon: data.phase_name.icon(),
-        illumination_text: format!("{:.0}% illuminated", data.illumination_percent),
-        age_text: format!("Age: {:.1} days", data.age_days),
-        distance_text: format!("Distance: {:.0} km", data.distance_km),
-        next_full_text: format!("Next full: {}", fmt_date(data.next_full_moon)),
-        next_new_text: format!("Next new: {}", fmt_date(data.next_new_moon)),
-        moonrise_text: data.moonrise.map(|t| format!("Moonrise: {}", fmt_time(t))),
-        moonset_text: data.moonset.map(|t| format!("Moonset: {}", fmt_time(t))),
-        sunrise_text: if cfg.show_sunrise_sunset {
-            data.sunrise.map(|t| format!("Sunrise: {}", fmt_time(t)))
+        illumination_percent: Some(data.illumination_percent),
+        age_days: Some(data.age_days),
+        distance_km: Some(data.distance_km),
+        next_full_date: Some(fmt_date(data.next_full_moon)),
+        next_new_date: Some(fmt_date(data.next_new_moon)),
+        moonrise_time: data.moonrise.map(fmt_time),
+        moonset_time: data.moonset.map(fmt_time),
+        sunrise_time: if cfg.show_sunrise_sunset {
+            data.sunrise.map(fmt_time)
         } else {
             None
         },
-        sunset_text: if cfg.show_sunrise_sunset {
-            data.sunset.map(|t| format!("Sunset: {}", fmt_time(t)))
+        sunset_time: if cfg.show_sunrise_sunset {
+            data.sunset.map(fmt_time)
         } else {
             None
         },
-        libration_text: if cfg.show_libration {
-            Some(format!(
-                "Libration: {:.1}°, {:.1}°",
-                data.libration_lat_deg, data.libration_lon_deg
-            ))
+        libration_lat_deg: if cfg.show_libration {
+            Some(data.libration_lat_deg)
         } else {
             None
         },
+        libration_lon_deg: if cfg.show_libration {
+            Some(data.libration_lon_deg)
+        } else {
+            None
+        },
+        is_loading: false,
     }
 }
 
