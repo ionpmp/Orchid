@@ -47,8 +47,14 @@ tarpaulin-report.html
 flamegraph.svg
 
 # ---------------------------------------------------------------------------
-# Temp files from atomic writes / tests
+# Bundled native libraries (download via docs/BUILDING.md)
 # ---------------------------------------------------------------------------
+third-party/pdfium/**/*.dll
+third-party/pdfium/**/*.tgz
+third-party/pdfium/**/bin/
+third-party/pdfium/**/lib/
+third-party/pdfium/**/include/
+
 *.tmp
 *.bak
 *.swp

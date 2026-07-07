@@ -28,6 +28,8 @@ uuid.workspace = true
 tokio = { workspace = true }
 dashmap.workspace = true
 
+pdfium-render.workspace = true
+
 orchid-core.workspace = true
 orchid-storage.workspace = true
 orchid-fs.workspace = true

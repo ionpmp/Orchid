@@ -39,8 +39,8 @@ pub enum ViewerError {
     #[error("PDF has no pages")]
     PdfEmpty,
 
-    /// PDF support requires bundling PDFium; not yet enabled.
-    #[error("PDF support disabled in this build (requires PDFium bundle)")]
+    /// Pdfium shared library could not be loaded.
+    #[error("PDF support unavailable: place pdfium.dll next to the executable or see docs/BUILDING.md")]
     PdfUnavailable,
 
     /// Text decode failed.

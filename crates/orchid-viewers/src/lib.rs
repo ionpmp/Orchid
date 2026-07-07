@@ -1,4 +1,4 @@
-//! Content viewers for Orchid: images, PDF (stub), text with syntax
+//! Content viewers for Orchid: images, PDF, text with syntax
 //! highlighting, archives, and thumbnails.
 
 #![warn(missing_docs)]

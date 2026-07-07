@@ -61,7 +61,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Viewers
 - [ ] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW)
-- [ ] PDF (pdfium)
+- [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, fit width/page, zoom; requires bundled `pdfium.dll`
 - [ ] Text with syntax highlighting (Tree-sitter)
 - [ ] Archives (browse + extract)
 

@@ -5302,6 +5302,7 @@ dependencies = [
  "orchid-fs",
  "orchid-storage",
  "parking_lot",
+ "pdfium-render",
  "ropey",
  "serde",
  "tempfile",

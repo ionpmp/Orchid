@@ -177,6 +177,8 @@ pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetR
     if let Some(v) = guard.as_ref() {
         if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
             img.set_viewport(width, height);
+        } else if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
+            pdf.set_viewport(width, height);
         }
     }
     Ok(())
@@ -312,7 +314,7 @@ pub async fn pdf_prev_page(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.prev_page();
+                let _ = pdf.prev_page().await;
             }
         }
     }
@@ -327,7 +329,7 @@ pub async fn pdf_next_page(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.next_page();
+                let _ = pdf.next_page().await;
             }
         }
     }
@@ -342,7 +344,7 @@ pub async fn pdf_fit_width(instance_id: Uuid, viewport_w: f32) -> WidgetResult<(
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.fit_width(viewport_w);
+                let _ = pdf.fit_width(viewport_w).await;
             }
         }
     }
@@ -357,7 +359,7 @@ pub async fn pdf_fit_page(instance_id: Uuid, viewport_w: f32, viewport_h: f32) -
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.fit_page(viewport_w, viewport_h);
+                let _ = pdf.fit_page(viewport_w, viewport_h).await;
             }
         }
     }
@@ -372,7 +374,7 @@ pub async fn pdf_zoom_in(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.zoom_in();
+                let _ = pdf.zoom_in().await;
             }
         }
     }
@@ -387,7 +389,7 @@ pub async fn pdf_zoom_out(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.zoom_out();
+                let _ = pdf.zoom_out().await;
             }
         }
     }
@@ -402,7 +404,7 @@ pub async fn pdf_go_to_page(instance_id: Uuid, page: i32) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.go_to_page(page.max(1) as u32);
+                let _ = pdf.go_to_page(page.max(1) as u32).await;
             }
         }
     }

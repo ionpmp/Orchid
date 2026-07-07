@@ -1,11 +1,7 @@
-//! PDF viewer — stub.
-//!
-//! Full support via `pdfium-render` requires bundling the PDFium shared
-//! library (`pdfium.dll` on Windows, `libpdfium.so` on Linux,
-//! `libpdfium.dylib` on macOS). That packaging work — plus the `build.rs`
-//! that copies the library next to the Orchid binary — is scheduled as a
-//! dedicated task. Until then the viewer compiles, fits the `Viewer`
-//! trait, and produces an explanatory error snapshot.
+//! PDF viewer backed by Pdfium via `pdfium-render`.
+
+mod bindings;
+mod render;
 
 use std::any::Any;
 use std::sync::Arc;
@@ -13,18 +9,41 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 
+pub use render::FitMode;
+
 use crate::error::{Result, ViewerError};
-use crate::snapshot::ViewerSnapshot;
+use crate::snapshot::{PdfSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
-/// PDF viewer stub.
+use render::RenderedPage;
+
+/// Default viewport until the UI reports the widget frame size.
+const DEFAULT_VIEWPORT: (f32, f32) = (800.0, 600.0);
+
+/// Zoom step for toolbar buttons (~25%).
+const ZOOM_STEP: f32 = 1.25;
+
+/// Max PDF payload accepted by the viewer. 256 MiB.
+pub const DEFAULT_SIZE_LIMIT: u64 = 256 * 1024 * 1024;
+
+/// PDF viewer.
 pub struct PdfViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
+    bytes: RwLock<Option<Vec<u8>>>,
+    page_count: RwLock<u32>,
+    current_page: RwLock<u32>,
+    zoom: RwLock<f32>,
+    viewport: RwLock<(f32, f32)>,
+    fit_mode: RwLock<FitMode>,
+    rendered: RwLock<Option<RenderedPage>>,
+    size_limit: u64,
 }
 
 impl std::fmt::Debug for PdfViewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PdfViewer").finish_non_exhaustive()
+        f.debug_struct("PdfViewer")
+            .field("path", &self.path.read().as_ref().map(|p| p.as_str().to_string()))
+            .finish_non_exhaustive()
     }
 }
 
@@ -35,52 +54,121 @@ impl Default for PdfViewer {
 }
 
 impl PdfViewer {
-    /// Build a new PDF viewer.
+    /// Build an empty PDF viewer.
     #[must_use]
     pub fn new() -> Self {
         Self {
             path: RwLock::new(None),
+            bytes: RwLock::new(None),
+            page_count: RwLock::new(0),
+            current_page: RwLock::new(1),
+            zoom: RwLock::new(1.0),
+            viewport: RwLock::new(DEFAULT_VIEWPORT),
+            fit_mode: RwLock::new(FitMode::FitWidth),
+            rendered: RwLock::new(None),
+            size_limit: DEFAULT_SIZE_LIMIT,
         }
     }
 
-    /// Go to a specific page (1-based). Today rejects with
-    /// [`ViewerError::PdfUnavailable`].
+    /// Update the viewport used for fit-width / fit-page math.
+    pub fn set_viewport(&self, width: f32, height: f32) {
+        *self.viewport.write() = (width.max(1.0), height.max(1.0));
+    }
+
+    /// Go to a specific page (1-based).
     ///
     /// # Errors
     ///
-    /// Always returns [`ViewerError::PdfUnavailable`] in the stub.
-    pub fn go_to_page(&self, _page: u32) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Returns [`ViewerError::PdfRender`] or [`ViewerError::PdfUnavailable`].
+    pub async fn go_to_page(&self, page: u32) -> Result<()> {
+        self.rerender_at_page(page).await
     }
 
-    /// Stub: no-op until PDFium is wired.
-    pub fn next_page(&self) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Previous page, no-op on page 1.
+    pub async fn prev_page(&self) -> Result<()> {
+        let page = (*self.current_page.read()).saturating_sub(1).max(1);
+        if page == *self.current_page.read() {
+            return Ok(());
+        }
+        self.rerender_at_page(page).await
     }
 
-    /// Stub: no-op until PDFium is wired.
-    pub fn prev_page(&self) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Next page, no-op on the last page.
+    pub async fn next_page(&self) -> Result<()> {
+        let count = *self.page_count.read();
+        if count == 0 {
+            return Ok(());
+        }
+        let page = (*self.current_page.read() + 1).min(count);
+        if page == *self.current_page.read() {
+            return Ok(());
+        }
+        self.rerender_at_page(page).await
     }
 
-    /// Stub.
-    pub fn fit_width(&self, _viewport_w: f32) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Fit the current page to the viewport width.
+    pub async fn fit_width(&self, viewport_w: f32) -> Result<()> {
+        {
+            let mut vp = self.viewport.write();
+            vp.0 = viewport_w.max(1.0);
+        }
+        *self.fit_mode.write() = FitMode::FitWidth;
+        self.rerender_current().await
     }
 
-    /// Stub.
-    pub fn fit_page(&self, _viewport_w: f32, _viewport_h: f32) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Fit the entire current page inside the viewport.
+    pub async fn fit_page(&self, viewport_w: f32, viewport_h: f32) -> Result<()> {
+        *self.viewport.write() = (viewport_w.max(1.0), viewport_h.max(1.0));
+        *self.fit_mode.write() = FitMode::FitPage;
+        self.rerender_current().await
     }
 
-    /// Stub.
-    pub fn zoom_in(&self) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Zoom in by [`ZOOM_STEP`].
+    pub async fn zoom_in(&self) -> Result<()> {
+        self.zoom_by(ZOOM_STEP).await
     }
 
-    /// Stub.
-    pub fn zoom_out(&self) -> Result<()> {
-        Err(ViewerError::PdfUnavailable)
+    /// Zoom out by [`ZOOM_STEP`].
+    pub async fn zoom_out(&self) -> Result<()> {
+        self.zoom_by(1.0 / ZOOM_STEP).await
+    }
+
+    async fn zoom_by(&self, factor: f32) -> Result<()> {
+        *self.fit_mode.write() = FitMode::Custom;
+        {
+            let mut z = self.zoom.write();
+            *z = (*z * factor).clamp(0.05, 16.0);
+        }
+        self.rerender_current().await
+    }
+
+    async fn rerender_current(&self) -> Result<()> {
+        let page = *self.current_page.read();
+        self.rerender_at_page(page).await
+    }
+
+    async fn rerender_at_page(&self, page: u32) -> Result<()> {
+        let bytes = self
+            .bytes
+            .read()
+            .clone()
+            .ok_or(ViewerError::PdfEmpty)?;
+        let viewport = *self.viewport.read();
+        let fit_mode = *self.fit_mode.read();
+        let zoom = *self.zoom.read();
+        let rendered = tokio::task::spawn_blocking(move || {
+            render::render_page(&bytes, page, viewport, fit_mode, zoom)
+        })
+        .await
+        .map_err(|e| ViewerError::PdfRender {
+            page,
+            reason: format!("join: {e}"),
+        })??;
+        *self.page_count.write() = rendered.page_count;
+        *self.current_page.write() = rendered.current_page;
+        *self.zoom.write() = rendered.zoom;
+        *self.rendered.write() = Some(rendered);
+        Ok(())
     }
 }
 
@@ -93,14 +181,50 @@ impl Viewer for PdfViewer {
     async fn open(
         &mut self,
         path: orchid_fs::FsPath,
-        _registry: Arc<orchid_fs::FsProviderRegistry>,
+        registry: Arc<orchid_fs::FsProviderRegistry>,
     ) -> Result<()> {
-        *self.path.write() = Some(path);
-        Err(ViewerError::PdfUnavailable)
+        let provider = registry
+            .for_path(&path)
+            .ok_or_else(|| orchid_fs::FsError::ProviderNotFound(path.scheme().to_string()))?;
+        let bytes = provider.read(&path).await.map_err(ViewerError::Fs)?;
+        if bytes.len() as u64 > self.size_limit {
+            return Err(ViewerError::FileTooLarge {
+                size: bytes.len() as u64,
+                limit: self.size_limit,
+            });
+        }
+
+        let viewport = *self.viewport.read();
+        let fit_mode = *self.fit_mode.read();
+        let zoom = *self.zoom.read();
+        let path_for_task = path.clone();
+        let bytes_for_render = bytes.clone();
+        let rendered = tokio::task::spawn_blocking(move || {
+            render::render_page(&bytes_for_render, 1, viewport, fit_mode, zoom)
+        })
+        .await
+        .map_err(|e| ViewerError::PdfRender {
+            page: 1,
+            reason: format!("join: {e}"),
+        })??;
+
+        *self.path.write() = Some(path_for_task);
+        *self.bytes.write() = Some(bytes);
+        *self.page_count.write() = rendered.page_count;
+        *self.current_page.write() = rendered.current_page;
+        *self.zoom.write() = rendered.zoom;
+        *self.rendered.write() = Some(rendered);
+        Ok(())
     }
 
     async fn close(&mut self) -> Result<()> {
         *self.path.write() = None;
+        *self.bytes.write() = None;
+        *self.page_count.write() = 0;
+        *self.current_page.write() = 1;
+        *self.zoom.write() = 1.0;
+        *self.fit_mode.write() = FitMode::FitWidth;
+        *self.rendered.write() = None;
         Ok(())
     }
 
@@ -111,10 +235,30 @@ impl Viewer for PdfViewer {
             .as_ref()
             .map(|p| p.as_str().to_string())
             .unwrap_or_default();
-        ViewerSnapshot::Error {
+
+        let Some(rendered) = self.rendered.read().clone() else {
+            return ViewerSnapshot::Loading { path_display };
+        };
+
+        let info = format!(
+            "PDF · page {} / {} · {} × {} px · {:.0}%",
+            rendered.current_page,
+            rendered.page_count,
+            rendered.width_px,
+            rendered.height_px,
+            rendered.zoom * 100.0
+        );
+
+        ViewerSnapshot::Pdf(PdfSnapshot {
             path_display,
-            message: ViewerError::PdfUnavailable.to_string(),
-        }
+            page_count: rendered.page_count,
+            current_page: rendered.current_page,
+            page_width_px: rendered.width_px,
+            page_height_px: rendered.height_px,
+            page_rgba_bytes: rendered.rgba,
+            zoom: rendered.zoom,
+            info_text: info,
+        })
     }
 
     fn current_path(&self) -> Option<&orchid_fs::FsPath> {

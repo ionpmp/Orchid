@@ -17,7 +17,15 @@
 
 ### Additional System Libraries
 
-These will be listed as dependencies are added.
+**Pdfium (PDF viewing and search extraction)**
+
+Orchid loads `pdfium.dll` at runtime via `pdfium-render`. For local development, download a prebuilt Windows x64 binary from [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases) and place it at:
+
+```
+third-party/pdfium/win-x64/pdfium.dll
+```
+
+The `orchid-app` build script copies this DLL next to `orchid.exe` under `target/<profile>/`. Without it, the PDF viewer shows an explanatory error and PDF text extraction in search is skipped.
 
 ## Cloning
 
