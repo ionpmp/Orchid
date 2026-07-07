@@ -127,7 +127,9 @@ fn rss_item_eq(a: &RssItemView, b: &RssItemView) -> bool {
 
 fn rss_payload_eq(a: &RssPayload, b: &RssPayload) -> bool {
     a.last_updated_text == b.last_updated_text
-        && a.error_summary == b.error_summary
+        && a.is_loading == b.is_loading
+        && a.enabled_feed_count == b.enabled_feed_count
+        && a.failed_feed_count == b.failed_feed_count
         && a.items.len() == b.items.len()
         && a
             .items

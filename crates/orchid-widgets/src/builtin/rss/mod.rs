@@ -10,6 +10,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::Utc;
 use parking_lot::RwLock;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
@@ -64,6 +65,29 @@ impl RssWidget {
             bus,
         }
     }
+
+    /// Fetch once and update shared state; publishes a snapshot-updated event.
+    async fn fetch_once(
+        provider: RssProvider,
+        feeds: Vec<FeedSource>,
+        data_slot: Arc<RwLock<FeedData>>,
+        bus: Arc<orchid_core::EventBus>,
+        instance_id: Uuid,
+    ) {
+        let fetched = provider.fetch_all(&feeds).await;
+        if !fetched.per_feed_errors.is_empty() {
+            warn!(
+                %instance_id,
+                failed = fetched.per_feed_errors.len(),
+                "rss fetch had feed errors"
+            );
+        }
+        *data_slot.write() = fetched;
+        bus.publish(
+            orchid_core::EventSource::Widget(instance_id),
+            WidgetSnapshotUpdated { instance_id },
+        );
+    }
 }
 
 #[async_trait]
@@ -75,10 +99,30 @@ impl Widget for RssWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        let feeds = self
+            .config
+            .read()
+            .feeds
+            .iter()
+            .filter(|f| f.enabled)
+            .cloned()
+            .collect::<Vec<_>>();
+        let provider = self.provider.clone();
+        let data_slot = self.data.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        Self::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let feeds = self.config.read().feeds.clone();
+        let feeds = self
+            .config
+            .read()
+            .feeds
+            .iter()
+            .filter(|f| f.enabled)
+            .cloned()
+            .collect::<Vec<_>>();
         let provider = self.provider.clone();
         let data_slot = self.data.clone();
         let bus = self.bus.clone();
@@ -89,12 +133,7 @@ impl Widget for RssWidget {
             let data_slot = data_slot.clone();
             let bus = bus.clone();
             async move {
-                let fetched = provider.fetch_all(&feeds).await;
-                *data_slot.write() = fetched;
-                bus.publish(
-                    orchid_core::EventSource::Widget(instance_id),
-                    WidgetSnapshotUpdated { instance_id },
-                );
+                Self::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
             }
         });
         Ok(())
@@ -117,16 +156,12 @@ impl Widget for RssWidget {
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let cfg = self.config.read().clone();
         let data = self.data.read().clone();
-        let total_feeds = cfg.feeds.iter().filter(|f| f.enabled).count();
-        let error_count = data.per_feed_errors.len();
-        let error_summary = if error_count > 0 {
-            Some(format!("{error_count} of {total_feeds} feeds failed"))
-        } else {
-            None
-        };
+        let enabled_feed_count = cfg.feeds.iter().filter(|f| f.enabled).count() as u32;
+        let failed_feed_count = data.per_feed_errors.len() as u32;
+        let is_loading = data.fetched_at.is_none();
         let last_updated_text = match data.fetched_at {
             Some(at) => format_relative(at),
-            None => "Loading…".into(),
+            None => String::new(),
         };
 
         let now = Utc::now();
@@ -156,7 +191,9 @@ impl Widget for RssWidget {
             payload: WidgetPayload::RssFeed(RssPayload {
                 items,
                 last_updated_text,
-                error_summary,
+                is_loading,
+                enabled_feed_count,
+                failed_feed_count,
             }),
         })
     }
@@ -164,7 +201,8 @@ impl Widget for RssWidget {
         state_codec::save_state(&*self.config.read())
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let cfg: RssConfig = state_codec::restore_state(bytes)?;
+        let mut cfg: RssConfig = state_codec::restore_state(bytes)?;
+        cfg.normalize();
         *self.config.write() = cfg;
         Ok(())
     }
@@ -211,10 +249,11 @@ fn format_item_relative(now: chrono::DateTime<Utc>, at: chrono::DateTime<Utc>) -
 #[must_use]
 pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
     let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
-        let cfg = match state_bytes {
+        let mut cfg = match state_bytes {
             Some(bytes) => state_codec::restore_state::<RssConfig>(bytes).unwrap_or_default(),
             None => RssConfig::default(),
         };
+        cfg.normalize();
         Ok(Box::new(RssWidget::new(
             ctx.instance_id,
             cfg,

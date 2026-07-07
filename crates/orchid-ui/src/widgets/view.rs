@@ -186,9 +186,17 @@ fn system_to_text_lines(s: &SystemPayload) -> Vec<String> {
 }
 
 fn rss_to_text_lines(r: &RssPayload) -> Vec<String> {
-    let mut lines = vec![r.last_updated_text.clone()];
-    if let Some(e) = &r.error_summary {
-        lines.push(e.clone());
+    let mut lines = Vec::new();
+    if r.is_loading {
+        lines.push("Loading…".to_string());
+    } else if !r.last_updated_text.is_empty() {
+        lines.push(r.last_updated_text.clone());
+    }
+    if r.failed_feed_count > 0 {
+        lines.push(format!(
+            "{} of {} feeds failed to update",
+            r.failed_feed_count, r.enabled_feed_count
+        ));
     }
     for item in &r.items {
         let mut line = item.title.clone();

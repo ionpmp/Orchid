@@ -27,12 +27,27 @@ impl Default for RssConfig {
         Self {
             feeds: vec![FeedSource {
                 name: "Hacker News".into(),
-                url: "https://news.ycombinator.com/rss".into(),
+                url: "https://hnrss.org/frontpage".into(),
                 enabled: true,
             }],
             max_items_displayed: 20,
             refresh_interval_minutes: 15,
             open_in_browser: true,
+        }
+    }
+}
+
+impl RssConfig {
+    /// Fill in sane defaults for empty or invalid persisted state.
+    pub fn normalize(&mut self) {
+        if self.feeds.is_empty() {
+            self.feeds = Self::default().feeds;
+        }
+        if self.max_items_displayed == 0 {
+            self.max_items_displayed = 20;
+        }
+        if self.refresh_interval_minutes == 0 {
+            self.refresh_interval_minutes = 15;
         }
     }
 }

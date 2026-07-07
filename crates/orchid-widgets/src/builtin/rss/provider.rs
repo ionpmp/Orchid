@@ -103,8 +103,15 @@ pub fn parse_bytes(
                 .filter(|s| !s.is_empty());
             let published = entry.published.or(entry.updated);
             let author = entry.authors.first().map(|a| a.name.clone());
+            let id = if entry.id.is_empty() {
+                link.clone()
+                    .or_else(|| Some(format!("{source_name}:{title}")))
+                    .unwrap_or_else(|| title.clone())
+            } else {
+                entry.id
+            };
             FeedItem {
-                id: entry.id,
+                id,
                 title,
                 link,
                 summary,
@@ -172,5 +179,11 @@ mod tests {
     #[test]
     fn strip_html_removes_tags_and_collapses_whitespace() {
         assert_eq!(strip_html("<p>Hello  <b>world</b></p>"), "Hello world");
+    }
+
+    #[test]
+    fn uses_link_as_id_when_entry_id_missing() {
+        let items = parse_bytes(FIXTURE_RSS, "Fixture").unwrap();
+        assert!(!items[0].id.is_empty());
     }
 }

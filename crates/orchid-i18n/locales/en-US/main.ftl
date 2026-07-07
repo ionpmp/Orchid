@@ -95,6 +95,9 @@ system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 
 # ---- RSS ----
 rss-no-feeds = No feeds configured
+rss-loading = Loading news…
+rss-fetch-failed = Could not load feeds. Check your connection and try again.
+rss-empty = No items in the configured feeds yet.
 recent-files-empty = No recent files yet. Open files in the viewer or file manager to see them here.
 rss-error-summary = { $n } of { $total } feeds failed to update
 rss-item-published-minutes = { $m }m ago

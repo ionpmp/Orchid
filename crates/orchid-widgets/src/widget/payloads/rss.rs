@@ -7,8 +7,12 @@ pub struct RssPayload {
     pub items: Vec<RssItemView>,
     /// Localised "Updated Xm ago" line.
     pub last_updated_text: String,
-    /// Optional localised error summary (e.g. "2 of 5 feeds failed").
-    pub error_summary: Option<String>,
+    /// `true` until the first fetch attempt completes.
+    pub is_loading: bool,
+    /// Number of enabled feeds in the widget config.
+    pub enabled_feed_count: u32,
+    /// Number of enabled feeds that failed on the last refresh.
+    pub failed_feed_count: u32,
 }
 
 /// One RSS item as rendered in the UI list.
