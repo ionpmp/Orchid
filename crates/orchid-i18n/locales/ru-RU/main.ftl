@@ -135,6 +135,19 @@ command.terminal.focus_previous_pane.name = Предыдущая панель т
 command.terminal.tab_next.name = Следующая вкладка терминала
 command.terminal.tab_previous.name = Предыдущая вкладка терминала
 
+# ---- Settings (universal search) ----
+settings.section.general = Общие
+settings.section.appearance = Оформление
+settings.section.input = Ввод
+settings.section.shortcuts = Горячие клавиши
+settings.section.locale = Язык и регион
+settings.section.privacy = Конфиденциальность
+
+# ---- Terminal tab bar ----
+terminal-tooltip-split-h = Разделить горизонтально (Ctrl+Shift+H)
+terminal-tooltip-split-v = Разделить вертикально (Ctrl+Shift+J)
+terminal-tooltip-tab-new = Новая вкладка (Ctrl+Shift+T)
+
 # ---- Media player ----
 media-no-session = Нет активного воспроизведения
 media-play = Воспроизвести

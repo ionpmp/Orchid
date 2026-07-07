@@ -13,39 +13,39 @@ pub const SOURCE_ID: &str = "settings";
 #[derive(Debug, Clone, Copy)]
 struct Section {
     id: &'static str,
-    english_label: &'static str,
+    title_key: &'static str,
     icon: &'static str,
 }
 
 const SECTIONS: &[Section] = &[
     Section {
         id: "general",
-        english_label: "General",
+        title_key: "settings.section.general",
         icon: "settings-general",
     },
     Section {
         id: "appearance",
-        english_label: "Appearance",
+        title_key: "settings.section.appearance",
         icon: "settings-appearance",
     },
     Section {
         id: "input",
-        english_label: "Input",
+        title_key: "settings.section.input",
         icon: "settings-input",
     },
     Section {
         id: "shortcuts",
-        english_label: "Shortcuts",
+        title_key: "settings.section.shortcuts",
         icon: "settings-shortcuts",
     },
     Section {
         id: "locale",
-        english_label: "Locale",
+        title_key: "settings.section.locale",
         icon: "settings-locale",
     },
     Section {
         id: "privacy",
-        english_label: "Privacy",
+        title_key: "settings.section.privacy",
         icon: "settings-privacy",
     },
 ];
@@ -80,13 +80,13 @@ impl SearchSource for SettingsSource {
         }
         let mut hits = Vec::new();
         for sec in SECTIONS {
-            let label_l = sec.english_label.to_lowercase();
             let id_l = sec.id;
-            let score = if label_l == q || id_l == q {
+            let key_suffix = sec.title_key.rsplit('.').next().unwrap_or("");
+            let score = if id_l == q || key_suffix == q {
                 100
-            } else if label_l.starts_with(&q) || id_l.starts_with(&q) {
+            } else if id_l.starts_with(&q) || key_suffix.starts_with(&q) {
                 80
-            } else if label_l.contains(&q) || id_l.contains(&q) {
+            } else if id_l.contains(&q) || key_suffix.contains(&q) {
                 60
             } else {
                 continue;
@@ -94,7 +94,7 @@ impl SearchSource for SettingsSource {
             hits.push(SearchCandidate {
                 id: format!("settings:{}", sec.id),
                 source_id: SOURCE_ID,
-                title: sec.english_label.to_string(),
+                title: sec.title_key.to_string(),
                 subtitle: None,
                 icon: sec.icon,
                 score,

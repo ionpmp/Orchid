@@ -140,6 +140,19 @@ command.terminal.focus_previous_pane.name = Focus previous terminal pane
 command.terminal.tab_next.name = Next terminal tab
 command.terminal.tab_previous.name = Previous terminal tab
 
+# ---- Settings (universal search) ----
+settings.section.general = General
+settings.section.appearance = Appearance
+settings.section.input = Input
+settings.section.shortcuts = Shortcuts
+settings.section.locale = Locale
+settings.section.privacy = Privacy
+
+# ---- Terminal tab bar ----
+terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)
+terminal-tooltip-split-v = Split vertically (Ctrl+Shift+J)
+terminal-tooltip-tab-new = New tab (Ctrl+Shift+T)
+
 # ---- Media player ----
 media-no-session = No media playing
 media-play = Play

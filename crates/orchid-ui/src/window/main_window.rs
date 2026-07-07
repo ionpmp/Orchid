@@ -364,6 +364,9 @@ impl MainWindowController {
         g.set_catalog_title(mgr.tr("catalog-title").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+        g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
+        g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
+        g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
 
         g.set_media_no_session(mgr.tr("media-no-session").into());
 
@@ -407,6 +410,7 @@ impl MainWindowController {
             );
         }
         drop(cfg);
+        self.apply_command_shortcut_overrides();
         self.apply_theme()?;
         self.apply_strings()?;
         self.apply_app_state_status()?;
@@ -1767,6 +1771,30 @@ impl MainWindowController {
             .get("command-palette")
             .and_then(|s| Shortcut::parse(s).ok())
             .unwrap_or_else(|| Shortcut::parse("Ctrl+Shift+P").expect("valid default shortcut"))
+    }
+
+    fn apply_command_shortcut_overrides(self: &Arc<Self>) {
+        let overrides = self.config.read().shortcuts.overrides.clone();
+        if overrides.is_empty() {
+            return;
+        }
+        for result in self.command_registry.apply_shortcut_overrides(&overrides) {
+            if let Err(reason) = result.outcome {
+                warn!(
+                    command = %result.command_id,
+                    reason = %reason,
+                    "shortcut override rejected"
+                );
+            }
+        }
+    }
+
+    fn dispatch_registry_shortcut(self: &Arc<Self>, cmd_id: String) {
+        let this = Arc::clone(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            this.dispatch_command(&cmd_id).await;
+            this.schedule_rebuild();
+        }));
     }
 
     fn sync_command_palette_global(self: &Arc<Self>) {
@@ -3519,14 +3547,7 @@ impl MainWindowController {
                                     if let Some(cmd_id) =
                                         resolve_registry_shortcut(&c.command_registry, &shortcut)
                                     {
-                                        if cmd_id.starts_with("terminal.") {
-                                            let this = Arc::clone(&c);
-                                            let cmd = cmd_id;
-                                            let _ = slint::spawn_local(Compat::new(async move {
-                                                this.dispatch_command(&cmd).await;
-                                                this.schedule_rebuild();
-                                            }));
-                                        }
+                                        c.dispatch_registry_shortcut(cmd_id);
                                     }
                                 }
                             }
@@ -7095,10 +7116,9 @@ fn build_search_model(
         .candidates
         .iter()
         .map(|c| {
-            let title: SharedString = if c.source_name == "commands" {
-                locale.tr(c.title.as_str()).into()
-            } else {
-                c.title.clone().into()
+            let title: SharedString = match c.source_name.as_str() {
+                "commands" | "settings" => locale.tr(c.title.as_str()).into(),
+                _ => c.title.clone().into(),
             };
             let source_label = match c.source_name.as_str() {
                 "files" => locale.tr("search-source-files"),

@@ -462,6 +462,8 @@ impl OrchidApp {
                 .map_err(|e| UiError::Slint(format!("register command {cmd_id}: {e}")))?;
         }
 
+        apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts.overrides);
+
         info!(
             theme = %theme.current().meta.id,
             language = %locale.current().as_str(),
@@ -663,6 +665,24 @@ impl OrchidApp {
     #[must_use]
     pub fn workspace_manager(&self) -> &Arc<WorkspaceManager> {
         &self.workspace_manager
+    }
+}
+
+fn apply_command_shortcut_overrides(
+    registry: &CommandRegistry,
+    overrides: &std::collections::HashMap<String, String>,
+) {
+    if overrides.is_empty() {
+        return;
+    }
+    for result in registry.apply_shortcut_overrides(overrides) {
+        if let Err(reason) = result.outcome {
+            tracing::warn!(
+                command = %result.command_id,
+                reason = %reason,
+                "shortcut override rejected"
+            );
+        }
     }
 }
 
