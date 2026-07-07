@@ -148,6 +148,11 @@ settings.section.shortcuts = Shortcuts
 settings.section.locale = Locale
 settings.section.privacy = Privacy
 
+# ---- Settings panel ----
+settings-panel-title = Settings
+settings-panel-coming-soon = The full settings editor for this section is not available yet. Edit config.toml directly for now.
+settings-panel-ok = Close
+
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)
 terminal-tooltip-split-v = Split vertically (Ctrl+Shift+J)

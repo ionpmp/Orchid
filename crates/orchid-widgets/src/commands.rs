@@ -7,7 +7,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use orchid_core::{
     Action, ActionContext, ActionFactory, ActionOutcome, CommandArg, CommandArgKind,
-    CommandCategory, CommandDescriptor, ParsedCommand, TerminalInvocation,
+    CommandCategory, CommandDescriptor, ParsedCommand, Shortcut, TerminalInvocation,
 };
 use orchid_storage::WidgetSize;
 use uuid::Uuid;
@@ -533,6 +533,7 @@ fn workspace_switch_next_command(
         "workspace switch next",
         workspace_manager,
         WorkspaceSwitchDirection::Next,
+        Shortcut::parse("Ctrl+Alt+ArrowRight").ok(),
     )
 }
 
@@ -545,6 +546,7 @@ fn workspace_switch_previous_command(
         "workspace switch previous",
         workspace_manager,
         WorkspaceSwitchDirection::Previous,
+        Shortcut::parse("Ctrl+Alt+ArrowLeft").ok(),
     )
 }
 
@@ -560,13 +562,14 @@ fn simple_workspace_command(
     verb: &'static str,
     manager: Arc<WorkspaceManager>,
     dir: WorkspaceSwitchDirection,
+    default_shortcut: Option<Shortcut>,
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: id.into(),
         display_name_key: name_key.into(),
         description_key: None,
         category: CommandCategory::View,
-        default_shortcut: None,
+        default_shortcut,
         terminal_invocation: Some(TerminalInvocation {
             verb: verb.into(),
             args: Vec::new(),

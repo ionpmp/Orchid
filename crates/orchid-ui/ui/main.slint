@@ -4,6 +4,8 @@ import { AppState } from "app_state_global.slint";
 import { WidgetCatalog } from "widget_catalog_global.slint";
 import { CommandPaletteGlobal } from "command_palette_global.slint";
 import { CommandPalettePanel } from "command-palette.slint";
+import { SettingsGlobal } from "settings_global.slint";
+import { SettingsPanel } from "settings-panel.slint";
 import { WorkspaceView } from "workspace/workspace.slint";
 import {
     DockWidgetType,
@@ -29,6 +31,7 @@ export { Strings } from "strings_global.slint";
 export { AppState } from "app_state_global.slint";
 export { WidgetCatalog } from "widget_catalog_global.slint";
 export { CommandPaletteGlobal } from "command_palette_global.slint";
+export { SettingsGlobal } from "settings_global.slint";
 export {
     DockWidgetType,
     MediaModel,
@@ -168,6 +171,7 @@ export component MainWindow inherits Window {
     callback command-palette-candidate-activated(string);
     callback command-palette-selection-changed(int);
     callback command-palette-dismiss();
+    callback settings-dismiss();
     callback ui-tick();
 
     VerticalLayout {
@@ -366,6 +370,28 @@ export component MainWindow inherits Window {
                     }
                     dismiss => {
                         root.command-palette-dismiss();
+                    }
+                }
+            }
+
+            if SettingsGlobal.visible: Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #00000050;
+
+                TouchArea {
+                    clicked => {
+                        root.settings-dismiss();
+                    }
+                }
+
+                SettingsPanel {
+                    width: min(parent.width - 48px, 480px);
+                    height: min(parent.height - 120px, 360px);
+                    x: (parent.width - self.width) / 2;
+                    y: parent.height * 0.15;
+                    dismiss => {
+                        root.settings-dismiss();
                     }
                 }
             }

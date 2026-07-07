@@ -1,0 +1,53 @@
+import { Theme } from "theme_global.slint";
+import { Strings } from "strings_global.slint";
+import { SettingsGlobal } from "settings_global.slint";
+
+export component SettingsPanel inherits Rectangle {
+    callback dismiss();
+
+    background: Theme.surface-raised;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.border-default;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: #00000060;
+    clip: true;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+
+        Text {
+            text: SettingsGlobal.section-title;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-lg;
+            font-weight: Theme.weight-semibold;
+        }
+
+        Text {
+            text: SettingsGlobal.body-text;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-md;
+            wrap: word-wrap;
+            vertical-stretch: 1;
+        }
+
+        Rectangle {
+            height: 36px;
+            background: Theme.accent-brand;
+            border-radius: Theme.radius-md;
+
+            TouchArea {
+                clicked => { root.dismiss(); }
+            }
+
+            Text {
+                text: Strings.settings_panel_ok;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

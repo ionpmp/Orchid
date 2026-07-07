@@ -32,7 +32,7 @@ use orchid_core::{
     SubscriptionHandle,
 };
 use orchid_i18n::{LocaleId, LocaleManager};
-use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
+use orchid_storage::{LifecycleState, OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
 use orchid_terminal::SplitDirection;
 use orchid_terminal::{FontMetrics};
@@ -68,7 +68,7 @@ use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary, CommandPaletteGlobal,
+    WorkspaceSummary, CommandPaletteGlobal, SettingsGlobal,
 };
 use crate::theme::ThemeManager;
 
@@ -150,6 +150,7 @@ pub struct MainWindowController {
     command_palette: Arc<CommandPalette>,
     palette: Arc<RwLock<PaletteUiState>>,
     palette_candidates: ModelRc<SearchCandidateEntry>,
+    settings: Arc<RwLock<SettingsUiState>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -168,6 +169,12 @@ struct PaletteUiState {
     query: String,
     selected_index: i32,
     request_autofocus: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SettingsUiState {
+    visible: bool,
+    section: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -303,11 +310,13 @@ impl MainWindowController {
             catalog_items,
             palette: Arc::new(RwLock::new(PaletteUiState::default())),
             palette_candidates,
+            settings: Arc::new(RwLock::new(SettingsUiState::default())),
         });
         this.apply_theme()?;
         this.apply_strings()?;
         this.sync_widget_catalog_global();
         this.sync_command_palette_global();
+        this.sync_settings_global();
         this.apply_initial_mode()?;
         this.wire_callbacks()?;
         Ok(this)
@@ -367,6 +376,7 @@ impl MainWindowController {
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
+        g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
 
         g.set_media_no_session(mgr.tr("media-no-session").into());
 
@@ -646,6 +656,14 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_command_palette_dismiss();
+                }
+            }
+        });
+        self.window.on_settings_dismiss({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_settings_dismiss();
                 }
             }
         });
@@ -1797,6 +1815,39 @@ impl MainWindowController {
         }));
     }
 
+    fn sync_settings_global(self: &Arc<Self>) {
+        let st = self.settings.read().clone();
+        let title = if st.section.is_empty() {
+            self.locale.tr("settings-panel-title").into()
+        } else {
+            let key = format!("settings.section.{}", st.section);
+            self.locale.tr(&key).into()
+        };
+        let body = self.locale.tr("settings-panel-coming-soon").into();
+        let g = self.window.global::<SettingsGlobal>();
+        g.set_visible(st.visible);
+        g.set_section_title(title);
+        g.set_body_text(body);
+    }
+
+    fn open_settings(self: &Arc<Self>, section: &str) {
+        self.on_command_palette_dismiss();
+        {
+            let mut st = self.settings.write();
+            st.visible = true;
+            st.section = section.to_string();
+        }
+        self.sync_settings_global();
+    }
+
+    fn on_settings_dismiss(self: &Arc<Self>) {
+        if !self.settings.read().visible {
+            return;
+        }
+        self.settings.write().visible = false;
+        self.sync_settings_global();
+    }
+
     fn sync_command_palette_global(self: &Arc<Self>) {
         let st = self.palette.read().clone();
         let candidates = build_palette_candidates(
@@ -2625,20 +2676,19 @@ impl MainWindowController {
         } else {
             self.search_selection.write().insert(instance_id, 0);
         }
-        // `refresh_snapshot_cache` awaits `tokio::sync::Mutex`. Slint's `spawn_local` cannot
-        // drive raw Tokio futures; `Compat` runs them on a Tokio pool and resumes on Slint.
-        //
-        // TODO(search): If candidates are still empty, check logs for
-        // `universal_search_push_query: instance not in SEARCH_LIVE`. That indicates the
-        // instance isn't active/live (Sleeping/Unloaded) or UI is sending the wrong id.
+        // Do not rebuild the whole workspace on every keystroke — that recreates
+        // SearchView, steals focus, and races the debouncer. Snapshot updates
+        // arrive via `WidgetSnapshotUpdated` and are patched through
+        // `patch_workspace_frames` on the next frame.
         let wm = self.widget_manager.clone();
-        let t = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            if wm.refresh_snapshot_cache(instance_id).await.is_err() {
-                return;
-            }
-            if let Some(c) = t.upgrade() {
-                c.schedule_rebuild();
+            wm.touch(instance_id);
+            if let Ok(inst_ref) = wm.get_instance(instance_id) {
+                if *inst_ref.lifecycle.read() == LifecycleState::Sleeping {
+                    let _ = wm
+                        .change_lifecycle(instance_id, LifecycleState::Active)
+                        .await;
+                }
             }
         }));
     }
@@ -2671,7 +2721,7 @@ impl MainWindowController {
                 self.dispatch_command(&cmd_id).await;
             }
             ActionTarget::OpenSettings(section) => {
-                debug!(section = %section, "open settings from search (not wired to UI yet)");
+                self.open_settings(&section);
             }
         }
     }
@@ -3534,6 +3584,10 @@ impl MainWindowController {
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {
                                 c.on_command_palette_dismiss();
+                            } else if c.settings.read().visible
+                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                            {
+                                c.on_settings_dismiss();
                             } else {
                                 let mods = *c.keyboard_modifiers.lock();
                                 let palette_sc = c.command_palette_shortcut();

@@ -143,6 +143,11 @@ settings.section.shortcuts = Горячие клавиши
 settings.section.locale = Язык и регион
 settings.section.privacy = Конфиденциальность
 
+# ---- Settings panel ----
+settings-panel-title = Настройки
+settings-panel-coming-soon = Полноценный редактор этого раздела пока недоступен. Пока что редактируйте config.toml напрямую.
+settings-panel-ok = Закрыть
+
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Разделить горизонтально (Ctrl+Shift+H)
 terminal-tooltip-split-v = Разделить вертикально (Ctrl+Shift+J)

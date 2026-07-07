@@ -85,6 +85,26 @@ export component ViewerPdfView inherits Rectangle {
                     fp-ta := TouchArea { clicked => { root.fit-page(); } }
                     Text { text: "Fit Page"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 28px; height: 28px;
+                    background: zi-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zi-ta := TouchArea { clicked => { root.zoom-in(); } }
+                    Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px; height: 28px;
+                    background: zo-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zo-ta := TouchArea { clicked => { root.zoom-out(); } }
+                    Text { text: "−"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
             }
         }
 
