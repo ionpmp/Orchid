@@ -1906,7 +1906,8 @@ impl MainWindowController {
     }
 
     fn leader_key_shortcut(&self) -> Option<Shortcut> {
-        let key = self.config.read().shortcuts.leader_key.as_ref()?;
+        let cfg = self.config.read();
+        let key = cfg.shortcuts.leader_key.as_ref()?;
         if key.is_empty() {
             return None;
         }
@@ -1943,7 +1944,7 @@ impl MainWindowController {
         use slint::winit_030::winit::keyboard::{Key, NamedKey};
         {
             let guard = self.leader_pending_until.lock();
-            let until = *guard?;
+            let until = (*guard)?;
             if Instant::now() > until {
                 drop(guard);
                 self.clear_leader_pending();
@@ -7201,21 +7202,21 @@ fn build_settings_fields(
                 "settings-field-leader-timeout",
                 format!("{} ms", cfg.shortcuts.leader_timeout_ms).into(),
             );
-            if cfg.shortcuts.leader_bindings.is_empty() {
-                push(
-                    "settings-field-leader-bindings",
-                    locale.tr("settings-value-none").into(),
-                );
-            } else {
-                let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
-                pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
-                for (key, cmd) in pairs {
-                    rows.push(SettingsFieldRow {
-                        label: format!("leader → {key}").into(),
-                        value: cmd.clone().into(),
-                    });
-                }
-            }
+            push(
+                "settings-field-leader-bindings",
+                if cfg.shortcuts.leader_bindings.is_empty() {
+                    locale.tr("settings-value-none").into()
+                } else {
+                    let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
+                    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+                    pairs
+                        .into_iter()
+                        .map(|(key, cmd)| format!("{key} → {cmd}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .into()
+                },
+            );
             if cfg.shortcuts.overrides.is_empty() {
                 push(
                     "settings-field-shortcut-overrides",
