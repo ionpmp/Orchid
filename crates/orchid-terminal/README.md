@@ -13,7 +13,7 @@ Terminal subsystem for Orchid.
 
 ## Cleanup model
 
-When the Orchid process exits, spawned child processes are terminated via `portable-pty`'s `Child::kill` as part of session close. A Windows Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) would give tree-wide kill guarantees but its surface in the `windows` crate changes between versions; the hookup is deferred (see crate-level TODO) and we rely on explicit shutdown on the happy path.
+When the Orchid process exits, spawned child processes are terminated via `portable-pty`'s `Child::kill` as part of session close. On Windows, each PTY child is also assigned to a Job Object created with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; the job handle is owned by `PtyHandle`, so the whole process tree is killed when Orchid exits or the handle is dropped. Other platforms rely on explicit shutdown alone.
 
 ## OSC coverage
 

@@ -45,6 +45,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Tabs + splits — tab strip, split panes (▥/▤), draggable dividers, pane focus/close, keyboard shortcuts
 - [x] PowerShell, cmd, WSL backends — all three plus `Custom` variant covered by `BackendSpec`
 - [x] SSH sessions — `SshTarget` parses `ssh://` URIs and produces correct argv (jump hosts, identity files, extra args)
+- [x] PTY child tree cleanup — Windows Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) on spawn
 - [ ] Inline graphics (sixel + kitty) — deferred to v1.x
 
 ### Widgets
@@ -60,10 +61,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
-- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate in viewer widget; HEIC/SVG/RAW pending
+- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate; SVG via `resvg`; HEIC/RAW still pending
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, fit width/page, zoom; requires bundled `pdfium.dll`
-- [~] Text with syntax highlighting (Tree-sitter) — `TextViewer` + `SyntaxHighlighter` in viewer widget; edit mode pending
-- [~] Archives (browse + extract) — browse + preview wired; extract selected/all to sibling folder in viewer toolbar
+- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save, dirty ●)
+- [~] Archives (browse + extract) — browse + preview wired; extract selected/all; TAR.XZ via `xz2`
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — vault unlock/lock UI (passphrase + Windows Hello); KDBX4 read/write, groups / entries / TOTP / search in `orchid-crypto::kdbx`
@@ -71,8 +72,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Biometric unlock via Windows Hello — password vault + FM encrypted-folder passphrase via DPAPI
 
 ### Storage
-- [~] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC done in `orchid-crypto::content`; managed-folder policy layer pending in `orchid-fs`
-- [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; ingest failure UX + sidebar stats in UI
+- [x] Content-addressed storage (BLAKE3 + FastCDC chunking) — `ChunkStore`, refcount table, orphan GC; managed-folder policy (`exclude_patterns`, quota, retention) in `orchid-fs`
+- [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; ingest failure UX + sidebar stats; policy dialog in FM
 
 ### Network Clients
 - [~] SFTP / SMB / WebDAV / FTP via rclone — browse + read/write via `RcloneProvider`; credentials via config or rclone.conf remote; network virtual folder in FM sidebar
@@ -80,17 +81,17 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### Search
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown
 - [x] File watcher for incremental updates — `IndexFsSubscriber` consumes `fs.created/modified/deleted/renamed/tags_changed` events, extracts text/PDF content, enqueues into `IndexScheduler`
-- [~] Universal search (files + commands + settings) — settings sections open read-only config panel; full editor pending
+- [x] Universal search (files + commands + settings) — live settings editor for theme/locale/density/bools; complex shortcut/leader fields stay read-only; search debouncer hardening + `SEARCH_LIVE` miss metrics
 
 ### UX
-- [~] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml
-- [ ] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast)
-- [ ] Internationalization (11 languages, RTL)
+- [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml
+- [x] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast) — nine bundled themes + JSON loader from `themes_dir`
+- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); RTL layout adaptation still pending
 - [ ] Adaptive layouts (profiles for different screens)
-- [~] Gestures (touch, pen, mouse) — recogniser + default binding set done in `orchid-core`; real input plumbing pending in `orchid-ui`
+- [x] Gestures (touch, pen, mouse) — recogniser + `default_bindings` wired through `orchid-ui` to workspace panel, notification center, dock, and universal search
 - [x] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, user override application, and configurable leader-key chord dispatch (`Ctrl+Shift+Space` + letter)
 - [x] Command palette — Ctrl+Shift+P overlay with fuzzy search and command dispatch
-- [ ] Onboarding tour, hint mode
+- [x] Onboarding tour, hint mode — four-step first-run overlay; `Win+?` hint overlays; persisted `[onboarding]` config
 
 ### Additional
 - [ ] Jyotish module (optional, not in default widgets)

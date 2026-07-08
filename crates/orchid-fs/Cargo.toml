@@ -28,6 +28,7 @@ zip.workspace = true
 sevenz-rust.workspace = true
 tar.workspace = true
 flate2.workspace = true
+xz2.workspace = true
 dashmap.workspace = true
 redb.workspace = true
 filetime.workspace = true

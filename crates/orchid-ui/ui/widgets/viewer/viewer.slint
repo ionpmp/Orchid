@@ -30,6 +30,10 @@ export component ViewerView inherits Rectangle {
     callback archive-extract-selected();
     callback archive-extract-all();
 
+    callback text-toggle-edit();
+    callback text-save();
+    callback text-edited(string);
+
     background: transparent;
 
     if model.kind == 0 : VerticalLayout {
@@ -94,6 +98,9 @@ export component ViewerView inherits Rectangle {
         width: parent.width;
         height: parent.height;
         model: root.model.text;
+        toggle-edit => { root.text-toggle-edit(); }
+        save => { root.text-save(); }
+        text-edited(t) => { root.text-edited(t); }
     }
 
     if model.kind == 6 : ViewerArchiveView {

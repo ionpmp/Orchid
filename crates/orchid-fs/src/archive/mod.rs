@@ -1,7 +1,6 @@
 //! Read-only archive navigation and extraction.
 //!
-//! Supported formats: ZIP, 7z, TAR (plain), TAR+GZ. XZ is deferred to a
-//! later iteration to keep the dependency surface small.
+//! Supported formats: ZIP, 7z, TAR (plain), TAR+GZ, TAR+XZ.
 
 pub mod reader;
 pub mod sevenz;

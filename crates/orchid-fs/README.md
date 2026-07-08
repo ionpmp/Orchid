@@ -1,6 +1,6 @@
 # orchid-fs
 
-Filesystem layer for Orchid. Exposes a pluggable provider abstraction (with a working `LocalProvider`), a cross-provider `FileWatcher` that fans notify events into the Orchid event bus, tagging via `orchid-storage`, archive browsing (ZIP / 7z / TAR / TAR.GZ), high-level file operations (copy / move / delete / recycle-bin), and two domain engines: managed (content-addressed dedup) and encrypted (`age` + reveal sessions) folders.
+Filesystem layer for Orchid. Exposes a pluggable provider abstraction (with a working `LocalProvider`), a cross-provider `FileWatcher` that fans notify events into the Orchid event bus, tagging via `orchid-storage`, archive browsing (ZIP / 7z / TAR / TAR.GZ / TAR.XZ), high-level file operations (copy / move / delete / recycle-bin), and two domain engines: managed (content-addressed dedup) and encrypted (`age` + reveal sessions) folders.
 
 ## Managed-folder MVP trade-off
 

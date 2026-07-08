@@ -4,17 +4,96 @@ import { ViewerTextModel } from "../../workspace/defs.slint";
 export component ViewerTextView inherits Rectangle {
     in property <ViewerTextModel> model;
 
+    callback toggle-edit();
+    callback save();
+    callback text-edited(string);
+
     background: transparent;
+
+    // Local draft while editing; re-synced when entering edit mode or when the
+    // model path / read-only flag changes from the backend snapshot.
+    property <string> draft-text: model.plain-text;
+    property <bool> was-read-only: true;
+    property <bool> locally-dirty: false;
+
+    changed model => {
+        if model.read-only {
+            root.draft-text = model.plain-text;
+            root.was-read-only = true;
+            root.locally-dirty = false;
+        } else if root.was-read-only {
+            root.draft-text = model.plain-text;
+            root.was-read-only = false;
+            root.locally-dirty = model.dirty;
+        } else if root.draft-text == model.plain-text {
+            root.locally-dirty = model.dirty;
+        } else {
+            root.locally-dirty = true;
+        }
+    }
 
     VerticalLayout {
         spacing: 0;
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: start;
+
+                Rectangle {
+                    width: max(72px, mode-label.preferred-width + 16px);
+                    height: 28px;
+                    background: mode-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    mode-ta := TouchArea { clicked => { root.toggle-edit(); } }
+                    mode-label := Text {
+                        text: model.mode-label;
+                        color: model.read-only ? Theme.text-secondary : Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if !model.read-only : Rectangle {
+                    width: max(56px, save-label.preferred-width + 16px);
+                    height: 28px;
+                    background: save-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    save-ta := TouchArea { clicked => { root.save(); } }
+                    save-label := Text {
+                        text: model.save-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                if model.dirty || root.locally-dirty : Text {
+                    text: "●";
+                    color: #eab308;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
 
         Rectangle {
             background: Theme.surface-base;
             vertical-stretch: 1;
             clip: true;
 
-            Flickable {
+            if model.read-only : Flickable {
                 width: parent.width;
                 height: parent.height;
                 viewport-width: self.width;
@@ -76,6 +155,34 @@ export component ViewerTextView inherits Rectangle {
                 }
             }
 
+            if !model.read-only : Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: max(self.height, edit-pad.preferred-height);
+
+                edit-pad := HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+
+                    edit-input := TextInput {
+                        width: parent.width - 16px;
+                        text: root.draft-text;
+                        single-line: false;
+                        wrap: no-wrap;
+                        color: Theme.text-primary;
+                        font-family: Theme.font-family-mono;
+                        font-size: Theme.font-size-sm;
+                        edited => {
+                            root.draft-text = self.text;
+                            root.locally-dirty = true;
+                            root.text-edited(self.text);
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -112,7 +219,7 @@ export component ViewerTextView inherits Rectangle {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
-                if model.dirty : Text {
+                if model.dirty || root.locally-dirty : Text {
                     text: "●";
                     color: #eab308;
                     font-size: Theme.font-size-sm;

@@ -141,6 +141,22 @@ impl TextBuffer {
         self.dirty = false;
     }
 
+    /// Full buffer text (LF-normalised, without CRLF restoration).
+    #[must_use]
+    pub fn plain_text(&self) -> String {
+        self.rope.to_string()
+    }
+
+    /// Replace the entire buffer contents (LF-normalised). Marks dirty when changed.
+    pub fn replace_content(&mut self, text: &str) {
+        let normalized = text.replace("\r\n", "\n");
+        if self.rope.to_string() == normalized {
+            return;
+        }
+        self.rope = Rope::from_str(&normalized);
+        self.dirty = true;
+    }
+
     /// Fetch a single line (without the trailing newline).
     #[must_use]
     pub fn line(&self, idx: u32) -> Option<String> {
@@ -167,6 +183,30 @@ impl TextBuffer {
             }
         }
         out
+    }
+
+    /// Extract text in `[start, end)` (exclusive end).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ViewerError::EditOutOfBounds`] for invalid positions.
+    pub fn text_range(
+        &self,
+        start_line: u32,
+        start_col: u32,
+        end_line: u32,
+        end_col: u32,
+    ) -> Result<String> {
+        let start = self
+            .line_col_to_char(start_line, start_col)
+            .ok_or(ViewerError::EditOutOfBounds)?;
+        let end = self
+            .line_col_to_char(end_line, end_col)
+            .ok_or(ViewerError::EditOutOfBounds)?;
+        if end < start {
+            return Err(ViewerError::EditOutOfBounds);
+        }
+        Ok(self.rope.slice(start..end).to_string())
     }
 
     /// Insert `text` at `(line, column)` (zero-based).

@@ -30,17 +30,16 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
     if sample.starts_with(b"%PDF-") {
         return Some(ViewerKind::Pdf);
     }
-    if image::guess_format(sample).is_ok() {
+    if image::guess_format(sample).is_ok() || crate::image::loader::looks_like_svg(sample) {
         return Some(ViewerKind::Image);
     }
     // Fall back to the extension for path-only dispatch (e.g. text files).
     if let Some(ext) = extension_of(path) {
         return match ext.as_str() {
             "pdf" => Some(ViewerKind::Pdf),
-            "zip" | "7z" | "tar" | "tgz" | "gz" => Some(ViewerKind::Archive),
-            "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "tiff" | "tif" | "avif" | "tga" => {
-                Some(ViewerKind::Image)
-            }
+            "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
+            "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "tiff" | "tif" | "avif" | "tga"
+            | "svg" => Some(ViewerKind::Image),
             _ => Some(ViewerKind::Text),
         };
     }
@@ -120,5 +119,37 @@ mod tests {
     fn image_extension_fallback() {
         let kind = kind_for(&path("local:/a/b.png"), b"").unwrap();
         assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn svg_extension_routes_to_image() {
+        let kind = kind_for(&path("local:/a/b.svg"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn svg_magic_routes_to_image() {
+        let sample = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>";
+        let kind = kind_for(&path("local:/a/b.unknown"), sample).unwrap();
+        assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn xz_magic_routes_to_archive() {
+        let sample = b"\xFD\x37\x7A\x58\x5A\x00rest";
+        let kind = kind_for(&path("local:/a/b.unknown"), sample).unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn xz_extension_fallback() {
+        let kind = kind_for(&path("local:/a/b.xz"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn txz_extension_fallback() {
+        let kind = kind_for(&path("local:/a/b.txz"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
     }
 }

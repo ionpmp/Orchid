@@ -1,4 +1,4 @@
-//! TAR and TAR.GZ archive readers.
+//! TAR, TAR.GZ, and TAR.XZ archive readers.
 
 use std::fs::File;
 use std::io::Read;
@@ -30,6 +30,19 @@ pub struct TarGzReader {
 }
 
 impl TarGzReader {
+    /// Open a reader over `path`.
+    #[must_use]
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+/// Reader around a `.tar.xz` / `.txz` / `.xz` archive.
+pub struct TarXzReader {
+    path: PathBuf,
+}
+
+impl TarXzReader {
     /// Open a reader over `path`.
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
@@ -130,6 +143,57 @@ impl ArchiveReader for TarGzReader {
             let f = File::open(&path)?;
             let gz = flate2::read::GzDecoder::new(f);
             extract_all_tar(gz, &target)
+        })
+        .await
+        .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?
+    }
+}
+
+#[async_trait]
+impl ArchiveReader for TarXzReader {
+    fn format(&self) -> ArchiveFormat {
+        ArchiveFormat::TarXz
+    }
+
+    async fn list(&self) -> Result<Vec<ArchiveEntry>> {
+        let path = self.path.clone();
+        tokio::task::spawn_blocking(move || {
+            let f = File::open(&path)?;
+            let xz = xz2::read::XzDecoder::new(f);
+            list_tar(xz)
+        })
+        .await
+        .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?
+    }
+
+    async fn read_entry(&self, inner: &str) -> Result<Vec<u8>> {
+        let path = self.path.clone();
+        let target = inner.to_string();
+        tokio::task::spawn_blocking(move || {
+            let f = File::open(&path)?;
+            let xz = xz2::read::XzDecoder::new(f);
+            read_tar_entry(xz, &target)
+        })
+        .await
+        .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?
+    }
+
+    async fn extract_entry(&self, path: &str, output: &Path) -> Result<()> {
+        let bytes = self.read_entry(path).await?;
+        if let Some(parent) = output.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(output, &bytes).await?;
+        Ok(())
+    }
+
+    async fn extract_all(&self, output: &Path) -> Result<u64> {
+        let path = self.path.clone();
+        let target = output.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            let f = File::open(&path)?;
+            let xz = xz2::read::XzDecoder::new(f);
+            extract_all_tar(xz, &target)
         })
         .await
         .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?

@@ -83,6 +83,10 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-archive-extract-selected(string);
     callback viewer-archive-extract-all(string);
 
+    callback viewer-text-toggle-edit(string);
+    callback viewer-text-save(string);
+    callback viewer-text-edited(string, string);
+
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
     callback fm-toggle-show-hidden(string);
@@ -360,6 +364,10 @@ export component WidgetFrame inherits Rectangle {
                 archive-select(path) => { root.viewer-archive-select(root.model.instance-id, path); }
                 archive-extract-selected => { root.viewer-archive-extract-selected(root.model.instance-id); }
                 archive-extract-all => { root.viewer-archive-extract-all(root.model.instance-id); }
+
+                text-toggle-edit => { root.viewer-text-toggle-edit(root.model.instance-id); }
+                text-save => { root.viewer-text-save(root.model.instance-id); }
+                text-edited(t) => { root.viewer-text-edited(root.model.instance-id, t); }
 
             }
         }

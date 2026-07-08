@@ -411,6 +411,7 @@ fn format_label(fmt: orchid_fs::ArchiveFormat) -> &'static str {
         orchid_fs::ArchiveFormat::SevenZ => "7z",
         orchid_fs::ArchiveFormat::Tar => "TAR",
         orchid_fs::ArchiveFormat::TarGz => "TAR.GZ",
+        orchid_fs::ArchiveFormat::TarXz => "TAR.XZ",
     }
 }
 

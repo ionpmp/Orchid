@@ -1438,6 +1438,44 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_text_toggle_edit({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::text_toggle_edit(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_text_save({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::text_save(inst));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_text_edited({
+            move |id, text| {
+                if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                    let body = text.to_string();
+                    // Push edits without schedule_rebuild so the multiline
+                    // TextInput keeps caret position; dirty ● uses local state.
+                    let _ = slint::spawn_local(Compat::new(async move {
+                        if let Err(e) =
+                            orchid_widgets::builtin::viewer::text_push_edit(inst, body).await
+                        {
+                            warn!(?e, "viewer text edit");
+                        }
+                    }));
+                }
+            }
+        });
 
         self.window.on_fm_sidebar_clicked({
             let t = t.clone();
@@ -7192,7 +7230,7 @@ fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         },
         image: empty_viewer_image_model(),
         pdf: empty_viewer_pdf_model(locale),
-        text: empty_viewer_text_model(),
+        text: empty_viewer_text_model(locale),
         archive: empty_viewer_archive_model(locale),
     }
 }
@@ -8704,7 +8742,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
     }
 }
 
-fn empty_viewer_text_model() -> ViewerTextModel {
+fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
     ViewerTextModel {
         language: "plaintext".into(),
         encoding: "UTF-8".into(),
@@ -8718,6 +8756,9 @@ fn empty_viewer_text_model() -> ViewerTextModel {
         visible_lines: ModelRc::new(VecModel::default()),
         info_text: SharedString::new(),
         path_display: SharedString::new(),
+        plain_text: SharedString::new(),
+        mode_label: locale.tr("viewer-text-read-only").into(),
+        save_label: locale.tr("viewer-text-save").into(),
     }
 }
 
@@ -8786,7 +8827,7 @@ fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel 
         }
         Vs::Text(s) => {
             model.kind = 5;
-            model.text = build_text_snapshot(s);
+            model.text = build_text_snapshot(s, locale);
         }
         Vs::Archive(s) => {
             model.kind = 6;
@@ -8855,7 +8896,7 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
     }
 }
 
-fn build_text_snapshot(s: &orchid_viewers::TextSnapshot) -> ViewerTextModel {
+fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager) -> ViewerTextModel {
     let lines: Vec<ViewerSyntaxLine> = s
         .visible_lines
         .iter()
@@ -8888,6 +8929,13 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot) -> ViewerTextModel {
         visible_lines: ModelRc::new(VecModel::from(lines)),
         info_text: s.info_text.clone().into(),
         path_display: s.path_display.clone().into(),
+        plain_text: s.plain_text.clone().into(),
+        mode_label: if s.read_only {
+            locale.tr("viewer-text-read-only").into()
+        } else {
+            locale.tr("viewer-text-editing").into()
+        },
+        save_label: locale.tr("viewer-text-save").into(),
     }
 }
 

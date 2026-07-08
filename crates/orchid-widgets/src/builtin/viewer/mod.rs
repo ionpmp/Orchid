@@ -513,6 +513,85 @@ pub async fn text_scroll(instance_id: Uuid, delta: i32) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Text: switch read / edit mode (`edit == true` → edit).
+pub async fn text_set_mode(instance_id: Uuid, edit: bool) -> WidgetResult<()> {
+    use orchid_viewers::TextViewerMode;
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                tv.set_mode(if edit {
+                    TextViewerMode::Edit
+                } else {
+                    TextViewerMode::Read
+                });
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Text: flip read ↔ edit. Returns `true` when the resulting mode is edit.
+///
+/// Leaving edit mode with unsaved changes is allowed for MVP — the dirty ●
+/// indicator remains until save.
+pub async fn text_toggle_edit(instance_id: Uuid) -> WidgetResult<bool> {
+    use orchid_viewers::TextViewerMode;
+    let inner = live_inner(instance_id)?;
+    let edit = {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(false);
+        };
+        let Some(tv) = v.as_any().downcast_ref::<TextViewer>() else {
+            return Ok(false);
+        };
+        let edit = tv.mode() == TextViewerMode::Read;
+        tv.set_mode(if edit {
+            TextViewerMode::Edit
+        } else {
+            TextViewerMode::Read
+        });
+        edit
+    };
+    inner.refresh_snapshot().await;
+    Ok(edit)
+}
+
+/// Text: push the full document contents from the plain editor.
+pub async fn text_push_edit(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                tv.replace_content(&text)
+                    .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Text: save buffer to disk (clears dirty).
+pub async fn text_save(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let mut guard = inner.viewer.lock().await;
+        let v = guard
+            .as_mut()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+        v.save()
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<ViewerWidgetInner>> {
     VIEWER_LIVE
         .get(&instance_id)

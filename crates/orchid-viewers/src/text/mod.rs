@@ -91,6 +91,12 @@ impl TextViewer {
         *self.mode.write() = mode;
     }
 
+    /// Current read / edit mode.
+    #[must_use]
+    pub fn mode(&self) -> TextViewerMode {
+        *self.mode.read()
+    }
+
     /// Set the visible window for snapshots.
     pub fn set_visible_range(&self, first_line: u32, count: u32) {
         *self.first_visible_line.write() = first_line;
@@ -151,6 +157,137 @@ impl TextViewer {
             text: text.into(),
             timestamp: std::time::Instant::now(),
         });
+        Ok(())
+    }
+
+    /// Delete the range `[start, end)`.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::EditOutOfBounds`] when not in edit mode or the range is invalid.
+    pub fn delete(&self, start: CursorPos, end: CursorPos) -> Result<()> {
+        if *self.mode.read() != TextViewerMode::Edit {
+            return Err(ViewerError::EditOutOfBounds);
+        }
+        let mut buffer = self.buffer.write();
+        let Some(buffer) = buffer.as_mut() else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        let deleted = buffer
+            .text_range(start.line, start.column, end.line, end.column)?
+            .to_string();
+        buffer.delete(start.line, start.column, end.line, end.column)?;
+        *self.cursor.write() = start;
+        self.undo.lock().push(TextOp {
+            kind: TextOpKind::Delete,
+            start_line: start.line,
+            start_column: start.column,
+            end_line: end.line,
+            end_column: end.column,
+            text: deleted,
+            timestamp: std::time::Instant::now(),
+        });
+        Ok(())
+    }
+
+    /// Replace the entire buffer with `text` (plain edit-mode push from the UI).
+    ///
+    /// Full-document replaces clear the undo stack (MVP; typing undo uses insert/delete).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::EditOutOfBounds`] when not in edit mode or no buffer is open.
+    pub fn replace_content(&self, text: &str) -> Result<()> {
+        if *self.mode.read() != TextViewerMode::Edit {
+            return Err(ViewerError::EditOutOfBounds);
+        }
+        let mut buffer = self.buffer.write();
+        let Some(buffer) = buffer.as_mut() else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        if buffer.plain_text() == text.replace("\r\n", "\n") {
+            return Ok(());
+        }
+        buffer.replace_content(text);
+        self.undo.lock().clear();
+        Ok(())
+    }
+
+    /// Undo the last edit op.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::EditOutOfBounds`] when not in edit mode or no buffer is open.
+    pub fn undo(&self) -> Result<()> {
+        if *self.mode.read() != TextViewerMode::Edit {
+            return Err(ViewerError::EditOutOfBounds);
+        }
+        let op = {
+            let mut undo = self.undo.lock();
+            undo.undo()
+        };
+        let Some(op) = op else {
+            return Ok(());
+        };
+        let mut buffer = self.buffer.write();
+        let Some(buffer) = buffer.as_mut() else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        match op.kind {
+            TextOpKind::Insert => {
+                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                *self.cursor.write() = CursorPos {
+                    line: op.start_line,
+                    column: op.start_column,
+                };
+            }
+            TextOpKind::Delete => {
+                buffer.insert(op.start_line, op.start_column, &op.text)?;
+                *self.cursor.write() = CursorPos {
+                    line: op.end_line,
+                    column: op.end_column,
+                };
+            }
+        }
+        Ok(())
+    }
+
+    /// Redo the last undone edit op.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::EditOutOfBounds`] when not in edit mode or no buffer is open.
+    pub fn redo(&self) -> Result<()> {
+        if *self.mode.read() != TextViewerMode::Edit {
+            return Err(ViewerError::EditOutOfBounds);
+        }
+        let op = {
+            let mut undo = self.undo.lock();
+            undo.redo()
+        };
+        let Some(op) = op else {
+            return Ok(());
+        };
+        let mut buffer = self.buffer.write();
+        let Some(buffer) = buffer.as_mut() else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        match op.kind {
+            TextOpKind::Insert => {
+                buffer.insert(op.start_line, op.start_column, &op.text)?;
+                *self.cursor.write() = CursorPos {
+                    line: op.end_line,
+                    column: op.end_column,
+                };
+            }
+            TextOpKind::Delete => {
+                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                *self.cursor.write() = CursorPos {
+                    line: op.start_line,
+                    column: op.start_column,
+                };
+            }
+        }
         Ok(())
     }
 
@@ -246,6 +383,7 @@ impl Viewer for TextViewer {
             cursor_column: cursor.column,
             selection: *self.selection.read(),
             info_text: info,
+            plain_text: buffer.plain_text(),
         })
     }
 
@@ -289,5 +427,66 @@ impl Viewer for TextViewer {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text::syntax::SyntaxHighlighter;
+    use std::sync::Arc;
+
+    fn viewer() -> TextViewer {
+        TextViewer::new(Arc::new(SyntaxHighlighter::new()))
+    }
+
+    #[test]
+    fn set_mode_round_trips() {
+        let tv = viewer();
+        assert_eq!(*tv.mode.read(), TextViewerMode::Read);
+        tv.set_mode(TextViewerMode::Edit);
+        assert_eq!(*tv.mode.read(), TextViewerMode::Edit);
+    }
+
+    #[test]
+    fn insert_requires_edit_mode() {
+        let tv = viewer();
+        *tv.buffer.write() = Some(TextBuffer::from_bytes(b"hi").unwrap());
+        assert!(tv.insert("x").is_err());
+        tv.set_mode(TextViewerMode::Edit);
+        assert!(tv.insert("x").is_ok());
+        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("xhi"));
+        assert!(tv.is_dirty());
+    }
+
+    #[test]
+    fn delete_undo_redo() {
+        let tv = viewer();
+        *tv.buffer.write() = Some(TextBuffer::from_bytes(b"abcd").unwrap());
+        tv.set_mode(TextViewerMode::Edit);
+        tv.delete(CursorPos { line: 0, column: 1 }, CursorPos { line: 0, column: 3 })
+            .unwrap();
+        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("ad"));
+        tv.undo().unwrap();
+        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("abcd"));
+        tv.redo().unwrap();
+        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("ad"));
+    }
+
+    #[test]
+    fn replace_content_marks_dirty() {
+        let tv = viewer();
+        *tv.buffer.write() = Some(TextBuffer::from_bytes(b"old").unwrap());
+        tv.set_mode(TextViewerMode::Edit);
+        tv.replace_content("new text").unwrap();
+        assert_eq!(tv.buffer.read().as_ref().unwrap().plain_text(), "new text");
+        assert!(tv.is_dirty());
+        let snap = tv.snapshot();
+        let ViewerSnapshot::Text(t) = snap else {
+            panic!("expected text snapshot");
+        };
+        assert!(t.dirty);
+        assert!(!t.read_only);
+        assert_eq!(t.plain_text, "new text");
     }
 }

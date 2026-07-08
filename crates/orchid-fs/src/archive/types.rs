@@ -10,6 +10,7 @@ pub enum ArchiveFormat {
     SevenZ,
     Tar,
     TarGz,
+    TarXz,
 }
 
 /// A single entry in an archive.

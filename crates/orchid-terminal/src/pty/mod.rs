@@ -59,6 +59,10 @@ pub struct PtyHandle {
     pub size: RwLock<PtySize>,
     /// When the child was started, for diagnostics.
     pub started_at: chrono::DateTime<chrono::Utc>,
+    /// Windows Job Object with `KILL_ON_JOB_CLOSE`. Kept alive so the child
+    /// tree is terminated when Orchid exits or this handle is dropped.
+    #[cfg(windows)]
+    pub(crate) _job: Option<JobHandle>,
 }
 
 impl std::fmt::Debug for PtyHandle {
@@ -72,3 +76,24 @@ impl std::fmt::Debug for PtyHandle {
 
 /// Shared alias — PTY handles are always held behind `Arc`.
 pub type SharedPty = Arc<PtyHandle>;
+
+/// Owned Windows Job Object handle. Closing it kills every process still in
+/// the job when `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` is set.
+#[cfg(windows)]
+pub(crate) struct JobHandle(pub(crate) windows::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+impl Drop for JobHandle {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            let _ = unsafe { windows::Win32::Foundation::CloseHandle(self.0) };
+            self.0 = windows::Win32::Foundation::HANDLE::default();
+        }
+    }
+}
+
+/// Safety: the handle is exclusively owned and only closed in `Drop`.
+#[cfg(windows)]
+unsafe impl Send for JobHandle {}
+#[cfg(windows)]
+unsafe impl Sync for JobHandle {}

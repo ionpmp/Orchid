@@ -1,8 +1,7 @@
 //! Image loading.
 //!
-//! Uses the [`image`](image) crate's built-in decoders. RAW and SVG are
-//! explicitly out of MVP scope — adding them is a future task that either
-//! pulls in `rawloader` + `resvg` or delegates to a helper binary.
+//! Raster formats use the [`image`](image) crate's built-in decoders. SVG is
+//! rasterized via [`resvg`]. RAW remains out of scope for now.
 
 use std::sync::Arc;
 
@@ -101,6 +100,9 @@ pub async fn load_image(
 }
 
 fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    if looks_like_svg(bytes) {
+        return decode_svg(bytes, size);
+    }
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
         .unwrap_or(ImageFormat::Unknown);
@@ -114,6 +116,78 @@ fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
         format: guessed,
         original_size_bytes: size,
     })
+}
+
+/// True when `bytes` look like an SVG document (XML sniff).
+#[must_use]
+pub fn looks_like_svg(bytes: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let trimmed = text.trim_start_matches('\u{feff}').trim_start();
+    let head: String = trimmed.chars().take(512).collect::<String>().to_ascii_lowercase();
+    if head.starts_with("<svg") {
+        return true;
+    }
+    if head.starts_with("<?xml") || head.starts_with("<!doctype") {
+        return head.contains("<svg");
+    }
+    false
+}
+
+fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    let opt = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_data(bytes, &opt)
+        .map_err(|e| ViewerError::ImageDecode(format!("SVG parse: {e}")))?;
+
+    let pixmap_size = tree.size().to_int_size();
+    let width = pixmap_size.width();
+    let height = pixmap_size.height();
+    if width == 0 || height == 0 {
+        return Err(ViewerError::ImageDecode(
+            "SVG has zero width or height".into(),
+        ));
+    }
+
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height).ok_or_else(|| {
+        ViewerError::ImageDecode(format!("failed to allocate {width}×{height} pixmap for SVG"))
+    })?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::default(),
+        &mut pixmap.as_mut(),
+    );
+
+    // tiny-skia stores premultiplied RGBA; convert to straight alpha for the
+    // shared image pipeline (`image::RgbaImage` / DisplayedImage).
+    let rgba = unpremultiply_rgba(pixmap.data());
+
+    Ok(LoadedImage {
+        rgba,
+        width,
+        height,
+        format: ImageFormat::Svg,
+        original_size_bytes: size,
+    })
+}
+
+fn unpremultiply_rgba(data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(data.len());
+    for px in data.chunks_exact(4) {
+        let (r, g, b, a) = (px[0], px[1], px[2], px[3]);
+        if a == 0 {
+            out.extend_from_slice(&[0, 0, 0, 0]);
+        } else if a == 255 {
+            out.extend_from_slice(px);
+        } else {
+            let a_f = f32::from(a);
+            out.push(((f32::from(r) * 255.0 / a_f) + 0.5) as u8);
+            out.push(((f32::from(g) * 255.0 / a_f) + 0.5) as u8);
+            out.push(((f32::from(b) * 255.0 / a_f) + 0.5) as u8);
+            out.push(a);
+        }
+    }
+    out
 }
 
 /// Build an `Arc<Vec<u8>>` suitable for the snapshot's `rgba_bytes`.
@@ -143,5 +217,33 @@ mod tests {
         assert_eq!(loaded.height, 2);
         assert_eq!(loaded.format, ImageFormat::Png);
         assert_eq!(loaded.rgba[0..4], [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn decodes_minimal_svg() {
+        // Extra `#` delimiters so CSS `#rrggbb` does not terminate the raw string.
+        let svg = br##"<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" viewBox="0 0 4 4">
+  <rect width="4" height="4" fill="#ff0000"/>
+</svg>"##;
+        assert!(looks_like_svg(svg));
+
+        let loaded = decode_bytes(svg, svg.len() as u64).unwrap();
+        assert_eq!(loaded.format, ImageFormat::Svg);
+        assert_eq!(loaded.width, 4);
+        assert_eq!(loaded.height, 4);
+        assert_eq!(loaded.rgba.len(), 4 * 4 * 4);
+        // Centre pixel should be opaque red.
+        let i = ((2 * 4 + 2) * 4) as usize;
+        assert_eq!(loaded.rgba[i], 255);
+        assert_eq!(loaded.rgba[i + 1], 0);
+        assert_eq!(loaded.rgba[i + 2], 0);
+        assert_eq!(loaded.rgba[i + 3], 255);
+    }
+
+    #[test]
+    fn sniffs_bare_svg_root() {
+        let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>";
+        assert!(looks_like_svg(svg));
     }
 }

@@ -131,6 +131,9 @@ export component MainWindow inherits Window {
     callback viewer-archive-select(string, string);
     callback viewer-archive-extract-selected(string);
     callback viewer-archive-extract-all(string);
+    callback viewer-text-toggle-edit(string);
+    callback viewer-text-save(string);
+    callback viewer-text-edited(string, string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -332,6 +335,9 @@ export component MainWindow inherits Window {
             viewer-archive-select(id, path) => { root.viewer-archive-select(id, path); }
             viewer-archive-extract-selected(id) => { root.viewer-archive-extract-selected(id); }
             viewer-archive-extract-all(id) => { root.viewer-archive-extract-all(id); }
+            viewer-text-toggle-edit(id) => { root.viewer-text-toggle-edit(id); }
+            viewer-text-save(id) => { root.viewer-text-save(id); }
+            viewer-text-edited(id, t) => { root.viewer-text-edited(id, t); }
 
             fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
             fm-toggle-dual-pane(fm_id) => { root.fm-toggle-dual-pane(fm_id); }

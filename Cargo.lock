@@ -5161,6 +5161,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "windows 0.58.0",
+ "xz2",
  "zip",
 ]
 
@@ -5304,6 +5305,7 @@ dependencies = [
  "orchid-storage",
  "parking_lot",
  "pdfium-render",
+ "resvg",
  "ropey",
  "serde",
  "tempfile",
