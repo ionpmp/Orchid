@@ -186,12 +186,14 @@ fn search_payload_eq(a: &UniversalSearchPayload, b: &UniversalSearchPayload) -> 
 
 fn media_payload_eq(a: &MediaPlayerPayload, b: &MediaPlayerPayload) -> bool {
     a.has_session == b.has_session
+        && a.is_loading == b.is_loading
+        && a.is_unsupported == b.is_unsupported
         && a.title == b.title
         && a.artist == b.artist
         && a.album == b.album
         && a.source_app == b.source_app
-        && a.position_text == b.position_text
-        && a.duration_text == b.duration_text
+        && a.position_secs == b.position_secs
+        && a.duration_secs == b.duration_secs
         && a.progress_fraction.to_bits() == b.progress_fraction.to_bits()
         && a.is_playing == b.is_playing
         && a.thumbnail_base64 == b.thumbnail_base64

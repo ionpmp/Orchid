@@ -1,5 +1,4 @@
 import { Theme } from "../theme_global.slint";
-import { Strings } from "../strings_global.slint";
 import { MediaModel } from "../workspace/defs.slint";
 
 export component MediaView inherits Rectangle {
@@ -24,7 +23,7 @@ export component MediaView inherits Rectangle {
         }
 
         Text {
-            text: Strings.media_no_session;
+            text: model.empty-state-text;
             color: Theme.text-tertiary;
             font-size: Theme.font-size-md;
             horizontal-alignment: center;

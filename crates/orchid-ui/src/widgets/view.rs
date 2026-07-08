@@ -257,6 +257,12 @@ fn search_to_text_lines(s: &UniversalSearchPayload) -> Vec<String> {
 }
 
 fn media_to_text_lines(m: &MediaPlayerPayload) -> Vec<String> {
+    if m.is_unsupported {
+        return vec!["Unsupported".to_string()];
+    }
+    if m.is_loading {
+        return vec!["Loading".to_string()];
+    }
     if !m.has_session {
         return vec!["No media session".to_string()];
     }
@@ -267,8 +273,8 @@ fn media_to_text_lines(m: &MediaPlayerPayload) -> Vec<String> {
         m.source_app.clone(),
         format!(
             "{} / {} ({:.0}%)",
-            m.position_text,
-            m.duration_text,
+            format_media_duration(m.position_secs),
+            format_media_duration(m.duration_secs),
             f64::from(m.progress_fraction) * 100.0
         ),
         if m.is_playing {
@@ -277,6 +283,12 @@ fn media_to_text_lines(m: &MediaPlayerPayload) -> Vec<String> {
             "Paused".to_string()
         },
     ]
+}
+
+fn format_media_duration(secs: u64) -> String {
+    let m = secs / 60;
+    let s = secs % 60;
+    format!("{m}:{s:02}")
 }
 
 /// Plain-text preview for the password widget: no secrets, no TOTP codes.

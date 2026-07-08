@@ -215,6 +215,8 @@ terminal-tooltip-tab-new = Новая вкладка (Ctrl+Shift+T)
 
 # ---- Media player ----
 media-no-session = Нет активного воспроизведения
+media-loading = Загрузка медиа…
+media-unsupported = Управление медиа недоступно на этой платформе
 media-play = Воспроизвести
 media-pause = Пауза
 media-next = Следующий

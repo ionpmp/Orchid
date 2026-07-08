@@ -220,6 +220,8 @@ terminal-tooltip-tab-new = New tab (Ctrl+Shift+T)
 
 # ---- Media player ----
 media-no-session = No media playing
+media-loading = Loading media…
+media-unsupported = Media controls are not available on this platform
 media-play = Play
 media-pause = Pause
 media-next = Next

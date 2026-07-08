@@ -5,12 +5,14 @@
 #[allow(missing_docs)]
 pub struct MediaPlayerPayload {
     pub has_session: bool,
+    pub is_loading: bool,
+    pub is_unsupported: bool,
     pub title: String,
     pub artist: String,
     pub album: String,
     pub source_app: String,
-    pub position_text: String,
-    pub duration_text: String,
+    pub position_secs: u64,
+    pub duration_secs: u64,
     pub progress_fraction: f32,
     pub is_playing: bool,
     /// Base64-encoded thumbnail (`data:image/...` suffix omitted; the UI

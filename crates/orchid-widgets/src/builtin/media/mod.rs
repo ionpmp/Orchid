@@ -61,6 +61,10 @@ pub struct MediaSession {
 /// Abstract media provider.
 #[async_trait]
 pub trait MediaProvider: Send + Sync + std::fmt::Debug {
+    /// Whether native now-playing integration is available on this platform.
+    fn platform_supported(&self) -> bool {
+        true
+    }
     /// Current session, if any.
     async fn current(&self) -> Option<MediaSession>;
     /// Start / resume playback.
@@ -81,6 +85,9 @@ pub struct NullProvider;
 
 #[async_trait]
 impl MediaProvider for NullProvider {
+    fn platform_supported(&self) -> bool {
+        false
+    }
     async fn current(&self) -> Option<MediaSession> {
         None
     }
@@ -105,7 +112,9 @@ impl MediaProvider for NullProvider {
 pub struct MediaPlayerWidget {
     instance_id: Uuid,
     provider: Arc<dyn MediaProvider>,
+    supported: bool,
     session: Arc<RwLock<Option<MediaSession>>>,
+    first_poll_done: Arc<RwLock<bool>>,
     refresh: PeriodicRefresh,
     bus: Arc<orchid_core::EventBus>,
 }
@@ -145,14 +154,33 @@ impl MediaPlayerWidget {
         provider: Arc<dyn MediaProvider>,
         bus: Arc<orchid_core::EventBus>,
     ) -> Self {
+        let supported = provider.platform_supported();
         MEDIA_LIVE.insert(instance_id, provider.clone());
         Self {
             instance_id,
+            supported,
             provider,
             session: Arc::new(RwLock::new(None)),
+            first_poll_done: Arc::new(RwLock::new(false)),
             refresh: PeriodicRefresh::new(Duration::from_millis(500)),
             bus,
         }
+    }
+
+    async fn poll_once(
+        provider: Arc<dyn MediaProvider>,
+        slot: Arc<RwLock<Option<MediaSession>>>,
+        first_poll_done: Arc<RwLock<bool>>,
+        bus: Arc<orchid_core::EventBus>,
+        instance_id: Uuid,
+    ) {
+        let session = provider.current().await;
+        *slot.write() = session;
+        *first_poll_done.write() = true;
+        bus.publish(
+            orchid_core::EventSource::Widget(instance_id),
+            WidgetSnapshotUpdated { instance_id },
+        );
     }
 
     /// Access the provider; used by the UI shell for transport controls.
@@ -176,24 +204,36 @@ impl Widget for MediaPlayerWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        if self.supported {
+            Self::poll_once(
+                self.provider.clone(),
+                self.session.clone(),
+                self.first_poll_done.clone(),
+                self.bus.clone(),
+                self.instance_id,
+            )
+            .await;
+        } else {
+            *self.first_poll_done.write() = true;
+        }
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        if !self.supported {
+            return Ok(());
+        }
         let provider = self.provider.clone();
         let slot = self.session.clone();
+        let first_poll_done = self.first_poll_done.clone();
         let bus = self.bus.clone();
         let instance_id = self.instance_id;
         self.refresh.start(move || {
             let provider = provider.clone();
             let slot = slot.clone();
+            let first_poll_done = first_poll_done.clone();
             let bus = bus.clone();
             async move {
-                let session = provider.current().await;
-                *slot.write() = session;
-                bus.publish(
-                    orchid_core::EventSource::Widget(instance_id),
-                    WidgetSnapshotUpdated { instance_id },
-                );
+                Self::poll_once(provider, slot, first_poll_done, bus, instance_id).await;
             }
         });
         Ok(())
@@ -214,10 +254,27 @@ impl Widget for MediaPlayerWidget {
         Ok(())
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
+        let is_loading = !*self.first_poll_done.read();
+        if !self.supported {
+            return Some(WidgetSnapshot {
+                instance_id: self.instance_id,
+                widget_type: TYPE_ID,
+                title: "Media".into(),
+                status: WidgetStatus::Ready,
+                payload: WidgetPayload::MediaPlayer(MediaPlayerPayload {
+                    is_unsupported: true,
+                    is_loading: false,
+                    ..MediaPlayerPayload::default()
+                }),
+            });
+        }
         let session = self.session.read().clone();
         let payload = match session {
-            Some(s) => session_to_payload(s),
-            None => MediaPlayerPayload::default(),
+            Some(s) => session_to_payload(s, is_loading),
+            None => MediaPlayerPayload {
+                is_loading,
+                ..MediaPlayerPayload::default()
+            },
         };
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
@@ -246,7 +303,7 @@ impl Widget for MediaPlayerWidget {
     }
 }
 
-fn session_to_payload(s: MediaSession) -> MediaPlayerPayload {
+fn session_to_payload(s: MediaSession, is_loading: bool) -> MediaPlayerPayload {
     let duration = s.duration.unwrap_or_default();
     let position = s.position.unwrap_or_default();
     let fraction = if duration.as_secs() == 0 {
@@ -260,23 +317,18 @@ fn session_to_payload(s: MediaSession) -> MediaPlayerPayload {
         .map(|bytes| base64_encode(bytes));
     MediaPlayerPayload {
         has_session: true,
+        is_loading,
         title: s.title,
         artist: s.artist.unwrap_or_default(),
         album: s.album.unwrap_or_default(),
         source_app: s.source_app.unwrap_or_default(),
-        position_text: format_duration(position),
-        duration_text: format_duration(duration),
+        position_secs: position.as_secs(),
+        duration_secs: duration.as_secs(),
         progress_fraction: fraction,
         is_playing: s.is_playing,
         thumbnail_base64,
+        ..Default::default()
     }
-}
-
-fn format_duration(d: Duration) -> String {
-    let total = d.as_secs();
-    let m = total / 60;
-    let s = total % 60;
-    format!("{m}:{s:02}")
 }
 
 /// Minimal RFC 4648 Base64 encoder for thumbnail payloads. Used only for
@@ -358,6 +410,9 @@ fn base_descriptor(factory: WidgetFactory) -> WidgetDescriptor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
+
+    use crate::widget::snapshot::WidgetPayload;
 
     #[tokio::test]
     async fn null_provider_rejects_controls() {
@@ -387,10 +442,24 @@ mod tests {
             duration: Some(Duration::from_secs(90)),
             ..Default::default()
         };
-        let payload = session_to_payload(session);
+        let payload = session_to_payload(session, false);
         assert!(payload.has_session);
-        assert_eq!(payload.position_text, "0:30");
-        assert_eq!(payload.duration_text, "1:30");
+        assert_eq!(payload.position_secs, 30);
+        assert_eq!(payload.duration_secs, 90);
         assert!((payload.progress_fraction - 1.0 / 3.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn unsupported_provider_snapshot() {
+        let bus = Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()));
+        let w = MediaPlayerWidget::new(Uuid::new_v4(), Arc::new(NullProvider), bus);
+        let snap = w.snapshot().expect("snapshot");
+        match snap.payload {
+            WidgetPayload::MediaPlayer(p) => {
+                assert!(p.is_unsupported);
+                assert!(!p.has_session);
+            }
+            _ => panic!("expected MediaPlayer payload"),
+        }
     }
 }
