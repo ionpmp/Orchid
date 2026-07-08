@@ -2565,6 +2565,9 @@ impl MainWindowController {
         g.set_empty_placeholder(self.locale.tr("notification-center-placeholder").into());
     }
 
+    /// Soft cap so bridges/toasts cannot grow the in-memory list without bound.
+    const NOTIFICATION_LIST_CAP: usize = 50;
+
     /// Append a notification (newest first). `severity`: 0 info, 1 tip, 2 warning, 3 error.
     fn push_notification(self: &Arc<Self>, title: &str, body: &str, severity: i32) {
         let item = NotificationItem {
@@ -2577,6 +2580,9 @@ impl MainWindowController {
         if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
         {
             model.insert(0, item);
+            while model.row_count() > Self::NOTIFICATION_LIST_CAP {
+                model.remove(model.row_count() - 1);
+            }
         }
         self.sync_notification_global();
     }
