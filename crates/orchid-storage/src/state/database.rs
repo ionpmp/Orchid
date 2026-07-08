@@ -586,6 +586,46 @@ impl WriteTransaction<'_> {
         Ok(())
     }
 
+    /// Evict every history entry whose `timestamp` is strictly before
+    /// `older_than`, removing both the primary row and its timestamp index
+    /// entry. Returns the number of rows removed.
+    ///
+    /// Uses [`HISTORY_BY_TIMESTAMP_INDEX`] so pruning does not scan the full
+    /// history table.
+    ///
+    /// # Errors
+    ///
+    /// Propagates redb errors.
+    pub fn evict_history_older_than(
+        &mut self,
+        older_than: DateTime<Utc>,
+    ) -> Result<u64> {
+        let txn = self.inner()?;
+        let cutoff_ms = older_than.timestamp_millis();
+
+        let mut index = match txn.open_table(HISTORY_BY_TIMESTAMP_INDEX) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(0),
+            Err(e) => return Err(e.into()),
+        };
+        let mut primary = txn.open_table(HISTORY_TABLE)?;
+
+        let mut to_evict: Vec<(i64, [u8; 16])> = Vec::new();
+        for entry in index.range(..cutoff_ms)? {
+            let (ts, key) = entry?;
+            to_evict.push((ts.value(), *key.value()));
+        }
+
+        let mut removed: u64 = 0;
+        for (ts, key) in to_evict {
+            if primary.remove(&key)?.is_some() {
+                let _ = index.remove(ts)?;
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     /// Evict every cache entry whose `last_access_at` is older than
     /// `older_than`. Returns the number of rows removed.
     ///
@@ -639,7 +679,7 @@ impl WriteTransaction<'_> {
 mod tests {
     use super::*;
     use crate::state::types::{
-        ColorLabel, GridPosition, LifecycleState, WidgetSize,
+        ColorLabel, GridPosition, HistoryEntry, LifecycleState, WidgetSize,
     };
 
     fn new_store() -> StateStore {
@@ -755,5 +795,73 @@ mod tests {
         for pair in recent.windows(2) {
             assert!(pair[0].timestamp >= pair[1].timestamp);
         }
+    }
+
+    #[test]
+    fn evict_history_older_than_removes_correct_rows() {
+        let store = new_store();
+        let cutoff = Utc::now();
+        let old_ts = cutoff - chrono::Duration::hours(1);
+        let fresh_ts = cutoff + chrono::Duration::hours(1);
+
+        let mut old_ids = Vec::new();
+        let mut fresh_ids = Vec::new();
+
+        {
+            let mut w = store.write().unwrap();
+            for i in 0..3_u8 {
+                let id = Uuid::new_v4();
+                old_ids.push(id);
+                w.put_history(&HistoryEntry {
+                    id,
+                    timestamp: old_ts + chrono::Duration::milliseconds(i64::from(i)),
+                    action_id: format!("old.{i}"),
+                    command_text: format!("old cmd {i}"),
+                    target: None,
+                    reversible_until: None,
+                    reverse_command: None,
+                    metadata: vec![],
+                })
+                .unwrap();
+            }
+            for i in 0..2_u8 {
+                let id = Uuid::new_v4();
+                fresh_ids.push(id);
+                w.put_history(&HistoryEntry {
+                    id,
+                    timestamp: fresh_ts + chrono::Duration::milliseconds(i64::from(i)),
+                    action_id: format!("fresh.{i}"),
+                    command_text: format!("fresh cmd {i}"),
+                    target: None,
+                    reversible_until: None,
+                    reverse_command: None,
+                    metadata: vec![],
+                })
+                .unwrap();
+            }
+            w.commit().unwrap();
+        }
+
+        {
+            let mut w = store.write().unwrap();
+            let removed = w.evict_history_older_than(cutoff).unwrap();
+            assert_eq!(removed, 3);
+            w.commit().unwrap();
+        }
+
+        let r = store.read().unwrap();
+        for id in &old_ids {
+            assert!(
+                r.get_history(*id).unwrap().is_none(),
+                "expired history entry was not evicted"
+            );
+        }
+        for id in &fresh_ids {
+            assert!(
+                r.get_history(*id).unwrap().is_some(),
+                "fresh history entry should remain"
+            );
+        }
+        assert_eq!(r.iter_history_recent(10).unwrap().len(), 2);
     }
 }

@@ -10,7 +10,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -205,6 +205,8 @@ pub struct MainWindowController {
     fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
     /// Persists dispatched actions when [`OrchidConfig::privacy::record_action_history`] is on.
     history_recorder: Arc<HistoryRecorder>,
+    /// Last applied [`OrchidConfig::privacy::history_retention_days`]; used to detect hot-config changes.
+    last_history_retention_days: AtomicU32,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -391,6 +393,7 @@ impl MainWindowController {
             storage.clone(),
             config.read().privacy.record_action_history,
         ));
+        let last_history_retention_days = config.read().privacy.history_retention_days;
         let this = Arc::new(Self {
             window,
             theme,
@@ -460,6 +463,7 @@ impl MainWindowController {
             vault_last_activity: Arc::new(Mutex::new(None)),
             fm_passphrase_vault,
             history_recorder,
+            last_history_retention_days: AtomicU32::new(last_history_retention_days),
         });
         this.apply_input_gesture_bindings();
         this.apply_theme()?;
@@ -470,6 +474,9 @@ impl MainWindowController {
         this.sync_navigation_global();
         this.sync_notification_global();
         this.apply_initial_mode()?;
+        if let Err(e) = this.evict_history_by_retention_policy() {
+            warn!(?e, "action history retention prune on startup");
+        }
         if !this.config.read().onboarding.completed {
             let mut ob = this.onboarding.write();
             ob.overlay_visible = true;
@@ -601,6 +608,11 @@ impl MainWindowController {
             self.history_recorder
                 .set_enabled(cfg.privacy.record_action_history);
         }
+        let retention_days = cfg.privacy.history_retention_days;
+        let retention_changed = retention_days
+            != self
+                .last_history_retention_days
+                .load(Ordering::Acquire);
         if let Ok(lang) = LocaleId::parse(&cfg.locale.language) {
             self.locale.set_current(lang);
         }
@@ -614,6 +626,13 @@ impl MainWindowController {
         }
         crate::autostart::sync_open_on_startup(&cfg.general);
         drop(cfg);
+        if retention_changed {
+            self.last_history_retention_days
+                .store(retention_days, Ordering::Release);
+            if let Err(e) = self.evict_history_by_retention_policy() {
+                warn!(?e, "action history retention prune after config change");
+            }
+        }
         self.apply_command_shortcut_overrides();
         self.apply_input_gesture_bindings();
         self.apply_theme()?;
@@ -635,6 +654,27 @@ impl MainWindowController {
 
     fn action_dispatcher(&self) -> ActionDispatcher {
         ActionDispatcher::new().with_middleware(self.history_recorder.clone() as _)
+    }
+
+    /// Delete persisted action-history rows older than
+    /// [`OrchidConfig::privacy::history_retention_days`].
+    fn evict_history_by_retention_policy(self: &Arc<Self>) -> Result<()> {
+        let days = self.config.read().privacy.history_retention_days;
+        let cutoff =
+            chrono::Utc::now() - chrono::Duration::days(i64::from(days));
+        let mut w = self.storage.write().map_err(UiError::Storage)?;
+        let removed = w
+            .evict_history_older_than(cutoff)
+            .map_err(UiError::Storage)?;
+        w.commit().map_err(UiError::Storage)?;
+        if removed > 0 {
+            debug!(
+                removed,
+                retention_days = days,
+                "pruned action history by retention policy"
+            );
+        }
+        Ok(())
     }
 
     fn apply_initial_mode(self: &Arc<Self>) -> Result<()> {

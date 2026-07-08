@@ -221,6 +221,74 @@ fn evict_cache_older_than_removes_correct_rows() {
 }
 
 #[test]
+fn evict_history_older_than_removes_correct_rows() {
+    let store = StateStore::open_in_memory(TEST_ORCHID_VERSION).unwrap();
+    let cutoff = Utc::now();
+    let old_ts = cutoff - ChronoDuration::hours(1);
+    let fresh_ts = cutoff + ChronoDuration::hours(1);
+
+    let mut old_ids = Vec::new();
+    let mut fresh_ids = Vec::new();
+
+    {
+        let mut w = store.write().unwrap();
+        for i in 0..3_u8 {
+            let id = Uuid::new_v4();
+            old_ids.push(id);
+            w.put_history(&HistoryEntry {
+                id,
+                timestamp: old_ts + ChronoDuration::milliseconds(i64::from(i)),
+                action_id: format!("old.{i}"),
+                command_text: format!("old cmd {i}"),
+                target: None,
+                reversible_until: None,
+                reverse_command: None,
+                metadata: vec![],
+            })
+            .unwrap();
+        }
+        for i in 0..2_u8 {
+            let id = Uuid::new_v4();
+            fresh_ids.push(id);
+            w.put_history(&HistoryEntry {
+                id,
+                timestamp: fresh_ts + ChronoDuration::milliseconds(i64::from(i)),
+                action_id: format!("fresh.{i}"),
+                command_text: format!("fresh cmd {i}"),
+                target: None,
+                reversible_until: None,
+                reverse_command: None,
+                metadata: vec![],
+            })
+            .unwrap();
+        }
+        w.commit().unwrap();
+    }
+
+    {
+        let mut w = store.write().unwrap();
+        let removed = w.evict_history_older_than(cutoff).unwrap();
+        assert_eq!(removed, 3);
+        w.commit().unwrap();
+    }
+
+    let r = store.read().unwrap();
+    for id in &old_ids {
+        assert!(
+            r.get_history(*id).unwrap().is_none(),
+            "expired history entry was not evicted"
+        );
+    }
+    for id in &fresh_ids {
+        assert!(
+            r.get_history(*id).unwrap().is_some(),
+            "fresh history entry should remain"
+        );
+    }
+    assert_eq!(r.iter_history_recent(10).unwrap().len(), 2);
+}
+
+#[test]
 fn opening_db_with_future_version_fails() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("state.redb");
