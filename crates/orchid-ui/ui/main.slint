@@ -410,8 +410,8 @@ export component MainWindow inherits Window {
                 }
 
                 WorkspacePanel {
-                    // LTR: left edge. RTL: right edge.
-                    x: AppState.is-rtl ? parent.width - self.width : 0;
+                    // Default: left. Mirrored (RTL / left-hand / mirror-edge-swipes): right.
+                    x: AppState.edge-panels-mirrored ? parent.width - self.width : 0;
                     y: 0;
                     height: parent.height;
                     workspace-clicked(id) => { root.workspace-clicked(id); }
@@ -428,8 +428,8 @@ export component MainWindow inherits Window {
                 }
 
                 NotificationCenter {
-                    // LTR: right edge. RTL: left edge.
-                    x: AppState.is-rtl ? 0 : parent.width - self.width;
+                    // Default: right. Mirrored: left.
+                    x: AppState.edge-panels-mirrored ? 0 : parent.width - self.width;
                     y: 0;
                     height: parent.height;
                     dismiss => { root.notification-center-dismiss(); }

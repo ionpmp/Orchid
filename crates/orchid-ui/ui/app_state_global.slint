@@ -6,6 +6,9 @@ export global AppState {
     in property <string> current-density;
     // True when `current-language` is Arabic (BCP-47 tag starts with "ar").
     in property <bool> is-rtl;
+    // Workspace/notification docking + edge-swipe targets: flipped for RTL,
+    // left-handed primary hand, or input.mirror-edge-swipes.
+    in property <bool> edge-panels-mirrored;
     in property <int> mode;
     in property <WorkspaceModel> workspace;
 }

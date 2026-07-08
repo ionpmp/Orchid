@@ -568,7 +568,13 @@ impl MainWindowController {
         g.set_current_language(language.as_str().into());
         g.set_current_density(self.locale.tr(density_i18n_key(density)).into());
         // Slint 1.16 has no Window `layout-direction`; drive RTL via `is-rtl`.
-        g.set_is_rtl(language.as_str().to_ascii_lowercase().starts_with("ar"));
+        let is_rtl = language.as_str().to_ascii_lowercase().starts_with("ar");
+        g.set_is_rtl(is_rtl);
+        let cfg = self.config.read();
+        let swap_edges = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
+            || cfg.input.mirror_edge_swipes;
+        // Panels must dock on the same edges as the swipe targets that open them.
+        g.set_edge_panels_mirrored(is_rtl ^ swap_edges);
         Ok(())
     }
 
@@ -5154,7 +5160,7 @@ impl MainWindowController {
         let hinted = hinted_dest.filter(|d| !d.is_empty() && !d.starts_with("virtual:"));
         let drop_target = self.fm_drop_target();
         match (hinted, drop_target) {
-            (Some(dest), Some((fm, pane))) if fm == source_inst => Some((source_inst, dest)),
+            (Some(dest), Some((fm, _pane))) if fm == source_inst => Some((source_inst, dest)),
             (Some(dest), _) => {
                 let fm = drop_target.map(|(f, _)| f).unwrap_or(source_inst);
                 Some((fm, dest))

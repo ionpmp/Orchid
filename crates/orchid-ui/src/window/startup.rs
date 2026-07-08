@@ -158,7 +158,12 @@ impl StartupWindowController {
         g.set_current_theme_id(theme.meta.id.clone().into());
         g.set_current_language(language.as_str().into());
         g.set_current_density(self.locale.tr(density_key).into());
-        g.set_is_rtl(language.as_str().to_ascii_lowercase().starts_with("ar"));
+        let is_rtl = language.as_str().to_ascii_lowercase().starts_with("ar");
+        g.set_is_rtl(is_rtl);
+        let cfg = self.config.read();
+        let swap_edges = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
+            || cfg.input.mirror_edge_swipes;
+        g.set_edge_panels_mirrored(is_rtl ^ swap_edges);
         g.set_mode(0);
         g.set_workspace(WorkspaceModel {
             workspaces: ModelRc::new(VecModel::default()),

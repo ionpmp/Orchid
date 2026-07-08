@@ -9,9 +9,9 @@ export component NotificationCenter inherits Rectangle {
     width: 320px;
     background: Theme.surface-raised;
 
-    // Edge facing the canvas: left when docked right (LTR), right when docked left (RTL).
+    // Edge facing the canvas: opposite the docked side.
     Rectangle {
-        x: AppState.is-rtl ? parent.width - 1px : 0;
+        x: AppState.edge-panels-mirrored ? parent.width - 1px : 0;
         width: 1px;
         height: parent.height;
         background: Theme.border-default;

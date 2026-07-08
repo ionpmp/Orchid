@@ -9,9 +9,9 @@ export component WorkspacePanel inherits Rectangle {
     width: 280px;
     background: Theme.surface-raised;
 
-    // Edge facing the canvas: right when docked left (LTR), left when docked right (RTL).
+    // Edge facing the canvas: opposite the docked side.
     Rectangle {
-        x: AppState.is-rtl ? 0 : parent.width - 1px;
+        x: AppState.edge-panels-mirrored ? 0 : parent.width - 1px;
         width: 1px;
         height: parent.height;
         background: Theme.border-default;
