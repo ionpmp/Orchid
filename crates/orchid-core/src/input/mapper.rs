@@ -224,6 +224,12 @@ pub fn default_bindings_mirrored(swap_left_right: bool) -> InputBindings {
     }
 }
 
+/// Whether edge panels should dock on mirrored edges (RTL XOR left-handed / mirror flag).
+#[must_use]
+pub fn edge_panels_mirrored(is_rtl: bool, swap_edges: bool) -> bool {
+    is_rtl ^ swap_edges
+}
+
 fn pattern_matches(
     pattern: &GesturePattern,
     gesture: &RecognizedGesture,
@@ -285,6 +291,14 @@ mod tests {
         };
         let cmd = mapper.resolve_gesture(&g, ScreenBounds::new(1920.0, 1080.0));
         assert_eq!(cmd.as_deref(), Some("navigation.show_workspace_panel"));
+    }
+
+    #[test]
+    fn edge_panels_mirrored_xor_rtl_and_swap() {
+        assert!(!edge_panels_mirrored(false, false));
+        assert!(edge_panels_mirrored(false, true));
+        assert!(edge_panels_mirrored(true, false));
+        assert!(!edge_panels_mirrored(true, true));
     }
 
     #[test]

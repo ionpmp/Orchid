@@ -83,6 +83,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn quoted_startup_command_wraps_path_with_spaces() {
+        assert_eq!(
+            quoted_startup_command(r"C:\Program Files\Orchid\orchid.exe"),
+            r#""C:\Program Files\Orchid\orchid.exe""#
+        );
+    }
+
+    #[test]
     fn quoted_startup_command_wraps_path() {
         assert_eq!(
             quoted_startup_command(r"C:\Orchid\orchid.exe"),

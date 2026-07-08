@@ -22,6 +22,7 @@ pub struct RecentFilesWidget {
     instance_id: Uuid,
     store: Arc<RecentFilesStore>,
     bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
     max_items: u32,
     _recent_sub: Option<SubscriptionHandle>,
 }
@@ -39,11 +40,13 @@ impl RecentFilesWidget {
         instance_id: Uuid,
         store: Arc<RecentFilesStore>,
         bus: Arc<orchid_core::EventBus>,
+        locale: Arc<orchid_i18n::LocaleManager>,
     ) -> Self {
         Self {
             instance_id,
             store,
             bus,
+            locale,
             max_items: 20,
             _recent_sub: None,
         }
@@ -51,7 +54,7 @@ impl RecentFilesWidget {
 
     fn build_payload(&self) -> RecentFilesPayload {
         let limit = self.max_items.max(1) as usize;
-        RecentFilesPayload::from_entries(&self.store.list(limit))
+        RecentFilesPayload::from_entries(&self.store.list(limit), &self.locale)
     }
 }
 
@@ -108,7 +111,7 @@ impl Widget for RecentFilesWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: "Recent Files".into(),
+            title: self.locale.tr("widget-recent-files-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::RecentFiles(payload),
         })
@@ -140,6 +143,7 @@ pub fn descriptor(store: Arc<RecentFilesStore>) -> WidgetDescriptor {
             ctx.instance_id,
             store.clone(),
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     WidgetDescriptor {

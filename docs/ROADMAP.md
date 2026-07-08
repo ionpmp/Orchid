@@ -27,7 +27,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
   - [x] Unified `InputEvent` (touch / mouse / keyboard / pen), ergonomic `ScreenZone`s
   - [x] `GestureRecognizer` (tap, double-tap, long-press via `tick`, swipe, edge-swipe, pinch, rotate, pan)
   - [x] `InputMapper` + `default_bindings` for spec-defined edge / multi-finger swipes
-- [ ] Minimal Slint + Skia window + theming + i18n infrastructure
+- [x] Minimal Slint + Skia window + theming + i18n infrastructure
 
 ### File Manager
 - [x] Dual-pane mode
@@ -50,7 +50,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Inline graphics (sixel + kitty) — deferred to v1.x
 
 ### Widgets
-- [~] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge. The Slint workspace dashboard (drag / resize / dock / switcher, app bootstrap) remains blocked on a dedicated UI-shell task (shared `Theme` global, `LocaleManager`, `StartupWindowController`).
+- [~] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge and the Slint workspace dashboard (switcher, layout grid, drag/resize hooks). Remaining polish: workspace drag/resize UX, dock animations, and deeper group-tab UI.
 - [x] Widget: Weather
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators

@@ -597,7 +597,9 @@ impl MainWindowController {
         let swap_edges = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
             || cfg.input.mirror_edge_swipes;
         // Panels must dock on the same edges as the swipe targets that open them.
-        g.set_edge_panels_mirrored(is_rtl ^ swap_edges);
+        g.set_edge_panels_mirrored(orchid_core::input::edge_panels_mirrored(
+            is_rtl, swap_edges,
+        ));
         Ok(())
     }
 
@@ -8979,7 +8981,7 @@ fn build_settings_fields(
             );
         }
         "shortcuts" => {
-            push_settings_text(
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "leader-key",
@@ -8988,14 +8990,15 @@ fn build_settings_fields(
                     .shortcuts
                     .leader_key
                     .clone()
-                    .unwrap_or_default(),
+                    .unwrap_or_else(|| locale.tr("settings-value-none").into())
+                    .into(),
             );
-            push_settings_text(
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "leader-timeout",
                 "settings-field-leader-timeout",
-                format!("{}", cfg.shortcuts.leader_timeout_ms),
+                format!("{} ms", cfg.shortcuts.leader_timeout_ms).into(),
             );
             push_settings_readonly(
                 &mut rows,
@@ -9063,19 +9066,15 @@ fn build_settings_fields(
                 "settings-field-time-format",
                 cfg.locale.time_format.clone().unwrap_or_default(),
             );
-            push_settings_combo(
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "first-day-of-week",
                 "settings-field-first-day-of-week",
-                &[
-                    ("0".into(), locale.tr("settings-value-sunday").into()),
-                    ("1".into(), locale.tr("settings-value-monday").into()),
-                ],
                 if cfg.locale.first_day_of_week == 0 {
-                    "0"
+                    locale.tr("settings-value-sunday").into()
                 } else {
-                    "1"
+                    locale.tr("settings-value-monday").into()
                 },
             );
         }
@@ -9942,6 +9941,16 @@ mod tests {
         p.progress_fraction = -0.3;
         let m = build_media_model(&p, &test_locale());
         assert!(m.progress >= 0.0);
+    }
+
+    #[test]
+    fn format_weather_updated_uses_locale_keys() {
+        let locale = test_locale();
+        let at = chrono::Utc::now() - chrono::Duration::seconds(30);
+        assert_eq!(
+            format_weather_updated(at, &locale),
+            locale.tr("weather-updated-just-now")
+        );
     }
 }
 
