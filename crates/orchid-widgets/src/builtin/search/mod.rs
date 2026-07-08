@@ -428,6 +428,10 @@ mod live_tests {
             bus,
             storage: Arc::new(StateStore::open_in_memory("0.0-test").expect("in-memory store")),
             config: Arc::new(RwLock::new(orchid_storage::OrchidConfig::default())),
+            locale: Arc::new(
+                orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None)
+                    .expect("test locale"),
+            ),
             instance_id,
             workspace_id: Uuid::new_v4(),
         }

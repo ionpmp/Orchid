@@ -3,6 +3,8 @@
 
 mod common;
 
+use common::test_locale;
+
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,6 +33,7 @@ fn make_manager() -> (WidgetManager, Arc<WidgetRegistry>, Arc<DummyCounters>, Ar
         bus.clone(),
         storage,
         config,
+        test_locale(),
         WidgetManagerOptions::default(),
     );
     (manager, registry, counters, bus)

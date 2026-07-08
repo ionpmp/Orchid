@@ -14,7 +14,7 @@ use orchid_widgets::{
 use parking_lot::RwLock;
 use uuid::Uuid;
 
-use common::{register_dummy, DiskStorage};
+use common::{register_dummy, test_locale, DiskStorage};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn snapshot_and_restore_preserves_widgets() {
@@ -49,6 +49,7 @@ async fn snapshot_and_restore_preserves_widgets() {
             bus.clone(),
             storage,
             config.clone(),
+            test_locale(),
             WidgetManagerOptions::default(),
         );
         let mut ids = Vec::new();
@@ -79,6 +80,7 @@ async fn snapshot_and_restore_preserves_widgets() {
         bus.clone(),
         storage,
         config,
+        test_locale(),
         WidgetManagerOptions::default(),
     );
     let restored = manager.restore_from_storage().await.unwrap();
@@ -125,6 +127,7 @@ async fn shutdown_keeps_widgets_and_grid_position_on_disk() {
             bus.clone(),
             storage,
             config.clone(),
+            test_locale(),
             WidgetManagerOptions::default(),
         );
         manager.start().await.unwrap();
@@ -152,6 +155,7 @@ async fn shutdown_keeps_widgets_and_grid_position_on_disk() {
         bus,
         storage,
         config,
+        test_locale(),
         WidgetManagerOptions::default(),
     );
     assert_eq!(manager.restore_from_storage().await.unwrap(), 1);

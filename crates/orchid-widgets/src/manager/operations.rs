@@ -76,6 +76,7 @@ impl WidgetManager {
             bus: self.inner.bus.clone(),
             storage: self.inner.storage.clone(),
             config: self.inner.config.clone(),
+            locale: self.inner.locale.clone(),
             instance_id,
             workspace_id,
         };
@@ -292,6 +293,7 @@ impl WidgetManager {
                     bus: self.inner.bus.clone(),
                     storage: self.inner.storage.clone(),
                     config: self.inner.config.clone(),
+                    locale: self.inner.locale.clone(),
                     instance_id: instance.id,
                     workspace_id,
                 };

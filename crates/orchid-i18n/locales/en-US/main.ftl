@@ -60,6 +60,13 @@ weather-updated-just-now = Updated just now
 weather-updated-minutes = Updated { $m }m ago
 weather-updated-hours = Updated { $h }h ago
 weather-updated-days = Updated { $d }d ago
+
+# ---- Relative time (shared) ----
+relative-just-now = just now
+relative-minutes = { $m }m ago
+relative-hours = { $h }h ago
+relative-days = { $d }d ago
+
 weather-loading = Loading weather…
 weather-feels-like = Feels like { $temp }
 weather-humidity-label = Humidity

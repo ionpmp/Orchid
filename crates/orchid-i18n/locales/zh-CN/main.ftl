@@ -60,6 +60,13 @@ weather-updated-just-now = 刚刚更新
 weather-updated-minutes = { $m } 分钟前更新
 weather-updated-hours = { $h } 小时前更新
 weather-updated-days = { $d } 天前更新
+
+# ---- Relative time (shared) ----
+relative-just-now = 刚刚
+relative-minutes = { $m } 分钟前
+relative-hours = { $h } 小时前
+relative-days = { $d } 天前
+
 weather-loading = 正在加载天气…
 weather-feels-like = 体感 { $temp }
 weather-humidity-label = 湿度

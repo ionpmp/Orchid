@@ -412,6 +412,7 @@ impl OrchidApp {
             bus.clone(),
             storage.clone(),
             config.clone(),
+            locale.clone(),
             WidgetManagerOptions::default(),
         ));
 

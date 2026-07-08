@@ -60,6 +60,13 @@ weather-updated-just-now = تم التحديث الآن
 weather-updated-minutes = تم التحديث منذ { $m } د
 weather-updated-hours = تم التحديث منذ { $h } س
 weather-updated-days = تم التحديث منذ { $d } ي
+
+# ---- Relative time (shared) ----
+relative-just-now = الآن
+relative-minutes = منذ { $m } د
+relative-hours = منذ { $h } س
+relative-days = منذ { $d } ي
+
 weather-loading = جارٍ تحميل الطقس…
 weather-feels-like = يشعر كـ { $temp }
 weather-humidity-label = الرطوبة

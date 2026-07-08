@@ -55,6 +55,13 @@ weather-updated-just-now = Обновлено только что
 weather-updated-minutes = Обновлено { $m } мин. назад
 weather-updated-hours = Обновлено { $h } ч. назад
 weather-updated-days = Обновлено { $d } дн. назад
+
+# ---- Relative time (shared) ----
+relative-just-now = только что
+relative-minutes = { $m } мин. назад
+relative-hours = { $h } ч. назад
+relative-days = { $d } дн. назад
+
 weather-loading = Загрузка погоды…
 weather-feels-like = Ощущается как { $temp }
 weather-humidity-label = Влажность

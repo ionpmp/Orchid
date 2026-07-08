@@ -208,6 +208,7 @@ struct PasswordHandle {
     deps: PasswordDeps,
     state: Arc<RwLock<State>>,
     bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
 }
 
 impl std::fmt::Debug for PasswordManagerWidget {
@@ -228,12 +229,18 @@ impl std::fmt::Debug for PasswordHandle {
 
 impl PasswordManagerWidget {
     /// Construct over an unlocked database.
-    pub fn new(instance_id: Uuid, deps: PasswordDeps, bus: Arc<orchid_core::EventBus>) -> Self {
+    pub fn new(
+        instance_id: Uuid,
+        deps: PasswordDeps,
+        bus: Arc<orchid_core::EventBus>,
+        locale: Arc<orchid_i18n::LocaleManager>,
+    ) -> Self {
         let inner = Arc::new(PasswordHandle {
             instance_id,
             deps,
             state: Arc::new(RwLock::new(State::default())),
             bus,
+            locale,
         });
         PASSWORD_LIVE.insert(instance_id, Arc::clone(&inner));
         Self {
@@ -477,7 +484,7 @@ impl Widget for PasswordManagerWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let state = self.inner.state.read().clone();
-        let payload = build_payload(&state, &self.inner.deps.vault);
+        let payload = build_payload(&state, &self.inner.deps.vault, &self.inner.locale);
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
@@ -505,7 +512,11 @@ impl Widget for PasswordManagerWidget {
     }
 }
 
-fn build_payload(state: &State, vault: &orchid_crypto::PasswordVault) -> PasswordManagerPayload {
+fn build_payload(
+    state: &State,
+    vault: &orchid_crypto::PasswordVault,
+    locale: &orchid_i18n::LocaleManager,
+) -> PasswordManagerPayload {
     let entries = state
         .entries
         .iter()
@@ -517,7 +528,7 @@ fn build_payload(state: &State, vault: &orchid_crypto::PasswordVault) -> Passwor
             has_totp: e.totp.is_some(),
             tags: e.tags.clone(),
             color_label: None,
-            modified_text: relative_from(e.modified_at),
+            modified_text: relative_from(locale, e.modified_at),
         })
         .collect();
     let selected = state
@@ -579,16 +590,25 @@ fn extract_host(url: &str) -> Option<String> {
     url::Url::parse(url).ok().and_then(|u| u.host_str().map(String::from))
 }
 
-fn relative_from(at: chrono::DateTime<chrono::Utc>) -> String {
+fn relative_from(locale: &orchid_i18n::LocaleManager, at: chrono::DateTime<chrono::Utc>) -> String {
     let secs = (Utc::now() - at).num_seconds().max(0);
     if secs < 60 {
-        "just now".into()
+        locale.tr("relative-just-now")
     } else if secs < 3600 {
-        format!("{}m ago", secs / 60)
+        locale.tr_args(
+            "relative-minutes",
+            &orchid_i18n::FluentArgs::new().with("m", (secs / 60).to_string()),
+        )
     } else if secs < 86400 {
-        format!("{}h ago", secs / 3600)
+        locale.tr_args(
+            "relative-hours",
+            &orchid_i18n::FluentArgs::new().with("h", (secs / 3600).to_string()),
+        )
     } else {
-        format!("{}d ago", secs / 86400)
+        locale.tr_args(
+            "relative-days",
+            &orchid_i18n::FluentArgs::new().with("d", (secs / 86400).to_string()),
+        )
     }
 }
 
@@ -604,6 +624,7 @@ pub fn descriptor(
             ctx.instance_id,
             deps.clone(),
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     WidgetDescriptor {

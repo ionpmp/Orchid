@@ -60,6 +60,13 @@ weather-updated-just-now = Mis à jour à l'instant
 weather-updated-minutes = Mis à jour il y a { $m } min
 weather-updated-hours = Mis à jour il y a { $h } h
 weather-updated-days = Mis à jour il y a { $d } j
+
+# ---- Relative time (shared) ----
+relative-just-now = à l'instant
+relative-minutes = il y a { $m } min
+relative-hours = il y a { $h } h
+relative-days = il y a { $d } j
+
 weather-loading = Chargement de la météo…
 weather-feels-like = Ressenti { $temp }
 weather-humidity-label = Humidité

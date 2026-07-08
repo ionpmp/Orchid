@@ -61,6 +61,7 @@ pub(crate) struct WidgetManagerInner {
     bus: Arc<orchid_core::EventBus>,
     storage: Arc<StateStore>,
     config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+    locale: Arc<orchid_i18n::LocaleManager>,
     instances: DashMap<Uuid, SharedInstance>,
     lifecycle: LifecycleController,
     options: RwLock<WidgetManagerOptions>,
@@ -100,6 +101,7 @@ impl WidgetManager {
         bus: Arc<orchid_core::EventBus>,
         storage: Arc<StateStore>,
         config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+        locale: Arc<orchid_i18n::LocaleManager>,
         options: WidgetManagerOptions,
     ) -> Self {
         let lifecycle = LifecycleController::new(bus.clone());
@@ -110,6 +112,7 @@ impl WidgetManager {
                 bus,
                 storage,
                 config,
+                locale,
                 instances: DashMap::new(),
                 lifecycle,
                 options: RwLock::new(options),
@@ -206,6 +209,7 @@ impl WidgetManager {
             bus: self.inner.bus.clone(),
             storage: self.inner.storage.clone(),
             config: self.inner.config.clone(),
+            locale: self.inner.locale.clone(),
             instance_id: instance.id,
             workspace_id: instance.workspace_id,
         }
@@ -294,6 +298,7 @@ impl WidgetManager {
                 bus: self.inner.bus.clone(),
                 storage: self.inner.storage.clone(),
                 config: self.inner.config.clone(),
+                locale: self.inner.locale.clone(),
                 instance_id: row.id,
                 workspace_id: row.workspace_id,
             };
@@ -504,6 +509,7 @@ async fn run_sweepers(inner: &WidgetManagerInner) {
             bus: inner.bus.clone(),
             storage: inner.storage.clone(),
             config: inner.config.clone(),
+            locale: inner.locale.clone(),
             instance_id: instance.id,
             workspace_id: instance.workspace_id,
         }

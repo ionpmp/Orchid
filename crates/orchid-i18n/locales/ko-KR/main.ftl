@@ -60,6 +60,13 @@ weather-updated-just-now = 방금 업데이트됨
 weather-updated-minutes = { $m }분 전 업데이트
 weather-updated-hours = { $h }시간 전 업데이트
 weather-updated-days = { $d }일 전 업데이트
+
+# ---- Relative time (shared) ----
+relative-just-now = 방금
+relative-minutes = { $m }분 전
+relative-hours = { $h }시간 전
+relative-days = { $d }일 전
+
 weather-loading = 날씨 로드 중…
 weather-feels-like = 체감 { $temp }
 weather-humidity-label = 습도

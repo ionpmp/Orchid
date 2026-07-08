@@ -5337,6 +5337,7 @@ dependencies = [
  "orchid-core",
  "orchid-crypto",
  "orchid-fs",
+ "orchid-i18n",
  "orchid-search",
  "orchid-storage",
  "orchid-viewers",

@@ -12,6 +12,14 @@ use orchid_widgets::{
 };
 use uuid::Uuid;
 
+/// Default locale manager for widget tests.
+pub fn test_locale() -> Arc<orchid_i18n::LocaleManager> {
+    Arc::new(
+        orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None)
+            .expect("test locale"),
+    )
+}
+
 /// Dummy widget used in tests. Counts how many times each callback fires so
 /// assertions can verify lifecycle transitions actually ran.
 pub struct DummyWidget {

@@ -37,6 +37,7 @@ pub struct RssWidget {
     data: Arc<RwLock<FeedData>>,
     refresh: PeriodicRefresh,
     bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
 }
 
 impl std::fmt::Debug for RssWidget {
@@ -54,6 +55,7 @@ impl RssWidget {
         cfg: RssConfig,
         client: reqwest::Client,
         bus: Arc<orchid_core::EventBus>,
+        locale: Arc<orchid_i18n::LocaleManager>,
     ) -> Self {
         let interval = Duration::from_secs(cfg.refresh_interval_minutes.max(1) as u64 * 60);
         Self {
@@ -63,6 +65,7 @@ impl RssWidget {
             data: Arc::new(RwLock::new(FeedData::default())),
             refresh: PeriodicRefresh::new(interval),
             bus,
+            locale,
         }
     }
 
@@ -160,7 +163,7 @@ impl Widget for RssWidget {
         let failed_feed_count = data.per_feed_errors.len() as u32;
         let is_loading = data.fetched_at.is_none();
         let last_updated_text = match data.fetched_at {
-            Some(at) => format_relative(at),
+            Some(at) => format_relative(&self.locale, at),
             None => String::new(),
         };
 
@@ -176,7 +179,7 @@ impl Widget for RssWidget {
                 source_name: it.source_name.clone(),
                 published_text: it
                     .published
-                    .map(|t| format_item_relative(now, t))
+                    .map(|t| format_item_relative(&self.locale, now, t))
                     .unwrap_or_default(),
                 summary_text: it.summary.clone(),
                 link: it.link.clone(),
@@ -219,29 +222,51 @@ impl Widget for RssWidget {
     }
 }
 
-fn format_relative(at: chrono::DateTime<Utc>) -> String {
+fn format_relative(locale: &orchid_i18n::LocaleManager, at: chrono::DateTime<Utc>) -> String {
     let secs = (Utc::now() - at).num_seconds().max(0);
     if secs < 60 {
-        "Updated just now".into()
+        locale.tr("weather-updated-just-now")
     } else if secs < 3600 {
-        format!("Updated {}m ago", secs / 60)
+        locale.tr_args(
+            "weather-updated-minutes",
+            &orchid_i18n::FluentArgs::new().with("m", (secs / 60).to_string()),
+        )
     } else if secs < 86400 {
-        format!("Updated {}h ago", secs / 3600)
+        locale.tr_args(
+            "weather-updated-hours",
+            &orchid_i18n::FluentArgs::new().with("h", (secs / 3600).to_string()),
+        )
     } else {
-        format!("Updated {}d ago", secs / 86400)
+        locale.tr_args(
+            "weather-updated-days",
+            &orchid_i18n::FluentArgs::new().with("d", (secs / 86400).to_string()),
+        )
     }
 }
 
-fn format_item_relative(now: chrono::DateTime<Utc>, at: chrono::DateTime<Utc>) -> String {
+fn format_item_relative(
+    locale: &orchid_i18n::LocaleManager,
+    now: chrono::DateTime<Utc>,
+    at: chrono::DateTime<Utc>,
+) -> String {
     let secs = (now - at).num_seconds().max(0);
     if secs < 60 {
-        "just now".into()
+        locale.tr("relative-just-now")
     } else if secs < 3600 {
-        format!("{}m ago", secs / 60)
+        locale.tr_args(
+            "relative-minutes",
+            &orchid_i18n::FluentArgs::new().with("m", (secs / 60).to_string()),
+        )
     } else if secs < 86400 {
-        format!("{}h ago", secs / 3600)
+        locale.tr_args(
+            "relative-hours",
+            &orchid_i18n::FluentArgs::new().with("h", (secs / 3600).to_string()),
+        )
     } else {
-        format!("{}d ago", secs / 86400)
+        locale.tr_args(
+            "relative-days",
+            &orchid_i18n::FluentArgs::new().with("d", (secs / 86400).to_string()),
+        )
     }
 }
 
@@ -259,6 +284,7 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
             cfg,
             http_client.clone(),
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     WidgetDescriptor {

@@ -5,6 +5,8 @@
 //! those rows with `patch_workspace_frames` instead of rebuilding the whole
 //! workspace on every keystroke (see `docs/universal-search-issue.md`).
 
+mod common;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,6 +21,8 @@ use orchid_widgets::{
     CreateWidgetRequest, WidgetManager, WidgetManagerOptions, WidgetPayload, WidgetRegistry,
 };
 use parking_lot::RwLock;
+
+use common::test_locale;
 
 struct EchoSource;
 
@@ -63,6 +67,7 @@ async fn make_search_manager() -> (WidgetManager, uuid::Uuid) {
         bus,
         storage,
         config,
+        test_locale(),
         WidgetManagerOptions::default(),
     );
     manager.start().await.unwrap();

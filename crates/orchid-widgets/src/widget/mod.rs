@@ -59,6 +59,8 @@ pub struct WidgetContext {
     pub storage: Arc<orchid_storage::StateStore>,
     /// Shared configuration.
     pub config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+    /// Localized UI strings.
+    pub locale: Arc<orchid_i18n::LocaleManager>,
     /// Instance id (stable for the widget's lifetime).
     pub instance_id: Uuid,
     /// Workspace this widget currently lives on.

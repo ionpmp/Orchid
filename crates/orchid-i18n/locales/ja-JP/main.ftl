@@ -60,6 +60,13 @@ weather-updated-just-now = たった今更新
 weather-updated-minutes = { $m } 分前に更新
 weather-updated-hours = { $h } 時間前に更新
 weather-updated-days = { $d } 日前に更新
+
+# ---- Relative time (shared) ----
+relative-just-now = たった今
+relative-minutes = { $m } 分前
+relative-hours = { $h } 時間前
+relative-days = { $d } 日前
+
 weather-loading = 天気を読み込み中…
 weather-feels-like = 体感 { $temp }
 weather-humidity-label = 湿度

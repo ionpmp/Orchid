@@ -1,5 +1,7 @@
 //! File-manager star action persists via TagManager.
 
+mod common;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,6 +11,8 @@ use orchid_storage::StateStore;
 use orchid_widgets::builtin::file_manager::{self, FileClipboard, FileManagerDeps};
 use orchid_widgets::{CreateWidgetRequest, RecentFilesStore, WidgetManager, WidgetManagerOptions, WidgetPayload, WidgetRegistry};
 use parking_lot::RwLock;
+
+use common::test_locale;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn star_action_updates_snapshot_from_tag_manager() {
@@ -50,6 +54,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         bus,
         storage,
         config,
+        test_locale(),
         WidgetManagerOptions::default(),
     );
     manager.start().await.unwrap();
