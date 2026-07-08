@@ -12,6 +12,7 @@ use orchid_core::{
 pub fn build_ui_command_set() -> Vec<(CommandDescriptor, ActionFactory)> {
     vec![
         settings_open_command(),
+        settings_open_config_file_command(),
         password_lock_command(),
         navigation_show_workspace_panel_command(),
         notification_show_center_command(),
@@ -36,6 +37,25 @@ fn settings_open_command() -> (CommandDescriptor, ActionFactory) {
     };
     let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
         Ok(Box::new(SettingsOpenAction) as Box<dyn Action>)
+    });
+    (descriptor, factory)
+}
+
+fn settings_open_config_file_command() -> (CommandDescriptor, ActionFactory) {
+    let descriptor = CommandDescriptor {
+        id: "settings.open_config_file".into(),
+        display_name_key: "command.settings.open_config_file.name".into(),
+        description_key: Some("command.settings.open_config_file.desc".into()),
+        category: CommandCategory::Settings,
+        default_shortcut: None,
+        terminal_invocation: Some(TerminalInvocation {
+            verb: "settings open config file".into(),
+            args: Vec::new(),
+        }),
+        icon_name: Some("settings".into()),
+    };
+    let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
+        Ok(Box::new(SettingsOpenConfigFileAction) as Box<dyn Action>)
     });
     (descriptor, factory)
 }
@@ -159,6 +179,24 @@ impl Action for SettingsOpenAction {
     }
     fn command_text(&self) -> String {
         "orc settings open".into()
+    }
+    async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
+        Ok(ActionOutcome::ok())
+    }
+}
+
+struct SettingsOpenConfigFileAction;
+
+#[async_trait]
+impl Action for SettingsOpenConfigFileAction {
+    fn id(&self) -> &'static str {
+        "settings.open_config_file"
+    }
+    fn display_name_key(&self) -> &'static str {
+        "command.settings.open_config_file.name"
+    }
+    fn command_text(&self) -> String {
+        "orc settings open config file".into()
     }
     async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
         Ok(ActionOutcome::ok())

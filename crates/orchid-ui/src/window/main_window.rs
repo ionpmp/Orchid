@@ -530,6 +530,8 @@ impl MainWindowController {
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
+        g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
+        g.set_settings_open_config_file(mgr.tr("settings-open-config-file").into());
 
         g.set_media_no_session(mgr.tr("media-no-session").into());
 
@@ -890,6 +892,14 @@ impl MainWindowController {
             move |section, key, value| {
                 if let Some(c) = t.upgrade() {
                     c.on_settings_field_changed(&section, &key, &value);
+                }
+            }
+        });
+        self.window.on_settings_open_config({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.open_config_file();
                 }
             }
         });
@@ -1941,6 +1951,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_error_action({
+            let t = t.clone();
+            move |_fm_id, _pane| {
+                if let Some(c) = t.upgrade() {
+                    c.open_config_file();
+                }
+            }
+        });
         Ok(())
     }
 
@@ -2416,6 +2434,17 @@ impl MainWindowController {
         self.sync_settings_global();
     }
 
+    fn open_config_file(self: &Arc<Self>) {
+        let path = self.config_file_path.clone();
+        if !path.exists() {
+            warn!(?path, "config file missing");
+            return;
+        }
+        if let Err(e) = opener::open(&path) {
+            warn!(?e, path = %path.display(), "open config file");
+        }
+    }
+
     fn sync_navigation_global(self: &Arc<Self>) {
         let nav = self.navigation.read().clone();
         let hint_mode = self.config.read().onboarding.hint_mode_enabled;
@@ -2847,6 +2876,10 @@ impl MainWindowController {
         }
         if cmd_id == "settings.open" {
             self.open_settings("general");
+            return;
+        }
+        if cmd_id == "settings.open_config_file" {
+            self.open_config_file();
             return;
         }
         if cmd_id == "password.lock" {
@@ -7863,6 +7896,13 @@ fn fm_tab_error_text(locale: &LocaleManager, error: Option<&str>) -> SharedStrin
         .unwrap_or_default()
 }
 
+fn fm_tab_error_action_label(locale: &LocaleManager, error: Option<&str>) -> SharedString {
+    match error {
+        Some("network-placeholder") => locale.tr("settings-open-config-file").into(),
+        _ => SharedString::default(),
+    }
+}
+
 fn build_sidebar_items(
     locale: &LocaleManager,
     active_path: &str,
@@ -8093,6 +8133,7 @@ fn build_file_manager_model(
                         quick_filter: t.quick_filter.clone().into(),
                         is_loading: t.is_loading,
                         error: fm_tab_error_text(locale, t.error.as_deref()),
+                        error_action_label: fm_tab_error_action_label(locale, t.error.as_deref()),
                         sort_by: t.sort_by as i32,
                         sort_descending: t.sort_descending,
                         sort_name_label: sort_name_label.clone().into(),

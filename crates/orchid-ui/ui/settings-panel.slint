@@ -7,6 +7,7 @@ export component SettingsPanel inherits Rectangle {
     callback dismiss();
     callback section-selected(int);
     callback field-changed(string, string, string);
+    callback open-config();
 
     background: Theme.surface-raised;
     border-radius: Theme.radius-md;
@@ -75,11 +76,35 @@ export component SettingsPanel inherits Rectangle {
                 wrap: word-wrap;
             }
 
-            if SettingsGlobal.config-path != "" : Text {
-                text: SettingsGlobal.config-path;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                wrap: word-wrap;
+            if SettingsGlobal.config-path != "" : VerticalLayout {
+                spacing: 6px;
+
+                Text {
+                    text: SettingsGlobal.config-path;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
+
+                Rectangle {
+                    height: 32px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    TouchArea {
+                        clicked => { root.open-config(); }
+                    }
+
+                    Text {
+                        text: Strings.settings_open_in_editor;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
             }
 
             Flickable {

@@ -187,6 +187,7 @@ export component MainWindow inherits Window {
     callback fm-pane-drag-hover(string, int);
     callback fm-drop-on-current-dir(string, int);
     callback fm-entry-drag-scroll(string, int, length, length, length, length);
+    callback fm-error-action(string, int);
 
     callback canvas-long-pressed(length, length, length, length);
     callback canvas-scrolled(length, length);
@@ -200,6 +201,7 @@ export component MainWindow inherits Window {
     callback settings-dismiss();
     callback settings-section-selected(int);
     callback settings-field-changed(string, string, string);
+    callback settings-open-config();
     callback navigation-workspace-panel-dismiss();
     callback notification-center-dismiss();
     callback onboarding-next-clicked();
@@ -394,6 +396,7 @@ export component MainWindow inherits Window {
             fm-pane-drag-hover(fm_id, p) => { root.fm-pane-drag-hover(fm_id, p); }
             fm-drop-on-current-dir(fm_id, p) => { root.fm-drop-on-current-dir(fm_id, p); }
             fm-entry-drag-scroll(fm_id, p, mx, my, vy, w) => { root.fm-entry-drag-scroll(fm_id, p, mx, my, vy, w); }
+            fm-error-action(fm_id, p) => { root.fm-error-action(fm_id, p); }
             canvas-long-pressed(cx, cy, vx, vy) => { root.canvas-long-pressed(cx, cy, vx, vy); }
             canvas-scrolled(vx, vy) => { root.canvas-scrolled(vx, vy); }
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
@@ -491,6 +494,9 @@ export component MainWindow inherits Window {
                     }
                     field-changed(section, key, value) => {
                         root.settings-field-changed(section, key, value);
+                    }
+                    open-config => {
+                        root.settings-open-config();
                     }
                 }
             }

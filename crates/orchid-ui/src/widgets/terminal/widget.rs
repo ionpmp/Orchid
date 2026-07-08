@@ -182,18 +182,6 @@ impl TerminalWidget {
         self.deps.layouts.lock().get(&self.instance_id).cloned()
     }
 
-    fn set_routing_to_focused(&self) {
-        let Some(layout) = self.layout() else {
-            return;
-        };
-        if let Some(sid) = layout.focused_session() {
-            self.deps
-                .session_routing
-                .lock()
-                .insert(self.instance_id, sid);
-        }
-    }
-
     fn sessions_in_layout(layout: &LayoutRoot) -> Vec<Uuid> {
         let mut out = Vec::new();
         for tab in &layout.tabs.tabs {

@@ -124,6 +124,7 @@ export component WorkspaceView inherits Rectangle {
     callback fm-pane-drag-hover(string, int);
     callback fm-drop-on-current-dir(string, int);
     callback fm-entry-drag-scroll(string, int, length, length, length, length);
+    callback fm-error-action(string, int);
 
     callback canvas-long-pressed(length, length, length, length);
     callback canvas-scrolled(length, length);
@@ -368,6 +369,7 @@ export component WorkspaceView inherits Rectangle {
                     fm-pane-drag-hover(fm_id, p) => { root.fm-pane-drag-hover(fm_id, p); }
                     fm-drop-on-current-dir(fm_id, p) => { root.fm-drop-on-current-dir(fm_id, p); }
                     fm-entry-drag-scroll(fm_id, p, mx, my, vy, w) => { root.fm-entry-drag-scroll(fm_id, p, mx, my, vy, w); }
+                    fm-error-action(fm_id, p) => { root.fm-error-action(fm_id, p); }
                 }
             }
         }

@@ -135,6 +135,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-pane-drag-hover(string, int);
     callback fm-drop-on-current-dir(string, int);
     callback fm-entry-drag-scroll(string, int, length, length, length, length);
+    callback fm-error-action(string, int);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -426,6 +427,7 @@ export component WidgetFrame inherits Rectangle {
             pane-drag-hover(p) => { root.fm-pane-drag-hover(root.model.instance-id, p); }
             drop-on-current-dir(p) => { root.fm-drop-on-current-dir(root.model.instance-id, p); }
             entry-drag-scroll(p, mx, my, vy, w) => { root.fm-entry-drag-scroll(root.model.instance-id, p, mx, my, vy, w); }
+            error-action(p) => { root.fm-error-action(root.model.instance-id, p); }
         }
     }
 

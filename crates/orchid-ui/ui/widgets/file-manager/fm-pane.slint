@@ -52,6 +52,7 @@ export component FmPane inherits Rectangle {
     callback pane-drag-hover();
     callback drop-on-current-dir();
     callback entry-drag-scroll(length, length, length, length);
+    callback error-action();
     callback crumb-drag-hover(string);
     callback crumb-drag-drop(string);
 
@@ -240,6 +241,26 @@ export component FmPane inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         wrap: word-wrap;
+                    }
+
+                    if pane.tabs[pane.active-tab].error-action-label != "" : Rectangle {
+                        height: 32px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+
+                        TouchArea {
+                            clicked => { root.error-action(); }
+                        }
+
+                        Text {
+                            text: pane.tabs[pane.active-tab].error-action-label;
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }

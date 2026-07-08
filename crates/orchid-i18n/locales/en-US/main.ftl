@@ -165,6 +165,8 @@ settings-panel-title = Settings
 settings-panel-hint = Changes save automatically to config.toml. Shortcut overrides and leader bindings are read-only here — edit those in config.toml directly.
 settings-panel-coming-soon = The full settings editor for this section is not available yet. Edit config.toml directly for now.
 settings-panel-ok = Close
+settings-open-in-editor = Open in editor
+settings-open-config-file = Open config.toml
 
 settings-value-yes = Yes
 settings-value-no = No
@@ -211,6 +213,8 @@ settings-field-vault-auto-lock = Vault auto-lock (seconds)
 
 command.settings.open.name = Open settings
 command.settings.open.desc = Show the settings panel
+command.settings.open_config_file.name = Open config
+command.settings.open_config_file.desc = Open config.toml in the default editor
 command.password.lock.name = Lock password vault
 command.password.lock.desc = Clear the unlocked password database from memory
 

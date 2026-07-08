@@ -160,6 +160,8 @@ settings-panel-title = Настройки
 settings-panel-hint = Значения пока только для просмотра. Чтобы изменить настройки, отредактируйте config.toml — изменения подхватятся автоматически.
 settings-panel-coming-soon = Полноценный редактор этого раздела пока недоступен. Пока что редактируйте config.toml напрямую.
 settings-panel-ok = Закрыть
+settings-open-in-editor = Открыть в редакторе
+settings-open-config-file = Открыть config.toml
 
 settings-value-yes = Да
 settings-value-no = Нет
@@ -206,6 +208,8 @@ settings-field-vault-auto-lock = Автоблокировка хранилища
 
 command.settings.open.name = Открыть настройки
 command.settings.open.desc = Показать панель настроек
+command.settings.open_config_file.name = Открыть config
+command.settings.open_config_file.desc = Открыть config.toml в редакторе по умолчанию
 command.password.lock.name = Заблокировать хранилище паролей
 command.password.lock.desc = Очистить разблокированную базу паролей из памяти
 
