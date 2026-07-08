@@ -2574,7 +2574,12 @@ impl MainWindowController {
             id: uuid::Uuid::new_v4().to_string().into(),
             title: title.into(),
             body: body.into(),
-            time_label: chrono::Local::now().format("%H:%M").to_string().into(),
+            time_label: self
+                .config
+                .read()
+                .locale
+                .format_time(chrono::Utc::now())
+                .into(),
             severity,
         };
         if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
