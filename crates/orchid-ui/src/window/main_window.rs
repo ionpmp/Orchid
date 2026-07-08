@@ -990,6 +990,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.global::<NotificationGlobal>().on_dismiss_item({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.dismiss_notification(id.as_str());
+                }
+            }
+        });
         self.window.on_onboarding_next_clicked({
             let t = t.clone();
             move || {
@@ -2560,6 +2568,7 @@ impl MainWindowController {
     /// Append a notification (newest first). `severity`: 0 info, 1 tip, 2 warning, 3 error.
     fn push_notification(self: &Arc<Self>, title: &str, body: &str, severity: i32) {
         let item = NotificationItem {
+            id: uuid::Uuid::new_v4().to_string().into(),
             title: title.into(),
             body: body.into(),
             time_label: chrono::Local::now().format("%H:%M").to_string().into(),
@@ -2576,6 +2585,18 @@ impl MainWindowController {
         if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
         {
             model.set_vec(Vec::new());
+        }
+        self.sync_notification_global();
+    }
+
+    fn dismiss_notification(self: &Arc<Self>, id: &str) {
+        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        {
+            if let Some(idx) = (0..model.row_count()).find(|&i| {
+                model.row_data(i).is_some_and(|item| item.id.as_str() == id)
+            }) {
+                model.remove(idx);
+            }
         }
         self.sync_notification_global();
     }
@@ -8712,20 +8733,6 @@ fn apply_settings_field(
         ("input", "mirror-edge-swipes") => {
             cfg.input.mirror_edge_swipes = parse_settings_bool(value)?;
         }
-        ("input", "haptic-feedback") => {
-            cfg.input.haptic_feedback = parse_settings_bool(value)?;
-        }
-        ("input", "palm-rejection") => {
-            cfg.input.palm_rejection = parse_settings_bool(value)?;
-        }
-        ("input", "pen-double-tap") => {
-            cfg.input.pen_double_tap_action = match value {
-                "none" => orchid_storage::PenDoubleTapAction::None,
-                "switch-tool" => orchid_storage::PenDoubleTapAction::SwitchTool,
-                "erase" => orchid_storage::PenDoubleTapAction::Erase,
-                other => return Err(format!("unknown pen double-tap action `{other}`")),
-            };
-        }
         ("shortcuts", "leader-key") => {
             cfg.shortcuts.leader_key = if value.is_empty() {
                 None
@@ -8925,46 +8932,39 @@ fn build_settings_fields(
                 "settings-field-mirror-edge-swipes",
                 cfg.input.mirror_edge_swipes,
             );
-            push_settings_bool(
+            // Haptics / palm rejection / pen double-tap need platform pen+haptic
+            // plumbing — show current values as read-only for now.
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "haptic-feedback",
                 "settings-field-haptic-feedback",
-                cfg.input.haptic_feedback,
+                settings_bool_label(cfg.input.haptic_feedback, locale),
             );
-            push_settings_bool(
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "palm-rejection",
                 "settings-field-palm-rejection",
-                cfg.input.palm_rejection,
+                settings_bool_label(cfg.input.palm_rejection, locale),
             );
-            push_settings_combo(
+            let pen_label = match cfg.input.pen_double_tap_action {
+                orchid_storage::PenDoubleTapAction::None => {
+                    locale.tr("settings-value-pen-double-tap-none")
+                }
+                orchid_storage::PenDoubleTapAction::SwitchTool => {
+                    locale.tr("settings-value-pen-double-tap-switch-tool")
+                }
+                orchid_storage::PenDoubleTapAction::Erase => {
+                    locale.tr("settings-value-pen-double-tap-erase")
+                }
+            };
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "pen-double-tap",
                 "settings-field-pen-double-tap",
-                &[
-                    (
-                        "none".into(),
-                        locale.tr("settings-value-pen-double-tap-none").into(),
-                    ),
-                    (
-                        "switch-tool".into(),
-                        locale
-                            .tr("settings-value-pen-double-tap-switch-tool")
-                            .into(),
-                    ),
-                    (
-                        "erase".into(),
-                        locale.tr("settings-value-pen-double-tap-erase").into(),
-                    ),
-                ],
-                match cfg.input.pen_double_tap_action {
-                    orchid_storage::PenDoubleTapAction::None => "none",
-                    orchid_storage::PenDoubleTapAction::SwitchTool => "switch-tool",
-                    orchid_storage::PenDoubleTapAction::Erase => "erase",
-                },
+                pen_label.into(),
             );
         }
         "shortcuts" => {

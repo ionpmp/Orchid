@@ -138,6 +138,25 @@ export component NotificationCenter inherits Rectangle {
                                     font-size: Theme.font-size-sm;
                                     vertical-alignment: center;
                                 }
+
+                                Rectangle {
+                                    width: 24px;
+                                    height: 24px;
+                                    border-radius: Theme.radius-md;
+                                    background: dismiss-ta.has-hover ? Theme.surface-raised : transparent;
+
+                                    dismiss-ta := TouchArea {
+                                        clicked => { NotificationGlobal.dismiss-item(item.id); }
+                                    }
+
+                                    Text {
+                                        text: "×";
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-md;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
                             }
 
                             if item.body != "": Text {
