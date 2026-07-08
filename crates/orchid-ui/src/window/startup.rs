@@ -66,6 +66,7 @@ impl StartupWindowController {
         let cfg = self.config.read();
         let scale = cfg.appearance.density.ui_scale()
             * cfg.appearance.font_scale.clamp(0.75, 2.0);
+        let reduce_motion = cfg.appearance.reduce_motion;
         drop(cfg);
         let g = self.window.global::<Theme>();
         let tokens = &theme.tokens;
@@ -93,6 +94,7 @@ impl StartupWindowController {
 
         g.set_radius_md(tokens.radius.md * scale);
         g.set_spacing_unit(tokens.spacing.unit * scale);
+        g.set_reduce_motion(reduce_motion);
     }
 
     fn apply_strings(&self) {

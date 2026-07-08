@@ -139,7 +139,7 @@ export component WidgetFrame inherits Rectangle {
     border-width: 1px;
     border-color: Theme.border-default;
     border-radius: Theme.radius-md;
-    drop-shadow-blur: 8px;
+    drop-shadow-blur: Theme.reduce-motion ? 0px : 8px;
     drop-shadow-color: #00000040;
     clip: true;
 

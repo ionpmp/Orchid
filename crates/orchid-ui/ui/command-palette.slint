@@ -12,7 +12,7 @@ export component CommandPalettePanel inherits Rectangle {
     border-radius: Theme.radius-md;
     border-width: 1px;
     border-color: Theme.border-default;
-    drop-shadow-blur: 16px;
+    drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
     drop-shadow-color: #00000060;
     clip: true;
 

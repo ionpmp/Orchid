@@ -59,7 +59,7 @@ pub use event::{
     SubscriptionHandle, SubscriptionId,
 };
 pub use input::{
-    default_bindings, Edge, GestureConfig, GesturePattern, GestureRecognizer, InputBindings,
+    default_bindings, default_bindings_mirrored, Edge, GestureConfig, GesturePattern, GestureRecognizer, InputBindings,
     InputEvent, InputMapper, KeyEventKind, KeyboardEvent, MouseButton, MouseButtons, MouseEvent,
     MouseEventKind, PenEvent, Point, RecognizedGesture, ScreenBounds, ScreenZone, SwipeDirection,
     TouchEvent, TouchPhase,

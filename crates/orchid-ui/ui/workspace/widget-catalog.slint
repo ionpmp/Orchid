@@ -13,7 +13,7 @@ export component WidgetCatalogPanel inherits Rectangle {
     border-radius: Theme.radius-md;
     border-width: 1px;
     border-color: Theme.border-default;
-    drop-shadow-blur: 12px;
+    drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
     drop-shadow-color: #00000050;
     clip: true;
 

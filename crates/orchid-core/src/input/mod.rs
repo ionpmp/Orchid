@@ -23,5 +23,5 @@ pub use event::{
 pub use gesture::{
     Edge, GestureConfig, GestureRecognizer, RecognizedGesture, SwipeDirection,
 };
-pub use mapper::{default_bindings, GesturePattern, InputBindings, InputMapper};
+pub use mapper::{default_bindings, default_bindings_mirrored, GesturePattern, InputBindings, InputMapper};
 pub use zone::{ScreenBounds, ScreenZone};

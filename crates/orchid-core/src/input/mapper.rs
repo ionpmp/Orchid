@@ -145,6 +145,29 @@ impl InputMapper {
 /// | Two-finger tap (anywhere)    | `"navigation.back"`                   |
 #[must_use]
 pub fn default_bindings() -> InputBindings {
+    default_bindings_mirrored(false)
+}
+
+/// Default bindings with optional left/right edge swipe command swap.
+///
+/// When `swap_left_right` is `true`, left-edge swipes dispatch
+/// `"notification.show_center"` and right-edge swipes dispatch
+/// `"navigation.show_workspace_panel"`. Top/bottom edges and multi-finger
+/// swipes are unchanged.
+#[must_use]
+pub fn default_bindings_mirrored(swap_left_right: bool) -> InputBindings {
+    let (left_cmd, right_cmd) = if swap_left_right {
+        (
+            "notification.show_center",
+            "navigation.show_workspace_panel",
+        )
+    } else {
+        (
+            "navigation.show_workspace_panel",
+            "notification.show_center",
+        )
+    };
+
     InputBindings {
         gesture_bindings: vec![
             (
@@ -152,14 +175,14 @@ pub fn default_bindings() -> InputBindings {
                     edge: Edge::Left,
                     pointer_count: 1,
                 },
-                "navigation.show_workspace_panel".into(),
+                left_cmd.into(),
             ),
             (
                 GesturePattern::EdgeSwipe {
                     edge: Edge::Right,
                     pointer_count: 1,
                 },
-                "notification.show_center".into(),
+                right_cmd.into(),
             ),
             (
                 GesturePattern::EdgeSwipe {
@@ -262,6 +285,20 @@ mod tests {
         };
         let cmd = mapper.resolve_gesture(&g, ScreenBounds::new(1920.0, 1080.0));
         assert_eq!(cmd.as_deref(), Some("navigation.show_workspace_panel"));
+    }
+
+    #[test]
+    fn mirrored_bindings_resolve_left_edge_to_notification() {
+        let mapper = InputMapper::new();
+        mapper.set_bindings(default_bindings_mirrored(true));
+
+        let g = RecognizedGesture::EdgeSwipe {
+            edge: Edge::Left,
+            distance: 120.0,
+            pointer_count: 1,
+        };
+        let cmd = mapper.resolve_gesture(&g, ScreenBounds::new(1920.0, 1080.0));
+        assert_eq!(cmd.as_deref(), Some("notification.show_center"));
     }
 
     #[test]

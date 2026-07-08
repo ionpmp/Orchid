@@ -29,7 +29,7 @@ use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use orchid_core::{
-    default_bindings, ActionContext, ActionDispatcher, CommandDescriptor, CommandPalette,
+    default_bindings_mirrored, ActionContext, ActionDispatcher, CommandDescriptor, CommandPalette,
     CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter, GestureConfig,
     GestureRecognizer, HandlerPriority, InputEvent, InputMapper, ParsedCommand, Point,
     RecognizedGesture, ScreenBounds, Shortcut, SubscriptionHandle, TouchEvent, TouchPhase,
@@ -348,7 +348,6 @@ impl MainWindowController {
             )
             .map_err(|e| UiError::Slint(format!("config reload sub: {e}")))?;
         let input_mapper = Arc::new(InputMapper::new());
-        input_mapper.set_bindings(default_bindings());
         let gesture_recognizer = Arc::new(Mutex::new(GestureRecognizer::new(
             GestureConfig::default(),
             ScreenBounds::new(800.0, 600.0),
@@ -418,6 +417,7 @@ impl MainWindowController {
             vault_last_activity: Arc::new(Mutex::new(None)),
             fm_passphrase_vault,
         });
+        this.apply_input_gesture_bindings();
         this.apply_theme()?;
         this.apply_strings()?;
         this.sync_widget_catalog_global();
@@ -443,6 +443,7 @@ impl MainWindowController {
         let (canvas_w, _) = *self.canvas_size.lock();
         let scale = crate::window::effective_ui_scale(cfg.appearance.density, canvas_w)
             * cfg.appearance.font_scale.clamp(0.75, 2.0);
+        let reduce_motion = cfg.appearance.reduce_motion;
         drop(cfg);
         let g = self.window.global::<Theme>();
         let t = &theme.tokens;
@@ -468,6 +469,7 @@ impl MainWindowController {
         g.set_weight_semibold(i32::from(sz.weight_semibold));
         g.set_radius_md(t.radius.md * scale);
         g.set_spacing_unit(t.spacing.unit * scale);
+        g.set_reduce_motion(reduce_motion);
         Ok(())
     }
 
@@ -552,6 +554,7 @@ impl MainWindowController {
         }
         drop(cfg);
         self.apply_command_shortcut_overrides();
+        self.apply_input_gesture_bindings();
         self.apply_theme()?;
         self.apply_strings()?;
         self.apply_app_state_status()?;
@@ -2249,6 +2252,13 @@ impl MainWindowController {
                 );
             }
         }
+    }
+
+    fn apply_input_gesture_bindings(self: &Arc<Self>) {
+        let cfg = self.config.read();
+        let swap = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
+            || cfg.input.mirror_edge_swipes;
+        self.input_mapper.set_bindings(default_bindings_mirrored(swap));
     }
 
     fn dispatch_registry_shortcut(self: &Arc<Self>, cmd_id: String) {
