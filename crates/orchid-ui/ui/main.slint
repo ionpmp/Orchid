@@ -78,6 +78,9 @@ export component MainWindow inherits Window {
     callback workspace-create-clicked();
     callback dock-add-clicked(string);
     callback widget-close-clicked(string);
+    callback widget-close-confirm-save(string);
+    callback widget-close-confirm-discard(string);
+    callback widget-close-confirm-cancel(string);
     callback widget-drag-started(string, length, length);
     callback widget-drag-moved(string, length, length);
     callback widget-drag-ended(string);
@@ -279,6 +282,9 @@ export component MainWindow inherits Window {
             workspace-create-clicked => { root.workspace-create-clicked(); }
             dock-add-clicked(type-id) => { root.dock-add-clicked(type-id); }
             widget-close-clicked(id) => { root.widget-close-clicked(id); }
+            widget-close-confirm-save(id) => { root.widget-close-confirm-save(id); }
+            widget-close-confirm-discard(id) => { root.widget-close-confirm-discard(id); }
+            widget-close-confirm-cancel(id) => { root.widget-close-confirm-cancel(id); }
             widget-drag-started(id, dx, dy) => { root.widget-drag-started(id, dx, dy); }
             widget-drag-moved(id, dx, dy) => { root.widget-drag-moved(id, dx, dy); }
             widget-drag-ended(id) => { root.widget-drag-ended(id); }

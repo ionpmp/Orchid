@@ -72,7 +72,7 @@ use crate::slint_generated::{
     FmManagedPolicyRow, FmContextSubitem,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
-    WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
+    WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel, WorkspaceModel,
     WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, NotificationGlobal,
     NotificationItem, OnboardingGlobal, SettingsFieldRow,
     SettingsGlobal,
@@ -166,6 +166,8 @@ pub struct MainWindowController {
     password_add_dialogs: Arc<RwLock<HashMap<Uuid, PasswordAddDialogOverlay>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
+    /// Unsaved text close-confirm overlays for viewer widgets.
+    close_confirm_overlays: Arc<RwLock<HashMap<Uuid, WidgetCloseConfirmDialog>>>,
     /// Last interacted file-manager instance and pane (for drop targeting).
     fm_focus: Arc<Mutex<Option<(Uuid, u8)>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
@@ -424,6 +426,7 @@ impl MainWindowController {
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
             password_add_dialogs: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
+            close_confirm_overlays: Arc::new(RwLock::new(HashMap::new())),
             fm_focus: Arc::new(Mutex::new(None)),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
@@ -956,6 +959,30 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     c.on_widget_close(&id);
+                }
+            }
+        });
+        self.window.on_widget_close_confirm_save({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_close_confirm_save(&id);
+                }
+            }
+        });
+        self.window.on_widget_close_confirm_discard({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_close_confirm_discard(&id);
+                }
+            }
+        });
+        self.window.on_widget_close_confirm_cancel({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_close_confirm_cancel(&id);
                 }
             }
         });
@@ -2942,9 +2969,119 @@ impl MainWindowController {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
+        if self.viewer_text_unsaved(u) {
+            self.show_viewer_unsaved_close_confirm(u);
+            return;
+        }
+        self.finish_widget_close(u);
+    }
+
+    fn on_widget_close_confirm_save(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = orchid_widgets::builtin::viewer::text_save(u).await {
+                warn!(?e, "viewer text save on close");
+                if let Some(c) = t.upgrade() {
+                    c.show_viewer_unsaved_close_confirm(u);
+                }
+                return;
+            }
+            if let Some(c) = t.upgrade() {
+                c.clear_close_confirm_overlay(u);
+                c.finish_widget_close(u);
+            }
+        }));
+    }
+
+    fn on_widget_close_confirm_discard(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        self.clear_close_confirm_overlay(u);
+        self.finish_widget_close(u);
+    }
+
+    fn on_widget_close_confirm_cancel(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        self.clear_close_confirm_overlay(u);
+    }
+
+    fn viewer_text_unsaved(&self, id: Uuid) -> bool {
+        let Ok(iref) = self.widget_manager.get_instance(id) else {
+            return false;
+        };
+        if iref.type_id != orchid_widgets::builtin::viewer::TYPE_ID {
+            return false;
+        }
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let WidgetPayload::Viewer(v) = &ws.payload else {
+            return false;
+        };
+        matches!(
+            &v.snapshot,
+            orchid_viewers::ViewerSnapshot::Text(s) if !s.read_only && s.dirty
+        )
+    }
+
+    fn show_viewer_unsaved_close_confirm(&self, id: Uuid) {
+        let dlg = WidgetCloseConfirmDialog {
+            visible: true,
+            title: self.locale.tr("viewer-text-unsaved-title").into(),
+            message: self.locale.tr("viewer-text-unsaved-body").into(),
+            save_label: self.locale.tr("viewer-text-save").into(),
+            discard_label: self.locale.tr("viewer-text-discard").into(),
+            cancel_label: self.locale.tr("fm-rename-cancel").into(),
+        };
+        self.close_confirm_overlays.write().insert(id, dlg);
+        self.patch_frame_close_confirm(id);
+    }
+
+    fn clear_close_confirm_overlay(self: &Arc<Self>, id: Uuid) {
+        self.close_confirm_overlays.write().remove(&id);
+        self.patch_frame_close_confirm(id);
+    }
+
+    fn patch_frame_close_confirm(&self, id: Uuid) {
+        let dlg = self
+            .close_confirm_overlays
+            .read()
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(empty_close_confirm_dialog);
+        let v = match self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+        {
+            Some(m) => m,
+            None => return,
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() == needle.as_str() {
+                row.close_confirm = dlg;
+                v.set_row_data(r, row);
+                return;
+            }
+        }
+    }
+
+    fn finish_widget_close(self: &Arc<Self>, u: Uuid) {
+        self.close_confirm_overlays.write().remove(&u);
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        let _ = slint::spawn_local(Compat::new(async move {
             if let Err(e) = wm.close(u).await {
                 warn!(?e, "close");
             }
@@ -2957,6 +3094,7 @@ impl MainWindowController {
                     *c.fm_focus.lock() = None;
                 }
                 c.fm_overlays.write().remove(&u);
+                c.close_confirm_overlays.write().remove(&u);
                 c.drag_offset.lock().remove(&u);
                 c.drag_start_bounds.lock().remove(&u);
                 c.drag_grab.lock().remove(&u);
@@ -2967,7 +3105,7 @@ impl MainWindowController {
                 c.password_add_dialogs.write().remove(&u);
                 c.schedule_rebuild();
             }
-        });
+        }));
     }
 
     fn on_widget_drag_started(self: &Arc<Self>, id: &SharedString, grab_lx: f32, grab_ly: f32) {
@@ -4675,6 +4813,12 @@ impl MainWindowController {
             default_terminal_divider_models()
         };
         let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
+        let close_confirm = self
+            .close_confirm_overlays
+            .read()
+            .get(&pl.instance_id)
+            .cloned()
+            .unwrap_or_else(empty_close_confirm_dialog);
         WidgetFrameModel {
             instance_id: pl.instance_id.to_string().into(),
             type_id: type_s,
@@ -4707,6 +4851,7 @@ impl MainWindowController {
             viewer: viewer_model,
             recent_files: recent_files_model,
             file_manager: file_manager_model,
+            close_confirm,
         }
     }
 
@@ -7696,6 +7841,17 @@ fn empty_context_menu() -> FmContextMenu {
         y: 0.0,
         actions: ModelRc::new(VecModel::default()),
         target_paths: ModelRc::new(VecModel::default()),
+    }
+}
+
+fn empty_close_confirm_dialog() -> WidgetCloseConfirmDialog {
+    WidgetCloseConfirmDialog {
+        visible: false,
+        title: SharedString::new(),
+        message: SharedString::new(),
+        save_label: SharedString::new(),
+        discard_label: SharedString::new(),
+        cancel_label: SharedString::new(),
     }
 }
 

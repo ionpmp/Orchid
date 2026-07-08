@@ -283,6 +283,10 @@ viewer-pdf-fit-page = ページに合わせる
 viewer-text-read-only = 読み取り専用
 viewer-text-editing = 編集中
 viewer-text-save = 保存
+viewer-text-unsaved-title = 未保存の変更
+viewer-text-unsaved-body = 閉じる前に変更を保存しますか？
+viewer-text-discard = 破棄
+
 viewer-text-dirty-indicator = 未保存の変更
 viewer-archive-extract-all = すべて展開
 viewer-archive-extract-selected = 選択項目を展開

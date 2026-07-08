@@ -1,0 +1,95 @@
+import { Theme } from "../theme_global.slint";
+import { WidgetCloseConfirmDialog } from "defs.slint";
+
+export component WidgetCloseConfirmDialog inherits Rectangle {
+    in property <WidgetCloseConfirmDialog> dialog;
+    callback save();
+    callback discard();
+    callback cancel();
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.cancel(); }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 360px;
+        height: lay.preferred-height + 16px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
+        drop-shadow-color: #00000080;
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+
+            Text {
+                text: dialog.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+
+            Text {
+                text: dialog.message;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-md;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                Rectangle {
+                    width: max(72px, cancel-label.preferred-width + 16px);
+                    height: 32px;
+                    background: cancel-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    cancel-ta := TouchArea { clicked => { root.cancel(); } }
+                    cancel-label := Text {
+                        text: dialog.cancel-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: max(72px, discard-label.preferred-width + 16px);
+                    height: 32px;
+                    background: discard-ta.has-hover ? #ef444444 : #ef444422;
+                    border-radius: Theme.radius-md;
+                    discard-ta := TouchArea { clicked => { root.discard(); } }
+                    discard-label := Text {
+                        text: dialog.discard-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: max(72px, save-label.preferred-width + 16px);
+                    height: 32px;
+                    background: save-ta.has-hover ? Theme.accent-brand : #4d82ff88;
+                    border-radius: Theme.radius-md;
+                    save-ta := TouchArea { clicked => { root.save(); } }
+                    save-label := Text {
+                        text: dialog.save-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

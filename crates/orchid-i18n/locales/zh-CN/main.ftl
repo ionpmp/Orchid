@@ -283,6 +283,10 @@ viewer-pdf-fit-page = 适应页面
 viewer-text-read-only = 只读
 viewer-text-editing = 编辑中
 viewer-text-save = 保存
+viewer-text-unsaved-title = 未保存的更改
+viewer-text-unsaved-body = 关闭前保存更改？
+viewer-text-discard = 放弃
+
 viewer-text-dirty-indicator = 未保存的更改
 viewer-archive-extract-all = 全部解压
 viewer-archive-extract-selected = 解压所选

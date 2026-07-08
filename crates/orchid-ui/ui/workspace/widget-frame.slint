@@ -13,11 +13,15 @@ import { MediaView } from "../widgets/media.slint";
 import { PasswordView } from "../widgets/password.slint";
 import { ViewerView } from "../widgets/viewer/viewer.slint";
 import { FileManagerView } from "../widgets/file-manager/file-manager.slint";
+import { WidgetCloseConfirmDialog } from "widget-close-confirm-dialog.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
 
     callback close-clicked();
+    callback close-confirm-save(string);
+    callback close-confirm-discard(string);
+    callback close-confirm-cancel(string);
     callback drag-started(length, length);
     callback drag-moved(length, length);
     callback drag-ended();
@@ -521,5 +525,16 @@ export component WidgetFrame inherits Rectangle {
                 root.resize-ended();
             }
         }
+    }
+
+    if model.close-confirm.visible : WidgetCloseConfirmDialog {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        dialog: model.close-confirm;
+        save => { root.close-confirm-save(root.model.instance-id); }
+        discard => { root.close-confirm-discard(root.model.instance-id); }
+        cancel => { root.close-confirm-cancel(root.model.instance-id); }
     }
 }

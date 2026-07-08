@@ -283,6 +283,10 @@ viewer-pdf-fit-page = Ajustar a página
 viewer-text-read-only = Solo lectura
 viewer-text-editing = Edición
 viewer-text-save = Guardar
+viewer-text-unsaved-title = Cambios sin guardar
+viewer-text-unsaved-body = ¿Guardar los cambios antes de cerrar?
+viewer-text-discard = Descartar
+
 viewer-text-dirty-indicator = Cambios sin guardar
 viewer-archive-extract-all = Extraer todo
 viewer-archive-extract-selected = Extraer selección

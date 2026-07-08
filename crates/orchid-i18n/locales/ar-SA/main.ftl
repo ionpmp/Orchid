@@ -284,6 +284,10 @@ viewer-pdf-fit-page = ملاءمة الصفحة
 viewer-text-read-only = للقراءة فقط
 viewer-text-editing = تحرير
 viewer-text-save = حفظ
+viewer-text-unsaved-title = تغييرات غير محفوظة
+viewer-text-unsaved-body = هل تريد حفظ التغييرات قبل الإغلاق؟
+viewer-text-discard = تجاهل
+
 viewer-text-dirty-indicator = تغييرات غير محفوظة
 viewer-archive-extract-all = استخراج الكل
 viewer-archive-extract-selected = استخراج المحدد

@@ -283,6 +283,10 @@ viewer-pdf-fit-page = An Seite anpassen
 viewer-text-read-only = Schreibgeschützt
 viewer-text-editing = Bearbeitung
 viewer-text-save = Speichern
+viewer-text-unsaved-title = Ungespeicherte Änderungen
+viewer-text-unsaved-body = Änderungen vor dem Schließen speichern?
+viewer-text-discard = Verwerfen
+
 viewer-text-dirty-indicator = Ungespeicherte Änderungen
 viewer-archive-extract-all = Alles extrahieren
 viewer-archive-extract-selected = Auswahl extrahieren

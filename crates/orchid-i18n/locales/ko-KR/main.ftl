@@ -283,6 +283,10 @@ viewer-pdf-fit-page = 페이지에 맞추기
 viewer-text-read-only = 읽기 전용
 viewer-text-editing = 편집 중
 viewer-text-save = 저장
+viewer-text-unsaved-title = 저장되지 않은 변경 사항
+viewer-text-unsaved-body = 닫기 전에 변경 사항을 저장할까요?
+viewer-text-discard = 버리기
+
 viewer-text-dirty-indicator = 저장되지 않은 변경 사항
 viewer-archive-extract-all = 모두 추출
 viewer-archive-extract-selected = 선택 항목 추출

@@ -14,6 +14,9 @@ export component WorkspaceView inherits Rectangle {
     callback workspace-create-clicked();
     callback dock-add-clicked(string);
     callback widget-close-clicked(string);
+    callback widget-close-confirm-save(string);
+    callback widget-close-confirm-discard(string);
+    callback widget-close-confirm-cancel(string);
     callback widget-drag-started(string, length, length);
     callback widget-drag-moved(string, length, length);
     callback widget-drag-ended(string);
@@ -252,6 +255,9 @@ export component WorkspaceView inherits Rectangle {
                     height: w.height;
                     model: w;
                     close-clicked => { root.widget-close-clicked(w.instance-id); }
+                    close-confirm-save(id) => { root.widget-close-confirm-save(id); }
+                    close-confirm-discard(id) => { root.widget-close-confirm-discard(id); }
+                    close-confirm-cancel(id) => { root.widget-close-confirm-cancel(id); }
                     drag-started(dx, dy) => { root.widget-drag-started(w.instance-id, dx, dy); }
                     drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
                     drag-ended => { root.widget-drag-ended(w.instance-id); }

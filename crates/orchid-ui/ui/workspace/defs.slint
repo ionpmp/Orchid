@@ -520,6 +520,15 @@ export struct SettingsFieldRow {
     combo-index: int,
 }
 
+export struct WidgetCloseConfirmDialog {
+    visible: bool,
+    title: string,
+    message: string,
+    save-label: string,
+    discard-label: string,
+    cancel-label: string,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -555,6 +564,7 @@ export struct WidgetFrameModel {
     password: PasswordModel,
     viewer: ViewerModel,
     file-manager: FileManagerModel,
+    close-confirm: WidgetCloseConfirmDialog,
 }
 
 export struct DockWidgetType {
