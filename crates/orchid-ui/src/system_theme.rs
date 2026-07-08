@@ -2,6 +2,19 @@
 
 use orchid_storage::AppearanceConfig;
 
+/// Resolve the sans-serif font family from appearance settings.
+///
+/// When `font_family` is set to a non-empty string, that value is used.
+/// Otherwise falls back to the active theme's `typography.font_family_sans`.
+#[must_use]
+pub fn resolve_font_family_sans(cfg: &AppearanceConfig, theme_default: &str) -> String {
+    cfg.font_family
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .cloned()
+        .unwrap_or_else(|| theme_default.to_string())
+}
+
 /// Resolve the theme id to apply from appearance settings.
 ///
 /// When `follow_system_theme` is enabled on Windows, reads the user's

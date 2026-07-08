@@ -63,13 +63,17 @@ impl StartupWindowController {
 
     fn apply_theme(&self) {
         let theme = self.theme.current();
+        let tokens = &theme.tokens;
         let cfg = self.config.read();
         let scale = cfg.appearance.density.ui_scale()
             * cfg.appearance.font_scale.clamp(0.75, 2.0);
         let reduce_motion = cfg.appearance.reduce_motion;
+        let font_sans = crate::system_theme::resolve_font_family_sans(
+            &cfg.appearance,
+            &tokens.typography.font_family_sans,
+        );
         drop(cfg);
         let g = self.window.global::<Theme>();
-        let tokens = &theme.tokens;
         let c = &tokens.color;
 
         g.set_surface_base(c.surface_base.to_slint());
@@ -80,7 +84,7 @@ impl StartupWindowController {
         g.set_accent_brand(c.accent_brand.to_slint());
         g.set_border_default(c.border_default.to_slint());
 
-        g.set_font_family_sans(tokens.typography.font_family_sans.clone().into());
+        g.set_font_family_sans(font_sans.into());
         g.set_font_family_mono(tokens.typography.font_family_mono.clone().into());
         g.set_font_size_sm(tokens.typography.size_sm * scale);
         g.set_font_size_md(tokens.typography.size_md * scale);

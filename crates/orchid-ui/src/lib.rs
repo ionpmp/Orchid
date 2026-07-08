@@ -8,6 +8,7 @@ pub mod app;
 mod commands;
 pub mod error;
 mod slint_generated;
+mod autostart;
 mod system_theme;
 pub mod theme;
 mod terminal_font_metrics;

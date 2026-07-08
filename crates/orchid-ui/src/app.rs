@@ -473,6 +473,8 @@ impl OrchidApp {
 
         apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts.overrides);
 
+        crate::autostart::sync_open_on_startup(&config.read().general);
+
         info!(
             theme = %theme.current().meta.id,
             language = %locale.current().as_str(),

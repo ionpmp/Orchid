@@ -488,6 +488,10 @@ impl MainWindowController {
         let scale = crate::window::effective_ui_scale(cfg.appearance.density, canvas_w)
             * cfg.appearance.font_scale.clamp(0.75, 2.0);
         let reduce_motion = cfg.appearance.reduce_motion;
+        let font_sans = crate::system_theme::resolve_font_family_sans(
+            &cfg.appearance,
+            &theme.tokens.typography.font_family_sans,
+        );
         drop(cfg);
         let g = self.window.global::<Theme>();
         let t = &theme.tokens;
@@ -499,7 +503,7 @@ impl MainWindowController {
         g.set_text_tertiary(c.text_tertiary.to_slint());
         g.set_accent_brand(c.accent_brand.to_slint());
         g.set_border_default(c.border_default.to_slint());
-        g.set_font_family_sans(t.typography.font_family_sans.clone().into());
+        g.set_font_family_sans(font_sans.into());
         g.set_font_family_mono(t.typography.font_family_mono.clone().into());
         let sz = &t.typography;
         g.set_font_size_sm(sz.size_sm * scale);
@@ -608,6 +612,7 @@ impl MainWindowController {
                 "unknown theme id after config reload"
             );
         }
+        crate::autostart::sync_open_on_startup(&cfg.general);
         drop(cfg);
         self.apply_command_shortcut_overrides();
         self.apply_input_gesture_bindings();
