@@ -31,8 +31,8 @@ use uuid::Uuid;
 use orchid_core::{
     default_bindings_mirrored, ActionContext, ActionDispatcher, CommandDescriptor, CommandPalette,
     CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter, GestureConfig,
-    GestureRecognizer, HandlerPriority, InputEvent, InputMapper, ParsedCommand, Point,
-    RecognizedGesture, ScreenBounds, Shortcut, SubscriptionHandle, TouchEvent, TouchPhase,
+    GestureRecognizer, HandlerPriority, HistoryRecorder, InputEvent, InputMapper, ParsedCommand,
+    Point, RecognizedGesture, ScreenBounds, Shortcut, SubscriptionHandle, TouchEvent, TouchPhase,
 };
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{ConfigLoader, LifecycleState, OrchidConfig, StateStore, WidgetSize};
@@ -203,6 +203,8 @@ pub struct MainWindowController {
     /// Last unlock or vault interaction; used for privacy.vault_auto_lock_seconds.
     vault_last_activity: Arc<Mutex<Option<Instant>>>,
     fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
+    /// Persists dispatched actions when [`OrchidConfig::privacy::record_action_history`] is on.
+    history_recorder: Arc<HistoryRecorder>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -385,6 +387,10 @@ impl MainWindowController {
             GestureConfig::default(),
             ScreenBounds::new(800.0, 600.0),
         )));
+        let history_recorder = Arc::new(HistoryRecorder::new(
+            storage.clone(),
+            config.read().privacy.record_action_history,
+        ));
         let this = Arc::new(Self {
             window,
             theme,
@@ -453,6 +459,7 @@ impl MainWindowController {
             password_vault,
             vault_last_activity: Arc::new(Mutex::new(None)),
             fm_passphrase_vault,
+            history_recorder,
         });
         this.apply_input_gesture_bindings();
         this.apply_theme()?;
@@ -586,6 +593,10 @@ impl MainWindowController {
     /// Re-apply theme, locale, and density after a hot config reload.
     fn apply_hot_config(self: &Arc<Self>) -> Result<()> {
         let cfg = self.config.read();
+        if self.history_recorder.is_enabled() != cfg.privacy.record_action_history {
+            self.history_recorder
+                .set_enabled(cfg.privacy.record_action_history);
+        }
         if let Ok(lang) = LocaleId::parse(&cfg.locale.language) {
             self.locale.set_current(lang);
         }
@@ -615,6 +626,10 @@ impl MainWindowController {
         self.sync_onboarding_global();
         self.schedule_rebuild();
         Ok(())
+    }
+
+    fn action_dispatcher(&self) -> ActionDispatcher {
+        ActionDispatcher::new().with_middleware(self.history_recorder.clone() as _)
     }
 
     fn apply_initial_mode(self: &Arc<Self>) -> Result<()> {
@@ -2952,7 +2967,7 @@ impl MainWindowController {
             self.storage.clone(),
             self.config.clone(),
         );
-        let dispatcher = ActionDispatcher::new();
+        let dispatcher = self.action_dispatcher();
         if let Err(e) = dispatcher.dispatch(action, &ctx).await {
             warn!(?e, cmd_id = %cmd_id, "dispatch command");
         }

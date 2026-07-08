@@ -18,7 +18,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] **Event bus, action system, command registry** — `orchid-core`
   - [x] Priority-ordered multi-producer/consumer `EventBus` (channel / async / sync subscribers, filter by type / source / predicate, slow-consumer policy, metrics, graceful shutdown)
   - [x] `Action` trait, `ActionContext`, `ActionOutcome`, panic-catching `ActionDispatcher` with before/after middleware
-  - [x] `HistoryRecorder` middleware (auto-persists every dispatched action into `orchid-storage`, respects `privacy.record_action_history`)
+  - [x] `HistoryRecorder` middleware (auto-persists every dispatched action into `orchid-storage`, respects `privacy.record_action_history`; wired on `MainWindowController` `ActionDispatcher` bootstrap + hot-config toggle; `privacy.history_retention_days` pruning deferred)
   - [x] `CommandRegistry` + `CommandDescriptor` + `ActionFactory`, shortcut-override batch apply
   - [x] Shell-like `parse_command_line` (quoted strings, `--flag` / `--key=value` / `--key value`, registry-aware multi-word verb resolution)
   - [x] `Shortcut` parser with canonical round-trip + `is_reserved` (`Win+L`, `Win+Space`, `Ctrl+Alt+<letter>`)

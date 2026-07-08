@@ -136,8 +136,9 @@ export component FmToolbar inherits Rectangle {
                     padding-right: 8px;
                     spacing: 6px;
 
+                    // ASCII/BMP glyph — color emoji missing in Slint's default font on Windows.
                     Text {
-                        text: "🔍";
+                        text: "?";
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;

@@ -12,11 +12,12 @@ export component SearchView inherits Rectangle {
 
     background: transparent;
 
+    // ASCII/BMP glyphs — color emoji and many Unicode symbols are missing in Slint's default font on Windows.
     pure function source-glyph(name: string) -> string {
         return
-            name == "files" ? "📁" :
+            name == "files" ? "F" :
             name == "commands" ? "⌨" :
-            name == "settings" ? "⚙" :
+            name == "settings" ? "*" :
             "·";
     }
 
@@ -52,7 +53,7 @@ export component SearchView inherits Rectangle {
                 spacing: 8px;
 
                 Text {
-                    text: "🔍";
+                    text: "?";
                     color: Theme.text-tertiary;
                     font-size: Theme.font-size-md;
                     vertical-alignment: center;

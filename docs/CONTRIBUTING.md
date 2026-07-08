@@ -87,7 +87,9 @@ logical task per pull request.
      `LocaleManager::new`.
 4. Run `cargo test -p orchid-i18n` and spot-check strings in the settings
    panel or startup window.
-5. *(Optional, no rebuild required)* Users can also drop overrides at
+5. Run `python scripts/i18n_sync_keys.py` to confirm every locale still
+   matches the en-US key set (exits non-zero when keys are missing).
+6. *(Optional, no rebuild required)* Users can also drop overrides at
    `{config_dir}/locales/<tag>/main.ftl`; those files overlay the bundled
    catalogue at runtime.
 

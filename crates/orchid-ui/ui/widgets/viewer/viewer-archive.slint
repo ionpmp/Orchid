@@ -152,7 +152,8 @@ export component ViewerArchiveView inherits Rectangle {
                                 spacing: 6px;
 
                                 Text {
-                                    text: entry.is-up ? "↩" : (entry.is-dir ? "📁" : "📄");
+                                    // ASCII/BMP — color emoji missing in Slint's default Windows font.
+                                    text: entry.is-up ? "^" : (entry.is-dir ? "D" : "F");
                                     color: Theme.accent-brand;
                                     font-size: Theme.font-size-sm;
                                     vertical-alignment: center;
@@ -225,7 +226,8 @@ export component ViewerArchiveView inherits Rectangle {
                 if model.preview-kind == 2 : VerticalLayout {
                     alignment: center;
                     spacing: 8px;
-                    Text { text: "📦"; color: Theme.text-tertiary; font-size: 32px; horizontal-alignment: center; }
+                    // ASCII/BMP glyph — color emoji missing in Slint's default font on Windows.
+                    Text { text: "A"; color: Theme.text-tertiary; font-size: 32px; horizontal-alignment: center; }
                     Text {
                         text: model.preview-binary-size;
                         color: Theme.text-secondary;
