@@ -36,6 +36,7 @@ pub const TYPE_ID: &str = "weather";
 pub struct WeatherWidget {
     instance_id: Uuid,
     config: RwLock<WeatherConfig>,
+    orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     provider: Arc<dyn WeatherProvider>,
     data: Arc<RwLock<Option<WeatherData>>>,
     last_error: Arc<RwLock<Option<String>>>,
@@ -58,6 +59,7 @@ impl WeatherWidget {
         config: WeatherConfig,
         provider: Arc<dyn WeatherProvider>,
         bus: Arc<orchid_core::EventBus>,
+        orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     ) -> Self {
         let refresh_interval = std::time::Duration::from_secs(
             (config.refresh_interval_minutes as u64).max(1) * 60,
@@ -65,6 +67,7 @@ impl WeatherWidget {
         Self {
             instance_id,
             config: RwLock::new(config),
+            orchid_config,
             provider,
             data: Arc::new(RwLock::new(None)),
             last_error: Arc::new(RwLock::new(None)),
@@ -192,7 +195,8 @@ impl Widget for WeatherWidget {
                 } else {
                     crate::widget::payloads::WeatherStatusTag::Stale
                 };
-                let payload = render_payload(&config, &data, status);
+                let locale = self.orchid_config.read().locale.clone();
+                let payload = render_payload(&config, &data, status, &locale);
                 let title = data.location.name.clone();
                 (payload, title)
             }
@@ -270,6 +274,7 @@ fn render_payload(
     config: &WeatherConfig,
     data: &WeatherData,
     status: crate::widget::payloads::WeatherStatusTag,
+    locale: &orchid_storage::LocaleConfig,
 ) -> crate::widget::payloads::WeatherPayload {
     let temp_text = format_temperature(data.current.temperature_c, config.units);
     let feels_like_temp = data
@@ -280,7 +285,7 @@ fn render_payload(
         .forecast
         .iter()
         .enumerate()
-        .map(|(i, d)| render_forecast_day(i, d, config))
+        .map(|(i, d)| render_forecast_day(i, d, config, locale))
         .collect();
 
     crate::widget::payloads::WeatherPayload {
@@ -306,11 +311,12 @@ fn render_forecast_day(
     idx: usize,
     day: &DailyForecast,
     config: &WeatherConfig,
+    locale: &orchid_storage::LocaleConfig,
 ) -> crate::widget::payloads::WeatherForecastDay {
     crate::widget::payloads::WeatherForecastDay {
         day_index: idx as u8,
         weekday_label: if idx >= 2 {
-            Some(day.date.format("%a").to_string())
+            Some(locale.format_weekday(day.date))
         } else {
             None
         },
@@ -348,7 +354,13 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
                 .unwrap_or_default(),
             None => WeatherConfig::default(),
         };
-        let widget = WeatherWidget::new(ctx.instance_id, cfg, provider.clone(), ctx.bus.clone());
+        let widget = WeatherWidget::new(
+            ctx.instance_id,
+            cfg,
+            provider.clone(),
+            ctx.bus.clone(),
+            ctx.config.clone(),
+        );
         Ok(Box::new(widget) as Box<dyn Widget>)
     });
 

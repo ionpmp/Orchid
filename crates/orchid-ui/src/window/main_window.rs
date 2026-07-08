@@ -8655,12 +8655,6 @@ fn apply_settings_field(
     value: &str,
 ) -> Result<(), String> {
     match (section, key) {
-        ("general", "auto-update") => {
-            cfg.general.auto_update = parse_settings_bool(value)?;
-        }
-        ("general", "telemetry") => {
-            cfg.general.telemetry = parse_settings_bool(value)?;
-        }
         ("general", "open-on-startup") => {
             cfg.general.open_on_startup = parse_settings_bool(value)?;
         }
@@ -8802,6 +8796,16 @@ fn parse_settings_bool(value: &str) -> Result<bool, String> {
     }
 }
 
+fn settings_bool_label(value: bool, locale: &LocaleManager) -> SharedString {
+    locale
+        .tr(if value {
+            "settings-value-yes"
+        } else {
+            "settings-value-no"
+        })
+        .into()
+}
+
 fn build_settings_fields(
     section: &str,
     cfg: &OrchidConfig,
@@ -8812,19 +8816,21 @@ fn build_settings_fields(
 
     match section {
         "general" => {
-            push_settings_bool(
+            // Auto-update / telemetry are reserved for a later release — keep
+            // them visible but read-only so toggles do not pretend to work.
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "auto-update",
                 "settings-field-auto-update",
-                cfg.general.auto_update,
+                settings_bool_label(cfg.general.auto_update, locale),
             );
-            push_settings_bool(
+            push_settings_readonly(
                 &mut rows,
                 locale,
                 "telemetry",
                 "settings-field-telemetry",
-                cfg.general.telemetry,
+                settings_bool_label(cfg.general.telemetry, locale),
             );
             push_settings_bool(
                 &mut rows,

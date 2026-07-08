@@ -57,6 +57,20 @@ impl LocaleConfig {
         }
         format_or_default(&local, Self::DEFAULT_DATE)
     }
+
+    /// Abbreviated weekday label (`%a`) for forecast rows.
+    #[must_use]
+    pub fn format_weekday(&self, date: chrono::NaiveDate) -> String {
+        // Midday avoids DST edge cases when converting to local display.
+        let Some(naive) = date.and_hms_opt(12, 0, 0) else {
+            return date.format("%a").to_string();
+        };
+        let local = match Local.from_local_datetime(&naive) {
+            chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => dt,
+            chrono::LocalResult::None => return date.format("%a").to_string(),
+        };
+        format_or_default(&local, "%a")
+    }
 }
 
 fn try_format<Tz: TimeZone>(dt: &DateTime<Tz>, fmt: &str) -> Option<String>
