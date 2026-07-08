@@ -1,5 +1,7 @@
 import { Theme } from "theme_global.slint";
 import { NavigationGlobal } from "navigation_global.slint";
+import { NotificationGlobal } from "notification_global.slint";
+import { AppState } from "app_state_global.slint";
 
 export component NotificationCenter inherits Rectangle {
     callback dismiss();
@@ -7,7 +9,9 @@ export component NotificationCenter inherits Rectangle {
     width: 320px;
     background: Theme.surface-raised;
 
+    // Edge facing the canvas: left when docked right (LTR), right when docked left (RTL).
     Rectangle {
+        x: AppState.is-rtl ? parent.width - 1px : 0;
         width: 1px;
         height: parent.height;
         background: Theme.border-default;
@@ -20,6 +24,8 @@ export component NotificationCenter inherits Rectangle {
         spacing: Theme.spacing-unit;
 
         HorizontalLayout {
+            spacing: Theme.spacing-unit;
+
             Text {
                 text: NavigationGlobal.notification-center-title;
                 color: Theme.text-primary;
@@ -27,6 +33,29 @@ export component NotificationCenter inherits Rectangle {
                 font-weight: Theme.weight-semibold;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
+            }
+
+            if NotificationGlobal.notifications.length > 0: Rectangle {
+                height: 32px;
+                border-radius: Theme.radius-md;
+                background: clear-ta.has-hover ? Theme.surface-base : transparent;
+
+                clear-ta := TouchArea {
+                    clicked => { NotificationGlobal.clear-all(); }
+                }
+
+                HorizontalLayout {
+                    padding-left: Theme.spacing-unit;
+                    padding-right: Theme.spacing-unit;
+                    alignment: center;
+
+                    Text {
+                        text: NotificationGlobal.clear-all-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
             }
 
             Rectangle {
@@ -49,12 +78,78 @@ export component NotificationCenter inherits Rectangle {
             }
         }
 
-        Text {
-            text: NavigationGlobal.notification-center-placeholder;
+        if NotificationGlobal.notifications.length == 0: Text {
+            text: NotificationGlobal.empty-placeholder;
             color: Theme.text-secondary;
             font-size: Theme.font-size-sm;
             wrap: word-wrap;
             vertical-stretch: 1;
+            vertical-alignment: top;
+        }
+
+        if NotificationGlobal.notifications.length > 0: Flickable {
+            vertical-stretch: 1;
+            width: 100%;
+            viewport-width: self.width;
+            viewport-height: list.preferred-height;
+
+            list := VerticalLayout {
+                width: parent.viewport-width;
+                spacing: Theme.spacing-unit;
+
+                for item in NotificationGlobal.notifications: Rectangle {
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    clip: true;
+
+                    HorizontalLayout {
+                        spacing: 0;
+
+                        Rectangle {
+                            width: 3px;
+                            background: item.severity >= 3
+                                ? #e85d5d
+                                : (item.severity == 2
+                                    ? #d4a017
+                                    : Theme.accent-brand);
+                        }
+
+                        VerticalLayout {
+                            padding: Theme.spacing-unit * 1.5;
+                            spacing: 4px;
+                            horizontal-stretch: 1;
+
+                            HorizontalLayout {
+                                spacing: Theme.spacing-unit;
+
+                                Text {
+                                    text: item.title;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: Theme.weight-semibold;
+                                    wrap: word-wrap;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                }
+
+                                Text {
+                                    text: item.time-label;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            if item.body != "": Text {
+                                text: item.body;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

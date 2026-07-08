@@ -267,6 +267,9 @@ pub struct PrivacyConfig {
     /// Automatically clear the clipboard this many seconds after a sensitive
     /// value (password, token) is copied. `0` disables the feature.
     pub clear_clipboard_seconds: u32,
+    /// Lock the password vault this many seconds after the last unlock or
+    /// vault interaction (search, copy, unlock). `0` disables auto-lock.
+    pub vault_auto_lock_seconds: u32,
 }
 
 impl Default for PrivacyConfig {
@@ -275,6 +278,7 @@ impl Default for PrivacyConfig {
             record_action_history: true,
             history_retention_days: 90,
             clear_clipboard_seconds: 30,
+            vault_auto_lock_seconds: 300,
         }
     }
 }

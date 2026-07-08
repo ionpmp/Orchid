@@ -4,6 +4,8 @@ export global AppState {
     in property <string> current-theme-id;
     in property <string> current-language;
     in property <string> current-density;
+    // True when `current-language` is Arabic (BCP-47 tag starts with "ar").
+    in property <bool> is-rtl;
     in property <int> mode;
     in property <WorkspaceModel> workspace;
 }

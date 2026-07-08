@@ -32,6 +32,7 @@ pub enum ImageFormat {
     Avif,
     Tga,
     Svg,
+    Heic,
     Raw,
     Unknown,
 }
@@ -50,6 +51,7 @@ impl ImageFormat {
             Self::Avif => "AVIF",
             Self::Tga => "TGA",
             Self::Svg => "SVG",
+            Self::Heic => "HEIC",
             Self::Raw => "RAW",
             Self::Unknown => "Image",
         }
@@ -103,6 +105,16 @@ fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     if looks_like_svg(bytes) {
         return decode_svg(bytes, size);
     }
+    if looks_like_heic(bytes) {
+        return Err(ViewerError::ImageDecode(
+            "HEIC images are not supported yet".into(),
+        ));
+    }
+    if looks_like_raw(bytes) {
+        return Err(ViewerError::ImageDecode(
+            "RAW images are not supported yet".into(),
+        ));
+    }
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
         .unwrap_or(ImageFormat::Unknown);
@@ -131,6 +143,78 @@ pub fn looks_like_svg(bytes: &[u8]) -> bool {
     }
     if head.starts_with("<?xml") || head.starts_with("<!doctype") {
         return head.contains("<svg");
+    }
+    false
+}
+
+/// True when `bytes` look like HEIC/HEIF (ISO BMFF `ftyp` with a HEIF brand).
+#[must_use]
+pub fn looks_like_heic(bytes: &[u8]) -> bool {
+    sniff_unsupported_image(bytes) == Some(ImageFormat::Heic)
+}
+
+/// True when `bytes` match a common camera-RAW magic sequence.
+#[must_use]
+pub fn looks_like_raw(bytes: &[u8]) -> bool {
+    sniff_unsupported_image(bytes) == Some(ImageFormat::Raw)
+}
+
+/// Sniff HEIC/HEIF or common RAW containers. Returns `None` when unknown.
+#[must_use]
+pub fn sniff_unsupported_image(bytes: &[u8]) -> Option<ImageFormat> {
+    if is_heic_ftyp(bytes) {
+        return Some(ImageFormat::Heic);
+    }
+    if is_raw_magic(bytes) {
+        return Some(ImageFormat::Raw);
+    }
+    None
+}
+
+fn is_heic_ftyp(bytes: &[u8]) -> bool {
+    // ISO BMFF: [size:4][ftyp][major_brand:4][…] plus optional compatible brands.
+    if bytes.len() < 12 || &bytes[4..8] != b"ftyp" {
+        return false;
+    }
+    const HEIF_BRANDS: &[&[u8]] = &[
+        b"heic", b"heif", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs", b"mif1",
+        b"msf1",
+    ];
+    // Check major brand at offset 8, then every compatible brand from offset 16.
+    let mut offset = 8;
+    while offset + 4 <= bytes.len() {
+        let brand = &bytes[offset..offset + 4];
+        if HEIF_BRANDS.iter().any(|b| *b == brand) {
+            return true;
+        }
+        // Skip minor_version (4 bytes) after the major brand.
+        offset = if offset == 8 { 16 } else { offset + 4 };
+        // Don't scan forever on huge boxes.
+        if offset > 64 {
+            break;
+        }
+    }
+    false
+}
+
+fn is_raw_magic(bytes: &[u8]) -> bool {
+    // Fujifilm RAF
+    if bytes.starts_with(b"FUJIFILMCCD-RAW") {
+        return true;
+    }
+    // Olympus ORF
+    if bytes.starts_with(b"IIRO") || bytes.starts_with(b"MMOR") || bytes.starts_with(b"IIRS") {
+        return true;
+    }
+    // Panasonic RW2
+    if bytes.starts_with(b"IIU\0") {
+        return true;
+    }
+    // Canon CR2: TIFF header + "CR" magic at offset 8.
+    if bytes.len() >= 10
+        && ((bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*")) && &bytes[8..10] == b"CR")
+    {
+        return true;
     }
     false
 }
@@ -245,5 +329,78 @@ mod tests {
     fn sniffs_bare_svg_root() {
         let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>";
         assert!(looks_like_svg(svg));
+    }
+
+    fn heic_ftyp(brand: &[u8; 4]) -> Vec<u8> {
+        let mut v = vec![0, 0, 0, 0x18];
+        v.extend_from_slice(b"ftyp");
+        v.extend_from_slice(brand);
+        v.extend_from_slice(&[0, 0, 0, 0]); // minor_version
+        v.extend_from_slice(b"mif1");
+        v.extend_from_slice(b"heic");
+        v
+    }
+
+    #[test]
+    fn sniffs_heic_ftyp_brands() {
+        for brand in [b"heic", b"heif", b"mif1", b"msf1", b"heix"] {
+            let bytes = heic_ftyp(brand);
+            assert_eq!(sniff_unsupported_image(&bytes), Some(ImageFormat::Heic));
+            assert!(looks_like_heic(&bytes));
+        }
+    }
+
+    #[test]
+    fn heic_decode_returns_clear_error() {
+        let bytes = heic_ftyp(b"heic");
+        let err = decode_bytes(&bytes, bytes.len() as u64).unwrap_err();
+        match err {
+            ViewerError::ImageDecode(msg) => {
+                assert!(msg.contains("HEIC images are not supported yet"), "{msg}");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sniffs_common_raw_magics() {
+        assert_eq!(
+            sniff_unsupported_image(b"FUJIFILMCCD-RAW \x00rest"),
+            Some(ImageFormat::Raw)
+        );
+        assert_eq!(
+            sniff_unsupported_image(b"IIROxxxx"),
+            Some(ImageFormat::Raw)
+        );
+        assert_eq!(
+            sniff_unsupported_image(b"IIU\0rest"),
+            Some(ImageFormat::Raw)
+        );
+        let mut cr2 = b"II*\0\0\0\0\0CR".to_vec();
+        cr2.extend_from_slice(b"rest");
+        assert_eq!(sniff_unsupported_image(&cr2), Some(ImageFormat::Raw));
+    }
+
+    #[test]
+    fn raw_decode_returns_clear_error() {
+        let bytes = b"FUJIFILMCCD-RAW \x00";
+        let err = decode_bytes(bytes, bytes.len() as u64).unwrap_err();
+        match err {
+            ViewerError::ImageDecode(msg) => {
+                assert!(msg.contains("RAW images are not supported yet"), "{msg}");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn avif_ftyp_is_not_heic() {
+        let mut v = vec![0, 0, 0, 0x18];
+        v.extend_from_slice(b"ftyp");
+        v.extend_from_slice(b"avif");
+        v.extend_from_slice(&[0, 0, 0, 0]);
+        v.extend_from_slice(b"avif");
+        assert!(!looks_like_heic(&v));
+        assert_eq!(sniff_unsupported_image(&v), None);
     }
 }

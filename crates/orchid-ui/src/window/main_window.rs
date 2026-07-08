@@ -73,7 +73,8 @@ use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, OnboardingGlobal, SettingsFieldRow,
+    WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, NotificationGlobal,
+    NotificationItem, OnboardingGlobal, SettingsFieldRow,
     SettingsGlobal,
     SettingsSectionEntry,
 };
@@ -183,11 +184,17 @@ pub struct MainWindowController {
     settings_sections: ModelRc<SettingsSectionEntry>,
     settings_fields: ModelRc<SettingsFieldRow>,
     navigation: Arc<RwLock<NavigationUiState>>,
+    /// UI-owned notification-center items (newest first).
+    notifications: ModelRc<NotificationItem>,
+    /// True after the first startup tip has been pushed (once per window).
+    notification_tip_pushed: AtomicBool,
     onboarding: Arc<RwLock<OnboardingUiState>>,
     gesture_recognizer: Arc<Mutex<GestureRecognizer>>,
     input_mapper: Arc<InputMapper>,
     recent_files: Arc<RecentFilesStore>,
     password_vault: Arc<orchid_crypto::PasswordVault>,
+    /// Last unlock or vault interaction; used for privacy.vault_auto_lock_seconds.
+    vault_last_activity: Arc<Mutex<Option<Instant>>>,
     fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
 }
 
@@ -324,6 +331,8 @@ impl MainWindowController {
             ModelRc::new(VecModel::<SettingsSectionEntry>::default());
         let settings_fields: ModelRc<SettingsFieldRow> =
             ModelRc::new(VecModel::<SettingsFieldRow>::default());
+        let notifications: ModelRc<NotificationItem> =
+            ModelRc::new(VecModel::<NotificationItem>::default());
         let config_reload_pending = Arc::new(AtomicBool::new(false));
         let config_reload_flag = config_reload_pending.clone();
         let config_reload_sub = bus
@@ -399,11 +408,14 @@ impl MainWindowController {
             settings_sections,
             settings_fields,
             navigation: Arc::new(RwLock::new(NavigationUiState::default())),
+            notifications,
+            notification_tip_pushed: AtomicBool::new(false),
             onboarding: Arc::new(RwLock::new(OnboardingUiState::default())),
             gesture_recognizer,
             input_mapper,
             recent_files,
             password_vault,
+            vault_last_activity: Arc::new(Mutex::new(None)),
             fm_passphrase_vault,
         });
         this.apply_theme()?;
@@ -412,6 +424,7 @@ impl MainWindowController {
         this.sync_command_palette_global();
         this.sync_settings_global();
         this.sync_navigation_global();
+        this.sync_notification_global();
         this.apply_initial_mode()?;
         if !this.config.read().onboarding.completed {
             let mut ob = this.onboarding.write();
@@ -419,6 +432,7 @@ impl MainWindowController {
             ob.current_step = 0;
         }
         this.sync_onboarding_global();
+        this.ensure_startup_notification_tip();
         this.wire_callbacks()?;
         Ok(this)
     }
@@ -516,6 +530,8 @@ impl MainWindowController {
         g.set_current_theme_id(th.meta.id.clone().into());
         g.set_current_language(language.as_str().into());
         g.set_current_density(self.locale.tr(density_i18n_key(density)).into());
+        // Slint 1.16 has no Window `layout-direction`; drive RTL via `is-rtl`.
+        g.set_is_rtl(language.as_str().to_ascii_lowercase().starts_with("ar"));
         Ok(())
     }
 
@@ -545,6 +561,7 @@ impl MainWindowController {
             self.sync_settings_global();
         }
         self.sync_navigation_global();
+        self.sync_notification_global();
         self.sync_onboarding_global();
         self.schedule_rebuild();
         Ok(())
@@ -650,6 +667,7 @@ impl MainWindowController {
                         rec.tick(Instant::now())
                     };
                     c.handle_recognized_gestures(gestures);
+                    c.check_vault_auto_lock();
                     let scale = c.window.window().scale_factor();
                     let scale_changed = {
                         let mut last = c.last_window_scale.lock();
@@ -834,6 +852,14 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_notification_center_dismiss();
+                }
+            }
+        });
+        self.window.global::<NotificationGlobal>().on_clear_all({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.clear_notifications();
                 }
             }
         });
@@ -2339,6 +2365,53 @@ impl MainWindowController {
         g.set_hint_gestures_label(self.locale.tr("onboarding-hint-gestures").into());
     }
 
+    fn sync_notification_global(self: &Arc<Self>) {
+        let g = self.window.global::<NotificationGlobal>();
+        g.set_notifications(self.notifications.clone());
+        g.set_clear_all_label(self.locale.tr("notification-center-clear").into());
+        g.set_empty_placeholder(self.locale.tr("notification-center-placeholder").into());
+    }
+
+    /// Append a notification (newest first). `severity`: 0 info, 1 tip, 2 warning, 3 error.
+    fn push_notification(self: &Arc<Self>, title: &str, body: &str, severity: i32) {
+        let item = NotificationItem {
+            title: title.into(),
+            body: body.into(),
+            time_label: chrono::Local::now().format("%H:%M").to_string().into(),
+            severity,
+        };
+        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        {
+            model.insert(0, item);
+        }
+        self.sync_notification_global();
+    }
+
+    fn clear_notifications(self: &Arc<Self>) {
+        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        {
+            model.set_vec(Vec::new());
+        }
+        self.sync_notification_global();
+    }
+
+    fn ensure_startup_notification_tip(self: &Arc<Self>) {
+        if self
+            .notification_tip_pushed
+            .swap(true, Ordering::AcqRel)
+        {
+            return;
+        }
+        if self.notifications.row_count() > 0 {
+            return;
+        }
+        self.push_notification(
+            &self.locale.tr("notification-center-tip-title"),
+            &self.locale.tr("notification-center-tip-body"),
+            1,
+        );
+    }
+
     fn sync_onboarding_global(self: &Arc<Self>) {
         let ob = self.onboarding.read().clone();
         let step = ob.current_step.clamp(0, ONBOARDING_STEP_COUNT - 1) as usize;
@@ -2443,12 +2516,16 @@ impl MainWindowController {
 
     fn toggle_notification_center(self: &Arc<Self>) {
         self.on_command_palette_dismiss();
-        {
+        let opening = {
             let mut nav = self.navigation.write();
             nav.notification_center_visible = !nav.notification_center_visible;
             if nav.notification_center_visible {
                 nav.workspace_panel_visible = false;
             }
+            nav.notification_center_visible
+        };
+        if opening {
+            self.ensure_startup_notification_tip();
         }
         self.sync_navigation_global();
     }
@@ -3333,11 +3410,36 @@ impl MainWindowController {
         None
     }
 
+    fn touch_vault_activity(self: &Arc<Self>) {
+        *self.vault_last_activity.lock() = Some(Instant::now());
+    }
+
+    fn check_vault_auto_lock(self: &Arc<Self>) {
+        let timeout_secs = self.config.read().privacy.vault_auto_lock_seconds;
+        if timeout_secs == 0 {
+            return;
+        }
+        if !self.password_vault.is_unlocked() {
+            return;
+        }
+        let mut last = self.vault_last_activity.lock();
+        let Some(at) = *last else {
+            // Unlocked without a recorded touch (e.g. restored session) — start the timer now.
+            *last = Some(Instant::now());
+            return;
+        };
+        if at.elapsed() >= Duration::from_secs(u64::from(timeout_secs)) {
+            drop(last);
+            self.on_password_lock_vault();
+        }
+    }
+
     fn on_password_search_changed(self: &Arc<Self>, q: &SharedString) {
         let query = q.to_string();
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
+        self.touch_vault_activity();
         orchid_widgets::builtin::password::update_search(inst_id, query);
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
@@ -3354,6 +3456,7 @@ impl MainWindowController {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
+        self.touch_vault_activity();
         orchid_widgets::builtin::password::select_entry(inst_id, entry_id);
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
@@ -3370,12 +3473,19 @@ impl MainWindowController {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
+        self.touch_vault_activity();
+        let clear_clipboard_secs = self.config.read().privacy.clear_clipboard_seconds;
         let t = Arc::downgrade(self);
         let locale = self.locale.clone();
         let _ = slint::spawn_local(Compat::new(async move {
             let toast_key = match kind {
                 PasswordCopyKind::Password => {
-                    match orchid_widgets::builtin::password::copy_password(inst_id, &entry_id).await
+                    match orchid_widgets::builtin::password::copy_password(
+                        inst_id,
+                        &entry_id,
+                        clear_clipboard_secs,
+                    )
+                    .await
                     {
                         Ok(()) => "password-password-copied",
                         Err(e) => {
@@ -3395,7 +3505,13 @@ impl MainWindowController {
                     }
                 }
                 PasswordCopyKind::Totp => {
-                    match orchid_widgets::builtin::password::copy_totp(inst_id, &entry_id).await {
+                    match orchid_widgets::builtin::password::copy_totp(
+                        inst_id,
+                        &entry_id,
+                        clear_clipboard_secs,
+                    )
+                    .await
+                    {
                         Ok(()) => "password-totp-copied",
                         Err(e) => {
                             warn!(?e, "copy totp");
@@ -3439,7 +3555,7 @@ impl MainWindowController {
         let vault = self.password_vault.clone();
         let bus = self.bus.clone();
         match orchid_widgets::builtin::password::unlock_with_passphrase(vault, bus, &pass) {
-            Ok(()) => {}
+            Ok(()) => self.touch_vault_activity(),
             Err(e) => orchid_widgets::builtin::password::record_unlock_error(e),
         }
         self.schedule_rebuild_after_password_unlock();
@@ -3450,7 +3566,7 @@ impl MainWindowController {
         let vault = self.password_vault.clone();
         let bus = self.bus.clone();
         match orchid_widgets::builtin::password::unlock_with_biometric(vault, bus, &prompt) {
-            Ok(()) => {}
+            Ok(()) => self.touch_vault_activity(),
             Err(e) => orchid_widgets::builtin::password::record_unlock_error(e),
         }
         self.schedule_rebuild_after_password_unlock();
@@ -3476,6 +3592,7 @@ impl MainWindowController {
             self.password_vault.clone(),
             self.bus.clone(),
         );
+        *self.vault_last_activity.lock() = None;
         self.schedule_rebuild_after_password_unlock();
     }
 
@@ -3483,6 +3600,7 @@ impl MainWindowController {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
+        self.touch_vault_activity();
         self.password_add_dialogs.write().insert(
             inst_id,
             PasswordAddDialogOverlay {
@@ -3504,6 +3622,7 @@ impl MainWindowController {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
+        self.touch_vault_activity();
         let url_opt = if url.is_empty() {
             None
         } else {
@@ -8255,6 +8374,11 @@ fn apply_settings_field(
                 .parse::<u32>()
                 .map_err(|_| format!("invalid clipboard timeout `{value}`"))?;
         }
+        ("privacy", "vault-auto-lock-seconds") => {
+            cfg.privacy.vault_auto_lock_seconds = value
+                .parse::<u32>()
+                .map_err(|_| format!("invalid vault auto-lock `{value}`"))?;
+        }
         _ => return Err(format!("field `{section}.{key}` is not editable")),
     }
     Ok(())
@@ -8549,6 +8673,13 @@ fn build_settings_fields(
                 "clear-clipboard-seconds",
                 "settings-field-clear-clipboard-seconds",
                 format!("{}", cfg.privacy.clear_clipboard_seconds),
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "vault-auto-lock-seconds",
+                "settings-field-vault-auto-lock",
+                format!("{}", cfg.privacy.vault_auto_lock_seconds),
             );
         }
         _ => {}

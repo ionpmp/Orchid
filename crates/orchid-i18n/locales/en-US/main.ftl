@@ -207,6 +207,7 @@ settings-field-first-day-of-week = First day of week
 settings-field-record-action-history = Record action history
 settings-field-history-retention-days = History retention (days)
 settings-field-clear-clipboard-seconds = Clear clipboard after copy
+settings-field-vault-auto-lock = Vault auto-lock (seconds)
 
 command.settings.open.name = Open settings
 command.settings.open.desc = Show the settings panel
@@ -228,6 +229,9 @@ command.onboarding.toggle_hint_mode.desc = Show or hide gesture hints on the wor
 navigation-workspace-panel-title = Workspaces
 notification-center-title = Notifications
 notification-center-placeholder = No notifications yet.
+notification-center-clear = Clear all
+notification-center-tip-title = Tip
+notification-center-tip-body = Swipe from the right edge or run “Show notification center” to open this panel.
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)

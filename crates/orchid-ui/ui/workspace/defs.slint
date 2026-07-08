@@ -494,6 +494,15 @@ export struct SettingsSectionEntry {
     label: string,
 }
 
+/// Notification-center row. `severity`: 0 = info, 1 = tip, 2 = warning, 3 = error.
+export struct NotificationItem {
+    title: string,
+    body: string,
+    time-label: string,
+    severity: int,
+}
+
+
 // Settings field editor kinds (see settings-panel.slint).
 export struct SettingsFieldRow {
     key: string,

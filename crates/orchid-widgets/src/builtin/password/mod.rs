@@ -48,13 +48,17 @@ pub fn select_entry(instance_id: Uuid, entry_id: String) {
     }
 }
 
-/// Copy password (30s auto-clear) for `entry_id`.
-pub async fn copy_password(instance_id: Uuid, entry_id: &str) -> Result<(), String> {
+/// Copy password with auto-clear after `clear_after_secs` (0 = effectively no clear).
+pub async fn copy_password(
+    instance_id: Uuid,
+    entry_id: &str,
+    clear_after_secs: u32,
+) -> Result<(), String> {
     let inner = PASSWORD_LIVE
         .get(&instance_id)
         .map(|r| Arc::clone(r.value()))
         .ok_or_else(|| "password widget not live".to_string())?;
-    inner.copy_password(entry_id).await
+    inner.copy_password(entry_id, clear_after_secs).await
 }
 
 /// Copy username (no auto-clear) for `entry_id`.
@@ -66,13 +70,17 @@ pub async fn copy_username(instance_id: Uuid, entry_id: &str) -> Result<(), Stri
     inner.copy_username(entry_id).await
 }
 
-/// Copy TOTP (30s auto-clear) for `entry_id`.
-pub async fn copy_totp(instance_id: Uuid, entry_id: &str) -> Result<(), String> {
+/// Copy TOTP with auto-clear after `clear_after_secs` (0 = effectively no clear).
+pub async fn copy_totp(
+    instance_id: Uuid,
+    entry_id: &str,
+    clear_after_secs: u32,
+) -> Result<(), String> {
     let inner = PASSWORD_LIVE
         .get(&instance_id)
         .map(|r| Arc::clone(r.value()))
         .ok_or_else(|| "password widget not live".to_string())?;
-    inner.copy_totp(entry_id).await
+    inner.copy_totp(entry_id, clear_after_secs).await
 }
 
 /// Create a new vault entry, persist to disk, and refresh the live widget.
@@ -310,7 +318,7 @@ impl PasswordHandle {
         );
     }
 
-    async fn copy_password(&self, id_str: &str) -> Result<(), String> {
+    async fn copy_password(&self, id_str: &str, clear_after_secs: u32) -> Result<(), String> {
         let db = self
             .deps
             .vault
@@ -322,7 +330,7 @@ impl PasswordHandle {
             .map_err(|e| e.to_string())?;
         self.deps
             .clipboard
-            .copy_with_auto_clear(entry.password.clone(), Duration::from_secs(30))
+            .copy_with_auto_clear(entry.password.clone(), clipboard_clear_duration(clear_after_secs))
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -347,7 +355,7 @@ impl PasswordHandle {
         Ok(())
     }
 
-    async fn copy_totp(&self, id_str: &str) -> Result<(), String> {
+    async fn copy_totp(&self, id_str: &str, clear_after_secs: u32) -> Result<(), String> {
         let db = self
             .deps
             .vault
@@ -363,7 +371,7 @@ impl PasswordHandle {
             .clipboard
             .copy_with_auto_clear(
                 secrecy::SecretString::new(code.code),
-                Duration::from_secs(30),
+                clipboard_clear_duration(clear_after_secs),
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -555,6 +563,15 @@ fn build_detail(e: &orchid_crypto::PasswordEntry) -> PasswordEntryDetailView {
         totp_code,
         totp_remaining_seconds: totp_remaining,
         tags: e.tags.clone(),
+    }
+}
+
+fn clipboard_clear_duration(clear_after_secs: u32) -> Duration {
+    // `0` means auto-clear is disabled; use a long TTL so the clipboard API still works.
+    if clear_after_secs == 0 {
+        Duration::from_secs(60 * 60 * 24 * 365)
+    } else {
+        Duration::from_secs(u64::from(clear_after_secs))
     }
 }
 

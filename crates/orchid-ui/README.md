@@ -18,12 +18,13 @@ bridge between `orchid-widgets` snapshots and Slint models.
 ## Slint shell (46+ components)
 
 All UI is compiled from `ui/main.slint` via `build.rs`. The tree currently
-includes 39 exported components and 7 shared globals (46 Slint units total):
+includes 39 exported components and 8 shared globals (47 Slint units total):
 
 - **Windows** — `MainWindow` (workspace + onboarding modes via `AppState.mode`);
   `StartupWindow` is a legacy alias of the same component
 - **Globals** — `Theme`, `Strings`, `AppState`, `WidgetCatalog`,
-  `CommandPaletteGlobal`, `SettingsGlobal`, `NavigationGlobal`
+  `CommandPaletteGlobal`, `SettingsGlobal`, `NavigationGlobal`,
+  `NotificationGlobal`
 - **Workspace shell** — `WorkspaceView`, `WidgetFrame`, `WidgetDock`,
   `WorkspaceSwitcher`, `WidgetCatalogPanel`, `TerminalView`
 - **Overlays** — `CommandPalettePanel`, `SettingsPanel`, `WorkspacePanel`,

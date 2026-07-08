@@ -30,7 +30,11 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
     if sample.starts_with(b"%PDF-") {
         return Some(ViewerKind::Pdf);
     }
-    if image::guess_format(sample).is_ok() || crate::image::loader::looks_like_svg(sample) {
+    if image::guess_format(sample).is_ok()
+        || crate::image::loader::looks_like_svg(sample)
+        || crate::image::loader::looks_like_heic(sample)
+        || crate::image::loader::looks_like_raw(sample)
+    {
         return Some(ViewerKind::Image);
     }
     // Fall back to the extension for path-only dispatch (e.g. text files).
@@ -39,7 +43,9 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
             "pdf" => Some(ViewerKind::Pdf),
             "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
             "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "tiff" | "tif" | "avif" | "tga"
-            | "svg" => Some(ViewerKind::Image),
+            | "svg" | "heic" | "heif" | "cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2" => {
+                Some(ViewerKind::Image)
+            }
             _ => Some(ViewerKind::Text),
         };
     }
@@ -151,5 +157,44 @@ mod tests {
     fn txz_extension_fallback() {
         let kind = kind_for(&path("local:/a/b.txz"), b"").unwrap();
         assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn heic_extension_routes_to_image() {
+        for ext in ["heic", "heif"] {
+            let kind = kind_for(&path(&format!("local:/a/b.{ext}")), b"").unwrap();
+            assert_eq!(kind, ViewerKind::Image, "{ext}");
+        }
+    }
+
+    #[test]
+    fn raw_extension_routes_to_image() {
+        for ext in ["cr2", "nef", "arw", "dng", "raf", "orf", "rw2"] {
+            let kind = kind_for(&path(&format!("local:/a/b.{ext}")), b"").unwrap();
+            assert_eq!(kind, ViewerKind::Image, "{ext}");
+        }
+    }
+
+    #[test]
+    fn heic_magic_routes_to_image() {
+        let mut sample = vec![0, 0, 0, 0x18];
+        sample.extend_from_slice(b"ftyp");
+        sample.extend_from_slice(b"heic");
+        sample.extend_from_slice(&[0, 0, 0, 0]);
+        sample.extend_from_slice(b"mif1");
+        let kind = kind_for(&path("local:/a/b.unknown"), &sample).unwrap();
+        assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn raw_magic_routes_to_image() {
+        let kind = kind_for(&path("local:/a/b.unknown"), b"FUJIFILMCCD-RAW \x00").unwrap();
+        assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn avif_extension_still_routes_to_image() {
+        let kind = kind_for(&path("local:/a/b.avif"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Image);
     }
 }

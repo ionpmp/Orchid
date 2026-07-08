@@ -61,13 +61,13 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
-- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate; SVG via `resvg`; HEIC/RAW still pending
+- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, fit width/page, zoom; requires bundled `pdfium.dll`
 - [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save, dirty ●)
 - [~] Archives (browse + extract) — browse + preview wired; extract selected/all; TAR.XZ via `xz2`
 
 ### Security
-- [~] Password manager (KDBX4 format, custom UX) — vault unlock/lock UI (passphrase + Windows Hello); KDBX4 read/write, groups / entries / TOTP / search in `orchid-crypto::kdbx`
+- [~] Password manager (KDBX4 format, custom UX) — unlock/lock UI + Hello; KDBX4 R/W, groups/entries/TOTP; `privacy.vault_auto_lock_seconds` idle lock (default 300s)
 - [~] File and folder encryption (age-based) — engine + file-manager encrypt / decrypt / reveal wired; localized passphrase UX + Windows Hello on FM passphrase dialog
 - [x] Biometric unlock via Windows Hello — password vault + FM encrypted-folder passphrase via DPAPI
 
@@ -86,7 +86,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### UX
 - [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml
 - [x] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast) — nine bundled themes + JSON loader from `themes_dir`
-- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); RTL layout adaptation still pending
+- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); S-size RTL mirrors notification/workspace docking when language starts with `ar`
 - [ ] Adaptive layouts (profiles for different screens)
 - [x] Gestures (touch, pen, mouse) — recogniser + `default_bindings` wired through `orchid-ui` to workspace panel, notification center, dock, and universal search
 - [x] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, user override application, and configurable leader-key chord dispatch (`Ctrl+Shift+Space` + letter)
@@ -100,7 +100,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 - [ ] AI agents (Ollama + OpenAI API)
 - [ ] Graphical resource monitor with history
-- [ ] Extended notification system
+- [~] Extended notification system — in-app notification center list + Clear all + startup tip; persistence / OS toasts deferred
 - [ ] Built-in browser (WebView2)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace

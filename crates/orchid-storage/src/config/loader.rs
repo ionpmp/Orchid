@@ -70,6 +70,8 @@ first-day-of-week = 1
 record-action-history = true
 history-retention-days = 90
 clear-clipboard-seconds = 30
+# Lock the password vault after this many seconds of inactivity. 0 = disabled.
+vault-auto-lock-seconds = 300
 
 [onboarding]
 # Set to true after the first-run tour is completed or skipped.

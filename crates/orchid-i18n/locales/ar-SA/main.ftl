@@ -207,11 +207,19 @@ settings-field-first-day-of-week = أول يوم في الأسبوع
 settings-field-record-action-history = تسجيل سجل الإجراءات
 settings-field-history-retention-days = الاحتفاظ بالسجل (أيام)
 settings-field-clear-clipboard-seconds = مسح الحافظة بعد النسخ
+settings-field-vault-auto-lock = قفل الخزنة تلقائياً (ثوانٍ)
 
 command.settings.open.name = فتح الإعدادات
 command.settings.open.desc = إظهار لوحة الإعدادات
 command.password.lock.name = قفل خزنة كلمات المرور
 command.password.lock.desc = مسح قاعدة بيانات كلمات المرور غير المقفلة من الذاكرة
+
+navigation-workspace-panel-title = مساحات العمل
+notification-center-title = الإشعارات
+notification-center-placeholder = لا توجد إشعارات بعد.
+notification-center-clear = مسح الكل
+notification-center-tip-title = تلميح
+notification-center-tip-body = اسحب من الحافة اليسرى أو نفّذ «إظهار مركز الإشعارات» لفتح هذه اللوحة.
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = تقسيم أفقي (Ctrl+Shift+H)
