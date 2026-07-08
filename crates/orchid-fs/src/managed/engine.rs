@@ -193,8 +193,28 @@ impl ManagedFolderEngine {
     ///
     /// # Errors
     ///
-    /// Propagates crypto / storage errors.
+    /// Propagates crypto / storage errors. Skips ingest when policy excludes the
+    /// path or the folder quota is exceeded.
     pub async fn ingest(&self, path: &FsPath) -> Result<FileManifest> {
+        if let Some(cfg) = self.config_for_path(path).await? {
+            if let Some(ref policy) = cfg.policy {
+                if !policy.should_ingest(path.as_str()) {
+                    debug!(%path, "managed ingest skipped: excluded by policy");
+                    return Err(FsError::ManagedIngestExcluded(path.to_string()));
+                }
+                let stats = self.folder_stats(&cfg.path).await?;
+                if let Err(e) = policy.check_quota(&stats) {
+                    warn!(
+                        error = %e,
+                        %path,
+                        folder = %cfg.path,
+                        "managed ingest skipped: quota exceeded"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
         self.inner.bus.publish(
             orchid_core::EventSource::Subsystem("fs.managed".into()),
             ManagedFileIngestStartedEvent {
@@ -380,11 +400,15 @@ impl ManagedFolderEngine {
     // ----------------------------------------------------------------
 
     async fn path_is_under_managed(&self, path: &FsPath) -> Result<bool> {
+        Ok(self.config_for_path(path).await?.is_some())
+    }
+
+    async fn config_for_path(&self, path: &FsPath) -> Result<Option<ManagedFolderConfig>> {
         let folders = self.list_folders().await?;
         let p = path.as_str();
-        Ok(folders
-            .iter()
-            .any(|f| f.enabled && f.auto_ingest && p.starts_with(f.path.as_str())))
+        Ok(folders.into_iter().find(|f| {
+            f.enabled && f.auto_ingest && p.starts_with(f.path.as_str())
+        }))
     }
 }
 

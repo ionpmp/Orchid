@@ -4,6 +4,11 @@ import { AppState } from "app_state_global.slint";
 import { WidgetCatalog } from "widget_catalog_global.slint";
 import { CommandPaletteGlobal } from "command_palette_global.slint";
 import { CommandPalettePanel } from "command-palette.slint";
+import { NavigationGlobal } from "navigation_global.slint";
+import { OnboardingGlobal } from "onboarding_global.slint";
+import { OnboardingOverlay } from "onboarding-overlay.slint";
+import { WorkspacePanel } from "workspace-panel.slint";
+import { NotificationCenter } from "notification-center.slint";
 import { SettingsGlobal } from "settings_global.slint";
 import { SettingsPanel } from "settings-panel.slint";
 import { WorkspaceView } from "workspace/workspace.slint";
@@ -31,6 +36,8 @@ export { Strings } from "strings_global.slint";
 export { AppState } from "app_state_global.slint";
 export { WidgetCatalog } from "widget_catalog_global.slint";
 export { CommandPaletteGlobal } from "command_palette_global.slint";
+export { NavigationGlobal } from "navigation_global.slint";
+export { OnboardingGlobal } from "onboarding_global.slint";
 export { SettingsGlobal } from "settings_global.slint";
 export {
     DockWidgetType,
@@ -73,7 +80,7 @@ export component MainWindow inherits Window {
     callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
-    callback terminal-key-pressed(string, string);
+    callback terminal-key-pressed(string, string, bool, bool, bool);
     callback terminal-viewport-changed(string, length, length);
     callback terminal-tab-clicked(string, int);
     callback terminal-tab-closed(string, int);
@@ -157,6 +164,7 @@ export component MainWindow inherits Window {
     callback fm-passphrase-commit(string, string);
     callback fm-passphrase-cancel(string);
     callback fm-passphrase-biometric(string);
+    callback fm-managed-policy-close(string);
     callback fm-select-all(string, int);
     callback fm-delete-selected(string, int);
     callback fm-copy-selected(string, int);
@@ -183,7 +191,17 @@ export component MainWindow inherits Window {
     callback command-palette-dismiss();
     callback settings-dismiss();
     callback settings-section-selected(int);
+    callback settings-field-changed(string, string, string);
+    callback navigation-workspace-panel-dismiss();
+    callback notification-center-dismiss();
+    callback onboarding-next-clicked();
+    callback onboarding-back-clicked();
+    callback onboarding-skip-clicked();
     callback ui-tick();
+
+    root-layer := Rectangle {
+        width: 100%;
+        height: 100%;
 
     VerticalLayout {
         width: 100%;
@@ -257,7 +275,9 @@ export component MainWindow inherits Window {
             widget-resize-started(id, c, px, py) => { root.widget-resize-started(id, c, px, py); }
             widget-resize-moved(id, px, py) => { root.widget-resize-moved(id, px, py); }
             widget-resize-ended(id) => { root.widget-resize-ended(id); }
-            terminal-key-pressed(id, text) => { root.terminal-key-pressed(id, text); }
+            terminal-key-pressed(id, text, ctrl, shift, alt) => {
+                root.terminal-key-pressed(id, text, ctrl, shift, alt);
+            }
             terminal-viewport-changed(id, w, h) => { root.terminal-viewport-changed(id, w, h); }
             terminal-tab-clicked(id, idx) => { root.terminal-tab-clicked(id, idx); }
             terminal-tab-closed(id, idx) => { root.terminal-tab-closed(id, idx); }
@@ -345,6 +365,7 @@ export component MainWindow inherits Window {
             fm-passphrase-commit(fm_id, pw) => { root.fm-passphrase-commit(fm_id, pw); }
             fm-passphrase-cancel(fm_id) => { root.fm-passphrase-cancel(fm_id); }
             fm-passphrase-biometric(fm_id) => { root.fm-passphrase-biometric(fm_id); }
+            fm-managed-policy-close(fm_id) => { root.fm-managed-policy-close(fm_id); }
             fm-select-all(fm_id, p) => { root.fm-select-all(fm_id, p); }
             fm-delete-selected(fm_id, p) => { root.fm-delete-selected(fm_id, p); }
             fm-copy-selected(fm_id, p) => { root.fm-copy-selected(fm_id, p); }
@@ -364,6 +385,39 @@ export component MainWindow inherits Window {
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
             catalog-dismiss => { root.catalog-dismiss(); }
             catalog-search-changed(q) => { root.catalog-search-changed(q); }
+            }
+
+            if NavigationGlobal.workspace-panel-visible: Rectangle {
+                width: 100%;
+                height: 100%;
+
+                panel-backdrop := TouchArea {
+                    clicked => { root.navigation-workspace-panel-dismiss(); }
+                }
+
+                WorkspacePanel {
+                    x: 0;
+                    y: 0;
+                    height: parent.height;
+                    workspace-clicked(id) => { root.workspace-clicked(id); }
+                    dismiss => { root.navigation-workspace-panel-dismiss(); }
+                }
+            }
+
+            if NavigationGlobal.notification-center-visible: Rectangle {
+                width: 100%;
+                height: 100%;
+
+                TouchArea {
+                    clicked => { root.notification-center-dismiss(); }
+                }
+
+                NotificationCenter {
+                    x: parent.width - self.width;
+                    y: 0;
+                    height: parent.height;
+                    dismiss => { root.notification-center-dismiss(); }
+                }
             }
 
             if CommandPaletteGlobal.visible: Rectangle {
@@ -419,9 +473,19 @@ export component MainWindow inherits Window {
                     section-selected(idx) => {
                         root.settings-section-selected(idx);
                     }
+                    field-changed(section, key, value) => {
+                        root.settings-field-changed(section, key, value);
+                    }
                 }
             }
         }
+    }
+
+    if OnboardingGlobal.overlay-visible: OnboardingOverlay {
+        next-clicked => { root.onboarding-next-clicked(); }
+        back-clicked => { root.onboarding-back-clicked(); }
+        skip-clicked => { root.onboarding-skip-clicked(); }
+    }
     }
 }
 

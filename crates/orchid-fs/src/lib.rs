@@ -27,7 +27,7 @@ pub use entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
 pub use error::{FsError, Result};
 pub use managed::{
     ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
-    ManagedFolderConfig, ManagedFolderEngine, ManagedFolderStats,
+    ManagedFolderConfig, ManagedFolderEngine, ManagedFolderPolicy, ManagedFolderStats,
 };
 pub use mime::guess_mime;
 pub use operations::{

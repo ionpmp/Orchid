@@ -53,6 +53,12 @@ pub struct ManagedFolderSidebarPayload {
     pub path: String,
     pub files_tracked: u32,
     pub dedup_bytes: u64,
+    /// Configured chunk-store quota (`None` = unlimited).
+    pub policy_max_bytes: Option<u64>,
+    /// Retention window in days (`None` = keep forever).
+    pub policy_retention_days: Option<u32>,
+    /// Number of exclude glob patterns.
+    pub policy_exclude_count: u32,
 }
 
 /// One pane (left or right) with its tabs.

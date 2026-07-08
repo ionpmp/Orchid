@@ -1,0 +1,478 @@
+# Orchid Japanese (ja-JP) message catalog.
+#
+# Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
+# the built-in widgets fall back to the English strings baked into their
+# Rust code — the keys below mirror those defaults and will become the
+# single source of truth once the bundle loader is wired up.
+
+# ---- Widget registry metadata ----
+widget-terminal-name = ターミナル
+widget-terminal-desc = ローカル、WSL、SSH シェル（PTY、ANSI カラー、スクロールバック対応）
+
+widget-weather-name = 天気
+widget-weather-desc = 現在の天候と 3 日間の予報
+
+widget-moon-name = 月
+widget-moon-desc = 現在の月相、月の出/月の入り、天体データ
+
+widget-system-name = システム
+widget-system-desc = CPU、メモリ、ディスク、ネットワーク、バッテリーの表示
+
+widget-rss-name = ニュース
+widget-rss-desc = RSS および Atom ニュースフィード
+
+widget-recent-files-name = 最近のファイル
+widget-recent-files-desc = Orchid で最近開いたファイル
+
+widget-search-name = ユニバーサル検索
+widget-search-desc = ファイル検索、コマンド実行、設定を開く
+
+widget-media-name = メディアプレーヤー
+widget-media-desc = 再生中のメディアと再生コントロール
+
+widget-password-name = パスワード
+widget-password-desc = パスワードデータベースにアクセス
+
+widget-viewer-name = ビューア
+widget-viewer-desc = 画像、ドキュメント、ソースファイル、アーカイブを表示
+
+# ---- Weather ----
+weather-condition-clear = 快晴
+weather-condition-partly-cloudy = 晴れ時々曇り
+weather-condition-cloudy = 曇り
+weather-condition-overcast = くもり
+weather-condition-fog = 霧
+weather-condition-drizzle = 霧雨
+weather-condition-rain = 雨
+weather-condition-snow = 雪
+weather-condition-sleet = みぞれ
+weather-condition-thunderstorm = 雷雨
+weather-condition-hail = 雹
+weather-condition-windy = 風
+weather-condition-unknown = 不明
+weather-day-today = 今日
+weather-day-tomorrow = 明日
+weather-status-fresh = 最新
+weather-status-stale = データが古い可能性があります
+weather-status-offline = オフライン
+weather-status-error = 天気の読み込みエラー
+weather-updated-just-now = たった今更新
+weather-updated-minutes = { $m } 分前に更新
+weather-updated-hours = { $h } 時間前に更新
+weather-updated-days = { $d } 日前に更新
+weather-loading = 天気を読み込み中…
+weather-feels-like = 体感 { $temp }
+weather-humidity-label = 湿度
+weather-wind-label = 風
+
+# ---- Moon ----
+moon-phase-new = 新月
+moon-phase-waxing-crescent = 三日月
+moon-phase-first-quarter = 上弦の月
+moon-phase-waxing-gibbous = 十三夜月
+moon-phase-full = 満月
+moon-phase-waning-gibbous = 寝待月
+moon-phase-last-quarter = 下弦の月
+moon-phase-waning-crescent = 有明の月
+moon-illumination = { $pct }% 照度
+moon-age = 月齢: { $days } 日
+moon-distance = 距離: { $km } km
+moon-next-full = 次の満月: { $date }
+moon-next-new = 次の新月: { $date }
+moon-moonrise = 月の出: { $time }
+moon-moonset = 月の入り: { $time }
+moon-sunrise = 日の出: { $time }
+moon-sunset = 日の入り: { $time }
+moon-libration = Libration: { $lat }°, { $lon }°
+moon-loading = 月のデータを計算中…
+
+# ---- System ----
+system-cpu-label = CPU
+system-memory-label = メモリ
+system-disk-label = ディスク { $mount }
+system-network-label = ネットワーク { $name }
+system-battery-label = バッテリー
+system-uptime-label = 稼働時間
+system-battery-charging = 充電中
+system-battery-time-remaining = 残り { $time }
+system-network-rate = ↑ { $up }/s  ↓ { $down }/s
+system-loading = システムメトリクスを読み込み中…
+
+# ---- RSS ----
+rss-no-feeds = フィードが設定されていません
+rss-loading = ニュースを読み込み中…
+rss-fetch-failed = フィードを読み込めませんでした。接続を確認して再試行してください。
+rss-empty = 設定されたフィードにまだ項目がありません。
+recent-files-empty = 最近のファイルはまだありません。ビューアまたはファイルマネージャーでファイルを開くとここに表示されます。
+rss-error-summary = { $total } 件中 { $n } 件のフィードの更新に失敗
+rss-item-published-minutes = { $m } 分前
+rss-item-published-hours = { $h } 時間前
+rss-item-published-days = { $d } 日前
+
+# ---- Universal Search ----
+search-placeholder = ファイル、コマンド、設定を検索…
+search-empty-state = 入力して検索を開始
+search-no-results = 「{ $query }」の結果はありません
+search-no-results-short = 結果なし
+search-searching = 検索中…
+search-source-files = ファイル
+search-source-commands = コマンド
+search-source-settings = 設定
+
+# ---- Command palette ----
+command-palette-placeholder = コマンドを実行…
+command-palette-empty = すべてのコマンド
+
+# ---- Registered commands ----
+command.widget.create.name = ウィジェットを作成
+command.widget.create.desc = ワークスペースに新しいウィジェットを追加
+command.widget.create.arg.type = ウィジェットタイプ ID（例: terminal, weather）
+
+command.widget.close.name = ウィジェットを閉じる
+command.widget.close.desc = ウィジェットインスタンスを閉じる
+
+command.widget.move.name = ウィジェットを移動
+command.widget.resize.name = ウィジェットのサイズ変更
+command.widget.focus_next.name = 次のウィジェットにフォーカス
+command.widget.show_all.name = すべてのウィジェットを表示
+command.widget.group.dissolve.name = ウィジェットグループを解除
+
+command.workspace.create.name = ワークスペースを作成
+command.workspace.delete.name = ワークスペースを削除
+command.workspace.switch_to.name = ワークスペースに切り替え
+command.workspace.switch_next.name = 次のワークスペース
+command.workspace.switch_previous.name = 前のワークスペース
+
+command.terminal.split_horizontal.name = ターミナルを水平分割
+command.terminal.split_vertical.name = ターミナルを垂直分割
+command.terminal.tab_new.name = 新しいターミナルタブ
+command.terminal.close.name = ターミナルペインまたはタブを閉じる
+command.terminal.focus_next_pane.name = 次のターミナルペインにフォーカス
+command.terminal.focus_previous_pane.name = 前のターミナルペインにフォーカス
+command.terminal.tab_next.name = 次のターミナルタブ
+command.terminal.tab_previous.name = 前のターミナルタブ
+
+# ---- Settings (universal search) ----
+settings.section.general = 一般
+settings.section.appearance = 外観
+settings.section.input = 入力
+settings.section.shortcuts = ショートカット
+settings.section.locale = 言語
+settings.section.privacy = プライバシー
+
+# ---- Settings panel ----
+settings-panel-title = 設定
+settings-panel-hint = 値は現在読み取り専用です。config.toml を直接編集してください。変更は自動的に再読み込みされます。
+settings-panel-coming-soon = このセクションの完全な設定エディターはまだ利用できません。当面は config.toml を直接編集してください。
+settings-panel-ok = 閉じる
+
+settings-value-yes = はい
+settings-value-no = いいえ
+settings-value-none = なし
+settings-value-default = デフォルト
+settings-value-disabled = 無効
+settings-value-system-default = システムデフォルト
+settings-value-hand-left = 左
+settings-value-hand-right = 右
+settings-value-pen-double-tap-none = なし
+settings-value-pen-double-tap-switch-tool = ツール切替
+settings-value-pen-double-tap-erase = 消去
+settings-value-sunday = 日曜日
+settings-value-monday = 月曜日
+
+settings-field-auto-update = 自動更新
+settings-field-telemetry = テレメトリ
+settings-field-open-on-startup = 起動時に開く
+settings-field-theme = テーマ
+settings-field-density = 密度
+settings-field-font-family = フォントファミリー
+settings-field-font-scale = フォントスケール
+settings-field-reduce-motion = モーションを減らす
+settings-field-follow-system-theme = システムテーマに従う
+settings-field-dark-theme = ダークテーマ
+settings-field-light-theme = ライトテーマ
+settings-field-primary-hand = 利き手
+settings-field-mirror-edge-swipes = 端のスワイプを反転
+settings-field-haptic-feedback = 触覚フィードバック
+settings-field-palm-rejection = 手のひら拒否
+settings-field-pen-double-tap = ペンのダブルタップ
+settings-field-shortcut-overrides = ショートカットの上書き
+settings-field-leader-key = リーダーキー
+settings-field-leader-timeout = リーダータイムアウト
+settings-field-leader-bindings = リーダーバインディング
+settings-field-language = 言語
+settings-field-date-format = 日付形式
+settings-field-time-format = 時刻形式
+settings-field-first-day-of-week = 週の最初の日
+settings-field-record-action-history = アクション履歴を記録
+settings-field-history-retention-days = 履歴保持（日）
+settings-field-clear-clipboard-seconds = コピー後にクリップボードをクリア
+
+command.settings.open.name = 設定を開く
+command.settings.open.desc = 設定パネルを表示
+command.password.lock.name = パスワード保管庫をロック
+command.password.lock.desc = ロック解除されたパスワードデータベースをメモリから消去
+
+# ---- Terminal tab bar ----
+terminal-tooltip-split-h = 水平分割 (Ctrl+Shift+H)
+terminal-tooltip-split-v = 垂直分割 (Ctrl+Shift+J)
+terminal-tooltip-tab-new = 新しいタブ (Ctrl+Shift+T)
+
+# ---- Media player ----
+media-no-session = 再生中のメディアはありません
+media-loading = メディアを読み込み中…
+media-unsupported = このプラットフォームではメディアコントロールは利用できません
+media-play = 再生
+media-pause = 一時停止
+media-next = 次へ
+media-previous = 前へ
+
+# ---- Password manager ----
+password-locked = データベースはロックされています
+password-unlock-label = マスターパスワード
+password-unlock-placeholder = マスターパスワードを入力
+password-unlock-submit = ロック解除
+password-unlock-biometric = Windows Hello
+password-unlock-biometric-prompt = パスワード保管庫のロック解除
+password-search-placeholder = エントリを検索…
+password-no-entries = エントリはまだありません
+password-copy-password = パスワードをコピー
+password-copy-username = ユーザー名をコピー
+password-copy-totp = TOTP をコピー
+password-open-url = URL を開く
+password-password-copied = パスワードをコピーしました（30 秒後に消去）
+password-totp-copied = TOTP をコピーしました（30 秒後に消去）
+password-totp-remaining = { $s } 秒
+
+
+# ==== Viewer widget ====
+widget-viewer-name = ビューア
+widget-viewer-desc = ファイルを開く: 画像、PDF、テキスト、アーカイブ
+viewer-loading = 読み込み中…
+viewer-error = このファイルを表示できません
+viewer-unsupported = サポートされていないファイル形式
+viewer-image-fit-screen = 画面に合わせる
+viewer-image-actual-size = 実際のサイズ
+viewer-image-rotate = 回転
+viewer-image-flip-h = 左右反転
+viewer-image-flip-v = 上下反転
+viewer-pdf-page-of = { $total } ページ中 { $current } ページ
+viewer-pdf-fit-width = 幅に合わせる
+viewer-pdf-fit-page = ページに合わせる
+viewer-text-read-only = 読み取り専用
+viewer-text-editing = 編集中
+viewer-text-save = 保存
+viewer-text-dirty-indicator = 未保存の変更
+viewer-archive-extract-all = すべて展開
+viewer-archive-extract-selected = 選択項目を展開
+viewer-archive-preview-binary = バイナリファイル、{ $size }
+
+# ==== File manager widget ====
+widget-fm-name = ファイル
+widget-fm-desc = ファイルの参照、整理、管理
+fm-nav-back = 戻る
+fm-nav-forward = 進む
+fm-nav-up = 上へ
+fm-nav-home = ホーム
+fm-view-icons = アイコン
+fm-view-list = リスト
+fm-view-details = 詳細
+fm-view-gallery = ギャラリー
+fm-sort-name = 名前
+fm-sort-size = サイズ
+fm-sort-modified = 更新日時
+fm-sort-type = 種類
+fm-action-open = 開く
+fm-action-open-all = すべて開く
+fm-action-open-with = プログラムから開く…
+fm-action-open-default = デフォルトアプリで開く
+fm-action-open-in-viewer = Orchid Viewer で開く
+fm-action-copy = コピー
+fm-action-cut = 切り取り
+fm-action-paste = 貼り付け
+fm-action-rename = 名前を変更
+fm-action-delete = 削除
+fm-action-new-folder = 新しいフォルダー
+fm-action-new-tab = 新しいタブ
+fm-action-close-tab = タブを閉じる
+fm-action-select-all = すべて選択
+fm-action-deselect-all = 選択を解除
+fm-action-star = スター
+fm-action-unstar = スターを解除
+fm-action-encrypt = 暗号化
+fm-action-reveal = 一時的に表示
+fm-action-decrypt = 復号
+fm-action-add-tag = タグを追加…
+fm-action-remove-tag = タグを削除
+fm-action-color-label = カラーラベル
+fm-color-red = 赤
+fm-color-orange = オレンジ
+fm-color-yellow = 黄
+fm-color-green = 緑
+fm-color-blue = 青
+fm-color-purple = 紫
+fm-color-gray = 灰
+fm-color-none = 色なし
+fm-action-properties = プロパティ
+fm-action-add-to-managed = 管理フォルダーに追加
+fm-action-remove-from-managed = 管理フォルダーから削除
+fm-rename-title = 名前を変更
+fm-rename-ok = OK
+fm-rename-cancel = キャンセル
+fm-dual-pane-on = デュアルペイン
+fm-dual-pane-off = シングルペイン
+fm-show-hidden-on = 隠しファイルを表示
+fm-show-hidden-off = 隠しファイルを非表示
+fm-click-single-on = シングルクリックで開く
+fm-click-single-off = ダブルクリックで開く
+fm-encrypt-title = パスフレーズで暗号化
+fm-reveal-title = 表示するパスフレーズを入力
+fm-decrypt-title = 復号するパスフレーズを入力
+fm-info-close = 閉じる
+fm-properties-title = プロパティ
+fm-tag-add-title = タグを追加
+fm-confirm-delete = { $n } 項目を削除しますか？
+fm-confirm-delete-permanent = { $n } 項目を完全に削除しますか？
+fm-status-items = { $n } 項目
+fm-status-selected = { $n } 件選択
+fm-status-total-size = { $size }
+fm-status-bar = { $items } 項目、{ $selected } 件選択
+fm-status-managed = { $items } 項目、{ $selected } 件選択 · { $tracked } 取り込み、{ $dedup } 重複排除
+fm-encrypted = 暗号化済み: { $name }
+fm-decrypted = 復号済み: { $name }
+fm-managed-added = 管理フォルダーに追加しました
+fm-managed-removed = 管理フォルダーから削除しました
+fm-encryption-unavailable = 暗号化は利用できません
+fm-passphrase-failed = パスフレーズ失敗: { $reason }
+fm-passphrase-invalid = 無効なパスフレーズ
+fm-passphrase-required = パスフレーズが必要です
+fm-decryption-failed = 復号に失敗しました
+fm-passphrase-encrypt-hint = 強力なパスフレーズを選択してください。紛失した場合は復元できません。
+fm-passphrase-decrypt-hint = これらのファイルの暗号化に使用したパスフレーズを入力してください。
+fm-passphrase-reveal-hint = ファイルは表示のために一時的な場所に復号されます。
+fm-passphrase-biometric = Windows Hello
+fm-passphrase-biometric-prompt = 暗号化ファイルのロック解除
+fm-revealed = 表示: { $name }
+fm-managed-unavailable = 管理フォルダーは利用できません
+fm-managed-no-selection = 管理フォルダーに追加するフォルダーを選択してください
+fm-not-managed-folder = 管理フォルダーではありません
+fm-managed-conflict = 管理フォルダーの競合
+fm-sidebar-managed-folder = { $name }（{ $count } ファイル、{ $dedup } 節約）
+fm-ingest-failed = 取り込み失敗: { $name }
+fm-quick-filter-placeholder = フィルター…
+fm-sidebar-favorites = お気に入り
+fm-sidebar-categories = カテゴリー
+fm-sidebar-managed = 管理フォルダー
+fm-network-placeholder = ネットワークマウントはまだ設定されていません。rclone 経由の SFTP、SMB、WebDAV サポートは予定されています。
+fm-network-no-provider = このネットワーク場所に登録されたファイルシステムプロバイダーがありません。
+fm-network-rclone-missing = rclone がインストールされていないか PATH にありません。必要に応じて RCLONE_BIN を設定してください。
+fm-network-invalid-mount = このネットワークマウントの設定が正しくありません。config.toml の名前と URI を確認してください。
+fm-network-auth-failed = 認証に失敗しました。config.toml のユーザー名とパスワードを確認してください。
+fm-network-permission-denied = このネットワーク場所へのアクセスが拒否されました。
+fm-network-connection-failed = ネットワークホストに接続できませんでした。URI とネットワークを確認してください。
+fm-ingested = 取り込み済み: { $name }
+fm-ingesting = 取り込み中: { $name }（{ $count } 件アクティブ）
+fm-ingesting-count = { $count } ファイルを取り込み中…
+fm-copying = コピー中: { $name }（{ $percent }%）
+fm-moving = 移動中: { $name }（{ $percent }%）
+fm-transfer-failed = 転送失敗: { $reason }
+fm-transfer-already-exists = その名前のファイルは既に存在します
+fm-transfer-virtual-dest = 仮想フォルダーにはコピーまたは移動できません
+fm-clipboard-copy = { $count } 件を貼り付け可能
+fm-clipboard-cut = { $count } 件（切り取り）を貼り付け可能
+fm-sidebar-tags = タグ
+fm-sidebar-recent = 最近
+fm-sidebar-network = ネットワーク
+fm-sidebar-network-all = すべての場所
+fm-category-images = 画像
+fm-category-documents = ドキュメント
+fm-category-video = 動画
+fm-category-audio = 音声
+fm-category-archives = アーカイブ
+fm-virtual-recent = 最近
+fm-virtual-starred = スター付き
+fm-virtual-tags = タグ
+fm-virtual-recent-empty = 最近のファイルはまだありません。ファイルを開くとここに表示されます。
+fm-virtual-starred-empty = スター付きファイルはまだありません。コンテキストメニューからスターを付けてください。
+fm-virtual-tags-empty = タグ付きファイルはまだありません。コンテキストメニューからタグを追加してください。
+fm-virtual-category-empty = このカテゴリーに一致するファイルが見つかりません。
+fm-virtual-create-denied = 仮想の場所ではフォルダーを作成できません
+fm-empty-folder = このフォルダーは空です
+fm-error-access = この場所にアクセスできません
+
+
+# ==== Startup shell (task 11A) ====
+window-title = Orchid
+startup-welcome = Orchid へようこそ
+startup-subtitle = タッチファーストのコンピューティング環境
+startup-version-label = バージョン { $version }
+status-theme = テーマ:
+status-language = 言語:
+status-density = 密度:
+density-touch = タッチ
+density-mouse = マウス
+density-hybrid = ハイブリッド
+
+# ---- Workspace shell (task 11B) ----
+startup-get-started = はじめる
+workspace-default-name = メイン
+workspace-new = 新しいワークスペース
+workspace-unnamed = ワークスペース { $n }
+dock-add-label = ウィジェットを追加
+catalog-title = ウィジェットカタログ
+catalog-search-placeholder = ウィジェットを検索…
+dock-widget-terminal = ターミナル
+dock-widget-weather = 天気
+dock-widget-moon = 月
+dock-widget-system = システム
+dock-widget-rss = ニュース
+dock-widget-recent-files = 最近
+dock-widget-search = 検索
+dock-widget-media = メディア
+dock-widget-password = パスワード
+dock-widget-viewer = ビューア
+dock-widget-fm = ファイル
+
+viewer-no-file = ファイルが開かれていません
+viewer-loading-path = 読み込み中: { $path }
+viewer-error-with-reason = このファイルを表示できません: { $reason }
+viewer-pdf-unavailable = このビルドでは PDF サポートは利用できません。
+viewer-archive-select-preview = プレビューするファイルを選択
+viewer-archive-binary-preview = バイナリファイル、{ $size }
+
+password-select-entry = エントリを選択
+password-label-title = タイトル
+password-label-username = ユーザー名
+password-label-password = パスワード
+password-label-url = URL
+password-label-notes = メモ
+password-label-totp = TOTP
+password-action-copy = コピー
+password-action-open = 開く
+password-action-lock = ロック
+password-action-add = 追加
+password-add-title = 新しいエントリ
+password-add-submit = 保存
+password-add-cancel = キャンセル
+password-add-error-title = タイトルは必須です
+password-entry-added = エントリを保存しました
+
+password-username-copied = ユーザー名をコピーしました
+
+moon-age-label = 月齢
+moon-distance-label = 距離
+moon-next-full-label = 次の満月
+moon-next-new-label = 次の新月
+moon-moonrise-label = 月の出
+moon-moonset-label = 月の入り
+moon-sunrise-label = 日の出
+moon-sunset-label = 日の入り
+moon-libration-label = Libration
+
+widget-title-terminal = ターミナル
+widget-close-tooltip = ウィジェットを閉じる
+widget-close-confirm = { $name } を閉じますか？
+action-confirm-yes = はい
+action-confirm-no = いいえ
+
+fm-confirm-title = 確認

@@ -14,8 +14,8 @@ pub mod watcher;
 pub use loader::{ConfigLoader, DEFAULT_CONFIG_TOML};
 pub use schema::{
     AppearanceConfig, Density, FileManagerSectionConfig, GeneralConfig, Hand, InputConfig,
-    LocaleConfig, NetworkMountConfig, OrchidConfig, PenDoubleTapAction, PrivacyConfig,
-    ShortcutsConfig,
+    LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig, PenDoubleTapAction,
+    PrivacyConfig, ShortcutsConfig,
 };
 pub use watcher::ConfigWatcher;
 

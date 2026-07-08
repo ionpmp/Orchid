@@ -1,11 +1,12 @@
 //! Theme manager + design-token types.
 //!
-//! Two themes are bundled — `orchid-dark` (default) and `orchid-light`.
-//! Additional themes may be dropped as JSON files under
-//! `paths.themes_dir`; the manager loads them on construction but this
-//! task defers the actual loader to a future pass (only the bundled
-//! pair is required for the startup window to look right).
+//! Nine colour themes are bundled: the default Orchid pair plus Solarized,
+//! Nord, Catppuccin, and high-contrast variants. Additional themes may be
+//! installed as JSON files under [`paths.themes_dir`](orchid_storage::paths::OrchidPaths::themes_dir);
+//! they are loaded when [`ThemeManager::new`] is constructed.
 
+pub mod bundled;
+pub mod loader;
 pub mod tokens;
 
 use std::path::PathBuf;
@@ -14,6 +15,10 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 
 use crate::error::{Result, UiError};
+pub use loader::{
+    ColorTokensJson, DesignTokensJson, HexColor, ThemeDocument, ThemeMetaJson,
+    load_themes_from_dir,
+};
 pub use tokens::{
     Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, TypographyTokens,
 };
@@ -52,19 +57,28 @@ impl std::fmt::Debug for ThemeManager {
 }
 
 impl ThemeManager {
-    /// Build a manager seeded with the bundled dark + light themes.
-    /// `extra_dir` is reserved for future external theme loaders.
+    /// Build a manager seeded with all bundled themes.
+    ///
+    /// When `extra_dir` is set, every valid `.json` file in that directory is
+    /// appended to the registry (invalid files are skipped with a warning).
     ///
     /// # Errors
     ///
-    /// Currently infallible; the `Result` wrapper is kept so the future
-    /// disk loader can propagate IO errors without an API break.
+    /// Currently infallible; the `Result` wrapper is kept so the disk loader
+    /// can propagate IO errors without an API break.
     pub fn new(extra_dir: Option<PathBuf>) -> Result<Self> {
-        let dark = bundled_dark_theme();
-        let light = bundled_light_theme();
-        let current = Arc::new(dark.clone());
+        let mut themes = bundled::all_bundled_themes();
+        if let Some(ref dir) = extra_dir {
+            themes.extend(loader::load_themes_from_dir(dir));
+        }
+        let dark = themes
+            .iter()
+            .find(|t| t.meta.id == "orchid-dark")
+            .cloned()
+            .expect("bundled orchid-dark theme");
+        let current = Arc::new(dark);
         Ok(Self {
-            themes: RwLock::new(vec![dark, light]),
+            themes: RwLock::new(themes),
             current: RwLock::new(current),
             extra_dir,
         })
@@ -99,57 +113,10 @@ impl ThemeManager {
     }
 }
 
-fn bundled_dark_theme() -> Theme {
-    Theme {
-        meta: ThemeMeta {
-            id: "orchid-dark".into(),
-            display_name: "Orchid Dark".into(),
-            is_dark: true,
-        },
-        tokens: DesignTokens {
-            color: ColorTokens {
-                surface_base: Color::rgb(0x17, 0x18, 0x1E),
-                surface_raised: Color::rgb(0x20, 0x22, 0x2A),
-                text_primary: Color::rgb(0xEB, 0xEC, 0xF0),
-                text_secondary: Color::rgb(0xAE, 0xB0, 0xBC),
-                text_tertiary: Color::rgb(0x80, 0x84, 0x94),
-                accent_brand: Color::rgb(0xC4, 0x9B, 0xE6),
-                border_default: Color::rgba(0xFF, 0xFF, 0xFF, 0x14),
-            },
-            typography: TypographyTokens::default(),
-            radius: RadiusTokens::default(),
-            spacing: SpacingTokens::default(),
-        },
-    }
-}
-
-fn bundled_light_theme() -> Theme {
-    Theme {
-        meta: ThemeMeta {
-            id: "orchid-light".into(),
-            display_name: "Orchid Light".into(),
-            is_dark: false,
-        },
-        tokens: DesignTokens {
-            color: ColorTokens {
-                surface_base: Color::rgb(0xF6, 0xF6, 0xFA),
-                surface_raised: Color::rgb(0xFF, 0xFF, 0xFF),
-                text_primary: Color::rgb(0x1A, 0x1B, 0x22),
-                text_secondary: Color::rgb(0x49, 0x4B, 0x58),
-                text_tertiary: Color::rgb(0x6D, 0x70, 0x7C),
-                accent_brand: Color::rgb(0x7A, 0x4E, 0xA8),
-                border_default: Color::rgba(0, 0, 0, 0x14),
-            },
-            typography: TypographyTokens::default(),
-            radius: RadiusTokens::default(),
-            spacing: SpacingTokens::default(),
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use loader::ThemeDocument;
 
     #[test]
     fn default_is_dark() {
@@ -162,6 +129,59 @@ mod tests {
         let mgr = ThemeManager::new(None).unwrap();
         mgr.set_current("orchid-light").unwrap();
         assert!(!mgr.current().meta.is_dark);
+    }
+
+    #[test]
+    fn set_current_nord_dark() {
+        let mgr = ThemeManager::new(None).unwrap();
+        mgr.set_current("nord-dark").unwrap();
+        assert_eq!(mgr.current().meta.id, "nord-dark");
+        assert!(mgr.current().meta.is_dark);
+        assert_eq!(
+            mgr.current().tokens.color.surface_base,
+            Color::rgb(0x2E, 0x34, 0x40)
+        );
+    }
+
+    #[test]
+    fn list_includes_all_bundled_themes() {
+        let mgr = ThemeManager::new(None).unwrap();
+        assert!(mgr.list().len() >= 9);
+        let ids: Vec<_> = mgr.list().into_iter().map(|m| m.id).collect();
+        for expected in [
+            "orchid-dark",
+            "orchid-light",
+            "solarized-dark",
+            "solarized-light",
+            "nord-dark",
+            "catppuccin-mocha",
+            "catppuccin-latte",
+            "high-contrast-dark",
+            "high-contrast-light",
+        ] {
+            assert!(ids.contains(&expected.to_string()), "missing {expected}");
+        }
+    }
+
+    #[test]
+    fn json_loader_round_trip() {
+        let source = bundled::solarized_dark_theme();
+        let doc = ThemeDocument::from(&source);
+        let json = serde_json::to_string_pretty(&doc).unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("solarized.json"), &json).unwrap();
+
+        let loaded = load_themes_from_dir(dir.path());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].meta.id, "solarized-dark");
+        assert_eq!(loaded[0].tokens.color, source.tokens.color);
+
+        let re_doc = ThemeDocument::from(&loaded[0]);
+        let re_json = serde_json::to_string(&re_doc).unwrap();
+        let parsed: ThemeDocument = serde_json::from_str(&re_json).unwrap();
+        assert_eq!(parsed.meta.id, source.meta.id);
+        assert_eq!(parsed.tokens.color.surface_base.0, source.tokens.color.surface_base);
     }
 
     #[test]

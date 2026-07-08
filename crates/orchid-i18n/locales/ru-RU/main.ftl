@@ -208,6 +208,9 @@ command.settings.open.desc = Показать панель настроек
 command.password.lock.name = Заблокировать хранилище паролей
 command.password.lock.desc = Очистить разблокированную базу паролей из памяти
 
+command.onboarding.toggle_hint_mode.name = Режим подсказок
+command.onboarding.toggle_hint_mode.desc = Показать или скрыть подсказки жестов на рабочем столе
+
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Разделить горизонтально (Ctrl+Shift+H)
 terminal-tooltip-split-v = Разделить вертикально (Ctrl+Shift+J)
@@ -408,6 +411,29 @@ density-hybrid = Смешанная
 
 # ---- Workspace shell (task 11B) ----
 startup-get-started = Начать работу
+
+# ---- Onboarding tour ----
+onboarding-back = Назад
+onboarding-next = Далее
+onboarding-skip = Пропустить тур
+onboarding-finish = Начать
+
+onboarding-step-welcome-title = Добро пожаловать в Orchid
+onboarding-step-welcome-body = Orchid — среда для сенсорных устройств, где жесты, команды и виджеты — три формы одного действия. Этот короткий тур покажет основы.
+
+onboarding-step-workspace-title = Рабочее пространство
+onboarding-step-workspace-body = Переключайте пространства сверху, размещайте виджеты на холсте и добавляйте новые с панели внизу.
+
+onboarding-step-palette-title = Палитра команд
+onboarding-step-palette-body = Нажмите Ctrl+Shift+P, чтобы выполнить любую команду. У каждой записи указано сочетание клавиш.
+
+onboarding-step-gestures-title = Жесты и подсказки
+onboarding-step-gestures-body = Проведите от края экрана, чтобы открыть панели и док. Нажмите Win+?, чтобы включить режим подсказок.
+
+onboarding-hint-workspace = Проведите от левого края — панель пространств
+onboarding-hint-dock = Проведите снизу вверх — док виджетов
+onboarding-hint-gestures = Win+? переключает подсказки
+
 workspace-default-name = Главный
 workspace-new = Новый рабочий стол
 workspace-unnamed = Рабочий стол { $n }

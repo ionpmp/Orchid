@@ -3,6 +3,7 @@
 pub mod aggregator;
 pub mod sources;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -29,6 +30,48 @@ pub use sources::{ActionTarget, CommandsSource, FilesSource, SearchCandidate, Se
 /// without holding `Arc<UniversalSearchWidget>`).
 static SEARCH_LIVE: LazyLock<DashMap<Uuid, Arc<Inner>>> = LazyLock::new(DashMap::new);
 
+/// Cumulative [`universal_search_push_query`] calls where the instance was not in [`SEARCH_LIVE`].
+static SEARCH_LIVE_MISS_COUNT: AtomicU64 = AtomicU64::new(0);
+/// Milliseconds since UNIX epoch when we last emitted a rate-limited mismatch warn.
+static SEARCH_LIVE_MISS_LAST_WARN_MS: AtomicU64 = AtomicU64::new(0);
+
+const SEARCH_LIVE_MISS_WARN_INTERVAL_MS: u64 = 30_000;
+const SEARCH_LIVE_MISS_WARN_EVERY_N: u64 = 100;
+
+fn now_epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn record_search_live_miss(instance_id: Uuid) {
+    let count = SEARCH_LIVE_MISS_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+    let now = now_epoch_ms();
+    let last_warn = SEARCH_LIVE_MISS_LAST_WARN_MS.load(Ordering::Relaxed);
+    let periodic = count == 1 || count % SEARCH_LIVE_MISS_WARN_EVERY_N == 0;
+    let timed = now.saturating_sub(last_warn) >= SEARCH_LIVE_MISS_WARN_INTERVAL_MS;
+    if periodic || timed {
+        SEARCH_LIVE_MISS_LAST_WARN_MS.store(now, Ordering::Relaxed);
+        let suppressed = count.saturating_sub(1) % SEARCH_LIVE_MISS_WARN_EVERY_N;
+        warn!(
+            target: "orchid_widgets::search",
+            %instance_id,
+            miss_count = count,
+            suppressed_since_last_warn = suppressed,
+            "universal_search_push_query: instance not in SEARCH_LIVE (widget closed or not yet activated)"
+        );
+    }
+}
+
+/// Total number of [`universal_search_push_query`] calls for unknown / closed instances.
+///
+/// Useful when diagnosing UI instance-id mismatches (see `docs/universal-search-issue.md`).
+#[must_use]
+pub fn universal_search_live_miss_count() -> u64 {
+    SEARCH_LIVE_MISS_COUNT.load(Ordering::Relaxed)
+}
+
 /// Push a query update into the widget debouncer for `instance_id`.
 ///
 /// Restarts the debouncer when it was stopped (e.g. after close). No-op when
@@ -40,15 +83,7 @@ pub fn universal_search_push_query(instance_id: Uuid, query: String) {
         inner.ensure_debouncer_running();
         inner.notify.notify_one();
     } else {
-        // TODO(search): If this triggers frequently, the UI is pushing queries for an instance
-        // that is not currently live. Likely causes:
-        // - widget is Sleeping/Unloaded and wasn't re-activated when shown
-        // - instance id mismatch between UI model and widget manager
-        warn!(
-            target: "orchid_widgets::search",
-            %instance_id,
-            "universal_search_push_query: instance not in SEARCH_LIVE (widget closed or not yet activated)"
-        );
+        record_search_live_miss(instance_id);
     }
 }
 

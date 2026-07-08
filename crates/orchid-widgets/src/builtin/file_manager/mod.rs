@@ -102,6 +102,11 @@ pub enum ActionOutcome {
         paths: Vec<String>,
         purpose: PassphrasePurpose,
     },
+    /// Show read-only managed-folder policy for `path`.
+    NeedsManagedPolicy {
+        path: String,
+        policy: Option<orchid_fs::ManagedFolderPolicy>,
+    },
 }
 
 /// Why the file manager needs a passphrase from the user.
@@ -181,6 +186,8 @@ struct FileManagerInner {
     managed_roots: RwLock<Vec<String>>,
     /// Cached ingest stats per managed root path.
     managed_stats: RwLock<std::collections::HashMap<String, orchid_fs::ManagedFolderStats>>,
+    /// Cached policy per managed root path.
+    managed_policies: RwLock<std::collections::HashMap<String, Option<orchid_fs::ManagedFolderPolicy>>>,
     /// Last ingested file name shown briefly in the status bar.
     ingest_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Managed ingest operations in progress (across all instances).
@@ -242,6 +249,7 @@ impl FileManagerWidget {
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
                 managed_roots: RwLock::new(Vec::new()),
                 managed_stats: RwLock::new(std::collections::HashMap::new()),
+                managed_policies: RwLock::new(std::collections::HashMap::new()),
                 ingest_notice: RwLock::new(None),
                 ingest_in_flight: AtomicU32::new(0),
                 ingest_current: RwLock::new(None),
@@ -491,10 +499,12 @@ impl FileManagerInner {
     fn managed_folder_payloads(&self) -> Vec<ManagedFolderSidebarPayload> {
         let roots = self.managed_roots.read().clone();
         let stats = self.managed_stats.read();
+        let policies = self.managed_policies.read();
         roots
             .into_iter()
             .map(|path| {
                 let st = stats.get(&path);
+                let policy = policies.get(&path).and_then(|p| p.as_ref());
                 let files_tracked = st.map(|s| s.files_tracked as u32).unwrap_or(0);
                 let dedup_bytes = st
                     .map(|s| s.logical_bytes.saturating_sub(s.physical_bytes))
@@ -503,6 +513,11 @@ impl FileManagerInner {
                     path,
                     files_tracked,
                     dedup_bytes,
+                    policy_max_bytes: policy.and_then(|p| p.max_size_bytes),
+                    policy_retention_days: policy.and_then(|p| p.retention_days),
+                    policy_exclude_count: policy
+                        .map(|p| p.exclude_patterns.len() as u32)
+                        .unwrap_or(0),
                 }
             })
             .collect()
@@ -1357,10 +1372,12 @@ impl FileManagerInner {
     async fn refresh_managed_roots(&self) {
         let mut roots = Vec::new();
         let mut stats = std::collections::HashMap::new();
+        let mut policies = std::collections::HashMap::new();
         if let Some(engine) = self.deps.managed.as_ref() {
             if let Ok(folders) = engine.list_folders().await {
                 for f in folders.into_iter().filter(|f| f.enabled) {
                     let key = f.path.as_str().to_string();
+                    policies.insert(key.clone(), f.policy.clone());
                     roots.push(key.clone());
                     if let Ok(st) = engine.folder_stats(&f.path).await {
                         stats.insert(key, st);
@@ -1370,6 +1387,15 @@ impl FileManagerInner {
         }
         *self.managed_roots.write() = roots;
         *self.managed_stats.write() = stats;
+        *self.managed_policies.write() = policies;
+    }
+
+    fn managed_root_for_path(&self, path: &str) -> Option<String> {
+        self.managed_roots
+            .read()
+            .iter()
+            .find(|root| path.starts_with(root.as_str()))
+            .cloned()
     }
 
     async fn register_managed_folder(&self, folder: &orchid_fs::FsPath) -> WidgetResult<()> {
@@ -1383,6 +1409,7 @@ impl FileManagerInner {
             chunk_size: orchid_crypto::ChunkerConfig::default(),
             enabled: true,
             auto_ingest: true,
+            policy: None,
         };
         engine.add_folder(cfg).await.map_err(map_fs_error)?;
         Ok(())
@@ -1926,6 +1953,9 @@ pub fn context_menu_for(
         tags_on_selection: tag_union.into_iter().take(12).collect(),
         entry_count,
         selection_count,
+        managed_policy_available: target_paths
+            .iter()
+            .any(|p| inner.managed_root_for_path(p).is_some()),
     };
     Ok((build_for_selection(&selected_entries, inputs), target_paths))
 }
@@ -2689,6 +2719,16 @@ pub async fn run_action_with_opts(
             inner.remove_selection_from_managed(&target_paths).await?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
+        }
+        "fs.managed-policy" => {
+            let root = target_paths
+                .iter()
+                .find_map(|p| inner.managed_root_for_path(p))
+                .ok_or_else(|| {
+                    WidgetError::InvalidStateForOperation("not a managed folder".into())
+                })?;
+            let policy = inner.managed_policies.read().get(&root).cloned().flatten();
+            return Ok(ActionOutcome::NeedsManagedPolicy { path: root, policy });
         }
         "fs.decrypt" => {
             if target_paths.is_empty() {

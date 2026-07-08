@@ -4,8 +4,10 @@
 //! supported language and resolves message keys via [`LocaleManager::tr`]
 //! / [`LocaleManager::tr_args`].
 //!
-//! Two locales are bundled at compile time from
-//! `crates/orchid-i18n/locales/`: `en-US` (the fallback) and `ru-RU`.
+//! Eleven locales are bundled at compile time from
+//! `crates/orchid-i18n/locales/`: `en-US` (the fallback), `ru-RU`,
+//! `de-DE`, `fr-FR`, `es-ES`, `it-IT`, `pt-BR`, `ja-JP`, `zh-CN`,
+//! `ko-KR`, and `ar-SA`.
 //! Additional / overriding catalogues may be loaded from a
 //! runtime-configurable directory — see [`LocaleManager::new`].
 //!
@@ -128,6 +130,24 @@ impl std::fmt::Debug for FluentArgs {
 const EN_US_FTL: &str = include_str!("../locales/en-US/main.ftl");
 /// Bundled Russian catalogue.
 const RU_RU_FTL: &str = include_str!("../locales/ru-RU/main.ftl");
+/// Bundled German catalogue.
+const DE_DE_FTL: &str = include_str!("../locales/de-DE/main.ftl");
+/// Bundled French catalogue.
+const FR_FR_FTL: &str = include_str!("../locales/fr-FR/main.ftl");
+/// Bundled Spanish catalogue.
+const ES_ES_FTL: &str = include_str!("../locales/es-ES/main.ftl");
+/// Bundled Italian catalogue.
+const IT_IT_FTL: &str = include_str!("../locales/it-IT/main.ftl");
+/// Bundled Brazilian Portuguese catalogue.
+const PT_BR_FTL: &str = include_str!("../locales/pt-BR/main.ftl");
+/// Bundled Japanese catalogue.
+const JA_JP_FTL: &str = include_str!("../locales/ja-JP/main.ftl");
+/// Bundled Simplified Chinese catalogue.
+const ZH_CN_FTL: &str = include_str!("../locales/zh-CN/main.ftl");
+/// Bundled Korean catalogue.
+const KO_KR_FTL: &str = include_str!("../locales/ko-KR/main.ftl");
+/// Bundled Arabic catalogue.
+const AR_SA_FTL: &str = include_str!("../locales/ar-SA/main.ftl");
 
 /// Resolved message store for all supported languages.
 ///
@@ -159,7 +179,7 @@ impl std::fmt::Debug for LocaleManager {
 
 impl LocaleManager {
     /// Build a manager starting in `initial` language. Always registers
-    /// the bundled `en-US` and `ru-RU` catalogues. If `extra_dir` is
+    /// all eleven bundled catalogues. If `extra_dir` is
     /// provided, overlays `<extra_dir>/<lang>/main.ftl` on top of the
     /// bundled copy (missing files are silently ignored).
     ///
@@ -171,7 +191,19 @@ impl LocaleManager {
     /// break construction.
     pub fn new(initial: LocaleId, extra_dir: Option<PathBuf>) -> Result<Self> {
         let mut bundles = Vec::new();
-        for (tag, source) in [("en-US", EN_US_FTL), ("ru-RU", RU_RU_FTL)] {
+        for (tag, source) in [
+            ("en-US", EN_US_FTL),
+            ("ru-RU", RU_RU_FTL),
+            ("de-DE", DE_DE_FTL),
+            ("fr-FR", FR_FR_FTL),
+            ("es-ES", ES_ES_FTL),
+            ("it-IT", IT_IT_FTL),
+            ("pt-BR", PT_BR_FTL),
+            ("ja-JP", JA_JP_FTL),
+            ("zh-CN", ZH_CN_FTL),
+            ("ko-KR", KO_KR_FTL),
+            ("ar-SA", AR_SA_FTL),
+        ] {
             let locale = LocaleId::parse(tag)?;
             let mut bundle = new_bundle(locale.clone());
             load_into(&mut bundle, source);
@@ -343,5 +375,11 @@ mod tests {
         let mgr = LocaleManager::new(default_language(), None).unwrap();
         mgr.set_current(LocaleId::parse("ru-RU").unwrap());
         assert_eq!(mgr.current().as_str(), "ru-RU");
+    }
+
+    #[test]
+    fn available_locales_returns_all_bundled() {
+        let mgr = LocaleManager::new(default_language(), None).unwrap();
+        assert_eq!(mgr.available_locales().len(), 11);
     }
 }

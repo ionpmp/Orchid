@@ -29,12 +29,13 @@ use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use orchid_core::{
-    ActionContext, ActionDispatcher, CommandDescriptor, CommandPalette, CommandRegistry,
-    ConfigUpdated, Event, EventBus, EventFilter, HandlerPriority, ParsedCommand, Shortcut,
-    SubscriptionHandle,
+    default_bindings, ActionContext, ActionDispatcher, CommandDescriptor, CommandPalette,
+    CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter, GestureConfig,
+    GestureRecognizer, HandlerPriority, InputEvent, InputMapper, ParsedCommand, Point,
+    RecognizedGesture, ScreenBounds, Shortcut, SubscriptionHandle, TouchEvent, TouchPhase,
 };
 use orchid_i18n::{LocaleId, LocaleManager};
-use orchid_storage::{LifecycleState, OrchidConfig, StateStore, WidgetSize};
+use orchid_storage::{ConfigLoader, LifecycleState, OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
 use orchid_terminal::SplitDirection;
 use orchid_terminal::{FontMetrics};
@@ -67,11 +68,13 @@ use crate::slint_generated::{
     TerminalPaneModel, TerminalTabModel,
     Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
-    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmContextSubitem,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmManagedPolicyState,
+    FmManagedPolicyRow, FmContextSubitem,
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
     WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary, CommandPaletteGlobal, SettingsFieldRow, SettingsGlobal,
+    WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, OnboardingGlobal, SettingsFieldRow,
+    SettingsGlobal,
     SettingsSectionEntry,
 };
 use crate::theme::ThemeManager;
@@ -79,9 +82,17 @@ use crate::theme::ThemeManager;
 /// Max command palette hits (fuzzy search or browse).
 const COMMAND_PALETTE_LIMIT: usize = 50;
 
-/// Top switcher (40) + bottom dock (64) = canvas height in [`workspace.slint`].
-const CANVAS_INSET_H: f32 = 40.0 + 64.0;
+/// Top switcher (40) + bottom dock (64 when visible) = canvas height inset in [`workspace.slint`].
 const WORKSPACE_SWITCHER_H: f32 = 40.0;
+const DOCK_H: f32 = 64.0;
+
+const ONBOARDING_STEP_COUNT: i32 = 4;
+const ONBOARDING_STEP_KEYS: [(&str, &str); 4] = [
+    ("onboarding-step-welcome-title", "onboarding-step-welcome-body"),
+    ("onboarding-step-workspace-title", "onboarding-step-workspace-body"),
+    ("onboarding-step-palette-title", "onboarding-step-palette-body"),
+    ("onboarding-step-gestures-title", "onboarding-step-gestures-body"),
+];
 
 const SETTINGS_SECTION_IDS: &[&str] = &[
     "general",
@@ -171,6 +182,10 @@ pub struct MainWindowController {
     config_file_path: PathBuf,
     settings_sections: ModelRc<SettingsSectionEntry>,
     settings_fields: ModelRc<SettingsFieldRow>,
+    navigation: Arc<RwLock<NavigationUiState>>,
+    onboarding: Arc<RwLock<OnboardingUiState>>,
+    gesture_recognizer: Arc<Mutex<GestureRecognizer>>,
+    input_mapper: Arc<InputMapper>,
     recent_files: Arc<RecentFilesStore>,
     password_vault: Arc<orchid_crypto::PasswordVault>,
     fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
@@ -205,6 +220,29 @@ struct PaletteUiState {
 struct SettingsUiState {
     visible: bool,
     section: String,
+}
+
+#[derive(Debug, Clone)]
+struct NavigationUiState {
+    workspace_panel_visible: bool,
+    notification_center_visible: bool,
+    dock_visible: bool,
+}
+
+impl Default for NavigationUiState {
+    fn default() -> Self {
+        Self {
+            workspace_panel_visible: false,
+            notification_center_visible: false,
+            dock_visible: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct OnboardingUiState {
+    overlay_visible: bool,
+    current_step: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -300,6 +338,12 @@ impl MainWindowController {
                 },
             )
             .map_err(|e| UiError::Slint(format!("config reload sub: {e}")))?;
+        let input_mapper = Arc::new(InputMapper::new());
+        input_mapper.set_bindings(default_bindings());
+        let gesture_recognizer = Arc::new(Mutex::new(GestureRecognizer::new(
+            GestureConfig::default(),
+            ScreenBounds::new(800.0, 600.0),
+        )));
         let this = Arc::new(Self {
             window,
             theme,
@@ -354,6 +398,10 @@ impl MainWindowController {
             config_file_path,
             settings_sections,
             settings_fields,
+            navigation: Arc::new(RwLock::new(NavigationUiState::default())),
+            onboarding: Arc::new(RwLock::new(OnboardingUiState::default())),
+            gesture_recognizer,
+            input_mapper,
             recent_files,
             password_vault,
             fm_passphrase_vault,
@@ -363,7 +411,14 @@ impl MainWindowController {
         this.sync_widget_catalog_global();
         this.sync_command_palette_global();
         this.sync_settings_global();
+        this.sync_navigation_global();
         this.apply_initial_mode()?;
+        if !this.config.read().onboarding.completed {
+            let mut ob = this.onboarding.write();
+            ob.overlay_visible = true;
+            ob.current_step = 0;
+        }
+        this.sync_onboarding_global();
         this.wire_callbacks()?;
         Ok(this)
     }
@@ -483,9 +538,14 @@ impl MainWindowController {
         self.apply_strings()?;
         self.apply_app_state_status()?;
         self.sync_widget_catalog_global();
+        if self.config.read().onboarding.completed {
+            self.onboarding.write().overlay_visible = false;
+        }
         if self.settings.read().visible {
             self.sync_settings_global();
         }
+        self.sync_navigation_global();
+        self.sync_onboarding_global();
         self.schedule_rebuild();
         Ok(())
     }
@@ -540,6 +600,15 @@ impl MainWindowController {
         }
     }
 
+    fn canvas_inset_h(&self) -> f32 {
+        WORKSPACE_SWITCHER_H
+            + if self.navigation.read().dock_visible {
+                DOCK_H
+            } else {
+                0.0
+            }
+    }
+
     /// Match [`Self::canvas_size`] to the window client in logical pixels (workspace canvas area).
     /// Slint `changed` on the canvas does not run for the *first* size, so we poll winit on every
     /// `on_ui_tick` and after `show` until the size converges. Returns `true` if the viewport changed.
@@ -551,7 +620,7 @@ impl MainWindowController {
         }
         let sc = win.scale_factor();
         let log = p.to_logical(sc);
-        let next = (log.width, (log.height - CANVAS_INSET_H).max(1.0));
+        let next = (log.width, (log.height - self.canvas_inset_h()).max(1.0));
         let mut cur = self.canvas_size.lock();
         if (cur.0 - next.0).abs() > 0.5 || (cur.1 - next.1).abs() > 0.5 {
             *cur = next;
@@ -573,6 +642,14 @@ impl MainWindowController {
                         }
                     }
                     let canvas_size_mismatch = c.sync_canvas_size_from_winit();
+                    if canvas_size_mismatch {
+                        c.update_gesture_bounds();
+                    }
+                    let gestures = {
+                        let mut rec = c.gesture_recognizer.lock();
+                        rec.tick(Instant::now())
+                    };
+                    c.handle_recognized_gestures(gestures);
                     let scale = c.window.window().scale_factor();
                     let scale_changed = {
                         let mut last = c.last_window_scale.lock();
@@ -736,6 +813,54 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_settings_field_changed({
+            let t = t.clone();
+            move |section, key, value| {
+                if let Some(c) = t.upgrade() {
+                    c.on_settings_field_changed(&section, &key, &value);
+                }
+            }
+        });
+        self.window.on_navigation_workspace_panel_dismiss({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_navigation_workspace_panel_dismiss();
+                }
+            }
+        });
+        self.window.on_notification_center_dismiss({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_notification_center_dismiss();
+                }
+            }
+        });
+        self.window.on_onboarding_next_clicked({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_onboarding_next();
+                }
+            }
+        });
+        self.window.on_onboarding_back_clicked({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_onboarding_back();
+                }
+            }
+        });
+        self.window.on_onboarding_skip_clicked({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_onboarding_skip();
+                }
+            }
+        });
         self.window.on_widget_close_clicked({
             let t = t.clone();
             move |id| {
@@ -794,9 +919,9 @@ impl MainWindowController {
         });
         self.window.on_terminal_key_pressed({
             let t = t.clone();
-            move |id, text| {
+            move |id, text, ctrl, shift, alt| {
                 if let Some(c) = t.upgrade() {
-                    c.on_terminal_key(&id, &text);
+                    c.on_terminal_key(&id, &text, ctrl, shift, alt);
                 }
             }
         });
@@ -1570,6 +1695,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_managed_policy_close({
+            let t = t.clone();
+            move |fm_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_managed_policy_close(&fm_id);
+                }
+            }
+        });
         self.window.on_fm_select_all({
             let t = t.clone();
             move |fm_id, pane| {
@@ -1831,7 +1964,8 @@ impl MainWindowController {
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
         let type_id_owned = type_id.to_string();
-        let focus_search_input = type_id_owned == "search";
+        let focus_search_input =
+            type_id_owned == "search" || type_id_owned == "universal-search";
         let focus_password_input = type_id_owned == "password";
         let _ = slint::spawn_local(async move {
             let wid = match wsm.active() {
@@ -2067,7 +2201,7 @@ impl MainWindowController {
         let title = self.locale.tr(&title_key).into();
         let hint = self.locale.tr("settings-panel-hint").into();
         let cfg = self.config.read();
-        let fields = build_settings_fields(&section, &cfg, &self.locale);
+        let fields = build_settings_fields(&section, &cfg, &self.locale, &self.theme);
         drop(cfg);
         sync_vec_model(&self.settings_sections, build_settings_sections(&self.locale));
         sync_vec_model(&self.settings_fields, fields);
@@ -2076,9 +2210,46 @@ impl MainWindowController {
         g.set_panel_title(title);
         g.set_hint_text(hint);
         g.set_config_path(self.config_file_path.display().to_string().into());
+        g.set_current_section_id(section.clone().into());
         g.set_selected_section_index(settings_section_index(&section));
         g.set_sections(self.settings_sections.clone());
         g.set_fields(self.settings_fields.clone());
+    }
+
+    fn on_settings_field_changed(self: &Arc<Self>, section: &str, key: &str, value: &str) {
+        if !self.settings.read().visible {
+            return;
+        }
+        let mut cfg = self.config.write();
+        if let Err(reason) = apply_settings_field(&mut cfg, section, key, value) {
+            warn!(
+                section = %section,
+                key = %key,
+                value = %value,
+                reason = %reason,
+                "settings field rejected"
+            );
+            return;
+        }
+        if let Err(e) = cfg.validate() {
+            warn!(
+                section = %section,
+                key = %key,
+                value = %value,
+                error = %e,
+                "settings field failed validation"
+            );
+            return;
+        }
+        let snapshot = cfg.clone();
+        drop(cfg);
+        if let Err(e) = ConfigLoader::save(&snapshot, &self.config_file_path) {
+            warn!(?e, "settings save failed");
+            return;
+        }
+        if let Err(e) = self.apply_hot_config() {
+            warn!(?e, "settings apply after save");
+        }
     }
 
     fn open_settings(self: &Arc<Self>, section: &str) {
@@ -2110,6 +2281,238 @@ impl MainWindowController {
         }
         self.settings.write().section = settings_section_id(idx).to_string();
         self.sync_settings_global();
+    }
+
+    fn sync_navigation_global(self: &Arc<Self>) {
+        let nav = self.navigation.read().clone();
+        let hint_mode = self.config.read().onboarding.hint_mode_enabled;
+        let g = self.window.global::<NavigationGlobal>();
+        g.set_workspace_panel_visible(nav.workspace_panel_visible);
+        g.set_notification_center_visible(nav.notification_center_visible);
+        g.set_dock_visible(nav.dock_visible);
+        g.set_hint_mode_enabled(hint_mode);
+        g.set_workspace_panel_title(self.locale.tr("navigation-workspace-panel-title").into());
+        g.set_notification_center_title(self.locale.tr("notification-center-title").into());
+        g.set_notification_center_placeholder(
+            self.locale.tr("notification-center-placeholder").into(),
+        );
+        g.set_hint_dock_label(self.locale.tr("onboarding-hint-dock").into());
+        g.set_hint_workspace_label(self.locale.tr("onboarding-hint-workspace").into());
+        g.set_hint_gestures_label(self.locale.tr("onboarding-hint-gestures").into());
+    }
+
+    fn sync_onboarding_global(self: &Arc<Self>) {
+        let ob = self.onboarding.read().clone();
+        let step = ob.current_step.clamp(0, ONBOARDING_STEP_COUNT - 1) as usize;
+        let (title_key, body_key) = ONBOARDING_STEP_KEYS[step];
+        let g = self.window.global::<OnboardingGlobal>();
+        g.set_overlay_visible(ob.overlay_visible);
+        g.set_current_step(step as i32);
+        g.set_step_count(ONBOARDING_STEP_COUNT);
+        g.set_step_title(self.locale.tr(title_key).into());
+        g.set_step_body(self.locale.tr(body_key).into());
+        g.set_back_label(self.locale.tr("onboarding-back").into());
+        g.set_next_label(self.locale.tr("onboarding-next").into());
+        g.set_skip_label(self.locale.tr("onboarding-skip").into());
+        g.set_finish_label(self.locale.tr("onboarding-finish").into());
+    }
+
+    fn save_config_to_disk(self: &Arc<Self>) {
+        let cfg = self.config.read().clone();
+        if let Err(e) = cfg.validate() {
+            warn!(?e, "config validation failed on save");
+            return;
+        }
+        if let Err(e) = ConfigLoader::save(&cfg, &self.config_file_path) {
+            warn!(?e, "failed to save config.toml");
+        }
+    }
+
+    fn complete_onboarding(self: &Arc<Self>) {
+        {
+            let mut cfg = self.config.write();
+            cfg.onboarding.completed = true;
+        }
+        self.onboarding.write().overlay_visible = false;
+        self.save_config_to_disk();
+        self.sync_onboarding_global();
+    }
+
+    fn ensure_workspace_mode_for_onboarding(self: &Arc<Self>) {
+        if self.window.global::<AppState>().get_mode() == 0 {
+            self.on_get_started();
+        }
+    }
+
+    fn on_onboarding_next(self: &Arc<Self>) {
+        if !self.onboarding.read().overlay_visible {
+            return;
+        }
+        let step = self.onboarding.read().current_step;
+        if step + 1 >= ONBOARDING_STEP_COUNT {
+            self.ensure_workspace_mode_for_onboarding();
+            self.complete_onboarding();
+            return;
+        }
+        if step == 0 {
+            self.ensure_workspace_mode_for_onboarding();
+        }
+        {
+            let mut ob = self.onboarding.write();
+            ob.current_step = step + 1;
+        }
+        self.sync_onboarding_global();
+    }
+
+    fn on_onboarding_back(self: &Arc<Self>) {
+        let mut ob = self.onboarding.write();
+        if !ob.overlay_visible || ob.current_step <= 0 {
+            return;
+        }
+        ob.current_step -= 1;
+        drop(ob);
+        self.sync_onboarding_global();
+    }
+
+    fn on_onboarding_skip(self: &Arc<Self>) {
+        if !self.onboarding.read().overlay_visible {
+            return;
+        }
+        self.ensure_workspace_mode_for_onboarding();
+        self.complete_onboarding();
+    }
+
+    fn toggle_hint_mode(self: &Arc<Self>) {
+        {
+            let mut cfg = self.config.write();
+            cfg.onboarding.hint_mode_enabled = !cfg.onboarding.hint_mode_enabled;
+        }
+        self.save_config_to_disk();
+        self.sync_navigation_global();
+    }
+
+    fn toggle_workspace_panel(self: &Arc<Self>) {
+        self.on_command_palette_dismiss();
+        {
+            let mut nav = self.navigation.write();
+            nav.workspace_panel_visible = !nav.workspace_panel_visible;
+            if nav.workspace_panel_visible {
+                nav.notification_center_visible = false;
+            }
+        }
+        self.sync_navigation_global();
+    }
+
+    fn toggle_notification_center(self: &Arc<Self>) {
+        self.on_command_palette_dismiss();
+        {
+            let mut nav = self.navigation.write();
+            nav.notification_center_visible = !nav.notification_center_visible;
+            if nav.notification_center_visible {
+                nav.workspace_panel_visible = false;
+            }
+        }
+        self.sync_navigation_global();
+    }
+
+    fn toggle_dock(self: &Arc<Self>) {
+        {
+            let mut nav = self.navigation.write();
+            nav.dock_visible = !nav.dock_visible;
+        }
+        self.sync_navigation_global();
+        self.update_gesture_bounds();
+        let _ = self.sync_canvas_size_from_winit();
+        self.schedule_rebuild();
+    }
+
+    fn on_navigation_workspace_panel_dismiss(self: &Arc<Self>) {
+        if !self.navigation.read().workspace_panel_visible {
+            return;
+        }
+        self.navigation.write().workspace_panel_visible = false;
+        self.sync_navigation_global();
+    }
+
+    fn on_notification_center_dismiss(self: &Arc<Self>) {
+        if !self.navigation.read().notification_center_visible {
+            return;
+        }
+        self.navigation.write().notification_center_visible = false;
+        self.sync_navigation_global();
+    }
+
+    fn show_universal_search(self: &Arc<Self>) {
+        self.on_command_palette_dismiss();
+        if let Ok(w) = self.workspace_manager.active() {
+            if let Some(inst) = self
+                .widget_manager
+                .instances_for_workspace(w.id)
+                .into_iter()
+                .find(|inst| inst.type_id == "universal-search" || inst.type_id == "search")
+            {
+                *self.search_autofocus_pending.lock() = Some(inst.id);
+                self.schedule_rebuild();
+                return;
+            }
+        }
+        self.spawn_add_widget("universal-search", AddWidgetPlacement::AutoSlot);
+    }
+
+    fn show_widget_catalog_center(self: &Arc<Self>) {
+        let (vw, vh) = *self.canvas_size.lock();
+        let (scroll_x, scroll_y) = *self.canvas_scroll.lock();
+        {
+            let mut cat = self.catalog.write();
+            cat.visible = true;
+            cat.content_x = vw / 2.0 + scroll_x;
+            cat.content_y = vh / 2.0 + scroll_y;
+            cat.screen_x = vw / 2.0;
+            cat.screen_y = WORKSPACE_SWITCHER_H + vh / 2.0;
+            cat.search_query.clear();
+        }
+        self.sync_widget_catalog_global();
+    }
+
+    fn update_gesture_bounds(self: &Arc<Self>) {
+        let win = self.window.window();
+        let p = win.size();
+        if p.width < 2 || p.height < 2 {
+            return;
+        }
+        let log = p.to_logical(win.scale_factor());
+        self.gesture_recognizer.lock().set_bounds(ScreenBounds::new(
+            log.width,
+            log.height,
+        ));
+    }
+
+    fn handle_recognized_gestures(
+        self: &Arc<Self>,
+        gestures: impl IntoIterator<Item = RecognizedGesture>,
+    ) {
+        let gestures: Vec<_> = gestures.into_iter().collect();
+        if gestures.is_empty() {
+            return;
+        }
+        let win = self.window.window();
+        let p = win.size();
+        if p.width < 2 || p.height < 2 {
+            return;
+        }
+        let log = p.to_logical(win.scale_factor());
+        let bounds = ScreenBounds::new(log.width, log.height);
+        for gesture in gestures {
+            if let Some(cmd_id) = self.input_mapper.resolve_gesture(&gesture, bounds) {
+                debug!(target: "orchid_ui::gestures", cmd_id = %cmd_id, ?gesture, "gesture resolved");
+                self.dispatch_registry_shortcut(cmd_id);
+            }
+        }
+    }
+
+    fn feed_touch_input(self: &Arc<Self>, touch: TouchEvent) {
+        let gestures = self.gesture_recognizer.lock().feed(&InputEvent::Touch(touch));
+        self.handle_recognized_gestures(gestures);
     }
 
     fn sync_command_palette_global(self: &Arc<Self>) {
@@ -2218,6 +2621,30 @@ impl MainWindowController {
         }
         if cmd_id == "password.lock" {
             self.on_password_lock_vault();
+            return;
+        }
+        if cmd_id == "navigation.show_workspace_panel" {
+            self.toggle_workspace_panel();
+            return;
+        }
+        if cmd_id == "notification.show_center" {
+            self.toggle_notification_center();
+            return;
+        }
+        if cmd_id == "dock.show" {
+            self.toggle_dock();
+            return;
+        }
+        if cmd_id == "search.show_universal" {
+            self.show_universal_search();
+            return;
+        }
+        if cmd_id == "onboarding.toggle_hint_mode" {
+            self.toggle_hint_mode();
+            return;
+        }
+        if cmd_id == "widget.show_all" {
+            self.show_widget_catalog_center();
             return;
         }
         let action = match self
@@ -2754,7 +3181,14 @@ impl MainWindowController {
         ModelRc::new(VecModel::from(panes))
     }
 
-    fn on_terminal_key(self: &Arc<Self>, id: &SharedString, text: &SharedString) {
+    fn on_terminal_key(
+        self: &Arc<Self>,
+        id: &SharedString,
+        text: &SharedString,
+        ctrl: bool,
+        shift: bool,
+        alt: bool,
+    ) {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
         };
@@ -2769,7 +3203,8 @@ impl MainWindowController {
         let Ok(session) = self.session_manager.get(sid) else {
             return;
         };
-        let encoded = encode_slint_key_text(text.as_str());
+        let encoder = session.encoder.read();
+        let encoded = encode_slint_key_event(text.as_str(), ctrl, shift, alt, &encoder);
         if encoded.is_empty() {
             return;
         }
@@ -3409,6 +3844,19 @@ impl MainWindowController {
 
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
+    ///
+    /// # Universal search contract
+    ///
+    /// `on_search_query_changed` must **not** call [`Self::rebuild_workspace_model`]: a full rebuild
+    /// recreates `SearchView`, steals focus, and races the widget debouncer. Instead:
+    ///
+    /// 1. UI calls [`orchid_widgets::builtin::search::universal_search_push_query`].
+    /// 2. The widget debouncer publishes [`orchid_widgets::WidgetSnapshotUpdated`].
+    /// 3. [`WidgetManager::start`]'s snapshot subscriber refreshes [`WidgetSnapshotCache`] and marks
+    ///    the instance frame-dirty.
+    /// 4. Each UI tick drains dirty ids and calls this method (when no full rebuild is pending).
+    ///
+    /// See `docs/universal-search-issue.md` for regression notes.
     fn patch_workspace_frames(self: &Arc<Self>, ids: &[Uuid]) -> Result<()> {
         if ids.is_empty() {
             return Ok(());
@@ -3789,6 +4237,7 @@ impl MainWindowController {
                             tag: empty_tag_state(),
                             tag_paths: Vec::new(),
                             passphrase: empty_passphrase_state(),
+                            managed_policy: empty_managed_policy_state(),
                             passphrase_paths: Vec::new(),
                             passphrase_purpose: None,
                             create_folder_parent: None,
@@ -4065,6 +4514,14 @@ impl MainWindowController {
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {
                                 c.on_settings_dismiss();
+                            } else if c.navigation.read().workspace_panel_visible
+                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                            {
+                                c.on_navigation_workspace_panel_dismiss();
+                            } else if c.navigation.read().notification_center_visible
+                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                            {
+                                c.on_notification_center_dismiss();
                             } else if c.leader_pending_until.lock().is_some()
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {
@@ -4102,6 +4559,13 @@ impl MainWindowController {
                         c.queue_os_file_drop(path);
                     }
                 }
+                WindowEvent::Touch(touch) => {
+                    if let Some(c) = tw.upgrade() {
+                        if let Some(ev) = winit_touch_to_orchid(&touch, c.window.window()) {
+                            c.feed_touch_input(ev);
+                        }
+                    }
+                }
                 _ => {}
             }
             EventResult::Propagate
@@ -4116,6 +4580,7 @@ impl MainWindowController {
         if self.sync_canvas_size_from_winit() && self.workspace_manager.active().is_ok() {
             self.schedule_rebuild();
         }
+        self.update_gesture_bounds();
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         tracing::info!("Main window closed");
         Ok(())
@@ -4449,6 +4914,7 @@ impl MainWindowController {
                 tag: empty_tag_state(),
                 tag_paths: Vec::new(),
                 passphrase: empty_passphrase_state(),
+                managed_policy: empty_managed_policy_state(),
                 passphrase_paths: Vec::new(),
                 passphrase_purpose: None,
                 create_folder_parent: None,
@@ -5397,6 +5863,18 @@ impl MainWindowController {
                 drop(over);
                 self.schedule_rebuild();
             }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsManagedPolicy {
+                path,
+                policy,
+            } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                entry.managed_policy =
+                    build_managed_policy_state(self.locale.as_ref(), &path, policy.as_ref());
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
                 let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
                     warn!(path = %path, "open in viewer: invalid path");
@@ -5715,6 +6193,19 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
+    fn on_fm_managed_policy_close(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
+            return;
+        };
+        let mut over = self.fm_overlays.write();
+        if let Some(entry) = over.get_mut(&inst) {
+            entry.managed_policy = empty_managed_policy_state();
+            entry.context_menu = empty_context_menu();
+        }
+        drop(over);
+        self.schedule_rebuild();
+    }
+
     fn on_fm_passphrase_biometric(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
@@ -5978,9 +6469,28 @@ fn resolve_registry_shortcut(
     registry.list_all().into_iter().find_map(|desc| {
         registry
             .effective_shortcut(&desc.id)
-            .filter(|s| s == shortcut)
+            .filter(|s| shortcuts_equivalent(s, shortcut))
             .map(|_| desc.id)
     })
+}
+
+/// Match shortcuts from winit, allowing an extra Shift for punctuation keys
+/// (e.g. `Win+?` is typed as Win+Shift+? on US layouts).
+fn shortcuts_equivalent(expected: &Shortcut, actual: &Shortcut) -> bool {
+    use orchid_core::{Key, Modifiers};
+    if expected == actual {
+        return true;
+    }
+    if expected.key != actual.key {
+        return false;
+    }
+    if matches!(expected.key, Key::Char(c) if !c.is_ascii_alphabetic())
+        && !expected.modifiers.contains(Modifiers::SHIFT)
+        && actual.modifiers == expected.modifiers | Modifiers::SHIFT
+    {
+        return true;
+    }
+    false
 }
 
 fn winit_to_shortcut(
@@ -6032,6 +6542,31 @@ fn winit_to_shortcut(
         _ => return None,
     };
     Some(Shortcut::new(modifiers, key))
+}
+
+fn winit_touch_to_orchid(
+    touch: &slint::winit_030::winit::event::Touch,
+    window: &slint::Window,
+) -> Option<TouchEvent> {
+    use slint::winit_030::winit::event::TouchPhase as WinitTouchPhase;
+
+    let scale = f64::from(window.scale_factor());
+    let logical: slint::winit_030::winit::dpi::LogicalPosition<f64> =
+        touch.location.to_logical(scale);
+    let phase = match touch.phase {
+        WinitTouchPhase::Started => TouchPhase::Began,
+        WinitTouchPhase::Moved => TouchPhase::Moved,
+        WinitTouchPhase::Ended => TouchPhase::Ended,
+        WinitTouchPhase::Cancelled => TouchPhase::Cancelled,
+    };
+    Some(TouchEvent {
+        pointer_id: touch.id as u32,
+        phase,
+        position: Point::new(logical.x as f32, logical.y as f32),
+        pressure: 1.0,
+        size: 10.0,
+        timestamp: Instant::now(),
+    })
 }
 
 fn winit_modifiers_match(
@@ -6670,6 +7205,7 @@ struct FileManagerOverlays {
     tag: FmTagState,
     tag_paths: Vec<String>,
     passphrase: FmPassphraseState,
+    managed_policy: FmManagedPolicyState,
     passphrase_paths: Vec<String>,
     passphrase_purpose: Option<orchid_widgets::builtin::file_manager::PassphrasePurpose>,
     create_folder_parent: Option<String>,
@@ -6695,6 +7231,7 @@ fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
         rename: empty_rename_state(),
         tag: empty_tag_state(),
         passphrase: empty_passphrase_state(),
+        managed_policy: empty_managed_policy_state(),
         show_hidden: false,
         show_hidden_label: locale.tr("fm-show-hidden-off").into(),
         single_click_open: false,
@@ -6739,6 +7276,63 @@ fn empty_passphrase_state() -> FmPassphraseState {
         cancel_label: SharedString::new(),
         biometric_available: false,
         biometric_label: SharedString::new(),
+    }
+}
+
+fn empty_managed_policy_state() -> FmManagedPolicyState {
+    FmManagedPolicyState {
+        active: false,
+        title: SharedString::new(),
+        path: SharedString::new(),
+        rows: ModelRc::new(VecModel::default()),
+        close_label: SharedString::new(),
+    }
+}
+
+fn build_managed_policy_state(
+    locale: &LocaleManager,
+    path: &str,
+    policy: Option<&orchid_fs::ManagedFolderPolicy>,
+) -> FmManagedPolicyState {
+    let policy = policy.cloned().unwrap_or_default();
+    let max_size = policy
+        .max_size_bytes
+        .map(format_byte_size)
+        .unwrap_or_else(|| locale.tr("fm-policy-unlimited"));
+    let retention = policy
+        .retention_days
+        .map(|d| {
+            locale.tr_args(
+                "fm-policy-retention-days",
+                &orchid_i18n::FluentArgs::new().with("days", d.to_string()),
+            )
+        })
+        .unwrap_or_else(|| locale.tr("fm-policy-forever"));
+    let excludes = if policy.exclude_patterns.is_empty() {
+        locale.tr("fm-policy-none")
+    } else {
+        policy.exclude_patterns.join(", ")
+    };
+    let rows = vec![
+        FmManagedPolicyRow {
+            label: locale.tr("fm-policy-max-size").into(),
+            value: max_size.into(),
+        },
+        FmManagedPolicyRow {
+            label: locale.tr("fm-policy-retention").into(),
+            value: retention.into(),
+        },
+        FmManagedPolicyRow {
+            label: locale.tr("fm-policy-excludes").into(),
+            value: excludes.into(),
+        },
+    ];
+    FmManagedPolicyState {
+        active: true,
+        title: locale.tr("fm-managed-policy-title").into(),
+        path: path.into(),
+        rows: ModelRc::new(VecModel::from(rows)),
+        close_label: locale.tr("fm-info-close").into(),
     }
 }
 
@@ -6813,13 +7407,31 @@ fn managed_sidebar_label(
     folder: &orchid_widgets::ManagedFolderSidebarPayload,
 ) -> String {
     let name = managed_sidebar_name(&folder.path);
+    let has_policy = folder.policy_max_bytes.is_some()
+        || folder.policy_retention_days.is_some()
+        || folder.policy_exclude_count > 0;
     if folder.files_tracked > 0 {
+        if has_policy {
+            locale.tr_args(
+                "fm-sidebar-managed-folder-policy",
+                &orchid_i18n::FluentArgs::new()
+                    .with("name", name.as_str())
+                    .with("count", folder.files_tracked.to_string())
+                    .with("dedup", format_byte_size(folder.dedup_bytes)),
+            )
+        } else {
+            locale.tr_args(
+                "fm-sidebar-managed-folder",
+                &orchid_i18n::FluentArgs::new()
+                    .with("name", name.as_str())
+                    .with("count", folder.files_tracked.to_string())
+                    .with("dedup", format_byte_size(folder.dedup_bytes)),
+            )
+        }
+    } else if has_policy {
         locale.tr_args(
-            "fm-sidebar-managed-folder",
-            &orchid_i18n::FluentArgs::new()
-                .with("name", name.as_str())
-                .with("count", folder.files_tracked.to_string())
-                .with("dedup", format_byte_size(folder.dedup_bytes)),
+            "fm-sidebar-managed-policy-only",
+            &orchid_i18n::FluentArgs::new().with("name", name.as_str()),
         )
     } else {
         name
@@ -7303,6 +7915,7 @@ fn build_file_manager_model(
         rename: overlays.rename,
         tag: overlays.tag,
         passphrase: overlays.passphrase,
+        managed_policy: overlays.managed_policy,
     }
 }
 
@@ -7341,121 +7954,464 @@ fn settings_section_id(index: i32) -> &'static str {
         .unwrap_or(SETTINGS_SECTION_IDS[0])
 }
 
+const SETTINGS_FIELD_READONLY: i32 = 0;
+const SETTINGS_FIELD_BOOL: i32 = 1;
+const SETTINGS_FIELD_TEXT: i32 = 2;
+const SETTINGS_FIELD_COMBO: i32 = 3;
+
+fn settings_strings_model(values: Vec<SharedString>) -> ModelRc<SharedString> {
+    ModelRc::new(VecModel::from(values))
+}
+
+fn push_settings_readonly(
+    rows: &mut Vec<SettingsFieldRow>,
+    locale: &LocaleManager,
+    key: &str,
+    label_key: &str,
+    value: SharedString,
+) {
+    rows.push(SettingsFieldRow {
+        key: key.into(),
+        label: locale.tr(label_key).into(),
+        kind: SETTINGS_FIELD_READONLY,
+        value,
+        bool_value: false,
+        combo_options: settings_strings_model(vec![]),
+        combo_values: settings_strings_model(vec![]),
+        combo_index: -1,
+    });
+}
+
+fn push_settings_bool(
+    rows: &mut Vec<SettingsFieldRow>,
+    locale: &LocaleManager,
+    key: &str,
+    label_key: &str,
+    value: bool,
+) {
+    rows.push(SettingsFieldRow {
+        key: key.into(),
+        label: locale.tr(label_key).into(),
+        kind: SETTINGS_FIELD_BOOL,
+        value: SharedString::default(),
+        bool_value: value,
+        combo_options: settings_strings_model(vec![]),
+        combo_values: settings_strings_model(vec![]),
+        combo_index: -1,
+    });
+}
+
+fn push_settings_text(
+    rows: &mut Vec<SettingsFieldRow>,
+    locale: &LocaleManager,
+    key: &str,
+    label_key: &str,
+    value: impl Into<SharedString>,
+) {
+    rows.push(SettingsFieldRow {
+        key: key.into(),
+        label: locale.tr(label_key).into(),
+        kind: SETTINGS_FIELD_TEXT,
+        value: value.into(),
+        bool_value: false,
+        combo_options: settings_strings_model(vec![]),
+        combo_values: settings_strings_model(vec![]),
+        combo_index: -1,
+    });
+}
+
+fn push_settings_combo(
+    rows: &mut Vec<SettingsFieldRow>,
+    locale: &LocaleManager,
+    key: &str,
+    label_key: &str,
+    options: &[(SharedString, SharedString)],
+    current: &str,
+) {
+    let combo_values: Vec<SharedString> = options.iter().map(|(v, _)| v.clone()).collect();
+    let combo_options: Vec<SharedString> = options.iter().map(|(_, l)| l.clone()).collect();
+    let combo_index = combo_values
+        .iter()
+        .position(|v| v.as_str() == current)
+        .map_or(0, |i| i as i32);
+    rows.push(SettingsFieldRow {
+        key: key.into(),
+        label: locale.tr(label_key).into(),
+        kind: SETTINGS_FIELD_COMBO,
+        value: SharedString::default(),
+        bool_value: false,
+        combo_options: settings_strings_model(combo_options),
+        combo_values: settings_strings_model(combo_values),
+        combo_index,
+    });
+}
+
+fn density_combo_options(locale: &LocaleManager) -> Vec<(SharedString, SharedString)> {
+    vec![
+        ("touch".into(), locale.tr("density-touch").into()),
+        ("mouse".into(), locale.tr("density-mouse").into()),
+        ("hybrid".into(), locale.tr("density-hybrid").into()),
+    ]
+}
+
+fn density_storage_key(density: orchid_storage::Density) -> &'static str {
+    match density {
+        orchid_storage::Density::Touch => "touch",
+        orchid_storage::Density::Mouse => "mouse",
+        orchid_storage::Density::Hybrid => "hybrid",
+    }
+}
+
+fn theme_combo_options(themes: &ThemeManager) -> Vec<(SharedString, SharedString)> {
+    themes
+        .list()
+        .into_iter()
+        .map(|meta| (meta.id.into(), meta.display_name.into()))
+        .collect()
+}
+
+fn locale_combo_options(locale_mgr: &LocaleManager) -> Vec<(SharedString, SharedString)> {
+    locale_mgr
+        .available_locales()
+        .into_iter()
+        .map(|id| {
+            let tag = id.to_string();
+            (tag.clone().into(), tag.into())
+        })
+        .collect()
+}
+
+fn apply_settings_field(
+    cfg: &mut OrchidConfig,
+    section: &str,
+    key: &str,
+    value: &str,
+) -> Result<(), String> {
+    match (section, key) {
+        ("general", "auto-update") => {
+            cfg.general.auto_update = parse_settings_bool(value)?;
+        }
+        ("general", "telemetry") => {
+            cfg.general.telemetry = parse_settings_bool(value)?;
+        }
+        ("general", "open-on-startup") => {
+            cfg.general.open_on_startup = parse_settings_bool(value)?;
+        }
+        ("appearance", "theme") => {
+            if value.is_empty() {
+                return Err("theme id must not be empty".into());
+            }
+            cfg.appearance.theme = value.to_string();
+        }
+        ("appearance", "density") => {
+            cfg.appearance.density = match value {
+                "touch" => orchid_storage::Density::Touch,
+                "mouse" => orchid_storage::Density::Mouse,
+                "hybrid" => orchid_storage::Density::Hybrid,
+                other => return Err(format!("unknown density `{other}`")),
+            };
+        }
+        ("appearance", "font-family") => {
+            cfg.appearance.font_family = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            };
+        }
+        ("appearance", "font-scale") => {
+            cfg.appearance.font_scale = value
+                .parse::<f32>()
+                .map_err(|_| format!("invalid font scale `{value}`"))?;
+        }
+        ("appearance", "reduce-motion") => {
+            cfg.appearance.reduce_motion = parse_settings_bool(value)?;
+        }
+        ("appearance", "follow-system-theme") => {
+            cfg.appearance.follow_system_theme = parse_settings_bool(value)?;
+        }
+        ("appearance", "dark-theme") => {
+            if value.is_empty() {
+                return Err("dark theme id must not be empty".into());
+            }
+            cfg.appearance.dark_theme = value.to_string();
+        }
+        ("appearance", "light-theme") => {
+            if value.is_empty() {
+                return Err("light theme id must not be empty".into());
+            }
+            cfg.appearance.light_theme = value.to_string();
+        }
+        ("input", "primary-hand") => {
+            cfg.input.primary_hand = match value {
+                "left" => orchid_storage::Hand::Left,
+                "right" => orchid_storage::Hand::Right,
+                other => return Err(format!("unknown hand `{other}`")),
+            };
+        }
+        ("input", "mirror-edge-swipes") => {
+            cfg.input.mirror_edge_swipes = parse_settings_bool(value)?;
+        }
+        ("input", "haptic-feedback") => {
+            cfg.input.haptic_feedback = parse_settings_bool(value)?;
+        }
+        ("input", "palm-rejection") => {
+            cfg.input.palm_rejection = parse_settings_bool(value)?;
+        }
+        ("input", "pen-double-tap") => {
+            cfg.input.pen_double_tap_action = match value {
+                "none" => orchid_storage::PenDoubleTapAction::None,
+                "switch-tool" => orchid_storage::PenDoubleTapAction::SwitchTool,
+                "erase" => orchid_storage::PenDoubleTapAction::Erase,
+                other => return Err(format!("unknown pen double-tap action `{other}`")),
+            };
+        }
+        ("shortcuts", "leader-key") => {
+            cfg.shortcuts.leader_key = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            };
+        }
+        ("shortcuts", "leader-timeout") => {
+            cfg.shortcuts.leader_timeout_ms = value
+                .parse::<u64>()
+                .map_err(|_| format!("invalid leader timeout `{value}`"))?;
+        }
+        ("locale", "language") => {
+            if value.is_empty() {
+                return Err("language tag must not be empty".into());
+            }
+            cfg.locale.language = value.to_string();
+        }
+        ("locale", "date-format") => {
+            cfg.locale.date_format = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            };
+        }
+        ("locale", "time-format") => {
+            cfg.locale.time_format = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            };
+        }
+        ("locale", "first-day-of-week") => {
+            cfg.locale.first_day_of_week = match value {
+                "0" => 0,
+                "1" => 1,
+                other => return Err(format!("first day of week must be 0 or 1, got `{other}`")),
+            };
+        }
+        ("privacy", "record-action-history") => {
+            cfg.privacy.record_action_history = parse_settings_bool(value)?;
+        }
+        ("privacy", "history-retention-days") => {
+            cfg.privacy.history_retention_days = value
+                .parse::<u32>()
+                .map_err(|_| format!("invalid history retention `{value}`"))?;
+        }
+        ("privacy", "clear-clipboard-seconds") => {
+            cfg.privacy.clear_clipboard_seconds = value
+                .parse::<u32>()
+                .map_err(|_| format!("invalid clipboard timeout `{value}`"))?;
+        }
+        _ => return Err(format!("field `{section}.{key}` is not editable")),
+    }
+    Ok(())
+}
+
+fn parse_settings_bool(value: &str) -> Result<bool, String> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        other => Err(format!("expected true/false, got `{other}`")),
+    }
+}
+
 fn build_settings_fields(
     section: &str,
     cfg: &OrchidConfig,
     locale: &LocaleManager,
+    themes: &ThemeManager,
 ) -> Vec<SettingsFieldRow> {
-    let yes = locale.tr("settings-value-yes");
-    let no = locale.tr("settings-value-no");
-    let fmt_bool = |value: bool| -> SharedString {
-        if value {
-            yes.clone().into()
-        } else {
-            no.clone().into()
-        }
-    };
     let mut rows = Vec::new();
-    let mut push = |key: &str, value: SharedString| {
-        rows.push(SettingsFieldRow {
-            label: locale.tr(key).into(),
-            value,
-        });
-    };
 
     match section {
         "general" => {
-            push("settings-field-auto-update", fmt_bool(cfg.general.auto_update));
-            push("settings-field-telemetry", fmt_bool(cfg.general.telemetry));
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "auto-update",
+                "settings-field-auto-update",
+                cfg.general.auto_update,
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "telemetry",
+                "settings-field-telemetry",
+                cfg.general.telemetry,
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "open-on-startup",
                 "settings-field-open-on-startup",
-                fmt_bool(cfg.general.open_on_startup),
+                cfg.general.open_on_startup,
             );
         }
         "appearance" => {
-            push("settings-field-theme", cfg.appearance.theme.clone().into());
-            push(
+            let theme_options = theme_combo_options(themes);
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "theme",
+                "settings-field-theme",
+                &theme_options,
+                &cfg.appearance.theme,
+            );
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "density",
                 "settings-field-density",
-                locale.tr(density_i18n_key(cfg.appearance.density)).into(),
+                &density_combo_options(locale),
+                density_storage_key(cfg.appearance.density),
             );
-            push(
+            push_settings_text(
+                &mut rows,
+                locale,
+                "font-family",
                 "settings-field-font-family",
-                cfg.appearance
-                    .font_family
-                    .clone()
-                    .unwrap_or_else(|| locale.tr("settings-value-system-default"))
-                    .into(),
+                cfg.appearance.font_family.clone().unwrap_or_default(),
             );
-            push(
+            push_settings_text(
+                &mut rows,
+                locale,
+                "font-scale",
                 "settings-field-font-scale",
-                format!("{:.2}", cfg.appearance.font_scale).into(),
+                format!("{:.2}", cfg.appearance.font_scale),
             );
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "reduce-motion",
                 "settings-field-reduce-motion",
-                fmt_bool(cfg.appearance.reduce_motion),
+                cfg.appearance.reduce_motion,
             );
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "follow-system-theme",
                 "settings-field-follow-system-theme",
-                fmt_bool(cfg.appearance.follow_system_theme),
+                cfg.appearance.follow_system_theme,
             );
-            push("settings-field-dark-theme", cfg.appearance.dark_theme.clone().into());
-            push("settings-field-light-theme", cfg.appearance.light_theme.clone().into());
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "dark-theme",
+                "settings-field-dark-theme",
+                &theme_options,
+                &cfg.appearance.dark_theme,
+            );
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "light-theme",
+                "settings-field-light-theme",
+                &theme_options,
+                &cfg.appearance.light_theme,
+            );
         }
         "input" => {
-            push(
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "primary-hand",
                 "settings-field-primary-hand",
-                locale
-                    .tr(match cfg.input.primary_hand {
-                        orchid_storage::Hand::Left => "settings-value-hand-left",
-                        orchid_storage::Hand::Right => "settings-value-hand-right",
-                    })
-                    .into(),
+                &[
+                    ("left".into(), locale.tr("settings-value-hand-left").into()),
+                    ("right".into(), locale.tr("settings-value-hand-right").into()),
+                ],
+                match cfg.input.primary_hand {
+                    orchid_storage::Hand::Left => "left",
+                    orchid_storage::Hand::Right => "right",
+                },
             );
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "mirror-edge-swipes",
                 "settings-field-mirror-edge-swipes",
-                fmt_bool(cfg.input.mirror_edge_swipes),
+                cfg.input.mirror_edge_swipes,
             );
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "haptic-feedback",
                 "settings-field-haptic-feedback",
-                fmt_bool(cfg.input.haptic_feedback),
+                cfg.input.haptic_feedback,
             );
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "palm-rejection",
                 "settings-field-palm-rejection",
-                fmt_bool(cfg.input.palm_rejection),
+                cfg.input.palm_rejection,
             );
-            push(
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "pen-double-tap",
                 "settings-field-pen-double-tap",
-                locale
-                    .tr(match cfg.input.pen_double_tap_action {
-                        orchid_storage::PenDoubleTapAction::None => {
-                            "settings-value-pen-double-tap-none"
-                        }
-                        orchid_storage::PenDoubleTapAction::SwitchTool => {
-                            "settings-value-pen-double-tap-switch-tool"
-                        }
-                        orchid_storage::PenDoubleTapAction::Erase => {
-                            "settings-value-pen-double-tap-erase"
-                        }
-                    })
-                    .into(),
+                &[
+                    (
+                        "none".into(),
+                        locale.tr("settings-value-pen-double-tap-none").into(),
+                    ),
+                    (
+                        "switch-tool".into(),
+                        locale
+                            .tr("settings-value-pen-double-tap-switch-tool")
+                            .into(),
+                    ),
+                    (
+                        "erase".into(),
+                        locale.tr("settings-value-pen-double-tap-erase").into(),
+                    ),
+                ],
+                match cfg.input.pen_double_tap_action {
+                    orchid_storage::PenDoubleTapAction::None => "none",
+                    orchid_storage::PenDoubleTapAction::SwitchTool => "switch-tool",
+                    orchid_storage::PenDoubleTapAction::Erase => "erase",
+                },
             );
         }
         "shortcuts" => {
-            push(
+            push_settings_text(
+                &mut rows,
+                locale,
+                "leader-key",
                 "settings-field-leader-key",
                 cfg
                     .shortcuts
                     .leader_key
                     .clone()
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| locale.tr("settings-value-none"))
-                    .into(),
+                    .unwrap_or_default(),
             );
-            push(
+            push_settings_text(
+                &mut rows,
+                locale,
+                "leader-timeout",
                 "settings-field-leader-timeout",
-                format!("{} ms", cfg.shortcuts.leader_timeout_ms).into(),
+                format!("{}", cfg.shortcuts.leader_timeout_ms),
             );
-            push(
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "leader-bindings",
                 "settings-field-leader-bindings",
                 if cfg.shortcuts.leader_bindings.is_empty() {
                     locale.tr("settings-value-none").into()
@@ -7471,7 +8427,10 @@ fn build_settings_fields(
                 },
             );
             if cfg.shortcuts.overrides.is_empty() {
-                push(
+                push_settings_readonly(
+                    &mut rows,
+                    locale,
+                    "shortcut-overrides",
                     "settings-field-shortcut-overrides",
                     locale.tr("settings-value-none").into(),
                 );
@@ -7480,52 +8439,79 @@ fn build_settings_fields(
                 pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
                 for (cmd, shortcut) in pairs {
                     rows.push(SettingsFieldRow {
+                        key: format!("override:{cmd}").into(),
                         label: (*cmd).clone().into(),
+                        kind: SETTINGS_FIELD_READONLY,
                         value: shortcut.clone().into(),
+                        bool_value: false,
+                        combo_options: settings_strings_model(vec![]),
+                        combo_values: settings_strings_model(vec![]),
+                        combo_index: -1,
                     });
                 }
             }
         }
         "locale" => {
-            push("settings-field-language", cfg.locale.language.clone().into());
-            push(
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "language",
+                "settings-field-language",
+                &locale_combo_options(locale),
+                &cfg.locale.language,
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "date-format",
                 "settings-field-date-format",
-                cfg.locale
-                    .date_format
-                    .clone()
-                    .unwrap_or_else(|| locale.tr("settings-value-default"))
-                    .into(),
+                cfg.locale.date_format.clone().unwrap_or_default(),
             );
-            push(
+            push_settings_text(
+                &mut rows,
+                locale,
+                "time-format",
                 "settings-field-time-format",
-                cfg.locale
-                    .time_format
-                    .clone()
-                    .unwrap_or_else(|| locale.tr("settings-value-default"))
-                    .into(),
+                cfg.locale.time_format.clone().unwrap_or_default(),
             );
-            let dow = if cfg.locale.first_day_of_week == 0 {
-                "settings-value-sunday"
-            } else {
-                "settings-value-monday"
-            };
-            push("settings-field-first-day-of-week", locale.tr(dow).into());
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "first-day-of-week",
+                "settings-field-first-day-of-week",
+                &[
+                    ("0".into(), locale.tr("settings-value-sunday").into()),
+                    ("1".into(), locale.tr("settings-value-monday").into()),
+                ],
+                if cfg.locale.first_day_of_week == 0 {
+                    "0"
+                } else {
+                    "1"
+                },
+            );
         }
         "privacy" => {
-            push(
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "record-action-history",
                 "settings-field-record-action-history",
-                fmt_bool(cfg.privacy.record_action_history),
+                cfg.privacy.record_action_history,
             );
-            push(
+            push_settings_text(
+                &mut rows,
+                locale,
+                "history-retention-days",
                 "settings-field-history-retention-days",
-                format!("{}", cfg.privacy.history_retention_days).into(),
+                format!("{}", cfg.privacy.history_retention_days),
             );
-            let clip = if cfg.privacy.clear_clipboard_seconds == 0 {
-                locale.tr("settings-value-disabled").into()
-            } else {
-                format!("{} s", cfg.privacy.clear_clipboard_seconds).into()
-            };
-            push("settings-field-clear-clipboard-seconds", clip);
+            push_settings_text(
+                &mut rows,
+                locale,
+                "clear-clipboard-seconds",
+                "settings-field-clear-clipboard-seconds",
+                format!("{}", cfg.privacy.clear_clipboard_seconds),
+            );
         }
         _ => {}
     }
@@ -8572,10 +9558,153 @@ fn indicator_status_to_int(s: &orchid_widgets::IndicatorStatus) -> i32 {
     }
 }
 
-// TODO(11B-Fix follow-up): Expose `event.key` (semantic key) from Slint in addition
-// to `event.text` and use `orchid_terminal::InputEncoder` for xterm-style arrow /
-// F-key / Home / End sequences once the workspace `slint` version supports it
-// in key handlers.
+/// Slint `KeyboardModifiers` → [`orchid_core::Modifiers`].
+fn slint_kb_modifiers(ctrl: bool, shift: bool, alt: bool) -> orchid_core::Modifiers {
+    use orchid_core::Modifiers;
+    let mut mods = Modifiers::empty();
+    if ctrl {
+        mods |= Modifiers::CTRL;
+    }
+    if shift {
+        mods |= Modifiers::SHIFT;
+    }
+    if alt {
+        mods |= Modifiers::ALT;
+    }
+    mods
+}
+
+/// Peel Slint embedded modifier key identities (U+0010..=U+0013) from `text`.
+fn peel_slint_modifier_prefix(
+    text: &str,
+    mut mods: orchid_core::Modifiers,
+) -> (&str, orchid_core::Modifiers) {
+    use orchid_core::Modifiers;
+    let mut t = text;
+    loop {
+        let Some(c) = t.chars().next() else {
+            break;
+        };
+        let embedded = match c as u32 {
+            0x10 => Some(Modifiers::SHIFT),
+            0x11 => Some(Modifiers::CTRL),
+            0x12 | 0x13 => Some(Modifiers::ALT),
+            _ => None,
+        };
+        if let Some(m) = embedded {
+            mods |= m;
+            t = &t[c.len_utf8()..];
+        } else {
+            break;
+        }
+    }
+    (t, mods)
+}
+
+/// Map a Slint `KeyEvent.text` code point to [`orchid_core::Key`] (see `i-slint-common` `key_codes`).
+fn slint_codepoint_to_key(cp: char) -> Option<orchid_core::Key> {
+    use orchid_core::Key;
+    match cp as u32 {
+        0x08 => Some(Key::Backspace),
+        0x09 => Some(Key::Tab),
+        0x0A | 0x0D => Some(Key::Enter),
+        0x1B => Some(Key::Escape),
+        0x7F => Some(Key::Delete),
+        0x20 => Some(Key::Space),
+        0xF700 => Some(Key::ArrowUp),
+        0xF701 => Some(Key::ArrowDown),
+        0xF702 => Some(Key::ArrowLeft),
+        0xF703 => Some(Key::ArrowRight),
+        0xF704..=0xF71B => Some(Key::F((cp as u32 - 0xF704 + 1) as u8)),
+        0xF727 => Some(Key::Insert),
+        0xF729 => Some(Key::Home),
+        0xF72B => Some(Key::End),
+        0xF72C => Some(Key::PageUp),
+        0xF72D => Some(Key::PageDown),
+        _ => match cp {
+            ',' => Some(Key::Comma),
+            '.' => Some(Key::Period),
+            '/' => Some(Key::Slash),
+            '`' => Some(Key::Backtick),
+            '-' => Some(Key::Minus),
+            '=' => Some(Key::Equals),
+            '[' => Some(Key::LeftBracket),
+            ']' => Some(Key::RightBracket),
+            ';' => Some(Key::Semicolon),
+            '\'' => Some(Key::Quote),
+            '\\' => Some(Key::Backslash),
+            c if c.is_ascii_alphabetic() => Some(Key::Char(c.to_ascii_lowercase())),
+            c if c.is_ascii_graphic() => Some(Key::Char(c)),
+            _ => None,
+        },
+    }
+}
+
+/// Maps Slint `KeyEvent` (`text` + modifiers) to PTY bytes via [`orchid_terminal::InputEncoder`].
+/// Falls back to [`encode_slint_key_text`] for multi-code-unit printable payloads.
+fn encode_slint_key_event(
+    text: &str,
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
+    encoder: &orchid_terminal::InputEncoder,
+) -> Vec<u8> {
+    use orchid_core::{Key, Modifiers};
+
+    let mods = slint_kb_modifiers(ctrl, shift, alt);
+    let (peeled, mods) = peel_slint_modifier_prefix(text, mods);
+
+    if peeled.is_empty() {
+        trace!(
+            target: "orchid_ui::terminal_input",
+            "empty Slint key text after modifier peel (modifier-only or platform gap)"
+        );
+        return Vec::new();
+    }
+
+    // Slint Backtab identity (U+0019).
+    if peeled == "\u{19}" {
+        return encoder.encode_key(Key::Tab, mods | Modifiers::SHIFT);
+    }
+
+    // Pre-formed CSI / SS3 sequences from older Slint paths or platform quirks.
+    if is_leading_escape_to_preserve(peeled) {
+        return peeled.as_bytes().to_vec();
+    }
+
+    let trimmed = trim_slint_key_artifacts(peeled);
+    if trimmed.is_empty() {
+        if peeled.chars().count() == 1 {
+            if let Some(key) = slint_codepoint_to_key(peeled.chars().next().expect("one char")) {
+                return encoder.encode_key(key, mods);
+            }
+        }
+        trace!(
+            target: "orchid_ui::terminal_input",
+            "key text was only Slint key-identity (PUA or modifier id); not forwarding to PTY"
+        );
+        return Vec::new();
+    }
+
+    if trimmed.chars().count() == 1 {
+        let c = trimmed.chars().next().expect("one char");
+        let cp = c as u32;
+        if (0x10..=0x19).contains(&cp) {
+            trace!(
+                target: "orchid_ui::terminal_input",
+                "Slint key id U+{:04X} only; not forwarding to PTY",
+                cp
+            );
+            return Vec::new();
+        }
+        if let Some(key) = slint_codepoint_to_key(c) {
+            return encoder.encode_key(key, mods);
+        }
+    }
+
+    encode_slint_key_text(peeled)
+}
+
 /// True when `t` should not have its leading U+001B removed by [`trim_slint_key_artifacts`].
 fn is_leading_escape_to_preserve(t: &str) -> bool {
     if !t.starts_with('\u{1b}') {
@@ -8624,14 +9753,9 @@ fn trim_slint_key_artifacts(text: &str) -> &str {
     t
 }
 
-/// Maps Slint `KeyEvent.text` payloads to bytes for the PTY. Empty input means
-/// a non-textual key in current Slint builds; see TODO above.
+/// Maps Slint `KeyEvent.text` payloads to bytes for the PTY (printable / legacy paths).
 fn encode_slint_key_text(text: &str) -> Vec<u8> {
     if text.is_empty() {
-        trace!(
-            target: "orchid_ui::terminal_input",
-            "empty Slint key text (e.g. arrow or modifier-only key)"
-        );
         return Vec::new();
     }
     if text == "\r\n" || text == "\n\r" {
@@ -8676,7 +9800,10 @@ fn encode_slint_key_text(text: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod key_encode_tests {
-    use super::encode_slint_key_text;
+    use orchid_core::{Key, Modifiers};
+    use orchid_terminal::InputEncoder;
+
+    use super::{encode_slint_key_event, encode_slint_key_text};
 
     #[test]
     fn encodes_printable() {
@@ -8749,5 +9876,94 @@ mod key_encode_tests {
     fn utf8_passed_through() {
         assert_eq!(&encode_slint_key_text("ü"), "ü".as_bytes());
         assert_eq!(&encode_slint_key_text("日"), "日".as_bytes());
+    }
+
+    #[test]
+    fn event_encoder_maps_lone_pua_arrow() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encode_slint_key_event("\u{F700}", false, false, false, &encoder),
+            vec![0x1B, b'[', b'A']
+        );
+        assert_eq!(
+            encode_slint_key_event("\u{F703}", false, false, false, &encoder),
+            vec![0x1B, b'[', b'C']
+        );
+    }
+
+    #[test]
+    fn event_encoder_ctrl_c() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encode_slint_key_event("c", true, false, false, &encoder),
+            vec![0x03]
+        );
+        assert_eq!(
+            encode_slint_key_event("\u{11}c", false, false, false, &encoder),
+            vec![0x03]
+        );
+    }
+
+    #[test]
+    fn event_encoder_f4_and_application_cursor() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encode_slint_key_event("\u{F707}", false, false, false, &encoder),
+            vec![0x1B, b'O', b'S']
+        );
+        let mut app = InputEncoder::new();
+        app.application_cursor = true;
+        assert_eq!(
+            encode_slint_key_event("\u{F700}", false, false, false, &app),
+            vec![0x1B, b'O', b'A']
+        );
+    }
+
+    #[test]
+    fn event_encoder_shift_tab_and_backtab() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encode_slint_key_event("\t", false, true, false, &encoder),
+            vec![0x1B, b'[', b'Z']
+        );
+        assert_eq!(
+            encode_slint_key_event("\u{19}", false, false, false, &encoder),
+            vec![0x1B, b'[', b'Z']
+        );
+    }
+
+    #[test]
+    fn event_encoder_preserves_csi_pass_through() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encode_slint_key_event("\u{1b}[A", false, false, false, &encoder),
+            b"\x1b[A"
+        );
+    }
+
+    #[test]
+    fn event_encoder_printable_matches_text_path() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encode_slint_key_event("hello", false, false, false, &encoder),
+            encode_slint_key_text("hello")
+        );
+        assert_eq!(
+            encode_slint_key_event("a", false, false, false, &encoder),
+            b"a"
+        );
+    }
+
+    #[test]
+    fn event_encoder_named_keys_via_input_encoder() {
+        let encoder = InputEncoder::new();
+        assert_eq!(
+            encoder.encode_key(Key::Enter, Modifiers::empty()),
+            encode_slint_key_event("\n", false, false, false, &encoder)
+        );
+        assert_eq!(
+            encoder.encode_key(Key::Backspace, Modifiers::empty()),
+            encode_slint_key_event("\u{8}", false, false, false, &encoder)
+        );
     }
 }

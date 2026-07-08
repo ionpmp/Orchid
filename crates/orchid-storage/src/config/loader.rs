@@ -71,6 +71,12 @@ record-action-history = true
 history-retention-days = 90
 clear-clipboard-seconds = 30
 
+[onboarding]
+# Set to true after the first-run tour is completed or skipped.
+completed = false
+# Show subtle gesture hints on the workspace and dock (Win+? toggles at runtime).
+hint-mode-enabled = false
+
 # [file-manager]
 # Remote mounts shown under the file manager Network sidebar.
 # Use Orchid path syntax (`sftp:host/path`) or a URL (`sftp://host/path`).

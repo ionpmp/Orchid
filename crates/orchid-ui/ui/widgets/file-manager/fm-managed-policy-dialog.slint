@@ -1,0 +1,84 @@
+import { Theme } from "../../theme_global.slint";
+import { FmManagedPolicyState } from "../../workspace/defs.slint";
+
+export component FmManagedPolicyDialog inherits Rectangle {
+    in property <FmManagedPolicyState> state;
+    callback close();
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.close(); }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 420px;
+        height: lay.preferred-height + 16px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #00000080;
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 10px;
+
+            Text {
+                text: state.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+
+            Text {
+                text: state.path;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
+            for row[i] in state.rows : HorizontalLayout {
+                spacing: 8px;
+
+                Text {
+                    text: row.label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    min-width: 120px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: row.value;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: close-ta.has-hover ? Theme.accent-brand : #4d82ff88;
+                    border-radius: Theme.radius-md;
+                    close-ta := TouchArea { clicked => { root.close(); } }
+                    Text {
+                        text: state.close-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

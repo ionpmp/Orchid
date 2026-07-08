@@ -6,6 +6,7 @@ import { FmContextMenu } from "fm-context-menu.slint";
 import { FmConfirmDialog } from "fm-confirm-dialog.slint";
 import { FmTagDialog } from "fm-tag-dialog.slint";
 import { FmPassphraseDialog } from "fm-passphrase-dialog.slint";
+import { FmManagedPolicyDialog } from "fm-managed-policy-dialog.slint";
 
 export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
@@ -48,6 +49,8 @@ export component FileManagerView inherits Rectangle {
     callback passphrase-commit(string);
     callback passphrase-cancel();
     callback passphrase-biometric();
+
+    callback managed-policy-close();
 
     callback select-all(int);
     callback delete-selected(int);
@@ -404,6 +407,14 @@ export component FileManagerView inherits Rectangle {
         commit(pw) => { root.passphrase-commit(pw); }
         cancel => { root.passphrase-cancel(); }
         biometric => { root.passphrase-biometric(); }
+    }
+
+    if model.managed-policy.active : FmManagedPolicyDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        state: model.managed-policy;
+        close => { root.managed-policy-close(); }
     }
 }
 

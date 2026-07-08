@@ -29,6 +29,27 @@ pub struct OrchidConfig {
     pub privacy: PrivacyConfig,
     /// File-manager global settings (network mounts, etc.).
     pub file_manager: FileManagerSectionConfig,
+    /// First-run tour and gesture hint overlay preferences.
+    pub onboarding: OnboardingConfig,
+}
+
+/// First-run onboarding tour and optional gesture hint overlays.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct OnboardingConfig {
+    /// When `true`, the first-run tour has been completed or skipped.
+    pub completed: bool,
+    /// When `true`, subtle gesture hints are shown on the dock and workspace.
+    pub hint_mode_enabled: bool,
+}
+
+impl Default for OnboardingConfig {
+    fn default() -> Self {
+        Self {
+            completed: false,
+            hint_mode_enabled: false,
+        }
+    }
 }
 
 /// Application-wide toggles that don't fit any other section.

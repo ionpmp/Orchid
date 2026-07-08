@@ -69,6 +69,88 @@ Example: `feat(terminal): add sixel graphics support`
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md). Discuss major changes in an issue or discussion before implementing.
 
+## Extension checklists
+
+Use these when adding a locale, theme, or widget. Keep changes scoped to one
+logical task per pull request.
+
+### How to add a locale
+
+1. Copy `crates/orchid-i18n/locales/en-US/main.ftl` to
+   `crates/orchid-i18n/locales/<tag>/main.ftl` (use a valid BCP-47 tag, e.g.
+   `nl-NL`).
+2. Translate every message id; keep placeholder names (`{ $version }`, etc.)
+   identical to the English source.
+3. Register the catalogue in `crates/orchid-i18n/src/lib.rs`:
+   - add a `const <TAG>_FTL: &str = include_str!(...)` entry,
+   - append `("<tag>", <TAG>_FTL)` to the array inside
+     `LocaleManager::new`.
+4. Run `cargo test -p orchid-i18n` and spot-check strings in the settings
+   panel or startup window.
+5. *(Optional, no rebuild required)* Users can also drop overrides at
+   `{config_dir}/locales/<tag>/main.ftl`; those files overlay the bundled
+   catalogue at runtime.
+
+### How to add a theme
+
+**Built-in (bundled):**
+
+1. Add a `*_theme()` factory in `crates/orchid-ui/src/theme/bundled.rs`
+   returning a `Theme` with a unique `meta.id`, display name, `is_dark`, and
+   a full `DesignTokens` set.
+2. Append the factory to `all_bundled_themes()` in the same file.
+3. Set `appearance.theme` in `config.toml` to the new id and verify hot-reload
+   (or restart once).
+
+**User-supplied (JSON in `themes_dir`):**
+
+1. Author a JSON file matching the `ThemeDocument` schema in
+   `crates/orchid-ui/src/theme/loader.rs` (metadata + `tokens.color` hex
+   strings; typography / spacing / radius default when omitted).
+2. Place it under `OrchidPaths::themes_dir` (created on first run, typically
+   `{config_dir}/themes/<id>.json`). [`ThemeManager::new`] loads every valid
+   `.json` in that directory at startup.
+3. Reference the theme id in `config.toml` under `[appearance]`.
+
+Bundled themes are preferred for contributions that ship with Orchid; JSON
+themes are ideal for user-specific palettes that do not require a rebuild.
+
+### How to add a widget
+
+A widget spans three crates. Follow an existing built-in (e.g. `weather`) as a
+template.
+
+1. **`orchid-widgets` — logic and lifecycle**
+   - Add `crates/orchid-widgets/src/builtin/<name>/` with a `Widget`
+     implementation, config/state types, and a `descriptor()` returning
+     `WidgetDescriptor` (stable `type_id`, i18n keys, factory).
+   - Export the module from `builtin/mod.rs` if needed.
+   - Extend `WidgetPayload` / snapshot types when the widget needs a
+     structured payload.
+   - Register the descriptor in `OrchidApp::bootstrap`
+     (`crates/orchid-ui/src/app.rs`).
+
+2. **`orchid-i18n` — strings**
+   - Add `widget-<name>-name`, `widget-<name>-desc`, and any widget-specific
+     keys to every `locales/*/main.ftl` (at minimum `en-US`).
+
+3. **`orchid-ui` — Slint surface**
+   - Add a Slint component under `ui/widgets/` (import `Theme` from
+     `theme_global.slint`).
+   - Define a model struct in `ui/workspace/defs.slint` if the widget needs
+     typed fields beyond generic text rows.
+   - Wire the component into `ui/workspace/widget-frame.slint`.
+   - In `MainWindowController` (`src/window/main_window.rs`):
+     - add a `build_<name>_model` helper,
+     - include the type in `is_known_widget_type` and `dock_types_vec`,
+     - handle any widget-specific callbacks.
+   - *(Optional)* Implement `WidgetView` and register it on a
+     `WidgetViewDispatcher` when the default `SlintPayload::from_widget`
+     conversion is not enough (see `TerminalWidgetView`).
+
+4. **Tests** — add or extend integration tests under
+   `crates/orchid-ui/tests/` and `crates/orchid-widgets/tests/` as appropriate.
+
 ## License
 
 By submitting code, you agree that it will be distributed under AGPL-3.0 (see [`LICENSE`](../LICENSE)).

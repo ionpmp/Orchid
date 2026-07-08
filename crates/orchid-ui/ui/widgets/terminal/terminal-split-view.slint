@@ -10,7 +10,7 @@ export component TerminalSplitView inherits Rectangle {
 
     callback pane-clicked(string);
     callback pane-closed(string);
-    callback key-pressed(string);
+    callback key-pressed(string, bool, bool, bool);
     callback shortcut(string);
     callback split-drag-moved(string, string, float, float);
 
@@ -37,7 +37,7 @@ export component TerminalSplitView inherits Rectangle {
             cursor-visible: pane.cursor-visible;
             cell-width: root.cell-width;
             cell-height: root.cell-height;
-            key-pressed(text) => { root.key-pressed(text); }
+            key-pressed(text, ctrl, shift, alt) => { root.key-pressed(text, ctrl, shift, alt); }
             shortcut(action) => { root.shortcut(action); }
         }
 

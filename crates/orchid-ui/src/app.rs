@@ -685,6 +685,12 @@ impl OrchidApp {
     pub fn workspace_manager(&self) -> &Arc<WorkspaceManager> {
         &self.workspace_manager
     }
+
+    /// Registered commands (palette, shortcuts, gestures).
+    #[must_use]
+    pub fn command_registry(&self) -> &Arc<CommandRegistry> {
+        &self.command_registry
+    }
 }
 
 fn apply_command_shortcut_overrides(

@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { NavigationGlobal } from "../navigation_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
 import { WidgetFrame } from "widget-frame.slint";
 import { WorkspaceSwitcher } from "workspace-switcher.slint";
@@ -19,7 +20,7 @@ export component WorkspaceView inherits Rectangle {
     callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
-    callback terminal-key-pressed(string, string);
+    callback terminal-key-pressed(string, string, bool, bool, bool);
     callback terminal-viewport-changed(string, length, length);
     callback terminal-tab-clicked(string, int);
     callback terminal-tab-closed(string, int);
@@ -104,6 +105,7 @@ export component WorkspaceView inherits Rectangle {
     callback fm-passphrase-commit(string, string);
     callback fm-passphrase-cancel(string);
     callback fm-passphrase-biometric(string);
+    callback fm-managed-policy-close(string);
     callback fm-select-all(string, int);
     callback fm-delete-selected(string, int);
     callback fm-copy-selected(string, int);
@@ -138,11 +140,31 @@ export component WorkspaceView inherits Rectangle {
         workspace-create-clicked => { root.workspace-create-clicked(); }
     }
 
+    if NavigationGlobal.hint-mode-enabled: Rectangle {
+        x: 12px;
+        y: 44px;
+        width: hint-workspace.preferred-width + 16px;
+        height: hint-workspace.preferred-height + 10px;
+        background: #00000088;
+        border-radius: Theme.radius-md;
+
+        hint-workspace := Text {
+            x: 8px;
+            y: 5px;
+            text: NavigationGlobal.hint-workspace-label;
+            color: #ffffff;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+    }
+
+    property <length> dock-height: NavigationGlobal.dock-visible ? 64px : 0px;
+
     canvas := Rectangle {
         x: 0;
         y: 40px;
         width: parent.width;
-        height: parent.height - 40px - 64px;
+        height: parent.height - 40px - root.dock-height;
         background: Theme.surface-base;
         clip: true;
 
@@ -231,7 +253,9 @@ export component WorkspaceView inherits Rectangle {
                     resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
                     resize-moved(px, py) => { root.widget-resize-moved(w.instance-id, px, py); }
                     resize-ended => { root.widget-resize-ended(w.instance-id); }
-                    terminal-key-pressed(text) => { root.terminal-key-pressed(w.instance-id, text); }
+                    terminal-key-pressed(text, ctrl, shift, alt) => {
+                        root.terminal-key-pressed(w.instance-id, text, ctrl, shift, alt);
+                    }
                     terminal-viewport-changed(w_, h_) => { root.terminal-viewport-changed(w.instance-id, w_, h_); }
                     terminal-tab-clicked(idx) => { root.terminal-tab-clicked(w.instance-id, idx); }
                     terminal-tab-closed(idx) => { root.terminal-tab-closed(w.instance-id, idx); }
@@ -319,6 +343,7 @@ export component WorkspaceView inherits Rectangle {
                     fm-passphrase-commit(fm_id, pw) => { root.fm-passphrase-commit(fm_id, pw); }
                     fm-passphrase-cancel(fm_id) => { root.fm-passphrase-cancel(fm_id); }
                     fm-passphrase-biometric(fm_id) => { root.fm-passphrase-biometric(fm_id); }
+                    fm-managed-policy-close(fm_id) => { root.fm-managed-policy-close(fm_id); }
                     fm-select-all(fm_id, p) => { root.fm-select-all(fm_id, p); }
                     fm-delete-selected(fm_id, p) => { root.fm-delete-selected(fm_id, p); }
                     fm-copy-selected(fm_id, p) => { root.fm-copy-selected(fm_id, p); }
@@ -364,7 +389,7 @@ export component WorkspaceView inherits Rectangle {
         }
     }
 
-    WidgetDock {
+    if NavigationGlobal.dock-visible: WidgetDock {
         x: 0;
         y: parent.height - 64px;
         width: parent.width;
@@ -372,5 +397,41 @@ export component WorkspaceView inherits Rectangle {
         dock-types: root.workspace.dock-types;
         dock-add-label: root.workspace.dock-add-label;
         add-clicked(type-id) => { root.dock-add-clicked(type-id); }
+    }
+
+    if NavigationGlobal.hint-mode-enabled && NavigationGlobal.dock-visible: Rectangle {
+        x: 12px;
+        y: parent.height - 64px - hint-dock.preferred-height - 18px;
+        width: hint-dock.preferred-width + 16px;
+        height: hint-dock.preferred-height + 10px;
+        background: #00000088;
+        border-radius: Theme.radius-md;
+
+        hint-dock := Text {
+            x: 8px;
+            y: 5px;
+            text: NavigationGlobal.hint-dock-label;
+            color: #ffffff;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+    }
+
+    if NavigationGlobal.hint-mode-enabled: Rectangle {
+        x: parent.width - hint-gestures.preferred-width - 28px;
+        y: parent.height - hint-gestures.preferred-height - 24px;
+        width: hint-gestures.preferred-width + 16px;
+        height: hint-gestures.preferred-height + 10px;
+        background: #00000088;
+        border-radius: Theme.radius-md;
+
+        hint-gestures := Text {
+            x: 8px;
+            y: 5px;
+            text: NavigationGlobal.hint-gestures-label;
+            color: #ffffff;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
     }
 }

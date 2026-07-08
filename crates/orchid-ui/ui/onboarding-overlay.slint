@@ -1,0 +1,123 @@
+import { Theme } from "theme_global.slint";
+import { OnboardingGlobal } from "onboarding_global.slint";
+
+export component OnboardingOverlay inherits Rectangle {
+    callback next-clicked();
+    callback back-clicked();
+    callback skip-clicked();
+
+    width: 100%;
+    height: 100%;
+    background: #00000066;
+
+    TouchArea {
+        // Block clicks to content beneath the tour.
+    }
+
+    card := Rectangle {
+        width: min(parent.width - 48px, 520px);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+
+        VerticalLayout {
+            padding: Theme.spacing-unit * 3;
+            spacing: Theme.spacing-unit * 2;
+
+            Text {
+                text: OnboardingGlobal.step-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-xl;
+                font-weight: Theme.weight-semibold;
+                wrap: word-wrap;
+            }
+
+            Text {
+                text: OnboardingGlobal.step-body;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-md;
+                wrap: word-wrap;
+                vertical-stretch: 1;
+            }
+
+            HorizontalLayout {
+                spacing: Theme.spacing-unit;
+
+                Text {
+                    text: "{OnboardingGlobal.current-step + 1} / {OnboardingGlobal.step-count}";
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                if OnboardingGlobal.current-step > 0: Rectangle {
+                    width: 88px;
+                    height: 40px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    TouchArea {
+                        clicked => { root.back-clicked(); }
+                    }
+
+                    Text {
+                        text: OnboardingGlobal.back-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 96px;
+                    height: 40px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    TouchArea {
+                        clicked => { root.skip-clicked(); }
+                    }
+
+                    Text {
+                        text: OnboardingGlobal.skip-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 104px;
+                    height: 40px;
+                    background: Theme.accent-brand;
+                    border-radius: Theme.radius-md;
+
+                    TouchArea {
+                        clicked => { root.next-clicked(); }
+                    }
+
+                    Text {
+                        text: OnboardingGlobal.current-step + 1 >= OnboardingGlobal.step-count
+                            ? OnboardingGlobal.finish-label
+                            : OnboardingGlobal.next-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-semibold;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

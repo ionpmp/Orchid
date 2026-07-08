@@ -1,0 +1,86 @@
+import { Theme } from "theme_global.slint";
+import { NavigationGlobal } from "navigation_global.slint";
+import { AppState } from "app_state_global.slint";
+
+export component WorkspacePanel inherits Rectangle {
+    callback workspace-clicked(string);
+    callback dismiss();
+
+    width: 280px;
+    background: Theme.surface-raised;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: parent.height;
+        background: Theme.border-default;
+    }
+
+    VerticalLayout {
+        width: parent.width;
+        height: 100%;
+        padding: Theme.spacing-unit * 2;
+        spacing: Theme.spacing-unit;
+
+        HorizontalLayout {
+            Text {
+                text: NavigationGlobal.workspace-panel-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-semibold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+
+                TouchArea {
+                    clicked => { root.dismiss(); }
+                }
+
+                Text {
+                    text: "×";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-lg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Flickable {
+            vertical-stretch: 1;
+            width: 100%;
+
+            VerticalLayout {
+                spacing: 4px;
+
+                for ws in AppState.workspace.workspaces: Rectangle {
+                    height: 36px;
+                    background: ws.is-active ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+
+                    TouchArea {
+                        clicked => {
+                            root.workspace-clicked(ws.id);
+                            root.dismiss();
+                        }
+                    }
+
+                    Text {
+                        text: ws.name;
+                        color: ws.is-active ? Theme.text-primary : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: ws.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

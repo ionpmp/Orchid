@@ -4,6 +4,7 @@ use bincode::{Decode, Encode};
 use orchid_crypto::ChunkerConfig;
 use serde::{Deserialize, Serialize};
 
+use crate::managed::policy::ManagedFolderPolicy;
 use crate::path::FsPath;
 
 /// Declaration of a managed folder.
@@ -17,6 +18,9 @@ pub struct ManagedFolderConfig {
     pub enabled: bool,
     /// Ingest new / modified files automatically.
     pub auto_ingest: bool,
+    /// Optional retention, quota, and exclude rules.
+    #[serde(default)]
+    pub policy: Option<ManagedFolderPolicy>,
 }
 
 /// Aggregate statistics for a managed folder.

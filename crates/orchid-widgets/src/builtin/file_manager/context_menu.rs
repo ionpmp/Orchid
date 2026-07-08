@@ -40,6 +40,8 @@ pub struct ContextMenuInputs {
     pub entry_count: usize,
     /// Number of selected paths.
     pub selection_count: usize,
+    /// Selection is under a registered managed folder (policy dialog available).
+    pub managed_policy_available: bool,
 }
 
 /// Build the menu from the current selection and the extra flags.
@@ -217,6 +219,14 @@ pub fn build_for_selection(
         items.push(item(
             "fs.add-to-managed",
             "fm-action-add-to-managed",
+            "action-managed",
+            has_selection,
+        ));
+    }
+    if inputs.managed_policy_available {
+        items.push(item(
+            "fs.managed-policy",
+            "fm-action-managed-policy",
             "action-managed",
             has_selection,
         ));

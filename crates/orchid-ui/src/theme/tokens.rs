@@ -34,7 +34,7 @@ impl Color {
 }
 
 /// Colour tokens referenced from Slint's `Theme` global.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct ColorTokens {
     pub surface_base: Color,
@@ -47,7 +47,7 @@ pub struct ColorTokens {
 }
 
 /// Typography tokens.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[allow(missing_docs)]
 pub struct TypographyTokens {
     pub font_family_sans: String,
@@ -84,7 +84,7 @@ impl Default for TypographyTokens {
 }
 
 /// Border-radius scale.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[allow(missing_docs)]
 pub struct RadiusTokens {
     pub sm: f32,
@@ -103,7 +103,7 @@ impl Default for RadiusTokens {
 }
 
 /// Spacing scale. `unit` is the base spacing increment (4 px by default).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[allow(missing_docs)]
 pub struct SpacingTokens {
     pub unit: f32,

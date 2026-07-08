@@ -1,10 +1,4 @@
-//! Language detection for text viewer.
-//!
-//! The MVP ships with **no** tree-sitter grammar bundled — adding them
-//! is a follow-up task because every grammar is a C build that requires
-//! the MSVC / clang toolchain. The detection here still produces the
-//! canonical language tag (`"rust"`, `"python"`, …) so the future
-//! grammar pack wires in without callers changing.
+//! Language detection and tree-sitter grammar registry.
 
 /// Stable language tag for `plaintext` (no highlighting).
 pub const PLAINTEXT: &str = "plaintext";
@@ -88,6 +82,22 @@ fn by_shebang(bytes: &[u8]) -> Option<&'static str> {
         }
     }
     None
+}
+
+/// Languages with a bundled tree-sitter grammar for syntax highlighting.
+pub const HIGHLIGHT_LANGUAGES: &[&str] = &["rust", "python", "toml", "json", "markdown"];
+
+/// Resolve a canonical language id to a tree-sitter [`Language`].
+#[must_use]
+pub fn language_for_id(id: &str) -> Option<tree_sitter::Language> {
+    match id {
+        "rust" => Some(tree_sitter_rust::LANGUAGE.into()),
+        "python" => Some(tree_sitter_python::LANGUAGE.into()),
+        "toml" => Some(tree_sitter_toml::LANGUAGE.into()),
+        "json" => Some(tree_sitter_json::LANGUAGE.into()),
+        "markdown" => Some(tree_sitter_md::LANGUAGE.into()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

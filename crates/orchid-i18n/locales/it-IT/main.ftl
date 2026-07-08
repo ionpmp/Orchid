@@ -1,0 +1,478 @@
+# Orchid Italian (it-IT) message catalog.
+#
+# Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
+# the built-in widgets fall back to the English strings baked into their
+# Rust code — the keys below mirror those defaults and will become the
+# single source of truth once the bundle loader is wired up.
+
+# ---- Widget registry metadata ----
+widget-terminal-name = Terminale
+widget-terminal-desc = Shell locali, WSL o SSH con PTY, colori ANSI e scrollback
+
+widget-weather-name = Meteo
+widget-weather-desc = Condizioni attuali e previsioni a 3 giorni
+
+widget-moon-name = Luna
+widget-moon-desc = Fase lunare attuale, orari di sorgere/tramonto e dati celesti
+
+widget-system-name = Sistema
+widget-system-desc = Indicatori CPU, memoria, disco, rete e batteria
+
+widget-rss-name = Notizie
+widget-rss-desc = Feed di notizie RSS e Atom
+
+widget-recent-files-name = File recenti
+widget-recent-files-desc = File aperti di recente in Orchid
+
+widget-search-name = Ricerca universale
+widget-search-desc = Cerca file, esegui comandi, apri impostazioni
+
+widget-media-name = Lettore multimediale
+widget-media-desc = Riproduzione in corso con controlli di trasporto
+
+widget-password-name = Password
+widget-password-desc = Accedi al database delle password
+
+widget-viewer-name = Visualizzatore
+widget-viewer-desc = Visualizza immagini, documenti, file sorgente e archivi
+
+# ---- Weather ----
+weather-condition-clear = Sereno
+weather-condition-partly-cloudy = Parzialmente nuvoloso
+weather-condition-cloudy = Nuvoloso
+weather-condition-overcast = Coperto
+weather-condition-fog = Nebbia
+weather-condition-drizzle = Pioggerella
+weather-condition-rain = Pioggia
+weather-condition-snow = Neve
+weather-condition-sleet = Nevischio
+weather-condition-thunderstorm = Temporale
+weather-condition-hail = Grandine
+weather-condition-windy = Ventoso
+weather-condition-unknown = Sconosciuto
+weather-day-today = Oggi
+weather-day-tomorrow = Domani
+weather-status-fresh = Aggiornato
+weather-status-stale = I dati potrebbero essere obsoleti
+weather-status-offline = Offline
+weather-status-error = Errore nel caricamento del meteo
+weather-updated-just-now = Aggiornato ora
+weather-updated-minutes = Aggiornato { $m } min fa
+weather-updated-hours = Aggiornato { $h } h fa
+weather-updated-days = Aggiornato { $d } g fa
+weather-loading = Caricamento meteo…
+weather-feels-like = Percepita { $temp }
+weather-humidity-label = Umidità
+weather-wind-label = Vento
+
+# ---- Moon ----
+moon-phase-new = Luna nuova
+moon-phase-waxing-crescent = Luna crescente
+moon-phase-first-quarter = Primo quarto
+moon-phase-waxing-gibbous = Gibbosa crescente
+moon-phase-full = Luna piena
+moon-phase-waning-gibbous = Gibbosa calante
+moon-phase-last-quarter = Ultimo quarto
+moon-phase-waning-crescent = Luna calante
+moon-illumination = { $pct }% illuminata
+moon-age = Età: { $days } giorni
+moon-distance = Distanza: { $km } km
+moon-next-full = Prossima luna piena: { $date }
+moon-next-new = Prossima luna nuova: { $date }
+moon-moonrise = Sorgere della luna: { $time }
+moon-moonset = Tramonto della luna: { $time }
+moon-sunrise = Alba: { $time }
+moon-sunset = Tramonto: { $time }
+moon-libration = Libration: { $lat }°, { $lon }°
+moon-loading = Calcolo dati lunari…
+
+# ---- System ----
+system-cpu-label = CPU
+system-memory-label = Memoria
+system-disk-label = Disco { $mount }
+system-network-label = Rete { $name }
+system-battery-label = Batteria
+system-uptime-label = Tempo attivo
+system-battery-charging = In carica
+system-battery-time-remaining = { $time } rimanenti
+system-network-rate = ↑ { $up }/s  ↓ { $down }/s
+system-loading = Caricamento metriche di sistema…
+
+# ---- RSS ----
+rss-no-feeds = Nessun feed configurato
+rss-loading = Caricamento notizie…
+rss-fetch-failed = Impossibile caricare i feed. Controlla la connessione e riprova.
+rss-empty = Nessun elemento nei feed configurati.
+recent-files-empty = Nessun file recente. Apri file nel visualizzatore o nel gestore file per vederli qui.
+rss-error-summary = { $n } di { $total } feed non aggiornati
+rss-item-published-minutes = { $m } min fa
+rss-item-published-hours = { $h } h fa
+rss-item-published-days = { $d } g fa
+
+# ---- Universal Search ----
+search-placeholder = Cerca file, comandi, impostazioni…
+search-empty-state = Inizia a digitare per cercare
+search-no-results = Nessun risultato per «{ $query }»
+search-no-results-short = Nessun risultato
+search-searching = Ricerca…
+search-source-files = File
+search-source-commands = Comandi
+search-source-settings = Impostazioni
+
+# ---- Command palette ----
+command-palette-placeholder = Esegui un comando…
+command-palette-empty = Tutti i comandi
+
+# ---- Registered commands ----
+command.widget.create.name = Crea widget
+command.widget.create.desc = Aggiungi un nuovo widget all'area di lavoro
+command.widget.create.arg.type = Id tipo widget (es. terminal, weather)
+
+command.widget.close.name = Chiudi widget
+command.widget.close.desc = Chiudi un'istanza del widget
+
+command.widget.move.name = Sposta widget
+command.widget.resize.name = Ridimensiona widget
+command.widget.focus_next.name = Widget successivo
+command.widget.show_all.name = Mostra tutti i widget
+command.widget.group.dissolve.name = Sciogli gruppo widget
+
+command.workspace.create.name = Crea area di lavoro
+command.workspace.delete.name = Elimina area di lavoro
+command.workspace.switch_to.name = Passa all'area di lavoro
+command.workspace.switch_next.name = Area di lavoro successiva
+command.workspace.switch_previous.name = Area di lavoro precedente
+
+command.terminal.split_horizontal.name = Dividi terminale orizzontalmente
+command.terminal.split_vertical.name = Dividi terminale verticalmente
+command.terminal.tab_new.name = Nuova scheda terminale
+command.terminal.close.name = Chiudi riquadro o scheda terminale
+command.terminal.focus_next_pane.name = Riquadro terminale successivo
+command.terminal.focus_previous_pane.name = Riquadro terminale precedente
+command.terminal.tab_next.name = Scheda terminale successiva
+command.terminal.tab_previous.name = Scheda terminale precedente
+
+# ---- Settings (universal search) ----
+settings.section.general = Generale
+settings.section.appearance = Aspetto
+settings.section.input = Input
+settings.section.shortcuts = Scorciatoie
+settings.section.locale = Lingua
+settings.section.privacy = Privacy
+
+# ---- Settings panel ----
+settings-panel-title = Impostazioni
+settings-panel-hint = I valori sono di sola lettura per ora. Modifica config.toml direttamente; le modifiche si ricaricano automaticamente.
+settings-panel-coming-soon = L'editor completo delle impostazioni per questa sezione non è ancora disponibile. Modifica config.toml direttamente per ora.
+settings-panel-ok = Chiudi
+
+settings-value-yes = Sì
+settings-value-no = No
+settings-value-none = Nessuno
+settings-value-default = Predefinito
+settings-value-disabled = Disabilitato
+settings-value-system-default = Predefinito di sistema
+settings-value-hand-left = Sinistra
+settings-value-hand-right = Destra
+settings-value-pen-double-tap-none = Nessuno
+settings-value-pen-double-tap-switch-tool = Cambia strumento
+settings-value-pen-double-tap-erase = Cancella
+settings-value-sunday = Domenica
+settings-value-monday = Lunedì
+
+settings-field-auto-update = Aggiornamento automatico
+settings-field-telemetry = Telemetria
+settings-field-open-on-startup = Apri all'avvio
+settings-field-theme = Tema
+settings-field-density = Densità
+settings-field-font-family = Famiglia di caratteri
+settings-field-font-scale = Scala caratteri
+settings-field-reduce-motion = Riduci animazioni
+settings-field-follow-system-theme = Segui tema di sistema
+settings-field-dark-theme = Tema scuro
+settings-field-light-theme = Tema chiaro
+settings-field-primary-hand = Mano dominante
+settings-field-mirror-edge-swipes = Inverti scorrimenti sui bordi
+settings-field-haptic-feedback = Feedback aptico
+settings-field-palm-rejection = Rifiuto del palmo
+settings-field-pen-double-tap = Doppio tocco penna
+settings-field-shortcut-overrides = Scorciatoie personalizzate
+settings-field-leader-key = Tasto leader
+settings-field-leader-timeout = Timeout leader
+settings-field-leader-bindings = Associazioni leader
+settings-field-language = Lingua
+settings-field-date-format = Formato data
+settings-field-time-format = Formato ora
+settings-field-first-day-of-week = Primo giorno della settimana
+settings-field-record-action-history = Registra cronologia azioni
+settings-field-history-retention-days = Conservazione cronologia (giorni)
+settings-field-clear-clipboard-seconds = Svuota appunti dopo copia
+
+command.settings.open.name = Apri impostazioni
+command.settings.open.desc = Mostra il pannello impostazioni
+command.password.lock.name = Blocca cassaforte password
+command.password.lock.desc = Rimuovi il database password sbloccato dalla memoria
+
+# ---- Terminal tab bar ----
+terminal-tooltip-split-h = Dividi orizzontalmente (Ctrl+Shift+H)
+terminal-tooltip-split-v = Dividi verticalmente (Ctrl+Shift+J)
+terminal-tooltip-tab-new = Nuova scheda (Ctrl+Shift+T)
+
+# ---- Media player ----
+media-no-session = Nessuna riproduzione
+media-loading = Caricamento media…
+media-unsupported = I controlli multimediali non sono disponibili su questa piattaforma
+media-play = Riproduci
+media-pause = Pausa
+media-next = Successivo
+media-previous = Precedente
+
+# ---- Password manager ----
+password-locked = Il database è bloccato
+password-unlock-label = Password principale
+password-unlock-placeholder = Inserisci password principale
+password-unlock-submit = Sblocca
+password-unlock-biometric = Windows Hello
+password-unlock-biometric-prompt = Sblocca cassaforte password
+password-search-placeholder = Cerca voci…
+password-no-entries = Nessuna voce
+password-copy-password = Copia password
+password-copy-username = Copia nome utente
+password-copy-totp = Copia TOTP
+password-open-url = Apri URL
+password-password-copied = Password copiata (si cancella in 30 s)
+password-totp-copied = TOTP copiato (si cancella in 30 s)
+password-totp-remaining = { $s } s
+
+
+# ==== Viewer widget ====
+widget-viewer-name = Visualizzatore
+widget-viewer-desc = Apri file: immagini, PDF, testo, archivi
+viewer-loading = Caricamento…
+viewer-error = Impossibile visualizzare questo file
+viewer-unsupported = Tipo di file non supportato
+viewer-image-fit-screen = Adatta allo schermo
+viewer-image-actual-size = Dimensione reale
+viewer-image-rotate = Ruota
+viewer-image-flip-h = Capovolgi orizzontalmente
+viewer-image-flip-v = Capovolgi verticalmente
+viewer-pdf-page-of = Pagina { $current } di { $total }
+viewer-pdf-fit-width = Adatta alla larghezza
+viewer-pdf-fit-page = Adatta alla pagina
+viewer-text-read-only = Sola lettura
+viewer-text-editing = Modifica
+viewer-text-save = Salva
+viewer-text-dirty-indicator = Modifiche non salvate
+viewer-archive-extract-all = Estrai tutto
+viewer-archive-extract-selected = Estrai selezione
+viewer-archive-preview-binary = File binario, { $size }
+
+# ==== File manager widget ====
+widget-fm-name = File
+widget-fm-desc = Sfoglia, organizza e gestisci i file
+fm-nav-back = Indietro
+fm-nav-forward = Avanti
+fm-nav-up = Su
+fm-nav-home = Home
+fm-view-icons = Icone
+fm-view-list = Elenco
+fm-view-details = Dettagli
+fm-view-gallery = Galleria
+fm-sort-name = Nome
+fm-sort-size = Dimensione
+fm-sort-modified = Modificato
+fm-sort-type = Tipo
+fm-action-open = Apri
+fm-action-open-all = Apri tutto
+fm-action-open-with = Apri con…
+fm-action-open-default = Apri con app predefinita
+fm-action-open-in-viewer = Apri in Orchid Viewer
+fm-action-copy = Copia
+fm-action-cut = Taglia
+fm-action-paste = Incolla
+fm-action-rename = Rinomina
+fm-action-delete = Elimina
+fm-action-new-folder = Nuova cartella
+fm-action-new-tab = Nuova scheda
+fm-action-close-tab = Chiudi scheda
+fm-action-select-all = Seleziona tutto
+fm-action-deselect-all = Deseleziona tutto
+fm-action-star = Preferito
+fm-action-unstar = Rimuovi preferito
+fm-action-encrypt = Cifra
+fm-action-reveal = Mostra temporaneamente
+fm-action-decrypt = Decifra
+fm-action-add-tag = Aggiungi tag…
+fm-action-remove-tag = Rimuovi tag
+fm-action-color-label = Etichetta colore
+fm-color-red = Rosso
+fm-color-orange = Arancione
+fm-color-yellow = Giallo
+fm-color-green = Verde
+fm-color-blue = Blu
+fm-color-purple = Viola
+fm-color-gray = Grigio
+fm-color-none = Nessun colore
+fm-action-properties = Proprietà
+fm-action-add-to-managed = Aggiungi a cartella gestita
+fm-action-remove-from-managed = Rimuovi da cartelle gestite
+fm-rename-title = Rinomina
+fm-rename-ok = OK
+fm-rename-cancel = Annulla
+fm-dual-pane-on = Doppio riquadro
+fm-dual-pane-off = Riquadro singolo
+fm-show-hidden-on = Mostra file nascosti
+fm-show-hidden-off = Nascondi file nascosti
+fm-click-single-on = Un clic per aprire
+fm-click-single-off = Doppio clic per aprire
+fm-encrypt-title = Cifra con passphrase
+fm-reveal-title = Inserisci passphrase per mostrare
+fm-decrypt-title = Inserisci passphrase per decifrare
+fm-info-close = Chiudi
+fm-properties-title = Proprietà
+fm-tag-add-title = Aggiungi tag
+fm-confirm-delete = Eliminare { $n } elementi?
+fm-confirm-delete-permanent = Eliminare definitivamente { $n } elementi?
+fm-status-items = { $n } elementi
+fm-status-selected = { $n } selezionati
+fm-status-total-size = { $size }
+fm-status-bar = { $items } elementi, { $selected } selezionati
+fm-status-managed = { $items } elementi, { $selected } selezionati · { $tracked } ingeriti, { $dedup } deduplicati
+fm-encrypted = Cifrato: { $name }
+fm-decrypted = Decifrato: { $name }
+fm-managed-added = Aggiunto a cartella gestita
+fm-managed-removed = Rimosso da cartelle gestite
+fm-encryption-unavailable = La cifratura non è disponibile
+fm-passphrase-failed = Passphrase non riuscita: { $reason }
+fm-passphrase-invalid = Passphrase non valida
+fm-passphrase-required = Passphrase obbligatoria
+fm-decryption-failed = Decifratura non riuscita
+fm-passphrase-encrypt-hint = Scegli una passphrase robusta. Non può essere recuperata se persa.
+fm-passphrase-decrypt-hint = Inserisci la passphrase usata per cifrare questi file.
+fm-passphrase-reveal-hint = I file vengono decifrati in una posizione temporanea per la visualizzazione.
+fm-passphrase-biometric = Windows Hello
+fm-passphrase-biometric-prompt = Sblocca file cifrati
+fm-revealed = Mostrato: { $name }
+fm-managed-unavailable = Le cartelle gestite non sono disponibili
+fm-managed-no-selection = Seleziona una cartella da aggiungere alle cartelle gestite
+fm-not-managed-folder = Non è una cartella gestita
+fm-managed-conflict = Conflitto cartella gestita
+fm-sidebar-managed-folder = { $name } ({ $count } file, { $dedup } risparmiati)
+fm-ingest-failed = Ingestione non riuscita: { $name }
+fm-quick-filter-placeholder = Filtra…
+fm-sidebar-favorites = Preferiti
+fm-sidebar-categories = Categorie
+fm-sidebar-managed = Cartelle gestite
+fm-network-placeholder = I mount di rete non sono ancora configurati. Supporto SFTP, SMB e WebDAV via rclone pianificato.
+fm-network-no-provider = Nessun provider di filesystem registrato per questa posizione di rete.
+fm-network-rclone-missing = rclone non è installato o non è nel PATH. Imposta RCLONE_BIN se necessario.
+fm-network-invalid-mount = Questo mount di rete è configurato male. Controlla nome e URI in config.toml.
+fm-network-auth-failed = Autenticazione non riuscita. Controlla username e password in config.toml.
+fm-network-permission-denied = Permesso negato su questa posizione di rete.
+fm-network-connection-failed = Impossibile connettersi all'host di rete. Controlla URI e rete.
+fm-ingested = Ingerito: { $name }
+fm-ingesting = Ingestione: { $name } ({ $count } attivi)
+fm-ingesting-count = Ingestione di { $count } file…
+fm-copying = Copia: { $name } ({ $percent }%)
+fm-moving = Spostamento: { $name } ({ $percent }%)
+fm-transfer-failed = Trasferimento non riuscito: { $reason }
+fm-transfer-already-exists = Esiste già un file con quel nome
+fm-transfer-virtual-dest = Impossibile copiare o spostare in una cartella virtuale
+fm-clipboard-copy = { $count } voci pronte per incollare
+fm-clipboard-cut = { $count } voci (taglia) pronte per incollare
+fm-sidebar-tags = Tag
+fm-sidebar-recent = Recenti
+fm-sidebar-network = Rete
+fm-sidebar-network-all = Tutte le posizioni
+fm-category-images = Immagini
+fm-category-documents = Documenti
+fm-category-video = Video
+fm-category-audio = Audio
+fm-category-archives = Archivi
+fm-virtual-recent = Recenti
+fm-virtual-starred = Preferiti
+fm-virtual-tags = Tag
+fm-virtual-recent-empty = Nessun file recente. Apri file per vederli qui.
+fm-virtual-starred-empty = Nessun preferito. Aggiungi preferiti dal menu contestuale.
+fm-virtual-tags-empty = Nessun file con tag. Aggiungi tag dal menu contestuale.
+fm-virtual-category-empty = Nessun file corrispondente in questa categoria.
+fm-virtual-create-denied = Impossibile creare cartelle in una posizione virtuale
+fm-empty-folder = Questa cartella è vuota
+fm-error-access = Impossibile accedere a questa posizione
+
+
+# ==== Startup shell (task 11A) ====
+window-title = Orchid
+startup-welcome = Benvenuto in Orchid
+startup-subtitle = Un ambiente informatico pensato per il touch
+startup-version-label = Versione { $version }
+status-theme = Tema:
+status-language = Lingua:
+status-density = Densità:
+density-touch = Touch
+density-mouse = Mouse
+density-hybrid = Ibrido
+
+# ---- Workspace shell (task 11B) ----
+startup-get-started = Inizia
+workspace-default-name = Principale
+workspace-new = Nuova area di lavoro
+workspace-unnamed = Area di lavoro { $n }
+dock-add-label = Aggiungi widget
+catalog-title = Catalogo widget
+catalog-search-placeholder = Cerca widget…
+dock-widget-terminal = Terminale
+dock-widget-weather = Meteo
+dock-widget-moon = Luna
+dock-widget-system = Sistema
+dock-widget-rss = Notizie
+dock-widget-recent-files = Recenti
+dock-widget-search = Ricerca
+dock-widget-media = Media
+dock-widget-password = Password
+dock-widget-viewer = Visualizzatore
+dock-widget-fm = File
+
+viewer-no-file = Nessun file aperto
+viewer-loading-path = Caricamento: { $path }
+viewer-error-with-reason = Impossibile visualizzare questo file: { $reason }
+viewer-pdf-unavailable = Il supporto PDF non è disponibile in questa build.
+viewer-archive-select-preview = Seleziona un file da anteprima
+viewer-archive-binary-preview = File binario, { $size }
+
+password-select-entry = Seleziona una voce
+password-label-title = Titolo
+password-label-username = Nome utente
+password-label-password = Password
+password-label-url = URL
+password-label-notes = Note
+password-label-totp = TOTP
+password-action-copy = Copia
+password-action-open = Apri
+password-action-lock = Blocca
+password-action-add = Aggiungi
+password-add-title = Nuova voce
+password-add-submit = Salva
+password-add-cancel = Annulla
+password-add-error-title = Il titolo è obbligatorio
+password-entry-added = Voce salvata
+
+password-username-copied = Nome utente copiato
+
+moon-age-label = Età
+moon-distance-label = Distanza
+moon-next-full-label = Prossima luna piena
+moon-next-new-label = Prossima luna nuova
+moon-moonrise-label = Sorgere della luna
+moon-moonset-label = Tramonto della luna
+moon-sunrise-label = Alba
+moon-sunset-label = Tramonto
+moon-libration-label = Libration
+
+widget-title-terminal = Terminale
+widget-close-tooltip = Chiudi widget
+widget-close-confirm = Chiudere { $name }?
+action-confirm-yes = Sì
+action-confirm-no = No
+
+fm-confirm-title = Conferma

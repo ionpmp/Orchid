@@ -162,7 +162,7 @@ settings.section.privacy = Privacy
 
 # ---- Settings panel ----
 settings-panel-title = Settings
-settings-panel-hint = Values are read-only for now. Edit config.toml directly to change settings; changes reload automatically.
+settings-panel-hint = Changes save automatically to config.toml. Shortcut overrides and leader bindings are read-only here — edit those in config.toml directly.
 settings-panel-coming-soon = The full settings editor for this section is not available yet. Edit config.toml directly for now.
 settings-panel-ok = Close
 
@@ -212,6 +212,22 @@ command.settings.open.name = Open settings
 command.settings.open.desc = Show the settings panel
 command.password.lock.name = Lock password vault
 command.password.lock.desc = Clear the unlocked password database from memory
+
+command.navigation.show_workspace_panel.name = Show workspace panel
+command.navigation.show_workspace_panel.desc = Toggle the workspace sidebar
+command.notification.show_center.name = Show notification center
+command.notification.show_center.desc = Toggle the notification center overlay
+command.dock.show.name = Show dock
+command.dock.show.desc = Toggle the widget dock
+command.search.show_universal.name = Universal search
+command.search.show_universal.desc = Open or focus universal search
+
+command.onboarding.toggle_hint_mode.name = Toggle hint mode
+command.onboarding.toggle_hint_mode.desc = Show or hide gesture hints on the workspace
+
+navigation-workspace-panel-title = Workspaces
+notification-center-title = Notifications
+notification-center-placeholder = No notifications yet.
 
 # ---- Terminal tab bar ----
 terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)
@@ -316,6 +332,17 @@ fm-color-none = No color
 fm-action-properties = Properties
 fm-action-add-to-managed = Add to managed folder
 fm-action-remove-from-managed = Remove from managed folders
+fm-action-managed-policy = Managed folder policy
+fm-managed-policy-title = Managed folder policy
+fm-policy-max-size = Max size
+fm-policy-retention = Retention
+fm-policy-excludes = Exclude patterns
+fm-policy-unlimited = Unlimited
+fm-policy-forever = Keep forever
+fm-policy-retention-days = { $days } days
+fm-policy-none = None
+fm-sidebar-managed-folder-policy = { $name } ({ $count } files, { $dedup } saved, policy)
+fm-sidebar-managed-policy-only = { $name } (policy)
 fm-rename-title = Rename
 fm-rename-ok = OK
 fm-rename-cancel = Cancel
@@ -415,6 +442,29 @@ density-hybrid = Hybrid
 
 # ---- Workspace shell (task 11B) ----
 startup-get-started = Get Started
+
+# ---- Onboarding tour ----
+onboarding-back = Back
+onboarding-next = Next
+onboarding-skip = Skip tour
+onboarding-finish = Get started
+
+onboarding-step-welcome-title = Welcome to Orchid
+onboarding-step-welcome-body = Orchid is a touch-first workspace where gestures, commands, and widgets are three forms of the same action. This short tour shows the essentials.
+
+onboarding-step-workspace-title = Your workspace
+onboarding-step-workspace-body = Switch workspaces at the top, arrange widgets on the canvas, and add new ones from the dock at the bottom.
+
+onboarding-step-palette-title = Command palette
+onboarding-step-palette-body = Press Ctrl+Shift+P to run any command. Every entry shows its keyboard shortcut so you can learn as you go.
+
+onboarding-step-gestures-title = Gestures and hints
+onboarding-step-gestures-body = Swipe from screen edges for panels and the dock. Press Win+? anytime to toggle hint mode and see what is available in the current context.
+
+onboarding-hint-workspace = Swipe from the left edge for workspaces
+onboarding-hint-dock = Swipe up from the bottom edge for the dock
+onboarding-hint-gestures = Win+? toggles these hints
+
 workspace-default-name = Main
 workspace-new = New workspace
 workspace-unnamed = Workspace { $n }

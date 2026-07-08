@@ -258,6 +258,7 @@ fn parse_key(token: &str) -> Option<Key> {
         ";" | "semicolon" => Some(Key::Semicolon),
         "'" | "quote" | "apostrophe" => Some(Key::Quote),
         "\\" | "backslash" => Some(Key::Backslash),
+        "?" => Some(Key::Char('?')),
         _ => None,
     };
     if named.is_some() {
@@ -331,6 +332,7 @@ mod tests {
             ("ctrl+shift+p", "Ctrl+Shift+P"),
             ("Alt+F4", "Alt+F4"),
             ("Win+Space", "Win+Space"),
+            ("Win+?", "Win+?"),
             ("Ctrl+,", "Ctrl+,"),
             ("Ctrl+`", "Ctrl+`"),
             ("Shift+Tab", "Shift+Tab"),

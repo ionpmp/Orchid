@@ -24,7 +24,7 @@ export component WidgetFrame inherits Rectangle {
     callback resize-started(string, length, length);
     callback resize-moved(length, length);
     callback resize-ended();
-    callback terminal-key-pressed(string);
+    callback terminal-key-pressed(string, bool, bool, bool);
     callback terminal-viewport-changed(length, length);
     callback terminal-tab-clicked(int);
     callback terminal-tab-closed(int);
@@ -115,6 +115,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-passphrase-commit(string, string);
     callback fm-passphrase-cancel(string);
     callback fm-passphrase-biometric(string);
+    callback fm-managed-policy-close(string);
     callback fm-select-all(string, int);
     callback fm-delete-selected(string, int);
     callback fm-copy-selected(string, int);
@@ -250,7 +251,9 @@ export component WidgetFrame inherits Rectangle {
                         root.terminal-split-drag-moved(a, b, fx, fy);
                     }
                     shortcut(action) => { root.terminal-shortcut(action); }
-                    key-pressed(text) => { root.terminal-key-pressed(text); }
+                    key-pressed(text, ctrl, shift, alt) => {
+                        root.terminal-key-pressed(text, ctrl, shift, alt);
+                    }
                 }
             }
         }
@@ -398,6 +401,7 @@ export component WidgetFrame inherits Rectangle {
             passphrase-commit(pw) => { root.fm-passphrase-commit(root.model.instance-id, pw); }
             passphrase-cancel => { root.fm-passphrase-cancel(root.model.instance-id); }
             passphrase-biometric => { root.fm-passphrase-biometric(root.model.instance-id); }
+            managed-policy-close => { root.fm-managed-policy-close(root.model.instance-id); }
             select-all(p) => { root.fm-select-all(root.model.instance-id, p); }
             delete-selected(p) => { root.fm-delete-selected(root.model.instance-id, p); }
             copy-selected(p) => { root.fm-copy-selected(root.model.instance-id, p); }

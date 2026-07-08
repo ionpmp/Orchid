@@ -5,6 +5,8 @@ import { TerminalCellModel } from "defs.slint";
 // the plain `FocusScope` path is unreliable: `KeyEvent::text` can be empty or pre-wrapped
 // in spurious C0/PUA codepoints, so the PTY never got consistent bytes. `TextInput` uses
 // the same text pipeline as the platform text system (layouts, @/#, IME-friendly).
+// Slint 1.16 `KeyEvent` has `text` + `modifiers` (no separate `event.key`); Rust maps PUA /
+// C0 key identities via `orchid_terminal::InputEncoder`.
 export component TerminalView inherits Rectangle {
     forward-focus: text-input;
     in property <int> cols;
@@ -19,7 +21,7 @@ export component TerminalView inherits Rectangle {
 
     in property <bool> input-enabled: true;
 
-    callback key-pressed(string);
+    callback key-pressed(string, bool, bool, bool);
     callback shortcut(string);
 
     background: Theme.surface-base;
@@ -88,84 +90,22 @@ export component TerminalView inherits Rectangle {
                     }
                 }
             }
-            if (event.text == Key.Return) {
-                root.key-pressed("\u{d}");
-            } else if (event.text == Key.Tab) {
-                root.key-pressed("\u{9}");
-            } else if (event.text == Key.Backtab) {
-                root.key-pressed("\u{1b}[Z");
-            } else if (event.text == Key.Backspace) {
-                root.key-pressed("\u{7f}");
-            } else if (event.text == Key.Escape) {
-                root.key-pressed("\u{1b}");
-            } else if (event.text == Key.Space) {
-                root.key-pressed(" ");
-            } else if (event.text == Key.UpArrow) {
-                root.key-pressed("\u{1b}[A");
-            } else if (event.text == Key.DownArrow) {
-                root.key-pressed("\u{1b}[B");
-            } else if (event.text == Key.LeftArrow) {
-                root.key-pressed("\u{1b}[D");
-            } else if (event.text == Key.RightArrow) {
-                root.key-pressed("\u{1b}[C");
-            } else if (event.text == Key.Home) {
-                root.key-pressed("\u{1b}[H");
-            } else if (event.text == Key.End) {
-                root.key-pressed("\u{1b}[F");
-            } else if (event.text == Key.PageUp) {
-                root.key-pressed("\u{1b}[5~");
-            } else if (event.text == Key.PageDown) {
-                root.key-pressed("\u{1b}[6~");
-            } else if (event.text == Key.Insert) {
-                root.key-pressed("\u{1b}[2~");
-            } else if (event.text == Key.Delete) {
-                root.key-pressed("\u{1b}[3~");
-            } else if (event.text == Key.F1) {
-                root.key-pressed("\u{1b}OP");
-            } else if (event.text == Key.F2) {
-                root.key-pressed("\u{1b}OQ");
-            } else if (event.text == Key.F3) {
-                root.key-pressed("\u{1b}OR");
-            } else if (event.text == Key.F4) {
-                root.key-pressed("\u{1b}OS");
-            } else if (event.text == Key.F5) {
-                root.key-pressed("\u{1b}[15~");
-            } else if (event.text == Key.F6) {
-                root.key-pressed("\u{1b}[17~");
-            } else if (event.text == Key.F7) {
-                root.key-pressed("\u{1b}[18~");
-            } else if (event.text == Key.F8) {
-                root.key-pressed("\u{1b}[19~");
-            } else if (event.text == Key.F9) {
-                root.key-pressed("\u{1b}[20~");
-            } else if (event.text == Key.F10) {
-                root.key-pressed("\u{1b}[21~");
-            } else if (event.text == Key.F11) {
-                root.key-pressed("\u{1b}[23~");
-            } else if (event.text == Key.F12) {
-                root.key-pressed("\u{1b}[24~");
-            } else if (event.text == Key.At) {
-                root.key-pressed("@");
-            } else if (event.text == Key.Hash) {
-                root.key-pressed("#");
-            } else if (event.text == Key.Dollar) {
-                root.key-pressed("$");
-            } else if (event.text == Key.Ampersand) {
-                root.key-pressed("&");
-            } else if (event.text == Key.Percent) {
-                root.key-pressed("%");
-            } else if (event.text != "") {
-                root.key-pressed(event.text);
-            } else {
-                // Let the widget apply the key; we pick the inserted text in `edited`.
-                return reject;
+            if (event.text != "") {
+                root.key-pressed(
+                    event.text,
+                    event.modifiers.control,
+                    event.modifiers.shift,
+                    event.modifiers.alt
+                );
+                self.text = "";
+                return accept;
             }
-            self.text = "";
-            return accept;
+            // Let the widget apply the key; we pick the inserted text in `edited`.
+            return reject;
         }
         edited() => {
             if (self.text == "") { return; }
-            root.key-pressed(self.text);
+            root.key-pressed(self.text, false, false, false);
             self.text = "";
         }
     }

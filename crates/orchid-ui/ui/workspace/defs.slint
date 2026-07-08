@@ -448,6 +448,19 @@ export struct FmPassphraseState {
     biometric-label: string,
 }
 
+export struct FmManagedPolicyRow {
+    label: string,
+    value: string,
+}
+
+export struct FmManagedPolicyState {
+    active: bool,
+    title: string,
+    path: string,
+    rows: [FmManagedPolicyRow],
+    close-label: string,
+}
+
 export struct FileManagerModel {
     panes: [FmPane],
     active-pane: int,
@@ -470,6 +483,7 @@ export struct FileManagerModel {
     rename: FmRenameState,
     tag: FmTagState,
     passphrase: FmPassphraseState,
+    managed-policy: FmManagedPolicyState,
 }
 
 export struct SettingsSectionEntry {
@@ -477,9 +491,17 @@ export struct SettingsSectionEntry {
     label: string,
 }
 
+// Settings field editor kinds (see settings-panel.slint).
 export struct SettingsFieldRow {
+    key: string,
     label: string,
+    // 0 = read-only text, 1 = bool, 2 = text input, 3 = combo
+    kind: int,
     value: string,
+    bool-value: bool,
+    combo-options: [string],
+    combo-values: [string],
+    combo-index: int,
 }
 
 export struct WidgetFrameModel {

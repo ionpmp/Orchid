@@ -1,0 +1,60 @@
+import { Theme } from "theme_global.slint";
+import { NavigationGlobal } from "navigation_global.slint";
+
+export component NotificationCenter inherits Rectangle {
+    callback dismiss();
+
+    width: 320px;
+    background: Theme.surface-raised;
+
+    Rectangle {
+        width: 1px;
+        height: parent.height;
+        background: Theme.border-default;
+    }
+
+    VerticalLayout {
+        width: parent.width;
+        height: 100%;
+        padding: Theme.spacing-unit * 2;
+        spacing: Theme.spacing-unit;
+
+        HorizontalLayout {
+            Text {
+                text: NavigationGlobal.notification-center-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-semibold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+
+                TouchArea {
+                    clicked => { root.dismiss(); }
+                }
+
+                Text {
+                    text: "×";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-lg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: NavigationGlobal.notification-center-placeholder;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+            vertical-stretch: 1;
+        }
+    }
+}

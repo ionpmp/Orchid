@@ -55,6 +55,19 @@ pub enum FsError {
     #[error("not a managed folder: {0}")]
     NotManagedFolder(String),
 
+    /// Managed ingest skipped because the path matches an exclude pattern.
+    #[error("managed ingest excluded: {0}")]
+    ManagedIngestExcluded(String),
+
+    /// Managed folder chunk-store quota exceeded.
+    #[error("managed folder quota exceeded: {current} bytes (limit {limit})")]
+    ManagedQuotaExceeded {
+        /// Current physical bytes in the chunk store.
+        current: u64,
+        /// Configured maximum allowed bytes.
+        limit: u64,
+    },
+
     /// Path is not registered as encrypted.
     #[error("not an encrypted path: {0}")]
     NotEncryptedPath(String),

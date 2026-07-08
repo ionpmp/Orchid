@@ -1,10 +1,12 @@
 import { Theme } from "theme_global.slint";
 import { Strings } from "strings_global.slint";
 import { SettingsGlobal } from "settings_global.slint";
+import { CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
 
 export component SettingsPanel inherits Rectangle {
     callback dismiss();
     callback section-selected(int);
+    callback field-changed(string, string, string);
 
     background: Theme.surface-raised;
     border-radius: Theme.radius-md;
@@ -91,6 +93,7 @@ export component SettingsPanel inherits Rectangle {
 
                     for row in SettingsGlobal.fields: HorizontalLayout {
                         spacing: 12px;
+                        min-height: 32px;
 
                         Text {
                             width: 42%;
@@ -98,14 +101,54 @@ export component SettingsPanel inherits Rectangle {
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
                             wrap: word-wrap;
+                            vertical-alignment: center;
                         }
 
-                        Text {
+                        if row.kind == 0 : Text {
                             horizontal-stretch: 1;
                             text: row.value;
                             color: Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             wrap: word-wrap;
+                            vertical-alignment: center;
+                        }
+
+                        if row.kind == 1 : CheckBox {
+                            horizontal-stretch: 1;
+                            checked: row.bool-value;
+                            toggled => {
+                                root.field-changed(
+                                    SettingsGlobal.current-section-id,
+                                    row.key,
+                                    self.checked ? "true" : "false",
+                                );
+                            }
+                        }
+
+                        if row.kind == 2 : LineEdit {
+                            horizontal-stretch: 1;
+                            text: row.value;
+                            font-size: Theme.font-size-sm;
+                            accepted(text) => {
+                                root.field-changed(
+                                    SettingsGlobal.current-section-id,
+                                    row.key,
+                                    text,
+                                );
+                            }
+                        }
+
+                        if row.kind == 3 : ComboBox {
+                            horizontal-stretch: 1;
+                            model: row.combo-options;
+                            current-index: row.combo-index;
+                            selected(_value) => {
+                                root.field-changed(
+                                    SettingsGlobal.current-section-id,
+                                    row.key,
+                                    row.combo-values[self.current-index],
+                                );
+                            }
                         }
                     }
                 }

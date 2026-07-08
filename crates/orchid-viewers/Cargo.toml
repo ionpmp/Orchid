@@ -11,6 +11,11 @@ authors.workspace = true
 [dependencies]
 image.workspace = true
 tree-sitter.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-toml.workspace = true
+tree-sitter-json.workspace = true
+tree-sitter-md.workspace = true
 ropey.workspace = true
 memmap2.workspace = true
 encoding_rs.workspace = true
