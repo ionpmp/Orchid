@@ -115,7 +115,7 @@ impl OrchidApp {
 
         let locale = Arc::new(LocaleManager::new(initial_lang, Some(paths.locales_dir.clone()))?);
 
-        let theme_id = config.read().appearance.theme.clone();
+        let theme_id = crate::system_theme::resolve_theme_id(&config.read().appearance);
         let theme = Arc::new(ThemeManager::new(Some(paths.themes_dir.clone()))?);
         if let Err(e) = theme.set_current(&theme_id) {
             tracing::warn!(

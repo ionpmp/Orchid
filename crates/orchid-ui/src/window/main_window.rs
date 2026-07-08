@@ -440,7 +440,8 @@ impl MainWindowController {
     fn apply_theme(self: &Arc<Self>) -> Result<()> {
         let theme = self.theme.current();
         let cfg = self.config.read();
-        let scale = cfg.appearance.density.ui_scale()
+        let (canvas_w, _) = *self.canvas_size.lock();
+        let scale = crate::window::effective_ui_scale(cfg.appearance.density, canvas_w)
             * cfg.appearance.font_scale.clamp(0.75, 2.0);
         drop(cfg);
         let g = self.window.global::<Theme>();
@@ -541,9 +542,10 @@ impl MainWindowController {
         if let Ok(lang) = LocaleId::parse(&cfg.locale.language) {
             self.locale.set_current(lang);
         }
-        if let Err(e) = self.theme.set_current(&cfg.appearance.theme) {
+        let theme_id = crate::system_theme::resolve_theme_id(&cfg.appearance);
+        if let Err(e) = self.theme.set_current(&theme_id) {
             warn!(
-                configured = %cfg.appearance.theme,
+                configured = %theme_id,
                 error = %e,
                 "unknown theme id after config reload"
             );
@@ -661,6 +663,9 @@ impl MainWindowController {
                     let canvas_size_mismatch = c.sync_canvas_size_from_winit();
                     if canvas_size_mismatch {
                         c.update_gesture_bounds();
+                        if c.config.read().appearance.density == orchid_storage::Density::Hybrid {
+                            let _ = c.apply_theme();
+                        }
                     }
                     let gestures = {
                         let mut rec = c.gesture_recognizer.lock();

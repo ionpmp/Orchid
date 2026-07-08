@@ -287,7 +287,7 @@ impl Default for PrivacyConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct FileManagerSectionConfig {
-    /// Remote folder mounts listed under the Network sidebar (rclone pending).
+    /// Remote folder mounts listed under the Network sidebar.
     pub network_mounts: Vec<NetworkMountConfig>,
 }
 
