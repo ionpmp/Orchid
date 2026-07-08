@@ -480,6 +480,7 @@ password-action-add = Добавить
 password-add-title = Новая запись
 password-add-submit = Сохранить
 password-add-cancel = Отмена
+password-generate = Сгенерировать
 password-add-error-title = Укажите название
 password-entry-added = Запись сохранена
 

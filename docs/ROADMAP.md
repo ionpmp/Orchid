@@ -100,7 +100,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 - [ ] AI agents (Ollama + OpenAI API)
 - [ ] Graphical resource monitor with history
-- [~] Extended notification system — in-app notification center list + Clear all + startup tip; persistence / OS toasts deferred
+- [~] Extended notification system — in-app notification center list + Clear all + startup tip; status toasts bridged for FM failures, password copy/auto-lock, and config apply errors; persistence / OS toasts deferred
 - [ ] Built-in browser (WebView2)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace

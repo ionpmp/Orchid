@@ -114,6 +114,11 @@ pub struct MainWindowController {
     command_registry: Arc<CommandRegistry>,
     bus: Arc<EventBus>,
     _config_reload_sub: SubscriptionHandle,
+    _fm_ingest_failed_sub: SubscriptionHandle,
+    /// Managed ingest failure file name; drained on the next UI tick.
+    fm_ingest_failure_pending: Arc<Mutex<Option<String>>>,
+    /// Last file-manager transfer error mirrored to the notification center.
+    last_fm_transfer_error: Arc<Mutex<Option<String>>>,
     widget_manager: Arc<WidgetManager>,
     workspace_manager: Arc<WorkspaceManager>,
     layout_engine: Arc<LayoutEngine>,
@@ -203,6 +208,8 @@ struct PasswordAddDialogOverlay {
     visible: bool,
     error: Option<String>,
     request_autofocus: bool,
+    generated_password: Option<String>,
+    generation_seq: u32,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -347,6 +354,30 @@ impl MainWindowController {
                 },
             )
             .map_err(|e| UiError::Slint(format!("config reload sub: {e}")))?;
+        let fm_ingest_failure_pending = Arc::new(Mutex::new(None));
+        let fm_ingest_flag = fm_ingest_failure_pending.clone();
+        let fm_ingest_failed_sub = bus
+            .subscribe_async(
+                EventFilter::of_type(orchid_fs::ManagedFileIngestFailedEvent::event_type()),
+                HandlerPriority::Normal,
+                move |env| {
+                    let name = env
+                        .downcast_arc::<orchid_fs::ManagedFileIngestFailedEvent>()
+                        .map(|e| {
+                            e.path
+                                .file_name()
+                                .map(String::from)
+                                .unwrap_or_else(|| e.path.as_str().to_string())
+                        });
+                    let flag = fm_ingest_flag.clone();
+                    async move {
+                        if let Some(name) = name {
+                            *flag.lock() = Some(name);
+                        }
+                    }
+                },
+            )
+            .map_err(|e| UiError::Slint(format!("fm ingest failed sub: {e}")))?;
         let input_mapper = Arc::new(InputMapper::new());
         let gesture_recognizer = Arc::new(Mutex::new(GestureRecognizer::new(
             GestureConfig::default(),
@@ -362,6 +393,9 @@ impl MainWindowController {
             command_palette: command_palette.clone(),
             bus,
             _config_reload_sub: config_reload_sub,
+            _fm_ingest_failed_sub: fm_ingest_failed_sub,
+            fm_ingest_failure_pending,
+            last_fm_transfer_error: Arc::new(Mutex::new(None)),
             widget_manager: widget_manager.clone(),
             workspace_manager: workspace_manager.clone(),
             layout_engine: layout_engine.clone(),
@@ -658,9 +692,15 @@ impl MainWindowController {
             let t = t.clone();
             move || {
                 if let Some(c) = t.upgrade() {
+                    c.drain_fm_ingest_failure_notification();
                     if c.config_reload_pending.swap(false, Ordering::AcqRel) {
                         if let Err(e) = c.apply_hot_config() {
                             warn!(?e, "config hot-reload");
+                            c.push_notification(
+                                &c.locale.tr("settings-panel-title"),
+                                &e.to_string(),
+                                2,
+                            );
                         }
                     }
                     let canvas_size_mismatch = c.sync_canvas_size_from_winit();
@@ -1198,6 +1238,14 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_password_add_entry_cancel();
+                }
+            }
+        });
+        self.window.on_password_add_entry_generate_password({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_add_entry_generate_password();
                 }
             }
         });
@@ -2410,6 +2458,52 @@ impl MainWindowController {
         self.sync_notification_global();
     }
 
+    /// Mirror high-value file-manager transfer failures into the notification center (deduped).
+    fn sync_fm_transfer_notifications(self: &Arc<Self>) {
+        let mut transfer_error: Option<String> = None;
+        for inst in self.widget_manager.list_instances() {
+            if inst.type_id != "file_manager" {
+                continue;
+            }
+            let Some(snap) = self.widget_manager.snapshot_cache().get(inst.id) else {
+                continue;
+            };
+            if let WidgetPayload::FileManager(fm) = &snap.payload {
+                if fm.transfer_error.is_some() {
+                    transfer_error = fm.transfer_error.clone();
+                    break;
+                }
+            }
+        }
+        let mut last = self.last_fm_transfer_error.lock();
+        match &transfer_error {
+            None => *last = None,
+            Some(err) if last.as_deref() == Some(err.as_str()) => {}
+            Some(err) => {
+                let title = self.locale.tr("widget-fm-name");
+                let body = self.locale.tr_args(
+                    "fm-transfer-failed",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("reason", fm_localized_error(&self.locale, err)),
+                );
+                self.push_notification(&title, &body, 3);
+                *last = Some(err.clone());
+            }
+        }
+    }
+
+    fn drain_fm_ingest_failure_notification(self: &Arc<Self>) {
+        let Some(name) = self.fm_ingest_failure_pending.lock().take() else {
+            return;
+        };
+        let title = self.locale.tr("widget-fm-name");
+        let body = self.locale.tr_args(
+            "fm-ingest-failed",
+            &orchid_i18n::FluentArgs::new().with("name", name.as_str()),
+        );
+        self.push_notification(&title, &body, 3);
+    }
+
     fn ensure_startup_notification_tip(self: &Arc<Self>) {
         if self
             .notification_tip_pushed
@@ -3445,6 +3539,11 @@ impl MainWindowController {
         };
         if at.elapsed() >= Duration::from_secs(u64::from(timeout_secs)) {
             drop(last);
+            self.push_notification(
+                &self.locale.tr("widget-password-name"),
+                &self.locale.tr("password-locked"),
+                0,
+            );
             self.on_password_lock_vault();
         }
     }
@@ -3540,7 +3639,9 @@ impl MainWindowController {
                 return;
             };
             let msg = locale.tr(toast_key).to_string();
-            c.password_toasts.write().insert(inst_id, (msg, true));
+            let title = locale.tr("widget-password-name");
+            c.password_toasts.write().insert(inst_id, (msg.clone(), true));
+            c.push_notification(&title, &msg, 1);
             c.schedule_rebuild();
 
             let t2 = Arc::downgrade(&c);
@@ -3622,6 +3723,7 @@ impl MainWindowController {
                 visible: true,
                 error: None,
                 request_autofocus: true,
+                ..Default::default()
             },
         );
         self.schedule_rebuild_after_password_unlock();
@@ -3677,6 +3779,12 @@ impl MainWindowController {
                         visible: true,
                         error: Some(error),
                         request_autofocus: false,
+                        ..self
+                            .password_add_dialogs
+                            .read()
+                            .get(&inst_id)
+                            .cloned()
+                            .unwrap_or_default()
                     },
                 );
                 self.schedule_rebuild_after_password_unlock();
@@ -3689,6 +3797,26 @@ impl MainWindowController {
             return;
         };
         self.password_add_dialogs.write().remove(&inst_id);
+        self.schedule_rebuild_after_password_unlock();
+    }
+
+    fn on_password_add_entry_generate_password(self: &Arc<Self>) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        self.touch_vault_activity();
+        let password = orchid_crypto::generate_password(orchid_crypto::DEFAULT_PASSWORD_LENGTH)
+            .unwrap_or_default();
+        let mut overlay = self
+            .password_add_dialogs
+            .read()
+            .get(&inst_id)
+            .cloned()
+            .unwrap_or_default();
+        overlay.visible = true;
+        overlay.generation_seq = overlay.generation_seq.saturating_add(1);
+        overlay.generated_password = Some(password);
+        self.password_add_dialogs.write().insert(inst_id, overlay);
         self.schedule_rebuild_after_password_unlock();
     }
 
@@ -4642,6 +4770,7 @@ impl MainWindowController {
             "rebuild_workspace_model in {ms:.2} ms"
         );
         *self.search_autofocus_pending.lock() = None;
+        self.sync_fm_transfer_notifications();
         Ok(())
     }
 
@@ -7330,6 +7459,9 @@ fn empty_password_add_dialog(locale: &LocaleManager) -> PasswordAddDialogState {
         url_label: locale.tr("password-label-url").into(),
         submit_label: locale.tr("password-add-submit").into(),
         cancel_label: locale.tr("password-add-cancel").into(),
+        generate_label: locale.tr("password-generate").into(),
+        gen_password: SharedString::new(),
+        gen_seq: 0,
         error: SharedString::new(),
         request_autofocus: false,
     }
@@ -9293,6 +9425,8 @@ fn build_password_model(
     dialog.visible = add_dialog.visible;
     dialog.error = add_dialog.error.unwrap_or_default().into();
     dialog.request_autofocus = add_dialog.request_autofocus;
+    dialog.gen_password = add_dialog.generated_password.unwrap_or_default().into();
+    dialog.gen_seq = add_dialog.generation_seq as i32;
 
     PasswordModel {
         is_unlocked: p.is_unlocked,

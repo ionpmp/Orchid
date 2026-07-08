@@ -63,7 +63,10 @@ pub use kdbx::{
     PasswordGroup, SearchQuery, SearchResult, SecureClipboard, TotpAlgorithm, TotpCode,
     TotpConfig,
 };
-pub use random::{fill_secure, random_bytes, random_uuid};
+pub use random::{
+    fill_secure, generate_password, generate_password_default, random_bytes, random_uuid,
+    DEFAULT_PASSWORD_LENGTH,
+};
 pub use secret::{SecretBytes, ZeroizingBytes};
 pub use vault::{FmPassphraseVault, PasswordVault};
 

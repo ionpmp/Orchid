@@ -67,6 +67,39 @@ pub fn random_uuid() -> uuid::Uuid {
     }
 }
 
+/// Default length for [`generate_password`].
+pub const DEFAULT_PASSWORD_LENGTH: usize = 20;
+
+const PASSWORD_CHARSET: &[u8] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}|;:,.<>?";
+
+/// Generate a random password using letters, digits, and symbols.
+///
+/// # Errors
+///
+/// See [`fill_secure`].
+pub fn generate_password(length: usize) -> Result<String> {
+    if length == 0 {
+        return Ok(String::new());
+    }
+    let mut bytes = vec![0u8; length];
+    fill_secure(&mut bytes)?;
+    let charset_len = PASSWORD_CHARSET.len();
+    Ok(bytes
+        .iter()
+        .map(|&b| PASSWORD_CHARSET[(b as usize) % charset_len] as char)
+        .collect())
+}
+
+/// Generate a random password using [`DEFAULT_PASSWORD_LENGTH`].
+///
+/// # Errors
+///
+/// See [`generate_password`].
+pub fn generate_password_default() -> Result<String> {
+    generate_password(DEFAULT_PASSWORD_LENGTH)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +122,24 @@ mod tests {
         let ids: std::collections::HashSet<_> =
             (0..16).map(|_| random_uuid()).collect();
         assert_eq!(ids.len(), 16);
+    }
+
+    #[test]
+    fn generate_password_has_requested_length() {
+        let p = generate_password(20).unwrap();
+        assert_eq!(p.len(), 20);
+    }
+
+    #[test]
+    fn generate_password_default_length() {
+        let p = generate_password_default().unwrap();
+        assert_eq!(p.len(), DEFAULT_PASSWORD_LENGTH);
+    }
+
+    #[test]
+    fn generate_passwords_differ() {
+        let a = generate_password(32).unwrap();
+        let b = generate_password(32).unwrap();
+        assert_ne!(a, b);
     }
 }

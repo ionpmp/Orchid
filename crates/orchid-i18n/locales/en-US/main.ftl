@@ -508,6 +508,7 @@ password-action-add = Add
 password-add-title = New entry
 password-add-submit = Save
 password-add-cancel = Cancel
+password-generate = Generate
 password-add-error-title = Title is required
 password-entry-added = Entry saved
 
