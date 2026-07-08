@@ -150,6 +150,8 @@ pub struct FileManagerDeps {
     pub recent_files: Arc<crate::recent_files::RecentFilesStore>,
     /// DPAPI-backed passphrase for Windows Hello unlock of encrypted files.
     pub fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
+    /// Application-wide config (locale formatting, etc.).
+    pub orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -1530,6 +1532,7 @@ fn build_tab_payload(
             .collect()
     };
 
+    let locale = inner.deps.orchid_config.read().locale.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
     let entry_payloads: Vec<EntryPayload> = entries_filtered
         .into_iter()
@@ -1554,7 +1557,7 @@ fn build_tab_payload(
                 modified_text: e
                     .metadata
                     .modified
-                    .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+                    .map(|t| locale.format_datetime(t))
                     .unwrap_or_default(),
                 type_text: classify(
                     &e.name,
@@ -2671,6 +2674,7 @@ pub async fn run_action_with_opts(
             return Ok(ActionOutcome::Done);
         }
         "fs.properties" => {
+            let locale = inner.deps.orchid_config.read().locale.clone();
             let mut lines = Vec::new();
             for p in &target_paths {
                 let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
@@ -2684,7 +2688,7 @@ pub async fn run_action_with_opts(
                         };
                         let modified = meta
                             .modified
-                            .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+                            .map(|t| locale.format_datetime(t))
                             .unwrap_or_else(|| "—".into());
                         let mime = meta.mime.unwrap_or_else(|| "—".into());
                         lines.push(format!(

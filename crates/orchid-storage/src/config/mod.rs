@@ -7,6 +7,8 @@
 //! * [`ConfigLoader`] — synchronous load / save API.
 //! * [`ConfigWatcher`] — async, debounced hot-reload bridge.
 
+mod locale_format;
+
 pub mod loader;
 pub mod schema;
 pub mod watcher;

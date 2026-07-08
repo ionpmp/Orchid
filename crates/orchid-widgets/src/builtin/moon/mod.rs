@@ -18,7 +18,7 @@ use crate::widget::payloads::MoonPayload;
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
-use orchid_storage::{LifecycleState, WidgetSize};
+use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 
 pub use astro::{compute_moon, MoonData, MoonPhase};
 pub use config::MoonConfig;
@@ -30,6 +30,7 @@ pub const TYPE_ID: &str = "moon";
 pub struct MoonWidget {
     instance_id: Uuid,
     config: RwLock<MoonConfig>,
+    orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     data: Arc<RwLock<Option<MoonData>>>,
     refresh: PeriodicRefresh,
     bus: Arc<orchid_core::EventBus>,
@@ -45,10 +46,16 @@ impl std::fmt::Debug for MoonWidget {
 
 impl MoonWidget {
     /// Construct a moon widget with the given config.
-    pub fn new(instance_id: Uuid, config: MoonConfig, bus: Arc<orchid_core::EventBus>) -> Self {
+    pub fn new(
+        instance_id: Uuid,
+        config: MoonConfig,
+        bus: Arc<orchid_core::EventBus>,
+        orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+    ) -> Self {
         Self {
             instance_id,
             config: RwLock::new(config),
+            orchid_config,
             data: Arc::new(RwLock::new(None)),
             refresh: PeriodicRefresh::new(Duration::from_secs(10 * 60)),
             bus,
@@ -119,8 +126,9 @@ impl Widget for MoonWidget {
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let cfg = self.config.read().clone();
+        let locale = self.orchid_config.read().locale.clone();
         let payload = match self.data.read().clone() {
-            Some(data) => render_payload(&cfg, &data),
+            Some(data) => render_payload(&cfg, &data, &locale),
             None => MoonPayload {
                 phase_key: MoonPhase::NewMoon.ftl_key(),
                 phase_icon: MoonPhase::NewMoon.icon(),
@@ -171,9 +179,9 @@ impl Widget for MoonWidget {
     }
 }
 
-fn render_payload(cfg: &MoonConfig, data: &MoonData) -> MoonPayload {
-    let fmt_time = |t: chrono::DateTime<Utc>| t.format("%H:%M").to_string();
-    let fmt_date = |t: chrono::DateTime<Utc>| t.format("%b %d").to_string();
+fn render_payload(cfg: &MoonConfig, data: &MoonData, locale: &LocaleConfig) -> MoonPayload {
+    let fmt_time = |t: chrono::DateTime<Utc>| locale.format_time(t);
+    let fmt_date = |t: chrono::DateTime<Utc>| locale.format_date(t);
     MoonPayload {
         phase_key: data.phase_name.ftl_key(),
         phase_icon: data.phase_name.icon(),
@@ -216,7 +224,12 @@ pub fn descriptor() -> WidgetDescriptor {
             Some(bytes) => state_codec::restore_state::<MoonConfig>(bytes).unwrap_or_default(),
             None => MoonConfig::default(),
         };
-        Ok(Box::new(MoonWidget::new(ctx.instance_id, cfg, ctx.bus.clone())) as Box<dyn Widget>)
+        Ok(Box::new(MoonWidget::new(
+            ctx.instance_id,
+            cfg,
+            ctx.bus.clone(),
+            ctx.config.clone(),
+        )) as Box<dyn Widget>)
     });
     WidgetDescriptor {
         type_id: TYPE_ID,

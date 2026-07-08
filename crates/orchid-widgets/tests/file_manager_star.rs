@@ -23,6 +23,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
     let thumbnails = Arc::new(
         orchid_viewers::ThumbnailService::new(cache_dir.path().join("thumbs")).unwrap(),
     );
+    let config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
     let fm_deps = FileManagerDeps {
         registry: registry.clone(),
         clipboard: Arc::new(FileClipboard::new()),
@@ -36,6 +37,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         fm_passphrase_vault: orchid_crypto::FmPassphraseVault::new(
             tempfile::tempdir().unwrap().path().to_path_buf(),
         ),
+        orchid_config: config.clone(),
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());
@@ -43,7 +45,6 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         .register(file_manager::descriptor(fm_deps))
         .unwrap();
 
-    let config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
     let manager = WidgetManager::new(
         widget_registry,
         bus,
