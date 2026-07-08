@@ -22,7 +22,7 @@ export component FmPassphraseDialog inherits Rectangle {
         height: lay.preferred-height + 16px;
         background: Theme.surface-raised;
         border-radius: Theme.radius-md;
-        drop-shadow-blur: 16px;
+        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
         drop-shadow-color: #00000080;
 
         lay := VerticalLayout {

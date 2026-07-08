@@ -9,7 +9,7 @@ export component FmContextSubmenu inherits Rectangle {
     border-color: Theme.border-default;
     border-width: 1px;
     border-radius: Theme.radius-md;
-    drop-shadow-blur: 12px;
+    drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
     drop-shadow-color: #00000060;
 
     VerticalLayout {
