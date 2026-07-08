@@ -83,52 +83,52 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-archive-extract-selected(string);
     callback viewer-archive-extract-all(string);
 
-    callback fm-sidebar-clicked(string);
-    callback fm-toggle-dual-pane();
-    callback fm-toggle-show-hidden();
-    callback fm-toggle-click-behavior();
-    callback fm-pane-clicked(int);
-    callback fm-tab-clicked(int, string);
-    callback fm-tab-closed(int, string);
-    callback fm-tab-new(int);
-    callback fm-new-folder(int);
-    callback fm-nav-back(int);
-    callback fm-nav-forward(int);
-    callback fm-nav-up(int);
-    callback fm-breadcrumb-clicked(int, string);
-    callback fm-view-mode-cycle(int);
-    callback fm-sort-cycle(int);
-    callback fm-sort-column-clicked(int, int);
-    callback fm-quick-filter-changed(int, string);
-    callback fm-entry-clicked(int, string, bool);
-    callback fm-entry-shift-clicked(int, string);
-    callback fm-entry-double-clicked(int, string, bool);
-    callback fm-entry-context(int, string, length, length);
-    callback fm-context-action(string, [string]);
-    callback fm-context-dismiss();
-    callback fm-confirm-yes();
-    callback fm-confirm-no();
-    callback fm-rename-commit(string, string);
-    callback fm-rename-cancel();
-    callback fm-tag-commit(string);
-    callback fm-tag-cancel();
-    callback fm-passphrase-commit(string);
-    callback fm-passphrase-cancel();
-    callback fm-passphrase-biometric();
-    callback fm-select-all(int);
-    callback fm-delete-selected(int);
-    callback fm-copy-selected(int);
-    callback fm-paste-clipboard(int);
-    callback fm-rename-selected(int);
-    callback fm-deselect-all(int);
-    callback fm-open-selected(int);
-    callback fm-entry-drag-start(int, string);
-    callback fm-entry-drag-hover(int, string);
-    callback fm-entry-drag-drop(int, string);
-    callback fm-entry-drag-cancel(int);
-    callback fm-pane-drag-hover(int);
-    callback fm-drop-on-current-dir(int);
-    callback fm-entry-drag-scroll(int, length, length, length, length);
+    callback fm-sidebar-clicked(string, string);
+    callback fm-toggle-dual-pane(string);
+    callback fm-toggle-show-hidden(string);
+    callback fm-toggle-click-behavior(string);
+    callback fm-pane-clicked(string, int);
+    callback fm-tab-clicked(string, int, string);
+    callback fm-tab-closed(string, int, string);
+    callback fm-tab-new(string, int);
+    callback fm-new-folder(string, int);
+    callback fm-nav-back(string, int);
+    callback fm-nav-forward(string, int);
+    callback fm-nav-up(string, int);
+    callback fm-breadcrumb-clicked(string, int, string);
+    callback fm-view-mode-cycle(string, int);
+    callback fm-sort-cycle(string, int);
+    callback fm-sort-column-clicked(string, int, int);
+    callback fm-quick-filter-changed(string, int, string);
+    callback fm-entry-clicked(string, int, string, bool);
+    callback fm-entry-shift-clicked(string, int, string);
+    callback fm-entry-double-clicked(string, int, string, bool);
+    callback fm-entry-context(string, int, string, length, length);
+    callback fm-context-action(string, string, [string]);
+    callback fm-context-dismiss(string);
+    callback fm-confirm-yes(string);
+    callback fm-confirm-no(string);
+    callback fm-rename-commit(string, string, string);
+    callback fm-rename-cancel(string);
+    callback fm-tag-commit(string, string);
+    callback fm-tag-cancel(string);
+    callback fm-passphrase-commit(string, string);
+    callback fm-passphrase-cancel(string);
+    callback fm-passphrase-biometric(string);
+    callback fm-select-all(string, int);
+    callback fm-delete-selected(string, int);
+    callback fm-copy-selected(string, int);
+    callback fm-paste-clipboard(string, int);
+    callback fm-rename-selected(string, int);
+    callback fm-deselect-all(string, int);
+    callback fm-open-selected(string, int);
+    callback fm-entry-drag-start(string, int, string);
+    callback fm-entry-drag-hover(string, int, string);
+    callback fm-entry-drag-drop(string, int, string);
+    callback fm-entry-drag-cancel(string, int);
+    callback fm-pane-drag-hover(string, int);
+    callback fm-drop-on-current-dir(string, int);
+    callback fm-entry-drag-scroll(string, int, length, length, length, length);
 
     background: Theme.surface-raised;
     border-width: 1px;
@@ -366,52 +366,52 @@ export component WidgetFrame inherits Rectangle {
             height: parent.height;
             model: root.model.file-manager;
 
-            sidebar-clicked(id) => { root.fm-sidebar-clicked(id); }
-            toggle-dual-pane => { root.fm-toggle-dual-pane(); }
-            toggle-show-hidden => { root.fm-toggle-show-hidden(); }
-            toggle-click-behavior => { root.fm-toggle-click-behavior(); }
-            pane-clicked(p) => { root.fm-pane-clicked(p); }
-            tab-clicked(p, id) => { root.fm-tab-clicked(p, id); }
-            tab-closed(p, id) => { root.fm-tab-closed(p, id); }
-            tab-new(p) => { root.fm-tab-new(p); }
-            new-folder(p) => { root.fm-new-folder(p); }
-            nav-back(p) => { root.fm-nav-back(p); }
-            nav-forward(p) => { root.fm-nav-forward(p); }
-            nav-up(p) => { root.fm-nav-up(p); }
-            breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(p, path); }
-            view-mode-cycle(p) => { root.fm-view-mode-cycle(p); }
-            sort-cycle(p) => { root.fm-sort-cycle(p); }
-            sort-column-clicked(p, col) => { root.fm-sort-column-clicked(p, col); }
-            quick-filter-changed(p, q) => { root.fm-quick-filter-changed(p, q); }
-            entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(p, path, ctrl); }
-            entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(p, path); }
-            entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(p, path, is_dir); }
-            entry-context(p, path, x, y) => { root.fm-entry-context(p, path, x, y); }
-            context-action(id, paths) => { root.fm-context-action(id, paths); }
-            context-dismiss => { root.fm-context-dismiss(); }
-            confirm-yes => { root.fm-confirm-yes(); }
-            confirm-no => { root.fm-confirm-no(); }
-            rename-commit(old, new) => { root.fm-rename-commit(old, new); }
-            rename-cancel => { root.fm-rename-cancel(); }
-            tag-commit(tag) => { root.fm-tag-commit(tag); }
-            tag-cancel => { root.fm-tag-cancel(); }
-            passphrase-commit(pw) => { root.fm-passphrase-commit(pw); }
-            passphrase-cancel => { root.fm-passphrase-cancel(); }
-            passphrase-biometric => { root.fm-passphrase-biometric(); }
-            select-all(p) => { root.fm-select-all(p); }
-            delete-selected(p) => { root.fm-delete-selected(p); }
-            copy-selected(p) => { root.fm-copy-selected(p); }
-            paste-clipboard(p) => { root.fm-paste-clipboard(p); }
-            rename-selected(p) => { root.fm-rename-selected(p); }
-            deselect-all(p) => { root.fm-deselect-all(p); }
-            open-selected(p) => { root.fm-open-selected(p); }
-            entry-drag-start(p, path) => { root.fm-entry-drag-start(p, path); }
-            entry-drag-hover(p, path) => { root.fm-entry-drag-hover(p, path); }
-            entry-drag-drop(p, path) => { root.fm-entry-drag-drop(p, path); }
-            entry-drag-cancel(p) => { root.fm-entry-drag-cancel(p); }
-            pane-drag-hover(p) => { root.fm-pane-drag-hover(p); }
-            drop-on-current-dir(p) => { root.fm-drop-on-current-dir(p); }
-            entry-drag-scroll(p, mx, my, vy, w) => { root.fm-entry-drag-scroll(p, mx, my, vy, w); }
+            sidebar-clicked(id) => { root.fm-sidebar-clicked(root.model.instance-id, id); }
+            toggle-dual-pane => { root.fm-toggle-dual-pane(root.model.instance-id); }
+            toggle-show-hidden => { root.fm-toggle-show-hidden(root.model.instance-id); }
+            toggle-click-behavior => { root.fm-toggle-click-behavior(root.model.instance-id); }
+            pane-clicked(p) => { root.fm-pane-clicked(root.model.instance-id, p); }
+            tab-clicked(p, id) => { root.fm-tab-clicked(root.model.instance-id, p, id); }
+            tab-closed(p, id) => { root.fm-tab-closed(root.model.instance-id, p, id); }
+            tab-new(p) => { root.fm-tab-new(root.model.instance-id, p); }
+            new-folder(p) => { root.fm-new-folder(root.model.instance-id, p); }
+            nav-back(p) => { root.fm-nav-back(root.model.instance-id, p); }
+            nav-forward(p) => { root.fm-nav-forward(root.model.instance-id, p); }
+            nav-up(p) => { root.fm-nav-up(root.model.instance-id, p); }
+            breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(root.model.instance-id, p, path); }
+            view-mode-cycle(p) => { root.fm-view-mode-cycle(root.model.instance-id, p); }
+            sort-cycle(p) => { root.fm-sort-cycle(root.model.instance-id, p); }
+            sort-column-clicked(p, col) => { root.fm-sort-column-clicked(root.model.instance-id, p, col); }
+            quick-filter-changed(p, q) => { root.fm-quick-filter-changed(root.model.instance-id, p, q); }
+            entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(root.model.instance-id, p, path, ctrl); }
+            entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(root.model.instance-id, p, path); }
+            entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(root.model.instance-id, p, path, is_dir); }
+            entry-context(p, path, x, y) => { root.fm-entry-context(root.model.instance-id, p, path, x, y); }
+            context-action(id, paths) => { root.fm-context-action(root.model.instance-id, id, paths); }
+            context-dismiss => { root.fm-context-dismiss(root.model.instance-id); }
+            confirm-yes => { root.fm-confirm-yes(root.model.instance-id); }
+            confirm-no => { root.fm-confirm-no(root.model.instance-id); }
+            rename-commit(old, new) => { root.fm-rename-commit(root.model.instance-id, old, new); }
+            rename-cancel => { root.fm-rename-cancel(root.model.instance-id); }
+            tag-commit(tag) => { root.fm-tag-commit(root.model.instance-id, tag); }
+            tag-cancel => { root.fm-tag-cancel(root.model.instance-id); }
+            passphrase-commit(pw) => { root.fm-passphrase-commit(root.model.instance-id, pw); }
+            passphrase-cancel => { root.fm-passphrase-cancel(root.model.instance-id); }
+            passphrase-biometric => { root.fm-passphrase-biometric(root.model.instance-id); }
+            select-all(p) => { root.fm-select-all(root.model.instance-id, p); }
+            delete-selected(p) => { root.fm-delete-selected(root.model.instance-id, p); }
+            copy-selected(p) => { root.fm-copy-selected(root.model.instance-id, p); }
+            paste-clipboard(p) => { root.fm-paste-clipboard(root.model.instance-id, p); }
+            rename-selected(p) => { root.fm-rename-selected(root.model.instance-id, p); }
+            deselect-all(p) => { root.fm-deselect-all(root.model.instance-id, p); }
+            open-selected(p) => { root.fm-open-selected(root.model.instance-id, p); }
+            entry-drag-start(p, path) => { root.fm-entry-drag-start(root.model.instance-id, p, path); }
+            entry-drag-hover(p, path) => { root.fm-entry-drag-hover(root.model.instance-id, p, path); }
+            entry-drag-drop(p, path) => { root.fm-entry-drag-drop(root.model.instance-id, p, path); }
+            entry-drag-cancel(p) => { root.fm-entry-drag-cancel(root.model.instance-id, p); }
+            pane-drag-hover(p) => { root.fm-pane-drag-hover(root.model.instance-id, p); }
+            drop-on-current-dir(p) => { root.fm-drop-on-current-dir(root.model.instance-id, p); }
+            entry-drag-scroll(p, mx, my, vy, w) => { root.fm-entry-drag-scroll(root.model.instance-id, p, mx, my, vy, w); }
         }
     }
 

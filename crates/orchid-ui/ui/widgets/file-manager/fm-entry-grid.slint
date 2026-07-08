@@ -24,6 +24,10 @@ export component FmEntryGrid inherits Rectangle {
     callback drop-on-current-dir();
     callback drag-scroll-changed(length, length, length, length);
 
+    pure function entry-glyph(is-dir: bool, is-encrypted: bool, is-managed: bool) -> string {
+        return is-dir ? "/" : is-encrypted ? "L" : is-managed ? "M" : "-";
+    }
+
     property <length> tile-size: large ? 220px : 100px;
     property <length> tile-height: large ? 240px : 120px;
     property <length> tile-spacing: 8px;
@@ -92,7 +96,7 @@ export component FmEntryGrid inherits Rectangle {
                     }
 
                     if !entry.has-thumbnail : Text {
-                        text: entry.is-dir ? "📁" : entry.is-encrypted ? "🔒" : entry.is-managed ? "🗃" : "📄";
+                        text: entry-glyph(entry.is-dir, entry.is-encrypted, entry.is-managed);
                         color: Theme.accent-brand;
                         font-size: large ? 64px : 36px;
                         horizontal-alignment: center;
@@ -140,7 +144,7 @@ export component FmEntryGrid inherits Rectangle {
             if entry.is-starred : Text {
                 x: parent.width - 20px;
                 y: 4px;
-                text: "★";
+                text: "*";
                 color: #eab308;
                 font-size: Theme.font-size-sm;
             }

@@ -29,6 +29,10 @@ export component FmEntryList inherits Rectangle {
     callback drop-on-current-dir();
     callback drag-scroll-changed(length, length, length, length);
 
+    pure function entry-glyph(is-dir: bool, is-encrypted: bool, is-managed: bool) -> string {
+        return is-dir ? "/" : is-encrypted ? "L" : is-managed ? "M" : "-";
+    }
+
     background: transparent;
 
     property <string> pressing-path: "";
@@ -190,10 +194,7 @@ export component FmEntryList inherits Rectangle {
                     }
 
                     if !entry.has-thumbnail : Text {
-                        text: entry.is-dir ? "📁"
-                            : entry.is-encrypted ? "🔒"
-                            : entry.is-managed ? "🗃"
-                            : "📄";
+                        text: entry-glyph(entry.is-dir, entry.is-encrypted, entry.is-managed);
                         color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
@@ -239,7 +240,7 @@ export component FmEntryList inherits Rectangle {
                     }
 
                     if entry.is-starred : Text {
-                        text: "★";
+                        text: "*";
                         color: #eab308;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;

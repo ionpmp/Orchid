@@ -7,23 +7,23 @@ export component FmSidebar inherits Rectangle {
 
     background: transparent;
 
-    // BMP symbols only — color emoji often missing in Slint's default font on Windows.
+    // ASCII/BMP glyphs — color emoji and many Unicode symbols are missing in Slint's default font on Windows.
     pure function sidebar-glyph(icon: string) -> string {
         return
-            icon == "sidebar-favorites" ? "★" :
-            icon == "sidebar-starred" ? "★" :
+            icon == "sidebar-favorites" ? "*" :
+            icon == "sidebar-starred" ? "*" :
             icon == "sidebar-tags" ? "#" :
-            icon == "sidebar-recent" ? "↺" :
-            icon == "sidebar-categories" ? "▸" :
-            icon == "sidebar-images" ? "◻" :
-            icon == "sidebar-documents" ? "≡" :
-            icon == "sidebar-video" ? "▶" :
-            icon == "sidebar-audio" ? "♫" :
-            icon == "sidebar-archives" ? "▣" :
-            icon == "sidebar-managed" ? "▤" :
-            icon == "sidebar-network" ? "◎" :
-            icon == "sidebar-mount" ? "◦" :
-            "•";
+            icon == "sidebar-recent" ? "R" :
+            icon == "sidebar-categories" ? ">" :
+            icon == "sidebar-images" ? "I" :
+            icon == "sidebar-documents" ? "D" :
+            icon == "sidebar-video" ? "V" :
+            icon == "sidebar-audio" ? "A" :
+            icon == "sidebar-archives" ? "Z" :
+            icon == "sidebar-managed" ? "M" :
+            icon == "sidebar-network" ? "N" :
+            icon == "sidebar-mount" ? "-" :
+            "+";
     }
 
     Flickable {

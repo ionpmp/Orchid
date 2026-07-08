@@ -1316,369 +1316,369 @@ impl MainWindowController {
 
         self.window.on_fm_sidebar_clicked({
             let t = t.clone();
-            move |id| {
+            move |fm_id, id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_sidebar_clicked(&id);
+                    c.on_fm_sidebar_clicked(&fm_id, &id);
                 }
             }
         });
         self.window.on_fm_toggle_dual_pane({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_toggle_dual_pane();
+                    c.on_fm_toggle_dual_pane(&fm_id);
                 }
             }
         });
         self.window.on_fm_toggle_show_hidden({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_toggle_show_hidden();
+                    c.on_fm_toggle_show_hidden(&fm_id);
                 }
             }
         });
         self.window.on_fm_toggle_click_behavior({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_toggle_click_behavior();
+                    c.on_fm_toggle_click_behavior(&fm_id);
                 }
             }
         });
         self.window.on_fm_pane_clicked({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_pane_clicked(pane);
+                    c.on_fm_pane_clicked(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_tab_clicked({
             let t = t.clone();
-            move |pane, tab_id| {
+            move |fm_id, pane, tab_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_tab_clicked(pane, &tab_id);
+                    c.on_fm_tab_clicked(&fm_id, pane, &tab_id);
                 }
             }
         });
         self.window.on_fm_tab_closed({
             let t = t.clone();
-            move |pane, tab_id| {
+            move |fm_id, pane, tab_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_tab_closed(pane, &tab_id);
+                    c.on_fm_tab_closed(&fm_id, pane, &tab_id);
                 }
             }
         });
         self.window.on_fm_tab_new({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_tab_new(pane);
+                    c.on_fm_tab_new(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_new_folder({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_new_folder(pane);
+                    c.on_fm_new_folder(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_nav_back({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_nav_back(pane);
+                    c.on_fm_nav_back(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_nav_forward({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_nav_forward(pane);
+                    c.on_fm_nav_forward(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_nav_up({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_nav_up(pane);
+                    c.on_fm_nav_up(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_breadcrumb_clicked({
             let t = t.clone();
-            move |pane, path| {
+            move |fm_id, pane, path| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_breadcrumb_clicked(pane, &path);
+                    c.on_fm_breadcrumb_clicked(&fm_id, pane, &path);
                 }
             }
         });
         self.window.on_fm_view_mode_cycle({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_view_mode_cycle(pane);
+                    c.on_fm_view_mode_cycle(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_sort_cycle({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_sort_cycle(pane);
+                    c.on_fm_sort_cycle(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_sort_column_clicked({
             let t = t.clone();
-            move |pane, col| {
+            move |fm_id, pane, col| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_sort_column_clicked(pane, col);
+                    c.on_fm_sort_column_clicked(&fm_id, pane, col);
                 }
             }
         });
         self.window.on_fm_quick_filter_changed({
             let t = t.clone();
-            move |pane, q| {
+            move |fm_id, pane, q| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_quick_filter_changed(pane, &q);
+                    c.on_fm_quick_filter_changed(&fm_id, pane, &q);
                 }
             }
         });
         self.window.on_fm_entry_clicked({
             let t = t.clone();
-            move |pane, path, ctrl| {
+            move |fm_id, pane, path, ctrl| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_clicked(pane, &path, ctrl);
+                    c.on_fm_entry_clicked(&fm_id, pane, &path, ctrl);
                 }
             }
         });
         self.window.on_fm_entry_shift_clicked({
             let t = t.clone();
-            move |pane, path| {
+            move |fm_id, pane, path| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_shift_clicked(pane, &path);
+                    c.on_fm_entry_shift_clicked(&fm_id, pane, &path);
                 }
             }
         });
         self.window.on_fm_entry_double_clicked({
             let t = t.clone();
-            move |pane, path, is_dir| {
+            move |fm_id, pane, path, is_dir| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_double_clicked(pane, &path, is_dir);
+                    c.on_fm_entry_double_clicked(&fm_id, pane, &path, is_dir);
                 }
             }
         });
         self.window.on_fm_entry_context({
             let t = t.clone();
-            move |pane, path, x, y| {
+            move |fm_id, pane, path, x, y| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_context(pane, &path, x, y);
+                    c.on_fm_entry_context(&fm_id, pane, &path, x, y);
                 }
             }
         });
         self.window.on_fm_context_action({
             let t = t.clone();
-            move |action_id, paths| {
+            move |fm_id, action_id, paths| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_context_action(&action_id, &paths);
+                    c.on_fm_context_action(&fm_id, &action_id, &paths);
                 }
             }
         });
         self.window.on_fm_context_dismiss({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_context_dismiss();
+                    c.on_fm_context_dismiss(&fm_id);
                 }
             }
         });
         self.window.on_fm_confirm_yes({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_confirm_yes();
+                    c.on_fm_confirm_yes(&fm_id);
                 }
             }
         });
         self.window.on_fm_confirm_no({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_confirm_no();
+                    c.on_fm_confirm_no(&fm_id);
                 }
             }
         });
         self.window.on_fm_rename_commit({
             let t = t.clone();
-            move |old_path, new_name| {
+            move |fm_id, old_path, new_name| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_rename_commit(&old_path, &new_name);
+                    c.on_fm_rename_commit(&fm_id, &old_path, &new_name);
                 }
             }
         });
         self.window.on_fm_rename_cancel({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_rename_cancel();
+                    c.on_fm_rename_cancel(&fm_id);
                 }
             }
         });
         self.window.on_fm_tag_commit({
             let t = t.clone();
-            move |tag| {
+            move |fm_id, tag| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_tag_commit(&tag);
+                    c.on_fm_tag_commit(&fm_id, &tag);
                 }
             }
         });
         self.window.on_fm_tag_cancel({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_tag_cancel();
+                    c.on_fm_tag_cancel(&fm_id);
                 }
             }
         });
         self.window.on_fm_passphrase_commit({
             let t = t.clone();
-            move |pw| {
+            move |fm_id, pw| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_passphrase_commit(&pw);
+                    c.on_fm_passphrase_commit(&fm_id, &pw);
                 }
             }
         });
         self.window.on_fm_passphrase_cancel({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_passphrase_cancel();
+                    c.on_fm_passphrase_cancel(&fm_id);
                 }
             }
         });
         self.window.on_fm_passphrase_biometric({
             let t = t.clone();
-            move || {
+            move |fm_id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_passphrase_biometric();
+                    c.on_fm_passphrase_biometric(&fm_id);
                 }
             }
         });
         self.window.on_fm_select_all({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_select_all(pane);
+                    c.on_fm_select_all(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_delete_selected({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_delete_selected(pane);
+                    c.on_fm_delete_selected(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_copy_selected({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_copy_selected(pane);
+                    c.on_fm_copy_selected(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_paste_clipboard({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_paste_clipboard(pane);
+                    c.on_fm_paste_clipboard(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_rename_selected({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_rename_selected(pane);
+                    c.on_fm_rename_selected(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_deselect_all({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_deselect_all(pane);
+                    c.on_fm_deselect_all(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_open_selected({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_open_selected(pane);
+                    c.on_fm_open_selected(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_entry_drag_start({
             let t = t.clone();
-            move |pane, path| {
+            move |fm_id, pane, path| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_drag_start(pane, &path);
+                    c.on_fm_entry_drag_start(&fm_id, pane, &path);
                 }
             }
         });
         self.window.on_fm_entry_drag_hover({
             let t = t.clone();
-            move |pane, path| {
+            move |fm_id, pane, path| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_drag_hover(pane, &path);
+                    c.on_fm_entry_drag_hover(&fm_id, pane, &path);
                 }
             }
         });
         self.window.on_fm_entry_drag_drop({
             let t = t.clone();
-            move |pane, path| {
+            move |fm_id, pane, path| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_drag_drop(pane, &path);
+                    c.on_fm_entry_drag_drop(&fm_id, pane, &path);
                 }
             }
         });
         self.window.on_fm_entry_drag_cancel({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_drag_cancel(pane);
+                    c.on_fm_entry_drag_cancel(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_pane_drag_hover({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_pane_drag_hover(pane);
+                    c.on_fm_pane_drag_hover(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_drop_on_current_dir({
             let t = t.clone();
-            move |pane| {
+            move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_drop_on_current_dir(pane);
+                    c.on_fm_drop_on_current_dir(&fm_id, pane);
                 }
             }
         });
         self.window.on_fm_entry_drag_scroll({
             let t = t.clone();
-            move |pane, mouse_x, mouse_y, viewport_y, width| {
+            move |fm_id, pane, mouse_x, mouse_y, viewport_y, width| {
                 if let Some(c) = t.upgrade() {
-                    c.on_fm_entry_drag_scroll(pane, mouse_x, mouse_y, viewport_y, width);
+                    c.on_fm_entry_drag_scroll(&fm_id, pane, mouse_x, mouse_y, viewport_y, width);
                 }
             }
         });
@@ -3211,7 +3211,7 @@ impl MainWindowController {
                 warn!(?e, %inst, tab_idx = idx, "terminal tab switch");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3227,7 +3227,7 @@ impl MainWindowController {
                 warn!(?e, %inst, "terminal tab add");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3247,7 +3247,7 @@ impl MainWindowController {
                 warn!(?e, %inst, tab_idx = idx, "terminal tab close");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3263,7 +3263,7 @@ impl MainWindowController {
                 warn!(?e, %inst, "terminal split horizontal");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3279,7 +3279,7 @@ impl MainWindowController {
                 warn!(?e, %inst, "terminal split vertical");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3298,7 +3298,7 @@ impl MainWindowController {
                 warn!(?e, %inst, %sid, "terminal pane focus");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3317,7 +3317,7 @@ impl MainWindowController {
                 warn!(?e, %inst, %sid, "terminal pane close");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3402,7 +3402,7 @@ impl MainWindowController {
                 warn!(?e, %inst, action = %act, "terminal shortcut");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -3546,7 +3546,7 @@ impl MainWindowController {
                         empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
-                        empty_media_model(),
+                        empty_media_model(&self.locale),
                         empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
@@ -3567,7 +3567,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
@@ -3587,7 +3587,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
@@ -3607,7 +3607,7 @@ impl MainWindowController {
                     build_system_model(s, &self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
@@ -3627,7 +3627,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
@@ -3662,7 +3662,7 @@ impl MainWindowController {
                         empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
-                        empty_media_model(),
+                        empty_media_model(&self.locale),
                         empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
@@ -3683,7 +3683,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    build_media_model(m),
+                    build_media_model(m, &self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
@@ -3729,7 +3729,7 @@ impl MainWindowController {
                         empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
-                        empty_media_model(),
+                        empty_media_model(&self.locale),
                         build_password_model(p, toast, autofocus, add_dialog, &self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
@@ -3750,7 +3750,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     build_viewer_model(v, &self.locale),
                     empty_recent_files_model(&self.locale),
@@ -3770,7 +3770,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     build_recent_files_model(r, &self.locale),
@@ -3811,7 +3811,7 @@ impl MainWindowController {
                         empty_system_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
-                        empty_media_model(),
+                        empty_media_model(&self.locale),
                         empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
@@ -3837,7 +3837,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
-                    empty_media_model(),
+                    empty_media_model(&self.locale),
                     empty_password_model(&self.locale),
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
@@ -4151,6 +4151,41 @@ impl MainWindowController {
         Some(fm_ids[0])
     }
 
+    fn fm_prepare_instance(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: Option<u8>,
+    ) -> Option<Uuid> {
+        let Ok(inst) = Uuid::parse_str(fm_id.as_str()) else {
+            return None;
+        };
+        if !self.fm_instances_on_active_workspace().contains(&inst) {
+            return None;
+        }
+        if let Some(p) = pane {
+            self.set_fm_focus(inst, p);
+        }
+        self.fm_wake_instance(inst);
+        Some(inst)
+    }
+
+    fn fm_wake_instance(self: &Arc<Self>, inst: Uuid) {
+        self.widget_manager.touch(inst);
+        if let Ok(iref) = self.widget_manager.get_instance(inst) {
+            if *iref.lifecycle.read() == LifecycleState::Sleeping {
+                let wm = self.widget_manager.clone();
+                let _ = slint::spawn_local(Compat::new(async move {
+                    let _ = wm.change_lifecycle(inst, LifecycleState::Active).await;
+                }));
+            }
+        }
+    }
+
+    async fn fm_refresh_ui(self: &Arc<Self>, inst: Uuid) {
+        let _ = self.widget_manager.refresh_snapshot_cache(inst).await;
+        self.schedule_rebuild();
+    }
+
     fn widget_bounds_at_canvas_point(
         &self,
         content_x: f32,
@@ -4336,6 +4371,10 @@ impl MainWindowController {
                     orchid_widgets::builtin::file_manager::refresh_instance(source_inst).await;
             }
             if let Some(c) = tw.upgrade() {
+                let _ = c.widget_manager.refresh_snapshot_cache(target_inst).await;
+                if source_inst != target_inst {
+                    let _ = c.widget_manager.refresh_snapshot_cache(source_inst).await;
+                }
                 c.schedule_rebuild();
             }
         }));
@@ -4514,7 +4553,7 @@ impl MainWindowController {
                 warn!(?e, dest = %dest, copy, "fm os file drop");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
@@ -4597,12 +4636,12 @@ impl MainWindowController {
         Ok(id)
     }
 
-    fn on_fm_sidebar_clicked(self: &Arc<Self>, id: &SharedString) {
+    fn on_fm_sidebar_clicked(self: &Arc<Self>, fm_id: &SharedString, id: &SharedString) {
         let item_id = id.to_string();
         if item_id.starts_with("section:") {
             return;
         }
-        let Some(inst) = self.find_active_fm() else {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let pane = {
@@ -4621,52 +4660,53 @@ impl MainWindowController {
                 warn!(?e, "fm sidebar navigation");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_toggle_dual_pane(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_toggle_dual_pane(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_dual_pane(inst).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_toggle_show_hidden(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_toggle_show_hidden(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_show_hidden(inst).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_toggle_click_behavior(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_toggle_click_behavior(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_click_behavior(inst).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_open_selected(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_open_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4677,8 +4717,9 @@ impl MainWindowController {
         self.fm_dispatch_open(inst, p, path.clone(), false);
     }
 
-    fn on_fm_entry_drag_start(self: &Arc<Self>, pane: i32, _path: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_drag_start(self: &Arc<Self>, fm_id: &SharedString, pane: i32, _path: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4697,8 +4738,9 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_entry_drag_hover(self: &Arc<Self>, pane: i32, folder: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_drag_hover(self: &Arc<Self>, fm_id: &SharedString, pane: i32, folder: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         self.set_fm_drag_hover(inst, pane, folder.to_string());
@@ -4730,13 +4772,15 @@ impl MainWindowController {
 
     fn on_fm_entry_drag_scroll(
         self: &Arc<Self>,
+        fm_id: &SharedString,
         pane: i32,
         mouse_x: f32,
         mouse_y: f32,
         viewport_y: f32,
         width: f32,
     ) {
-        let Some(inst) = self.find_active_fm() else {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let drag_active = self
@@ -4816,16 +4860,18 @@ impl MainWindowController {
         }
     }
 
-    fn on_fm_entry_drag_drop(self: &Arc<Self>, _pane: i32, folder: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_drag_drop(self: &Arc<Self>, fm_id: &SharedString, pane: i32, folder: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let folder_path = folder.to_string();
         self.fm_complete_drag_drop(inst, Some(folder_path));
     }
 
-    fn on_fm_pane_drag_hover(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_pane_drag_hover(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let mut over = self.fm_overlays.write();
@@ -4839,8 +4885,9 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_drop_on_current_dir(self: &Arc<Self>, pane: i32) {
-        let Some(source) = self.find_active_fm() else {
+    fn on_fm_drop_on_current_dir(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(source) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4848,16 +4895,18 @@ impl MainWindowController {
         self.fm_complete_drag_drop(source, None);
     }
 
-    fn on_fm_entry_drag_cancel(self: &Arc<Self>, _pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_drag_cancel(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         self.clear_fm_drag(inst);
         self.schedule_rebuild();
     }
 
-    fn on_fm_pane_clicked(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_pane_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4866,13 +4915,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::switch_active_pane(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_tab_clicked(self: &Arc<Self>, pane: i32, tab_id: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_tab_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, tab_id: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4881,13 +4931,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::switch_to_tab(inst, p, &tab).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_tab_closed(self: &Arc<Self>, pane: i32, tab_id: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_tab_closed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, tab_id: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4896,13 +4947,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::close_tab(inst, p, &tab).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_tab_new(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_tab_new(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4910,13 +4962,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::new_tab(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_new_folder(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_new_folder(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4935,8 +4988,9 @@ impl MainWindowController {
         }));
     }
 
-    fn on_fm_nav_back(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_nav_back(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4944,13 +4998,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_back(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_nav_forward(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_nav_forward(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4958,13 +5013,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_forward(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_nav_up(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_nav_up(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4972,13 +5028,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_up(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_breadcrumb_clicked(self: &Arc<Self>, pane: i32, path: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_breadcrumb_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -4990,13 +5047,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_view_mode_cycle(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_view_mode_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5004,13 +5062,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::cycle_view_mode(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_sort_cycle(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_sort_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5018,13 +5077,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::cycle_sort(inst, p).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_sort_column_clicked(self: &Arc<Self>, pane: i32, column: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_sort_column_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, column: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5033,13 +5093,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::set_sort_column(inst, p, col).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_quick_filter_changed(self: &Arc<Self>, pane: i32, q: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_quick_filter_changed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, q: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5048,13 +5109,14 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             let _ = orchid_widgets::builtin::file_manager::set_quick_filter(inst, p, query).await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_entry_clicked(self: &Arc<Self>, pane: i32, path: &SharedString, ctrl: bool) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, ctrl: bool) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5072,7 +5134,7 @@ impl MainWindowController {
                 orchid_widgets::builtin::file_manager::select_entry(inst, p, &ps_for_select, mode)
                     .await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
 
@@ -5084,8 +5146,9 @@ impl MainWindowController {
         self.fm_dispatch_open(inst, p, ps, false);
     }
 
-    fn on_fm_entry_shift_clicked(self: &Arc<Self>, pane: i32, path: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_shift_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5100,13 +5163,14 @@ impl MainWindowController {
             )
             .await;
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_entry_double_clicked(self: &Arc<Self>, pane: i32, path: &SharedString, is_dir: bool) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_double_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, is_dir: bool) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5137,17 +5201,18 @@ impl MainWindowController {
                 }
             };
             if let Some(c) = tw.upgrade() {
+                let _ = c.widget_manager.refresh_snapshot_cache(inst).await;
                 c.apply_fm_action_outcome(inst, outcome);
                 c.schedule_rebuild();
             }
         }));
     }
 
-    fn on_fm_entry_context(self: &Arc<Self>, pane: i32, path: &SharedString, x: f32, y: f32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_entry_context(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, x: f32, y: f32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
-        let p = pane.max(0) as u8;
         let target = path.to_string();
         let (actions, target_paths) = match orchid_widgets::builtin::file_manager::context_menu_for(
             inst,
@@ -5179,18 +5244,18 @@ impl MainWindowController {
                 warn!(?e, "fm context focus");
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_context_action(self: &Arc<Self>, action_id: &SharedString, paths: &ModelRc<SharedString>) {
+    fn on_fm_context_action(self: &Arc<Self>, fm_id: &SharedString, action_id: &SharedString, paths: &ModelRc<SharedString>) {
         let id = action_id.to_string();
         let path_vec: Vec<String> = (0..paths.row_count())
             .filter_map(|i| paths.row_data(i))
             .map(|s| s.to_string())
             .collect();
-        let Some(inst) = self.find_active_fm() else {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let tw = Arc::downgrade(self);
@@ -5411,8 +5476,8 @@ impl MainWindowController {
         }
     }
 
-    fn on_fm_context_dismiss(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_context_dismiss(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let mut over = self.fm_overlays.write();
@@ -5422,8 +5487,8 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_confirm_yes(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_confirm_yes(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let overlay = self.fm_overlays.read().get(&inst).cloned();
@@ -5479,8 +5544,8 @@ impl MainWindowController {
         }));
     }
 
-    fn on_fm_confirm_no(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_confirm_no(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let mut over = self.fm_overlays.write();
@@ -5490,8 +5555,8 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_rename_commit(self: &Arc<Self>, old_path: &SharedString, new_name: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_rename_commit(self: &Arc<Self>, fm_id: &SharedString, old_path: &SharedString, new_name: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let create_parent = self
@@ -5531,8 +5596,8 @@ impl MainWindowController {
         }));
     }
 
-    fn on_fm_rename_cancel(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_rename_cancel(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let mut over = self.fm_overlays.write();
@@ -5543,8 +5608,8 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_tag_commit(self: &Arc<Self>, tag: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_tag_commit(self: &Arc<Self>, fm_id: &SharedString, tag: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let paths = self
@@ -5569,8 +5634,8 @@ impl MainWindowController {
         }));
     }
 
-    fn on_fm_tag_cancel(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_tag_cancel(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let mut over = self.fm_overlays.write();
@@ -5581,8 +5646,8 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_passphrase_commit(self: &Arc<Self>, passphrase: &SharedString) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_passphrase_commit(self: &Arc<Self>, fm_id: &SharedString, passphrase: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let overlay = self.fm_overlays.read().get(&inst).cloned();
@@ -5642,16 +5707,16 @@ impl MainWindowController {
         }));
     }
 
-    fn on_fm_passphrase_cancel(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_passphrase_cancel(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         self.clear_fm_passphrase_overlay(inst);
         self.schedule_rebuild();
     }
 
-    fn on_fm_passphrase_biometric(self: &Arc<Self>) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_passphrase_biometric(self: &Arc<Self>, fm_id: &SharedString) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         let overlay = self.fm_overlays.read().get(&inst).cloned();
@@ -5731,8 +5796,9 @@ impl MainWindowController {
         self.schedule_rebuild();
     }
 
-    fn on_fm_select_all(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_select_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5745,13 +5811,14 @@ impl MainWindowController {
                 return;
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_deselect_all(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_deselect_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
@@ -5764,13 +5831,14 @@ impl MainWindowController {
                 return;
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                c.fm_refresh_ui(inst).await;
             }
         }));
     }
 
-    fn on_fm_delete_selected(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_delete_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
@@ -5780,8 +5848,9 @@ impl MainWindowController {
         self.spawn_fm_action(inst, "fs.delete", paths);
     }
 
-    fn on_fm_copy_selected(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_copy_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
@@ -5791,15 +5860,17 @@ impl MainWindowController {
         self.spawn_fm_action(inst, "fs.copy", paths);
     }
 
-    fn on_fm_paste_clipboard(self: &Arc<Self>, _pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_paste_clipboard(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         self.spawn_fm_action(inst, "fs.paste", Vec::new());
     }
 
-    fn on_fm_rename_selected(self: &Arc<Self>, pane: i32) {
-        let Some(inst) = self.find_active_fm() else {
+    fn on_fm_rename_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let paths = self.fm_selected_paths(inst, pane.max(0) as u8);
@@ -6366,7 +6437,7 @@ fn default_frame_data_extended(
         empty_system_model(locale),
         empty_rss_model(locale),
         empty_search_model(locale),
-        empty_media_model(),
+        empty_media_model(locale),
         empty_password_model(locale),
         empty_viewer_model(locale),
         empty_recent_files_model(locale),
@@ -6511,9 +6582,10 @@ fn empty_search_model(locale: &LocaleManager) -> SearchModel {
     }
 }
 
-fn empty_media_model() -> MediaModel {
+fn empty_media_model(locale: &LocaleManager) -> MediaModel {
     MediaModel {
         has_session: false,
+        empty_state_text: locale.tr("media-loading").into(),
         title: SharedString::new(),
         artist: SharedString::new(),
         album: SharedString::new(),
@@ -7940,7 +8012,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     }
 }
 
-fn build_media_model(p: &orchid_widgets::MediaPlayerPayload) -> MediaModel {
+fn build_media_model(p: &orchid_widgets::MediaPlayerPayload, locale: &LocaleManager) -> MediaModel {
     let (has_thumb, thumb_img) = p
         .thumbnail_base64
         .as_ref()
@@ -7957,19 +8029,33 @@ fn build_media_model(p: &orchid_widgets::MediaPlayerPayload) -> MediaModel {
             Some((true, Image::from_rgba8(buf)))
         })
         .unwrap_or((false, Image::default()));
+    let empty_state_text = if p.is_loading {
+        locale.tr("media-loading").into()
+    } else if p.is_unsupported {
+        locale.tr("media-unsupported").into()
+    } else {
+        locale.tr("media-no-session").into()
+    };
     MediaModel {
         has_session: p.has_session,
+        empty_state_text,
         title: p.title.clone().into(),
         artist: p.artist.clone().into(),
         album: p.album.clone().into(),
         source_app: p.source_app.clone().into(),
-        position: p.position_text.clone().into(),
-        duration: p.duration_text.clone().into(),
+        position: format_media_duration(p.position_secs).into(),
+        duration: format_media_duration(p.duration_secs).into(),
         progress: p.progress_fraction.clamp(0.0, 1.0),
         is_playing: p.is_playing,
         has_thumbnail: has_thumb,
         thumbnail: thumb_img,
     }
+}
+
+fn format_media_duration(secs: u64) -> String {
+    let m = secs / 60;
+    let s = secs % 60;
+    format!("{m}:{s:02}")
 }
 
 fn build_password_model(
@@ -8205,6 +8291,11 @@ fn format_weather_updated(at: chrono::DateTime<chrono::Utc>, locale: &LocaleMana
 #[cfg(test)]
 mod tests {
     use super::*;
+    use orchid_i18n::default_language;
+
+    fn test_locale() -> LocaleManager {
+        LocaleManager::new(default_language(), None).expect("locale")
+    }
 
     fn sample_media_payload() -> orchid_widgets::MediaPlayerPayload {
         orchid_widgets::MediaPlayerPayload {
@@ -8213,23 +8304,49 @@ mod tests {
             artist: "a".into(),
             album: "al".into(),
             source_app: "app".into(),
-            position_text: "0:00".into(),
-            duration_text: "1:00".into(),
+            position_secs: 0,
+            duration_secs: 60,
             progress_fraction: 0.5,
             is_playing: true,
             thumbnail_base64: None,
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn media_empty_state_text() {
+        let locale = test_locale();
+        let loading = build_media_model(
+            &orchid_widgets::MediaPlayerPayload {
+                is_loading: true,
+                ..Default::default()
+            },
+            &locale,
+        );
+        assert_eq!(loading.empty_state_text.as_str(), "Loading media…");
+
+        let unsupported = build_media_model(
+            &orchid_widgets::MediaPlayerPayload {
+                is_unsupported: true,
+                ..Default::default()
+            },
+            &locale,
+        );
+        assert_eq!(
+            unsupported.empty_state_text.as_str(),
+            "Media controls are not available on this platform"
+        );
     }
 
     #[test]
     fn media_progress_clamps() {
         let mut p = sample_media_payload();
         p.progress_fraction = 1.5;
-        let m = build_media_model(&p);
+        let m = build_media_model(&p, &test_locale());
         assert!(m.progress <= 1.0);
 
         p.progress_fraction = -0.3;
-        let m = build_media_model(&p);
+        let m = build_media_model(&p, &test_locale());
         assert!(m.progress >= 0.0);
     }
 }

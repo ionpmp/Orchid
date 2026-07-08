@@ -67,11 +67,11 @@ export component FileManagerView inherits Rectangle {
     background: transparent;
 
     pure function fm-dual-pane-glyph(dual: bool) -> string {
-        return dual ? "▢▢" : "▢";
+        return dual ? "||" : "|";
     }
 
     pure function fm-hidden-glyph(show-hidden: bool) -> string {
-        return show-hidden ? "◉" : "○";
+        return show-hidden ? "+" : "o";
     }
 
     HorizontalLayout {

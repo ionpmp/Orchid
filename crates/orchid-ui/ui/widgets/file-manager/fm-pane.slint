@@ -164,7 +164,7 @@ export component FmPane inherits Rectangle {
                 if pane.tabs[pane.active-tab].is-loading : VerticalLayout {
                     alignment: center;
                     Text {
-                        text: "⏳";
+                        text: "...";
                         color: Theme.accent-brand;
                         font-size: 32px;
                         horizontal-alignment: center;
@@ -233,7 +233,7 @@ export component FmPane inherits Rectangle {
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {
                     alignment: center;
                     spacing: 8px;
-                    Text { text: "⚠"; color: #ef4444; font-size: 32px; horizontal-alignment: center; }
+                    Text { text: "!"; color: #ef4444; font-size: 32px; horizontal-alignment: center; }
                     Text {
                         text: pane.tabs[pane.active-tab].error;
                         color: Theme.text-secondary;
