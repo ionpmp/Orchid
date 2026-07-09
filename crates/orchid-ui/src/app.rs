@@ -397,6 +397,7 @@ impl OrchidApp {
             recent_files: recent_files.clone(),
             fm_passphrase_vault: fm_passphrase_vault.clone(),
             orchid_config: config.clone(),
+            locale: locale.clone(),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

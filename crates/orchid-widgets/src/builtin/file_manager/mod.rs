@@ -152,6 +152,8 @@ pub struct FileManagerDeps {
     pub fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
     /// Application-wide config (locale formatting, etc.).
     pub orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+    /// Fluent locale for UI strings built inside the widget (e.g. Properties).
+    pub locale: Arc<orchid_i18n::LocaleManager>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -2674,7 +2676,8 @@ pub async fn run_action_with_opts(
             return Ok(ActionOutcome::Done);
         }
         "fs.properties" => {
-            let locale = inner.deps.orchid_config.read().locale.clone();
+            let fmt_locale = inner.deps.orchid_config.read().locale.clone();
+            let i18n = &inner.deps.locale;
             let mut lines = Vec::new();
             for p in &target_paths {
                 let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
@@ -2682,18 +2685,34 @@ pub async fn run_action_with_opts(
                 if let Some(provider) = inner.deps.registry.for_path(&fp) {
                     if let Ok(meta) = provider.metadata(&fp).await {
                         let kind = if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
-                            "Folder"
+                            i18n.tr("fm-properties-kind-folder")
                         } else {
-                            "File"
+                            i18n.tr("fm-properties-kind-file")
                         };
                         let modified = meta
                             .modified
-                            .map(|t| locale.format_datetime(t))
+                            .map(|t| fmt_locale.format_datetime(t))
                             .unwrap_or_else(|| "—".into());
                         let mime = meta.mime.unwrap_or_else(|| "—".into());
+                        let size = format_size(meta.size);
+                        let type_line = i18n.tr_args(
+                            "fm-properties-type",
+                            &orchid_i18n::FluentArgs::new().with("kind", kind),
+                        );
+                        let size_line = i18n.tr_args(
+                            "fm-properties-size",
+                            &orchid_i18n::FluentArgs::new().with("size", size),
+                        );
+                        let modified_line = i18n.tr_args(
+                            "fm-properties-modified",
+                            &orchid_i18n::FluentArgs::new().with("modified", modified),
+                        );
+                        let mime_line = i18n.tr_args(
+                            "fm-properties-mime",
+                            &orchid_i18n::FluentArgs::new().with("mime", mime),
+                        );
                         lines.push(format!(
-                            "{name}\n  Type: {kind}\n  Size: {}\n  Modified: {modified}\n  MIME: {mime}",
-                            format_size(meta.size)
+                            "{name}\n  {type_line}\n  {size_line}\n  {modified_line}\n  {mime_line}"
                         ));
                         continue;
                     }

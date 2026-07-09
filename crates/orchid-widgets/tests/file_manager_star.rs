@@ -42,6 +42,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
             tempfile::tempdir().unwrap().path().to_path_buf(),
         ),
         orchid_config: config.clone(),
+        locale: test_locale(),
     };
 
     let widget_registry = Arc::new(WidgetRegistry::new());
