@@ -94,6 +94,8 @@ weather-wind-label = الرياح
 weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
+weather-forecast-range = { $high } / { $low }
+weather-precip-chance = { $pct }%
 
 # ---- Wind directions ----
 weather-wind-n = ش
@@ -145,6 +147,8 @@ system-battery-charging = قيد الشحن
 system-battery-time-remaining = متبقٍ { $time }
 system-network-rate = ↑ { $up }/ث  ↓ { $down }/ث
 system-loading = جارٍ تحميل مقاييس النظام…
+system-status-warning = { $label } — مرتفع ({ $value })
+system-status-critical = { $label } — حرج ({ $value })
 
 # ---- RSS ----
 rss-no-feeds = لا توجد خلاصات مُعدّة

@@ -28,9 +28,14 @@ export component ViewerPdfView inherits Rectangle {
         alignment: center;
         padding: 16px;
         spacing: 8px;
-        // ASCII/BMP glyph — color emoji missing in Slint's default font on Windows.
-        Text { text: "P"; color: Theme.text-tertiary; font-size: 32px; horizontal-alignment: center; }
-        Text { text: model.unavailable-reason; color: Theme.text-secondary; font-size: Theme.font-size-md; horizontal-alignment: center; wrap: word-wrap; }
+        Text {
+            text: model.unavailable-reason;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-md;
+            font-weight: Theme.weight-semibold;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
     }
 
     if model.available : VerticalLayout {

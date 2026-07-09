@@ -60,8 +60,7 @@ export struct TerminalDividerModel {
 
 export struct WeatherForecastEntry {
     day-label: string,
-    high-text: string,
-    low-text: string,
+    range-text: string,
     icon: string,
     precip-text: string,
 }
@@ -77,6 +76,7 @@ export struct SystemIndicatorEntry {
     percent: float,
     icon: string,
     status: int,
+    status-hint: string,
 }
 
 export struct WeatherModel {

@@ -8527,6 +8527,7 @@ fn empty_system_model(locale: &LocaleManager) -> SystemModel {
             percent: -1.0,
             icon: SharedString::new(),
             status: 0,
+            status_hint: SharedString::new(),
         }])),
     }
 }
@@ -11097,16 +11098,26 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
                     1 => locale.tr("weather-day-tomorrow"),
                     _ => d.weekday_label.clone().unwrap_or_default(),
                 };
+                let range_text = locale.tr_args(
+                    "weather-forecast-range",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("high", d.high_text.as_str())
+                        .with("low", d.low_text.as_str()),
+                );
+                let precip_text = d
+                    .precipitation_probability
+                    .map(|pct| {
+                        locale.tr_args(
+                            "weather-precip-chance",
+                            &orchid_i18n::FluentArgs::new().with("pct", pct.to_string()),
+                        )
+                    })
+                    .unwrap_or_default();
                 WeatherForecastEntry {
                     day_label: day_label.into(),
-                    high_text: d.high_text.clone().into(),
-                    low_text: d.low_text.clone().into(),
+                    range_text: range_text.into(),
                     icon: d.condition_icon.into(),
-                    precip_text: d
-                        .precipitation_probability
-                        .map(|pct| format!("{pct}%"))
-                        .unwrap_or_default()
-                        .into(),
+                    precip_text: precip_text.into(),
                 }
             })
             .collect()
@@ -11497,21 +11508,49 @@ fn build_system_model(p: &orchid_widgets::SystemPayload, locale: &LocaleManager)
     let indicators: Vec<SystemIndicatorEntry> = p
         .indicators
         .iter()
-        .map(|i| SystemIndicatorEntry {
-            label: system_indicator_label(i, locale),
-            value_text: system_indicator_value(i, locale),
-            percent: i
-                .percent
-                .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
-                .unwrap_or(-1.0),
-            icon: i.icon.into(),
-            status: indicator_status_to_int(&i.status),
+        .map(|i| {
+            let label = system_indicator_label(i, locale);
+            let value_text = system_indicator_value(i, locale);
+            let status = indicator_status_to_int(&i.status);
+            let status_hint = system_indicator_status_hint(locale, &label, &value_text, status);
+            SystemIndicatorEntry {
+                label,
+                value_text,
+                percent: i
+                    .percent
+                    .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
+                    .unwrap_or(-1.0),
+                icon: i.icon.into(),
+                status,
+                status_hint,
+            }
         })
         .collect();
 
     SystemModel {
         indicators: ModelRc::new(VecModel::from(indicators)),
     }
+}
+
+fn system_indicator_status_hint(
+    locale: &LocaleManager,
+    label: &SharedString,
+    value_text: &SharedString,
+    status: i32,
+) -> SharedString {
+    let key = match status {
+        2 => "system-status-critical",
+        1 => "system-status-warning",
+        _ => return SharedString::new(),
+    };
+    locale
+        .tr_args(
+            key,
+            &orchid_i18n::FluentArgs::new()
+                .with("label", label.as_str())
+                .with("value", value_text.as_str()),
+        )
+        .into()
 }
 
 fn system_indicator_label(

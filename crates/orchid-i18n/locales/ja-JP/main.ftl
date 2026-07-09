@@ -94,6 +94,8 @@ weather-wind-label = 風
 weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
+weather-forecast-range = { $high } / { $low }
+weather-precip-chance = { $pct }%
 
 # ---- Wind directions ----
 weather-wind-n = 北
@@ -145,6 +147,8 @@ system-battery-charging = 充電中
 system-battery-time-remaining = 残り { $time }
 system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 system-loading = システムメトリクスを読み込み中…
+system-status-warning = { $label } — 高め ({ $value })
+system-status-critical = { $label } — 危険 ({ $value })
 
 # ---- RSS ----
 rss-no-feeds = フィードが設定されていません

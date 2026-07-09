@@ -211,27 +211,11 @@ export component WeatherView inherits Rectangle {
                     horizontal-alignment: center;
                 }
 
-                HorizontalLayout {
-                    spacing: 4px;
-                    alignment: center;
-
-                    Text {
-                        text: day.high-text;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                    }
-
-                    Text {
-                        text: " / ";
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                    }
-
-                    Text {
-                        text: day.low-text;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                    }
+                Text {
+                    text: day.range-text;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
                 }
 
                 if day.precip-text != "" : Text {

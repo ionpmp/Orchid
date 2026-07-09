@@ -310,13 +310,13 @@ export component ViewerArchiveView inherits Rectangle {
                 if model.preview-kind == 2 : VerticalLayout {
                     alignment: center;
                     spacing: 8px;
-                    // ASCII/BMP glyph — color emoji missing in Slint's default font on Windows.
-                    Text { text: "A"; color: Theme.text-tertiary; font-size: 32px; horizontal-alignment: center; }
                     Text {
                         text: model.preview-binary-size;
                         color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
+                        font-size: Theme.font-size-md;
+                        font-weight: Theme.weight-semibold;
                         horizontal-alignment: center;
+                        wrap: word-wrap;
                     }
                 }
             }

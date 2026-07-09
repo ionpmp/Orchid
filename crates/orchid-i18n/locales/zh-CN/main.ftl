@@ -94,6 +94,8 @@ weather-wind-label = 风
 weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
+weather-forecast-range = { $high } / { $low }
+weather-precip-chance = { $pct }%
 
 # ---- Wind directions ----
 weather-wind-n = 北
@@ -145,6 +147,8 @@ system-battery-charging = 充电中
 system-battery-time-remaining = 剩余 { $time }
 system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 system-loading = 正在加载系统指标…
+system-status-warning = { $label } — 偏高（{ $value }）
+system-status-critical = { $label } — 严重（{ $value }）
 
 # ---- RSS ----
 rss-no-feeds = 未配置订阅源

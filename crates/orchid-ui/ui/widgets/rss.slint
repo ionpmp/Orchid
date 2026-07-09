@@ -77,9 +77,11 @@ export component RssView inherits Rectangle {
                         z: 100;
                         open-hint := Text {
                             x: 6px; y: 3px;
-                            text: item.title != ""
-                                ? (item.source != "" ? item.title + " — " + item.source : item.title)
-                                : Strings.rss-open-item-hint;
+                            text: item.summary != ""
+                                ? (item.title != "" ? item.title + " — " + item.summary : item.summary)
+                                : item.title != ""
+                                    ? (item.source != "" ? item.title + " — " + item.source : item.title)
+                                    : Strings.rss-open-item-hint;
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
                         }

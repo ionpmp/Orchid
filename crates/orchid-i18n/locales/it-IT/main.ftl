@@ -94,6 +94,8 @@ weather-wind-label = Vento
 weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
+weather-forecast-range = { $high } / { $low }
+weather-precip-chance = { $pct }%
 
 # ---- Wind directions ----
 weather-wind-n = N
@@ -145,6 +147,8 @@ system-battery-charging = In carica
 system-battery-time-remaining = { $time } rimanenti
 system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 system-loading = Caricamento metriche di sistema…
+system-status-warning = { $label } — elevato ({ $value })
+system-status-critical = { $label } — critico ({ $value })
 
 # ---- RSS ----
 rss-no-feeds = Nessun feed configurato

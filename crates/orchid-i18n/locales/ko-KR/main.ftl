@@ -94,6 +94,8 @@ weather-wind-label = 바람
 weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
+weather-forecast-range = { $high } / { $low }
+weather-precip-chance = { $pct }%
 
 # ---- Wind directions ----
 weather-wind-n = 북
@@ -145,6 +147,8 @@ system-battery-charging = 충전 중
 system-battery-time-remaining = { $time } 남음
 system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 system-loading = 시스템 메트릭 로드 중…
+system-status-warning = { $label } — 높음 ({ $value })
+system-status-critical = { $label } — 위험 ({ $value })
 
 # ---- RSS ----
 rss-no-feeds = 구성된 피드 없음

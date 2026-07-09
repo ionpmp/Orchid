@@ -89,6 +89,8 @@ weather-wind-label = Ветер
 weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } км/ч { $dir }
 weather-wind-line-no-dir = { $label } { $speed } км/ч
+weather-forecast-range = { $high } / { $low }
+weather-precip-chance = { $pct }%
 
 # ---- Wind directions ----
 weather-wind-n = С
@@ -140,6 +142,8 @@ system-battery-charging = Заряжается
 system-battery-time-remaining = осталось { $time }
 system-network-rate = ↑ { $up }/с  ↓ { $down }/с
 system-loading = Загрузка системных метрик…
+system-status-warning = { $label } — повышено ({ $value })
+system-status-critical = { $label } — критично ({ $value })
 
 # ---- RSS ----
 rss-no-feeds = Нет настроенных лент
