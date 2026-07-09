@@ -702,7 +702,7 @@ impl FileManagerInner {
     ) -> WidgetResult<()> {
         if is_virtual(dest_dir) {
             return Err(WidgetError::InvalidStateForOperation(
-                "cannot drop into virtual folder".into(),
+                "fm-transfer-virtual-dest".into(),
             ));
         }
         self.begin_transfer(is_copy);
@@ -1020,7 +1020,7 @@ impl FileManagerInner {
             || name.contains(':')
         {
             return Err(WidgetError::InvalidStateForOperation(
-                "invalid folder name".into(),
+                "fm-invalid-folder-name".into(),
             ));
         }
         let new_path = parent.join(name);
@@ -1028,7 +1028,9 @@ impl FileManagerInner {
             .deps
             .registry
             .for_path(parent)
-            .ok_or_else(|| WidgetError::InvalidStateForOperation("no provider for parent".into()))?;
+            .ok_or_else(|| {
+                WidgetError::InvalidStateForOperation("fm-no-provider-parent".into())
+            })?;
         provider
             .create_dir(&new_path, false)
             .await
@@ -1287,7 +1289,7 @@ impl FileManagerInner {
     async fn encrypt_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<()> {
         let Some(engine) = self.deps.encrypted.as_ref() else {
             return Err(WidgetError::InvalidStateForOperation(
-                "encryption unavailable".into(),
+                "fm-encryption-unavailable".into(),
             ));
         };
         let identity = orchid_crypto::Identity::passphrase(passphrase);
@@ -1327,7 +1329,7 @@ impl FileManagerInner {
     async fn decrypt_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<()> {
         let Some(engine) = self.deps.encrypted.as_ref() else {
             return Err(WidgetError::InvalidStateForOperation(
-                "encryption unavailable".into(),
+                "fm-encryption-unavailable".into(),
             ));
         };
         let identity = orchid_crypto::Identity::passphrase(passphrase);
@@ -1351,7 +1353,7 @@ impl FileManagerInner {
     async fn reveal_paths(&self, paths: &[String], passphrase: &str) -> WidgetResult<Vec<String>> {
         let Some(engine) = self.deps.encrypted.as_ref() else {
             return Err(WidgetError::InvalidStateForOperation(
-                "encryption unavailable".into(),
+                "fm-encryption-unavailable".into(),
             ));
         };
         let identity = orchid_crypto::Identity::passphrase(passphrase);
@@ -1405,7 +1407,7 @@ impl FileManagerInner {
     async fn register_managed_folder(&self, folder: &orchid_fs::FsPath) -> WidgetResult<()> {
         let Some(engine) = self.deps.managed.as_ref() else {
             return Err(WidgetError::InvalidStateForOperation(
-                "managed folders unavailable".into(),
+                "fm-managed-unavailable".into(),
             ));
         };
         let cfg = orchid_fs::ManagedFolderConfig {
@@ -1444,7 +1446,7 @@ impl FileManagerInner {
     async fn remove_selection_from_managed(&self, paths: &[String]) -> WidgetResult<()> {
         let Some(engine) = self.deps.managed.as_ref() else {
             return Err(WidgetError::InvalidStateForOperation(
-                "managed folders unavailable".into(),
+                "fm-managed-unavailable".into(),
             ));
         };
         for p in paths {
@@ -1462,7 +1464,7 @@ impl FileManagerInner {
     ) -> WidgetResult<orchid_fs::FsPath> {
         if paths.is_empty() {
             return Err(WidgetError::InvalidStateForOperation(
-                "no selection for managed folder".into(),
+                "fm-managed-no-selection".into(),
             ));
         }
         let mut folder_candidates: Vec<orchid_fs::FsPath> = Vec::new();
@@ -1478,13 +1480,13 @@ impl FileManagerInner {
             }
             let parent = fp
                 .parent()
-                .ok_or_else(|| WidgetError::InvalidStateForOperation("no parent folder".into()))?;
+                .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-no-parent-folder".into()))?;
             folder_candidates.push(parent);
         }
         let first = folder_candidates[0].as_str();
         if !folder_candidates.iter().all(|f| f.as_str() == first) {
             return Err(WidgetError::InvalidStateForOperation(
-                "selection spans multiple folders".into(),
+                "fm-selection-multiple-folders".into(),
             ));
         }
         Ok(folder_candidates[0].clone())
@@ -1562,6 +1564,7 @@ fn build_tab_payload(
                     .map(|t| locale.format_datetime(t))
                     .unwrap_or_default(),
                 type_text: classify(
+                    &inner.deps.locale,
                     &e.name,
                     e.metadata.mime.as_deref(),
                     matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
@@ -1747,17 +1750,27 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
-fn classify(name: &str, mime: Option<&str>, is_dir: bool) -> String {
+fn classify(
+    locale: &orchid_i18n::LocaleManager,
+    name: &str,
+    mime: Option<&str>,
+    is_dir: bool,
+) -> String {
     if is_dir {
-        return "Folder".into();
+        return locale.tr("fm-properties-kind-folder");
     }
     if let Some(m) = mime {
         return m.to_string();
     }
     name.rsplit('.')
         .next()
-        .map(|ext| format!("{} file", ext.to_uppercase()))
-        .unwrap_or_else(|| "File".into())
+        .map(|ext| {
+            locale.tr_args(
+                "fm-type-ext-file",
+                &orchid_i18n::FluentArgs::new().with("ext", ext.to_uppercase()),
+            )
+        })
+        .unwrap_or_else(|| locale.tr("fm-properties-kind-file"))
 }
 
 fn is_image_entry(e: &orchid_fs::FsEntry) -> bool {
@@ -2748,7 +2761,7 @@ pub async fn run_action_with_opts(
                 .iter()
                 .find_map(|p| inner.managed_root_for_path(p))
                 .ok_or_else(|| {
-                    WidgetError::InvalidStateForOperation("not a managed folder".into())
+                    WidgetError::InvalidStateForOperation("fm-not-managed-folder".into())
                 })?;
             let policy = inner.managed_policies.read().get(&root).cloned().flatten();
             return Ok(ActionOutcome::NeedsManagedPolicy { path: root, policy });
@@ -2787,20 +2800,20 @@ pub async fn rename(instance_id: Uuid, old_path: &str, new_name: &str) -> Widget
         || new_name.contains(':')
     {
         return Err(WidgetError::InvalidStateForOperation(
-            "invalid rename target".into(),
+            "fm-invalid-rename-target".into(),
         ));
     }
     let inner = live_inner(instance_id)?;
     let old = orchid_fs::FsPath::new(old_path).map_err(map_fs_error)?;
     let parent = old
         .parent()
-        .ok_or_else(|| WidgetError::InvalidStateForOperation("cannot rename root".into()))?;
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-cannot-rename-root".into()))?;
     let new_path = parent.join(new_name);
     let provider = inner
         .deps
         .registry
         .for_path(&old)
-        .ok_or_else(|| WidgetError::InvalidStateForOperation(format!("no provider for {old_path}")))?;
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-no-provider-path".into()))?;
     provider
         .rename(&old, &new_path)
         .await
@@ -2815,7 +2828,7 @@ pub async fn create_folder(instance_id: Uuid, parent_path: &str, name: &str) -> 
     let parent = orchid_fs::FsPath::new(parent_path).map_err(map_fs_error)?;
     if is_virtual(&parent) {
         return Err(WidgetError::InvalidStateForOperation(
-            "cannot create folder in virtual location".into(),
+            "fm-virtual-create-denied".into(),
         ));
     }
     inner.create_folder_at(&parent, name).await?;
@@ -2846,7 +2859,7 @@ pub async fn add_tag_to_paths(
 ) -> WidgetResult<()> {
     let trimmed = tag.trim();
     if trimmed.is_empty() {
-        return Err(WidgetError::InvalidStateForOperation("empty tag".into()));
+        return Err(WidgetError::InvalidStateForOperation("fm-empty-tag".into()));
     }
     let inner = live_inner(instance_id)?;
     for p in paths {
@@ -3001,12 +3014,12 @@ pub async fn move_paths_to_directory(
         let meta = provider.metadata(&dest).await.map_err(map_fs_error)?;
         if !matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
             return Err(WidgetError::InvalidStateForOperation(
-                "drop target is not a directory".into(),
+                "fm-drop-not-directory".into(),
             ));
         }
     } else {
         return Err(WidgetError::InvalidStateForOperation(
-            "drop target unavailable".into(),
+            "fm-drop-unavailable".into(),
         ));
     }
     inner.transfer_paths(&sources, &dest, false).await?;
@@ -3029,12 +3042,12 @@ pub async fn copy_paths_to_directory(
         let meta = provider.metadata(&dest).await.map_err(map_fs_error)?;
         if !matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
             return Err(WidgetError::InvalidStateForOperation(
-                "drop target is not a directory".into(),
+                "fm-drop-not-directory".into(),
             ));
         }
     } else {
         return Err(WidgetError::InvalidStateForOperation(
-            "drop target unavailable".into(),
+            "fm-drop-unavailable".into(),
         ));
     }
     inner.transfer_paths(&sources, &dest, true).await?;

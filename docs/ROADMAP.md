@@ -101,7 +101,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 - [ ] AI agents (Ollama + OpenAI API)
 - [ ] Graphical resource monitor with history
-- [~] Extended notification system — in-app list with Clear all, per-item dismiss, a 50-item soft cap, and redb-backed persistence across sessions; startup tip + bridged FM/password/config/viewer action failures; OS toasts deferred
+- [~] Extended notification system — in-app list with Clear all, per-item dismiss, a 50-item soft cap, and redb-backed persistence across sessions; startup tip + bridged FM/password/config/viewer action failures (incl. FM rename/delete/drop/context); OS toasts deferred
 - [ ] Built-in browser (WebView2)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace

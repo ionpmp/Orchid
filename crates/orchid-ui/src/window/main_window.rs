@@ -2728,6 +2728,16 @@ impl MainWindowController {
     /// Soft cap so bridges/toasts cannot grow the in-memory list without bound.
     const NOTIFICATION_LIST_CAP: usize = 50;
 
+    fn notify_fm_action_failed(self: &Arc<Self>, err: &impl std::fmt::Display) {
+        let title = self.locale.tr("widget-fm-name");
+        let reason = fm_localized_error(&self.locale, &err.to_string());
+        let body = self.locale.tr_args(
+            "fm-action-failed",
+            &orchid_i18n::FluentArgs::new().with("reason", reason),
+        );
+        self.push_notification(&title, &body, 3);
+    }
+
     /// Append a notification (newest first). `severity`: 0 info, 1 tip, 2 warning, 3 error.
     fn push_notification(self: &Arc<Self>, title: &str, body: &str, severity: i32) {
         let item = NotificationItem {
@@ -6171,6 +6181,9 @@ impl MainWindowController {
             };
             if let Err(e) = result {
                 warn!(?e, dest = %dest, copy, "fm drag drop");
+                if let Some(c) = tw.upgrade() {
+                    c.notify_fm_action_failed(&e);
+                }
             }
             if source_inst != target_inst {
                 let _ =
@@ -6358,6 +6371,9 @@ impl MainWindowController {
             };
             if let Err(e) = result {
                 warn!(?e, dest = %dest, copy, "fm os file drop");
+                if let Some(c) = tw.upgrade() {
+                    c.notify_fm_action_failed(&e);
+                }
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
@@ -6786,6 +6802,9 @@ impl MainWindowController {
                 Ok(o) => o,
                 Err(e) => {
                     warn!(?e, "fm new folder");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                     return;
                 }
             };
@@ -7004,6 +7023,9 @@ impl MainWindowController {
                 Ok(o) => o,
                 Err(e) => {
                     warn!(?e, path = %path, "fm open path");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                     return;
                 }
             };
@@ -7078,6 +7100,9 @@ impl MainWindowController {
                 Ok(o) => o,
                 Err(e) => {
                     warn!(?e, "fm action");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                     return;
                 }
             };
@@ -7342,6 +7367,9 @@ impl MainWindowController {
                 Ok(o) => o,
                 Err(e) => {
                     warn!(?e, "fm confirm action");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                     return;
                 }
             };
@@ -7387,8 +7415,14 @@ impl MainWindowController {
             let newn = new_name.to_string();
             let tw = Arc::downgrade(self);
             let _ = slint::spawn_local(Compat::new(async move {
-                let _ =
-                    orchid_widgets::builtin::file_manager::create_folder(inst, &parent, &newn).await;
+                if let Err(e) =
+                    orchid_widgets::builtin::file_manager::create_folder(inst, &parent, &newn).await
+                {
+                    warn!(?e, "fm create folder");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
+                }
                 if let Some(c) = tw.upgrade() {
                     let mut over = c.fm_overlays.write();
                     let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
@@ -7404,7 +7438,12 @@ impl MainWindowController {
         let newn = new_name.to_string();
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            let _ = orchid_widgets::builtin::file_manager::rename(inst, &old, &newn).await;
+            if let Err(e) = orchid_widgets::builtin::file_manager::rename(inst, &old, &newn).await {
+                warn!(?e, "fm rename");
+                if let Some(c) = tw.upgrade() {
+                    c.notify_fm_action_failed(&e);
+                }
+            }
             if let Some(c) = tw.upgrade() {
                 let mut over = c.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
@@ -7726,6 +7765,9 @@ impl MainWindowController {
                 Ok(o) => o,
                 Err(e) => {
                     warn!(?e, action_id = %action_id, "fm action");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                     return;
                 }
             };
@@ -8837,15 +8879,40 @@ fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
 }
 
 fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
-    let lower = err.to_ascii_lowercase();
-    match err {
-        "network-placeholder" => locale.tr("fm-network-placeholder"),
-        "virtual-empty-recent" => locale.tr("fm-virtual-recent-empty"),
-        "virtual-empty-starred" => locale.tr("fm-virtual-starred-empty"),
-        "virtual-empty-tags" => locale.tr("fm-virtual-tags-empty"),
-        "virtual-empty-category" => locale.tr("fm-virtual-category-empty"),
-        _ if err.contains("no provider for scheme") => locale.tr("fm-network-no-provider"),
-        _ if err.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing"),
+    let mut msg = err;
+    if let Some(rest) = msg.strip_prefix("widget is in an invalid state for this operation: ") {
+        msg = rest;
+    }
+    // Fluent-key sentinels from orchid-widgets file manager.
+    match msg {
+        "network-placeholder" => return locale.tr("fm-network-placeholder"),
+        "virtual-empty-recent" => return locale.tr("fm-virtual-recent-empty"),
+        "virtual-empty-starred" => return locale.tr("fm-virtual-starred-empty"),
+        "virtual-empty-tags" => return locale.tr("fm-virtual-tags-empty"),
+        "virtual-empty-category" => return locale.tr("fm-virtual-category-empty"),
+        "fm-transfer-virtual-dest"
+        | "fm-virtual-create-denied"
+        | "fm-encryption-unavailable"
+        | "fm-managed-unavailable"
+        | "fm-managed-no-selection"
+        | "fm-not-managed-folder"
+        | "fm-managed-conflict"
+        | "fm-invalid-folder-name"
+        | "fm-no-provider-parent"
+        | "fm-no-parent-folder"
+        | "fm-selection-multiple-folders"
+        | "fm-invalid-rename-target"
+        | "fm-cannot-rename-root"
+        | "fm-no-provider-path"
+        | "fm-empty-tag"
+        | "fm-drop-not-directory"
+        | "fm-drop-unavailable" => return locale.tr(msg),
+        _ => {}
+    }
+    let lower = msg.to_ascii_lowercase();
+    match msg {
+        _ if msg.contains("no provider for scheme") => locale.tr("fm-network-no-provider"),
+        _ if msg.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing"),
         _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount"),
         _ if lower.contains("authentication")
             || lower.contains("access denied")
@@ -8879,7 +8946,7 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if lower.contains("invalid passphrase") => locale.tr("fm-passphrase-invalid"),
         _ if lower.contains("passphrase required") => locale.tr("fm-passphrase-required"),
         _ if lower.contains("age decryption failed") => locale.tr("fm-decryption-failed"),
-        _ => err.to_string(),
+        _ => msg.to_string(),
     }
 }
 
