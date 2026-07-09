@@ -75,6 +75,8 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-image-actual-size(string);
     callback viewer-image-rotate-cw(string);
     callback viewer-image-rotate-ccw(string);
+    callback viewer-image-flip-h(string);
+    callback viewer-image-flip-v(string);
     callback viewer-image-pan(string, length, length);
     callback viewer-viewport-changed(string, length, length);
 
@@ -381,6 +383,8 @@ export component WidgetFrame inherits Rectangle {
                         image-actual-size => { root.viewer-image-actual-size(root.model.instance-id); }
                         image-rotate-cw => { root.viewer-image-rotate-cw(root.model.instance-id); }
                         image-rotate-ccw => { root.viewer-image-rotate-ccw(root.model.instance-id); }
+                        image-flip-h => { root.viewer-image-flip-h(root.model.instance-id); }
+                        image-flip-v => { root.viewer-image-flip-v(root.model.instance-id); }
                         image-pan(dx, dy) => { root.viewer-image-pan(root.model.instance-id, dx, dy); }
 
                         pdf-prev-page => { root.viewer-pdf-prev-page(root.model.instance-id); }

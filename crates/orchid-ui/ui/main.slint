@@ -129,6 +129,8 @@ export component MainWindow inherits Window {
     callback viewer-image-actual-size(string);
     callback viewer-image-rotate-cw(string);
     callback viewer-image-rotate-ccw(string);
+    callback viewer-image-flip-h(string);
+    callback viewer-image-flip-v(string);
     callback viewer-image-pan(string, length, length);
     callback viewer-viewport-changed(string, length, length);
     callback viewer-pdf-prev-page(string);
@@ -344,6 +346,8 @@ export component MainWindow inherits Window {
             viewer-image-actual-size(id) => { root.viewer-image-actual-size(id); }
             viewer-image-rotate-cw(id) => { root.viewer-image-rotate-cw(id); }
             viewer-image-rotate-ccw(id) => { root.viewer-image-rotate-ccw(id); }
+            viewer-image-flip-h(id) => { root.viewer-image-flip-h(id); }
+            viewer-image-flip-v(id) => { root.viewer-image-flip-v(id); }
             viewer-image-pan(id, dx, dy) => { root.viewer-image-pan(id, dx, dy); }
             viewer-viewport-changed(id, w, h) => { root.viewer-viewport-changed(id, w, h); }
             viewer-pdf-prev-page(id) => { root.viewer-pdf-prev-page(id); }

@@ -62,7 +62,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
-- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
+- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, fit width/page, zoom; requires bundled `pdfium.dll`
 - [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save, dirty ●)
 - [~] Archives (browse + extract) — browse + preview wired; extract selected/all; TAR.XZ via `xz2`

@@ -10,6 +10,8 @@ export component ViewerImageView inherits Rectangle {
     callback actual-size();
     callback rotate-cw();
     callback rotate-ccw();
+    callback flip-h();
+    callback flip-v();
     callback pan(length, length);
 
     background: transparent;
@@ -107,6 +109,28 @@ export component ViewerImageView inherits Rectangle {
                     rccw-ta := TouchArea { clicked => { root.rotate-ccw(); } }
                     Text { text: "↺"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: flip-h-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    flip-h-ta := TouchArea { clicked => { root.flip-h(); } }
+                    Text { text: "⇄"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: flip-v-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    flip-v-ta := TouchArea { clicked => { root.flip-v(); } }
+                    Text { text: "⇅"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
             }
         }
 
@@ -123,6 +147,8 @@ export component ViewerImageView inherits Rectangle {
                 height: model.height-px * 1px * model.zoom;
                 image-fit: fill;
                 transform-rotation: model.rotation-deg * 1deg;
+                transform-scale-x: model.flipped-h ? -1 : 1;
+                transform-scale-y: model.flipped-v ? -1 : 1;
             }
 
             pan-area := TouchArea {

@@ -291,6 +291,38 @@ pub async fn image_rotate_ccw(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Image toolbar: toggle horizontal flip.
+pub async fn image_flip_h(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+            img.flip_horizontal();
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Image toolbar: toggle vertical flip.
+pub async fn image_flip_v(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+            img.flip_vertical();
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Image: pan by logical pixels.
 pub async fn image_pan(instance_id: Uuid, dx: f32, dy: f32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

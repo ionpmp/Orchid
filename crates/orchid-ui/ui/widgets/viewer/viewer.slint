@@ -14,6 +14,8 @@ export component ViewerView inherits Rectangle {
     callback image-actual-size();
     callback image-rotate-cw();
     callback image-rotate-ccw();
+    callback image-flip-h();
+    callback image-flip-v();
     callback image-pan(length, length);
 
     callback pdf-prev-page();
@@ -78,6 +80,8 @@ export component ViewerView inherits Rectangle {
         actual-size => { root.image-actual-size(); }
         rotate-cw => { root.image-rotate-cw(); }
         rotate-ccw => { root.image-rotate-ccw(); }
+        flip-h => { root.image-flip-h(); }
+        flip-v => { root.image-flip-v(); }
         pan(dx, dy) => { root.image-pan(dx, dy); }
     }
 
