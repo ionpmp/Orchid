@@ -75,6 +75,24 @@ weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
 
+# ---- Wind directions ----
+weather-wind-n = 북
+weather-wind-nne = 북북동
+weather-wind-ne = 북동
+weather-wind-ene = 동북동
+weather-wind-e = 동
+weather-wind-ese = 동남동
+weather-wind-se = 남동
+weather-wind-sse = 남남동
+weather-wind-s = 남
+weather-wind-ssw = 남남서
+weather-wind-sw = 남서
+weather-wind-wsw = 서남서
+weather-wind-w = 서
+weather-wind-wnw = 서북서
+weather-wind-nw = 북서
+weather-wind-nnw = 북북서
+
 # ---- Moon ----
 moon-phase-new = 신월
 moon-phase-waxing-crescent = 초승달
@@ -498,6 +516,8 @@ viewer-no-file = 열린 파일 없음
 viewer-loading-path = 로드 중: { $path }
 viewer-error-with-reason = 이 파일을 표시할 수 없습니다: { $reason }
 viewer-pdf-unavailable = 이 빌드에서는 PDF 지원을 사용할 수 없습니다.
+viewer-image-heic-unsupported = HEIC 이미지는 아직 지원되지 않습니다
+viewer-image-raw-unsupported = RAW 이미지는 아직 지원되지 않습니다
 viewer-archive-select-preview = 미리 볼 파일 선택
 viewer-archive-binary-preview = 바이너리 파일, { $size }
 

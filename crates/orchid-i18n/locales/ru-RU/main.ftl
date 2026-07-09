@@ -70,6 +70,24 @@ weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } км/ч { $dir }
 weather-wind-line-no-dir = { $label } { $speed } км/ч
 
+# ---- Wind directions ----
+weather-wind-n = С
+weather-wind-nne = ССВ
+weather-wind-ne = СВ
+weather-wind-ene = ВСВ
+weather-wind-e = В
+weather-wind-ese = ВЮВ
+weather-wind-se = ЮВ
+weather-wind-sse = ЮЮВ
+weather-wind-s = Ю
+weather-wind-ssw = ЮЮЗ
+weather-wind-sw = ЮЗ
+weather-wind-wsw = ЗЮЗ
+weather-wind-w = З
+weather-wind-wnw = ЗСЗ
+weather-wind-nw = СЗ
+weather-wind-nnw = ССЗ
+
 # ---- Moon ----
 moon-phase-new = Новолуние
 moon-phase-waxing-crescent = Молодая луна
@@ -500,6 +518,8 @@ viewer-no-file = Файл не открыт
 viewer-loading-path = Загрузка: { $path }
 viewer-error-with-reason = Не удаётся отобразить файл: { $reason }
 viewer-pdf-unavailable = Поддержка PDF недоступна в этой сборке.
+viewer-image-heic-unsupported = Изображения HEIC пока не поддерживаются
+viewer-image-raw-unsupported = Изображения RAW пока не поддерживаются
 viewer-archive-select-preview = Выберите файл для предпросмотра
 viewer-archive-binary-preview = Бинарный файл, { $size }
 

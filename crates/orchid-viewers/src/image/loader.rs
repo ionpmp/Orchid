@@ -106,14 +106,10 @@ fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
         return decode_svg(bytes, size);
     }
     if looks_like_heic(bytes) {
-        return Err(ViewerError::ImageDecode(
-            "HEIC images are not supported yet".into(),
-        ));
+        return Err(ViewerError::UnsupportedHeic);
     }
     if looks_like_raw(bytes) {
-        return Err(ViewerError::ImageDecode(
-            "RAW images are not supported yet".into(),
-        ));
+        return Err(ViewerError::UnsupportedRaw);
     }
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
@@ -354,12 +350,11 @@ mod tests {
     fn heic_decode_returns_clear_error() {
         let bytes = heic_ftyp(b"heic");
         let err = decode_bytes(&bytes, bytes.len() as u64).unwrap_err();
-        match err {
-            ViewerError::ImageDecode(msg) => {
-                assert!(msg.contains("HEIC images are not supported yet"), "{msg}");
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        assert!(
+            matches!(err, ViewerError::UnsupportedHeic),
+            "unexpected error: {err:?}"
+        );
+        assert_eq!(err.to_string(), "viewer-image-heic-unsupported");
     }
 
     #[test]
@@ -385,12 +380,11 @@ mod tests {
     fn raw_decode_returns_clear_error() {
         let bytes = b"FUJIFILMCCD-RAW \x00";
         let err = decode_bytes(bytes, bytes.len() as u64).unwrap_err();
-        match err {
-            ViewerError::ImageDecode(msg) => {
-                assert!(msg.contains("RAW images are not supported yet"), "{msg}");
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        assert!(
+            matches!(err, ViewerError::UnsupportedRaw),
+            "unexpected error: {err:?}"
+        );
+        assert_eq!(err.to_string(), "viewer-image-raw-unsupported");
     }
 
     #[test]

@@ -75,6 +75,24 @@ weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
 
+# ---- Wind directions ----
+weather-wind-n = N
+weather-wind-nne = NNE
+weather-wind-ne = NE
+weather-wind-ene = ENE
+weather-wind-e = E
+weather-wind-ese = ESE
+weather-wind-se = SE
+weather-wind-sse = SSE
+weather-wind-s = S
+weather-wind-ssw = SSW
+weather-wind-sw = SW
+weather-wind-wsw = WSW
+weather-wind-w = W
+weather-wind-wnw = WNW
+weather-wind-nw = NW
+weather-wind-nnw = NNW
+
 # ---- Moon ----
 moon-phase-new = New Moon
 moon-phase-waxing-crescent = Waxing Crescent
@@ -508,6 +526,8 @@ viewer-no-file = No file open
 viewer-loading-path = Loading: { $path }
 viewer-error-with-reason = Cannot display this file: { $reason }
 viewer-pdf-unavailable = PDF support is unavailable on this build.
+viewer-image-heic-unsupported = HEIC images are not supported yet
+viewer-image-raw-unsupported = RAW images are not supported yet
 viewer-archive-select-preview = Select a file to preview
 viewer-archive-binary-preview = Binary file, { $size }
 

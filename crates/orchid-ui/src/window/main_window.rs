@@ -9367,6 +9367,17 @@ fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel 
         Vs::Error {
             path_display,
             message,
+        } if *message == ViewerError::UnsupportedHeic.to_string()
+            || *message == ViewerError::UnsupportedRaw.to_string() =>
+        {
+            model.kind = 2;
+            model.status.path_display = path_display.clone().into();
+            model.status.icon = "error".into();
+            model.status.message = locale.tr(message).into();
+        }
+        Vs::Error {
+            path_display,
+            message,
         } => {
             model.kind = 2;
             model.status.path_display = path_display.clone().into();
@@ -9833,13 +9844,21 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
         .unwrap_or_default();
 
     let wind = match (p.wind_speed_kph, p.wind_direction.as_deref()) {
-        (Some(kph), Some(dir)) if !dir.is_empty() => locale.tr_args(
-            "weather-wind-line",
-            &orchid_i18n::FluentArgs::new()
-                .with("label", locale.tr("weather-wind-label"))
-                .with("speed", format!("{kph:.0}"))
-                .with("dir", dir.to_string()),
-        ),
+        (Some(kph), Some(dir_key)) if !dir_key.is_empty() => {
+            let dir = if dir_key.starts_with("weather-wind-") {
+                locale.tr(dir_key)
+            } else {
+                // Legacy payloads may still carry English compass abbreviations.
+                dir_key.to_string()
+            };
+            locale.tr_args(
+                "weather-wind-line",
+                &orchid_i18n::FluentArgs::new()
+                    .with("label", locale.tr("weather-wind-label"))
+                    .with("speed", format!("{kph:.0}"))
+                    .with("dir", dir),
+            )
+        }
         (Some(kph), _) => locale.tr_args(
             "weather-wind-line-no-dir",
             &orchid_i18n::FluentArgs::new()
@@ -9983,7 +10002,7 @@ mod tests {
                 condition_icon: "weather-clear",
                 humidity_percent: Some(45),
                 wind_speed_kph: Some(12.0),
-                wind_direction: Some("NE".into()),
+                wind_direction: Some("weather-wind-ne".into()),
                 forecast: vec![],
                 fetched_at: None,
                 is_loading: false,

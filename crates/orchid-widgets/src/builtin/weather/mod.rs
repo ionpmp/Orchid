@@ -299,7 +299,7 @@ fn render_payload(
         wind_direction: data
             .current
             .wind_direction_deg
-            .map(|deg| wind_direction_label(deg).to_string()),
+            .map(|deg| wind_direction_ftl_key(deg).to_string()),
         forecast,
         fetched_at: Some(data.fetched_at),
         is_loading: false,
@@ -334,13 +334,51 @@ fn format_temperature(c: f32, units: TemperatureUnit) -> String {
     }
 }
 
-fn wind_direction_label(deg: u16) -> &'static str {
-    const DIRS: [&str; 16] = [
-        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
-        "NW", "NNW",
+/// Fluent key for a compass bearing (`weather-wind-n` … `weather-wind-nnw`).
+///
+/// The UI layer resolves the key through [`orchid_i18n::LocaleManager`].
+#[must_use]
+pub fn wind_direction_ftl_key(deg: u16) -> &'static str {
+    const KEYS: [&str; 16] = [
+        "weather-wind-n",
+        "weather-wind-nne",
+        "weather-wind-ne",
+        "weather-wind-ene",
+        "weather-wind-e",
+        "weather-wind-ese",
+        "weather-wind-se",
+        "weather-wind-sse",
+        "weather-wind-s",
+        "weather-wind-ssw",
+        "weather-wind-sw",
+        "weather-wind-wsw",
+        "weather-wind-w",
+        "weather-wind-wnw",
+        "weather-wind-nw",
+        "weather-wind-nnw",
     ];
-    let idx = (((deg as f32 + 11.25) / 22.5) as usize) % 16;
-    DIRS[idx]
+    KEYS[wind_direction_index(deg)]
+}
+
+fn wind_direction_index(deg: u16) -> usize {
+    (((deg as f32 + 11.25) / 22.5) as usize) % 16
+}
+
+#[cfg(test)]
+mod wind_tests {
+    use super::*;
+
+    #[test]
+    fn wind_direction_buckets_cardinals_and_intermediates() {
+        assert_eq!(wind_direction_ftl_key(0), "weather-wind-n");
+        assert_eq!(wind_direction_ftl_key(45), "weather-wind-ne");
+        assert_eq!(wind_direction_ftl_key(90), "weather-wind-e");
+        assert_eq!(wind_direction_ftl_key(180), "weather-wind-s");
+        assert_eq!(wind_direction_ftl_key(270), "weather-wind-w");
+        assert_eq!(wind_direction_ftl_key(359), "weather-wind-n");
+        assert_eq!(wind_direction_index(22), 1); // NNE
+        assert_eq!(wind_direction_index(337), 15); // NNW
+    }
 }
 
 /// Build the descriptor ready to register on a

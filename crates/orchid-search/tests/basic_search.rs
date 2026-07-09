@@ -50,6 +50,20 @@ async fn upsert_then_search_by_name_and_extension() {
     let hits = engine.search(q).await.unwrap();
     assert!(!hits.hits.is_empty());
     assert!(hits.hits.iter().all(|h| h.path.contains("report-")));
+    let with_snippet = hits
+        .hits
+        .iter()
+        .find_map(|h| h.snippet.as_ref())
+        .expect("content match should produce a snippet");
+    assert!(
+        with_snippet.text.to_ascii_lowercase().contains("quarterly"),
+        "snippet text was: {}",
+        with_snippet.text
+    );
+    assert!(
+        !with_snippet.highlights.is_empty(),
+        "snippet should highlight the query term"
+    );
 
     // Extension filter alone.
     let q = QueryBuilder::new().extension("md").build();

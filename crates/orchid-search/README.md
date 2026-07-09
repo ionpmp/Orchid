@@ -8,6 +8,6 @@ The engine ships with a single fixed schema (see `schema::Schema`). Tokenizers:
 - `name` / `content` — Tantivy's default + English stemmer
 - `extension`, `tags`, `color_label`, `mime`, `kind`, `in_archive` — raw strings
 
-`query::QueryBuilder` exposes a fluent surface covering text, extension, MIME, tag, colour, path prefix, size and modified-time ranges, file/directory filters, and pagination. Snippet types are defined but generation is opt-in (the current iteration returns `snippet: None` in hits; a snippet generator using Tantivy's built-in facility is planned).
+`query::QueryBuilder` exposes a fluent surface covering text, extension, MIME, tag, colour, path prefix, size and modified-time ranges, file/directory filters, and pagination. Free-text searches attach a content snippet (via Tantivy's `SnippetGenerator`) with highlight ranges when the hit has indexed body text; filter-only queries leave `snippet: None`.
 
 PDF extraction requires pdfium at runtime; see the module docs on `extractors::pdf`.

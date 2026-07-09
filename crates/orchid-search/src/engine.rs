@@ -444,6 +444,24 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
     let top = searcher.search(&combined, &collector)?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
+    // Snippets only make sense for free-text queries against stored content.
+    let snippet_generator = q
+        .text
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|_| {
+            tantivy::snippet::SnippetGenerator::create(
+                &searcher,
+                &*combined,
+                inner.schema.field_content,
+            )
+            .ok()
+            .map(|mut gen| {
+                gen.set_max_num_chars(160);
+                gen
+            })
+        });
+
     let mut hits = Vec::with_capacity(top.len());
     for (score, addr) in top {
         let retrieved: TantivyDocument = searcher.doc(addr)?;
@@ -460,6 +478,10 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
             DocumentKind::File
         };
 
+        let snippet = snippet_generator
+            .as_ref()
+            .and_then(|gen| snippet_from_doc(gen, &retrieved));
+
         hits.push(SearchHit {
             path,
             name,
@@ -469,7 +491,7 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
             mime,
             kind,
             score,
-            snippet: None, // Snippet generation is opt-in; see query::snippet.
+            snippet,
         });
     }
 
@@ -481,6 +503,23 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
         total_estimated: total,
         query_time_ms: elapsed_ms,
     })
+}
+
+fn snippet_from_doc(
+    generator: &tantivy::snippet::SnippetGenerator,
+    doc: &TantivyDocument,
+) -> Option<Snippet> {
+    let tantivy_snippet = generator.snippet_from_doc(doc);
+    let text = tantivy_snippet.fragment().to_string();
+    if text.trim().is_empty() {
+        return None;
+    }
+    let highlights = tantivy_snippet
+        .highlighted()
+        .iter()
+        .map(|range| (range.start as u32, range.end as u32))
+        .collect();
+    Some(Snippet { text, highlights })
 }
 
 fn get_str(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<String> {
@@ -496,10 +535,3 @@ fn get_i64(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<i64> {
     d.get_first(field).and_then(|v| v.as_i64())
 }
 
-#[allow(dead_code)]
-fn _snippet_placeholder() -> Snippet {
-    Snippet {
-        text: String::new(),
-        highlights: Vec::new(),
-    }
-}

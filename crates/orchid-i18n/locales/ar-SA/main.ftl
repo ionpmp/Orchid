@@ -75,6 +75,24 @@ weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
 
+# ---- Wind directions ----
+weather-wind-n = ش
+weather-wind-nne = ش ش ق
+weather-wind-ne = ش ق
+weather-wind-ene = ق ش ق
+weather-wind-e = ق
+weather-wind-ese = ق ج ق
+weather-wind-se = ج ق
+weather-wind-sse = ج ج ق
+weather-wind-s = ج
+weather-wind-ssw = ج ج غ
+weather-wind-sw = ج غ
+weather-wind-wsw = غ ج غ
+weather-wind-w = غ
+weather-wind-wnw = غ ش غ
+weather-wind-nw = ش غ
+weather-wind-nnw = ش ش غ
+
 # ---- Moon ----
 moon-phase-new = محاق
 moon-phase-waxing-crescent = هلال متزايد
@@ -499,6 +517,8 @@ viewer-no-file = لا يوجد ملف مفتوح
 viewer-loading-path = جارٍ التحميل: { $path }
 viewer-error-with-reason = تعذّر عرض هذا الملف: { $reason }
 viewer-pdf-unavailable = دعم PDF غير متاح في هذا الإصدار.
+viewer-image-heic-unsupported = صور HEIC غير مدعومة بعد
+viewer-image-raw-unsupported = صور RAW غير مدعومة بعد
 viewer-archive-select-preview = حدّد ملفًا للمعاينة
 viewer-archive-binary-preview = ملف ثنائي، { $size }
 

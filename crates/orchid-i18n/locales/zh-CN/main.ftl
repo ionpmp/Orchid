@@ -75,6 +75,24 @@ weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
 
+# ---- Wind directions ----
+weather-wind-n = 北
+weather-wind-nne = 北东北
+weather-wind-ne = 东北
+weather-wind-ene = 东东北
+weather-wind-e = 东
+weather-wind-ese = 东东南
+weather-wind-se = 东南
+weather-wind-sse = 南东南
+weather-wind-s = 南
+weather-wind-ssw = 南西南
+weather-wind-sw = 西南
+weather-wind-wsw = 西西南
+weather-wind-w = 西
+weather-wind-wnw = 西西北
+weather-wind-nw = 西北
+weather-wind-nnw = 北西北
+
 # ---- Moon ----
 moon-phase-new = 新月
 moon-phase-waxing-crescent = 娥眉月
@@ -498,6 +516,8 @@ viewer-no-file = 未打开文件
 viewer-loading-path = 正在加载：{ $path }
 viewer-error-with-reason = 无法显示此文件：{ $reason }
 viewer-pdf-unavailable = 此版本不支持 PDF。
+viewer-image-heic-unsupported = 暂不支持 HEIC 图片
+viewer-image-raw-unsupported = 暂不支持 RAW 图片
 viewer-archive-select-preview = 选择要预览的文件
 viewer-archive-binary-preview = 二进制文件，{ $size }
 

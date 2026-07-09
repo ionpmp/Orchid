@@ -75,6 +75,24 @@ weather-humidity-line = { $label } { $h }%
 weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
 
+# ---- Wind directions ----
+weather-wind-n = 北
+weather-wind-nne = 北北東
+weather-wind-ne = 北東
+weather-wind-ene = 東北東
+weather-wind-e = 東
+weather-wind-ese = 東南東
+weather-wind-se = 南東
+weather-wind-sse = 南南東
+weather-wind-s = 南
+weather-wind-ssw = 南南西
+weather-wind-sw = 南西
+weather-wind-wsw = 西南西
+weather-wind-w = 西
+weather-wind-wnw = 西北西
+weather-wind-nw = 北西
+weather-wind-nnw = 北北西
+
 # ---- Moon ----
 moon-phase-new = 新月
 moon-phase-waxing-crescent = 三日月
@@ -498,6 +516,8 @@ viewer-no-file = ファイルが開かれていません
 viewer-loading-path = 読み込み中: { $path }
 viewer-error-with-reason = このファイルを表示できません: { $reason }
 viewer-pdf-unavailable = このビルドでは PDF サポートは利用できません。
+viewer-image-heic-unsupported = HEIC画像はまだサポートされていません
+viewer-image-raw-unsupported = RAW画像はまだサポートされていません
 viewer-archive-select-preview = プレビューするファイルを選択
 viewer-archive-binary-preview = バイナリファイル、{ $size }
 

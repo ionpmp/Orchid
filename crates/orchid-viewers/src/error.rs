@@ -26,6 +26,18 @@ pub enum ViewerError {
     #[error("failed to decode image: {0}")]
     ImageDecode(String),
 
+    /// HEIC/HEIF containers are recognised but not decoded yet.
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-heic-unsupported")]
+    UnsupportedHeic,
+
+    /// Camera RAW containers are recognised but not decoded yet.
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-raw-unsupported")]
+    UnsupportedRaw,
+
     /// PDF page render failed.
     #[error("failed to render PDF page {page}: {reason}")]
     PdfRender {
