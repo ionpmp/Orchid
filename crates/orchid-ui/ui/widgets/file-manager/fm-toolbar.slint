@@ -28,11 +28,15 @@ export component FmToolbar inherits Rectangle {
             border-radius: Theme.radius-md;
             opacity: tab.can-back ? 1.0 : 0.4;
 
+            // Keep TouchArea enabled so disabled state can still show a hover hint.
             back-ta := TouchArea {
-                enabled: tab.can-back;
-                clicked => { root.back(); }
+                clicked => {
+                    if tab.can-back {
+                        root.back();
+                    }
+                }
             }
-            if back-ta.has-hover && tab.can-back : Rectangle {
+            if back-ta.has-hover : Rectangle {
                 x: parent.x;
                 y: parent.height + 2px;
                 width: back-hint.preferred-width + 12px;
@@ -44,7 +48,7 @@ export component FmToolbar inherits Rectangle {
                 z: 100;
                 back-hint := Text {
                     x: 6px; y: 3px;
-                    text: Strings.fm-nav-back;
+                    text: tab.can-back ? Strings.fm-nav-back : Strings.fm-nav-back-disabled;
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
                 }
@@ -59,11 +63,15 @@ export component FmToolbar inherits Rectangle {
             border-radius: Theme.radius-md;
             opacity: tab.can-forward ? 1.0 : 0.4;
 
+            // Keep TouchArea enabled so disabled state can still show a hover hint.
             fwd-ta := TouchArea {
-                enabled: tab.can-forward;
-                clicked => { root.forward(); }
+                clicked => {
+                    if tab.can-forward {
+                        root.forward();
+                    }
+                }
             }
-            if fwd-ta.has-hover && tab.can-forward : Rectangle {
+            if fwd-ta.has-hover : Rectangle {
                 x: parent.x;
                 y: parent.height + 2px;
                 width: fwd-hint.preferred-width + 12px;
@@ -75,7 +83,7 @@ export component FmToolbar inherits Rectangle {
                 z: 100;
                 fwd-hint := Text {
                     x: 6px; y: 3px;
-                    text: Strings.fm-nav-forward;
+                    text: tab.can-forward ? Strings.fm-nav-forward : Strings.fm-nav-forward-disabled;
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
                 }

@@ -96,6 +96,23 @@ export component FmEntryList inherits Rectangle {
                         name-hdr-ta := TouchArea {
                             clicked => { root.sort-column-clicked(0); }
                         }
+                        if name-hdr-ta.has-hover : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: name-hdr-hint.preferred-width + 12px;
+                            height: name-hdr-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            name-hdr-hint := Text {
+                                x: 6px; y: 3px;
+                                text: sort-name-label + (sort-by == 0 ? (sort-descending ? " ↓" : " ↑") : "");
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
                         Text {
                             text: sort-name-label + (sort-by == 0 ? (sort-descending ? " ↓" : " ↑") : "");
                             color: sort-by == 0 ? Theme.accent-brand : Theme.text-tertiary;
@@ -112,6 +129,23 @@ export component FmEntryList inherits Rectangle {
 
                         size-hdr-ta := TouchArea {
                             clicked => { root.sort-column-clicked(1); }
+                        }
+                        if size-hdr-ta.has-hover : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: size-hdr-hint.preferred-width + 12px;
+                            height: size-hdr-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            size-hdr-hint := Text {
+                                x: 6px; y: 3px;
+                                text: sort-size-label + (sort-by == 1 ? (sort-descending ? " ↓" : " ↑") : "");
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
                         }
                         Text {
                             text: sort-size-label + (sort-by == 1 ? (sort-descending ? " ↓" : " ↑") : "");
@@ -130,6 +164,23 @@ export component FmEntryList inherits Rectangle {
                         mod-hdr-ta := TouchArea {
                             clicked => { root.sort-column-clicked(2); }
                         }
+                        if mod-hdr-ta.has-hover : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: mod-hdr-hint.preferred-width + 12px;
+                            height: mod-hdr-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            mod-hdr-hint := Text {
+                                x: 6px; y: 3px;
+                                text: sort-modified-label + (sort-by == 2 ? (sort-descending ? " ↓" : " ↑") : "");
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
                         Text {
                             text: sort-modified-label + (sort-by == 2 ? (sort-descending ? " ↓" : " ↑") : "");
                             color: sort-by == 2 ? Theme.accent-brand : Theme.text-tertiary;
@@ -146,6 +197,23 @@ export component FmEntryList inherits Rectangle {
 
                         type-hdr-ta := TouchArea {
                             clicked => { root.sort-column-clicked(3); }
+                        }
+                        if type-hdr-ta.has-hover : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: type-hdr-hint.preferred-width + 12px;
+                            height: type-hdr-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            type-hdr-hint := Text {
+                                x: 6px; y: 3px;
+                                text: sort-type-label + (sort-by == 3 ? (sort-descending ? " ↓" : " ↑") : "");
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
                         }
                         Text {
                             text: sort-type-label + (sort-by == 3 ? (sort-descending ? " ↓" : " ↑") : "");

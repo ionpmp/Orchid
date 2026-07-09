@@ -199,9 +199,27 @@ export component WidgetFrame inherits Rectangle {
                 }
             }
 
+            if drag-area.has-hover && model.title != "" : Rectangle {
+                x: 8px;
+                y: parent.height + 2px;
+                width: title-hint.preferred-width + 12px;
+                height: title-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                title-hint := Text {
+                    x: 6px; y: 3px;
+                    text: model.title;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
             HorizontalLayout {
                 padding-left: 12px;
-                padding-right: 12px;
+                padding-right: 36px;
                 alignment: start;
                 spacing: 8px;
 
@@ -211,6 +229,9 @@ export component WidgetFrame inherits Rectangle {
                     font-size: Theme.font-size-sm;
                     font-weight: Theme.weight-medium;
                     vertical-alignment: center;
+                    wrap: no-wrap;
+                    overflow: elide;
+                    horizontal-stretch: 1;
                 }
             }
         }

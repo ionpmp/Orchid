@@ -594,8 +594,12 @@ impl MainWindowController {
         g.set_viewer_image_flip_v(mgr.tr("viewer-image-flip-v").into());
         g.set_viewer_pdf_prev_page(mgr.tr("viewer-pdf-prev-page").into());
         g.set_viewer_pdf_next_page(mgr.tr("viewer-pdf-next-page").into());
+        g.set_viewer_loading(mgr.tr("viewer-loading").into());
+        g.set_viewer_error(mgr.tr("viewer-error").into());
         g.set_fm_nav_back(mgr.tr("fm-nav-back").into());
+        g.set_fm_nav_back_disabled(mgr.tr("fm-nav-back-disabled").into());
         g.set_fm_nav_forward(mgr.tr("fm-nav-forward").into());
+        g.set_fm_nav_forward_disabled(mgr.tr("fm-nav-forward-disabled").into());
         g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
         g.set_fm_nav_home(mgr.tr("fm-nav-home").into());
         g.set_fm_loading(mgr.tr("fm-loading").into());

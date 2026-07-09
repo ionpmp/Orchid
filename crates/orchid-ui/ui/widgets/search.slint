@@ -194,16 +194,18 @@ export component SearchView inherits Rectangle {
                     if cand-ta.has-hover : Rectangle {
                         x: parent.x + 8px;
                         y: parent.height - 2px;
-                        width: open-hint.preferred-width + 12px;
-                        height: open-hint.preferred-height + 6px;
+                        width: cand-hint.preferred-width + 12px;
+                        height: cand-hint.preferred-height + 6px;
                         background: Theme.surface-raised;
                         border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border-default;
                         z: 100;
-                        open-hint := Text {
+                        cand-hint := Text {
                             x: 6px; y: 3px;
-                            text: Strings.search-open-hint;
+                            text: cand.subtitle != ""
+                                ? cand.title + " — " + cand.subtitle
+                                : cand.title != "" ? cand.title : Strings.search-open-hint;
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
                         }

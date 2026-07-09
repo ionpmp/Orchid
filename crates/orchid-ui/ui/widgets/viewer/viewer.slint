@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { ViewerModel } from "../../workspace/defs.slint";
 import { ViewerImageView } from "viewer-image.slint";
 import { ViewerPdfView } from "viewer-pdf.slint";
@@ -53,26 +54,21 @@ export component ViewerView inherits Rectangle {
         padding: 16px;
         spacing: 8px;
 
-        if model.status.icon != "" : Text {
-            text: model.status.icon == "loading" ? "…"
-                : model.status.icon == "error" ? "!"
-                : "·";
-            color: model.kind == 1 ? Theme.accent-brand : Theme.text-tertiary;
-            font-size: Theme.font-size-3xl;
-            horizontal-alignment: center;
-        }
-
+        // Prefer localized status copy over hardcoded glyph icons.
         Text {
-            text: model.status.path-display;
-            color: Theme.text-secondary;
+            text: model.status.message != "" ? model.status.message
+                : model.status.icon == "loading" ? Strings.viewer-loading
+                : Strings.viewer-error;
+            color: model.kind == 1 ? Theme.accent-brand : Theme.text-tertiary;
             font-size: Theme.font-size-md;
+            font-weight: Theme.weight-semibold;
             horizontal-alignment: center;
             wrap: word-wrap;
         }
 
-        if model.status.message != "" : Text {
-            text: model.status.message;
-            color: model.kind == 1 ? Theme.accent-brand : Theme.text-tertiary;
+        if model.status.path-display != "" : Text {
+            text: model.status.path-display;
+            color: Theme.text-secondary;
             font-size: Theme.font-size-sm;
             horizontal-alignment: center;
             wrap: word-wrap;
