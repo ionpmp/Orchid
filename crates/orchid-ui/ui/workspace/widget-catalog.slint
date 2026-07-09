@@ -1,5 +1,6 @@
 import { Theme } from "../theme_global.slint";
 import { Strings } from "../strings_global.slint";
+import { NavigationGlobal } from "../navigation_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
 
 export component WidgetCatalogPanel inherits Rectangle {
@@ -21,11 +22,53 @@ export component WidgetCatalogPanel inherits Rectangle {
         padding: 12px;
         spacing: 8px;
 
-        Text {
-            text: Strings.catalog-title;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-md;
-            font-weight: Theme.weight-semibold;
+        HorizontalLayout {
+            spacing: Theme.spacing-unit;
+
+            Text {
+                text: Strings.catalog-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-semibold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                background: close-ta.has-hover ? Theme.surface-base : transparent;
+                border-radius: Theme.radius-md;
+
+                close-ta := TouchArea {
+                    clicked => { root.dismiss(); }
+                }
+                if close-ta.has-hover : Rectangle {
+                    x: parent.x + parent.width - close-hint.preferred-width - 12px;
+                    y: parent.height + 2px;
+                    width: close-hint.preferred-width + 12px;
+                    height: close-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    close-hint := Text {
+                        x: 6px; y: 3px;
+                        text: NavigationGlobal.panel-dismiss-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+
+                Text {
+                    text: "×";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-lg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
 
         Rectangle {

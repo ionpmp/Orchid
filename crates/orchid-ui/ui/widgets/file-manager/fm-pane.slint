@@ -175,6 +175,20 @@ export component FmPane inherits Rectangle {
 
                 if !pane.tabs[pane.active-tab].is-loading
                     && pane.tabs[pane.active-tab].error == ""
+                    && pane.tabs[pane.active-tab].entries.length == 0 : VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: Strings.fm-empty-folder;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+
+                if !pane.tabs[pane.active-tab].is-loading
+                    && pane.tabs[pane.active-tab].error == ""
+                    && pane.tabs[pane.active-tab].entries.length > 0
                     && (pane.tabs[pane.active-tab].view-mode == 1 || pane.tabs[pane.active-tab].view-mode == 2) :
                     FmEntryList {
                         width: parent.width;
@@ -208,6 +222,7 @@ export component FmPane inherits Rectangle {
 
                 if !pane.tabs[pane.active-tab].is-loading
                     && pane.tabs[pane.active-tab].error == ""
+                    && pane.tabs[pane.active-tab].entries.length > 0
                     && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3) :
                     FmEntryGrid {
                         width: parent.width;

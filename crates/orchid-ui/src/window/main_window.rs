@@ -595,6 +595,7 @@ impl MainWindowController {
         g.set_fm_nav_forward(mgr.tr("fm-nav-forward").into());
         g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
         g.set_fm_loading(mgr.tr("fm-loading").into());
+        g.set_fm_empty_folder(mgr.tr("fm-empty-folder").into());
         g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());
         g.set_fm_action_new_tab(mgr.tr("fm-action-new-tab").into());
         g.set_fm_action_close_tab(mgr.tr("fm-action-close-tab").into());
@@ -2666,7 +2667,7 @@ impl MainWindowController {
             return;
         }
         let mut cfg = self.config.write();
-        if let Err(reason) = apply_settings_field(&mut cfg, section, key, value) {
+        if let Err(reason) = apply_settings_field(&mut cfg, section, key, value, &self.locale) {
             warn!(
                 section = %section,
                 key = %key,
@@ -8975,6 +8976,10 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if msg.contains("no provider for scheme") => locale.tr("fm-network-no-provider"),
         _ if msg.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing"),
         _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount"),
+        // Local FS access failures (Windows "Access is denied. (os error 5)").
+        _ if lower.contains("os error 5") || lower.contains("access is denied") => {
+            locale.tr("fm-error-access")
+        }
         _ if lower.contains("authentication")
             || lower.contains("access denied")
             || lower.contains("login failed")
@@ -8983,7 +8988,12 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
             locale.tr("fm-network-auth-failed")
         }
         _ if lower.contains("permission denied") || lower.contains("forbidden") || lower.contains("403") => {
-            locale.tr("fm-network-permission-denied")
+            // Prefer a generic access message for local FS; keep network wording for HTTP 403.
+            if lower.contains("403") || lower.contains("forbidden") {
+                locale.tr("fm-network-permission-denied")
+            } else {
+                locale.tr("fm-error-access")
+            }
         }
         _ if lower.contains("connection refused")
             || lower.contains("timed out")
@@ -9597,6 +9607,7 @@ fn apply_settings_field(
     section: &str,
     key: &str,
     value: &str,
+    locale: &LocaleManager,
 ) -> Result<(), String> {
     match (section, key) {
         ("general", "open-on-startup") => {
@@ -9617,10 +9628,12 @@ fn apply_settings_field(
             };
         }
         ("appearance", "font-family") => {
-            cfg.appearance.font_family = if value.is_empty() {
+            let trimmed = value.trim();
+            let system_default = locale.tr("settings-value-system-default");
+            cfg.appearance.font_family = if trimmed.is_empty() || trimmed == system_default {
                 None
             } else {
-                Some(value.to_string())
+                Some(trimmed.to_string())
             };
         }
         ("appearance", "font-scale") => {
@@ -9793,7 +9806,11 @@ fn build_settings_fields(
                 locale,
                 "font-family",
                 "settings-field-font-family",
-                cfg.appearance.font_family.clone().unwrap_or_default(),
+                cfg.appearance
+                    .font_family
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| locale.tr("settings-value-system-default")),
             );
             push_settings_text(
                 &mut rows,
