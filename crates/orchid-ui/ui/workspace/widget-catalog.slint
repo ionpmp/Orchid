@@ -128,20 +128,22 @@ export component WidgetCatalogPanel inherits Rectangle {
                             root.pick(item.type-id);
                         }
                     }
-                    if item-touch.has-hover && item.description != "" : Rectangle {
+                    if item-touch.has-hover : Rectangle {
                         x: parent.x + 8px;
                         y: parent.height + 2px;
-                        width: min(parent.width - 16px, desc-hint.preferred-width + 12px);
-                        height: desc-hint.preferred-height + 6px;
+                        width: min(parent.width - 16px, item-hint.preferred-width + 12px);
+                        height: item-hint.preferred-height + 6px;
                         background: Theme.surface-raised;
                         border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border-default;
                         z: 100;
-                        desc-hint := Text {
+                        item-hint := Text {
                             x: 6px; y: 3px;
                             width: parent.width - 12px;
-                            text: item.description;
+                            text: item.description != ""
+                                ? item.label + " — " + item.description
+                                : item.label;
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
                             wrap: word-wrap;
@@ -162,6 +164,8 @@ export component WidgetCatalogPanel inherits Rectangle {
                             font-size: Theme.font-size-sm;
                             font-weight: Theme.weight-semibold;
                             vertical-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
                         }
 
                         if item.description != "" : Text {

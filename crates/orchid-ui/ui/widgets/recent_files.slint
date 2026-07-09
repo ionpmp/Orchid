@@ -58,7 +58,7 @@ export component RecentFilesView inherits Rectangle {
                         z: 100;
                         open-hint := Text {
                             x: 6px; y: 3px;
-                            text: Strings.recent-files-open-hint;
+                            text: item.path != "" ? item.path : Strings.recent-files-open-hint;
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
                         }

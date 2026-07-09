@@ -54,7 +54,9 @@ export component WidgetDock inherits Rectangle {
                 z: 100;
                 dock-hint := Text {
                     x: 6px; y: 3px;
-                    text: dw.description != "" ? dw.description : dw.label;
+                    text: dw.description != ""
+                        ? dw.label + " — " + dw.description
+                        : dw.label;
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
                 }

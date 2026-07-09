@@ -252,11 +252,11 @@ export component FmPane inherits Rectangle {
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {
                     alignment: center;
                     spacing: 8px;
-                    Text { text: "!"; color: #ef4444; font-size: 32px; horizontal-alignment: center; }
                     Text {
                         text: pane.tabs[pane.active-tab].error;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
+                        color: #ef4444;
+                        font-size: Theme.font-size-md;
+                        font-weight: Theme.weight-semibold;
                         horizontal-alignment: center;
                         wrap: word-wrap;
                     }
