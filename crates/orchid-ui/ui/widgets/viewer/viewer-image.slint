@@ -19,6 +19,64 @@ export component ViewerImageView inherits Rectangle {
 
     property <length> last-mx: 0px;
     property <length> last-my: 0px;
+    property <length> pan-step: 40px;
+
+    img-keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        init => { self.focus(); }
+
+        key-pressed(event) => {
+            if (event.text == "+" || event.text == "=") {
+                root.zoom-in();
+                return accept;
+            }
+            if (event.text == "-" || event.text == "−") {
+                root.zoom-out();
+                return accept;
+            }
+            if (event.text == "f" || event.text == "F") {
+                root.fit();
+                return accept;
+            }
+            if (event.text == "1") {
+                root.actual-size();
+                return accept;
+            }
+            if (event.text == "r" || event.text == "R") {
+                if (event.modifiers.shift) {
+                    root.rotate-ccw();
+                } else {
+                    root.rotate-cw();
+                }
+                return accept;
+            }
+            if (event.text == "h" || event.text == "H") {
+                root.flip-h();
+                return accept;
+            }
+            if (event.text == "v" || event.text == "V") {
+                root.flip-v();
+                return accept;
+            }
+            if (event.text == Key.LeftArrow) {
+                root.pan(root.pan-step, 0px);
+                return accept;
+            }
+            if (event.text == Key.RightArrow) {
+                root.pan(-root.pan-step, 0px);
+                return accept;
+            }
+            if (event.text == Key.UpArrow) {
+                root.pan(0px, root.pan-step);
+                return accept;
+            }
+            if (event.text == Key.DownArrow) {
+                root.pan(0px, -root.pan-step);
+                return accept;
+            }
+            return reject;
+        }
 
     VerticalLayout {
         spacing: 0;
@@ -40,7 +98,12 @@ export component ViewerImageView inherits Rectangle {
                     background: zoom-out-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    zoom-out-ta := TouchArea { clicked => { root.zoom-out(); } }
+                    zoom-out-ta := TouchArea {
+                        clicked => {
+                            root.zoom-out();
+                            img-keys.focus();
+                        }
+                    }
                     if zoom-out-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -81,7 +144,12 @@ export component ViewerImageView inherits Rectangle {
                     background: zoom-in-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    zoom-in-ta := TouchArea { clicked => { root.zoom-in(); } }
+                    zoom-in-ta := TouchArea {
+                        clicked => {
+                            root.zoom-in();
+                            img-keys.focus();
+                        }
+                    }
                     if zoom-in-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -112,7 +180,12 @@ export component ViewerImageView inherits Rectangle {
                         : fit-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    fit-ta := TouchArea { clicked => { root.fit(); } }
+                    fit-ta := TouchArea {
+                        clicked => {
+                            root.fit();
+                            img-keys.focus();
+                        }
+                    }
                     if fit-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -150,7 +223,12 @@ export component ViewerImageView inherits Rectangle {
                         : actual-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    actual-ta := TouchArea { clicked => { root.actual-size(); } }
+                    actual-ta := TouchArea {
+                        clicked => {
+                            root.actual-size();
+                            img-keys.focus();
+                        }
+                    }
                     if actual-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -189,7 +267,12 @@ export component ViewerImageView inherits Rectangle {
                     background: rcw-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    rcw-ta := TouchArea { clicked => { root.rotate-cw(); } }
+                    rcw-ta := TouchArea {
+                        clicked => {
+                            root.rotate-cw();
+                            img-keys.focus();
+                        }
+                    }
                     if rcw-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -217,7 +300,12 @@ export component ViewerImageView inherits Rectangle {
                     background: rccw-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    rccw-ta := TouchArea { clicked => { root.rotate-ccw(); } }
+                    rccw-ta := TouchArea {
+                        clicked => {
+                            root.rotate-ccw();
+                            img-keys.focus();
+                        }
+                    }
                     if rccw-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -248,7 +336,12 @@ export component ViewerImageView inherits Rectangle {
                         : flip-h-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    flip-h-ta := TouchArea { clicked => { root.flip-h(); } }
+                    flip-h-ta := TouchArea {
+                        clicked => {
+                            root.flip-h();
+                            img-keys.focus();
+                        }
+                    }
                     if flip-h-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -283,7 +376,12 @@ export component ViewerImageView inherits Rectangle {
                         : flip-v-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
-                    flip-v-ta := TouchArea { clicked => { root.flip-v(); } }
+                    flip-v-ta := TouchArea {
+                        clicked => {
+                            root.flip-v();
+                            img-keys.focus();
+                        }
+                    }
                     if flip-v-ta.has-hover : Rectangle {
                         x: parent.x;
                         y: parent.height + 2px;
@@ -337,6 +435,7 @@ export component ViewerImageView inherits Rectangle {
                     if (e.kind == PointerEventKind.down) {
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
+                        img-keys.focus();
                     }
                 }
                 moved => {
@@ -364,5 +463,6 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
         }
-    }
+    } // VerticalLayout
+    } // FocusScope
 }
