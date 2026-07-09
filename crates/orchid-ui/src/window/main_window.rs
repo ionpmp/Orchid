@@ -8942,6 +8942,7 @@ fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "viewer-image-raw-unsupported"
         | "viewer-archive-nothing-selected"
         | "viewer-archive-cannot-extract-folder" => locale.tr(msg),
+        _ if msg.starts_with("unsupported file type") => locale.tr("viewer-unsupported"),
         _ if msg.contains("edit outside buffer bounds") => locale.tr("viewer-text-read-only"),
         _ if msg.contains("PDF support unavailable") => locale.tr("viewer-pdf-unavailable"),
         _ => msg.to_string(),
@@ -9696,17 +9697,21 @@ fn apply_settings_field(
             cfg.locale.language = value.to_string();
         }
         ("locale", "date-format") => {
-            cfg.locale.date_format = if value.is_empty() {
+            let trimmed = value.trim();
+            let default_label = locale.tr("settings-value-default");
+            cfg.locale.date_format = if trimmed.is_empty() || trimmed == default_label {
                 None
             } else {
-                Some(value.to_string())
+                Some(trimmed.to_string())
             };
         }
         ("locale", "time-format") => {
-            cfg.locale.time_format = if value.is_empty() {
+            let trimmed = value.trim();
+            let default_label = locale.tr("settings-value-default");
+            cfg.locale.time_format = if trimmed.is_empty() || trimmed == default_label {
                 None
             } else {
-                Some(value.to_string())
+                Some(trimmed.to_string())
             };
         }
         ("locale", "first-day-of-week") => {
@@ -9747,16 +9752,6 @@ fn parse_settings_bool(value: &str) -> Result<bool, String> {
     }
 }
 
-fn settings_bool_label(value: bool, locale: &LocaleManager) -> SharedString {
-    locale
-        .tr(if value {
-            "settings-value-yes"
-        } else {
-            "settings-value-no"
-        })
-        .into()
-}
-
 fn build_settings_fields(
     section: &str,
     cfg: &OrchidConfig,
@@ -9774,14 +9769,14 @@ fn build_settings_fields(
                 locale,
                 "auto-update",
                 "settings-field-auto-update",
-                settings_bool_label(cfg.general.auto_update, locale),
+                locale.tr("settings-value-disabled").into(),
             );
             push_settings_readonly(
                 &mut rows,
                 locale,
                 "telemetry",
                 "settings-field-telemetry",
-                settings_bool_label(cfg.general.telemetry, locale),
+                locale.tr("settings-value-disabled").into(),
             );
             push_settings_bool(
                 &mut rows,
@@ -9881,20 +9876,20 @@ fn build_settings_fields(
                 cfg.input.mirror_edge_swipes,
             );
             // Haptics / palm rejection / pen double-tap need platform pen+haptic
-            // plumbing — show current values as read-only for now.
+            // plumbing — mark bools as unavailable rather than Yes/No.
             push_settings_readonly(
                 &mut rows,
                 locale,
                 "haptic-feedback",
                 "settings-field-haptic-feedback",
-                settings_bool_label(cfg.input.haptic_feedback, locale),
+                locale.tr("settings-value-disabled").into(),
             );
             push_settings_readonly(
                 &mut rows,
                 locale,
                 "palm-rejection",
                 "settings-field-palm-rejection",
-                settings_bool_label(cfg.input.palm_rejection, locale),
+                locale.tr("settings-value-disabled").into(),
             );
             let pen_label = match cfg.input.pen_double_tap_action {
                 orchid_storage::PenDoubleTapAction::None => {
@@ -9992,14 +9987,22 @@ fn build_settings_fields(
                 locale,
                 "date-format",
                 "settings-field-date-format",
-                cfg.locale.date_format.clone().unwrap_or_default(),
+                cfg.locale
+                    .date_format
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| locale.tr("settings-value-default")),
             );
             push_settings_text(
                 &mut rows,
                 locale,
                 "time-format",
                 "settings-field-time-format",
-                cfg.locale.time_format.clone().unwrap_or_default(),
+                cfg.locale
+                    .time_format
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| locale.tr("settings-value-default")),
             );
             push_settings_readonly(
                 &mut rows,
