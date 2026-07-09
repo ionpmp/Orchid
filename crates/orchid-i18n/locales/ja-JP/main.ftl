@@ -165,6 +165,7 @@ search-empty-state = 入力して検索を開始
 search-no-results = 「{ $query }」の結果はありません
 search-no-results-short = 結果なし
 search-sources-unconfigured = 検索ソースはまだ設定されていません
+search-error-with-reason = Search failed: { $reason }
 search-searching = 検索中…
 search-source-files = ファイル
 search-source-commands = コマンド
@@ -585,6 +586,7 @@ fm-empty-folder = このフォルダーは空です
 fm-entry-encrypted-hint = Encrypted file
 fm-entry-managed-hint = Managed folder
 fm-error-access = この場所にアクセスできません
+fm-error-not-found = File or folder not found
 
 
 # ==== Startup shell (task 11A) ====
@@ -653,6 +655,7 @@ viewer-error-pdf-empty = This PDF has no pages
 viewer-error-pdf-render = Could not render this PDF page
 viewer-error-syntax-grammar = Syntax highlighting is unavailable for this language
 viewer-error-thumbnail = Could not generate a thumbnail
+viewer-error-unavailable = Viewer is unavailable
 viewer-pdf-unavailable = このビルドでは PDF サポートは利用できません。
 viewer-image-heic-unsupported = HEIC画像はまだサポートされていません
 viewer-image-raw-unsupported = RAW画像はまだサポートされていません
@@ -705,3 +708,11 @@ action-confirm-yes = はい
 action-confirm-no = いいえ
 
 fm-confirm-title = 確認
+fm-error-disk-full = Not enough disk space
+fm-error-in-use = File is in use by another program
+fm-error-invalid-sort = Invalid sort column
+fm-error-invalid-tab = Invalid tab
+fm-error-io = File operation failed: { $reason }
+fm-error-unavailable = File manager is unavailable
+search-open-hint = Open
+viewer-error-no-archive = No archive is open

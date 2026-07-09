@@ -261,9 +261,27 @@ export component MainWindow inherits Window {
                 height: 56px;
                 background: Theme.accent-brand;
                 border-radius: Theme.radius-md;
+                opacity: start-ta.has-hover ? 0.88 : 1.0;
 
-                TouchArea {
+                start-ta := TouchArea {
                     clicked => { root.get-started-clicked(); }
+                }
+                if start-ta.has-hover : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: start-hint.preferred-width + 12px;
+                    height: start-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    start-hint := Text {
+                        x: 6px; y: 3px;
+                        text: Strings.get-started-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
                 }
 
                 Text {

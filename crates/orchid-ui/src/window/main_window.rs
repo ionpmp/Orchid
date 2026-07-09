@@ -574,6 +574,7 @@ impl MainWindowController {
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
         g.set_recent_files_open_hint(mgr.tr("recent-files-open-hint").into());
         g.set_rss_open_item_hint(mgr.tr("rss-open-item-hint").into());
+        g.set_search_open_hint(mgr.tr("search-open-hint").into());
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
@@ -9011,6 +9012,8 @@ fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if msg.starts_with("thumbnail generation failed:") => {
             locale.tr("viewer-error-thumbnail")
         }
+        "no viewer" | "viewer widget not live" => locale.tr("viewer-error-unavailable"),
+        "not an archive" | "no archive open" => locale.tr("viewer-error-no-archive"),
         // Callers wrap the result in `viewer-error-with-reason`; keep unknowns raw.
         _ => msg.to_string(),
     }
@@ -9080,6 +9083,9 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-empty-tag"
         | "fm-drop-not-directory"
         | "fm-drop-unavailable" => return locale.tr(msg),
+        "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
+        "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
+        "file-manager widget not live" => return locale.tr("fm-error-unavailable"),
         _ => {}
     }
     let lower = msg.to_ascii_lowercase();
@@ -9090,6 +9096,26 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         // Local FS access failures (Windows "Access is denied. (os error 5)").
         _ if lower.contains("os error 5") || lower.contains("access is denied") => {
             locale.tr("fm-error-access")
+        }
+        _ if lower.contains("os error 2")
+            || lower.contains("no such file")
+            || lower.contains("the system cannot find the file")
+            || lower.contains("the system cannot find the path") =>
+        {
+            locale.tr("fm-error-not-found")
+        }
+        _ if lower.contains("os error 112")
+            || lower.contains("no space")
+            || lower.contains("disk full")
+            || lower.contains("not enough space") =>
+        {
+            locale.tr("fm-error-disk-full")
+        }
+        _ if lower.contains("os error 32")
+            || lower.contains("sharing violation")
+            || lower.contains("being used by another process") =>
+        {
+            locale.tr("fm-error-in-use")
         }
         _ if lower.contains("authentication")
             || lower.contains("access denied")
@@ -9128,7 +9154,20 @@ fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if lower.contains("invalid passphrase") => locale.tr("fm-passphrase-invalid"),
         _ if lower.contains("passphrase required") => locale.tr("fm-passphrase-required"),
         _ if lower.contains("age decryption failed") => locale.tr("fm-decryption-failed"),
-        _ => msg.to_string(),
+        _ => locale.tr_args(
+            "fm-error-io",
+            &orchid_i18n::FluentArgs::new().with("reason", msg),
+        ),
+    }
+}
+
+fn search_localized_error(locale: &LocaleManager, err: &str) -> String {
+    match err {
+        "search-sources-unconfigured" => locale.tr("search-sources-unconfigured"),
+        _ => locale.tr_args(
+            "search-error-with-reason",
+            &orchid_i18n::FluentArgs::new().with("reason", err),
+        ),
     }
 }
 
@@ -11006,11 +11045,11 @@ fn build_search_model(
     } else {
         selected.clamp(0, max - 1)
     };
-    let error = match p.error.as_deref() {
-        Some("search-sources-unconfigured") => locale.tr("search-sources-unconfigured"),
-        Some(other) => other.to_string(),
-        None => String::new(),
-    };
+    let error = p
+        .error
+        .as_deref()
+        .map(|e| search_localized_error(locale, e))
+        .unwrap_or_default();
     let no_results_text = if !p.query.trim().is_empty() {
         locale.tr_args(
             "search-no-results",

@@ -165,6 +165,7 @@ search-empty-state = 开始输入以搜索
 search-no-results = 没有“{ $query }”的结果
 search-no-results-short = 无结果
 search-sources-unconfigured = 搜索源尚未配置
+search-error-with-reason = Search failed: { $reason }
 search-searching = 搜索中…
 search-source-files = 文件
 search-source-commands = 命令
@@ -585,6 +586,7 @@ fm-empty-folder = 此文件夹为空
 fm-entry-encrypted-hint = Encrypted file
 fm-entry-managed-hint = Managed folder
 fm-error-access = 无法访问此位置
+fm-error-not-found = File or folder not found
 
 
 # ==== Startup shell (task 11A) ====
@@ -653,6 +655,7 @@ viewer-error-pdf-empty = This PDF has no pages
 viewer-error-pdf-render = Could not render this PDF page
 viewer-error-syntax-grammar = Syntax highlighting is unavailable for this language
 viewer-error-thumbnail = Could not generate a thumbnail
+viewer-error-unavailable = Viewer is unavailable
 viewer-pdf-unavailable = 此版本不支持 PDF。
 viewer-image-heic-unsupported = 暂不支持 HEIC 图片
 viewer-image-raw-unsupported = 暂不支持 RAW 图片
@@ -705,3 +708,11 @@ action-confirm-yes = 是
 action-confirm-no = 否
 
 fm-confirm-title = 确认
+fm-error-disk-full = Not enough disk space
+fm-error-in-use = File is in use by another program
+fm-error-invalid-sort = Invalid sort column
+fm-error-invalid-tab = Invalid tab
+fm-error-io = File operation failed: { $reason }
+fm-error-unavailable = File manager is unavailable
+search-open-hint = Open
+viewer-error-no-archive = No archive is open

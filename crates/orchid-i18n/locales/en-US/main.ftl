@@ -167,6 +167,8 @@ search-empty-state = Start typing to search
 search-no-results = No results for "{ $query }"
 search-no-results-short = No results
 search-sources-unconfigured = Search sources are not configured yet
+search-error-with-reason = Search failed: { $reason }
+search-open-hint = Open
 search-searching = Searching...
 search-source-files = Files
 search-source-commands = Commands
@@ -587,6 +589,13 @@ fm-empty-folder = This folder is empty
 fm-entry-encrypted-hint = Encrypted file
 fm-entry-managed-hint = Managed folder
 fm-error-access = Cannot access this location
+fm-error-not-found = File or folder not found
+fm-error-disk-full = Not enough disk space
+fm-error-in-use = File is in use by another program
+fm-error-io = File operation failed: { $reason }
+fm-error-invalid-tab = Invalid tab
+fm-error-invalid-sort = Invalid sort column
+fm-error-unavailable = File manager is unavailable
 
 
 # ==== Startup shell (task 11A) ====
@@ -663,6 +672,8 @@ viewer-error-parse-text = Could not read this text file
 viewer-error-syntax-grammar = Syntax highlighting is unavailable for this language
 viewer-error-archive-entry-not-found = Archive entry not found
 viewer-error-thumbnail = Could not generate a thumbnail
+viewer-error-unavailable = Viewer is unavailable
+viewer-error-no-archive = No archive is open
 viewer-pdf-unavailable = PDF support is unavailable on this build.
 viewer-image-heic-unsupported = HEIC images are not supported yet
 viewer-image-raw-unsupported = RAW images are not supported yet

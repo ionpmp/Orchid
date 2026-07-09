@@ -165,6 +165,7 @@ search-empty-state = 검색하려면 입력하세요
 search-no-results = "{ $query }"에 대한 결과 없음
 search-no-results-short = 결과 없음
 search-sources-unconfigured = 검색 소스가 아직 구성되지 않았습니다
+search-error-with-reason = Search failed: { $reason }
 search-searching = 검색 중…
 search-source-files = 파일
 search-source-commands = 명령
@@ -585,6 +586,7 @@ fm-empty-folder = 이 폴더가 비어 있습니다
 fm-entry-encrypted-hint = Encrypted file
 fm-entry-managed-hint = Managed folder
 fm-error-access = 이 위치에 액세스할 수 없습니다
+fm-error-not-found = File or folder not found
 
 
 # ==== Startup shell (task 11A) ====
@@ -653,6 +655,7 @@ viewer-error-pdf-empty = This PDF has no pages
 viewer-error-pdf-render = Could not render this PDF page
 viewer-error-syntax-grammar = Syntax highlighting is unavailable for this language
 viewer-error-thumbnail = Could not generate a thumbnail
+viewer-error-unavailable = Viewer is unavailable
 viewer-pdf-unavailable = 이 빌드에서는 PDF 지원을 사용할 수 없습니다.
 viewer-image-heic-unsupported = HEIC 이미지는 아직 지원되지 않습니다
 viewer-image-raw-unsupported = RAW 이미지는 아직 지원되지 않습니다
@@ -705,3 +708,11 @@ action-confirm-yes = 예
 action-confirm-no = 아니오
 
 fm-confirm-title = 확인
+fm-error-disk-full = Not enough disk space
+fm-error-in-use = File is in use by another program
+fm-error-invalid-sort = Invalid sort column
+fm-error-invalid-tab = Invalid tab
+fm-error-io = File operation failed: { $reason }
+fm-error-unavailable = File manager is unavailable
+search-open-hint = Open
+viewer-error-no-archive = No archive is open

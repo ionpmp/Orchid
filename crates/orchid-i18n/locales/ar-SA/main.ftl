@@ -165,6 +165,7 @@ search-empty-state = ابدأ الكتابة للبحث
 search-no-results = لا نتائج لـ «{ $query }»
 search-no-results-short = لا نتائج
 search-sources-unconfigured = مصادر البحث غير مُعدّة بعد
+search-error-with-reason = Search failed: { $reason }
 search-searching = جارٍ البحث…
 search-source-files = الملفات
 search-source-commands = الأوامر
@@ -586,6 +587,7 @@ fm-empty-folder = هذا المجلد فارغ
 fm-entry-encrypted-hint = Encrypted file
 fm-entry-managed-hint = Managed folder
 fm-error-access = تعذّر الوصول إلى هذا الموقع
+fm-error-not-found = File or folder not found
 
 
 # ==== Startup shell (task 11A) ====
@@ -654,6 +656,7 @@ viewer-error-pdf-empty = This PDF has no pages
 viewer-error-pdf-render = Could not render this PDF page
 viewer-error-syntax-grammar = Syntax highlighting is unavailable for this language
 viewer-error-thumbnail = Could not generate a thumbnail
+viewer-error-unavailable = Viewer is unavailable
 viewer-pdf-unavailable = دعم PDF غير متاح في هذا الإصدار.
 viewer-image-heic-unsupported = صور HEIC غير مدعومة بعد
 viewer-image-raw-unsupported = صور RAW غير مدعومة بعد
@@ -706,3 +709,11 @@ action-confirm-yes = نعم
 action-confirm-no = لا
 
 fm-confirm-title = تأكيد
+fm-error-disk-full = Not enough disk space
+fm-error-in-use = File is in use by another program
+fm-error-invalid-sort = Invalid sort column
+fm-error-invalid-tab = Invalid tab
+fm-error-io = File operation failed: { $reason }
+fm-error-unavailable = File manager is unavailable
+search-open-hint = Open
+viewer-error-no-archive = No archive is open

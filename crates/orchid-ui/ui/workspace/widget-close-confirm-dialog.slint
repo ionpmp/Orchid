@@ -51,6 +51,23 @@ export component WidgetCloseConfirmDialog inherits Rectangle {
                     background: cancel-ta.has-hover ? Theme.surface-base : transparent;
                     border-radius: Theme.radius-md;
                     cancel-ta := TouchArea { clicked => { root.cancel(); } }
+                    if cancel-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: cancel-hint.preferred-width + 12px;
+                        height: cancel-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        cancel-hint := Text {
+                            x: 6px; y: 3px;
+                            text: dialog.cancel-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     cancel-label := Text {
                         text: dialog.cancel-label;
                         color: Theme.text-secondary;
@@ -65,7 +82,26 @@ export component WidgetCloseConfirmDialog inherits Rectangle {
                     height: 32px;
                     background: discard-ta.has-hover ? #ef444444 : #ef444422;
                     border-radius: Theme.radius-md;
+                    border-width: discard-ta.has-hover ? 1px : 0px;
+                    border-color: discard-ta.has-hover ? #ef4444 : transparent;
                     discard-ta := TouchArea { clicked => { root.discard(); } }
+                    if discard-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: discard-hint.preferred-width + 12px;
+                        height: discard-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        discard-hint := Text {
+                            x: 6px; y: 3px;
+                            text: dialog.discard-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     discard-label := Text {
                         text: dialog.discard-label;
                         color: Theme.text-primary;
@@ -81,6 +117,23 @@ export component WidgetCloseConfirmDialog inherits Rectangle {
                     background: save-ta.has-hover ? Theme.accent-brand : #4d82ff88;
                     border-radius: Theme.radius-md;
                     save-ta := TouchArea { clicked => { root.save(); } }
+                    if save-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: save-hint.preferred-width + 12px;
+                        height: save-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        save-hint := Text {
+                            x: 6px; y: 3px;
+                            text: dialog.save-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     save-label := Text {
                         text: dialog.save-label;
                         color: Theme.text-primary;

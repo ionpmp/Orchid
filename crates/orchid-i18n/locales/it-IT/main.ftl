@@ -165,6 +165,7 @@ search-empty-state = Inizia a digitare per cercare
 search-no-results = Nessun risultato per «{ $query }»
 search-no-results-short = Nessun risultato
 search-sources-unconfigured = Le fonti di ricerca non sono ancora configurate
+search-error-with-reason = Search failed: { $reason }
 search-searching = Ricerca…
 search-source-files = File
 search-source-commands = Comandi
@@ -585,6 +586,7 @@ fm-empty-folder = Questa cartella è vuota
 fm-entry-encrypted-hint = Encrypted file
 fm-entry-managed-hint = Managed folder
 fm-error-access = Impossibile accedere a questa posizione
+fm-error-not-found = File or folder not found
 
 
 # ==== Startup shell (task 11A) ====
@@ -653,6 +655,7 @@ viewer-error-pdf-empty = This PDF has no pages
 viewer-error-pdf-render = Could not render this PDF page
 viewer-error-syntax-grammar = Syntax highlighting is unavailable for this language
 viewer-error-thumbnail = Could not generate a thumbnail
+viewer-error-unavailable = Viewer is unavailable
 viewer-pdf-unavailable = Il supporto PDF non è disponibile in questa build.
 viewer-image-heic-unsupported = Le immagini HEIC non sono ancora supportate
 viewer-image-raw-unsupported = Le immagini RAW non sono ancora supportate
@@ -705,3 +708,11 @@ action-confirm-yes = Sì
 action-confirm-no = No
 
 fm-confirm-title = Conferma
+fm-error-disk-full = Not enough disk space
+fm-error-in-use = File is in use by another program
+fm-error-invalid-sort = Invalid sort column
+fm-error-invalid-tab = Invalid tab
+fm-error-io = File operation failed: { $reason }
+fm-error-unavailable = File manager is unavailable
+search-open-hint = Open
+viewer-error-no-archive = No archive is open
