@@ -261,6 +261,42 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "important" | "keyword_query" | "at_keyword" => Some(SyntaxScope::Keyword),
             _ => None,
         },
+        "c" | "cpp" => match kind {
+            "primitive_type"
+            | "type_identifier"
+            | "sized_type_specifier"
+            | "type_descriptor"
+            | "class_specifier"
+            | "struct_specifier"
+            | "enum_specifier"
+            | "union_specifier"
+            | "template_type"
+            | "dependent_type" => Some(SyntaxScope::Type),
+            "function_definition"
+            | "function_declarator"
+            | "call_expression"
+            | "field_expression" => Some(SyntaxScope::Function),
+            "field_identifier" | "identifier" | "namespace_identifier" => {
+                Some(SyntaxScope::Variable)
+            }
+            "string_literal" | "char_literal" | "raw_string_literal" | "system_lib_string" => {
+                Some(SyntaxScope::String)
+            }
+            "preproc_include"
+            | "preproc_def"
+            | "preproc_function_def"
+            | "preproc_call"
+            | "preproc_ifdef"
+            | "preproc_ifndef"
+            | "preproc_else"
+            | "preproc_elif"
+            | "preproc_endif"
+            | "preproc_if"
+            | "preproc_arg"
+            | "preproc_directive" => Some(SyntaxScope::Preprocessor),
+            "null" | "true" | "false" | "nullptr" => Some(SyntaxScope::Constant),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -387,6 +423,48 @@ fn is_keyword_kind(kind: &str) -> bool {
             | "command"
             | "coproc"
             | "time"
+            // C / C++ (void already listed under JavaScript)
+            | "typedef"
+            | "sizeof"
+            | "alignof"
+            | "alignas"
+            | "volatile"
+            | "register"
+            | "signed"
+            | "unsigned"
+            | "short"
+            | "long"
+            | "int"
+            | "char"
+            | "float"
+            | "double"
+            | "auto"
+            | "inline"
+            | "restrict"
+            | "namespace"
+            | "using"
+            | "template"
+            | "typename"
+            | "virtual"
+            | "override"
+            | "final"
+            | "explicit"
+            | "friend"
+            | "operator"
+            | "constexpr"
+            | "consteval"
+            | "constinit"
+            | "noexcept"
+            | "concept"
+            | "requires"
+            | "co_await"
+            | "co_yield"
+            | "co_return"
+            | "nullptr"
+            | "wchar_t"
+            | "char8_t"
+            | "char16_t"
+            | "char32_t"
     )
 }
 
@@ -606,6 +684,30 @@ mod tests {
     }
 
     #[test]
+    fn c_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "#include <stdio.h>\nint main(void) {\n  return 0;\n}\n";
+        let lines = h.highlight_lines("c", source, 0, 4);
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for C"
+        );
+    }
+
+    #[test]
+    fn cpp_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "#include <string>\nstd::string greet(const std::string& name) {\n  return name;\n}\n";
+        let lines = h.highlight_lines("cpp", source, 0, 4);
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for C++"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
@@ -619,5 +721,7 @@ mod tests {
         assert!(langs.contains(&"bash"));
         assert!(langs.contains(&"html"));
         assert!(langs.contains(&"css"));
+        assert!(langs.contains(&"c"));
+        assert!(langs.contains(&"cpp"));
     }
 }
