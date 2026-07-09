@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { ViewerImageModel } from "../../workspace/defs.slint";
 
 export component ViewerImageView inherits Rectangle {
@@ -40,6 +41,24 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     zoom-out-ta := TouchArea { clicked => { root.zoom-out(); } }
+                    if zoom-out-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: zoom-out-hint.preferred-width + 12px;
+                        height: zoom-out-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        zoom-out-hint := Text {
+                            x: 6px;
+                            y: 3px;
+                            text: Strings.viewer-image-zoom-out;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "−"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -63,6 +82,24 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     zoom-in-ta := TouchArea { clicked => { root.zoom-in(); } }
+                    if zoom-in-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: zoom-in-hint.preferred-width + 12px;
+                        height: zoom-in-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        zoom-in-hint := Text {
+                            x: 6px;
+                            y: 3px;
+                            text: Strings.viewer-image-zoom-in;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -117,6 +154,24 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     rcw-ta := TouchArea { clicked => { root.rotate-cw(); } }
+                    if rcw-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: rcw-hint.preferred-width + 12px;
+                        height: rcw-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        rcw-hint := Text {
+                            x: 6px;
+                            y: 3px;
+                            text: Strings.viewer-image-rotate-cw;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "↻"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -127,6 +182,24 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     rccw-ta := TouchArea { clicked => { root.rotate-ccw(); } }
+                    if rccw-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: rccw-hint.preferred-width + 12px;
+                        height: rccw-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        rccw-hint := Text {
+                            x: 6px;
+                            y: 3px;
+                            text: Strings.viewer-image-rotate-ccw;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "↺"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -139,6 +212,24 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     flip-h-ta := TouchArea { clicked => { root.flip-h(); } }
+                    if flip-h-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: flip-h-hint.preferred-width + 12px;
+                        height: flip-h-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        flip-h-hint := Text {
+                            x: 6px;
+                            y: 3px;
+                            text: Strings.viewer-image-flip-h;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "⇄"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -149,6 +240,24 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     flip-v-ta := TouchArea { clicked => { root.flip-v(); } }
+                    if flip-v-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: flip-v-hint.preferred-width + 12px;
+                        height: flip-v-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        flip-v-hint := Text {
+                            x: 6px;
+                            y: 3px;
+                            text: Strings.viewer-image-flip-v;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "⇅"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
             }

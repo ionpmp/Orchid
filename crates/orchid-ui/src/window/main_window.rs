@@ -580,6 +580,12 @@ impl MainWindowController {
         g.set_group_tooltip_move_right(mgr.tr("group-tooltip-move-right").into());
         g.set_group_tooltip_close_tab(mgr.tr("group-tooltip-close-tab").into());
         g.set_group_hint_alt_detach(mgr.tr("group-hint-alt-detach").into());
+        g.set_viewer_image_zoom_in(mgr.tr("viewer-image-zoom-in").into());
+        g.set_viewer_image_zoom_out(mgr.tr("viewer-image-zoom-out").into());
+        g.set_viewer_image_rotate_cw(mgr.tr("viewer-image-rotate-cw").into());
+        g.set_viewer_image_rotate_ccw(mgr.tr("viewer-image-rotate-ccw").into());
+        g.set_viewer_image_flip_h(mgr.tr("viewer-image-flip-h").into());
+        g.set_viewer_image_flip_v(mgr.tr("viewer-image-flip-v").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
@@ -10200,6 +10206,8 @@ fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
         format: SharedString::new(),
         total_entries: 0,
         current_inner_path: SharedString::new(),
+        header_label: SharedString::new(),
+        path_label: locale.tr("viewer-archive-root").into(),
         breadcrumbs: ModelRc::new(VecModel::default()),
         entries: ModelRc::new(VecModel::default()),
         selected_path: SharedString::new(),
@@ -10494,13 +10502,18 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     let has_file_selected = !s.selected_path.is_empty()
         && s.entries.iter().any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
 
+    let header_args = orchid_i18n::FluentArgs::new()
+        .with("format", s.format.clone())
+        .with("count", s.total_entries.to_string());
+    let header_label: SharedString = locale.tr_args("viewer-archive-info", &header_args).into();
+    let path_label: SharedString = if s.current_inner_path.is_empty() {
+        locale.tr("viewer-archive-root").into()
+    } else {
+        s.current_inner_path.clone().into()
+    };
+
     let info_text: SharedString = match &s.status {
-        orchid_viewers::ArchiveStatus::Idle => {
-            let args = orchid_i18n::FluentArgs::new()
-                .with("format", s.format.clone())
-                .with("count", s.total_entries.to_string());
-            locale.tr_args("viewer-archive-info", &args).into()
-        }
+        orchid_viewers::ArchiveStatus::Idle => SharedString::new(),
         orchid_viewers::ArchiveStatus::ExtractedSelected { path } => {
             let args = orchid_i18n::FluentArgs::new().with("path", path.clone());
             locale
@@ -10519,6 +10532,8 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
         format: s.format.clone().into(),
         total_entries: s.total_entries as i32,
         current_inner_path: s.current_inner_path.clone().into(),
+        header_label,
+        path_label,
         breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
         entries: ModelRc::new(VecModel::from(entries)),
         selected_path: s.selected_path.clone().into(),
