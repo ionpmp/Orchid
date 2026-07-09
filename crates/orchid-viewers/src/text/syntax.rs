@@ -113,15 +113,27 @@ fn scope_for_node(language: &str, node: &Node) -> Option<SyntaxScope> {
         | "raw_string_literal"
         | "string_content"
         | "interpreted_string_literal"
-        | "string_fragment" => Some(SyntaxScope::String),
-        "integer" | "integer_literal" | "float" | "float_literal" => Some(SyntaxScope::Number),
-        "boolean" | "true" | "false" => Some(SyntaxScope::Constant),
+        | "string_fragment"
+        | "template_string"
+        | "template_chars"
+        | "double_quote_scalar"
+        | "single_quote_scalar"
+        | "block_scalar" => Some(SyntaxScope::String),
+        "integer"
+        | "integer_literal"
+        | "float"
+        | "float_literal"
+        | "number"
+        | "number_literal" => Some(SyntaxScope::Number),
+        "boolean" | "true" | "false" | "null" | "undefined" => Some(SyntaxScope::Constant),
         "attribute_item" | "attribute" | "annotation" => Some(SyntaxScope::Attribute),
         "preproc" | "preproc_def" | "preproc_call" | "preproc_if" | "preproc_elif" => {
             Some(SyntaxScope::Preprocessor)
         }
         "html_tag_name" | "tag_name" | "start_tag" | "end_tag" => Some(SyntaxScope::Tag),
-        "property_name" | "field_name" | "pair" => Some(SyntaxScope::Property),
+        "property_name" | "field_name" | "pair" | "flow_pair" | "block_mapping_pair" => {
+            Some(SyntaxScope::Property)
+        }
         "ERROR" | "error" => Some(SyntaxScope::Error),
         _ if is_keyword_kind(kind) => Some(SyntaxScope::Keyword),
         _ => scope_for_language_node(language, kind, node),
@@ -169,6 +181,26 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             }
             "emphasis" | "strong_emphasis" => Some(SyntaxScope::Type),
             "link" | "link_text" | "link_destination" => Some(SyntaxScope::Function),
+            _ => None,
+        },
+        "javascript" => match kind {
+            "type_identifier" | "type_annotation" => Some(SyntaxScope::Type),
+            "function_declaration"
+            | "function"
+            | "method_definition"
+            | "arrow_function"
+            | "generator_function"
+            | "generator_function_declaration" => Some(SyntaxScope::Function),
+            "property_identifier" | "shorthand_property_identifier" | "identifier" => {
+                Some(SyntaxScope::Variable)
+            }
+            "regex" | "regex_pattern" => Some(SyntaxScope::String),
+            _ => None,
+        },
+        "yaml" => match kind {
+            "block_mapping_pair" | "flow_pair" => Some(SyntaxScope::Property),
+            "anchor_name" | "alias_name" | "tag" => Some(SyntaxScope::Attribute),
+            "comment" => Some(SyntaxScope::Comment),
             _ => None,
         },
         _ => None,
@@ -240,6 +272,35 @@ fn is_keyword_kind(kind: &str) -> bool {
             | "None"
             | "True"
             | "False"
+            // JavaScript
+            | "var"
+            | "function"
+            | "typeof"
+            | "instanceof"
+            | "new"
+            | "this"
+            | "throw"
+            | "catch"
+            | "switch"
+            | "case"
+            | "default"
+            | "export"
+            | "extends"
+            | "implements"
+            | "interface"
+            | "package"
+            | "private"
+            | "protected"
+            | "public"
+            | "void"
+            | "delete"
+            | "debugger"
+            | "of"
+            | "get"
+            | "set"
+            // YAML document markers often surface as keyword-like tokens
+            | "---"
+            | "..."
     )
 }
 
@@ -375,10 +436,36 @@ mod tests {
     }
 
     #[test]
+    fn javascript_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "const greet = (name) => {\n  return `hello ${name}`;\n};\n";
+        let lines = h.highlight_lines("javascript", source, 0, 3);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for JavaScript"
+        );
+    }
+
+    #[test]
+    fn yaml_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "name: orchid\nversion: 1\n# comment\n";
+        let lines = h.highlight_lines("yaml", source, 0, 3);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for YAML"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
         assert!(langs.contains(&"rust"));
         assert!(langs.contains(&"python"));
+        assert!(langs.contains(&"javascript"));
+        assert!(langs.contains(&"yaml"));
     }
 }

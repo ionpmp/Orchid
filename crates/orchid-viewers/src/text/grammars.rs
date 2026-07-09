@@ -85,7 +85,15 @@ fn by_shebang(bytes: &[u8]) -> Option<&'static str> {
 }
 
 /// Languages with a bundled tree-sitter grammar for syntax highlighting.
-pub const HIGHLIGHT_LANGUAGES: &[&str] = &["rust", "python", "toml", "json", "markdown"];
+pub const HIGHLIGHT_LANGUAGES: &[&str] = &[
+    "rust",
+    "python",
+    "toml",
+    "json",
+    "markdown",
+    "javascript",
+    "yaml",
+];
 
 /// Resolve a canonical language id to a tree-sitter [`Language`].
 #[must_use]
@@ -96,6 +104,8 @@ pub fn language_for_id(id: &str) -> Option<tree_sitter::Language> {
         "toml" => Some(tree_sitter_toml::LANGUAGE.into()),
         "json" => Some(tree_sitter_json::LANGUAGE.into()),
         "markdown" => Some(tree_sitter_md::LANGUAGE.into()),
+        "javascript" => Some(tree_sitter_javascript::LANGUAGE.into()),
+        "yaml" => Some(tree_sitter_yaml::LANGUAGE.into()),
         _ => None,
     }
 }
