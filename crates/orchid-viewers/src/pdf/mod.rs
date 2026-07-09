@@ -257,6 +257,11 @@ impl Viewer for PdfViewer {
             return ViewerSnapshot::Loading { path_display };
         };
 
+        let fit_mode = match *self.fit_mode.read() {
+            FitMode::FitWidth => 0,
+            FitMode::FitPage => 1,
+            FitMode::Custom => 2,
+        };
         ViewerSnapshot::Pdf(PdfSnapshot {
             path_display,
             page_count: rendered.page_count,
@@ -265,6 +270,7 @@ impl Viewer for PdfViewer {
             page_height_px: rendered.height_px,
             page_rgba_bytes: rendered.rgba,
             zoom: rendered.zoom,
+            fit_mode,
             // Status line is localized in orchid-ui (`viewer-pdf-info`).
             info_text: String::new(),
         })

@@ -131,7 +131,7 @@ impl Widget for MoonWidget {
             Some(data) => render_payload(&cfg, &data, &locale),
             None => MoonPayload {
                 phase_key: MoonPhase::NewMoon.ftl_key(),
-                phase_icon: MoonPhase::NewMoon.icon(),
+                phase_icon: "",
                 illumination_percent: None,
                 age_days: None,
                 distance_km: None,

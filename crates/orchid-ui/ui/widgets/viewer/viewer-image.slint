@@ -108,7 +108,8 @@ export component ViewerImageView inherits Rectangle {
                 Rectangle {
                     min-width: 40px;
                     height: 28px;
-                    background: fit-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: model.fit-mode ? Theme.surface-raised
+                        : fit-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fit-ta := TouchArea { clicked => { root.fit(); } }
@@ -117,7 +118,7 @@ export component ViewerImageView inherits Rectangle {
                         padding-right: 8px;
                         Text {
                             text: model.fit-label;
-                            color: Theme.text-primary;
+                            color: model.fit-mode ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -128,7 +129,8 @@ export component ViewerImageView inherits Rectangle {
                 Rectangle {
                     min-width: 40px;
                     height: 28px;
-                    background: actual-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: !model.fit-mode ? Theme.surface-raised
+                        : actual-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     actual-ta := TouchArea { clicked => { root.actual-size(); } }
@@ -137,7 +139,7 @@ export component ViewerImageView inherits Rectangle {
                         padding-right: 8px;
                         Text {
                             text: model.actual-size-label;
-                            color: Theme.text-primary;
+                            color: !model.fit-mode ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;

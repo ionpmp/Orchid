@@ -62,9 +62,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
-- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip; localized Fit/Actual Size + status strip + toolbar hover hints; viewport re-fit while in fit mode; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
-- [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, go-to-page input, fit width/page, zoom, toolbar hover hints, viewport re-fit; requires bundled `pdfium.dll`
-- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S, dirty ●, localized line count)
+- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip; localized Fit/Actual Size with active-mode highlight + status strip + toolbar hover hints; viewport re-fit while in fit mode; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
+- [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, go-to-page input, fit width/page with active-mode highlight, zoom, toolbar hover hints, viewport re-fit; requires bundled `pdfium.dll`
+- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S, dirty ●, localized line count + LF/CRLF)
 - [~] Archives (ZIP, 7z, TAR, TAR.GZ, TAR.XZ) — browse + preview + extract selected/all; localized toolbar header + status strip (format/count + extract feedback); TAR.XZ via `xz2`
 
 ### Security
@@ -87,7 +87,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### UX
 - [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml (main window + startup window)
 - [x] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast) — nine bundled themes + JSON loader from `themes_dir`
-- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); widget titles, FM/viewer sizes, System uptime, Properties/Details/delete confirm, search empty states, startup status strip, FM Home/loading/empty/access, settings shortcuts/coming-soon/disabled/default placeholders, TOTP remaining, PDF page-of/Go, archive extract disabled hint, weather/search/onboarding hover chrome, viewer unsupported type, terminal/password/catalog/dock/FM chrome hover hints localized; S-size RTL mirrors notification/workspace docking when language starts with `ar`
+- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); widget titles, FM/viewer sizes, System uptime/battery charging·time, Properties/Details/delete confirm, search empty states, startup status strip, FM Home/loading/empty/access, settings shortcuts/coming-soon/disabled/default placeholders, TOTP remaining, PDF page-of/Go, archive extract disabled hint, weather/search/onboarding hover chrome, viewer unsupported type + text LF/CRLF, terminal/password/catalog/dock/FM chrome hover hints localized; S-size RTL mirrors notification/workspace docking when language starts with `ar`
 - [~] Adaptive layouts (profiles for different screens) — Hybrid density nudges UI scale from canvas width: below 1100 px toward Touch (1.2×), above 1600 px toward Mouse (0.8×)
 - [x] Gestures (touch, pen, mouse) — recogniser + `default_bindings` wired through `orchid-ui` to workspace panel, notification center, dock, and universal search
 - [x] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, user override application, and configurable leader-key chord dispatch (`Ctrl+Shift+Space` + letter)

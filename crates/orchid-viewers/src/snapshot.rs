@@ -42,6 +42,8 @@ pub struct ImageSnapshot {
     pub rotation_degrees: i16,
     pub flipped_horizontal: bool,
     pub flipped_vertical: bool,
+    /// `true` when Fit Screen is active; `false` for Actual Size / custom zoom.
+    pub fit_mode: bool,
     /// Short format label (e.g. `PNG`) for the localized status strip.
     pub format_label: String,
     /// Original file size in bytes (for the localized status strip).
@@ -61,6 +63,8 @@ pub struct PdfSnapshot {
     pub page_height_px: u32,
     pub page_rgba_bytes: Arc<Vec<u8>>,
     pub zoom: f32,
+    /// 0 = FitWidth, 1 = FitPage, 2 = Custom (manual zoom).
+    pub fit_mode: u8,
     pub info_text: String,
 }
 

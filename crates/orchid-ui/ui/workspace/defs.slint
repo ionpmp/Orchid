@@ -250,6 +250,7 @@ export struct ViewerImageModel {
     rotation-deg: int,
     flipped-h: bool,
     flipped-v: bool,
+    fit-mode: bool,
     info-text: string,
     path-display: string,
     fit-label: string,
@@ -263,6 +264,8 @@ export struct ViewerPdfModel {
     page-height-px: int,
     page-image: image,
     zoom: float,
+    /// 0 = FitWidth, 1 = FitPage, 2 = Custom.
+    fit-mode: int,
     info-text: string,
     path-display: string,
     available: bool,

@@ -186,6 +186,7 @@ impl Viewer for ImageViewer {
             rotation_degrees: transform.rotation_degrees,
             flipped_horizontal: transform.flipped_horizontal,
             flipped_vertical: transform.flipped_vertical,
+            fit_mode: *self.fit_mode.read(),
             format_label: image.format.label().to_string(),
             size_bytes: image.original_size_bytes,
             info_text: String::new(),

@@ -10245,6 +10245,7 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         rotation_deg: 0,
         flipped_h: false,
         flipped_v: false,
+        fit_mode: true,
         info_text: SharedString::new(),
         path_display: SharedString::new(),
         fit_label: locale.tr("viewer-image-fit-screen").into(),
@@ -10260,6 +10261,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         page_height_px: 0,
         page_image: Image::default(),
         zoom: 1.0,
+        fit_mode: 0,
         info_text: SharedString::new(),
         path_display: SharedString::new(),
         available: true,
@@ -10276,7 +10278,7 @@ fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
     ViewerTextModel {
         language: "plaintext".into(),
         encoding: "UTF-8".into(),
-        line_ending: "LF".into(),
+        line_ending: locale.tr("viewer-text-line-ending-lf").into(),
         dirty: false,
         read_only: true,
         total_lines: 0,
@@ -10411,6 +10413,7 @@ fn build_image_snapshot(
         rotation_deg: i32::from(s.rotation_degrees),
         flipped_h: s.flipped_horizontal,
         flipped_v: s.flipped_vertical,
+        fit_mode: s.fit_mode,
         info_text: {
             let args = orchid_i18n::FluentArgs::new()
                 .with("width", s.width_px.to_string())
@@ -10455,6 +10458,7 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         page_height_px: s.page_height_px as i32,
         page_image: image,
         zoom: s.zoom,
+        fit_mode: i32::from(s.fit_mode),
         info_text: locale.tr_args("viewer-pdf-info", &info_args).into(),
         path_display: s.path_display.clone().into(),
         available,
@@ -10490,10 +10494,14 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager)
         })
         .collect();
 
+    let line_ending_key = match s.line_ending.as_str() {
+        "CRLF" => "viewer-text-line-ending-crlf",
+        _ => "viewer-text-line-ending-lf",
+    };
     ViewerTextModel {
         language: s.language.clone().into(),
         encoding: s.encoding.clone().into(),
-        line_ending: s.line_ending.clone().into(),
+        line_ending: locale.tr(line_ending_key).into(),
         dirty: s.dirty,
         read_only: s.read_only,
         total_lines: s.total_lines as i32,

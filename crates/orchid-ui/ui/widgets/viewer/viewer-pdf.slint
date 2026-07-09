@@ -196,7 +196,8 @@ export component ViewerPdfView inherits Rectangle {
 
                 Rectangle {
                     min-width: 72px; height: 28px;
-                    background: fw-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: model.fit-mode == 0 ? Theme.surface-raised
+                        : fw-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fw-ta := TouchArea { clicked => { root.fit-width(); } }
@@ -205,7 +206,7 @@ export component ViewerPdfView inherits Rectangle {
                         padding-right: 8px;
                         Text {
                             text: model.fit-width-label;
-                            color: Theme.text-primary;
+                            color: model.fit-mode == 0 ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -215,7 +216,8 @@ export component ViewerPdfView inherits Rectangle {
 
                 Rectangle {
                     min-width: 72px; height: 28px;
-                    background: fp-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: model.fit-mode == 1 ? Theme.surface-raised
+                        : fp-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fp-ta := TouchArea { clicked => { root.fit-page(); } }
@@ -224,7 +226,7 @@ export component ViewerPdfView inherits Rectangle {
                         padding-right: 8px;
                         Text {
                             text: model.fit-page-label;
-                            color: Theme.text-primary;
+                            color: model.fit-mode == 1 ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;

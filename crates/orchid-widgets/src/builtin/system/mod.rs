@@ -281,10 +281,26 @@ fn build_indicators(
     if cfg.show_battery {
         if let Some(b) = &snap.battery {
             let pct = b.percent as f32;
+            let mut value = format!("{}%", b.percent);
+            if b.charging {
+                value.push_str(" · ");
+                value.push_str(&locale.tr("system-battery-charging"));
+                if let Some(secs) = b.time_to_full_seconds {
+                    let time = locale.format_duration_secs(secs);
+                    let args = orchid_i18n::FluentArgs::new().with("time", time);
+                    value.push_str(" · ");
+                    value.push_str(&locale.tr_args("system-battery-time-remaining", &args));
+                }
+            } else if let Some(secs) = b.time_to_empty_seconds {
+                let time = locale.format_duration_secs(secs);
+                let args = orchid_i18n::FluentArgs::new().with("time", time);
+                value.push_str(" · ");
+                value.push_str(&locale.tr_args("system-battery-time-remaining", &args));
+            }
             out.push(SystemIndicator {
                 kind: SystemIndicatorKind::Battery,
                 name_suffix: None,
-                value_text: format!("{}%", b.percent),
+                value_text: value,
                 network_up: None,
                 network_down: None,
                 percent: Some(pct),

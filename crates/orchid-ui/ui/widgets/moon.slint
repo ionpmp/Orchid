@@ -24,7 +24,7 @@ export component MoonView inherits Rectangle {
         spacing: 12px;
         alignment: start;
 
-        Text {
+        if model.phase-icon != "" : Text {
             text: moon-icon-glyph(model.phase-icon);
             color: Theme.text-primary;
             font-size: 64px;
