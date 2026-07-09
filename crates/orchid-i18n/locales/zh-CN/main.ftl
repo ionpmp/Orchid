@@ -270,6 +270,7 @@ navigation-workspace-panel-title = 工作区
 notification-center-title = 通知
 notification-center-placeholder = 暂无通知。
 notification-center-clear = 全部清除
+notification-center-dismiss = 关闭
 notification-center-tip-title = 提示
 notification-center-tip-body = 从右边缘滑动或运行“显示通知中心”以打开此面板。
 # ---- Terminal tab bar ----

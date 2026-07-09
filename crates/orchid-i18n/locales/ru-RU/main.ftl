@@ -539,6 +539,7 @@ onboarding-hint-gestures = Win+? переключает подсказки
 notification-center-title = Уведомления
 notification-center-placeholder = Уведомлений пока нет.
 notification-center-clear = Очистить все
+notification-center-dismiss = Закрыть
 notification-center-tip-title = Подсказка
 notification-center-tip-body = Проведите от правого края или выполните «Показать центр уведомлений», чтобы открыть эту панель.
 

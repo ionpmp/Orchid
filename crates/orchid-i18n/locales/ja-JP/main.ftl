@@ -270,6 +270,7 @@ navigation-workspace-panel-title = ワークスペース
 notification-center-title = 通知
 notification-center-placeholder = 通知はまだありません。
 notification-center-clear = すべて消去
+notification-center-dismiss = 閉じる
 notification-center-tip-title = ヒント
 notification-center-tip-body = 右端からスワイプするか、「通知センターを表示」を実行してこのパネルを開きます。
 # ---- Terminal tab bar ----

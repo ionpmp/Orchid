@@ -64,8 +64,25 @@ export component NotificationCenter inherits Rectangle {
                 background: Theme.surface-base;
                 border-radius: Theme.radius-md;
 
-                TouchArea {
+                panel-close-ta := TouchArea {
                     clicked => { root.dismiss(); }
+                }
+                if panel-close-ta.has-hover : Rectangle {
+                    x: parent.x - panel-close-hint.preferred-width - 8px;
+                    y: parent.height + 2px;
+                    width: panel-close-hint.preferred-width + 12px;
+                    height: panel-close-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    panel-close-hint := Text {
+                        x: 6px; y: 3px;
+                        text: NavigationGlobal.panel-dismiss-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
                 }
 
                 Text {
@@ -147,6 +164,23 @@ export component NotificationCenter inherits Rectangle {
 
                                     dismiss-ta := TouchArea {
                                         clicked => { NotificationGlobal.dismiss-item(item.id); }
+                                    }
+                                    if dismiss-ta.has-hover : Rectangle {
+                                        x: parent.x - item-dismiss-hint.preferred-width - 8px;
+                                        y: parent.height + 2px;
+                                        width: item-dismiss-hint.preferred-width + 12px;
+                                        height: item-dismiss-hint.preferred-height + 6px;
+                                        background: Theme.surface-raised;
+                                        border-radius: Theme.radius-md;
+                                        border-width: 1px;
+                                        border-color: Theme.border-default;
+                                        z: 100;
+                                        item-dismiss-hint := Text {
+                                            x: 6px; y: 3px;
+                                            text: NotificationGlobal.dismiss-label;
+                                            color: Theme.text-secondary;
+                                            font-size: Theme.font-size-sm;
+                                        }
                                     }
 
                                     Text {

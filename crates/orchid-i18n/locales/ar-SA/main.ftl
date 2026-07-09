@@ -270,6 +270,7 @@ navigation-workspace-panel-title = مساحات العمل
 notification-center-title = الإشعارات
 notification-center-placeholder = لا توجد إشعارات بعد.
 notification-center-clear = مسح الكل
+notification-center-dismiss = تجاهل
 notification-center-tip-title = تلميح
 notification-center-tip-body = اسحب من الحافة اليسرى أو نفّذ «إظهار مركز الإشعارات» لفتح هذه اللوحة.
 

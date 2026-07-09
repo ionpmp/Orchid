@@ -270,6 +270,7 @@ navigation-workspace-panel-title = 작업 공간
 notification-center-title = 알림
 notification-center-placeholder = 아직 알림이 없습니다.
 notification-center-clear = 모두 지우기
+notification-center-dismiss = 닫기
 notification-center-tip-title = 팁
 notification-center-tip-body = 오른쪽 가장자리에서 스와이프하거나 «알림 센터 표시»를 실행하여 이 패널을 엽니다.
 # ---- Terminal tab bar ----

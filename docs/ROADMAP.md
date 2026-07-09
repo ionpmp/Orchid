@@ -87,7 +87,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### UX
 - [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml (main window + startup window)
 - [x] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast) — nine bundled themes + JSON loader from `themes_dir`
-- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); widget titles, FM/viewer sizes, System uptime, Properties/Details/delete confirm, search empty states, toolbar hover hints localized; S-size RTL mirrors notification/workspace docking when language starts with `ar`
+- [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); widget titles, FM/viewer sizes, System uptime, Properties/Details/delete confirm, search empty states, catalog/workspace/notification/text-dirty hover hints localized; S-size RTL mirrors notification/workspace docking when language starts with `ar`
 - [~] Adaptive layouts (profiles for different screens) — Hybrid density nudges UI scale from canvas width: below 1100 px toward Touch (1.2×), above 1600 px toward Mouse (0.8×)
 - [x] Gestures (touch, pen, mouse) — recogniser + `default_bindings` wired through `orchid-ui` to workspace panel, notification center, dock, and universal search
 - [x] Keyboard shortcuts + leader-key mode — `Shortcut` parsing, reserved-combo detection, user override application, and configurable leader-key chord dispatch (`Ctrl+Shift+Space` + letter)

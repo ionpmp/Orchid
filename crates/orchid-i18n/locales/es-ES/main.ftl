@@ -270,6 +270,7 @@ navigation-workspace-panel-title = Espacios de trabajo
 notification-center-title = Notificaciones
 notification-center-placeholder = Aún no hay notificaciones.
 notification-center-clear = Borrar todo
+notification-center-dismiss = Descartar
 notification-center-tip-title = Consejo
 notification-center-tip-body = Desliza desde el borde derecho o ejecuta «Mostrar centro de notificaciones» para abrir este panel.
 # ---- Terminal tab bar ----

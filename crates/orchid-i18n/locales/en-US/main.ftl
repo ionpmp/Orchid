@@ -272,6 +272,7 @@ navigation-workspace-panel-title = Workspaces
 notification-center-title = Notifications
 notification-center-placeholder = No notifications yet.
 notification-center-clear = Clear all
+notification-center-dismiss = Dismiss
 notification-center-tip-title = Tip
 notification-center-tip-body = Swipe from the right edge or run “Show notification center” to open this panel.
 

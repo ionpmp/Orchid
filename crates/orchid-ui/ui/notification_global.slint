@@ -3,6 +3,7 @@ import { NotificationItem } from "workspace/defs.slint";
 export global NotificationGlobal {
     in property <[NotificationItem]> notifications;
     in property <string> clear-all-label;
+    in property <string> dismiss-label;
     in property <string> empty-placeholder;
     callback clear-all();
     callback dismiss-item(string);

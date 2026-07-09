@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { ViewerTextModel } from "../../workspace/defs.slint";
 
 export component ViewerTextView inherits Rectangle {
@@ -79,11 +80,37 @@ export component ViewerTextView inherits Rectangle {
 
                 Rectangle { horizontal-stretch: 1; }
 
-                if model.dirty || root.locally-dirty : Text {
-                    text: "●";
-                    color: #eab308;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
+                if model.dirty || root.locally-dirty : Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+
+                    dirty-ta := TouchArea { }
+                    if dirty-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: dirty-hint.preferred-width + 12px;
+                        height: dirty-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        dirty-hint := Text {
+                            x: 6px; y: 3px;
+                            text: Strings.viewer-text-dirty-indicator;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+
+                    Text {
+                        text: "●";
+                        color: #eab308;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }

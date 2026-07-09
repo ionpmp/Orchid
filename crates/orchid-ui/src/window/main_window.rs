@@ -572,6 +572,7 @@ impl MainWindowController {
         g.set_catalog_title(mgr.tr("catalog-title").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+        g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
@@ -2736,6 +2737,7 @@ impl MainWindowController {
         g.set_notification_center_placeholder(
             self.locale.tr("notification-center-placeholder").into(),
         );
+        g.set_panel_dismiss_label(self.locale.tr("notification-center-dismiss").into());
         g.set_hint_dock_label(self.locale.tr("onboarding-hint-dock").into());
         g.set_hint_workspace_label(self.locale.tr("onboarding-hint-workspace").into());
         g.set_hint_gestures_label(self.locale.tr("onboarding-hint-gestures").into());
@@ -2745,6 +2747,7 @@ impl MainWindowController {
         let g = self.window.global::<NotificationGlobal>();
         g.set_notifications(self.notifications.clone());
         g.set_clear_all_label(self.locale.tr("notification-center-clear").into());
+        g.set_dismiss_label(self.locale.tr("notification-center-dismiss").into());
         g.set_empty_placeholder(self.locale.tr("notification-center-placeholder").into());
     }
 

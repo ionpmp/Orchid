@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { Strings } from "../strings_global.slint";
 import { WorkspaceSummary } from "defs.slint";
 
 export component WorkspaceSwitcher inherits Rectangle {
@@ -48,8 +49,25 @@ export component WorkspaceSwitcher inherits Rectangle {
             background: Theme.surface-base;
             border-radius: Theme.radius-md;
 
-            TouchArea {
+            new-ta := TouchArea {
                 clicked => { root.workspace-create-clicked(); }
+            }
+            if new-ta.has-hover : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: new-hint.preferred-width + 12px;
+                height: new-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                new-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.workspace-new-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
             }
 
             Text {
