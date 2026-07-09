@@ -576,6 +576,8 @@ impl MainWindowController {
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
+        g.set_terminal_tooltip_tab_close(mgr.tr("terminal-tooltip-tab-close").into());
+        g.set_terminal_tooltip_pane_close(mgr.tr("terminal-tooltip-pane-close").into());
         g.set_group_tooltip_dissolve(mgr.tr("group-tooltip-dissolve").into());
         g.set_group_tooltip_move_left(mgr.tr("group-tooltip-move-left").into());
         g.set_group_tooltip_move_right(mgr.tr("group-tooltip-move-right").into());
@@ -622,6 +624,10 @@ impl MainWindowController {
         g.set_password_label_totp(mgr.tr("password-label-totp").into());
         g.set_password_action_copy(mgr.tr("password-action-copy").into());
         g.set_password_action_open(mgr.tr("password-action-open").into());
+        g.set_password_copy_username(mgr.tr("password-copy-username").into());
+        g.set_password_copy_password(mgr.tr("password-copy-password").into());
+        g.set_password_copy_totp(mgr.tr("password-copy-totp").into());
+        g.set_password_open_url(mgr.tr("password-open-url").into());
         g.set_password_action_lock(mgr.tr("password-action-lock").into());
         g.set_password_unlock_label(mgr.tr("password-unlock-label").into());
         g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());

@@ -277,6 +277,8 @@ notification-center-tip-body = Deslize da borda direita ou execute «Mostrar cen
 terminal-tooltip-split-h = Dividir horizontalmente (Ctrl+Shift+H)
 terminal-tooltip-split-v = Dividir verticalmente (Ctrl+Shift+J)
 terminal-tooltip-tab-new = Nova aba (Ctrl+Shift+T)
+terminal-tooltip-tab-close = Fechar aba
+terminal-tooltip-pane-close = Fechar painel
 
 # ---- Media player ----
 media-no-session = Nenhuma mídia em reprodução

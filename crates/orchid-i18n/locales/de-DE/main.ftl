@@ -277,6 +277,8 @@ notification-center-tip-body = Wischen Sie vom rechten Rand oder führen Sie „
 terminal-tooltip-split-h = Horizontal teilen (Ctrl+Shift+H)
 terminal-tooltip-split-v = Vertikal teilen (Ctrl+Shift+J)
 terminal-tooltip-tab-new = Neuer Tab (Ctrl+Shift+T)
+terminal-tooltip-tab-close = Tab schließen
+terminal-tooltip-pane-close = Bereich schließen
 
 # ---- Media player ----
 media-no-session = Keine Wiedergabe

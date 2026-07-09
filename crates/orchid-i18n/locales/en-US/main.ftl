@@ -280,6 +280,8 @@ notification-center-tip-body = Swipe from the right edge or run “Show notifica
 terminal-tooltip-split-h = Split horizontally (Ctrl+Shift+H)
 terminal-tooltip-split-v = Split vertically (Ctrl+Shift+J)
 terminal-tooltip-tab-new = New tab (Ctrl+Shift+T)
+terminal-tooltip-tab-close = Close tab
+terminal-tooltip-pane-close = Close pane
 
 # ---- Media player ----
 media-no-session = No media playing

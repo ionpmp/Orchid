@@ -277,6 +277,8 @@ notification-center-tip-body = Balayez depuis le bord droit ou exécutez « Affi
 terminal-tooltip-split-h = Diviser horizontalement (Ctrl+Shift+H)
 terminal-tooltip-split-v = Diviser verticalement (Ctrl+Shift+J)
 terminal-tooltip-tab-new = Nouvel onglet (Ctrl+Shift+T)
+terminal-tooltip-tab-close = Fermer l’onglet
+terminal-tooltip-pane-close = Fermer le volet
 
 # ---- Media player ----
 media-no-session = Aucune lecture en cours

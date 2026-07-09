@@ -278,6 +278,8 @@ notification-center-tip-body = اسحب من الحافة اليسرى أو نف
 terminal-tooltip-split-h = تقسيم أفقي (Ctrl+Shift+H)
 terminal-tooltip-split-v = تقسيم عمودي (Ctrl+Shift+J)
 terminal-tooltip-tab-new = علامة تبويب جديدة (Ctrl+Shift+T)
+terminal-tooltip-tab-close = إغلاق علامة التبويب
+terminal-tooltip-pane-close = إغلاق اللوحة
 
 # ---- Media player ----
 media-no-session = لا يوجد تشغيل

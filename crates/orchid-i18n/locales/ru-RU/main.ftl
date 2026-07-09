@@ -267,6 +267,8 @@ navigation-workspace-panel-title = Пространства
 terminal-tooltip-split-h = Разделить горизонтально (Ctrl+Shift+H)
 terminal-tooltip-split-v = Разделить вертикально (Ctrl+Shift+J)
 terminal-tooltip-tab-new = Новая вкладка (Ctrl+Shift+T)
+terminal-tooltip-tab-close = Закрыть вкладку
+terminal-tooltip-pane-close = Закрыть панель
 
 # ---- Media player ----
 media-no-session = Нет активного воспроизведения

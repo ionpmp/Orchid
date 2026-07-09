@@ -274,6 +274,39 @@ export component MainWindow inherits Window {
                     vertical-alignment: center;
                 }
             }
+
+            VerticalLayout {
+                spacing: Theme.spacing-unit;
+                alignment: center;
+
+                Text {
+                    text: Strings.version-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
+
+                HorizontalLayout {
+                    spacing: Theme.spacing-unit * 3;
+                    alignment: center;
+
+                    Text {
+                        text: Strings.theme-label + " " + AppState.current-theme-id;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Text {
+                        text: Strings.language-label + " " + AppState.current-language;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Text {
+                        text: Strings.density-label + " " + AppState.current-density;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
         }
 
         if AppState.mode == 1: Rectangle {
