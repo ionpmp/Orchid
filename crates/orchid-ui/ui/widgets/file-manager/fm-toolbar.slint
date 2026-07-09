@@ -9,6 +9,7 @@ export component FmToolbar inherits Rectangle {
     callback back();
     callback forward();
     callback up();
+    callback home();
     callback view-mode-cycle();
     callback sort-cycle();
     callback quick-filter-changed(string);
@@ -109,6 +110,35 @@ export component FmToolbar inherits Rectangle {
                 }
             }
             Text { text: "↑"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+        }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: home-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            home-ta := TouchArea {
+                clicked => { root.home(); }
+            }
+            if home-ta.has-hover : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: home-hint.preferred-width + 12px;
+                height: home-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                home-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-nav-home;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+            Text { text: "⌂"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
         Rectangle {

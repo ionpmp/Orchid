@@ -594,6 +594,7 @@ impl MainWindowController {
         g.set_fm_nav_back(mgr.tr("fm-nav-back").into());
         g.set_fm_nav_forward(mgr.tr("fm-nav-forward").into());
         g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
+        g.set_fm_nav_home(mgr.tr("fm-nav-home").into());
         g.set_fm_loading(mgr.tr("fm-loading").into());
         g.set_fm_empty_folder(mgr.tr("fm-empty-folder").into());
         g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());
@@ -1903,6 +1904,14 @@ impl MainWindowController {
             move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_nav_up(&fm_id, pane);
+                }
+            }
+        });
+        self.window.on_fm_nav_home({
+            let t = t.clone();
+            move |fm_id, pane| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_nav_home(&fm_id, pane);
                 }
             }
         });
@@ -6916,6 +6925,21 @@ impl MainWindowController {
         }));
     }
 
+    fn on_fm_nav_home(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            let _ = orchid_widgets::builtin::file_manager::navigate_home(inst, p).await;
+            if let Some(c) = tw.upgrade() {
+                c.fm_refresh_ui(inst).await;
+            }
+        }));
+    }
+
     fn on_fm_breadcrumb_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
@@ -10278,6 +10302,7 @@ fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
         has_file_selected: false,
         extract_all_label: locale.tr("viewer-archive-extract-all").into(),
         extract_selected_label: locale.tr("viewer-archive-extract-selected").into(),
+        nothing_selected_label: locale.tr("viewer-archive-nothing-selected").into(),
         preview_kind: 0,
         preview_text: locale.tr("viewer-archive-select-preview").into(),
         preview_binary_size: SharedString::new(),
@@ -10604,6 +10629,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
         has_file_selected,
         extract_all_label: locale.tr("viewer-archive-extract-all").into(),
         extract_selected_label: locale.tr("viewer-archive-extract-selected").into(),
+        nothing_selected_label: locale.tr("viewer-archive-nothing-selected").into(),
         preview_kind,
         preview_text,
         preview_binary_size: preview_binary,

@@ -140,6 +140,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     go-ta := TouchArea { clicked => { root.commit-page-jump(); } }
+                    if go-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: go-hint.preferred-width + 12px;
+                        height: go-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        go-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.go-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text {
                         text: model.go-label;
                         color: Theme.text-primary;

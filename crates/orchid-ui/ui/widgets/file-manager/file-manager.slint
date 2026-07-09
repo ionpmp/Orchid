@@ -23,6 +23,7 @@ export component FileManagerView inherits Rectangle {
     callback nav-back(int);
     callback nav-forward(int);
     callback nav-up(int);
+    callback nav-home(int);
     callback breadcrumb-clicked(int, string);
     callback view-mode-cycle(int);
     callback sort-cycle(int);
@@ -279,6 +280,7 @@ export component FileManagerView inherits Rectangle {
                 nav-back => { root.nav-back(0); }
                 nav-forward => { root.nav-forward(0); }
                 nav-up => { root.nav-up(0); }
+                nav-home => { root.nav-home(0); }
                 breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                 view-mode-cycle => { root.view-mode-cycle(0); }
                 sort-cycle => { root.sort-cycle(0); }
@@ -341,6 +343,7 @@ export component FileManagerView inherits Rectangle {
                         nav-back => { root.nav-back(0); }
                         nav-forward => { root.nav-forward(0); }
                         nav-up => { root.nav-up(0); }
+                        nav-home => { root.nav-home(0); }
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                         view-mode-cycle => { root.view-mode-cycle(0); }
                         sort-cycle => { root.sort-cycle(0); }
@@ -401,6 +404,7 @@ export component FileManagerView inherits Rectangle {
                         nav-back => { root.nav-back(1); }
                         nav-forward => { root.nav-forward(1); }
                         nav-up => { root.nav-up(1); }
+                        nav-home => { root.nav-home(1); }
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(1, p); }
                         view-mode-cycle => { root.view-mode-cycle(1); }
                         sort-cycle => { root.sort-cycle(1); }

@@ -76,9 +76,32 @@ export component ViewerArchiveView inherits Rectangle {
                         (extract-sel-ta.has-hover ? Theme.accent-brand : Theme.surface-raised);
                     border-radius: Theme.radius-md;
 
+                    // Keep TouchArea enabled so disabled state can still show a hover hint.
                     extract-sel-ta := TouchArea {
-                        enabled: model.has-file-selected;
-                        clicked => { root.extract-selected(); }
+                        clicked => {
+                            if model.has-file-selected {
+                                root.extract-selected();
+                            }
+                        }
+                    }
+                    if extract-sel-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: extract-sel-hint.preferred-width + 12px;
+                        height: extract-sel-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        extract-sel-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.has-file-selected
+                                ? model.extract-selected-label
+                                : model.nothing-selected-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
                     }
 
                     HorizontalLayout {

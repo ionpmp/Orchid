@@ -349,7 +349,6 @@ viewer-text-discard = 放弃
 viewer-text-dirty-indicator = 未保存的更改
 viewer-archive-extract-all = 全部解压
 viewer-archive-extract-selected = 解压所选
-viewer-archive-preview-binary = 二进制文件，{ $size }
 
 # ==== File manager widget ====
 widget-fm-name = 文件
@@ -434,10 +433,7 @@ fm-properties-mime = MIME：{ $mime }
 fm-tag-add-title = 添加标签
 fm-confirm-delete = 删除 { $n } 项？
 fm-confirm-delete-permanent = 永久删除 { $n } 项？
-fm-status-items = { $n } 项
 fm-loading = 正在加载…
-fm-status-selected = 已选 { $n } 项
-fm-status-total-size = { $size }
 fm-status-bar = { $items } 项，已选 { $selected } 项
 fm-status-managed = { $items } 项，已选 { $selected } 项 · { $tracked } 已摄取，{ $dedup } 已去重
 fm-encrypted = 已加密：{ $name }
@@ -494,8 +490,6 @@ fm-transfer-already-exists = 已存在同名文件
 fm-transfer-virtual-dest = 无法复制或移动到虚拟文件夹
 fm-clipboard-copy = { $count } 个条目可供粘贴
 fm-clipboard-cut = { $count } 个条目（剪切）可供粘贴
-fm-sidebar-tags = 标签
-fm-sidebar-recent = 最近
 fm-sidebar-network = 网络
 fm-sidebar-network-all = 所有位置
 fm-category-images = 图片

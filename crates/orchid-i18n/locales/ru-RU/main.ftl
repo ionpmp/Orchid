@@ -336,7 +336,6 @@ viewer-text-unsaved-body = Сохранить изменения перед за
 viewer-text-discard = Не сохранять
 viewer-archive-extract-all = Извлечь всё
 viewer-archive-extract-selected = Извлечь выбранные
-viewer-archive-preview-binary = Бинарный файл, { $size }
 
 # ==== File manager widget ====
 widget-fm-name = Файлы
@@ -421,10 +420,7 @@ fm-properties-mime = MIME: { $mime }
 fm-tag-add-title = Добавить тег
 fm-confirm-delete = Удалить { $n } элементов?
 fm-confirm-delete-permanent = Удалить { $n } элементов безвозвратно?
-fm-status-items = { $n } элементов
 fm-loading = Загрузка…
-fm-status-selected = { $n } выделено
-fm-status-total-size = { $size }
 fm-status-bar = { $items } элементов, { $selected } выделено
 fm-status-managed = { $items } элементов, { $selected } выделено · { $tracked } загружено, { $dedup } сэкономлено
 fm-encrypted = Зашифровано: { $name }
@@ -481,8 +477,6 @@ fm-transfer-already-exists = Файл с таким именем уже суще
 fm-transfer-virtual-dest = Нельзя копировать или перемещать в виртуальную папку
 fm-clipboard-copy = { $count } объектов готово к вставке
 fm-clipboard-cut = { $count } объектов (вырезано) готово к вставке
-fm-sidebar-tags = Теги
-fm-sidebar-recent = Недавние
 fm-sidebar-network = Сеть
 fm-sidebar-network-all = Все места
 fm-category-images = Изображения

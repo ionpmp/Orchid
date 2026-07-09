@@ -350,7 +350,6 @@ viewer-text-discard = تجاهل
 viewer-text-dirty-indicator = تغييرات غير محفوظة
 viewer-archive-extract-all = استخراج الكل
 viewer-archive-extract-selected = استخراج المحدد
-viewer-archive-preview-binary = ملف ثنائي، { $size }
 
 # ==== File manager widget ====
 widget-fm-name = الملفات
@@ -435,10 +434,7 @@ fm-properties-mime = MIME: { $mime }
 fm-tag-add-title = إضافة وسم
 fm-confirm-delete = حذف { $n } عناصر؟
 fm-confirm-delete-permanent = حذف { $n } عناصر نهائيًا؟
-fm-status-items = { $n } عناصر
 fm-loading = جارٍ التحميل…
-fm-status-selected = { $n } محدد
-fm-status-total-size = { $size }
 fm-status-bar = { $items } عناصر، { $selected } محدد
 fm-status-managed = { $items } عناصر، { $selected } محدد · { $tracked } مُستَوعَب، { $dedup } مُزال التكرار
 fm-encrypted = مُشفّر: { $name }
@@ -495,8 +491,6 @@ fm-transfer-already-exists = يوجد ملف بهذا الاسم بالفعل
 fm-transfer-virtual-dest = لا يمكن النسخ أو النقل إلى مجلد افتراضي
 fm-clipboard-copy = { $count } إدخالات جاهزة للصق
 fm-clipboard-cut = { $count } إدخالات (قص) جاهزة للصق
-fm-sidebar-tags = الوسوم
-fm-sidebar-recent = الأخيرة
 fm-sidebar-network = الشبكة
 fm-sidebar-network-all = جميع الأماكن
 fm-category-images = صور

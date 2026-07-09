@@ -349,7 +349,6 @@ viewer-text-discard = Descartar
 viewer-text-dirty-indicator = Cambios sin guardar
 viewer-archive-extract-all = Extraer todo
 viewer-archive-extract-selected = Extraer selección
-viewer-archive-preview-binary = Archivo binario, { $size }
 
 # ==== File manager widget ====
 widget-fm-name = Archivos
@@ -434,10 +433,7 @@ fm-properties-mime = MIME: { $mime }
 fm-tag-add-title = Añadir etiqueta
 fm-confirm-delete = ¿Eliminar { $n } elementos?
 fm-confirm-delete-permanent = ¿Eliminar permanentemente { $n } elementos?
-fm-status-items = { $n } elementos
 fm-loading = Cargando…
-fm-status-selected = { $n } seleccionados
-fm-status-total-size = { $size }
 fm-status-bar = { $items } elementos, { $selected } seleccionados
 fm-status-managed = { $items } elementos, { $selected } seleccionados · { $tracked } ingeridos, { $dedup } deduplicados
 fm-encrypted = Cifrado: { $name }
@@ -494,8 +490,6 @@ fm-transfer-already-exists = Ya existe un archivo con ese nombre
 fm-transfer-virtual-dest = No se puede copiar o mover a una carpeta virtual
 fm-clipboard-copy = { $count } entradas listas para pegar
 fm-clipboard-cut = { $count } entradas (cortar) listas para pegar
-fm-sidebar-tags = Etiquetas
-fm-sidebar-recent = Recientes
 fm-sidebar-network = Red
 fm-sidebar-network-all = Todos los lugares
 fm-category-images = Imágenes

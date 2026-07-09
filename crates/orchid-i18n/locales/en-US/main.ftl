@@ -351,7 +351,6 @@ viewer-text-unsaved-body = Save changes before closing?
 viewer-text-discard = Discard
 viewer-archive-extract-all = Extract all
 viewer-archive-extract-selected = Extract selected
-viewer-archive-preview-binary = Binary file, { $size }
 
 # ==== File manager widget ====
 widget-fm-name = Files
@@ -436,10 +435,7 @@ fm-properties-mime = MIME: { $mime }
 fm-tag-add-title = Add tag
 fm-confirm-delete = Delete { $n } items?
 fm-confirm-delete-permanent = Permanently delete { $n } items?
-fm-status-items = { $n } items
 fm-loading = Loading…
-fm-status-selected = { $n } selected
-fm-status-total-size = { $size }
 fm-status-bar = { $items } items, { $selected } selected
 fm-status-managed = { $items } items, { $selected } selected · { $tracked } ingested, { $dedup } deduped
 fm-encrypted = Encrypted: { $name }
@@ -496,8 +492,6 @@ fm-transfer-already-exists = A file with that name already exists
 fm-transfer-virtual-dest = Cannot copy or move into a virtual folder
 fm-clipboard-copy = { $count } entries ready to paste
 fm-clipboard-cut = { $count } entries (cut) ready to paste
-fm-sidebar-tags = Tags
-fm-sidebar-recent = Recent
 fm-sidebar-network = Network
 fm-sidebar-network-all = All places
 fm-category-images = Images

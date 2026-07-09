@@ -99,6 +99,7 @@ export component WorkspaceView inherits Rectangle {
     callback fm-nav-back(string, int);
     callback fm-nav-forward(string, int);
     callback fm-nav-up(string, int);
+    callback fm-nav-home(string, int);
     callback fm-breadcrumb-clicked(string, int, string);
     callback fm-view-mode-cycle(string, int);
     callback fm-sort-cycle(string, int);
@@ -358,6 +359,7 @@ export component WorkspaceView inherits Rectangle {
                     fm-nav-back(fm_id, p) => { root.fm-nav-back(fm_id, p); }
                     fm-nav-forward(fm_id, p) => { root.fm-nav-forward(fm_id, p); }
                     fm-nav-up(fm_id, p) => { root.fm-nav-up(fm_id, p); }
+                    fm-nav-home(fm_id, p) => { root.fm-nav-home(fm_id, p); }
                     fm-breadcrumb-clicked(fm_id, p, path) => { root.fm-breadcrumb-clicked(fm_id, p, path); }
                     fm-view-mode-cycle(fm_id, p) => { root.fm-view-mode-cycle(fm_id, p); }
                     fm-sort-cycle(fm_id, p) => { root.fm-sort-cycle(fm_id, p); }

@@ -2075,6 +2075,11 @@ pub async fn navigate_up(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Jump the active tab to the user's home directory (or a local root fallback).
+pub async fn navigate_home(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    navigate(instance_id, pane, default_initial_path()).await
+}
+
 /// Switch to tab by string id.
 pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

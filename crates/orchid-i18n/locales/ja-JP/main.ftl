@@ -349,7 +349,6 @@ viewer-text-discard = 破棄
 viewer-text-dirty-indicator = 未保存の変更
 viewer-archive-extract-all = すべて展開
 viewer-archive-extract-selected = 選択項目を展開
-viewer-archive-preview-binary = バイナリファイル、{ $size }
 
 # ==== File manager widget ====
 widget-fm-name = ファイル
@@ -434,10 +433,7 @@ fm-properties-mime = MIME: { $mime }
 fm-tag-add-title = タグを追加
 fm-confirm-delete = { $n } 項目を削除しますか？
 fm-confirm-delete-permanent = { $n } 項目を完全に削除しますか？
-fm-status-items = { $n } 項目
 fm-loading = 読み込み中…
-fm-status-selected = { $n } 件選択
-fm-status-total-size = { $size }
 fm-status-bar = { $items } 項目、{ $selected } 件選択
 fm-status-managed = { $items } 項目、{ $selected } 件選択 · { $tracked } 取り込み、{ $dedup } 重複排除
 fm-encrypted = 暗号化済み: { $name }
@@ -494,8 +490,6 @@ fm-transfer-already-exists = その名前のファイルは既に存在します
 fm-transfer-virtual-dest = 仮想フォルダーにはコピーまたは移動できません
 fm-clipboard-copy = { $count } 件を貼り付け可能
 fm-clipboard-cut = { $count } 件（切り取り）を貼り付け可能
-fm-sidebar-tags = タグ
-fm-sidebar-recent = 最近
 fm-sidebar-network = ネットワーク
 fm-sidebar-network-all = すべての場所
 fm-category-images = 画像

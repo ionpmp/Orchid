@@ -349,7 +349,6 @@ viewer-text-discard = 버리기
 viewer-text-dirty-indicator = 저장되지 않은 변경 사항
 viewer-archive-extract-all = 모두 추출
 viewer-archive-extract-selected = 선택 항목 추출
-viewer-archive-preview-binary = 바이너리 파일, { $size }
 
 # ==== File manager widget ====
 widget-fm-name = 파일
@@ -434,10 +433,7 @@ fm-properties-mime = MIME: { $mime }
 fm-tag-add-title = 태그 추가
 fm-confirm-delete = { $n }개 항목을 삭제하시겠습니까?
 fm-confirm-delete-permanent = { $n }개 항목을 영구 삭제하시겠습니까?
-fm-status-items = { $n }개 항목
 fm-loading = 로드 중…
-fm-status-selected = { $n }개 선택됨
-fm-status-total-size = { $size }
 fm-status-bar = { $items }개 항목, { $selected }개 선택됨
 fm-status-managed = { $items }개 항목, { $selected }개 선택됨 · { $tracked }개 수집, { $dedup }개 중복 제거
 fm-encrypted = 암호화됨: { $name }
@@ -494,8 +490,6 @@ fm-transfer-already-exists = 해당 이름의 파일이 이미 있습니다
 fm-transfer-virtual-dest = 가상 폴더로 복사하거나 이동할 수 없습니다
 fm-clipboard-copy = { $count }개 항목 붙여넣기 준비됨
 fm-clipboard-cut = { $count }개 항목(잘라내기) 붙여넣기 준비됨
-fm-sidebar-tags = 태그
-fm-sidebar-recent = 최근
 fm-sidebar-network = 네트워크
 fm-sidebar-network-all = 모든 위치
 fm-category-images = 이미지

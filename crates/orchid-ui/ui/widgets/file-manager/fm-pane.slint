@@ -27,6 +27,7 @@ export component FmPane inherits Rectangle {
     callback nav-back();
     callback nav-forward();
     callback nav-up();
+    callback nav-home();
     callback breadcrumb-clicked(string);
     callback view-mode-cycle();
     callback sort-cycle();
@@ -145,6 +146,7 @@ export component FmPane inherits Rectangle {
                 back => { root.nav-back(); }
                 forward => { root.nav-forward(); }
                 up => { root.nav-up(); }
+                home => { root.nav-home(); }
                 view-mode-cycle => { root.view-mode-cycle(); }
                 sort-cycle => { root.sort-cycle(); }
                 quick-filter-changed(q) => { root.quick-filter-changed(q); }
