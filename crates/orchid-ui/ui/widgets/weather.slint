@@ -41,14 +41,41 @@ export component WeatherView inherits Rectangle {
             }
 
             Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
-                background:
-                    model.status == 0 ? #22c55e :
-                    model.status == 1 ? #eab308 :
-                    model.status == 2 ? #6b7280 :
-                    #ef4444;
+                width: 16px;
+                height: 16px;
+                y: (parent.height - self.height) / 2;
+
+                status-ta := TouchArea { }
+                if status-ta.has-hover : Rectangle {
+                    x: parent.x + parent.width - status-hint.preferred-width - 12px;
+                    y: parent.height + 2px;
+                    width: status-hint.preferred-width + 12px;
+                    height: status-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    status-hint := Text {
+                        x: 6px; y: 3px;
+                        text: model.status-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 4px;
+                    background:
+                        model.status == 0 ? #22c55e :
+                        model.status == 1 ? #eab308 :
+                        model.status == 2 ? #6b7280 :
+                        #ef4444;
+                }
             }
         }
 

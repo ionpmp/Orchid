@@ -534,6 +534,7 @@ onboarding-back = رجوع
 onboarding-next = التالي
 onboarding-skip = تخطّي الجولة
 onboarding-finish = البدء
+onboarding-step-progress = الخطوة { $current } من { $total }
 onboarding-step-welcome-title = مرحبًا بك في Orchid
 onboarding-step-welcome-body = Orchid بيئة تُصمَّم للمس أولًا، حيث الإيماءات والأوامر وعناصر الواجهة ثلاثة أشكال لنفس الإجراء. هذه الجولة القصيرة تعرّفك بالأساسيات.
 onboarding-step-workspace-title = مساحة عملك

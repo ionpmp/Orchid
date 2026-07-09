@@ -533,6 +533,7 @@ onboarding-back = Indietro
 onboarding-next = Avanti
 onboarding-skip = Salta tour
 onboarding-finish = Inizia
+onboarding-step-progress = Passo { $current } di { $total }
 onboarding-step-welcome-title = Benvenuto in Orchid
 onboarding-step-welcome-body = Orchid è un ambiente touch-first in cui gesti, comandi e widget sono tre forme della stessa azione. Questo breve tour mostra l'essenziale.
 onboarding-step-workspace-title = Il tuo spazio di lavoro

@@ -533,6 +533,7 @@ onboarding-back = 戻る
 onboarding-next = 次へ
 onboarding-skip = ツアーをスキップ
 onboarding-finish = はじめる
+onboarding-step-progress = { $total } 中 { $current } ステップ
 onboarding-step-welcome-title = Orchid へようこそ
 onboarding-step-welcome-body = Orchid はタッチファーストのワークスペースで、ジェスチャー、コマンド、ウィジェットは同じ操作の 3 つの形です。この短いツアーで基本を紹介します。
 onboarding-step-workspace-title = ワークスペース

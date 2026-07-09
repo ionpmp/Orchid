@@ -2930,6 +2930,13 @@ impl MainWindowController {
         g.set_overlay_visible(ob.overlay_visible);
         g.set_current_step(step as i32);
         g.set_step_count(ONBOARDING_STEP_COUNT);
+        let progress = self.locale.tr_args(
+            "onboarding-step-progress",
+            &orchid_i18n::FluentArgs::new()
+                .with("current", (step + 1).to_string())
+                .with("total", ONBOARDING_STEP_COUNT.to_string()),
+        );
+        g.set_step_progress_label(progress.into());
         g.set_step_title(self.locale.tr(title_key).into());
         g.set_step_body(self.locale.tr(body_key).into());
         g.set_back_label(self.locale.tr("onboarding-back").into());
@@ -8436,6 +8443,7 @@ fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
         forecast: ModelRc::new(VecModel::default()),
         last_updated: locale.tr("weather-loading").into(),
         status: 2,
+        status_label: locale.tr("weather-status-offline").into(),
     }
 }
 
@@ -10890,6 +10898,7 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
             .unwrap_or_default()
     };
 
+    let status = weather_status_to_int(&p.status);
     WeatherModel {
         location: p.location_name.clone().into(),
         current_temp: if p.is_loading {
@@ -10904,7 +10913,8 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
         wind: wind.into(),
         forecast: ModelRc::new(VecModel::from(forecast)),
         last_updated: last_updated.into(),
-        status: weather_status_to_int(&p.status),
+        status,
+        status_label: locale.tr(weather_status_i18n_key(status)).into(),
     }
 }
 
@@ -11043,6 +11053,15 @@ fn weather_status_to_int(s: &orchid_widgets::WeatherStatusTag) -> i32 {
         Stale => 1,
         Offline => 2,
         Error => 3,
+    }
+}
+
+fn weather_status_i18n_key(status: i32) -> &'static str {
+    match status {
+        0 => "weather-status-fresh",
+        1 => "weather-status-stale",
+        2 => "weather-status-offline",
+        _ => "weather-status-error",
     }
 }
 

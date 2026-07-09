@@ -533,6 +533,7 @@ onboarding-back = 返回
 onboarding-next = 下一步
 onboarding-skip = 跳过导览
 onboarding-finish = 开始使用
+onboarding-step-progress = 第 { $current } 步，共 { $total } 步
 onboarding-step-welcome-title = 欢迎使用 Orchid
 onboarding-step-welcome-body = Orchid 是一个触控优先的工作区，手势、命令和小组件是同一操作的三种形式。本简短导览将介绍基本功能。
 onboarding-step-workspace-title = 您的工作区

@@ -533,6 +533,7 @@ onboarding-back = 뒤로
 onboarding-next = 다음
 onboarding-skip = 투어 건너뛰기
 onboarding-finish = 시작하기
+onboarding-step-progress = { $total }단계 중 { $current }단계
 onboarding-step-welcome-title = Orchid에 오신 것을 환영합니다
 onboarding-step-welcome-body = Orchid는 제스처, 명령, 위젯이 같은 동작의 세 가지 형태인 터치 우선 작업 공간입니다. 이 짧은 투어에서 기본을 안내합니다.
 onboarding-step-workspace-title = 작업 공간

@@ -47,7 +47,7 @@ export component OnboardingOverlay inherits Rectangle {
                 spacing: Theme.spacing-unit;
 
                 Text {
-                    text: "{OnboardingGlobal.current-step + 1} / {OnboardingGlobal.step-count}";
+                    text: OnboardingGlobal.step-progress-label;
                     color: Theme.text-tertiary;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;

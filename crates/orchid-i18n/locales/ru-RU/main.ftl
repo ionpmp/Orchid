@@ -522,6 +522,7 @@ onboarding-back = Назад
 onboarding-next = Далее
 onboarding-skip = Пропустить тур
 onboarding-finish = Начать
+onboarding-step-progress = Шаг { $current } из { $total }
 
 onboarding-step-welcome-title = Добро пожаловать в Orchid
 onboarding-step-welcome-body = Orchid — среда для сенсорных устройств, где жесты, команды и виджеты — три формы одного действия. Этот короткий тур покажет основы.

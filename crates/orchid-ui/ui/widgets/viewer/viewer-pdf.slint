@@ -101,11 +101,37 @@ export component ViewerPdfView inherits Rectangle {
                     }
                 }
 
-                Text {
-                    text: "/ " + model.page-count;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
+                Rectangle {
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    width: max(28px, page-total.preferred-width + 8px);
+
+                    page-total-ta := TouchArea { }
+                    if page-total-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: page-of-hint.preferred-width + 12px;
+                        height: page-of-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        page-of-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.page-of-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+
+                    page-total := Text {
+                        text: "/ " + model.page-count;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
 
                 Rectangle {
