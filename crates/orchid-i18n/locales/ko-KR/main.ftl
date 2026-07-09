@@ -71,6 +71,9 @@ weather-loading = 날씨 로드 중…
 weather-feels-like = 체감 { $temp }
 weather-humidity-label = 습도
 weather-wind-label = 바람
+weather-humidity-line = { $label } { $h }%
+weather-wind-line = { $label } { $speed } km/h { $dir }
+weather-wind-line-no-dir = { $label } { $speed } km/h
 
 # ---- Moon ----
 moon-phase-new = 신월

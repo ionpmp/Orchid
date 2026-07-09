@@ -71,6 +71,9 @@ weather-loading = 正在加载天气…
 weather-feels-like = 体感 { $temp }
 weather-humidity-label = 湿度
 weather-wind-label = 风
+weather-humidity-line = { $label } { $h }%
+weather-wind-line = { $label } { $speed } km/h { $dir }
+weather-wind-line-no-dir = { $label } { $speed } km/h
 
 # ---- Moon ----
 moon-phase-new = 新月

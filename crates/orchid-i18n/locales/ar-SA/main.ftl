@@ -71,6 +71,9 @@ weather-loading = جارٍ تحميل الطقس…
 weather-feels-like = يشعر كـ { $temp }
 weather-humidity-label = الرطوبة
 weather-wind-label = الرياح
+weather-humidity-line = { $label } { $h }%
+weather-wind-line = { $label } { $speed } km/h { $dir }
+weather-wind-line-no-dir = { $label } { $speed } km/h
 
 # ---- Moon ----
 moon-phase-new = محاق

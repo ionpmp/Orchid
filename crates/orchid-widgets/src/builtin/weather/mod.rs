@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::error::{Result as WidgetResult, WidgetError};
+use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::refresh::PeriodicRefresh;
@@ -378,8 +378,3 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
         factory,
     }
 }
-
-// Used by the error match arm above; satisfies the compiler that we carried
-// the variant through.
-#[allow(dead_code)]
-fn _assert_error_type(_: &WidgetError) {}

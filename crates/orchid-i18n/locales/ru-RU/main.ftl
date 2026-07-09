@@ -66,6 +66,9 @@ weather-loading = Загрузка погоды…
 weather-feels-like = Ощущается как { $temp }
 weather-humidity-label = Влажность
 weather-wind-label = Ветер
+weather-humidity-line = { $label } { $h }%
+weather-wind-line = { $label } { $speed } км/ч { $dir }
+weather-wind-line-no-dir = { $label } { $speed } км/ч
 
 # ---- Moon ----
 moon-phase-new = Новолуние

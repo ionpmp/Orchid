@@ -71,6 +71,9 @@ weather-loading = Chargement de la météo…
 weather-feels-like = Ressenti { $temp }
 weather-humidity-label = Humidité
 weather-wind-label = Vent
+weather-humidity-line = { $label } { $h }%
+weather-wind-line = { $label } { $speed } km/h { $dir }
+weather-wind-line-no-dir = { $label } { $speed } km/h
 
 # ---- Moon ----
 moon-phase-new = Nouvelle lune

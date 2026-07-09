@@ -9822,12 +9822,30 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
 
     let humidity = p
         .humidity_percent
-        .map(|h| format!("{h}%"))
+        .map(|h| {
+            locale.tr_args(
+                "weather-humidity-line",
+                &orchid_i18n::FluentArgs::new()
+                    .with("label", locale.tr("weather-humidity-label"))
+                    .with("h", h.to_string()),
+            )
+        })
         .unwrap_or_default();
 
     let wind = match (p.wind_speed_kph, p.wind_direction.as_deref()) {
-        (Some(kph), Some(dir)) if !dir.is_empty() => format!("{kph:.0} km/h {dir}"),
-        (Some(kph), _) => format!("{kph:.0} km/h"),
+        (Some(kph), Some(dir)) if !dir.is_empty() => locale.tr_args(
+            "weather-wind-line",
+            &orchid_i18n::FluentArgs::new()
+                .with("label", locale.tr("weather-wind-label"))
+                .with("speed", format!("{kph:.0}"))
+                .with("dir", dir.to_string()),
+        ),
+        (Some(kph), _) => locale.tr_args(
+            "weather-wind-line-no-dir",
+            &orchid_i18n::FluentArgs::new()
+                .with("label", locale.tr("weather-wind-label"))
+                .with("speed", format!("{kph:.0}")),
+        ),
         _ => String::new(),
     };
 
@@ -9951,6 +9969,39 @@ mod tests {
             format_weather_updated(at, &locale),
             locale.tr("weather-updated-just-now")
         );
+    }
+
+    #[test]
+    fn build_weather_model_localizes_humidity_and_wind() {
+        let locale = test_locale();
+        let model = build_weather_model(
+            &orchid_widgets::WeatherPayload {
+                location_name: "Home".into(),
+                current_temp_text: "20°C".into(),
+                feels_like_temp: None,
+                condition_key: "weather-condition-clear",
+                condition_icon: "weather-clear",
+                humidity_percent: Some(45),
+                wind_speed_kph: Some(12.0),
+                wind_direction: Some("NE".into()),
+                forecast: vec![],
+                fetched_at: None,
+                is_loading: false,
+                status: orchid_widgets::WeatherStatusTag::Fresh,
+            },
+            &locale,
+        );
+        assert_eq!(
+            model.humidity.as_str(),
+            locale.tr_args(
+                "weather-humidity-line",
+                &orchid_i18n::FluentArgs::new()
+                    .with("label", locale.tr("weather-humidity-label"))
+                    .with("h", "45"),
+            )
+        );
+        assert!(model.wind.as_str().contains("NE"));
+        assert!(model.wind.as_str().contains("12"));
     }
 }
 
