@@ -3581,6 +3581,35 @@ impl MainWindowController {
                 return;
             }
             let (pos, _) = le.snap(pos, size);
+
+            // Alt+drop away from another header → detach this member from its group.
+            let alt_detach = c
+                .keyboard_modifiers
+                .lock()
+                .contains(slint::winit_030::winit::keyboard::ModifiersState::ALT);
+            if alt_detach {
+                if let Some(group) = c.group_manager.find_for_instance(u) {
+                    if group.members.len() >= 2 {
+                        if group.members.len() <= 2 {
+                            let _ = c.dissolve_group_internal(group.id).await;
+                        } else {
+                            let _ = c.group_manager.remove_from_group(group.id, u).await;
+                            if let Ok(inst) = wm.get_instance(u) {
+                                *inst.group_id.write() = None;
+                            }
+                        }
+                        if let Err(e) = wm.move_to(u, pos).await {
+                            warn!(?e, "move after ungroup");
+                        }
+                        if let Some(c) = t.upgrade() {
+                            end_drag(&c);
+                            c.schedule_rebuild();
+                        }
+                        return;
+                    }
+                }
+            }
+
             if let Err(e) = wm.move_to(u, pos).await {
                 warn!(?e, "move");
             }
@@ -8433,7 +8462,7 @@ fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         empty: ViewerEmptyModel {
             placeholder_text: locale.tr("viewer-no-file").into(),
         },
-        image: empty_viewer_image_model(),
+        image: empty_viewer_image_model(locale),
         pdf: empty_viewer_pdf_model(locale),
         text: empty_viewer_text_model(locale),
         archive: empty_viewer_archive_model(locale),
@@ -9929,7 +9958,7 @@ fn build_context_menu(
     }
 }
 
-fn empty_viewer_image_model() -> ViewerImageModel {
+fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
     ViewerImageModel {
         width_px: 0,
         height_px: 0,
@@ -9942,6 +9971,8 @@ fn empty_viewer_image_model() -> ViewerImageModel {
         flipped_v: false,
         info_text: SharedString::new(),
         path_display: SharedString::new(),
+        fit_label: locale.tr("viewer-image-fit-screen").into(),
+        actual_size_label: locale.tr("viewer-image-actual-size").into(),
     }
 }
 
@@ -10052,7 +10083,7 @@ fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel 
         }
         Vs::Image(s) => {
             model.kind = 3;
-            model.image = build_image_snapshot(s);
+            model.image = build_image_snapshot(s, locale);
         }
         Vs::Pdf(s) => {
             model.kind = 4;
@@ -10071,7 +10102,10 @@ fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel 
     model
 }
 
-fn build_image_snapshot(s: &orchid_viewers::ImageSnapshot) -> ViewerImageModel {
+fn build_image_snapshot(
+    s: &orchid_viewers::ImageSnapshot,
+    locale: &LocaleManager,
+) -> ViewerImageModel {
     let image = if s.width_px > 0 && s.height_px > 0 && !s.rgba_bytes.is_empty() {
         let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
             s.rgba_bytes.as_slice(),
@@ -10095,6 +10129,8 @@ fn build_image_snapshot(s: &orchid_viewers::ImageSnapshot) -> ViewerImageModel {
         flipped_v: s.flipped_vertical,
         info_text: s.info_text.clone().into(),
         path_display: s.path_display.clone().into(),
+        fit_label: locale.tr("viewer-image-fit-screen").into(),
+        actual_size_label: locale.tr("viewer-image-actual-size").into(),
     }
 }
 
