@@ -705,6 +705,7 @@ moon-libration-label = Libration
 
 widget-title-terminal = الطرفية
 widget-close-tooltip = إغلاق عنصر الواجهة
+widget-resize-tooltip = تغيير حجم عنصر الواجهة
 widget-close-confirm = إغلاق { $name }؟
 action-confirm-yes = نعم
 action-confirm-no = لا

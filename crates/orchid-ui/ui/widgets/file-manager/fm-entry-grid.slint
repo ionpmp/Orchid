@@ -214,6 +214,23 @@ export component FmEntryGrid inherits Rectangle {
                     }
                 }
             }
+            if tile-ta.has-hover && !(rename.active && entry.path == rename.path) : Rectangle {
+                x: 4px;
+                y: parent.height + 2px;
+                width: name-hint.preferred-width + 12px;
+                height: name-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                name-hint := Text {
+                    x: 6px; y: 3px;
+                    text: entry.name;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
         }
     }
 }

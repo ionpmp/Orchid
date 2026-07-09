@@ -571,6 +571,7 @@ impl MainWindowController {
         g.set_catalog_title(mgr.tr("catalog-title").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+        g.set_widget_resize_tooltip(mgr.tr("widget-resize-tooltip").into());
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
         g.set_recent_files_open_hint(mgr.tr("recent-files-open-hint").into());
         g.set_rss_open_item_hint(mgr.tr("rss-open-item-hint").into());

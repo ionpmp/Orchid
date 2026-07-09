@@ -47,6 +47,23 @@ export component SettingsPanel inherits Rectangle {
                             root.section-selected(i);
                         }
                     }
+                    if sec-ta.has-hover : Rectangle {
+                        x: parent.width + 4px;
+                        y: parent.y;
+                        width: sec-hint.preferred-width + 12px;
+                        height: sec-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        sec-hint := Text {
+                            x: 6px; y: 3px;
+                            text: sec.label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
 
                     Text {
                         x: 12px;
@@ -55,6 +72,9 @@ export component SettingsPanel inherits Rectangle {
                             ? Theme.accent-brand : Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        wrap: no-wrap;
+                        overflow: elide;
+                        width: parent.width - 16px;
                     }
                 }
             }

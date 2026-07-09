@@ -704,6 +704,7 @@ moon-libration-label = Libration
 
 widget-title-terminal = Terminal
 widget-close-tooltip = Cerrar widget
+widget-resize-tooltip = Cambiar tamaño del widget
 widget-close-confirm = ¿Cerrar { $name }?
 action-confirm-yes = Sí
 action-confirm-no = No

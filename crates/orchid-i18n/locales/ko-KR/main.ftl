@@ -704,6 +704,7 @@ moon-libration-label = Libration
 
 widget-title-terminal = 터미널
 widget-close-tooltip = 위젯 닫기
+widget-resize-tooltip = 위젯 크기 조절
 widget-close-confirm = { $name }을(를) 닫으시겠습니까?
 action-confirm-yes = 예
 action-confirm-no = 아니오

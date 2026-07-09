@@ -706,6 +706,7 @@ moon-libration-label = Либрация
 
 widget-title-terminal = Терминал
 widget-close-tooltip = Закрыть виджет
+widget-resize-tooltip = Изменить размер виджета
 widget-close-confirm = Закрыть { $name }?
 action-confirm-yes = Да
 action-confirm-no = Нет

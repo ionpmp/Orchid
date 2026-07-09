@@ -704,6 +704,7 @@ moon-libration-label = Libration
 
 widget-title-terminal = ターミナル
 widget-close-tooltip = ウィジェットを閉じる
+widget-resize-tooltip = ウィジェットのサイズ変更
 widget-close-confirm = { $name } を閉じますか？
 action-confirm-yes = はい
 action-confirm-no = いいえ

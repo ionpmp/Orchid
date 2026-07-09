@@ -704,6 +704,7 @@ moon-libration-label = Libration
 
 widget-title-terminal = 终端
 widget-close-tooltip = 关闭小组件
+widget-resize-tooltip = 调整小组件大小
 widget-close-confirm = 关闭 { $name }？
 action-confirm-yes = 是
 action-confirm-no = 否

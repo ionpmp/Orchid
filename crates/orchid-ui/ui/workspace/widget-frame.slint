@@ -532,6 +532,23 @@ export component WidgetFrame inherits Rectangle {
             }
         }
     }
+    if resize-se.has-hover : Rectangle {
+        x: parent.width - resize-se-hint.preferred-width - 16px;
+        y: parent.height - 36px;
+        width: resize-se-hint.preferred-width + 12px;
+        height: resize-se-hint.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 100;
+        resize-se-hint := Text {
+            x: 6px; y: 3px;
+            text: Strings.widget-resize-tooltip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
+    }
 
     resize-sw := TouchArea {
         x: 0;
@@ -553,6 +570,23 @@ export component WidgetFrame inherits Rectangle {
             } else if (event.kind == PointerEventKind.up) {
                 root.resize-ended();
             }
+        }
+    }
+    if resize-sw.has-hover : Rectangle {
+        x: 4px;
+        y: parent.height - 36px;
+        width: resize-sw-hint.preferred-width + 12px;
+        height: resize-sw-hint.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 100;
+        resize-sw-hint := Text {
+            x: 6px; y: 3px;
+            text: Strings.widget-resize-tooltip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
         }
     }
 
@@ -578,6 +612,23 @@ export component WidgetFrame inherits Rectangle {
             }
         }
     }
+    if resize-ne.has-hover : Rectangle {
+        x: parent.width - resize-ne-hint.preferred-width - 16px;
+        y: 48px;
+        width: resize-ne-hint.preferred-width + 12px;
+        height: resize-ne-hint.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 100;
+        resize-ne-hint := Text {
+            x: 6px; y: 3px;
+            text: Strings.widget-resize-tooltip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
+    }
 
     resize-nw := TouchArea {
         x: 0;
@@ -599,6 +650,23 @@ export component WidgetFrame inherits Rectangle {
             } else if (event.kind == PointerEventKind.up) {
                 root.resize-ended();
             }
+        }
+    }
+    if resize-nw.has-hover : Rectangle {
+        x: 4px;
+        y: 48px;
+        width: resize-nw-hint.preferred-width + 12px;
+        height: resize-nw-hint.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 100;
+        resize-nw-hint := Text {
+            x: 6px; y: 3px;
+            text: Strings.widget-resize-tooltip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
         }
     }
 
