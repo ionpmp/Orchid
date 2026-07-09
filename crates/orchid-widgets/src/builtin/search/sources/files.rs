@@ -54,7 +54,7 @@ impl SearchSource for FilesSource {
                 id: format!("file:{}", h.path),
                 source_id: "files",
                 title: h.name,
-                subtitle: Some(h.path.clone()),
+                subtitle: Some(file_hit_subtitle(&h.path, h.snippet.as_ref())),
                 icon: "search-files",
                 // Tantivy scores are f32 in (~0..=30); keep the relative
                 // ordering by scaling into i32.
@@ -63,5 +63,52 @@ impl SearchSource for FilesSource {
                 action_target: ActionTarget::OpenFile(h.path),
             })
             .collect()
+    }
+}
+
+fn file_hit_subtitle(path: &str, snippet: Option<&orchid_search::Snippet>) -> String {
+    let Some(snippet) = snippet else {
+        return path.to_string();
+    };
+    let collapsed: String = snippet
+        .text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if collapsed.is_empty() {
+        return path.to_string();
+    }
+    let excerpt: String = if collapsed.chars().count() > 100 {
+        let truncated: String = collapsed.chars().take(100).collect();
+        format!("{truncated}…")
+    } else {
+        collapsed
+    };
+    format!("{path} — {excerpt}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use orchid_search::Snippet;
+
+    #[test]
+    fn subtitle_falls_back_to_path_without_snippet() {
+        assert_eq!(
+            file_hit_subtitle("local:/a/b.txt", None),
+            "local:/a/b.txt"
+        );
+    }
+
+    #[test]
+    fn subtitle_includes_collapsed_snippet() {
+        let sn = Snippet {
+            text: "  hello\n  world  ".into(),
+            highlights: vec![(0, 5)],
+        };
+        let out = file_hit_subtitle("local:/note.md", Some(&sn));
+        assert!(out.starts_with("local:/note.md — "));
+        assert!(out.contains("hello world"));
+        assert!(!out.contains('\n'));
     }
 }

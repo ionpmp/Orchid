@@ -50,7 +50,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Inline graphics (sixel + kitty) — deferred to v1.x
 
 ### Widgets
-- [~] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge and the Slint workspace dashboard (switcher, layout grid, drag/resize hooks). Remaining polish: workspace drag/resize UX, dock animations, and deeper group-tab UI.
+- [~] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge and the Slint workspace dashboard (switcher, layout grid, drag/resize hooks, dock show/hide + hover animations). Remaining polish: workspace drag/resize UX and deeper group-tab UI.
 - [x] Widget: Weather
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators
@@ -82,7 +82,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### Search
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown
 - [x] File watcher for incremental updates — `IndexFsSubscriber` consumes `fs.created/modified/deleted/renamed/tags_changed` events, extracts text/PDF content, enqueues into `IndexScheduler`
-- [x] Universal search (files + commands + settings) — live settings editor for theme/locale/density/bools; complex shortcut/leader fields stay read-only; search debouncer hardening + `SEARCH_LIVE` miss metrics
+- [x] Universal search (files + commands + settings) — live settings editor for theme/locale/density/bools; complex shortcut/leader fields stay read-only; search debouncer hardening + `SEARCH_LIVE` miss metrics; file hits show Tantivy content snippets in the subtitle when available
 
 ### UX
 - [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml (main window + startup window)

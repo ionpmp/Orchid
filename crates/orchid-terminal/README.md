@@ -19,4 +19,4 @@ When the Orchid process exits, spawned child processes are terminated via `porta
 
 - OSC 0, 1, 2 — window title (emits `TerminalTitleChanged`).
 - OSC 7 — working directory (emits `TerminalCwdChanged`).
-- OSC 52 — clipboard write. Logged and dropped for MVP; the UI clipboard integration in `orchid-ui` will wire it to the real system clipboard via `arboard`.
+- OSC 52 — clipboard write. Emits `TerminalClipboardWrite`; `orchid-ui` subscribes and copies the payload to the system clipboard via `arboard`.

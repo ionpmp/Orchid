@@ -167,6 +167,10 @@ export component WorkspaceView inherits Rectangle {
     }
 
     property <length> dock-height: NavigationGlobal.dock-visible ? 64px : 0px;
+    animate dock-height {
+        duration: Theme.reduce-motion ? 0ms : 180ms;
+        easing: ease-out;
+    }
 
     canvas := Rectangle {
         x: 0;
@@ -407,11 +411,17 @@ export component WorkspaceView inherits Rectangle {
         }
     }
 
-    if NavigationGlobal.dock-visible: WidgetDock {
+    WidgetDock {
         x: 0;
-        y: parent.height - 64px;
+        y: parent.height - root.dock-height;
         width: parent.width;
-        height: 64px;
+        height: root.dock-height;
+        clip: true;
+        opacity: NavigationGlobal.dock-visible ? 1.0 : 0.0;
+        animate opacity {
+            duration: Theme.reduce-motion ? 0ms : 160ms;
+            easing: ease-out;
+        }
         dock-types: root.workspace.dock-types;
         dock-add-label: root.workspace.dock-add-label;
         add-clicked(type-id) => { root.dock-add-clicked(type-id); }
@@ -419,11 +429,12 @@ export component WorkspaceView inherits Rectangle {
 
     if NavigationGlobal.hint-mode-enabled && NavigationGlobal.dock-visible: Rectangle {
         x: 12px;
-        y: parent.height - 64px - hint-dock.preferred-height - 18px;
+        y: parent.height - root.dock-height - hint-dock.preferred-height - 18px;
         width: hint-dock.preferred-width + 16px;
         height: hint-dock.preferred-height + 10px;
         background: #00000088;
         border-radius: Theme.radius-md;
+        opacity: root.dock-height > 0 ? 1.0 : 0.0;
 
         hint-dock := Text {
             x: 8px;

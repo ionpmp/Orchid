@@ -39,8 +39,19 @@ export component WidgetDock inherits Rectangle {
             border-width: 1px;
             border-color: Theme.border-default;
 
-            TouchArea {
+            ta := TouchArea {
                 clicked => { root.add-clicked(dw.type-id); }
+            }
+
+            states [
+                hover when ta.has-hover: {
+                    background: Theme.surface-raised;
+                    border-color: Theme.accent-brand;
+                }
+            ]
+            animate background, border-color {
+                duration: Theme.reduce-motion ? 0ms : 120ms;
+                easing: ease-out;
             }
 
             Text {
