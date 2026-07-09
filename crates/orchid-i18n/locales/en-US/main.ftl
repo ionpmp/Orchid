@@ -506,6 +506,8 @@ onboarding-hint-gestures = Win+? toggles these hints
 
 workspace-default-name = Main
 workspace-new = New workspace
+workspace-placement-blocked-title = Cannot place widget here
+workspace-placement-blocked-body = That spot overlaps another widget or leaves the grid. Try a free cell.
 workspace-unnamed = Workspace { $n }
 dock-add-label = Add widget
 catalog-title = Widget catalog

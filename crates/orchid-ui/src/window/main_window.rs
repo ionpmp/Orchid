@@ -3310,6 +3310,9 @@ impl MainWindowController {
             .lock()
             .entry(instance)
             .or_insert((0.0, 0.0)) = (fx - start.x, fy - start.y);
+
+        let (snap_bounds, placement_valid) = self.drag_snap_preview(instance, fx, fy);
+
         let v = match self
             .workspace_widgets
             .as_any()
@@ -3331,11 +3334,50 @@ impl MainWindowController {
             }
             row.x = fx;
             row.y = fy;
+            row.z_order = 10_000;
+            row.placement_valid = placement_valid;
+            if let Some(sb) = snap_bounds {
+                row.snap_visible = true;
+                row.snap_x = sb.x;
+                row.snap_y = sb.y;
+                row.snap_width = sb.width;
+                row.snap_height = sb.height;
+            } else {
+                row.snap_visible = false;
+            }
             v.set_row_data(r, row);
             self.sync_canvas_scroll_extent();
             return;
         }
         self.schedule_rebuild();
+    }
+
+    /// Snapped cell bounds + whether that placement is free of collisions.
+    fn drag_snap_preview(
+        self: &Arc<Self>,
+        instance: Uuid,
+        top_left_x: f32,
+        top_left_y: f32,
+    ) -> (Option<PixelBounds>, bool) {
+        let Ok(w) = self.workspace_manager.active() else {
+            return (None, true);
+        };
+        let Ok(inst) = self.widget_manager.get_instance(instance) else {
+            return (None, true);
+        };
+        let size = *inst.size.read();
+        let (vw, vh) = *self.canvas_size.lock();
+        let viewport = ViewportSize {
+            width_px: vw,
+            height_px: vh,
+        };
+        let le = &self.layout_engine;
+        let pos = le.placement_from_content_top_left(viewport, top_left_x, top_left_y, size);
+        let (pos, size) = le.snap(pos, size);
+        let all = self.widget_manager.instances_for_workspace(w.id);
+        let valid = le.can_place(w.id, instance, pos, size, &all).is_ok();
+        let bounds = le.pixel_bounds_for(pos, size, viewport);
+        (Some(bounds), valid)
     }
 
     fn on_widget_drag_ended(self: &Arc<Self>, id: &SharedString) {
@@ -3399,6 +3441,11 @@ impl MainWindowController {
             if le.can_place(w.id, u, pos, size, &all).is_err() {
                 if let Some(c) = t.upgrade() {
                     end_drag(&c);
+                    c.push_notification(
+                        &c.locale.tr("workspace-placement-blocked-title"),
+                        &c.locale.tr("workspace-placement-blocked-body"),
+                        2,
+                    );
                     c.schedule_rebuild();
                 }
                 return;
@@ -3496,6 +3543,7 @@ impl MainWindowController {
 
     /// O(1) update of a frame's bounds during live resize (no full `rebuild_workspace_model`).
     fn apply_resize_frame_preview(self: &Arc<Self>, instance: Uuid, b: PixelBounds) {
+        let (snap_bounds, placement_valid) = self.resize_snap_preview(instance, &b);
         let v = match self
             .workspace_widgets
             .as_any()
@@ -3519,11 +3567,43 @@ impl MainWindowController {
             row.y = b.y;
             row.width = b.width;
             row.height = b.height;
+            row.z_order = 10_000;
+            row.placement_valid = placement_valid;
+            if let Some(sb) = snap_bounds {
+                row.snap_visible = true;
+                row.snap_x = sb.x;
+                row.snap_y = sb.y;
+                row.snap_width = sb.width;
+                row.snap_height = sb.height;
+            } else {
+                row.snap_visible = false;
+            }
             v.set_row_data(r, row);
             self.sync_canvas_scroll_extent();
             return;
         }
         self.schedule_rebuild();
+    }
+
+    fn resize_snap_preview(
+        self: &Arc<Self>,
+        instance: Uuid,
+        bounds: &PixelBounds,
+    ) -> (Option<PixelBounds>, bool) {
+        let Ok(w) = self.workspace_manager.active() else {
+            return (None, true);
+        };
+        let (vw, vh) = *self.canvas_size.lock();
+        let viewport = ViewportSize {
+            width_px: vw,
+            height_px: vh,
+        };
+        let le = &self.layout_engine;
+        let (pos, size) = le.placement_from_free_bounds(bounds, viewport);
+        let all = self.widget_manager.instances_for_workspace(w.id);
+        let valid = le.can_place(w.id, instance, pos, size, &all).is_ok();
+        let snapped = le.pixel_bounds_for(pos, size, viewport);
+        (Some(snapped), valid)
     }
 
     /// Keep the Flickable scroll extent in sync while drag/resize previews move frames
@@ -3579,6 +3659,23 @@ impl MainWindowController {
                 height_px: vh,
             };
             let (new_pos, new_size) = le.placement_from_free_bounds(&pb, viewport);
+            let ws_id = match c.workspace_manager.active() {
+                Ok(w) => w.id,
+                Err(_) => {
+                    c.schedule_rebuild();
+                    return;
+                }
+            };
+            let all = c.widget_manager.instances_for_workspace(ws_id);
+            if le.can_place(ws_id, u, new_pos, new_size, &all).is_err() {
+                c.push_notification(
+                    &c.locale.tr("workspace-placement-blocked-title"),
+                    &c.locale.tr("workspace-placement-blocked-body"),
+                    2,
+                );
+                c.schedule_rebuild();
+                return;
+            }
             if let Err(e) = wm.move_to(u, new_pos).await {
                 warn!(?e, "resize move");
             }
@@ -4977,6 +5074,12 @@ impl MainWindowController {
             width: bounds.width,
             height: bounds.height,
             z_order,
+            placement_valid: true,
+            snap_visible: false,
+            snap_x: 0.0,
+            snap_y: 0.0,
+            snap_width: 0.0,
+            snap_height: 0.0,
             terminal_cols: tcols,
             terminal_rows: trows,
             terminal_cells: tcells,

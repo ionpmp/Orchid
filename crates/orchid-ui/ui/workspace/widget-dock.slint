@@ -54,13 +54,37 @@ export component WidgetDock inherits Rectangle {
                 easing: ease-out;
             }
 
-            Text {
-                text: dw.label;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-sm;
-                font-weight: Theme.weight-medium;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            VerticalLayout {
+                padding: 4px;
+                spacing: 2px;
+                alignment: center;
+
+                Text {
+                    text: dw.icon == "terminal" ? ">" :
+                          dw.icon == "weather" ? "*" :
+                          dw.icon == "moon" ? "o" :
+                          dw.icon == "system" ? "#" :
+                          dw.icon == "rss" ? "@" :
+                          dw.icon == "recent-files" ? "~" :
+                          dw.icon == "search" ? "?" :
+                          dw.icon == "media" ? ">" :
+                          dw.icon == "password" ? "*" :
+                          dw.icon == "viewer" ? "[]" :
+                          dw.icon == "fm" ? "/" :
+                          "+";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: dw.label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    font-weight: Theme.weight-medium;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                }
             }
         }
     }

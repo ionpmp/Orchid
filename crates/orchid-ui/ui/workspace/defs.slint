@@ -539,6 +539,14 @@ export struct WidgetFrameModel {
     width: length,
     height: length,
     z-order: int,
+    /// False while a live drag/resize would collide or leave the grid.
+    placement-valid: bool,
+    /// Show the snapped-cell ghost overlay during drag/resize.
+    snap-visible: bool,
+    snap-x: length,
+    snap-y: length,
+    snap-width: length,
+    snap-height: length,
 
     terminal-cols: int,
     terminal-rows: int,

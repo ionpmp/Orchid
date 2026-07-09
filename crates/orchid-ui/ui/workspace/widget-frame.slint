@@ -142,12 +142,17 @@ export component WidgetFrame inherits Rectangle {
     callback fm-error-action(string, int);
 
     background: Theme.surface-raised;
-    border-width: 1px;
-    border-color: Theme.border-default;
+    border-width: model.placement-valid ? 1px : 2px;
+    border-color: model.placement-valid ? Theme.border-default : #e35d6a;
     border-radius: Theme.radius-md;
-    drop-shadow-blur: Theme.reduce-motion ? 0px : 8px;
+    drop-shadow-blur: Theme.reduce-motion ? 0px : (drag-area.pressed ? 16px : 8px);
     drop-shadow-color: #00000040;
+    drop-shadow-offset-y: Theme.reduce-motion ? 0px : (drag-area.pressed ? 4px : 0px);
     clip: true;
+    animate border-color, drop-shadow-blur, drop-shadow-offset-y {
+        duration: Theme.reduce-motion ? 0ms : 100ms;
+        easing: ease-out;
+    }
 
     header := Rectangle {
         x: 0;
@@ -168,6 +173,7 @@ export component WidgetFrame inherits Rectangle {
             height: parent.height;
             x: 0;
             y: 0;
+            mouse-cursor: MouseCursor.move;
             moved => {
                 if (self.pressed) {
                     // Pointer in *canvas* (workspace) space: the grab bar moves with the frame, so

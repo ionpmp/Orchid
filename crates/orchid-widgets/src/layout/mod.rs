@@ -352,6 +352,32 @@ impl LayoutEngine {
         }
     }
 
+    /// Pixel bounds for a grid placement in the given viewport (same math as [`Self::snapshot`]).
+    #[must_use]
+    pub fn pixel_bounds_for(
+        &self,
+        position: GridPosition,
+        size: WidgetSize,
+        viewport: ViewportSize,
+    ) -> PixelBounds {
+        let opts = self.options.read().clone();
+        let view_rows = opts.view_rows.max(1);
+        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_h = viewport.height_px / f32::from(view_rows);
+        let gutter = opts.gutter_px;
+        let (w_cells, h_cells) = size_in_cells(size);
+        let x = (position.col as f32) * cell_w + gutter * 0.5;
+        let y = (position.row as f32) * cell_h + gutter * 0.5;
+        let width = (w_cells as f32) * cell_w - gutter;
+        let height = (h_cells as f32) * cell_h - gutter;
+        PixelBounds {
+            x,
+            y,
+            width: width.max(0.0),
+            height: height.max(0.0),
+        }
+    }
+
     /// Materialise a [`LayoutSnapshot`] for the UI.
     #[must_use]
     pub fn snapshot(

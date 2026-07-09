@@ -381,6 +381,20 @@ export component WorkspaceView inherits Rectangle {
                     fm-entry-drag-scroll(fm_id, p, mx, my, vy, w) => { root.fm-entry-drag-scroll(fm_id, p, mx, my, vy, w); }
                     fm-error-action(fm_id, p) => { root.fm-error-action(fm_id, p); }
                 }
+
+                // Snap-cell ghosts sit above frames so they are not clipped by frame `clip: true`.
+                for w[i] in root.workspace.widgets: Rectangle {
+                    visible: w.snap-visible;
+                    x: w.snap-x;
+                    y: w.snap-y;
+                    width: w.snap-width;
+                    height: w.snap-height;
+                    background: transparent;
+                    border-width: 2px;
+                    border-color: w.placement-valid ? Theme.accent-brand : #e35d6a;
+                    border-radius: Theme.radius-md;
+                    opacity: 0.9;
+                }
             }
         }
 
