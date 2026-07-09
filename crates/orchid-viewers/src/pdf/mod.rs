@@ -257,15 +257,6 @@ impl Viewer for PdfViewer {
             return ViewerSnapshot::Loading { path_display };
         };
 
-        let info = format!(
-            "PDF · page {} / {} · {} × {} px · {:.0}%",
-            rendered.current_page,
-            rendered.page_count,
-            rendered.width_px,
-            rendered.height_px,
-            rendered.zoom * 100.0
-        );
-
         ViewerSnapshot::Pdf(PdfSnapshot {
             path_display,
             page_count: rendered.page_count,
@@ -274,7 +265,8 @@ impl Viewer for PdfViewer {
             page_height_px: rendered.height_px,
             page_rgba_bytes: rendered.rgba,
             zoom: rendered.zoom,
-            info_text: info,
+            // Status line is localized in orchid-ui (`viewer-pdf-info`).
+            info_text: String::new(),
         })
     }
 

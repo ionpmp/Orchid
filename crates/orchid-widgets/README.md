@@ -17,7 +17,11 @@ Widget framework for Orchid. Provides:
   or spiral), collision detection, pixel-space snapshots for the
   renderer, and a free-form mode toggle.
 * **Groups** — tab stacks (`WidgetGroup`) persisted in a dedicated redb
-  table via `StateStore::raw_database()`.
+  table via `StateStore::raw_database()`. `GroupManager` supports create /
+  dissolve / add / remove / `switch_active` / `reorder_members` /
+  `update_slot`. The UI binds a group tab strip (switch, close-to-ungroup,
+  ‹› reorder, dissolve) and forms stacks by dropping one widget header onto
+  another; **Alt+drag** detaches the active member.
 * **Commands** — `build_command_set(...)` produces every widget /
   workspace / group command ready to register on a
   `CommandRegistry`.

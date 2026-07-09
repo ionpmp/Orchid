@@ -576,6 +576,10 @@ impl MainWindowController {
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
         g.set_group_tooltip_dissolve(mgr.tr("group-tooltip-dissolve").into());
+        g.set_group_tooltip_move_left(mgr.tr("group-tooltip-move-left").into());
+        g.set_group_tooltip_move_right(mgr.tr("group-tooltip-move-right").into());
+        g.set_group_tooltip_close_tab(mgr.tr("group-tooltip-close-tab").into());
+        g.set_group_hint_alt_detach(mgr.tr("group-hint-alt-detach").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
@@ -10202,6 +10206,12 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
     let page_args = orchid_i18n::FluentArgs::new()
         .with("current", s.current_page.to_string())
         .with("total", s.page_count.to_string());
+    let info_args = orchid_i18n::FluentArgs::new()
+        .with("current", s.current_page.to_string())
+        .with("total", s.page_count.to_string())
+        .with("width", s.page_width_px.to_string())
+        .with("height", s.page_height_px.to_string())
+        .with("zoom", format!("{:.0}", s.zoom * 100.0));
 
     ViewerPdfModel {
         page_count: s.page_count as i32,
@@ -10210,7 +10220,7 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         page_height_px: s.page_height_px as i32,
         page_image: image,
         zoom: s.zoom,
-        info_text: s.info_text.clone().into(),
+        info_text: locale.tr_args("viewer-pdf-info", &info_args).into(),
         path_display: s.path_display.clone().into(),
         available,
         unavailable_reason: if available {

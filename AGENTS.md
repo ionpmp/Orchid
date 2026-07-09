@@ -37,6 +37,8 @@ see [`docs/BUILDING.md`](docs/BUILDING.md) (including `pdfium.dll` for PDF).
 - Logic in `crates/orchid-widgets/src/builtin/<name>/`
 - Strings in every `locales/*/main.ftl`
 - Slint surface under `crates/orchid-ui/ui/widgets/` + wiring in `main_window.rs`
+- Widget **groups** (tab stacks): drop header-on-header to stack; strip actions
+  in `ui/workspace/group-tabs.slint`; Alt+drag detaches
 - Checklist: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md#how-to-add-a-widget)
 
 ## Themes

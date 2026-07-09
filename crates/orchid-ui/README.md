@@ -26,12 +26,15 @@ includes 39 exported components and 8 shared globals (47 Slint units total):
   `CommandPaletteGlobal`, `SettingsGlobal`, `NavigationGlobal`,
   `NotificationGlobal`
 - **Workspace shell** — `WorkspaceView`, `WidgetFrame`, `WidgetDock`,
-  `WorkspaceSwitcher`, `WidgetCatalogPanel`, `TerminalView`
+  `WorkspaceSwitcher`, `WidgetCatalogPanel`, `TerminalView`, `GroupTabs`
+  (stack widgets by dropping headers; switch / reorder / dissolve; Alt+drag
+  to detach)
 - **Overlays** — `CommandPalettePanel`, `SettingsPanel`, `WorkspacePanel`,
   `NotificationCenter`
 - **Built-in widgets** — terminal (tabs + split view), weather, moon, system,
   RSS, recent files, universal search, media player, password manager, viewer
-  (image / PDF / text / archive), file manager (panes, sidebar, dialogs, …)
+  (image flip/rotate/fit, PDF go-to-page + fit re-render, text edit + Ctrl+S,
+  archive extract), file manager (panes, sidebar, dialogs, …)
 
 Every component reads design tokens from the shared [`Theme`] global and user
 strings from [`Strings`] (populated from `orchid-i18n`).
