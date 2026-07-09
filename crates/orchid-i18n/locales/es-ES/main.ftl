@@ -151,6 +151,7 @@ rss-no-feeds = No hay fuentes configuradas
 rss-loading = Cargando noticias…
 rss-fetch-failed = No se pudieron cargar las fuentes. Compruebe la conexión e inténtelo de nuevo.
 rss-empty = Aún no hay elementos en las fuentes configuradas.
+rss-item-untitled = (Sin título)
 recent-files-empty = Aún no hay archivos recientes. Abra archivos en el visor o el gestor de archivos para verlos aquí.
 recent-files-open-hint = Abrir archivo
 rss-open-item-hint = Abrir enlace

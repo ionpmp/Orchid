@@ -151,6 +151,7 @@ rss-no-feeds = 未配置订阅源
 rss-loading = 正在加载新闻…
 rss-fetch-failed = 无法加载订阅源。请检查连接后重试。
 rss-empty = 已配置的订阅源中尚无条目。
+rss-item-untitled = (无标题)
 recent-files-empty = 尚无最近文件。在查看器或文件管理器中打开文件即可在此显示。
 recent-files-open-hint = 打开文件
 rss-open-item-hint = 打开链接

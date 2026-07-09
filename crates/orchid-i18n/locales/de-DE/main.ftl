@@ -151,6 +151,7 @@ rss-no-feeds = Keine Feeds konfiguriert
 rss-loading = Nachrichten werden geladen…
 rss-fetch-failed = Feeds konnten nicht geladen werden. Verbindung prüfen und erneut versuchen.
 rss-empty = In den konfigurierten Feeds sind noch keine Einträge.
+rss-item-untitled = (Ohne Titel)
 recent-files-empty = Noch keine zuletzt geöffneten Dateien. Öffnen Sie Dateien im Betrachter oder Dateimanager, um sie hier zu sehen.
 recent-files-open-hint = Datei öffnen
 rss-open-item-hint = Link öffnen

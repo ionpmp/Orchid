@@ -151,6 +151,7 @@ rss-no-feeds = 구성된 피드 없음
 rss-loading = 뉴스 로드 중…
 rss-fetch-failed = 피드를 로드할 수 없습니다. 연결을 확인하고 다시 시도하세요.
 rss-empty = 구성된 피드에 아직 항목이 없습니다.
+rss-item-untitled = (제목 없음)
 recent-files-empty = 최근 파일이 없습니다. 뷰어나 파일 관리자에서 파일을 열면 여기에 표시됩니다.
 recent-files-open-hint = 파일 열기
 rss-open-item-hint = 링크 열기

@@ -35,7 +35,8 @@ export component FmBreadcrumbs inherits Rectangle {
                 Rectangle {
                     background: crumb-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
-                    border-width: drag-active && crumb.path == drag-drop-target ? 1px : 0px;
+                    border-width: (drag-active && crumb.path == drag-drop-target)
+                        || crumb-ta.has-hover ? 1px : 0px;
                     border-color: Theme.accent-brand;
 
                     crumb-ta := TouchArea {
@@ -51,13 +52,30 @@ export component FmBreadcrumbs inherits Rectangle {
                             }
                         }
                     }
+                    if crumb-ta.has-hover && crumb.path != "" : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: crumb-hint.preferred-width + 12px;
+                        height: crumb-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        crumb-hint := Text {
+                            x: 6px; y: 3px;
+                            text: crumb.path;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
 
                     HorizontalLayout {
                         padding-left: 6px;
                         padding-right: 6px;
                         Text {
                             text: crumb.label;
-                            color: i == breadcrumbs.length - 1 ? Theme.text-primary : Theme.text-secondary;
+                            color: i == breadcrumbs.length - 1 ? Theme.accent-brand : Theme.text-secondary;
                             font-weight: i == breadcrumbs.length - 1 ? Theme.weight-semibold : Theme.weight-regular;
                             font-size: Theme.font-size-sm;
                             vertical-alignment: center;

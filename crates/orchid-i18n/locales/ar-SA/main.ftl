@@ -151,6 +151,7 @@ rss-no-feeds = لا توجد خلاصات مُعدّة
 rss-loading = جارٍ تحميل الأخبار…
 rss-fetch-failed = تعذّر تحميل الخلاصات. تحقق من الاتصال وحاول مرة أخرى.
 rss-empty = لا توجد عناصر في الخلاصات المُعدّة بعد.
+rss-item-untitled = (بدون عنوان)
 recent-files-empty = لا توجد ملفات حديثة بعد. افتح ملفات في العارض أو مدير الملفات لعرضها هنا.
 recent-files-open-hint = فتح الملف
 rss-open-item-hint = فتح الرابط

@@ -211,9 +211,27 @@ export component SettingsPanel inherits Rectangle {
                 height: 36px;
                 background: Theme.accent-brand;
                 border-radius: Theme.radius-md;
+                opacity: close-ta.has-hover ? 0.88 : 1.0;
 
-                TouchArea {
+                close-ta := TouchArea {
                     clicked => { root.dismiss(); }
+                }
+                if close-ta.has-hover : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: close-hint.preferred-width + 12px;
+                    height: close-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    close-hint := Text {
+                        x: 6px; y: 3px;
+                        text: Strings.settings_panel_ok;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
                 }
 
                 Text {

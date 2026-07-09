@@ -78,6 +78,23 @@ export component FmPassphraseDialog inherits Rectangle {
                     background: bio-ta.has-hover ? Theme.accent-brand : Theme.surface-raised;
                     border-radius: Theme.radius-md;
                     bio-ta := TouchArea { clicked => { root.biometric(); } }
+                    if bio-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: bio-hint.preferred-width + 12px;
+                        height: bio-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        bio-hint := Text {
+                            x: 6px; y: 3px;
+                            text: state.biometric-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     HorizontalLayout {
                         padding-left: 12px;
                         padding-right: 12px;
@@ -96,6 +113,23 @@ export component FmPassphraseDialog inherits Rectangle {
                     background: cancel-ta.has-hover ? Theme.surface-base : transparent;
                     border-radius: Theme.radius-md;
                     cancel-ta := TouchArea { clicked => { root.cancel(); } }
+                    if cancel-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: cancel-hint.preferred-width + 12px;
+                        height: cancel-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        cancel-hint := Text {
+                            x: 6px; y: 3px;
+                            text: state.cancel-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text {
                         text: state.cancel-label;
                         color: Theme.text-secondary;
@@ -112,6 +146,23 @@ export component FmPassphraseDialog inherits Rectangle {
                     border-radius: Theme.radius-md;
                     ok-ta := TouchArea {
                         clicked => { root.commit(root.edited-passphrase); }
+                    }
+                    if ok-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: ok-hint.preferred-width + 12px;
+                        height: ok-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        ok-hint := Text {
+                            x: 6px; y: 3px;
+                            text: state.ok-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
                     }
                     Text {
                         text: state.ok-label;

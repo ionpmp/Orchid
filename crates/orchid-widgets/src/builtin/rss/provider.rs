@@ -94,7 +94,7 @@ pub fn parse_bytes(
                 .title
                 .as_ref()
                 .map(|t| t.content.clone())
-                .unwrap_or_else(|| "(untitled)".to_string());
+                .unwrap_or_default();
             let link = entry.links.first().map(|l| l.href.clone());
             let summary = entry
                 .summary

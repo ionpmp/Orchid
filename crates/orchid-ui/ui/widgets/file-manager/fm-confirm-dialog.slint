@@ -52,6 +52,23 @@ export component FmConfirmDialog inherits Rectangle {
                     background: no-ta.has-hover ? Theme.surface-base : transparent;
                     border-radius: Theme.radius-md;
                     no-ta := TouchArea { clicked => { root.no(); } }
+                    if no-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: no-hint.preferred-width + 12px;
+                        height: no-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        no-hint := Text {
+                            x: 6px; y: 3px;
+                            text: dialog.cancel-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text {
                         text: dialog.cancel-label;
                         color: Theme.text-secondary;
@@ -69,6 +86,23 @@ export component FmConfirmDialog inherits Rectangle {
                         : (yes-ta.has-hover ? #ef4444 : #ef444488);
                     border-radius: Theme.radius-md;
                     yes-ta := TouchArea { clicked => { root.yes(); } }
+                    if yes-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: yes-hint.preferred-width + 12px;
+                        height: yes-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        yes-hint := Text {
+                            x: 6px; y: 3px;
+                            text: dialog.confirm-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text {
                         text: dialog.confirm-label;
                         color: Theme.text-primary;

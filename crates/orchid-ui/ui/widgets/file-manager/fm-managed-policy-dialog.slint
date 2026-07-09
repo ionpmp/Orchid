@@ -70,6 +70,23 @@ export component FmManagedPolicyDialog inherits Rectangle {
                     background: close-ta.has-hover ? Theme.accent-brand : #4d82ff88;
                     border-radius: Theme.radius-md;
                     close-ta := TouchArea { clicked => { root.close(); } }
+                    if close-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: close-hint.preferred-width + 12px;
+                        height: close-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        close-hint := Text {
+                            x: 6px; y: 3px;
+                            text: state.close-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text {
                         text: state.close-label;
                         color: Theme.text-primary;

@@ -151,6 +151,7 @@ rss-no-feeds = フィードが設定されていません
 rss-loading = ニュースを読み込み中…
 rss-fetch-failed = フィードを読み込めませんでした。接続を確認して再試行してください。
 rss-empty = 設定されたフィードにまだ項目がありません。
+rss-item-untitled = (無題)
 recent-files-empty = 最近のファイルはまだありません。ビューアまたはファイルマネージャーでファイルを開くとここに表示されます。
 recent-files-open-hint = ファイルを開く
 rss-open-item-hint = リンクを開く

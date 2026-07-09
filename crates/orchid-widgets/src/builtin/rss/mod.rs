@@ -175,7 +175,11 @@ impl Widget for RssWidget {
             .take(limit.max(1))
             .map(|it| RssItemView {
                 id: it.id.clone(),
-                title: it.title.clone(),
+                title: if it.title.trim().is_empty() {
+                    self.locale.tr("rss-item-untitled")
+                } else {
+                    it.title.clone()
+                },
                 source_name: it.source_name.clone(),
                 published_text: it
                     .published
