@@ -151,6 +151,26 @@ export component FmToolbar inherits Rectangle {
             sort-ta := TouchArea {
                 clicked => { root.sort-cycle(); }
             }
+            if sort-ta.has-hover : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: sort-hint.preferred-width + 12px;
+                height: sort-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                sort-hint := Text {
+                    x: 6px; y: 3px;
+                    text: tab.sort-by == 0 ? tab.sort-name-label
+                        : tab.sort-by == 1 ? tab.sort-size-label
+                        : tab.sort-by == 2 ? tab.sort-modified-label
+                        : tab.sort-type-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
             Text {
                 text: tab.sort-by == 0 ? (tab.sort-descending ? "A↓" : "A↑")
                     : tab.sort-by == 1 ? (tab.sort-descending ? "S↓" : "S↑")
@@ -171,6 +191,26 @@ export component FmToolbar inherits Rectangle {
 
             vm-ta := TouchArea {
                 clicked => { root.view-mode-cycle(); }
+            }
+            if vm-ta.has-hover : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: vm-hint.preferred-width + 12px;
+                height: vm-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                vm-hint := Text {
+                    x: 6px; y: 3px;
+                    text: tab.view-mode == 0 ? Strings.fm-view-icons
+                        : tab.view-mode == 1 ? Strings.fm-view-list
+                        : tab.view-mode == 2 ? Strings.fm-view-details
+                        : Strings.fm-view-gallery;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
             }
             Text {
                 text: tab.view-mode == 0 ? "▦"
@@ -213,14 +253,29 @@ export component FmToolbar inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    TextInput {
-                        text: tab.quick-filter;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        single-line: true;
+                    Rectangle {
                         horizontal-stretch: 1;
-                        edited => { root.quick-filter-changed(self.text); }
+                        height: parent.height;
+
+                        if tab.quick-filter == "" : Text {
+                            width: parent.width;
+                            height: parent.height;
+                            text: Strings.fm-quick-filter-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+
+                        TextInput {
+                            width: parent.width;
+                            height: parent.height;
+                            text: tab.quick-filter;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.quick-filter-changed(self.text); }
+                        }
                     }
                 }
             }

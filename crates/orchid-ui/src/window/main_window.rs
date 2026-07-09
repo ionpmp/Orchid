@@ -592,6 +592,13 @@ impl MainWindowController {
         g.set_fm_nav_forward(mgr.tr("fm-nav-forward").into());
         g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
         g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());
+        g.set_fm_action_new_tab(mgr.tr("fm-action-new-tab").into());
+        g.set_fm_action_close_tab(mgr.tr("fm-action-close-tab").into());
+        g.set_fm_quick_filter_placeholder(mgr.tr("fm-quick-filter-placeholder").into());
+        g.set_fm_view_icons(mgr.tr("fm-view-icons").into());
+        g.set_fm_view_list(mgr.tr("fm-view-list").into());
+        g.set_fm_view_details(mgr.tr("fm-view-details").into());
+        g.set_fm_view_gallery(mgr.tr("fm-view-gallery").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
