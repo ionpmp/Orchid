@@ -167,6 +167,7 @@ search-searching = Ricerca…
 search-source-files = File
 search-source-commands = Comandi
 search-source-settings = Impostazioni
+command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
 command-palette-placeholder = Esegui un comando…

@@ -201,6 +201,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fw-ta := TouchArea { clicked => { root.fit-width(); } }
+                    if fw-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fw-hint.preferred-width + 12px;
+                        height: fw-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fw-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fit-width-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 8px;
@@ -221,6 +238,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fp-ta := TouchArea { clicked => { root.fit-page(); } }
+                    if fp-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fp-hint.preferred-width + 12px;
+                        height: fp-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fp-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fit-page-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 8px;

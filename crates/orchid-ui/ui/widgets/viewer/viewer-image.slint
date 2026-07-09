@@ -113,6 +113,23 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fit-ta := TouchArea { clicked => { root.fit(); } }
+                    if fit-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fit-hint.preferred-width + 12px;
+                        height: fit-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fit-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fit-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 8px;
@@ -134,6 +151,23 @@ export component ViewerImageView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     actual-ta := TouchArea { clicked => { root.actual-size(); } }
+                    if actual-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: actual-hint.preferred-width + 12px;
+                        height: actual-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        actual-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.actual-size-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 8px;

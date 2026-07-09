@@ -167,6 +167,7 @@ search-searching = 搜索中…
 search-source-files = 文件
 search-source-commands = 命令
 search-source-settings = 设置
+command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
 command-palette-placeholder = 运行命令…

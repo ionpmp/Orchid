@@ -40,6 +40,8 @@ pub struct WeatherWidget {
     provider: Arc<dyn WeatherProvider>,
     data: Arc<RwLock<Option<WeatherData>>>,
     last_error: Arc<RwLock<Option<String>>>,
+    /// True while a network fetch is in flight (initial or periodic refresh).
+    is_fetching: Arc<RwLock<bool>>,
     refresh: PeriodicRefresh,
     bus: Arc<orchid_core::EventBus>,
 }
@@ -71,6 +73,7 @@ impl WeatherWidget {
             provider,
             data: Arc::new(RwLock::new(None)),
             last_error: Arc::new(RwLock::new(None)),
+            is_fetching: Arc::new(RwLock::new(false)),
             refresh: PeriodicRefresh::new(refresh_interval),
             bus,
         }
@@ -86,27 +89,30 @@ impl WeatherWidget {
         location: Location,
         data_slot: Arc<RwLock<Option<WeatherData>>>,
         last_error: Arc<RwLock<Option<String>>>,
+        is_fetching: Arc<RwLock<bool>>,
         bus: Arc<orchid_core::EventBus>,
         instance_id: Uuid,
     ) {
+        *is_fetching.write() = true;
+        bus.publish(
+            orchid_core::EventSource::Widget(instance_id),
+            WidgetSnapshotUpdated { instance_id },
+        );
         match provider.fetch(&location).await {
             Ok(wd) => {
                 *data_slot.write() = Some(wd);
                 *last_error.write() = None;
-                bus.publish(
-                    orchid_core::EventSource::Widget(instance_id),
-                    WidgetSnapshotUpdated { instance_id },
-                );
             }
             Err(e) => {
                 warn!(%instance_id, error = %e, "weather fetch failed");
                 *last_error.write() = Some(e.to_string());
-                bus.publish(
-                    orchid_core::EventSource::Widget(instance_id),
-                    WidgetSnapshotUpdated { instance_id },
-                );
             }
         }
+        *is_fetching.write() = false;
+        bus.publish(
+            orchid_core::EventSource::Widget(instance_id),
+            WidgetSnapshotUpdated { instance_id },
+        );
     }
 }
 
@@ -125,6 +131,7 @@ impl Widget for WeatherWidget {
         let provider = self.provider.clone();
         let data_slot = self.data.clone();
         let last_error = self.last_error.clone();
+        let is_fetching = self.is_fetching.clone();
         let bus = self.bus.clone();
         let instance_id = self.instance_id;
         Self::fetch_once(
@@ -132,6 +139,7 @@ impl Widget for WeatherWidget {
             location,
             data_slot,
             last_error,
+            is_fetching,
             bus,
             instance_id,
         )
@@ -144,6 +152,7 @@ impl Widget for WeatherWidget {
         let provider = self.provider.clone();
         let data_slot = self.data.clone();
         let last_error = self.last_error.clone();
+        let is_fetching = self.is_fetching.clone();
         let bus = self.bus.clone();
         let instance_id = self.instance_id;
 
@@ -153,9 +162,19 @@ impl Widget for WeatherWidget {
             let location = location.clone();
             let data_slot = data_slot.clone();
             let last_error = last_error.clone();
+            let is_fetching = is_fetching.clone();
             let bus = bus.clone();
             async move {
-                Self::fetch_once(provider, location, data_slot, last_error, bus, instance_id).await;
+                Self::fetch_once(
+                    provider,
+                    location,
+                    data_slot,
+                    last_error,
+                    is_fetching,
+                    bus,
+                    instance_id,
+                )
+                .await;
             }
         });
         Ok(())
@@ -184,6 +203,7 @@ impl Widget for WeatherWidget {
         let config = self.config.read().clone();
         let data_opt = self.data.read().clone();
         let last_err = self.last_error.read().clone();
+        let fetching = *self.is_fetching.read();
         let now = Utc::now();
 
         let (payload, title) = match (data_opt, last_err) {
@@ -196,6 +216,7 @@ impl Widget for WeatherWidget {
                     crate::widget::payloads::WeatherStatusTag::Stale
                 };
                 let locale = self.orchid_config.read().locale.clone();
+                // Keep last-good data visible while a refresh is in flight.
                 let payload = render_payload(&config, &data, status, &locale);
                 let title = data.location.name.clone();
                 (payload, title)
@@ -212,7 +233,8 @@ impl Widget for WeatherWidget {
                     wind_direction: None,
                     forecast: Vec::new(),
                     fetched_at: None,
-                    is_loading: false,
+                    // Retrying after an error: show loading instead of a stuck error card.
+                    is_loading: fetching,
                     status: crate::widget::payloads::WeatherStatusTag::Error,
                 },
                 config.location.name.clone(),

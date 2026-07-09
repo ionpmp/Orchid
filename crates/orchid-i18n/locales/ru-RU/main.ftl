@@ -162,6 +162,7 @@ search-searching = Идёт поиск…
 search-source-files = Файлы
 search-source-commands = Команды
 search-source-settings = Настройки
+command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
 command-palette-placeholder = Выполнить команду…

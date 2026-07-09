@@ -2645,7 +2645,13 @@ impl MainWindowController {
             SharedString::default()
         };
         let cfg = self.config.read();
-        let fields = build_settings_fields(&section, &cfg, &self.locale, &self.theme);
+        let fields = build_settings_fields(
+            &section,
+            &cfg,
+            &self.locale,
+            &self.theme,
+            &self.command_registry,
+        );
         drop(cfg);
         sync_vec_model(&self.settings_sections, build_settings_sections(&self.locale));
         sync_vec_model(&self.settings_fields, fields);
@@ -7914,9 +7920,15 @@ fn palette_entry_from_descriptor(
     let subtitle: SharedString = desc
         .terminal_invocation
         .as_ref()
-        .map(|t| format!("orc {}", t.verb))
-        .unwrap_or_default()
-        .into();
+        .map(|t| {
+            locale
+                .tr_args(
+                    "command-terminal-invocation",
+                    &orchid_i18n::FluentArgs::new().with("verb", t.verb.as_str()),
+                )
+                .into()
+        })
+        .unwrap_or_default();
     SearchCandidateEntry {
         id: desc.id.clone().into(),
         source_name: locale.tr("search-source-commands").into(),
@@ -9787,11 +9799,23 @@ fn parse_settings_bool(value: &str) -> Result<bool, String> {
     }
 }
 
+fn command_display_label(
+    registry: &CommandRegistry,
+    locale: &LocaleManager,
+    cmd_id: &str,
+) -> String {
+    registry
+        .get(cmd_id)
+        .map(|d| locale.tr(&d.display_name_key))
+        .unwrap_or_else(|| cmd_id.to_string())
+}
+
 fn build_settings_fields(
     section: &str,
     cfg: &OrchidConfig,
     locale: &LocaleManager,
     themes: &ThemeManager,
+    registry: &CommandRegistry,
 ) -> Vec<SettingsFieldRow> {
     let mut rows = Vec::new();
 
@@ -9985,11 +10009,12 @@ fn build_settings_fields(
                     pairs
                         .into_iter()
                         .map(|(key, cmd)| {
+                            let cmd_label = command_display_label(registry, locale, cmd);
                             locale.tr_args(
                                 "settings-shortcut-binding",
                                 &orchid_i18n::FluentArgs::new()
                                     .with("key", key.as_str())
-                                    .with("cmd", cmd.as_str()),
+                                    .with("cmd", cmd_label),
                             )
                         })
                         .collect::<Vec<_>>()
@@ -10011,7 +10036,7 @@ fn build_settings_fields(
                 for (cmd, shortcut) in pairs {
                     rows.push(SettingsFieldRow {
                         key: format!("override:{cmd}").into(),
-                        label: (*cmd).clone().into(),
+                        label: command_display_label(registry, locale, cmd).into(),
                         kind: SETTINGS_FIELD_READONLY,
                         value: shortcut.clone().into(),
                         bool_value: false,
@@ -10879,76 +10904,88 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
         locale.tr(p.condition_key)
     };
 
-    let forecast: Vec<WeatherForecastEntry> = p
-        .forecast
-        .iter()
-        .map(|d| {
-            let day_label = match d.day_index {
-                0 => locale.tr("weather-day-today"),
-                1 => locale.tr("weather-day-tomorrow"),
-                _ => d.weekday_label.clone().unwrap_or_default(),
-            };
-            WeatherForecastEntry {
-                day_label: day_label.into(),
-                high_text: d.high_text.clone().into(),
-                low_text: d.low_text.clone().into(),
-                icon: d.condition_icon.into(),
-                precip_text: d
-                    .precipitation_probability
-                    .map(|pct| format!("{pct}%"))
-                    .unwrap_or_default()
-                    .into(),
-            }
-        })
-        .collect();
+    let forecast: Vec<WeatherForecastEntry> = if p.is_loading {
+        Vec::new()
+    } else {
+        p.forecast
+            .iter()
+            .map(|d| {
+                let day_label = match d.day_index {
+                    0 => locale.tr("weather-day-today"),
+                    1 => locale.tr("weather-day-tomorrow"),
+                    _ => d.weekday_label.clone().unwrap_or_default(),
+                };
+                WeatherForecastEntry {
+                    day_label: day_label.into(),
+                    high_text: d.high_text.clone().into(),
+                    low_text: d.low_text.clone().into(),
+                    icon: d.condition_icon.into(),
+                    precip_text: d
+                        .precipitation_probability
+                        .map(|pct| format!("{pct}%"))
+                        .unwrap_or_default()
+                        .into(),
+                }
+            })
+            .collect()
+    };
 
-    let feels_like = p
-        .feels_like_temp
-        .as_ref()
-        .map(|temp| {
-            locale
-                .tr_args(
+    let feels_like = if p.is_loading {
+        String::new()
+    } else {
+        p.feels_like_temp
+            .as_ref()
+            .map(|temp| {
+                locale.tr_args(
                     "weather-feels-like",
                     &orchid_i18n::FluentArgs::new().with("temp", temp.clone()),
                 )
-        })
-        .unwrap_or_default();
+            })
+            .unwrap_or_default()
+    };
 
-    let humidity = p
-        .humidity_percent
-        .map(|h| {
-            locale.tr_args(
-                "weather-humidity-line",
-                &orchid_i18n::FluentArgs::new()
-                    .with("label", locale.tr("weather-humidity-label"))
-                    .with("h", h.to_string()),
-            )
-        })
-        .unwrap_or_default();
+    let humidity = if p.is_loading {
+        String::new()
+    } else {
+        p.humidity_percent
+            .map(|h| {
+                locale.tr_args(
+                    "weather-humidity-line",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("label", locale.tr("weather-humidity-label"))
+                        .with("h", h.to_string()),
+                )
+            })
+            .unwrap_or_default()
+    };
 
-    let wind = match (p.wind_speed_kph, p.wind_direction.as_deref()) {
-        (Some(kph), Some(dir_key)) if !dir_key.is_empty() => {
-            let dir = if dir_key.starts_with("weather-wind-") {
-                locale.tr(dir_key)
-            } else {
-                // Legacy payloads may still carry English compass abbreviations.
-                dir_key.to_string()
-            };
-            locale.tr_args(
-                "weather-wind-line",
+    let wind = if p.is_loading {
+        String::new()
+    } else {
+        match (p.wind_speed_kph, p.wind_direction.as_deref()) {
+            (Some(kph), Some(dir_key)) if !dir_key.is_empty() => {
+                let dir = if dir_key.starts_with("weather-wind-") {
+                    locale.tr(dir_key)
+                } else {
+                    // Legacy payloads may still carry English compass abbreviations.
+                    dir_key.to_string()
+                };
+                locale.tr_args(
+                    "weather-wind-line",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("label", locale.tr("weather-wind-label"))
+                        .with("speed", format!("{kph:.0}"))
+                        .with("dir", dir),
+                )
+            }
+            (Some(kph), _) => locale.tr_args(
+                "weather-wind-line-no-dir",
                 &orchid_i18n::FluentArgs::new()
                     .with("label", locale.tr("weather-wind-label"))
-                    .with("speed", format!("{kph:.0}"))
-                    .with("dir", dir),
-            )
+                    .with("speed", format!("{kph:.0}")),
+            ),
+            _ => String::new(),
         }
-        (Some(kph), _) => locale.tr_args(
-            "weather-wind-line-no-dir",
-            &orchid_i18n::FluentArgs::new()
-                .with("label", locale.tr("weather-wind-label"))
-                .with("speed", format!("{kph:.0}")),
-        ),
-        _ => String::new(),
     };
 
     let last_updated = if p.is_loading {
