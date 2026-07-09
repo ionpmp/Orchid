@@ -335,6 +335,114 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "comment" => Some(SyntaxScope::Comment),
             _ => None,
         },
+        "sql" => match kind {
+            "keyword"
+            | "keyword_select"
+            | "keyword_from"
+            | "keyword_where"
+            | "keyword_insert"
+            | "keyword_update"
+            | "keyword_delete"
+            | "keyword_create"
+            | "keyword_drop"
+            | "keyword_alter"
+            | "keyword_table"
+            | "keyword_into"
+            | "keyword_values"
+            | "keyword_set"
+            | "keyword_join"
+            | "keyword_on"
+            | "keyword_as"
+            | "keyword_and"
+            | "keyword_or"
+            | "keyword_not"
+            | "keyword_null"
+            | "keyword_order"
+            | "keyword_by"
+            | "keyword_group"
+            | "keyword_having"
+            | "keyword_limit"
+            | "keyword_offset"
+            | "keyword_union"
+            | "keyword_all"
+            | "keyword_distinct"
+            | "keyword_inner"
+            | "keyword_left"
+            | "keyword_right"
+            | "keyword_full"
+            | "keyword_outer"
+            | "keyword_cross"
+            | "keyword_primary"
+            | "keyword_key"
+            | "keyword_foreign"
+            | "keyword_references"
+            | "keyword_index"
+            | "keyword_view"
+            | "keyword_database"
+            | "keyword_schema"
+            | "keyword_if"
+            | "keyword_exists"
+            | "keyword_cascade"
+            | "keyword_restrict"
+            | "keyword_default"
+            | "keyword_constraint"
+            | "keyword_unique"
+            | "keyword_check"
+            | "keyword_with"
+            | "keyword_recursive"
+            | "keyword_case"
+            | "keyword_when"
+            | "keyword_then"
+            | "keyword_else"
+            | "keyword_end"
+            | "keyword_in"
+            | "keyword_is"
+            | "keyword_like"
+            | "keyword_between"
+            | "keyword_cast"
+            | "keyword_asc"
+            | "keyword_desc" => Some(SyntaxScope::Keyword),
+            "type" | "keyword_int" | "keyword_bigint" | "keyword_smallint"
+            | "keyword_tinyint" | "keyword_boolean" | "keyword_bool" | "keyword_text"
+            | "keyword_varchar" | "keyword_char" | "keyword_date" | "keyword_datetime"
+            | "keyword_timestamp" | "keyword_time" | "keyword_numeric" | "keyword_decimal"
+            | "keyword_float" | "keyword_real" | "keyword_double" | "keyword_json"
+            | "keyword_uuid" | "keyword_bytea" | "keyword_blob" | "keyword_serial" => {
+                Some(SyntaxScope::Type)
+            }
+            "identifier" | "dotted_name" | "field" | "column_definition" => {
+                Some(SyntaxScope::Variable)
+            }
+            "function_call" | "invocation" => Some(SyntaxScope::Function),
+            "string" | "string_content" | "literal" => Some(SyntaxScope::String),
+            "number" | "literal_value" => Some(SyntaxScope::Number),
+            "comment" | "marginalia" => Some(SyntaxScope::Comment),
+            "true" | "false" | "null" => Some(SyntaxScope::Constant),
+            _ => None,
+        },
+        "php" => match kind {
+            "name" | "qualified_name" | "namespace_name" | "class_declaration"
+            | "interface_declaration" | "trait_declaration" | "enum_declaration"
+            | "primitive_type" | "cast_type" | "named_type" | "optional_type"
+            | "union_type" | "intersection_type" => Some(SyntaxScope::Type),
+            "function_definition"
+            | "method_declaration"
+            | "function_call_expression"
+            | "member_call_expression"
+            | "scoped_call_expression"
+            | "nullsafe_member_call_expression" => Some(SyntaxScope::Function),
+            "variable_name" | "dynamic_variable_name" | "member_access_expression"
+            | "nullsafe_member_access_expression" | "scoped_property_access_expression" => {
+                Some(SyntaxScope::Variable)
+            }
+            "string" | "encapsed_string" | "string_content" | "heredoc" | "nowdoc"
+            | "shell_command_expression" => Some(SyntaxScope::String),
+            "integer" | "float" => Some(SyntaxScope::Number),
+            "null" | "true" | "false" => Some(SyntaxScope::Constant),
+            "attribute" | "attribute_list" | "attribute_group" => Some(SyntaxScope::Attribute),
+            "php_tag" | "text_interpolation" => Some(SyntaxScope::Preprocessor),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -503,7 +611,7 @@ fn is_keyword_kind(kind: &str) -> bool {
             | "char8_t"
             | "char16_t"
             | "char32_t"
-            // Java / Ruby (shared tokens like this/new/yield/and already listed above)
+            // Java / Ruby / PHP (shared tokens already listed above)
             | "abstract"
             | "synchronized"
             | "transient"
@@ -521,6 +629,31 @@ fn is_keyword_kind(kind: &str) -> bool {
             | "module"
             | "undef"
             | "defined?"
+            | "echo"
+            | "print"
+            | "die"
+            | "exit"
+            | "isset"
+            | "empty"
+            | "list"
+            | "array"
+            | "callable"
+            | "iterable"
+            | "clone"
+            | "include"
+            | "include_once"
+            | "require"
+            | "require_once"
+            | "insteadof"
+            | "foreach"
+            | "enddeclare"
+            | "endfor"
+            | "endforeach"
+            | "endif"
+            | "endswitch"
+            | "endwhile"
+            | "parent"
+            | "xor"
     )
 }
 
@@ -788,6 +921,30 @@ mod tests {
     }
 
     #[test]
+    fn sql_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "SELECT id, name\nFROM users\nWHERE active = 1;\n";
+        let lines = h.highlight_lines("sql", source, 0, 3);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for SQL"
+        );
+    }
+
+    #[test]
+    fn php_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "<?php\nfunction greet(string $name): string {\n  return $name;\n}\n";
+        let lines = h.highlight_lines("php", source, 0, 4);
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for PHP"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
@@ -805,5 +962,7 @@ mod tests {
         assert!(langs.contains(&"cpp"));
         assert!(langs.contains(&"java"));
         assert!(langs.contains(&"ruby"));
+        assert!(langs.contains(&"sql"));
+        assert!(langs.contains(&"php"));
     }
 }

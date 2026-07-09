@@ -104,6 +104,8 @@ pub const HIGHLIGHT_LANGUAGES: &[&str] = &[
     "cpp",
     "java",
     "ruby",
+    "sql",
+    "php",
 ];
 
 /// Resolve a canonical language id to a tree-sitter [`Language`].
@@ -127,6 +129,8 @@ pub fn language_for_id(id: &str) -> Option<tree_sitter::Language> {
         "cpp" => Some(tree_sitter_cpp::LANGUAGE.into()),
         "java" => Some(tree_sitter_java::LANGUAGE.into()),
         "ruby" => Some(tree_sitter_ruby::LANGUAGE.into()),
+        "sql" => Some(tree_sitter_sequel::LANGUAGE.into()),
+        "php" => Some(tree_sitter_php::LANGUAGE_PHP.into()),
         _ => None,
     }
 }
@@ -154,6 +158,8 @@ mod tests {
         assert_eq!(detect_language(&path("local:/a/b.cpp"), b""), "cpp");
         assert_eq!(detect_language(&path("local:/a/b.java"), b""), "java");
         assert_eq!(detect_language(&path("local:/a/b.rb"), b""), "ruby");
+        assert_eq!(detect_language(&path("local:/a/b.sql"), b""), "sql");
+        assert_eq!(detect_language(&path("local:/a/b.php"), b""), "php");
         assert_eq!(detect_language(&path("local:/a/unknown.xyz"), b""), PLAINTEXT);
     }
 
