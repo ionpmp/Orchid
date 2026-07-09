@@ -568,7 +568,6 @@ impl MainWindowController {
         g.set_density_label(mgr.tr("status-density").into());
         g.set_get_started_label(mgr.tr("startup-get-started").into());
         g.set_workspace_new_label(mgr.tr("workspace-new").into());
-        g.set_dock_add_label(mgr.tr("dock-add-label").into());
         g.set_catalog_title(mgr.tr("catalog-title").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
@@ -606,11 +605,9 @@ impl MainWindowController {
         g.set_fm_view_details(mgr.tr("fm-view-details").into());
         g.set_fm_view_gallery(mgr.tr("fm-view-gallery").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
-        g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
         g.set_settings_open_config_file(mgr.tr("settings-open-config-file").into());
 
-        g.set_media_no_session(mgr.tr("media-no-session").into());
         g.set_media_play(mgr.tr("media-play").into());
         g.set_media_pause(mgr.tr("media-pause").into());
         g.set_media_next(mgr.tr("media-next").into());
@@ -625,8 +622,6 @@ impl MainWindowController {
         g.set_password_label_url(mgr.tr("password-label-url").into());
         g.set_password_label_notes(mgr.tr("password-label-notes").into());
         g.set_password_label_totp(mgr.tr("password-label-totp").into());
-        g.set_password_action_copy(mgr.tr("password-action-copy").into());
-        g.set_password_action_open(mgr.tr("password-action-open").into());
         g.set_password_copy_username(mgr.tr("password-copy-username").into());
         g.set_password_copy_password(mgr.tr("password-copy-password").into());
         g.set_password_copy_totp(mgr.tr("password-copy-totp").into());
@@ -637,11 +632,6 @@ impl MainWindowController {
         g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
         g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
         g.set_password_action_add(mgr.tr("password-action-add").into());
-        g.set_password_add_title(mgr.tr("password-add-title").into());
-        g.set_password_add_submit(mgr.tr("password-add-submit").into());
-        g.set_password_add_cancel(mgr.tr("password-add-cancel").into());
-        g.set_password_add_error_title(mgr.tr("password-add-error-title").into());
-        g.set_password_entry_added(mgr.tr("password-entry-added").into());
         Ok(())
     }
 
@@ -9952,7 +9942,13 @@ fn build_settings_fields(
                 locale,
                 "leader-timeout",
                 "settings-field-leader-timeout",
-                format!("{} ms", cfg.shortcuts.leader_timeout_ms).into(),
+                locale
+                    .tr_args(
+                        "settings-value-leader-timeout",
+                        &orchid_i18n::FluentArgs::new()
+                            .with("ms", cfg.shortcuts.leader_timeout_ms.to_string()),
+                    )
+                    .into(),
             );
             push_settings_readonly(
                 &mut rows,
@@ -9964,11 +9960,19 @@ fn build_settings_fields(
                 } else {
                     let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
                     pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+                    let sep = locale.tr("settings-shortcut-list-separator");
                     pairs
                         .into_iter()
-                        .map(|(key, cmd)| format!("{key} → {cmd}"))
+                        .map(|(key, cmd)| {
+                            locale.tr_args(
+                                "settings-shortcut-binding",
+                                &orchid_i18n::FluentArgs::new()
+                                    .with("key", key.as_str())
+                                    .with("cmd", cmd.as_str()),
+                            )
+                        })
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(&sep)
                         .into()
                 },
             );

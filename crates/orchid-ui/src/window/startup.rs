@@ -209,10 +209,7 @@ fn apply_strings_to(window: &StartupWindow, mgr: &LocaleManager) {
     g.set_density_label(mgr.tr("status-density").into());
     g.set_get_started_label(mgr.tr("startup-get-started").into());
     g.set_workspace_new_label(mgr.tr("workspace-new").into());
-    g.set_dock_add_label(mgr.tr("dock-add-label").into());
     g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
-
-    g.set_media_no_session(mgr.tr("media-no-session").into());
 
     g.set_password_locked(mgr.tr("password-locked").into());
     g.set_password_no_entries(mgr.tr("password-no-entries").into());
@@ -223,19 +220,12 @@ fn apply_strings_to(window: &StartupWindow, mgr: &LocaleManager) {
     g.set_password_label_url(mgr.tr("password-label-url").into());
     g.set_password_label_notes(mgr.tr("password-label-notes").into());
     g.set_password_label_totp(mgr.tr("password-label-totp").into());
-    g.set_password_action_copy(mgr.tr("password-action-copy").into());
-    g.set_password_action_open(mgr.tr("password-action-open").into());
     g.set_password_action_lock(mgr.tr("password-action-lock").into());
     g.set_password_unlock_label(mgr.tr("password-unlock-label").into());
     g.set_password_unlock_placeholder(mgr.tr("password-unlock-placeholder").into());
     g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
     g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
     g.set_password_action_add(mgr.tr("password-action-add").into());
-    g.set_password_add_title(mgr.tr("password-add-title").into());
-    g.set_password_add_submit(mgr.tr("password-add-submit").into());
-    g.set_password_add_cancel(mgr.tr("password-add-cancel").into());
-    g.set_password_add_error_title(mgr.tr("password-add-error-title").into());
-    g.set_password_entry_added(mgr.tr("password-entry-added").into());
 }
 
 fn apply_app_state_to(

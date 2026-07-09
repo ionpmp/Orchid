@@ -57,12 +57,12 @@ export component OnboardingOverlay inherits Rectangle {
                 if OnboardingGlobal.current-step > 0: Rectangle {
                     width: 88px;
                     height: 40px;
-                    background: Theme.surface-base;
+                    background: back-ta.has-hover ? Theme.surface-raised : Theme.surface-base;
                     border-radius: Theme.radius-md;
                     border-width: 1px;
-                    border-color: Theme.border-default;
+                    border-color: back-ta.has-hover ? Theme.accent-brand : Theme.border-default;
 
-                    TouchArea {
+                    back-ta := TouchArea {
                         clicked => { root.back-clicked(); }
                     }
 
@@ -78,12 +78,12 @@ export component OnboardingOverlay inherits Rectangle {
                 Rectangle {
                     width: 96px;
                     height: 40px;
-                    background: Theme.surface-base;
+                    background: skip-ta.has-hover ? Theme.surface-raised : Theme.surface-base;
                     border-radius: Theme.radius-md;
                     border-width: 1px;
-                    border-color: Theme.border-default;
+                    border-color: skip-ta.has-hover ? Theme.accent-brand : Theme.border-default;
 
-                    TouchArea {
+                    skip-ta := TouchArea {
                         clicked => { root.skip-clicked(); }
                     }
 
@@ -101,8 +101,9 @@ export component OnboardingOverlay inherits Rectangle {
                     height: 40px;
                     background: Theme.accent-brand;
                     border-radius: Theme.radius-md;
+                    opacity: next-ta.has-hover ? 0.88 : 1.0;
 
-                    TouchArea {
+                    next-ta := TouchArea {
                         clicked => { root.next-clicked(); }
                     }
 
