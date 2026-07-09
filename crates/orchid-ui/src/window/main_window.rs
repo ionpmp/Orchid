@@ -1612,12 +1612,10 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            let _ = orchid_widgets::builtin::viewer::set_viewport(inst, w, h).await;
-                            if let Some(ctrl) = tw.upgrade() {
-                                ctrl.schedule_rebuild();
-                            }
-                        }));
+                        viewer_spawn!(
+                            tw,
+                            orchid_widgets::builtin::viewer::set_viewport(inst, w, h)
+                        );
                     }
                 }
             }
@@ -1650,12 +1648,10 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            let _ = orchid_widgets::builtin::viewer::pdf_fit_width(inst, vw).await;
-                            if let Some(ctrl) = tw.upgrade() {
-                                ctrl.schedule_rebuild();
-                            }
-                        }));
+                        viewer_spawn!(
+                            tw,
+                            orchid_widgets::builtin::viewer::pdf_fit_width(inst, vw)
+                        );
                     }
                 }
             }
@@ -1666,12 +1662,10 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            let _ = orchid_widgets::builtin::viewer::pdf_fit_page(inst, vw, vh).await;
-                            if let Some(ctrl) = tw.upgrade() {
-                                ctrl.schedule_rebuild();
-                            }
-                        }));
+                        viewer_spawn!(
+                            tw,
+                            orchid_widgets::builtin::viewer::pdf_fit_page(inst, vw, vh)
+                        );
                     }
                 }
             }
@@ -1716,12 +1710,10 @@ impl MainWindowController {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let p = path.to_string();
                         let tw = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            let _ = orchid_widgets::builtin::viewer::archive_navigate_into(inst, p).await;
-                            if let Some(ctrl) = tw.upgrade() {
-                                ctrl.schedule_rebuild();
-                            }
-                        }));
+                        viewer_spawn!(
+                            tw,
+                            orchid_widgets::builtin::viewer::archive_navigate_into(inst, p)
+                        );
                     }
                 }
             }
@@ -1744,12 +1736,10 @@ impl MainWindowController {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let p = path.to_string();
                         let tw = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
-                            let _ = orchid_widgets::builtin::viewer::archive_select(inst, p).await;
-                            if let Some(ctrl) = tw.upgrade() {
-                                ctrl.schedule_rebuild();
-                            }
-                        }));
+                        viewer_spawn!(
+                            tw,
+                            orchid_widgets::builtin::viewer::archive_select(inst, p)
+                        );
                     }
                 }
             }

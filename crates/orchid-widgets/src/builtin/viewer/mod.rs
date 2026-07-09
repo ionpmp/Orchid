@@ -170,6 +170,10 @@ impl ViewerWidget {
 
 }
 
+fn map_viewer_err(e: orchid_viewers::ViewerError) -> WidgetError {
+    WidgetError::InvalidStateForOperation(e.to_string())
+}
+
 /// Update image/PDF viewport size for fit/zoom math.
 pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -181,7 +185,9 @@ pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetR
                 img.set_viewport(width, height);
                 should_refresh = true;
             } else if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.apply_viewport(width, height).await;
+                pdf.apply_viewport(width, height)
+                    .await
+                    .map_err(map_viewer_err)?;
                 should_refresh = true;
             }
         }
@@ -354,7 +360,7 @@ pub async fn pdf_prev_page(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.prev_page().await;
+                pdf.prev_page().await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -369,7 +375,7 @@ pub async fn pdf_next_page(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.next_page().await;
+                pdf.next_page().await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -384,7 +390,7 @@ pub async fn pdf_fit_width(instance_id: Uuid, viewport_w: f32) -> WidgetResult<(
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.fit_width(viewport_w).await;
+                pdf.fit_width(viewport_w).await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -399,7 +405,9 @@ pub async fn pdf_fit_page(instance_id: Uuid, viewport_w: f32, viewport_h: f32) -
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.fit_page(viewport_w, viewport_h).await;
+                pdf.fit_page(viewport_w, viewport_h)
+                    .await
+                    .map_err(map_viewer_err)?;
             }
         }
     }
@@ -414,7 +422,7 @@ pub async fn pdf_zoom_in(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.zoom_in().await;
+                pdf.zoom_in().await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -429,7 +437,7 @@ pub async fn pdf_zoom_out(instance_id: Uuid) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.zoom_out().await;
+                pdf.zoom_out().await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -444,7 +452,9 @@ pub async fn pdf_go_to_page(instance_id: Uuid, page: i32) -> WidgetResult<()> {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-                let _ = pdf.go_to_page(page.max(1) as u32).await;
+                pdf.go_to_page(page.max(1) as u32)
+                    .await
+                    .map_err(map_viewer_err)?;
             }
         }
     }
@@ -459,7 +469,7 @@ pub async fn archive_navigate_into(instance_id: Uuid, path: String) -> WidgetRes
         let mut guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_mut() {
             if let Some(ar) = v.as_any_mut().downcast_mut::<ArchiveViewer>() {
-                let _ = ar.navigate_into(&path).await;
+                ar.navigate_into(&path).await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -474,7 +484,7 @@ pub async fn archive_navigate_up(instance_id: Uuid) -> WidgetResult<()> {
         let mut guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_mut() {
             if let Some(ar) = v.as_any_mut().downcast_mut::<ArchiveViewer>() {
-                let _ = ar.navigate_up().await;
+                ar.navigate_up().await.map_err(map_viewer_err)?;
             }
         }
     }
@@ -489,7 +499,7 @@ pub async fn archive_select(instance_id: Uuid, path: String) -> WidgetResult<()>
         let mut guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_mut() {
             if let Some(ar) = v.as_any_mut().downcast_mut::<ArchiveViewer>() {
-                let _ = ar.select(&path).await;
+                ar.select(&path).await.map_err(map_viewer_err)?;
             }
         }
     }
