@@ -32,12 +32,40 @@ export component WeatherView inherits Rectangle {
             spacing: 8px;
             alignment: space-between;
 
-            Text {
-                text: model.location;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-md;
-                font-weight: Theme.weight-medium;
-                vertical-alignment: center;
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+
+                location-ta := TouchArea { }
+                if location-ta.has-hover && model.location != "" : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: location-hint.preferred-width + 12px;
+                    height: location-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    location-hint := Text {
+                        x: 6px; y: 3px;
+                        text: model.location;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+
+                Text {
+                    text: model.location;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-medium;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
             }
 
             Rectangle {
