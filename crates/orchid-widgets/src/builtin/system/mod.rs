@@ -35,6 +35,7 @@ pub struct SystemWidget {
     snapshot: Arc<RwLock<Option<SystemSnapshot>>>,
     refresh: PeriodicRefresh,
     bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
 }
 
 impl std::fmt::Debug for SystemWidget {
@@ -47,7 +48,12 @@ impl std::fmt::Debug for SystemWidget {
 
 impl SystemWidget {
     /// Construct a system widget.
-    pub fn new(instance_id: Uuid, cfg: SystemConfig, bus: Arc<orchid_core::EventBus>) -> Self {
+    pub fn new(
+        instance_id: Uuid,
+        cfg: SystemConfig,
+        bus: Arc<orchid_core::EventBus>,
+        locale: Arc<orchid_i18n::LocaleManager>,
+    ) -> Self {
         let interval = Duration::from_secs(cfg.refresh_interval_seconds.max(1) as u64);
         Self {
             instance_id,
@@ -56,6 +62,7 @@ impl SystemWidget {
             snapshot: Arc::new(RwLock::new(None)),
             refresh: PeriodicRefresh::new(interval),
             bus,
+            locale,
         }
     }
 }
@@ -138,7 +145,7 @@ impl Widget for SystemWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: "System".into(),
+            title: self.locale.tr("widget-system-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::SystemIndicators(SystemPayload {
                 indicators,
@@ -343,7 +350,12 @@ pub fn descriptor() -> WidgetDescriptor {
             Some(bytes) => state_codec::restore_state::<SystemConfig>(bytes).unwrap_or_default(),
             None => SystemConfig::default(),
         };
-        Ok(Box::new(SystemWidget::new(ctx.instance_id, cfg, ctx.bus.clone())) as Box<dyn Widget>)
+        Ok(Box::new(SystemWidget::new(
+            ctx.instance_id,
+            cfg,
+            ctx.bus.clone(),
+            ctx.locale.clone(),
+        )) as Box<dyn Widget>)
     });
     WidgetDescriptor {
         type_id: TYPE_ID,

@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { Strings } from "../strings_global.slint";
 import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
 import { TerminalTabs } from "../widgets/terminal/terminal-tabs.slint";
@@ -247,13 +248,33 @@ export component WidgetFrame inherits Rectangle {
             height: parent.height;
             spacing: 0;
 
-            if model.group-tabs.length > 1 : GroupTabs {
-                tabs: model.group-tabs;
-                tab-clicked(id) => { root.group-tab-clicked(id); }
-                tab-closed(id) => { root.group-tab-closed(id); }
-                tab-move-left(id) => { root.group-tab-move-left(id); }
-                tab-move-right(id) => { root.group-tab-move-right(id); }
-                dissolve-clicked => { root.group-dissolve-clicked(); }
+            if model.group-tabs.length > 1 : VerticalLayout {
+                spacing: 0;
+
+                GroupTabs {
+                    tabs: model.group-tabs;
+                    tab-clicked(id) => { root.group-tab-clicked(id); }
+                    tab-closed(id) => { root.group-tab-closed(id); }
+                    tab-move-left(id) => { root.group-tab-move-left(id); }
+                    tab-move-right(id) => { root.group-tab-move-right(id); }
+                    dissolve-clicked => { root.group-dissolve-clicked(); }
+                }
+
+                Rectangle {
+                    height: 18px;
+                    background: Theme.surface-raised;
+
+                    Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: parent.height;
+                        text: Strings.group-hint-alt-detach;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
             }
 
             body := Rectangle {

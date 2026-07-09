@@ -117,6 +117,7 @@ pub struct MediaPlayerWidget {
     first_poll_done: Arc<RwLock<bool>>,
     refresh: PeriodicRefresh,
     bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
 }
 
 /// Live media providers keyed by instance id (for UI transport controls without
@@ -153,6 +154,7 @@ impl MediaPlayerWidget {
         instance_id: Uuid,
         provider: Arc<dyn MediaProvider>,
         bus: Arc<orchid_core::EventBus>,
+        locale: Arc<orchid_i18n::LocaleManager>,
     ) -> Self {
         let supported = provider.platform_supported();
         MEDIA_LIVE.insert(instance_id, provider.clone());
@@ -164,6 +166,7 @@ impl MediaPlayerWidget {
             first_poll_done: Arc::new(RwLock::new(false)),
             refresh: PeriodicRefresh::new(Duration::from_millis(500)),
             bus,
+            locale,
         }
     }
 
@@ -255,11 +258,12 @@ impl Widget for MediaPlayerWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let is_loading = !*self.first_poll_done.read();
+        let title = self.locale.tr("widget-media-name").into();
         if !self.supported {
             return Some(WidgetSnapshot {
                 instance_id: self.instance_id,
                 widget_type: TYPE_ID,
-                title: "Media".into(),
+                title,
                 status: WidgetStatus::Ready,
                 payload: WidgetPayload::MediaPlayer(MediaPlayerPayload {
                     is_unsupported: true,
@@ -279,7 +283,7 @@ impl Widget for MediaPlayerWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: "Media".into(),
+            title,
             status: WidgetStatus::Ready,
             payload: WidgetPayload::MediaPlayer(payload),
         })
@@ -373,6 +377,7 @@ pub fn descriptor_with_provider(provider: Arc<dyn MediaProvider>) -> WidgetDescr
             ctx.instance_id,
             provider.clone(),
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     base_descriptor(factory)
@@ -452,7 +457,11 @@ mod tests {
     #[test]
     fn unsupported_provider_snapshot() {
         let bus = Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()));
-        let w = MediaPlayerWidget::new(Uuid::new_v4(), Arc::new(NullProvider), bus);
+        let locale = Arc::new(
+            orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None)
+                .expect("test locale"),
+        );
+        let w = MediaPlayerWidget::new(Uuid::new_v4(), Arc::new(NullProvider), bus, locale);
         let snap = w.snapshot().expect("snapshot");
         match snap.payload {
             WidgetPayload::MediaPlayer(p) => {

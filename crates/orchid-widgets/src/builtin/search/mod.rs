@@ -116,6 +116,7 @@ struct Inner {
     aggregator: Option<Arc<SearchAggregator>>,
     bus: Arc<orchid_core::EventBus>,
     instance_id: Uuid,
+    locale: Arc<orchid_i18n::LocaleManager>,
     /// Background debounce loop; restarted from [`universal_search_push_query`] if it was
     /// stopped (e.g. after `on_sleep`) so typing in the UI still produces hits.
     debouncer_task: Mutex<Option<JoinHandle<()>>>,
@@ -197,6 +198,7 @@ impl UniversalSearchWidget {
         instance_id: Uuid,
         aggregator: Option<Arc<SearchAggregator>>,
         bus: Arc<orchid_core::EventBus>,
+        locale: Arc<orchid_i18n::LocaleManager>,
     ) -> Self {
         let inner = Arc::new(Inner {
             query: RwLock::new(String::new()),
@@ -207,6 +209,7 @@ impl UniversalSearchWidget {
             aggregator,
             bus,
             instance_id,
+            locale,
             debouncer_task: Mutex::new(None),
         });
         SEARCH_LIVE.insert(instance_id, inner.clone());
@@ -296,7 +299,7 @@ impl Widget for UniversalSearchWidget {
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
-            title: "Universal Search".into(),
+            title: self.inner.locale.tr("widget-search-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::UniversalSearch(UniversalSearchPayload {
                 query,
@@ -343,6 +346,7 @@ pub fn descriptor(aggregator: Arc<SearchAggregator>) -> WidgetDescriptor {
             ctx.instance_id,
             Some(agg.clone()),
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     base_descriptor(factory)
@@ -357,6 +361,7 @@ pub fn descriptor_stub() -> WidgetDescriptor {
             ctx.instance_id,
             None,
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     base_descriptor(factory)
@@ -442,8 +447,8 @@ mod live_tests {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let id = Uuid::new_v4();
         let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
-        let mut w = UniversalSearchWidget::new(id, Some(agg), bus.clone());
-        let ctx = test_ctx(id, bus);
+        let ctx = test_ctx(id, bus.clone());
+        let mut w = UniversalSearchWidget::new(id, Some(agg), bus, ctx.locale.clone());
         w.on_activate(&ctx).await.expect("activate");
         w.on_sleep(&ctx).await.expect("sleep");
 
@@ -464,8 +469,8 @@ mod live_tests {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let id = Uuid::new_v4();
         let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
-        let mut w = UniversalSearchWidget::new(id, Some(agg), bus.clone());
-        let ctx = test_ctx(id, bus);
+        let ctx = test_ctx(id, bus.clone());
+        let mut w = UniversalSearchWidget::new(id, Some(agg), bus, ctx.locale.clone());
         w.on_activate(&ctx).await.expect("activate");
         w.stop_debouncer();
 
@@ -487,8 +492,8 @@ mod live_tests {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let id = Uuid::new_v4();
         let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
-        let mut w = UniversalSearchWidget::new(id, Some(agg), bus.clone());
-        let ctx = test_ctx(id, bus);
+        let ctx = test_ctx(id, bus.clone());
+        let mut w = UniversalSearchWidget::new(id, Some(agg), bus, ctx.locale.clone());
         w.on_activate(&ctx).await.expect("activate");
 
         w.update_query("abc".into());

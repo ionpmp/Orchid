@@ -7134,7 +7134,7 @@ impl MainWindowController {
                 entry.rename = FmRenameState {
                     active: true,
                     path: SharedString::new(),
-                    proposed_name: "New folder".into(),
+                    proposed_name: self.locale.tr("fm-action-new-folder").into(),
                     title: self.locale.tr("fm-action-new-folder").into(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),

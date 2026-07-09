@@ -189,7 +189,7 @@ impl Widget for RssWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: "News Feed".into(),
+            title: self.locale.tr("widget-rss-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::RssFeed(RssPayload {
                 items,

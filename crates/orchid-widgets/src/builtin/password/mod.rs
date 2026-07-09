@@ -488,7 +488,7 @@ impl Widget for PasswordManagerWidget {
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
-            title: "Passwords".into(),
+            title: self.inner.locale.tr("widget-password-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::PasswordManager(payload),
         })
