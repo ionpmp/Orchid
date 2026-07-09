@@ -1,0 +1,60 @@
+import { Theme } from "../theme_global.slint";
+import { GroupTabModel } from "defs.slint";
+
+/// Compact tab strip for widgets stacked in a shared layout slot.
+export component GroupTabs inherits Rectangle {
+    in property <[GroupTabModel]> tabs;
+
+    callback tab-clicked(string);
+    callback dissolve-clicked();
+
+    height: 28px;
+    background: Theme.surface-raised;
+
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+
+        for tab[i] in tabs : Rectangle {
+            width: 140px;
+            height: 24px;
+            background: tab.is-active ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            tab-ta := TouchArea {
+                clicked => { root.tab-clicked(tab.instance-id); }
+            }
+
+            Text {
+                text: tab.title;
+                color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                font-weight: tab.is-active ? Theme.weight-medium : Theme.weight-regular;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+                overflow: elide;
+                width: parent.width - 8px;
+                x: 4px;
+            }
+        }
+
+        Rectangle {
+            width: 28px;
+            height: 24px;
+            background: dissolve-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+
+            dissolve-ta := TouchArea {
+                clicked => { root.dissolve-clicked(); }
+            }
+
+            Text {
+                text: "⧉";
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

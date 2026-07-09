@@ -20,6 +20,13 @@ export struct TerminalTabModel {
     is-active: bool,
 }
 
+/// One tab in a widget group stack (shared layout slot).
+export struct GroupTabModel {
+    instance-id: string,
+    title: string,
+    is-active: bool,
+}
+
 export struct TerminalPaneModel {
     session-id: string,
     left: float,
@@ -547,6 +554,9 @@ export struct WidgetFrameModel {
     snap-y: length,
     snap-width: length,
     snap-height: length,
+    /// Empty when the frame is not part of a multi-widget group.
+    group-id: string,
+    group-tabs: [GroupTabModel],
 
     terminal-cols: int,
     terminal-rows: int,

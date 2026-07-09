@@ -321,6 +321,29 @@ impl GroupManager {
         Ok(())
     }
 
+    /// Update the shared layout slot for a group.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WidgetError::GroupNotFound`].
+    pub async fn update_slot(
+        &self,
+        group_id: Uuid,
+        position: GridPosition,
+        size: WidgetSize,
+    ) -> Result<()> {
+        let mut entry = self
+            .groups
+            .get_mut(&group_id)
+            .ok_or(WidgetError::GroupNotFound(group_id))?;
+        entry.value_mut().position = position;
+        entry.value_mut().size = size;
+        let group = entry.value().clone();
+        drop(entry);
+        self.persist(&group)?;
+        Ok(())
+    }
+
     /// Fetch a group by id.
     ///
     /// # Errors
@@ -341,6 +364,21 @@ impl GroupManager {
             .filter(|g| g.value().workspace_id == workspace_id)
             .map(|g| g.value().clone())
             .collect()
+    }
+
+    /// Find the group that contains `instance_id`, if any.
+    #[must_use]
+    pub fn find_for_instance(&self, instance_id: Uuid) -> Option<WidgetGroup> {
+        self.groups
+            .iter()
+            .find(|g| g.value().members.contains(&instance_id))
+            .map(|g| g.value().clone())
+    }
+
+    /// Every in-memory group (all workspaces).
+    #[must_use]
+    pub fn list_all(&self) -> Vec<WidgetGroup> {
+        self.groups.iter().map(|g| g.value().clone()).collect()
     }
 }
 

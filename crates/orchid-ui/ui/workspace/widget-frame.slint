@@ -3,6 +3,7 @@ import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
 import { TerminalTabs } from "../widgets/terminal/terminal-tabs.slint";
 import { TerminalSplitView } from "../widgets/terminal/terminal-split-view.slint";
+import { GroupTabs } from "group-tabs.slint";
 import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
 import { SystemView } from "../widgets/system.slint";
@@ -28,6 +29,8 @@ export component WidgetFrame inherits Rectangle {
     callback resize-started(string, length, length);
     callback resize-moved(length, length);
     callback resize-ended();
+    callback group-tab-clicked(string);
+    callback group-dissolve-clicked();
     callback terminal-key-pressed(string, bool, bool, bool);
     callback terminal-viewport-changed(length, length);
     callback terminal-tab-clicked(int);
@@ -234,210 +237,225 @@ export component WidgetFrame inherits Rectangle {
         height: parent.height - 32px;
         background: Theme.surface-base;
 
-        if model.type-id == "terminal" : VerticalLayout {
+        VerticalLayout {
             width: parent.width;
             height: parent.height;
             spacing: 0;
 
-            TerminalTabs {
-                tabs: model.terminal-tabs;
-                active-tab: model.terminal-active-tab;
-                tab-clicked(idx) => { root.terminal-tab-clicked(idx); }
-                tab-closed(idx) => { root.terminal-tab-closed(idx); }
-                tab-new => { root.terminal-tab-new(); }
-                split-horizontal => { root.terminal-split-horizontal(); }
-                split-vertical => { root.terminal-split-vertical(); }
+            if model.group-tabs.length > 1 : GroupTabs {
+                tabs: model.group-tabs;
+                tab-clicked(id) => { root.group-tab-clicked(id); }
+                dissolve-clicked => { root.group-dissolve-clicked(); }
             }
 
-            viewport := Rectangle {
+            body := Rectangle {
                 vertical-stretch: 1;
-                changed width => { root.terminal-viewport-changed(self.width, self.height); }
-                changed height => { root.terminal-viewport-changed(self.width, self.height); }
 
-                TerminalSplitView {
+                if model.type-id == "terminal" : VerticalLayout {
                     width: parent.width;
                     height: parent.height;
-                    panes: model.terminal-panes;
-                    dividers: model.terminal-dividers;
-                    cell-width: model.terminal-cell-width;
-                    cell-height: model.terminal-cell-height;
-                    pane-clicked(sid) => { root.terminal-pane-clicked(sid); }
-                    pane-closed(sid) => { root.terminal-pane-closed(sid); }
-                    split-drag-moved(a, b, fx, fy) => {
-                        root.terminal-split-drag-moved(a, b, fx, fy);
+                    spacing: 0;
+
+                    TerminalTabs {
+                        tabs: model.terminal-tabs;
+                        active-tab: model.terminal-active-tab;
+                        tab-clicked(idx) => { root.terminal-tab-clicked(idx); }
+                        tab-closed(idx) => { root.terminal-tab-closed(idx); }
+                        tab-new => { root.terminal-tab-new(); }
+                        split-horizontal => { root.terminal-split-horizontal(); }
+                        split-vertical => { root.terminal-split-vertical(); }
                     }
-                    shortcut(action) => { root.terminal-shortcut(action); }
-                    key-pressed(text, ctrl, shift, alt) => {
-                        root.terminal-key-pressed(text, ctrl, shift, alt);
+
+                    viewport := Rectangle {
+                        vertical-stretch: 1;
+                        changed width => { root.terminal-viewport-changed(self.width, self.height); }
+                        changed height => { root.terminal-viewport-changed(self.width, self.height); }
+
+                        TerminalSplitView {
+                            width: parent.width;
+                            height: parent.height;
+                            panes: model.terminal-panes;
+                            dividers: model.terminal-dividers;
+                            cell-width: model.terminal-cell-width;
+                            cell-height: model.terminal-cell-height;
+                            pane-clicked(sid) => { root.terminal-pane-clicked(sid); }
+                            pane-closed(sid) => { root.terminal-pane-closed(sid); }
+                            split-drag-moved(a, b, fx, fy) => {
+                                root.terminal-split-drag-moved(a, b, fx, fy);
+                            }
+                            shortcut(action) => { root.terminal-shortcut(action); }
+                            key-pressed(text, ctrl, shift, alt) => {
+                                root.terminal-key-pressed(text, ctrl, shift, alt);
+                            }
+                        }
                     }
                 }
+
+                if model.type-id == "weather" : WeatherView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.weather;
+                }
+
+                if model.type-id == "moon" : MoonView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.moon;
+                }
+
+                if model.type-id == "system" : SystemView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.system;
+                }
+
+                if model.type-id == "rss" : RssView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.rss;
+                    item-clicked(link) => { root.rss-item-clicked(link); }
+                }
+
+                if model.type-id == "recent-files" : RecentFilesView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.recent-files;
+                    item-clicked(path) => { root.recent-files-item-clicked(path); }
+                }
+
+                if model.type-id == "universal-search" || model.type-id == "search" : SearchView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.search;
+                    query-changed(q) => { root.search-query-changed(root.model.instance-id, q); }
+                    candidate-activated(id) => { root.search-candidate-activated(root.model.instance-id, id); }
+                    selection-changed(idx) => { root.search-selection-changed(root.model.instance-id, idx); }
+                }
+
+                if model.type-id == "media" || model.type-id == "media-player" : MediaView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.media;
+                    play-pause => { root.media-play-pause(); }
+                    next => { root.media-next(); }
+                    previous => { root.media-previous(); }
+                }
+
+                if model.type-id == "password" || model.type-id == "password-manager" : PasswordView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.password;
+                    search-changed(q) => { root.password-search-changed(q); }
+                    entry-clicked(id) => { root.password-entry-clicked(id); }
+                    copy-password(id) => { root.password-copy-password(id); }
+                    copy-username(id) => { root.password-copy-username(id); }
+                    copy-totp(id) => { root.password-copy-totp(id); }
+                    open-url(url) => { root.password-open-url(url); }
+                    unlock-submit(pw) => { root.password-unlock-submit(pw); }
+                    unlock-biometric => { root.password-unlock-biometric(); }
+                    lock-vault => { root.password-lock-vault(); }
+                    add-entry-request => { root.password-add-entry-request(); }
+                    add-entry-commit(title, username, password, url) => {
+                        root.password-add-entry-commit(title, username, password, url);
+                    }
+                    add-entry-cancel => { root.password-add-entry-cancel(); }
+                    add-entry-generate-password => { root.password-add-entry-generate-password(); }
+                }
+
+                if model.type-id == "viewer" : Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    changed width => { root.viewer-viewport-changed(root.model.instance-id, self.width, self.height); }
+                    changed height => { root.viewer-viewport-changed(root.model.instance-id, self.width, self.height); }
+
+                    ViewerView {
+                        width: parent.width;
+                        height: parent.height;
+                        model: root.model.viewer;
+
+                        image-zoom-in => { root.viewer-image-zoom-in(root.model.instance-id); }
+                        image-zoom-out => { root.viewer-image-zoom-out(root.model.instance-id); }
+                        image-fit => { root.viewer-image-fit(root.model.instance-id); }
+                        image-actual-size => { root.viewer-image-actual-size(root.model.instance-id); }
+                        image-rotate-cw => { root.viewer-image-rotate-cw(root.model.instance-id); }
+                        image-rotate-ccw => { root.viewer-image-rotate-ccw(root.model.instance-id); }
+                        image-pan(dx, dy) => { root.viewer-image-pan(root.model.instance-id, dx, dy); }
+
+                        pdf-prev-page => { root.viewer-pdf-prev-page(root.model.instance-id); }
+                        pdf-next-page => { root.viewer-pdf-next-page(root.model.instance-id); }
+                        pdf-fit-width => { root.viewer-pdf-fit-width(root.model.instance-id, parent.width); }
+                        pdf-fit-page => { root.viewer-pdf-fit-page(root.model.instance-id, parent.width, parent.height); }
+                        pdf-zoom-in => { root.viewer-pdf-zoom-in(root.model.instance-id); }
+                        pdf-zoom-out => { root.viewer-pdf-zoom-out(root.model.instance-id); }
+                        pdf-go-to-page(p) => { root.viewer-pdf-go-to-page(root.model.instance-id, p); }
+
+                        archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
+                        archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }
+                        archive-select(path) => { root.viewer-archive-select(root.model.instance-id, path); }
+                        archive-extract-selected => { root.viewer-archive-extract-selected(root.model.instance-id); }
+                        archive-extract-all => { root.viewer-archive-extract-all(root.model.instance-id); }
+
+                        text-toggle-edit => { root.viewer-text-toggle-edit(root.model.instance-id); }
+                        text-save => { root.viewer-text-save(root.model.instance-id); }
+                        text-edited(t) => { root.viewer-text-edited(root.model.instance-id, t); }
+                    }
+                }
+
+                if model.type-id == "file-manager" : FileManagerView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.file-manager;
+
+                    sidebar-clicked(id) => { root.fm-sidebar-clicked(root.model.instance-id, id); }
+                    toggle-dual-pane => { root.fm-toggle-dual-pane(root.model.instance-id); }
+                    toggle-show-hidden => { root.fm-toggle-show-hidden(root.model.instance-id); }
+                    toggle-click-behavior => { root.fm-toggle-click-behavior(root.model.instance-id); }
+                    pane-clicked(p) => { root.fm-pane-clicked(root.model.instance-id, p); }
+                    tab-clicked(p, id) => { root.fm-tab-clicked(root.model.instance-id, p, id); }
+                    tab-closed(p, id) => { root.fm-tab-closed(root.model.instance-id, p, id); }
+                    tab-new(p) => { root.fm-tab-new(root.model.instance-id, p); }
+                    new-folder(p) => { root.fm-new-folder(root.model.instance-id, p); }
+                    nav-back(p) => { root.fm-nav-back(root.model.instance-id, p); }
+                    nav-forward(p) => { root.fm-nav-forward(root.model.instance-id, p); }
+                    nav-up(p) => { root.fm-nav-up(root.model.instance-id, p); }
+                    breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(root.model.instance-id, p, path); }
+                    view-mode-cycle(p) => { root.fm-view-mode-cycle(root.model.instance-id, p); }
+                    sort-cycle(p) => { root.fm-sort-cycle(root.model.instance-id, p); }
+                    sort-column-clicked(p, col) => { root.fm-sort-column-clicked(root.model.instance-id, p, col); }
+                    quick-filter-changed(p, q) => { root.fm-quick-filter-changed(root.model.instance-id, p, q); }
+                    entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(root.model.instance-id, p, path, ctrl); }
+                    entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(root.model.instance-id, p, path); }
+                    entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(root.model.instance-id, p, path, is_dir); }
+                    entry-context(p, path, x, y) => { root.fm-entry-context(root.model.instance-id, p, path, x, y); }
+                    context-action(id, paths) => { root.fm-context-action(root.model.instance-id, id, paths); }
+                    context-dismiss => { root.fm-context-dismiss(root.model.instance-id); }
+                    confirm-yes => { root.fm-confirm-yes(root.model.instance-id); }
+                    confirm-no => { root.fm-confirm-no(root.model.instance-id); }
+                    rename-commit(old, new) => { root.fm-rename-commit(root.model.instance-id, old, new); }
+                    rename-cancel => { root.fm-rename-cancel(root.model.instance-id); }
+                    tag-commit(tag) => { root.fm-tag-commit(root.model.instance-id, tag); }
+                    tag-cancel => { root.fm-tag-cancel(root.model.instance-id); }
+                    passphrase-commit(pw) => { root.fm-passphrase-commit(root.model.instance-id, pw); }
+                    passphrase-cancel => { root.fm-passphrase-cancel(root.model.instance-id); }
+                    passphrase-biometric => { root.fm-passphrase-biometric(root.model.instance-id); }
+                    managed-policy-close => { root.fm-managed-policy-close(root.model.instance-id); }
+                    select-all(p) => { root.fm-select-all(root.model.instance-id, p); }
+                    delete-selected(p) => { root.fm-delete-selected(root.model.instance-id, p); }
+                    copy-selected(p) => { root.fm-copy-selected(root.model.instance-id, p); }
+                    paste-clipboard(p) => { root.fm-paste-clipboard(root.model.instance-id, p); }
+                    rename-selected(p) => { root.fm-rename-selected(root.model.instance-id, p); }
+                    deselect-all(p) => { root.fm-deselect-all(root.model.instance-id, p); }
+                    open-selected(p) => { root.fm-open-selected(root.model.instance-id, p); }
+                    entry-drag-start(p, path) => { root.fm-entry-drag-start(root.model.instance-id, p, path); }
+                    entry-drag-hover(p, path) => { root.fm-entry-drag-hover(root.model.instance-id, p, path); }
+                    entry-drag-drop(p, path) => { root.fm-entry-drag-drop(root.model.instance-id, p, path); }
+                    entry-drag-cancel(p) => { root.fm-entry-drag-cancel(root.model.instance-id, p); }
+                    pane-drag-hover(p) => { root.fm-pane-drag-hover(root.model.instance-id, p); }
+                    drop-on-current-dir(p) => { root.fm-drop-on-current-dir(root.model.instance-id, p); }
+                    entry-drag-scroll(p, mx, my, vy, w) => { root.fm-entry-drag-scroll(root.model.instance-id, p, mx, my, vy, w); }
+                    error-action(p) => { root.fm-error-action(root.model.instance-id, p); }
+                }
             }
-        }
-
-        if model.type-id == "weather" : WeatherView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.weather;
-        }
-
-        if model.type-id == "moon" : MoonView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.moon;
-        }
-
-        if model.type-id == "system" : SystemView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.system;
-        }
-
-        if model.type-id == "rss" : RssView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.rss;
-            item-clicked(link) => { root.rss-item-clicked(link); }
-        }
-
-        if model.type-id == "recent-files" : RecentFilesView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.recent-files;
-            item-clicked(path) => { root.recent-files-item-clicked(path); }
-        }
-
-        if model.type-id == "universal-search" || model.type-id == "search" : SearchView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.search;
-            query-changed(q) => { root.search-query-changed(root.model.instance-id, q); }
-            candidate-activated(id) => { root.search-candidate-activated(root.model.instance-id, id); }
-            selection-changed(idx) => { root.search-selection-changed(root.model.instance-id, idx); }
-        }
-
-        if model.type-id == "media" || model.type-id == "media-player" : MediaView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.media;
-            play-pause => { root.media-play-pause(); }
-            next => { root.media-next(); }
-            previous => { root.media-previous(); }
-        }
-
-        if model.type-id == "password" || model.type-id == "password-manager" : PasswordView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.password;
-            search-changed(q) => { root.password-search-changed(q); }
-            entry-clicked(id) => { root.password-entry-clicked(id); }
-            copy-password(id) => { root.password-copy-password(id); }
-            copy-username(id) => { root.password-copy-username(id); }
-            copy-totp(id) => { root.password-copy-totp(id); }
-            open-url(url) => { root.password-open-url(url); }
-            unlock-submit(pw) => { root.password-unlock-submit(pw); }
-            unlock-biometric => { root.password-unlock-biometric(); }
-            lock-vault => { root.password-lock-vault(); }
-            add-entry-request => { root.password-add-entry-request(); }
-            add-entry-commit(title, username, password, url) => {
-                root.password-add-entry-commit(title, username, password, url);
-            }
-            add-entry-cancel => { root.password-add-entry-cancel(); }
-            add-entry-generate-password => { root.password-add-entry-generate-password(); }
-        }
-
-        if model.type-id == "viewer" : Rectangle {
-            width: parent.width;
-            height: parent.height;
-            changed width => { root.viewer-viewport-changed(root.model.instance-id, self.width, self.height); }
-            changed height => { root.viewer-viewport-changed(root.model.instance-id, self.width, self.height); }
-
-            ViewerView {
-                width: parent.width;
-                height: parent.height;
-                model: root.model.viewer;
-
-                image-zoom-in => { root.viewer-image-zoom-in(root.model.instance-id); }
-                image-zoom-out => { root.viewer-image-zoom-out(root.model.instance-id); }
-                image-fit => { root.viewer-image-fit(root.model.instance-id); }
-                image-actual-size => { root.viewer-image-actual-size(root.model.instance-id); }
-                image-rotate-cw => { root.viewer-image-rotate-cw(root.model.instance-id); }
-                image-rotate-ccw => { root.viewer-image-rotate-ccw(root.model.instance-id); }
-                image-pan(dx, dy) => { root.viewer-image-pan(root.model.instance-id, dx, dy); }
-
-                pdf-prev-page => { root.viewer-pdf-prev-page(root.model.instance-id); }
-                pdf-next-page => { root.viewer-pdf-next-page(root.model.instance-id); }
-                pdf-fit-width => { root.viewer-pdf-fit-width(root.model.instance-id, parent.width); }
-                pdf-fit-page => { root.viewer-pdf-fit-page(root.model.instance-id, parent.width, parent.height); }
-                pdf-zoom-in => { root.viewer-pdf-zoom-in(root.model.instance-id); }
-                pdf-zoom-out => { root.viewer-pdf-zoom-out(root.model.instance-id); }
-                pdf-go-to-page(p) => { root.viewer-pdf-go-to-page(root.model.instance-id, p); }
-
-                archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
-                archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }
-                archive-select(path) => { root.viewer-archive-select(root.model.instance-id, path); }
-                archive-extract-selected => { root.viewer-archive-extract-selected(root.model.instance-id); }
-                archive-extract-all => { root.viewer-archive-extract-all(root.model.instance-id); }
-
-                text-toggle-edit => { root.viewer-text-toggle-edit(root.model.instance-id); }
-                text-save => { root.viewer-text-save(root.model.instance-id); }
-                text-edited(t) => { root.viewer-text-edited(root.model.instance-id, t); }
-
-            }
-        }
-
-        if model.type-id == "file-manager" : FileManagerView {
-            width: parent.width;
-            height: parent.height;
-            model: root.model.file-manager;
-
-            sidebar-clicked(id) => { root.fm-sidebar-clicked(root.model.instance-id, id); }
-            toggle-dual-pane => { root.fm-toggle-dual-pane(root.model.instance-id); }
-            toggle-show-hidden => { root.fm-toggle-show-hidden(root.model.instance-id); }
-            toggle-click-behavior => { root.fm-toggle-click-behavior(root.model.instance-id); }
-            pane-clicked(p) => { root.fm-pane-clicked(root.model.instance-id, p); }
-            tab-clicked(p, id) => { root.fm-tab-clicked(root.model.instance-id, p, id); }
-            tab-closed(p, id) => { root.fm-tab-closed(root.model.instance-id, p, id); }
-            tab-new(p) => { root.fm-tab-new(root.model.instance-id, p); }
-            new-folder(p) => { root.fm-new-folder(root.model.instance-id, p); }
-            nav-back(p) => { root.fm-nav-back(root.model.instance-id, p); }
-            nav-forward(p) => { root.fm-nav-forward(root.model.instance-id, p); }
-            nav-up(p) => { root.fm-nav-up(root.model.instance-id, p); }
-            breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(root.model.instance-id, p, path); }
-            view-mode-cycle(p) => { root.fm-view-mode-cycle(root.model.instance-id, p); }
-            sort-cycle(p) => { root.fm-sort-cycle(root.model.instance-id, p); }
-            sort-column-clicked(p, col) => { root.fm-sort-column-clicked(root.model.instance-id, p, col); }
-            quick-filter-changed(p, q) => { root.fm-quick-filter-changed(root.model.instance-id, p, q); }
-            entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(root.model.instance-id, p, path, ctrl); }
-            entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(root.model.instance-id, p, path); }
-            entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(root.model.instance-id, p, path, is_dir); }
-            entry-context(p, path, x, y) => { root.fm-entry-context(root.model.instance-id, p, path, x, y); }
-            context-action(id, paths) => { root.fm-context-action(root.model.instance-id, id, paths); }
-            context-dismiss => { root.fm-context-dismiss(root.model.instance-id); }
-            confirm-yes => { root.fm-confirm-yes(root.model.instance-id); }
-            confirm-no => { root.fm-confirm-no(root.model.instance-id); }
-            rename-commit(old, new) => { root.fm-rename-commit(root.model.instance-id, old, new); }
-            rename-cancel => { root.fm-rename-cancel(root.model.instance-id); }
-            tag-commit(tag) => { root.fm-tag-commit(root.model.instance-id, tag); }
-            tag-cancel => { root.fm-tag-cancel(root.model.instance-id); }
-            passphrase-commit(pw) => { root.fm-passphrase-commit(root.model.instance-id, pw); }
-            passphrase-cancel => { root.fm-passphrase-cancel(root.model.instance-id); }
-            passphrase-biometric => { root.fm-passphrase-biometric(root.model.instance-id); }
-            managed-policy-close => { root.fm-managed-policy-close(root.model.instance-id); }
-            select-all(p) => { root.fm-select-all(root.model.instance-id, p); }
-            delete-selected(p) => { root.fm-delete-selected(root.model.instance-id, p); }
-            copy-selected(p) => { root.fm-copy-selected(root.model.instance-id, p); }
-            paste-clipboard(p) => { root.fm-paste-clipboard(root.model.instance-id, p); }
-            rename-selected(p) => { root.fm-rename-selected(root.model.instance-id, p); }
-            deselect-all(p) => { root.fm-deselect-all(root.model.instance-id, p); }
-            open-selected(p) => { root.fm-open-selected(root.model.instance-id, p); }
-            entry-drag-start(p, path) => { root.fm-entry-drag-start(root.model.instance-id, p, path); }
-            entry-drag-hover(p, path) => { root.fm-entry-drag-hover(root.model.instance-id, p, path); }
-            entry-drag-drop(p, path) => { root.fm-entry-drag-drop(root.model.instance-id, p, path); }
-            entry-drag-cancel(p) => { root.fm-entry-drag-cancel(root.model.instance-id, p); }
-            pane-drag-hover(p) => { root.fm-pane-drag-hover(root.model.instance-id, p); }
-            drop-on-current-dir(p) => { root.fm-drop-on-current-dir(root.model.instance-id, p); }
-            entry-drag-scroll(p, mx, my, vy, w) => { root.fm-entry-drag-scroll(root.model.instance-id, p, mx, my, vy, w); }
-            error-action(p) => { root.fm-error-action(root.model.instance-id, p); }
         }
     }
 

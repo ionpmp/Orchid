@@ -442,6 +442,13 @@ impl OrchidApp {
         group_manager
             .restore_from_storage()
             .map_err(|e| UiError::Slint(format!("restore groups: {e}")))?;
+        for group in group_manager.list_all() {
+            for member_id in &group.members {
+                if let Ok(inst) = widget_manager.get_instance(*member_id) {
+                    *inst.group_id.write() = Some(group.id);
+                }
+            }
+        }
 
         for (desc, factory) in build_command_set(
             widget_manager.clone(),
@@ -612,6 +619,7 @@ impl OrchidApp {
             self.widget_manager.clone(),
             self.workspace_manager.clone(),
             self.layout_engine.clone(),
+            self.group_manager.clone(),
             self.session_manager.clone(),
             self.session_routing.clone(),
             self.terminal_deps.clone(),

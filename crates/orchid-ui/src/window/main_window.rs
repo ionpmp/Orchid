@@ -46,7 +46,7 @@ use orchid_widgets::TerminalPanePayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
 use orchid_widgets::{ViewerPayload, WidgetPayload};
 use orchid_widgets::{CreateWidgetRequest,
-    LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager, WorkspaceManager,
+    GroupManager, LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager, WorkspaceManager,
 };
 use orchid_widgets::SharedInstance;
 use parking_lot::RwLock;
@@ -76,7 +76,7 @@ use crate::slint_generated::{
     WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, NotificationGlobal,
     NotificationItem, OnboardingGlobal, SettingsFieldRow,
     SettingsGlobal,
-    SettingsSectionEntry,
+    SettingsSectionEntry, GroupTabModel,
 };
 use crate::theme::ThemeManager;
 
@@ -122,6 +122,7 @@ pub struct MainWindowController {
     widget_manager: Arc<WidgetManager>,
     workspace_manager: Arc<WorkspaceManager>,
     layout_engine: Arc<LayoutEngine>,
+    group_manager: Arc<GroupManager>,
     session_manager: Arc<SessionManager>,
     session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
     terminal_deps: TerminalWidgetDeps,
@@ -318,6 +319,7 @@ impl MainWindowController {
         widget_manager: Arc<WidgetManager>,
         workspace_manager: Arc<WorkspaceManager>,
         layout_engine: Arc<LayoutEngine>,
+        group_manager: Arc<GroupManager>,
         session_manager: Arc<SessionManager>,
         session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
         terminal_deps: TerminalWidgetDeps,
@@ -430,6 +432,7 @@ impl MainWindowController {
             widget_manager: widget_manager.clone(),
             workspace_manager: workspace_manager.clone(),
             layout_engine: layout_engine.clone(),
+            group_manager,
             session_manager: session_manager.clone(),
             session_routing,
             terminal_deps,
@@ -1121,6 +1124,22 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     c.on_widget_resize_ended(&id);
+                }
+            }
+        });
+        self.window.on_group_tab_clicked({
+            let t = t.clone();
+            move |group_id, member_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_group_tab_clicked(&group_id, &member_id);
+                }
+            }
+        });
+        self.window.on_group_dissolve_clicked({
+            let t = t.clone();
+            move |group_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_group_dissolve_clicked(&group_id);
                 }
             }
         });
@@ -3438,6 +3457,22 @@ impl MainWindowController {
             };
             let pos = le.placement_from_content_top_left(viewport, new_x, new_y, size);
             let all = c.widget_manager.instances_for_workspace(w.id);
+
+            // Drop onto another widget's header → form / join a group.
+            if let Some(target_id) = c.find_group_drop_target(u, new_x, new_y, start.width) {
+                if let Err(e) = c
+                    .form_or_join_group(w.id, u, target_id, pos, size)
+                    .await
+                {
+                    warn!(?e, "group form");
+                }
+                if let Some(c) = t.upgrade() {
+                    end_drag(&c);
+                    c.schedule_rebuild();
+                }
+                return;
+            }
+
             if le.can_place(w.id, u, pos, size, &all).is_err() {
                 if let Some(c) = t.upgrade() {
                     end_drag(&c);
@@ -3454,8 +3489,232 @@ impl MainWindowController {
             if let Err(e) = wm.move_to(u, pos).await {
                 warn!(?e, "move");
             }
+            // Keep group slot + sibling members aligned when dragging the active tab.
+            if let Some(group) = c.group_manager.find_for_instance(u) {
+                if group.active_instance() == Some(u) {
+                    let _ = c.group_manager.update_slot(group.id, pos, size).await;
+                    for mid in &group.members {
+                        if *mid != u {
+                            let _ = wm.move_to(*mid, pos).await;
+                            let _ = wm.resize(*mid, size).await;
+                        }
+                    }
+                }
+            }
             if let Some(c) = t.upgrade() {
                 end_drag(&c);
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    /// Header hit-test: pointer near another frame's title bar → group drop target.
+    fn find_group_drop_target(
+        self: &Arc<Self>,
+        dragged: Uuid,
+        drop_x: f32,
+        drop_y: f32,
+        dragged_width: f32,
+    ) -> Option<Uuid> {
+        let Ok(w) = self.workspace_manager.active() else {
+            return None;
+        };
+        let (vw, vh) = *self.canvas_size.lock();
+        let instances = self.widget_manager.instances_for_workspace(w.id);
+        let snap = self.layout_engine.snapshot(
+            w.id,
+            &instances,
+            ViewportSize {
+                width_px: vw,
+                height_px: vh,
+            },
+        );
+        let cx = drop_x + dragged_width * 0.5;
+        let cy = drop_y + Self::WIDGET_FRAME_HEADER_PX * 0.5;
+        for pl in &snap.cells {
+            if pl.instance_id == dragged {
+                continue;
+            }
+            // Skip hidden (non-active) group members.
+            if let Some(g) = self.group_manager.find_for_instance(pl.instance_id) {
+                if g.members.len() >= 2 && g.active_instance() != Some(pl.instance_id) {
+                    continue;
+                }
+            }
+            let header = PixelBounds {
+                x: pl.bounds.x,
+                y: pl.bounds.y,
+                width: pl.bounds.width,
+                height: Self::WIDGET_FRAME_HEADER_PX,
+            };
+            if cx >= header.x
+                && cx <= header.x + header.width
+                && cy >= header.y
+                && cy <= header.y + header.height
+            {
+                return Some(pl.instance_id);
+            }
+        }
+        None
+    }
+
+    async fn form_or_join_group(
+        self: &Arc<Self>,
+        workspace_id: Uuid,
+        dragged: Uuid,
+        target: Uuid,
+        pos: orchid_storage::GridPosition,
+        size: WidgetSize,
+    ) -> Result<()> {
+        if dragged == target {
+            return Ok(());
+        }
+        // Already grouped together — nothing to do.
+        if let (Some(ga), Some(gb)) = (
+            self.group_manager.find_for_instance(dragged),
+            self.group_manager.find_for_instance(target),
+        ) {
+            if ga.id == gb.id {
+                return Ok(());
+            }
+        }
+
+        if let Some(target_group) = self.group_manager.find_for_instance(target) {
+            // Leave previous group if any.
+            if let Some(prev) = self.group_manager.find_for_instance(dragged) {
+                let _ = self
+                    .group_manager
+                    .remove_from_group(prev.id, dragged)
+                    .await;
+                if let Ok(inst) = self.widget_manager.get_instance(dragged) {
+                    *inst.group_id.write() = None;
+                }
+                if prev.members.len() <= 2 {
+                    let _ = self.dissolve_group_internal(prev.id).await;
+                }
+            }
+            self.group_manager
+                .add_to_group(target_group.id, dragged)
+                .await
+                .map_err(|e| UiError::Slint(format!("add to group: {e}")))?;
+            if let Ok(inst) = self.widget_manager.get_instance(dragged) {
+                *inst.group_id.write() = Some(target_group.id);
+            }
+            let slot_pos = target_group.position;
+            let slot_size = target_group.size;
+            let _ = self.widget_manager.move_to(dragged, slot_pos).await;
+            let _ = self.widget_manager.resize(dragged, slot_size).await;
+            let _ = self
+                .group_manager
+                .switch_active(target_group.id, dragged)
+                .await;
+            return Ok(());
+        }
+
+        // Target is ungrouped — create a new group.
+        if let Some(prev) = self.group_manager.find_for_instance(dragged) {
+            let _ = self
+                .group_manager
+                .remove_from_group(prev.id, dragged)
+                .await;
+            if let Ok(inst) = self.widget_manager.get_instance(dragged) {
+                *inst.group_id.write() = None;
+            }
+            if prev.members.len() <= 2 {
+                let _ = self.dissolve_group_internal(prev.id).await;
+            }
+        }
+        let target_inst = self
+            .widget_manager
+            .get_instance(target)
+            .map_err(|e| UiError::Slint(format!("{e}")))?;
+        let slot_pos = *target_inst.position.read();
+        let slot_size = *target_inst.size.read();
+        let _ = pos;
+        let _ = size;
+        let gid = self
+            .group_manager
+            .create_group(
+                workspace_id,
+                vec![target, dragged],
+                slot_pos,
+                slot_size,
+            )
+            .await
+            .map_err(|e| UiError::Slint(format!("create group: {e}")))?;
+        for mid in [target, dragged] {
+            if let Ok(inst) = self.widget_manager.get_instance(mid) {
+                *inst.group_id.write() = Some(gid);
+            }
+            let _ = self.widget_manager.move_to(mid, slot_pos).await;
+            let _ = self.widget_manager.resize(mid, slot_size).await;
+        }
+        let _ = self.group_manager.switch_active(gid, dragged).await;
+        Ok(())
+    }
+
+    async fn dissolve_group_internal(self: &Arc<Self>, group_id: Uuid) -> Result<()> {
+        let members = self
+            .group_manager
+            .dissolve_group(group_id)
+            .await
+            .map_err(|e| UiError::Slint(format!("dissolve group: {e}")))?;
+        let Ok(w) = self.workspace_manager.active() else {
+            return Ok(());
+        };
+        for mid in members {
+            if let Ok(inst) = self.widget_manager.get_instance(mid) {
+                *inst.group_id.write() = None;
+            }
+            let all = self.widget_manager.instances_for_workspace(w.id);
+            if let Ok(inst) = self.widget_manager.get_instance(mid) {
+                let size = *inst.size.read();
+                if let Ok(pos) = self
+                    .layout_engine
+                    .auto_place_excluding_with_growth(w.id, size, &all, mid)
+                {
+                    let _ = self.widget_manager.move_to(mid, pos).await;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn on_group_tab_clicked(self: &Arc<Self>, group_id: &SharedString, member_id: &SharedString) {
+        let Ok(gid) = Uuid::parse_str(group_id.as_str()) else {
+            return;
+        };
+        let Ok(mid) = Uuid::parse_str(member_id.as_str()) else {
+            return;
+        };
+        let gm = self.group_manager.clone();
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(async move {
+            if let Err(e) = gm.switch_active(gid, mid).await {
+                warn!(?e, "group switch_active");
+            }
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    fn on_group_dissolve_clicked(self: &Arc<Self>, group_id: &SharedString) {
+        let Ok(gid) = Uuid::parse_str(group_id.as_str()) else {
+            return;
+        };
+        if gid.is_nil() {
+            return;
+        }
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(async move {
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            if let Err(e) = c.dissolve_group_internal(gid).await {
+                warn!(?e, "group dissolve");
+            }
+            if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
             }
         });
@@ -3682,6 +3941,20 @@ impl MainWindowController {
             if let Err(e) = wm.resize(u, new_size).await {
                 warn!(?e, "resize");
             }
+            if let Some(group) = c.group_manager.find_for_instance(u) {
+                if group.active_instance() == Some(u) {
+                    let _ = c
+                        .group_manager
+                        .update_slot(group.id, new_pos, new_size)
+                        .await;
+                    for mid in &group.members {
+                        if *mid != u {
+                            let _ = wm.move_to(*mid, new_pos).await;
+                            let _ = wm.resize(*mid, new_size).await;
+                        }
+                    }
+                }
+            }
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
             }
@@ -3693,6 +3966,8 @@ impl MainWindowController {
     const WIDGET_FRAME_HEADER_PX: f32 = 32.0;
     /// Height of [`terminal-tabs.slint`] inside the terminal widget content area.
     const TERMINAL_TAB_BAR_PX: f32 = 29.0;
+    /// Height of [`group-tabs.slint`] when a frame is part of a multi-widget group.
+    const GROUP_TAB_BAR_PX: f32 = 28.0;
 
     /// Resize PTY grids for every pane in the active tab to match the terminal viewport.
     /// Returns `true` if any session was resized.
@@ -5065,6 +5340,7 @@ impl MainWindowController {
             .get(&pl.instance_id)
             .cloned()
             .unwrap_or_else(empty_close_confirm_dialog);
+        let (group_id, group_tabs) = self.build_group_tab_models(pl.instance_id);
         WidgetFrameModel {
             instance_id: pl.instance_id.to_string().into(),
             type_id: type_s,
@@ -5080,6 +5356,8 @@ impl MainWindowController {
             snap_y: 0.0,
             snap_width: 0.0,
             snap_height: 0.0,
+            group_id,
+            group_tabs,
             terminal_cols: tcols,
             terminal_rows: trows,
             terminal_cells: tcells,
@@ -5105,6 +5383,39 @@ impl MainWindowController {
             file_manager: file_manager_model,
             close_confirm,
         }
+    }
+
+    fn build_group_tab_models(&self, instance_id: Uuid) -> (SharedString, ModelRc<GroupTabModel>) {
+        let Some(group) = self.group_manager.find_for_instance(instance_id) else {
+            return (SharedString::default(), ModelRc::new(VecModel::default()));
+        };
+        if group.members.len() < 2 {
+            return (SharedString::default(), ModelRc::new(VecModel::default()));
+        }
+        let active = group.active_instance();
+        let cache = self.widget_manager.snapshot_cache();
+        let tabs: Vec<GroupTabModel> = group
+            .members
+            .iter()
+            .map(|mid| {
+                let title = cache
+                    .get(*mid)
+                    .map(|ws| ws.title.clone())
+                    .or_else(|| {
+                        self.widget_manager
+                            .get_instance(*mid)
+                            .ok()
+                            .map(|i| i.type_id.clone())
+                    })
+                    .unwrap_or_else(|| mid.to_string());
+                GroupTabModel {
+                    instance_id: mid.to_string().into(),
+                    title: title.into(),
+                    is_active: active == Some(*mid),
+                }
+            })
+            .collect();
+        (group.id.to_string().into(), ModelRc::new(VecModel::from(tabs)))
     }
 
     /// Rebuild the Slint [`WorkspaceModel`].
@@ -5133,8 +5444,39 @@ impl MainWindowController {
         let mut canvas_content_w = snap.content_width_px.max(vw);
         let mut canvas_content_h = snap.content_height_px.max(vh);
         let mut pty_changed_needs_rebuild = false;
+        let workspace_groups = self.group_manager.list_for_workspace(w.id);
         for (idx, pl) in snap.cells.iter().enumerate() {
+            // Hide non-active group members — only the active tab occupies the slot.
+            if let Some(gid) = pl.group_id.or_else(|| {
+                workspace_groups
+                    .iter()
+                    .find(|g| g.members.contains(&pl.instance_id))
+                    .map(|g| g.id)
+            }) {
+                if let Ok(group) = self.group_manager.get(gid) {
+                    if group.members.len() >= 2
+                        && group.active_instance() != Some(pl.instance_id)
+                    {
+                        continue;
+                    }
+                }
+            }
             let mut bounds = pl.bounds;
+            // Group slot uses the group's shared position/size when available.
+            if let Some(group) = workspace_groups
+                .iter()
+                .find(|g| g.members.contains(&pl.instance_id) && g.members.len() >= 2)
+            {
+                let view = ViewportSize {
+                    width_px: vw,
+                    height_px: vh,
+                };
+                bounds = self.layout_engine.pixel_bounds_for(
+                    group.position,
+                    group.size,
+                    view,
+                );
+            }
             if let Some(o) = off.get(&pl.instance_id) {
                 bounds.x += o.0;
                 bounds.y += o.1;
@@ -5147,9 +5489,21 @@ impl MainWindowController {
             let Ok(iref) = self.widget_manager.get_instance(pl.instance_id) else {
                 continue;
             };
+            let group_bar = if self
+                .group_manager
+                .find_for_instance(pl.instance_id)
+                .is_some_and(|g| g.members.len() >= 2)
+            {
+                Self::GROUP_TAB_BAR_PX
+            } else {
+                0.0
+            };
             if iref.type_id == "terminal" && !ro.contains_key(&pl.instance_id) {
                 let cw = bounds.width.max(1.0);
-                let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX)
+                let ch = (bounds.height
+                    - Self::WIDGET_FRAME_HEADER_PX
+                    - Self::TERMINAL_TAB_BAR_PX
+                    - group_bar)
                     .max(1.0);
                 if self.resize_terminal_pty_to_content(pl.instance_id, cw, ch) {
                     pty_changed_needs_rebuild = true;

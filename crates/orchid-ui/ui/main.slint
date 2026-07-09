@@ -44,6 +44,7 @@ export { OnboardingGlobal } from "onboarding_global.slint";
 export { SettingsGlobal } from "settings_global.slint";
 export {
     DockWidgetType,
+    GroupTabModel,
     MediaModel,
     MoonModel,
     MoonValueEntry,
@@ -87,6 +88,8 @@ export component MainWindow inherits Window {
     callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
+    callback group-tab-clicked(string, string);
+    callback group-dissolve-clicked(string);
     callback terminal-key-pressed(string, string, bool, bool, bool);
     callback terminal-viewport-changed(string, length, length);
     callback terminal-tab-clicked(string, int);
@@ -291,6 +294,8 @@ export component MainWindow inherits Window {
             widget-resize-started(id, c, px, py) => { root.widget-resize-started(id, c, px, py); }
             widget-resize-moved(id, px, py) => { root.widget-resize-moved(id, px, py); }
             widget-resize-ended(id) => { root.widget-resize-ended(id); }
+            group-tab-clicked(group-id, member-id) => { root.group-tab-clicked(group-id, member-id); }
+            group-dissolve-clicked(group-id) => { root.group-dissolve-clicked(group-id); }
             terminal-key-pressed(id, text, ctrl, shift, alt) => {
                 root.terminal-key-pressed(id, text, ctrl, shift, alt);
             }
