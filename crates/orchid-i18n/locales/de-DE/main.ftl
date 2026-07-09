@@ -312,6 +312,7 @@ viewer-pdf-go = Los
 viewer-text-read-only = Schreibgeschützt
 viewer-text-editing = Bearbeitung
 viewer-text-save = Speichern (Ctrl+S)
+viewer-text-lines = { $count } Zeilen
 viewer-text-unsaved-title = Ungespeicherte Änderungen
 viewer-text-unsaved-body = Änderungen vor dem Schließen speichern?
 viewer-text-discard = Verwerfen

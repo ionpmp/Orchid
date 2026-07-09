@@ -96,8 +96,14 @@ impl WidgetGroup {
                 self.members.len()
             )));
         }
+        let active_id = self.active_instance();
         let member = self.members.remove(from);
         self.members.insert(to, member);
+        if let Some(id) = active_id {
+            if let Some(idx) = self.members.iter().position(|m| *m == id) {
+                self.active_member = idx as u16;
+            }
+        }
         Ok(())
     }
 
@@ -338,6 +344,28 @@ impl GroupManager {
             .ok_or(WidgetError::GroupNotFound(group_id))?;
         entry.value_mut().position = position;
         entry.value_mut().size = size;
+        let group = entry.value().clone();
+        drop(entry);
+        self.persist(&group)?;
+        Ok(())
+    }
+
+    /// Reorder a member within a group (tab strip order).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WidgetError::GroupNotFound`] or [`WidgetError::GroupMoveError`].
+    pub async fn reorder_members(
+        &self,
+        group_id: Uuid,
+        from: usize,
+        to: usize,
+    ) -> Result<()> {
+        let mut entry = self
+            .groups
+            .get_mut(&group_id)
+            .ok_or(WidgetError::GroupNotFound(group_id))?;
+        entry.value_mut().reorder(from, to)?;
         let group = entry.value().clone();
         drop(entry);
         self.persist(&group)?;

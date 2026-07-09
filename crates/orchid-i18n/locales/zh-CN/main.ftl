@@ -312,6 +312,7 @@ viewer-pdf-go = 转到
 viewer-text-read-only = 只读
 viewer-text-editing = 编辑中
 viewer-text-save = 保存 (Ctrl+S)
+viewer-text-lines = { $count } 行
 viewer-text-unsaved-title = 未保存的更改
 viewer-text-unsaved-body = 关闭前保存更改？
 viewer-text-discard = 放弃

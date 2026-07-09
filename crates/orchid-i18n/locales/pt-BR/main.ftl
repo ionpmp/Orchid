@@ -312,6 +312,7 @@ viewer-pdf-go = Ir
 viewer-text-read-only = Somente leitura
 viewer-text-editing = Editando
 viewer-text-save = Salvar (Ctrl+S)
+viewer-text-lines = { $count } linhas
 viewer-text-unsaved-title = Alterações não salvas
 viewer-text-unsaved-body = Salvar as alterações antes de fechar?
 viewer-text-discard = Descartar

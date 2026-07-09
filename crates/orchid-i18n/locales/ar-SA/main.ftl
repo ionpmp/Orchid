@@ -313,6 +313,7 @@ viewer-pdf-go = انتقال
 viewer-text-read-only = للقراءة فقط
 viewer-text-editing = تحرير
 viewer-text-save = حفظ (Ctrl+S)
+viewer-text-lines = { $count } أسطر
 viewer-text-unsaved-title = تغييرات غير محفوظة
 viewer-text-unsaved-body = هل تريد حفظ التغييرات قبل الإغلاق؟
 viewer-text-discard = تجاهل

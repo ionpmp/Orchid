@@ -8,6 +8,8 @@ export component GroupTabs inherits Rectangle {
 
     callback tab-clicked(string);
     callback tab-closed(string);
+    callback tab-move-left(string);
+    callback tab-move-right(string);
     callback dissolve-clicked();
 
     height: 28px;
@@ -39,6 +41,42 @@ export component GroupTabs inherits Rectangle {
                         font-weight: tab.is-active ? Theme.weight-medium : Theme.weight-regular;
                         vertical-alignment: center;
                         overflow: elide;
+                    }
+                }
+
+                if i > 0 : Rectangle {
+                    width: 16px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: left-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: 8px;
+                    left-ta := TouchArea {
+                        clicked => { root.tab-move-left(tab.instance-id); }
+                    }
+                    Text {
+                        text: "‹";
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if i + 1 < tabs.length : Rectangle {
+                    width: 16px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: right-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: 8px;
+                    right-ta := TouchArea {
+                        clicked => { root.tab-move-right(tab.instance-id); }
+                    }
+                    Text {
+                        text: "›";
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
 

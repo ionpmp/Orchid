@@ -312,6 +312,7 @@ viewer-pdf-go = 移動
 viewer-text-read-only = 読み取り専用
 viewer-text-editing = 編集中
 viewer-text-save = 保存 (Ctrl+S)
+viewer-text-lines = { $count } 行
 viewer-text-unsaved-title = 未保存の変更
 viewer-text-unsaved-body = 閉じる前に変更を保存しますか？
 viewer-text-discard = 破棄

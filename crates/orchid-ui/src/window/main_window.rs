@@ -1147,6 +1147,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_group_tab_move_left({
+            let t = t.clone();
+            move |group_id, member_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_group_tab_move(&group_id, &member_id, -1);
+                }
+            }
+        });
+        self.window.on_group_tab_move_right({
+            let t = t.clone();
+            move |group_id, member_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_group_tab_move(&group_id, &member_id, 1);
+                }
+            }
+        });
         self.window.on_group_dissolve_clicked({
             let t = t.clone();
             move |group_id| {
@@ -3867,6 +3883,40 @@ impl MainWindowController {
                         }
                     }
                 }
+            }
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    fn on_group_tab_move(
+        self: &Arc<Self>,
+        group_id: &SharedString,
+        member_id: &SharedString,
+        delta: i32,
+    ) {
+        let Ok(gid) = Uuid::parse_str(group_id.as_str()) else {
+            return;
+        };
+        let Ok(mid) = Uuid::parse_str(member_id.as_str()) else {
+            return;
+        };
+        let gm = self.group_manager.clone();
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(async move {
+            let Ok(group) = gm.get(gid) else {
+                return;
+            };
+            let Some(from) = group.members.iter().position(|m| *m == mid) else {
+                return;
+            };
+            let to = from as i32 + delta;
+            if to < 0 || to as usize >= group.members.len() {
+                return;
+            }
+            if let Err(e) = gm.reorder_members(gid, from, to as usize).await {
+                warn!(?e, "group reorder");
             }
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
@@ -9996,6 +10046,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
 }
 
 fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
+    let lines_args = orchid_i18n::FluentArgs::new().with("count", "0");
     ViewerTextModel {
         language: "plaintext".into(),
         encoding: "UTF-8".into(),
@@ -10012,6 +10063,7 @@ fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
         plain_text: SharedString::new(),
         mode_label: locale.tr("viewer-text-read-only").into(),
         save_label: locale.tr("viewer-text-save").into(),
+        lines_label: locale.tr_args("viewer-text-lines", &lines_args).into(),
     }
 }
 
@@ -10213,6 +10265,12 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager)
             locale.tr("viewer-text-editing").into()
         },
         save_label: locale.tr("viewer-text-save").into(),
+        lines_label: locale
+            .tr_args(
+                "viewer-text-lines",
+                &orchid_i18n::FluentArgs::new().with("count", s.total_lines.to_string()),
+            )
+            .into(),
     }
 }
 

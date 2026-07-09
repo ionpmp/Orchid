@@ -315,6 +315,7 @@ viewer-pdf-go = Go
 viewer-text-read-only = Read-only
 viewer-text-editing = Editing
 viewer-text-save = Save (Ctrl+S)
+viewer-text-lines = { $count } lines
 viewer-text-dirty-indicator = Unsaved changes
 viewer-text-unsaved-title = Unsaved changes
 viewer-text-unsaved-body = Save changes before closing?

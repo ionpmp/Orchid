@@ -301,6 +301,7 @@ viewer-pdf-go = Перейти
 viewer-text-read-only = Только чтение
 viewer-text-editing = Редактирование
 viewer-text-save = Сохранить (Ctrl+S)
+viewer-text-lines = { $count } строк
 viewer-text-dirty-indicator = Несохранённые изменения
 viewer-text-unsaved-title = Несохранённые изменения
 viewer-text-unsaved-body = Сохранить изменения перед закрытием?
