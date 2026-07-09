@@ -65,6 +65,23 @@ export component OnboardingOverlay inherits Rectangle {
                     back-ta := TouchArea {
                         clicked => { root.back-clicked(); }
                     }
+                    if back-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: back-hint.preferred-width + 12px;
+                        height: back-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        back-hint := Text {
+                            x: 6px; y: 3px;
+                            text: OnboardingGlobal.back-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
 
                     Text {
                         text: OnboardingGlobal.back-label;
@@ -86,6 +103,23 @@ export component OnboardingOverlay inherits Rectangle {
                     skip-ta := TouchArea {
                         clicked => { root.skip-clicked(); }
                     }
+                    if skip-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: skip-hint.preferred-width + 12px;
+                        height: skip-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        skip-hint := Text {
+                            x: 6px; y: 3px;
+                            text: OnboardingGlobal.skip-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
 
                     Text {
                         text: OnboardingGlobal.skip-label;
@@ -105,6 +139,25 @@ export component OnboardingOverlay inherits Rectangle {
 
                     next-ta := TouchArea {
                         clicked => { root.next-clicked(); }
+                    }
+                    if next-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: next-hint.preferred-width + 12px;
+                        height: next-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        next-hint := Text {
+                            x: 6px; y: 3px;
+                            text: OnboardingGlobal.current-step + 1 >= OnboardingGlobal.step-count
+                                ? OnboardingGlobal.finish-label
+                                : OnboardingGlobal.next-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
                     }
 
                     Text {

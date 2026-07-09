@@ -24,6 +24,26 @@ export component GroupTabs inherits Rectangle {
             height: 24px;
             background: tab.is-active ? Theme.surface-base : transparent;
             border-radius: Theme.radius-md;
+            border-width: tab.is-active ? 1px : 0px;
+            border-color: tab.is-active ? Theme.accent-brand : transparent;
+
+            if tab-ta.has-hover : Rectangle {
+                x: 0px;
+                y: parent.height + 2px;
+                width: tab-hint.preferred-width + 12px;
+                height: tab-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                tab-hint := Text {
+                    x: 6px; y: 3px;
+                    text: tab.title;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
 
             HorizontalLayout {
                 padding-left: 8px;
@@ -36,7 +56,7 @@ export component GroupTabs inherits Rectangle {
 
                     Text {
                         text: tab.title;
-                        color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                        color: tab.is-active ? Theme.accent-brand : Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         font-weight: tab.is-active ? Theme.weight-medium : Theme.weight-regular;
                         vertical-alignment: center;

@@ -572,6 +572,8 @@ impl MainWindowController {
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
+        g.set_recent_files_open_hint(mgr.tr("recent-files-open-hint").into());
+        g.set_rss_open_item_hint(mgr.tr("rss-open-item-hint").into());
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
@@ -10601,7 +10603,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     if !s.current_inner_path.is_empty() {
         entries.push(ViewerArchiveEntry {
             path_in_archive: SharedString::new(),
-            name: "..".into(),
+            name: locale.tr("viewer-archive-parent").into(),
             is_dir: true,
             size_text: SharedString::new(),
             modified_text: SharedString::new(),

@@ -38,6 +38,9 @@ export component SettingsPanel inherits Rectangle {
                             ? Theme.surface-raised
                             : (sec-ta.has-hover ? Theme.surface-raised : transparent);
                     border-radius: Theme.radius-md;
+                    border-width: i == SettingsGlobal.selected-section-index ? 1px : 0px;
+                    border-color: i == SettingsGlobal.selected-section-index
+                        ? Theme.accent-brand : transparent;
 
                     sec-ta := TouchArea {
                         clicked => {
@@ -48,7 +51,8 @@ export component SettingsPanel inherits Rectangle {
                     Text {
                         x: 12px;
                         text: sec.label;
-                        color: Theme.text-primary;
+                        color: i == SettingsGlobal.selected-section-index
+                            ? Theme.accent-brand : Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }
