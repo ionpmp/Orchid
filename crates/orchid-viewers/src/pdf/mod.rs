@@ -75,6 +75,23 @@ impl PdfViewer {
         *self.viewport.write() = (width.max(1.0), height.max(1.0));
     }
 
+    /// Update the viewport and re-render when a fit mode is active.
+    ///
+    /// # Errors
+    ///
+    /// Propagates render failures when a document is open and fit mode is not custom.
+    pub async fn apply_viewport(&self, width: f32, height: f32) -> Result<()> {
+        self.set_viewport(width, height);
+        if self.bytes.read().is_none() {
+            return Ok(());
+        }
+        if *self.fit_mode.read() == FitMode::Custom {
+            return Ok(());
+        }
+        let page = *self.current_page.read();
+        self.rerender_at_page(page.max(1)).await
+    }
+
     /// Go to a specific page (1-based).
     ///
     /// # Errors

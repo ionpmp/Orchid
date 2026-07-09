@@ -308,6 +308,7 @@ viewer-image-flip-v = 垂直翻转
 viewer-pdf-page-of = 第 { $current } 页，共 { $total } 页
 viewer-pdf-fit-width = 适应宽度
 viewer-pdf-fit-page = 适应页面
+viewer-pdf-go = 转到
 viewer-text-read-only = 只读
 viewer-text-editing = 编辑中
 viewer-text-save = 保存

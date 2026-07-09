@@ -14,6 +14,15 @@ export component ViewerPdfView inherits Rectangle {
 
     background: transparent;
 
+    property <string> page-draft: "" + model.current-page;
+    property <bool> page-editing: false;
+
+    changed model => {
+        if !root.page-editing {
+            root.page-draft = "" + model.current-page;
+        }
+    }
+
     if !model.available : VerticalLayout {
         alignment: center;
         padding: 16px;
@@ -46,11 +55,49 @@ export component ViewerPdfView inherits Rectangle {
                 }
 
                 Rectangle {
-                    width: 120px;
+                    width: 44px;
                     height: 28px;
                     y: (parent.height - self.height) / 2;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    clip: true;
+
+                    page-input := TextInput {
+                        x: 4px;
+                        width: parent.width - 8px;
+                        height: parent.height;
+                        text: root.page-draft;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        single-line: true;
+                        edited => {
+                            root.page-editing = true;
+                            root.page-draft = self.text;
+                        }
+                        accepted => {
+                            root.commit-page-jump();
+                        }
+                    }
+                }
+
+                Text {
+                    text: "/ " + model.page-count;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    width: 40px; height: 28px;
+                    background: go-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    go-ta := TouchArea { clicked => { root.commit-page-jump(); } }
                     Text {
-                        text: "Page " + model.current-page + " / " + model.page-count;
+                        text: model.go-label;
                         color: Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
@@ -70,21 +117,41 @@ export component ViewerPdfView inherits Rectangle {
                 Rectangle { width: 8px; }
 
                 Rectangle {
-                    width: 72px; height: 28px;
+                    min-width: 72px; height: 28px;
                     background: fw-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fw-ta := TouchArea { clicked => { root.fit-width(); } }
-                    Text { text: "Fit Width"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.fit-width-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
 
                 Rectangle {
-                    width: 72px; height: 28px;
+                    min-width: 72px; height: 28px;
                     background: fp-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fp-ta := TouchArea { clicked => { root.fit-page(); } }
-                    Text { text: "Fit Page"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.fit-page-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
 
                 Rectangle { width: 8px; }
@@ -138,5 +205,15 @@ export component ViewerPdfView inherits Rectangle {
                 Text { text: model.info-text; color: Theme.text-tertiary; font-size: Theme.font-size-sm; vertical-alignment: center; }
             }
         }
+    }
+
+    function commit-page-jump() {
+        root.page-editing = false;
+        // Digits-only parse: ignore non-numeric draft and clamp later in Rust.
+        if root.page-draft == "" || !root.page-draft.is-float() {
+            root.page-draft = "" + model.current-page;
+            return;
+        }
+        root.go-to-page(Math.round(root.page-draft.to-float()));
     }
 }

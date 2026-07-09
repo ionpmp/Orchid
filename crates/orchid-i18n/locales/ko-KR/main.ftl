@@ -308,6 +308,7 @@ viewer-image-flip-v = 세로 뒤집기
 viewer-pdf-page-of = { $total }페이지 중 { $current }페이지
 viewer-pdf-fit-width = 너비에 맞추기
 viewer-pdf-fit-page = 페이지에 맞추기
+viewer-pdf-go = 이동
 viewer-text-read-only = 읽기 전용
 viewer-text-editing = 편집 중
 viewer-text-save = 저장

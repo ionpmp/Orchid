@@ -9905,6 +9905,10 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         path_display: SharedString::new(),
         available: true,
         unavailable_reason: locale.tr("viewer-pdf-unavailable").into(),
+        page_of_label: SharedString::new(),
+        fit_width_label: locale.tr("viewer-pdf-fit-width").into(),
+        fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
+        go_label: locale.tr("viewer-pdf-go").into(),
     }
 }
 
@@ -10055,6 +10059,10 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         Image::default()
     };
 
+    let page_args = orchid_i18n::FluentArgs::new()
+        .with("current", s.current_page.to_string())
+        .with("total", s.page_count.to_string());
+
     ViewerPdfModel {
         page_count: s.page_count as i32,
         current_page: s.current_page as i32,
@@ -10070,6 +10078,10 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         } else {
             locale.tr("viewer-pdf-unavailable").into()
         },
+        page_of_label: locale.tr_args("viewer-pdf-page-of", &page_args).into(),
+        fit_width_label: locale.tr("viewer-pdf-fit-width").into(),
+        fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
+        go_label: locale.tr("viewer-pdf-go").into(),
     }
 }
 

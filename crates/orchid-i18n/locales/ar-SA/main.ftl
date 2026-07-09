@@ -309,6 +309,7 @@ viewer-image-flip-v = قلب عمودي
 viewer-pdf-page-of = صفحة { $current } من { $total }
 viewer-pdf-fit-width = ملاءمة العرض
 viewer-pdf-fit-page = ملاءمة الصفحة
+viewer-pdf-go = انتقال
 viewer-text-read-only = للقراءة فقط
 viewer-text-editing = تحرير
 viewer-text-save = حفظ

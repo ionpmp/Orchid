@@ -308,6 +308,7 @@ viewer-image-flip-v = Vertikal spiegeln
 viewer-pdf-page-of = Seite { $current } von { $total }
 viewer-pdf-fit-width = An Breite anpassen
 viewer-pdf-fit-page = An Seite anpassen
+viewer-pdf-go = Los
 viewer-text-read-only = Schreibgeschützt
 viewer-text-editing = Bearbeitung
 viewer-text-save = Speichern

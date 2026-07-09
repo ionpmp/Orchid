@@ -297,6 +297,7 @@ viewer-image-flip-v = Отразить по вертикали
 viewer-pdf-page-of = Страница { $current } из { $total }
 viewer-pdf-fit-width = По ширине
 viewer-pdf-fit-page = По странице
+viewer-pdf-go = Перейти
 viewer-text-read-only = Только чтение
 viewer-text-editing = Редактирование
 viewer-text-save = Сохранить

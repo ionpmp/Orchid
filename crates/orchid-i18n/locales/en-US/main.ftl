@@ -311,6 +311,7 @@ viewer-image-flip-v = Flip vertical
 viewer-pdf-page-of = Page { $current } of { $total }
 viewer-pdf-fit-width = Fit width
 viewer-pdf-fit-page = Fit page
+viewer-pdf-go = Go
 viewer-text-read-only = Read-only
 viewer-text-editing = Editing
 viewer-text-save = Save

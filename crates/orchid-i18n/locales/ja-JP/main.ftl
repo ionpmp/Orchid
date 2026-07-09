@@ -308,6 +308,7 @@ viewer-image-flip-v = 上下反転
 viewer-pdf-page-of = { $total } ページ中 { $current } ページ
 viewer-pdf-fit-width = 幅に合わせる
 viewer-pdf-fit-page = ページに合わせる
+viewer-pdf-go = 移動
 viewer-text-read-only = 読み取り専用
 viewer-text-editing = 編集中
 viewer-text-save = 保存

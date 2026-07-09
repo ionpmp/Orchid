@@ -308,6 +308,7 @@ viewer-image-flip-v = Capovolgi verticalmente
 viewer-pdf-page-of = Pagina { $current } di { $total }
 viewer-pdf-fit-width = Adatta alla larghezza
 viewer-pdf-fit-page = Adatta alla pagina
+viewer-pdf-go = Vai
 viewer-text-read-only = Sola lettura
 viewer-text-editing = Modifica
 viewer-text-save = Salva

@@ -170,16 +170,23 @@ impl ViewerWidget {
 
 }
 
-/// Update image-viewer viewport size for fit/zoom math.
+/// Update image/PDF viewport size for fit/zoom math.
 pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    let guard = inner.viewer.lock().await;
-    if let Some(v) = guard.as_ref() {
-        if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
-            img.set_viewport(width, height);
-        } else if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
-            pdf.set_viewport(width, height);
+    let mut pdf_rerendered = false;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+                img.set_viewport(width, height);
+            } else if let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() {
+                let _ = pdf.apply_viewport(width, height).await;
+                pdf_rerendered = true;
+            }
         }
+    }
+    if pdf_rerendered {
+        inner.refresh_snapshot().await;
     }
     Ok(())
 }
