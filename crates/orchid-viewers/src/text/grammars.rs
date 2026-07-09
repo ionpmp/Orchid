@@ -96,6 +96,8 @@ pub const HIGHLIGHT_LANGUAGES: &[&str] = &[
     "typescript",
     "tsx",
     "yaml",
+    "go",
+    "bash",
 ];
 
 /// Resolve a canonical language id to a tree-sitter [`Language`].
@@ -111,6 +113,8 @@ pub fn language_for_id(id: &str) -> Option<tree_sitter::Language> {
         "typescript" => Some(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
         "tsx" => Some(tree_sitter_typescript::LANGUAGE_TSX.into()),
         "yaml" => Some(tree_sitter_yaml::LANGUAGE.into()),
+        "go" => Some(tree_sitter_go::LANGUAGE.into()),
+        "bash" => Some(tree_sitter_bash::LANGUAGE.into()),
         _ => None,
     }
 }
@@ -130,6 +134,8 @@ mod tests {
         assert_eq!(detect_language(&path("local:/a/b.json"), b""), "json");
         assert_eq!(detect_language(&path("local:/a/b.ts"), b""), "typescript");
         assert_eq!(detect_language(&path("local:/a/b.tsx"), b""), "tsx");
+        assert_eq!(detect_language(&path("local:/a/b.go"), b""), "go");
+        assert_eq!(detect_language(&path("local:/a/b.sh"), b""), "bash");
         assert_eq!(detect_language(&path("local:/a/unknown.xyz"), b""), PLAINTEXT);
     }
 

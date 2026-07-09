@@ -212,6 +212,34 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "comment" => Some(SyntaxScope::Comment),
             _ => None,
         },
+        "go" => match kind {
+            "type_identifier" | "type_spec" | "type_declaration" | "qualified_type" => {
+                Some(SyntaxScope::Type)
+            }
+            "function_declaration" | "method_declaration" | "func_literal" => {
+                Some(SyntaxScope::Function)
+            }
+            "field_identifier" | "identifier" | "package_identifier" => {
+                Some(SyntaxScope::Variable)
+            }
+            "interpreted_string_literal" | "raw_string_literal" | "rune_literal" => {
+                Some(SyntaxScope::String)
+            }
+            _ => None,
+        },
+        "bash" => match kind {
+            "command_name" | "function_definition" => Some(SyntaxScope::Function),
+            "variable_name" | "special_variable_name" | "simple_expansion"
+            | "expansion" | "variable_assignment" => Some(SyntaxScope::Variable),
+            "string" | "raw_string" | "ansi_c_string" | "translated_string" => {
+                Some(SyntaxScope::String)
+            }
+            "file_redirect" | "heredoc_redirect" | "herestring_redirect" => {
+                Some(SyntaxScope::Operator)
+            }
+            "test_operator" | "file_descriptor" => Some(SyntaxScope::Operator),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -310,6 +338,34 @@ fn is_keyword_kind(kind: &str) -> bool {
             // YAML document markers often surface as keyword-like tokens
             | "---"
             | "..."
+            // Go / Bash (shared tokens like package/export/select already listed above)
+            | "func"
+            | "defer"
+            | "go"
+            | "chan"
+            | "map"
+            | "range"
+            | "fallthrough"
+            | "goto"
+            | "nil"
+            | "iota"
+            | "then"
+            | "fi"
+            | "do"
+            | "done"
+            | "esac"
+            | "until"
+            | "declare"
+            | "local"
+            | "readonly"
+            | "unset"
+            | "source"
+            | "alias"
+            | "unalias"
+            | "builtin"
+            | "command"
+            | "coproc"
+            | "time"
     )
 }
 
@@ -481,6 +537,30 @@ mod tests {
     }
 
     #[test]
+    fn go_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "package main\n\nfunc greet(name string) string {\n\treturn name\n}\n";
+        let lines = h.highlight_lines("go", source, 0, 5);
+        assert_eq!(lines.len(), 5);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for Go"
+        );
+    }
+
+    #[test]
+    fn bash_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "#!/bin/bash\nif [ -n \"$NAME\" ]; then\n  echo \"hello $NAME\"\nfi\n";
+        let lines = h.highlight_lines("bash", source, 0, 4);
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for Bash"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
@@ -490,5 +570,7 @@ mod tests {
         assert!(langs.contains(&"typescript"));
         assert!(langs.contains(&"tsx"));
         assert!(langs.contains(&"yaml"));
+        assert!(langs.contains(&"go"));
+        assert!(langs.contains(&"bash"));
     }
 }
