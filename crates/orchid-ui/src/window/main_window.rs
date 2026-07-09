@@ -169,6 +169,8 @@ pub struct MainWindowController {
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
     /// Unsaved text close-confirm overlays for viewer widgets.
     close_confirm_overlays: Arc<RwLock<HashMap<Uuid, WidgetCloseConfirmDialog>>>,
+    /// Last text-viewer instance that received an edit (for Ctrl+S when focus left the input).
+    last_text_edit_instance: Arc<Mutex<Option<Uuid>>>,
     /// Last interacted file-manager instance and pane (for drop targeting).
     fm_focus: Arc<Mutex<Option<(Uuid, u8)>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
@@ -459,6 +461,7 @@ impl MainWindowController {
             password_add_dialogs: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
             close_confirm_overlays: Arc::new(RwLock::new(HashMap::new())),
+            last_text_edit_instance: Arc::new(Mutex::new(None)),
             fm_focus: Arc::new(Mutex::new(None)),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
@@ -1726,8 +1729,12 @@ impl MainWindowController {
             }
         });
         self.window.on_viewer_text_edited({
+            let t = t.clone();
             move |id, text| {
                 if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                    if let Some(c) = t.upgrade() {
+                        *c.last_text_edit_instance.lock() = Some(inst);
+                    }
                     let body = text.to_string();
                     // Push edits without schedule_rebuild so the multiline
                     // TextInput keeps caret position; dirty ● uses local state.
@@ -2402,6 +2409,49 @@ impl MainWindowController {
 
     fn clear_leader_pending(&self) {
         *self.leader_pending_until.lock() = None;
+    }
+
+    /// Ctrl+S fallback for the last edited text viewer (when focus left the TextInput).
+    fn try_viewer_text_ctrl_s(
+        self: &Arc<Self>,
+        mods: slint::winit_030::winit::keyboard::ModifiersState,
+        logical: &slint::winit_030::winit::keyboard::Key,
+    ) -> bool {
+        use slint::winit_030::winit::keyboard::Key;
+        if !mods.control_key() || mods.shift_key() || mods.alt_key() || mods.super_key() {
+            return false;
+        }
+        let is_s = matches!(logical, Key::Character(s) if s.eq_ignore_ascii_case("s"));
+        if !is_s {
+            return false;
+        }
+        let Some(inst) = *self.last_text_edit_instance.lock() else {
+            return false;
+        };
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(inst) else {
+            return false;
+        };
+        let WidgetPayload::Viewer(v) = &ws.payload else {
+            return false;
+        };
+        let orchid_viewers::ViewerSnapshot::Text(t) = &v.snapshot else {
+            return false;
+        };
+        if t.read_only {
+            return false;
+        }
+        let tw = Arc::downgrade(self);
+        let _ = slint::spawn_local(Compat::new(async move {
+            if let Err(e) = orchid_widgets::builtin::viewer::text_save(inst).await {
+                warn!(?e, "viewer text Ctrl+S");
+                return;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.schedule_rebuild();
+            }
+        }));
+        true
     }
 
     fn try_activate_leader(
@@ -5726,6 +5776,8 @@ impl MainWindowController {
                                     && winit_key_matches(palette_sc.key, &event.logical_key)
                                 {
                                     c.toggle_command_palette();
+                                } else if c.try_viewer_text_ctrl_s(mods, &event.logical_key) {
+                                    // Saved focused/last text editor; consume.
                                 } else if let Some(shortcut) =
                                     winit_to_shortcut(mods, &event.logical_key)
                                 {

@@ -175,6 +175,17 @@ export component ViewerTextView inherits Rectangle {
                         color: Theme.text-primary;
                         font-family: Theme.font-family-mono;
                         font-size: Theme.font-size-sm;
+                        key-pressed(event) => {
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "s" || event.text == "S"))
+                            {
+                                root.save();
+                                return accept;
+                            }
+                            return reject;
+                        }
                         edited => {
                             root.draft-text = self.text;
                             root.locally-dirty = true;
