@@ -2592,7 +2592,8 @@ pub async fn run_action_with_opts(
             let cfg = inner.config.read().clone();
             if cfg.confirm_delete && !target_paths.is_empty() && !opts.skip_confirm {
                 return Ok(ActionOutcome::NeedsConfirmation {
-                    message: format!("Delete {} items?", target_paths.len()),
+                    // Fluent key resolved in the UI with `{ $n }` = paths.len().
+                    message: "fm-confirm-delete".into(),
                     action_id: action_id.to_string(),
                     paths: target_paths,
                 });

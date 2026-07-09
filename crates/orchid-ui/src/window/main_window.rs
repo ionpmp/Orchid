@@ -3114,6 +3114,14 @@ impl MainWindowController {
         } else {
             st.selected_index.clamp(0, count as i32 - 1)
         };
+        let no_results_text = if !st.query.trim().is_empty() {
+            self.locale.tr_args(
+                "search-no-results",
+                &orchid_i18n::FluentArgs::new().with("query", st.query.clone()),
+            )
+        } else {
+            self.locale.tr("search-no-results-short")
+        };
         let g = self.window.global::<CommandPaletteGlobal>();
         g.set_visible(st.visible);
         g.set_model(SearchModel {
@@ -3124,7 +3132,7 @@ impl MainWindowController {
             selected_index: selected,
             placeholder_text: self.locale.tr("command-palette-placeholder").into(),
             empty_state_text: self.locale.tr("command-palette-empty").into(),
-            no_results_text: self.locale.tr("search-no-results-short").into(),
+            no_results_text: no_results_text.into(),
             searching_text: self.locale.tr("search-searching").into(),
             request_autofocus: st.request_autofocus,
         });
@@ -7136,10 +7144,21 @@ impl MainWindowController {
                 action_id,
                 paths,
             } => {
+                let n = paths.len();
+                let message_text = if message == "fm-confirm-delete"
+                    || message == "fm-confirm-delete-permanent"
+                {
+                    self.locale.tr_args(
+                        &message,
+                        &orchid_i18n::FluentArgs::new().with("n", n.to_string()),
+                    )
+                } else {
+                    message
+                };
                 let dlg = FmConfirmDialog {
                     visible: true,
                     title: self.locale.tr("fm-confirm-title").into(),
-                    message: message.into(),
+                    message: message_text.into(),
                     confirm_label: self.locale.tr("action-confirm-yes").into(),
                     cancel_label: self.locale.tr("action-confirm-no").into(),
                     pending_action: action_id.into(),
@@ -10686,15 +10705,28 @@ fn build_search_model(
     } else {
         selected.clamp(0, max - 1)
     };
+    let error = match p.error.as_deref() {
+        Some("search-sources-unconfigured") => locale.tr("search-sources-unconfigured"),
+        Some(other) => other.to_string(),
+        None => String::new(),
+    };
+    let no_results_text = if !p.query.trim().is_empty() {
+        locale.tr_args(
+            "search-no-results",
+            &orchid_i18n::FluentArgs::new().with("query", p.query.clone()),
+        )
+    } else {
+        locale.tr("search-no-results-short")
+    };
     SearchModel {
         query: p.query.clone().into(),
         candidates: ModelRc::new(VecModel::from(candidates)),
         is_searching: p.is_searching,
-        error: p.error.clone().unwrap_or_default().into(),
+        error: error.into(),
         selected_index: clamped,
         placeholder_text: locale.tr("search-placeholder").into(),
         empty_state_text: locale.tr("search-empty-state").into(),
-        no_results_text: locale.tr("search-no-results-short").into(),
+        no_results_text: no_results_text.into(),
         searching_text: locale.tr("search-searching").into(),
         request_autofocus,
     }

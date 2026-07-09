@@ -257,7 +257,7 @@ impl Widget for UniversalSearchWidget {
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         if self.inner.aggregator.is_none() {
-            *self.inner.error.write() = Some("Search sources not yet configured".into());
+            *self.inner.error.write() = Some("search-sources-unconfigured".into());
         } else {
             *self.inner.error.write() = None;
         }

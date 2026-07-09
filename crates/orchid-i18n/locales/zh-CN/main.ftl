@@ -142,6 +142,7 @@ search-placeholder = 搜索文件、命令、设置…
 search-empty-state = 开始输入以搜索
 search-no-results = 没有“{ $query }”的结果
 search-no-results-short = 无结果
+search-sources-unconfigured = 搜索源尚未配置
 search-searching = 搜索中…
 search-source-files = 文件
 search-source-commands = 命令

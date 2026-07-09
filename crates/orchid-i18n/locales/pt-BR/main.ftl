@@ -142,6 +142,7 @@ search-placeholder = Buscar arquivos, comandos, configurações…
 search-empty-state = Comece a digitar para buscar
 search-no-results = Nenhum resultado para "{ $query }"
 search-no-results-short = Nenhum resultado
+search-sources-unconfigured = As fontes de pesquisa ainda não estão configuradas
 search-searching = Buscando…
 search-source-files = Arquivos
 search-source-commands = Comandos
