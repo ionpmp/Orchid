@@ -606,6 +606,8 @@ impl MainWindowController {
         g.set_fm_view_list(mgr.tr("fm-view-list").into());
         g.set_fm_view_details(mgr.tr("fm-view-details").into());
         g.set_fm_view_gallery(mgr.tr("fm-view-gallery").into());
+        g.set_fm_entry_encrypted_hint(mgr.tr("fm-entry-encrypted-hint").into());
+        g.set_fm_entry_managed_hint(mgr.tr("fm-entry-managed-hint").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
         g.set_settings_open_config_file(mgr.tr("settings-open-config-file").into());
@@ -4787,11 +4789,7 @@ impl MainWindowController {
                 }));
             }
             Err(e) => {
-                let error = if e == "title required" {
-                    self.locale.tr("password-add-error-title")
-                } else {
-                    e
-                };
+                let error = password_localized_error(&self.locale, &e);
                 self.password_add_dialogs.write().insert(
                     inst_id,
                     PasswordAddDialogOverlay {
@@ -8993,9 +8991,6 @@ fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
     if let Some(rest) = msg.strip_prefix("widget is in an invalid state for this operation: ") {
         msg = rest;
     }
-    if let Some(rest) = msg.strip_prefix("archive entry not found: ") {
-        msg = rest;
-    }
     match msg {
         "viewer-image-heic-unsupported"
         | "viewer-image-raw-unsupported"
@@ -9004,7 +8999,55 @@ fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
         _ if msg.starts_with("unsupported file type") => locale.tr("viewer-unsupported"),
         _ if msg.contains("edit outside buffer bounds") => locale.tr("viewer-text-read-only"),
         _ if msg.contains("PDF support unavailable") => locale.tr("viewer-pdf-unavailable"),
+        _ if msg.starts_with("file too large:") => locale.tr("viewer-error-file-too-large"),
+        _ if msg.starts_with("failed to decode image:") => locale.tr("viewer-error-image-decode"),
+        _ if msg.starts_with("failed to render PDF page") => locale.tr("viewer-error-pdf-render"),
+        _ if msg == "PDF has no pages" => locale.tr("viewer-error-pdf-empty"),
+        _ if msg.starts_with("failed to parse text:") => locale.tr("viewer-error-parse-text"),
+        _ if msg.starts_with("syntax grammar not found") => locale.tr("viewer-error-syntax-grammar"),
+        _ if msg.starts_with("archive entry not found:") => {
+            locale.tr("viewer-error-archive-entry-not-found")
+        }
+        _ if msg.starts_with("thumbnail generation failed:") => {
+            locale.tr("viewer-error-thumbnail")
+        }
+        // Callers wrap the result in `viewer-error-with-reason`; keep unknowns raw.
         _ => msg.to_string(),
+    }
+}
+
+fn password_localized_error(locale: &LocaleManager, err: &str) -> String {
+    let lower = err.to_ascii_lowercase();
+    match err {
+        "title required" => locale.tr("password-add-error-title"),
+        "vault locked" => locale.tr("password-error-vault-locked"),
+        "password widget not live" => locale.tr("password-error-unavailable"),
+        _ if lower.contains("invalid master password") => {
+            locale.tr("password-error-invalid-master")
+        }
+        _ if lower.contains("biometric verification cancelled") => {
+            locale.tr("password-error-biometric-cancelled")
+        }
+        _ if lower.contains("biometric verification is unavailable") => {
+            locale.tr("password-error-biometric-unavailable")
+        }
+        _ if lower.contains("biometric verification failed") => {
+            locale.tr("password-error-biometric-failed")
+        }
+        _ if lower.contains("no stored master key for biometric") => {
+            locale.tr("password-error-no-master-key")
+        }
+        _ if lower.starts_with("failed to open password database:") => {
+            locale.tr("password-error-db-open")
+        }
+        _ if lower.starts_with("duplicate entry title in same group:") => {
+            locale.tr("password-add-error-duplicate")
+        }
+        _ if lower.starts_with("entry not found:") => locale.tr("password-error-entry-not-found"),
+        _ => locale.tr_args(
+            "password-error-with-reason",
+            &orchid_i18n::FluentArgs::new().with("reason", err),
+        ),
     }
 }
 
@@ -10900,9 +10943,19 @@ fn build_password_model(
 
     PasswordModel {
         is_unlocked: p.is_unlocked,
-        lock_reason: p.lock_reason.clone().unwrap_or_default().into(),
+        lock_reason: p
+            .lock_reason
+            .as_deref()
+            .map(|r| password_localized_error(locale, r))
+            .unwrap_or_default()
+            .into(),
         biometric_available: p.biometric_available,
-        unlock_error: p.unlock_error.clone().unwrap_or_default().into(),
+        unlock_error: p
+            .unlock_error
+            .as_deref()
+            .map(|r| password_localized_error(locale, r))
+            .unwrap_or_default()
+            .into(),
         entries: ModelRc::new(VecModel::from(entries)),
         selected,
         search_query: p.search_query.clone().into(),

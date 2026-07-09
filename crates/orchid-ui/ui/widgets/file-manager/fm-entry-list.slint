@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { FmEntry, FmRenameState } from "../../workspace/defs.slint";
 
 export component FmEntryList inherits Rectangle {
@@ -97,7 +98,7 @@ export component FmEntryList inherits Rectangle {
                         }
                         Text {
                             text: sort-name-label + (sort-by == 0 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 0 ? Theme.text-primary : Theme.text-tertiary;
+                            color: sort-by == 0 ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-sm;
                             font-weight: sort-by == 0 ? Theme.weight-semibold : Theme.weight-regular;
                             vertical-alignment: center;
@@ -114,7 +115,7 @@ export component FmEntryList inherits Rectangle {
                         }
                         Text {
                             text: sort-size-label + (sort-by == 1 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 1 ? Theme.text-primary : Theme.text-tertiary;
+                            color: sort-by == 1 ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-sm;
                             font-weight: sort-by == 1 ? Theme.weight-semibold : Theme.weight-regular;
                             vertical-alignment: center;
@@ -131,7 +132,7 @@ export component FmEntryList inherits Rectangle {
                         }
                         Text {
                             text: sort-modified-label + (sort-by == 2 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 2 ? Theme.text-primary : Theme.text-tertiary;
+                            color: sort-by == 2 ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-sm;
                             font-weight: sort-by == 2 ? Theme.weight-semibold : Theme.weight-regular;
                             vertical-alignment: center;
@@ -148,7 +149,7 @@ export component FmEntryList inherits Rectangle {
                         }
                         Text {
                             text: sort-type-label + (sort-by == 3 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 3 ? Theme.text-primary : Theme.text-tertiary;
+                            color: sort-by == 3 ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-sm;
                             font-weight: sort-by == 3 ? Theme.weight-semibold : Theme.weight-regular;
                             vertical-alignment: center;
@@ -193,11 +194,38 @@ export component FmEntryList inherits Rectangle {
                         y: (parent.height - self.height) / 2;
                     }
 
-                    if !entry.has-thumbnail : Text {
-                        text: entry-glyph(entry.is-dir, entry.is-encrypted, entry.is-managed);
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                    if !entry.has-thumbnail : Rectangle {
+                        width: 16px;
+                        height: 20px;
+                        y: (parent.height - self.height) / 2;
+
+                        glyph-ta := TouchArea { }
+                        if glyph-ta.has-hover && (entry.is-encrypted || entry.is-managed) : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: glyph-hint.preferred-width + 12px;
+                            height: glyph-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            glyph-hint := Text {
+                                x: 6px; y: 3px;
+                                text: entry.is-encrypted ? Strings.fm-entry-encrypted-hint
+                                    : Strings.fm-entry-managed-hint;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
+
+                        Text {
+                            text: entry-glyph(entry.is-dir, entry.is-encrypted, entry.is-managed);
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                        }
                     }
 
                     if rename.active && entry.path == rename.path : rename-fs := FocusScope {

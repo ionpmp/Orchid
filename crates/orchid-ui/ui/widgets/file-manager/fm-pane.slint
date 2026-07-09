@@ -263,18 +263,35 @@ export component FmPane inherits Rectangle {
 
                     if pane.tabs[pane.active-tab].error-action-label != "" : Rectangle {
                         height: 32px;
-                        background: Theme.surface-raised;
+                        background: err-action-ta.has-hover ? Theme.accent-brand : Theme.surface-raised;
                         border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border-default;
 
-                        TouchArea {
+                        err-action-ta := TouchArea {
                             clicked => { root.error-action(); }
+                        }
+                        if err-action-ta.has-hover : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: err-action-hint.preferred-width + 12px;
+                            height: err-action-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            err-action-hint := Text {
+                                x: 6px; y: 3px;
+                                text: pane.tabs[pane.active-tab].error-action-label;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
                         }
 
                         Text {
                             text: pane.tabs[pane.active-tab].error-action-label;
-                            color: Theme.accent-brand;
+                            color: err-action-ta.has-hover ? Theme.text-primary : Theme.accent-brand;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;

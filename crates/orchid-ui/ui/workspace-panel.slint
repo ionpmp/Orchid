@@ -82,10 +82,27 @@ export component WorkspacePanel inherits Rectangle {
                     background: ws.is-active ? Theme.accent-brand : Theme.surface-base;
                     border-radius: Theme.radius-md;
 
-                    TouchArea {
+                    ws-ta := TouchArea {
                         clicked => {
                             root.workspace-clicked(ws.id);
                             root.dismiss();
+                        }
+                    }
+                    if ws-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: ws-hint.preferred-width + 12px;
+                        height: ws-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        ws-hint := Text {
+                            x: 6px; y: 3px;
+                            text: ws.name;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
                         }
                     }
 
@@ -96,6 +113,8 @@ export component WorkspacePanel inherits Rectangle {
                         font-weight: ws.is-active ? Theme.weight-semibold : Theme.weight-regular;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                        wrap: no-wrap;
+                        overflow: elide;
                     }
                 }
             }
