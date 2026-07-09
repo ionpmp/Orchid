@@ -175,7 +175,7 @@ export component FmToolbar inherits Rectangle {
         Rectangle {
             width: 36px; height: 28px;
             y: (parent.height - self.height) / 2;
-            background: sort-ta.has-hover ? Theme.surface-base : transparent;
+            background: Theme.surface-base;
             border-radius: Theme.radius-md;
 
             sort-ta := TouchArea {
@@ -206,7 +206,7 @@ export component FmToolbar inherits Rectangle {
                     : tab.sort-by == 1 ? (tab.sort-descending ? "S↓" : "S↑")
                     : tab.sort-by == 2 ? (tab.sort-descending ? "M↓" : "M↑")
                     : (tab.sort-descending ? "T↓" : "T↑");
-                color: Theme.text-secondary;
+                color: Theme.accent-brand;
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -216,7 +216,7 @@ export component FmToolbar inherits Rectangle {
         Rectangle {
             width: 28px; height: 28px;
             y: (parent.height - self.height) / 2;
-            background: vm-ta.has-hover ? Theme.surface-base : transparent;
+            background: Theme.surface-base;
             border-radius: Theme.radius-md;
 
             vm-ta := TouchArea {
@@ -247,7 +247,7 @@ export component FmToolbar inherits Rectangle {
                     : tab.view-mode == 1 ? "≡"
                     : tab.view-mode == 2 ? "☰"
                     : "▢";
-                color: Theme.text-primary;
+                color: Theme.accent-brand;
                 font-size: Theme.font-size-md;
                 horizontal-alignment: center;
                 vertical-alignment: center;

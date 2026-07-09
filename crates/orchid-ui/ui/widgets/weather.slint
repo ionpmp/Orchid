@@ -89,7 +89,7 @@ export component WeatherView inherits Rectangle {
         HorizontalLayout {
             spacing: 8px;
 
-            Text {
+            if model.condition-icon != "" : Text {
                 text: weather-icon-glyph(model.condition-icon);
                 color: Theme.accent-brand;
                 font-size: Theme.font-size-xl;

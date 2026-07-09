@@ -49,10 +49,28 @@ export component ViewerTextView inherits Rectangle {
                 Rectangle {
                     width: max(72px, mode-label.preferred-width + 16px);
                     height: 28px;
-                    background: mode-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: !model.read-only ? Theme.surface-raised
+                        : mode-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     mode-ta := TouchArea { clicked => { root.toggle-edit(); } }
+                    if mode-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: mode-hint.preferred-width + 12px;
+                        height: mode-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        mode-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.mode-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     mode-label := Text {
                         text: model.mode-label;
                         color: model.read-only ? Theme.text-secondary : Theme.accent-brand;
@@ -69,6 +87,23 @@ export component ViewerTextView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     save-ta := TouchArea { clicked => { root.save(); } }
+                    if save-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: save-hint.preferred-width + 12px;
+                        height: save-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        save-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.save-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     save-label := Text {
                         text: model.save-label;
                         color: Theme.text-primary;

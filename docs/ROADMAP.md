@@ -62,9 +62,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
-- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip; localized Fit/Actual Size with active-mode highlight + status strip + toolbar hover hints; viewport re-fit while in fit mode; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
+- [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip with active flip accent; localized Fit/Actual Size with active-mode highlight + status strip + toolbar hover hints; viewport re-fit while in fit mode; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation, go-to-page input, fit width/page with active-mode highlight, zoom, toolbar hover hints, viewport re-fit; requires bundled `pdfium.dll`
-- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S, dirty ●, localized line count + LF/CRLF)
+- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S with hover hints, dirty ●, localized line count + LF/CRLF)
 - [~] Archives (ZIP, 7z, TAR, TAR.GZ, TAR.XZ) — browse + preview + extract selected/all; localized toolbar header + status strip (format/count + extract feedback); TAR.XZ via `xz2`
 
 ### Security

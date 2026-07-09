@@ -10675,7 +10675,8 @@ fn build_media_model(p: &orchid_widgets::MediaPlayerPayload, locale: &LocaleMana
         locale.tr("media-no-session").into()
     };
     MediaModel {
-        has_session: p.has_session,
+        // Keep the empty/loading layout until a real session is ready.
+        has_session: p.has_session && !p.is_loading,
         empty_state_text,
         title: p.title.clone().into(),
         artist: p.artist.clone().into(),
@@ -10948,7 +10949,11 @@ fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManage
             p.current_temp_text.clone().into()
         },
         condition_label: condition_label.into(),
-        condition_icon: p.condition_icon.into(),
+        condition_icon: if p.is_loading {
+            SharedString::new()
+        } else {
+            p.condition_icon.into()
+        },
         feels_like: feels_like.into(),
         humidity: humidity.into(),
         wind: wind.into(),
@@ -11017,6 +11022,17 @@ mod tests {
             &locale,
         );
         assert_eq!(loading.empty_state_text.as_str(), "Loading media…");
+        assert!(!loading.has_session);
+
+        let loading_with_session = build_media_model(
+            &orchid_widgets::MediaPlayerPayload {
+                has_session: true,
+                is_loading: true,
+                ..Default::default()
+            },
+            &locale,
+        );
+        assert!(!loading_with_session.has_session);
 
         let unsupported = build_media_model(
             &orchid_widgets::MediaPlayerPayload {

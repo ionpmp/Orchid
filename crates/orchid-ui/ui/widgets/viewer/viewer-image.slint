@@ -210,7 +210,8 @@ export component ViewerImageView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
-                    background: flip-h-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: model.flipped-h ? Theme.surface-raised
+                        : flip-h-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     flip-h-ta := TouchArea { clicked => { root.flip-h(); } }
@@ -232,13 +233,20 @@ export component ViewerImageView inherits Rectangle {
                             font-size: Theme.font-size-sm;
                         }
                     }
-                    Text { text: "⇄"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                    Text {
+                        text: "⇄";
+                        color: model.flipped-h ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
 
                 Rectangle {
                     width: 28px;
                     height: 28px;
-                    background: flip-v-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: model.flipped-v ? Theme.surface-raised
+                        : flip-v-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     flip-v-ta := TouchArea { clicked => { root.flip-v(); } }
@@ -260,7 +268,13 @@ export component ViewerImageView inherits Rectangle {
                             font-size: Theme.font-size-sm;
                         }
                     }
-                    Text { text: "⇅"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                    Text {
+                        text: "⇅";
+                        color: model.flipped-v ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }
