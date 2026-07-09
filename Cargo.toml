@@ -57,7 +57,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Storage
 redb = "2"
-rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Crypto / content addressing
 age = "0.10"
@@ -107,7 +106,6 @@ tantivy = "0.22"
 
 # Terminal
 portable-pty = "0.8"
-alacritty_terminal = "0.24"
 vte = "0.13"
 bytes = "1"
 arboard = "3"
@@ -135,6 +133,7 @@ tree-sitter-java = "0.23"
 tree-sitter-ruby = "0.23"
 tree-sitter-php = "0.23"
 tree-sitter-sequel = "0.3"
+tree-sitter-kotlin = { package = "tree-sitter-kotlin-ng", version = "1" }
 sevenz-rust = "0.6"
 zip = "2"
 flate2 = "1"
@@ -144,10 +143,6 @@ filetime = "0.2"
 trash = "5"
 encoding_rs = "0.8"
 chardetng = "0.1"
-
-# IPC (reserved for wiring in the next stage)
-capnp = "0.20"
-capnp-rpc = "0.20"
 
 # HTTP client / feeds
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
@@ -205,8 +200,6 @@ orchid-ui = { path = "crates/orchid-ui", version = "0.1.0" }
 lto = "thin"
 codegen-units = 1
 strip = true
-
-[profile.dev]
 # Standard dev profile -- full debug info, unoptimised workspace code.
 
 # Build dependencies optimised even in debug mode so the first-party code stays

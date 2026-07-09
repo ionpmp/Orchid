@@ -443,6 +443,30 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "php_tag" | "text_interpolation" => Some(SyntaxScope::Preprocessor),
             _ => None,
         },
+        "kotlin" => match kind {
+            "type_identifier"
+            | "user_type"
+            | "nullable_type"
+            | "function_type"
+            | "class_declaration"
+            | "object_declaration"
+            | "interface_declaration"
+            | "enum_class_body"
+            | "type_alias" => Some(SyntaxScope::Type),
+            "function_declaration"
+            | "secondary_constructor"
+            | "call_expression"
+            | "navigation_expression" => Some(SyntaxScope::Function),
+            "simple_identifier" | "identifier" => Some(SyntaxScope::Variable),
+            "string_literal" | "character_literal" | "line_string_literal"
+            | "multi_line_string_literal" => Some(SyntaxScope::String),
+            "integer_literal" | "real_literal" | "hex_literal" | "bin_literal" => {
+                Some(SyntaxScope::Number)
+            }
+            "null_literal" | "boolean_literal" | "true" | "false" => Some(SyntaxScope::Constant),
+            "annotation" | "annotation_use_site_target" => Some(SyntaxScope::Attribute),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -654,6 +678,31 @@ fn is_keyword_kind(kind: &str) -> bool {
             | "endwhile"
             | "parent"
             | "xor"
+            // Kotlin (shared tokens already listed above)
+            | "fun"
+            | "val"
+            | "object"
+            | "companion"
+            | "data"
+            | "sealed"
+            | "inner"
+            | "open"
+            | "lateinit"
+            | "suspend"
+            | "tailrec"
+            | "infix"
+            | "noinline"
+            | "crossinline"
+            | "reified"
+            | "expect"
+            | "actual"
+            | "typealias"
+            | "when"
+            | "by"
+            | "init"
+            | "constructor"
+            | "field"
+            | "it"
     )
 }
 
@@ -945,6 +994,18 @@ mod tests {
     }
 
     #[test]
+    fn kotlin_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "fun greet(name: String): String {\n  return name\n}\n";
+        let lines = h.highlight_lines("kotlin", source, 0, 3);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for Kotlin"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
@@ -964,5 +1025,6 @@ mod tests {
         assert!(langs.contains(&"ruby"));
         assert!(langs.contains(&"sql"));
         assert!(langs.contains(&"php"));
+        assert!(langs.contains(&"kotlin"));
     }
 }
