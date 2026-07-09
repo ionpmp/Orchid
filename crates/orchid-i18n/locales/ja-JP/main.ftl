@@ -17,6 +17,15 @@ widget-moon-desc = 現在の月相、月の出/月の入り、天体データ
 
 widget-system-name = システム
 widget-system-desc = CPU、メモリ、ディスク、ネットワーク、バッテリーの表示
+# ---- Shared size / duration formatting ----
+byte-size-b = { $value } B
+byte-size-kb = { $value } KB
+byte-size-mb = { $value } MB
+byte-size-gb = { $value } GB
+byte-size-tb = { $value } TB
+duration-days-hours = { $days }日 { $hours }時間
+duration-hours-minutes = { $hours }時間 { $minutes }分
+duration-minutes = { $minutes }分
 
 widget-rss-name = ニュース
 widget-rss-desc = RSS および Atom ニュースフィード

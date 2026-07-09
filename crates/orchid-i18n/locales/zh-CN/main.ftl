@@ -17,6 +17,15 @@ widget-moon-desc = 当前月相、月出/月落时间和天体数据
 
 widget-system-name = 系统
 widget-system-desc = CPU、内存、磁盘、网络和电池指示器
+# ---- Shared size / duration formatting ----
+byte-size-b = { $value } B
+byte-size-kb = { $value } KB
+byte-size-mb = { $value } MB
+byte-size-gb = { $value } GB
+byte-size-tb = { $value } TB
+duration-days-hours = { $days }天 { $hours }小时
+duration-hours-minutes = { $hours }小时 { $minutes }分
+duration-minutes = { $minutes }分
 
 widget-rss-name = 新闻
 widget-rss-desc = RSS 和 Atom 新闻源

@@ -17,6 +17,15 @@ widget-moon-desc = Aktuelle Mondphase, Auf-/Untergangszeiten und Himmelsdaten
 
 widget-system-name = System
 widget-system-desc = CPU-, Speicher-, Festplatten-, Netzwerk- und Akku-Anzeigen
+# ---- Shared size / duration formatting ----
+byte-size-b = { $value } B
+byte-size-kb = { $value } KB
+byte-size-mb = { $value } MB
+byte-size-gb = { $value } GB
+byte-size-tb = { $value } TB
+duration-days-hours = { $days }t { $hours }h
+duration-hours-minutes = { $hours }h { $minutes }m
+duration-minutes = { $minutes }m
 
 widget-rss-name = Nachrichtenfeed
 widget-rss-desc = RSS- und Atom-Nachrichtenfeeds

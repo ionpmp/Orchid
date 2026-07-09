@@ -17,6 +17,15 @@ widget-moon-desc = طور القمر الحالي وأوقات الشروق/ال
 
 widget-system-name = النظام
 widget-system-desc = مؤشرات وحدة المعالجة والذاكرة والقرص والشبكة والبطارية
+# ---- Shared size / duration formatting ----
+byte-size-b = { $value } بايت
+byte-size-kb = { $value } ك.ب
+byte-size-mb = { $value } م.ب
+byte-size-gb = { $value } ج.ب
+byte-size-tb = { $value } ت.ب
+duration-days-hours = { $days }ي { $hours }س
+duration-hours-minutes = { $hours }س { $minutes }د
+duration-minutes = { $minutes }د
 
 widget-rss-name = الأخبار
 widget-rss-desc = خلاصات أخبار RSS وAtom

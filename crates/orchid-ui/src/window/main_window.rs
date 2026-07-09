@@ -8702,7 +8702,7 @@ fn build_managed_policy_state(
     let policy = policy.cloned().unwrap_or_default();
     let max_size = policy
         .max_size_bytes
-        .map(format_byte_size)
+        .map(|n| locale.format_byte_size(n))
         .unwrap_or_else(|| locale.tr("fm-policy-unlimited"));
     let retention = policy
         .retention_days
@@ -8833,7 +8833,7 @@ fn managed_sidebar_label(
                 &orchid_i18n::FluentArgs::new()
                     .with("name", name.as_str())
                     .with("count", folder.files_tracked.to_string())
-                    .with("dedup", format_byte_size(folder.dedup_bytes)),
+                    .with("dedup", locale.format_byte_size(folder.dedup_bytes)),
             )
         } else {
             locale.tr_args(
@@ -8841,7 +8841,7 @@ fn managed_sidebar_label(
                 &orchid_i18n::FluentArgs::new()
                     .with("name", name.as_str())
                     .with("count", folder.files_tracked.to_string())
-                    .with("dedup", format_byte_size(folder.dedup_bytes)),
+                    .with("dedup", locale.format_byte_size(folder.dedup_bytes)),
             )
         }
     } else if has_policy {
@@ -8984,7 +8984,7 @@ fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPaylo
                 .with("items", t.item_count.to_string())
                 .with("selected", t.selection_count.to_string())
                 .with("tracked", tracked.to_string())
-                .with("dedup", format_byte_size(dedup_bytes)),
+                .with("dedup", locale.format_byte_size(dedup_bytes)),
         )
     } else {
         locale.tr_args(
@@ -10314,7 +10314,7 @@ fn build_image_snapshot(
             let args = orchid_i18n::FluentArgs::new()
                 .with("width", s.width_px.to_string())
                 .with("height", s.height_px.to_string())
-                .with("size", format_byte_size(s.size_bytes))
+                .with("size", locale.format_byte_size(s.size_bytes))
                 .with("format", s.format_label.clone());
             locale.tr_args("viewer-image-info", &args).into()
         },
@@ -10440,19 +10440,6 @@ fn syntax_scope_to_int(scope: &orchid_viewers::SyntaxScope) -> i32 {
     }
 }
 
-fn format_byte_size(n: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    let f = n as f64;
-    if f >= MB {
-        format!("{:.1} MB", f / MB)
-    } else if f >= KB {
-        format!("{:.0} KB", f / KB)
-    } else {
-        format!("{n} B")
-    }
-}
-
 fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleManager) -> ViewerArchiveModel {
     let mut entries: Vec<ViewerArchiveEntry> = Vec::with_capacity(s.entries.len() + 1);
 
@@ -10473,7 +10460,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
             path_in_archive: e.path_in_archive.clone().into(),
             name: e.name.clone().into(),
             is_dir: e.is_dir,
-            size_text: format_byte_size(e.size).into(),
+            size_text: locale.format_byte_size(e.size).into(),
             modified_text: e.modified_text.clone().into(),
             icon: e.icon.into(),
             is_up: false,
@@ -10490,7 +10477,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     let (preview_kind, preview_text, preview_binary) = match &s.preview {
         Some(orchid_viewers::ArchivePreview::Text(t)) => (1, t.clone().into(), SharedString::new()),
         Some(orchid_viewers::ArchivePreview::Binary { size }) => {
-            let args = orchid_i18n::FluentArgs::new().with("size", format_byte_size(*size));
+            let args = orchid_i18n::FluentArgs::new().with("size", locale.format_byte_size(*size));
             (
                 2,
                 SharedString::new(),

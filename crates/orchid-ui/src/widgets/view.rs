@@ -383,21 +383,13 @@ fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
 }
 
 fn format_byte_size(n: u64) -> String {
-    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-    if n == 0 {
-        return "0 B".to_string();
-    }
-    let mut size = n as f64;
-    let mut unit = 0;
-    while size >= 1024.0 && unit < UNITS.len() - 1 {
-        size /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{} {}", n, UNITS[unit])
-    } else {
-        format!("{:.1} {}", size, UNITS[unit])
-    }
+    // Accessibility / text-export path has no live LocaleManager; use en-US.
+    static LOCALE: std::sync::OnceLock<orchid_i18n::LocaleManager> = std::sync::OnceLock::new();
+    let locale = LOCALE.get_or_init(|| {
+        orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None)
+            .expect("bundled en-US locale")
+    });
+    locale.format_byte_size(n)
 }
 
 fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {

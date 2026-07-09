@@ -130,7 +130,7 @@ impl Widget for SystemWidget {
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let cfg = self.config.read().clone();
         let indicators = match self.snapshot.read().clone() {
-            Some(snap) => build_indicators(&cfg, &snap),
+            Some(snap) => build_indicators(&cfg, &snap, &self.locale),
             None => vec![SystemIndicator {
                 kind: SystemIndicatorKind::Cpu,
                 name_suffix: None,
@@ -194,7 +194,11 @@ fn bucket_low(pct: f32, warn: f32, crit: f32) -> IndicatorStatus {
     }
 }
 
-fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndicator> {
+fn build_indicators(
+    cfg: &SystemConfig,
+    snap: &SystemSnapshot,
+    locale: &orchid_i18n::LocaleManager,
+) -> Vec<SystemIndicator> {
     let mut out = Vec::new();
 
     if cfg.show_cpu {
@@ -217,8 +221,8 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
             name_suffix: None,
             value_text: format!(
                 "{} / {}",
-                format_bytes(snap.memory_used_bytes),
-                format_bytes(snap.memory_total_bytes)
+                locale.format_byte_size(snap.memory_used_bytes),
+                locale.format_byte_size(snap.memory_total_bytes)
             ),
             network_up: None,
             network_down: None,
@@ -243,8 +247,8 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
                 name_suffix: Some(d.mount.clone()),
                 value_text: format!(
                     "{} / {}",
-                    format_bytes(d.used_bytes),
-                    format_bytes(d.total_bytes)
+                    locale.format_byte_size(d.used_bytes),
+                    locale.format_byte_size(d.total_bytes)
                 ),
                 network_up: None,
                 network_down: None,
@@ -265,8 +269,8 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
                 kind: SystemIndicatorKind::Network,
                 name_suffix: Some(n.interface.clone()),
                 value_text: String::new(),
-                network_up: Some(format_bytes(n.upload_bps as u64)),
-                network_down: Some(format_bytes(n.download_bps as u64)),
+                network_up: Some(locale.format_byte_size(n.upload_bps as u64)),
+                network_down: Some(locale.format_byte_size(n.download_bps as u64)),
                 percent: None,
                 icon: "system-network",
                 status: IndicatorStatus::Normal,
@@ -298,7 +302,7 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
         out.push(SystemIndicator {
             kind: SystemIndicatorKind::Uptime,
             name_suffix: None,
-            value_text: format_duration_secs(snap.uptime_seconds),
+            value_text: locale.format_duration_secs(snap.uptime_seconds),
             network_up: None,
             network_down: None,
             percent: None,
@@ -308,38 +312,6 @@ fn build_indicators(cfg: &SystemConfig, snap: &SystemSnapshot) -> Vec<SystemIndi
     }
 
     out
-}
-
-fn format_bytes(b: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-    const TB: f64 = GB * 1024.0;
-    let f = b as f64;
-    if f >= TB {
-        format!("{:.1} TB", f / TB)
-    } else if f >= GB {
-        format!("{:.1} GB", f / GB)
-    } else if f >= MB {
-        format!("{:.1} MB", f / MB)
-    } else if f >= KB {
-        format!("{:.0} KB", f / KB)
-    } else {
-        format!("{} B", b)
-    }
-}
-
-fn format_duration_secs(s: u64) -> String {
-    let days = s / 86400;
-    let hours = (s % 86400) / 3600;
-    let minutes = (s % 3600) / 60;
-    if days > 0 {
-        format!("{days}d {hours}h")
-    } else if hours > 0 {
-        format!("{hours}h {minutes}m")
-    } else {
-        format!("{minutes}m")
-    }
 }
 
 /// Descriptor ready to register on a widget registry.
@@ -394,30 +366,28 @@ mod tests {
         }
     }
 
+    fn test_locale() -> orchid_i18n::LocaleManager {
+        orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None).expect("locale")
+    }
+
     #[test]
     fn cpu_thresholds_bucket_correctly() {
         let cfg = SystemConfig::default();
-        let indicators = build_indicators(&cfg, &snap(20.0));
+        let locale = test_locale();
+        let indicators = build_indicators(&cfg, &snap(20.0), &locale);
         let cpu = indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap();
         assert_eq!(cpu.status, IndicatorStatus::Normal);
 
-        let indicators = build_indicators(&cfg, &snap(80.0));
+        let indicators = build_indicators(&cfg, &snap(80.0), &locale);
         assert_eq!(
             indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap().status,
             IndicatorStatus::Warning
         );
 
-        let indicators = build_indicators(&cfg, &snap(95.0));
+        let indicators = build_indicators(&cfg, &snap(95.0), &locale);
         assert_eq!(
             indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap().status,
             IndicatorStatus::Critical
         );
-    }
-
-    #[test]
-    fn format_bytes_scales() {
-        assert_eq!(format_bytes(512), "512 B");
-        assert!(format_bytes(1024 * 1024).ends_with("MB"));
-        assert!(format_bytes(1024_u64.pow(3)).ends_with("GB"));
     }
 }

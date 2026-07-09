@@ -1557,7 +1557,7 @@ fn build_tab_payload(
                 path: path_key.to_string(),
                 name: e.name.clone(),
                 is_dir: matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
-                size_text: format_size(e.metadata.size),
+                size_text: inner.deps.locale.format_byte_size(e.metadata.size),
                 modified_text: e
                     .metadata
                     .modified
@@ -1731,22 +1731,6 @@ fn to_payload_mode(mode: ViewMode) -> FmViewMode {
         ViewMode::List => FmViewMode::List,
         ViewMode::Details => FmViewMode::Details,
         ViewMode::Gallery => FmViewMode::Gallery,
-    }
-}
-
-fn format_size(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-    let f = bytes as f64;
-    if f >= GB {
-        format!("{:.1} GB", f / GB)
-    } else if f >= MB {
-        format!("{:.1} MB", f / MB)
-    } else if f >= KB {
-        format!("{:.0} KB", f / KB)
-    } else {
-        format!("{bytes} B")
     }
 }
 
@@ -2708,7 +2692,7 @@ pub async fn run_action_with_opts(
                             .map(|t| fmt_locale.format_datetime(t))
                             .unwrap_or_else(|| "—".into());
                         let mime = meta.mime.unwrap_or_else(|| "—".into());
-                        let size = format_size(meta.size);
+                        let size = i18n.format_byte_size(meta.size);
                         let type_line = i18n.tr_args(
                             "fm-properties-type",
                             &orchid_i18n::FluentArgs::new().with("kind", kind),

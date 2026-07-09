@@ -17,6 +17,15 @@ widget-moon-desc = 현재 월상, 월출/월몰 시간 및 천체 데이터
 
 widget-system-name = 시스템
 widget-system-desc = CPU, 메모리, 디스크, 네트워크 및 배터리 표시
+# ---- Shared size / duration formatting ----
+byte-size-b = { $value } B
+byte-size-kb = { $value } KB
+byte-size-mb = { $value } MB
+byte-size-gb = { $value } GB
+byte-size-tb = { $value } TB
+duration-days-hours = { $days }일 { $hours }시간
+duration-hours-minutes = { $hours }시간 { $minutes }분
+duration-minutes = { $minutes }분
 
 widget-rss-name = 뉴스
 widget-rss-desc = RSS 및 Atom 뉴스 피드

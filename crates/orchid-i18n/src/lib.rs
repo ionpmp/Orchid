@@ -280,6 +280,59 @@ impl LocaleManager {
         key.to_string()
     }
 
+    /// Format a byte count with localized unit suffixes (B / KB / MB / GB / TB).
+    ///
+    /// Uses binary (1024) steps. Values below 1 KB are whole bytes; KB is
+    /// rounded to the nearest integer; MB and above use one decimal place.
+    #[must_use]
+    pub fn format_byte_size(&self, bytes: u64) -> String {
+        const KB: f64 = 1024.0;
+        const MB: f64 = KB * 1024.0;
+        const GB: f64 = MB * 1024.0;
+        const TB: f64 = GB * 1024.0;
+        let f = bytes as f64;
+        let (key, value) = if f >= TB {
+            ("byte-size-tb", format!("{:.1}", f / TB))
+        } else if f >= GB {
+            ("byte-size-gb", format!("{:.1}", f / GB))
+        } else if f >= MB {
+            ("byte-size-mb", format!("{:.1}", f / MB))
+        } else if f >= KB {
+            ("byte-size-kb", format!("{:.0}", f / KB))
+        } else {
+            ("byte-size-b", bytes.to_string())
+        };
+        self.tr_args(key, &FluentArgs::new().with("value", value))
+    }
+
+    /// Format an uptime / duration in seconds with localized unit suffixes.
+    #[must_use]
+    pub fn format_duration_secs(&self, secs: u64) -> String {
+        let days = secs / 86400;
+        let hours = (secs % 86400) / 3600;
+        let minutes = (secs % 3600) / 60;
+        if days > 0 {
+            self.tr_args(
+                "duration-days-hours",
+                &FluentArgs::new()
+                    .with("days", days.to_string())
+                    .with("hours", hours.to_string()),
+            )
+        } else if hours > 0 {
+            self.tr_args(
+                "duration-hours-minutes",
+                &FluentArgs::new()
+                    .with("hours", hours.to_string())
+                    .with("minutes", minutes.to_string()),
+            )
+        } else {
+            self.tr_args(
+                "duration-minutes",
+                &FluentArgs::new().with("minutes", minutes.to_string()),
+            )
+        }
+    }
+
     fn lookup(&self, locale: &LocaleId, key: &str, args: &FluentArgs) -> Option<String> {
         let bundles = self.inner.bundles.read();
         let (_, bundle) = bundles.iter().find(|(l, _)| l == locale)?;
@@ -362,6 +415,22 @@ mod tests {
             &FluentArgs::new().with("version", "9.9.9"),
         );
         assert!(out.contains("9.9.9"), "got: {out}");
+    }
+
+    #[test]
+    fn format_byte_size_scales() {
+        let mgr = LocaleManager::new(default_language(), None).unwrap();
+        assert_eq!(mgr.format_byte_size(512), "512 B");
+        assert!(mgr.format_byte_size(1024 * 1024).contains("MB"));
+        assert!(mgr.format_byte_size(1024_u64.pow(3)).contains("GB"));
+    }
+
+    #[test]
+    fn format_duration_secs_buckets() {
+        let mgr = LocaleManager::new(default_language(), None).unwrap();
+        assert_eq!(mgr.format_duration_secs(90), "1m");
+        assert!(mgr.format_duration_secs(3700).contains('h'));
+        assert!(mgr.format_duration_secs(90_000).contains('d'));
     }
 
     #[test]
