@@ -245,8 +245,16 @@ fn apply_app_state_to(
         orchid_storage::Density::Hybrid => "density-hybrid",
     };
 
-    g.set_current_theme_id(theme.meta.id.clone().into());
-    g.set_current_language(language.as_str().into());
+    g.set_current_theme_id(theme.meta.display_name.clone().into());
+    g.set_current_language({
+        let key = format!("locale-name-{language}");
+        let name = locale.tr(&key);
+        if name == key {
+            language.as_str().into()
+        } else {
+            name.into()
+        }
+    });
     g.set_current_density(locale.tr(density_key).into());
     let is_rtl = language.as_str().to_ascii_lowercase().starts_with("ar");
     g.set_is_rtl(is_rtl);

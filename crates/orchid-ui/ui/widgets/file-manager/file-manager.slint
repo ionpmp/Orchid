@@ -132,7 +132,7 @@ export component FileManagerView inherits Rectangle {
 
                         Text {
                             text: fm-dual-pane-glyph(model.dual-pane);
-                            color: Theme.accent-brand;
+                            color: model.dual-pane ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;
                         }

@@ -641,8 +641,8 @@ impl MainWindowController {
         let th = self.theme.current();
         let language = self.locale.current();
         let density = self.config.read().appearance.density;
-        g.set_current_theme_id(th.meta.id.clone().into());
-        g.set_current_language(language.as_str().into());
+        g.set_current_theme_id(th.meta.display_name.clone().into());
+        g.set_current_language(locale_display_name(&self.locale, &language).into());
         g.set_current_density(self.locale.tr(density_i18n_key(density)).into());
         // Slint 1.16 has no Window `layout-direction`; drive RTL via `is-rtl`.
         let is_rtl = language.as_str().to_ascii_lowercase().starts_with("ar");
@@ -9620,9 +9620,30 @@ fn locale_combo_options(locale_mgr: &LocaleManager) -> Vec<(SharedString, Shared
         .into_iter()
         .map(|id| {
             let tag = id.to_string();
-            (tag.clone().into(), tag.into())
+            let label = locale_display_name(locale_mgr, &id);
+            (tag.into(), label.into())
         })
         .collect()
+}
+
+fn locale_display_name(locale_mgr: &LocaleManager, id: &LocaleId) -> String {
+    let key = format!("locale-name-{id}");
+    let name = locale_mgr.tr(&key);
+    if name == key {
+        id.to_string()
+    } else {
+        name
+    }
+}
+
+fn viewer_syntax_label(locale: &LocaleManager, language_id: &str) -> SharedString {
+    let key = format!("viewer-syntax-{language_id}");
+    let label = locale.tr(&key);
+    if label == key {
+        language_id.into()
+    } else {
+        label.into()
+    }
 }
 
 fn apply_settings_field(
@@ -10276,7 +10297,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
 fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
     let lines_args = orchid_i18n::FluentArgs::new().with("count", "0");
     ViewerTextModel {
-        language: "plaintext".into(),
+        language: viewer_syntax_label(locale, "plaintext"),
         encoding: "UTF-8".into(),
         line_ending: locale.tr("viewer-text-line-ending-lf").into(),
         dirty: false,
@@ -10499,7 +10520,7 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager)
         _ => "viewer-text-line-ending-lf",
     };
     ViewerTextModel {
-        language: s.language.clone().into(),
+        language: viewer_syntax_label(locale, &s.language),
         encoding: s.encoding.clone().into(),
         line_ending: locale.tr(line_ending_key).into(),
         dirty: s.dirty,

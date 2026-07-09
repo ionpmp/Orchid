@@ -53,6 +53,15 @@ export component ViewerView inherits Rectangle {
         padding: 16px;
         spacing: 8px;
 
+        if model.status.icon != "" : Text {
+            text: model.status.icon == "loading" ? "…"
+                : model.status.icon == "error" ? "!"
+                : "·";
+            color: model.kind == 1 ? Theme.accent-brand : Theme.text-tertiary;
+            font-size: Theme.font-size-3xl;
+            horizontal-alignment: center;
+        }
+
         Text {
             text: model.status.path-display;
             color: Theme.text-secondary;

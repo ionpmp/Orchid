@@ -56,6 +56,23 @@ export component ViewerArchiveView inherits Rectangle {
                     extract-all-ta := TouchArea {
                         clicked => { root.extract-all(); }
                     }
+                    if extract-all-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: extract-all-hint.preferred-width + 12px;
+                        height: extract-all-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        extract-all-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.extract-all-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
 
                     HorizontalLayout {
                         padding-left: 8px;
