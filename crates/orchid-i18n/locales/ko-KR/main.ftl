@@ -612,6 +612,16 @@ startup-version-label = 버전 { $version }
 status-theme = 테마:
 status-language = 언어:
 status-density = 밀도:
+theme-name-orchid-dark = Orchid 다크
+theme-name-orchid-light = Orchid 라이트
+theme-name-solarized-dark = Solarized 다크
+theme-name-solarized-light = Solarized 라이트
+theme-name-nord-dark = Nord 다크
+theme-name-catppuccin-mocha = Catppuccin Mocha
+theme-name-catppuccin-latte = Catppuccin Latte
+theme-name-high-contrast-dark = 고대비 다크
+theme-name-high-contrast-light = 고대비 라이트
+
 density-touch = 터치
 density-mouse = 마우스
 density-hybrid = 하이브리드

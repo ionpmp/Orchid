@@ -612,6 +612,16 @@ startup-version-label = 版本 { $version }
 status-theme = 主题：
 status-language = 语言：
 status-density = 密度：
+theme-name-orchid-dark = Orchid 深色
+theme-name-orchid-light = Orchid 浅色
+theme-name-solarized-dark = Solarized 深色
+theme-name-solarized-light = Solarized 浅色
+theme-name-nord-dark = Nord 深色
+theme-name-catppuccin-mocha = Catppuccin Mocha
+theme-name-catppuccin-latte = Catppuccin Latte
+theme-name-high-contrast-dark = 高对比度深色
+theme-name-high-contrast-light = 高对比度浅色
+
 density-touch = 触控
 density-mouse = 鼠标
 density-hybrid = 混合

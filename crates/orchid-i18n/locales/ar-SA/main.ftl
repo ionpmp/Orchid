@@ -613,6 +613,16 @@ startup-version-label = الإصدار { $version }
 status-theme = السمة:
 status-language = اللغة:
 status-density = الكثافة:
+theme-name-orchid-dark = أوركيد داكن
+theme-name-orchid-light = أوركيد فاتح
+theme-name-solarized-dark = سولارايزد داكن
+theme-name-solarized-light = سولارايزد فاتح
+theme-name-nord-dark = نورد داكن
+theme-name-catppuccin-mocha = كاتبوتشين موكا
+theme-name-catppuccin-latte = كاتبوتشين لاتيه
+theme-name-high-contrast-dark = تباين عالٍ داكن
+theme-name-high-contrast-light = تباين عالٍ فاتح
+
 density-touch = لمس
 density-mouse = فأرة
 density-hybrid = هجين

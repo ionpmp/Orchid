@@ -245,7 +245,15 @@ fn apply_app_state_to(
         orchid_storage::Density::Hybrid => "density-hybrid",
     };
 
-    g.set_current_theme_id(theme.meta.display_name.clone().into());
+    g.set_current_theme_id({
+        let key = format!("theme-name-{}", theme.meta.id);
+        let name = locale.tr(&key);
+        if name == key {
+            theme.meta.display_name.clone().into()
+        } else {
+            name.into()
+        }
+    });
     g.set_current_language({
         let key = format!("locale-name-{language}");
         let name = locale.tr(&key);

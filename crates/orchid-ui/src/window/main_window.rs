@@ -652,7 +652,9 @@ impl MainWindowController {
         let th = self.theme.current();
         let language = self.locale.current();
         let density = self.config.read().appearance.density;
-        g.set_current_theme_id(th.meta.display_name.clone().into());
+        g.set_current_theme_id(
+            theme_display_name(&self.locale, &th.meta.id, &th.meta.display_name).into(),
+        );
         g.set_current_language(locale_display_name(&self.locale, &language).into());
         g.set_current_density(self.locale.tr(density_i18n_key(density)).into());
         // Slint 1.16 has no Window `layout-direction`; drive RTL via `is-rtl`.
@@ -9844,12 +9846,30 @@ fn density_storage_key(density: orchid_storage::Density) -> &'static str {
     }
 }
 
-fn theme_combo_options(themes: &ThemeManager) -> Vec<(SharedString, SharedString)> {
+fn theme_combo_options(
+    themes: &ThemeManager,
+    locale: &LocaleManager,
+) -> Vec<(SharedString, SharedString)> {
     themes
         .list()
         .into_iter()
-        .map(|meta| (meta.id.into(), meta.display_name.into()))
+        .map(|meta| {
+            (
+                meta.id.clone().into(),
+                theme_display_name(locale, &meta.id, &meta.display_name).into(),
+            )
+        })
         .collect()
+}
+
+fn theme_display_name(locale: &LocaleManager, id: &str, fallback: &str) -> String {
+    let key = format!("theme-name-{id}");
+    let name = locale.tr(&key);
+    if name == key {
+        fallback.to_string()
+    } else {
+        name
+    }
 }
 
 fn locale_combo_options(locale_mgr: &LocaleManager) -> Vec<(SharedString, SharedString)> {
@@ -10124,7 +10144,7 @@ fn build_settings_fields(
             );
         }
         "appearance" => {
-            let theme_options = theme_combo_options(themes);
+            let theme_options = theme_combo_options(themes, locale);
             push_settings_combo(
                 &mut rows,
                 locale,

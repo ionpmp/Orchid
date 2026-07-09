@@ -612,6 +612,16 @@ startup-version-label = Versione { $version }
 status-theme = Tema:
 status-language = Lingua:
 status-density = Densità:
+theme-name-orchid-dark = Orchid Scuro
+theme-name-orchid-light = Orchid Chiaro
+theme-name-solarized-dark = Solarized Scuro
+theme-name-solarized-light = Solarized Chiaro
+theme-name-nord-dark = Nord Scuro
+theme-name-catppuccin-mocha = Catppuccin Mocha
+theme-name-catppuccin-latte = Catppuccin Latte
+theme-name-high-contrast-dark = Alto contrasto scuro
+theme-name-high-contrast-light = Alto contrasto chiaro
+
 density-touch = Touch
 density-mouse = Mouse
 density-hybrid = Ibrido

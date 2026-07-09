@@ -599,6 +599,16 @@ startup-version-label = Версия { $version }
 status-theme = Тема:
 status-language = Язык:
 status-density = Плотность:
+theme-name-orchid-dark = Orchid Тёмная
+theme-name-orchid-light = Orchid Светлая
+theme-name-solarized-dark = Solarized Тёмная
+theme-name-solarized-light = Solarized Светлая
+theme-name-nord-dark = Nord Тёмная
+theme-name-catppuccin-mocha = Catppuccin Mocha
+theme-name-catppuccin-latte = Catppuccin Latte
+theme-name-high-contrast-dark = Высокий контраст — тёмная
+theme-name-high-contrast-light = Высокий контраст — светлая
+
 density-touch = Сенсор
 density-mouse = Мышь
 density-hybrid = Смешанная
