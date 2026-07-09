@@ -9,13 +9,15 @@ pub mod migrations;
 pub mod tables;
 pub mod types;
 
-pub use codec::Value;
-pub use database::{ReadTransaction, StateStore, WriteTransaction};
+pub use codec::{bincode_decode, bincode_encode, Value};
+pub use database::{
+    ReadTransaction, StateStore, WriteTransaction, NOTIFICATION_CENTER_CACHE_KEY,
+};
 pub use migrations::{
     available_migrations, Migration, CURRENT_SCHEMA_VERSION,
 };
 pub use types::{
     CacheEntry, CacheKind, ColorLabel, FileManagerTab, FileTag, GridPosition, HistoryEntry,
-    LifecycleState, SchemaMeta, SessionState, TerminalBackend, TerminalSession, ViewMode,
-    WidgetInstance, WidgetSize, Workspace,
+    LifecycleState, NotificationCenterItem, NotificationCenterState, SchemaMeta, SessionState,
+    TerminalBackend, TerminalSession, ViewMode, WidgetInstance, WidgetSize, Workspace,
 };

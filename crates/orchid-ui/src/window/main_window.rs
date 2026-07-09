@@ -346,6 +346,26 @@ impl MainWindowController {
             ModelRc::new(VecModel::<SettingsFieldRow>::default());
         let notifications: ModelRc<NotificationItem> =
             ModelRc::new(VecModel::<NotificationItem>::default());
+        if let Ok(Ok(Some(saved))) = storage.read().map(|r| r.get_notification_center()) {
+            if let Some(model) = notifications
+                .as_any()
+                .downcast_ref::<VecModel<NotificationItem>>()
+            {
+                let rows: Vec<NotificationItem> = saved
+                    .items
+                    .into_iter()
+                    .take(Self::NOTIFICATION_LIST_CAP)
+                    .map(|n| NotificationItem {
+                        id: n.id.into(),
+                        title: n.title.into(),
+                        body: n.body.into(),
+                        time_label: n.time_label.into(),
+                        severity: n.severity,
+                    })
+                    .collect();
+                model.set_vec(rows);
+            }
+        }
         let config_reload_pending = Arc::new(AtomicBool::new(false));
         let config_reload_flag = config_reload_pending.clone();
         let config_reload_sub = bus
@@ -2592,6 +2612,7 @@ impl MainWindowController {
             }
         }
         self.sync_notification_global();
+        self.persist_notifications();
     }
 
     fn clear_notifications(self: &Arc<Self>) {
@@ -2600,6 +2621,7 @@ impl MainWindowController {
             model.set_vec(Vec::new());
         }
         self.sync_notification_global();
+        self.persist_notifications();
     }
 
     fn dismiss_notification(self: &Arc<Self>, id: &str) {
@@ -2612,6 +2634,39 @@ impl MainWindowController {
             }
         }
         self.sync_notification_global();
+        self.persist_notifications();
+    }
+
+    fn snapshot_notifications(&self) -> orchid_storage::NotificationCenterState {
+        let mut items = Vec::new();
+        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        {
+            for i in 0..model.row_count() {
+                if let Some(row) = model.row_data(i) {
+                    items.push(orchid_storage::NotificationCenterItem {
+                        id: row.id.to_string(),
+                        title: row.title.to_string(),
+                        body: row.body.to_string(),
+                        time_label: row.time_label.to_string(),
+                        severity: row.severity,
+                    });
+                }
+            }
+        }
+        orchid_storage::NotificationCenterState { items }
+    }
+
+    fn persist_notifications(self: &Arc<Self>) {
+        let state = self.snapshot_notifications();
+        if let Err(e) = (|| -> Result<()> {
+            let mut w = self.storage.write().map_err(UiError::Storage)?;
+            w.put_notification_center(&state)
+                .map_err(UiError::Storage)?;
+            w.commit().map_err(UiError::Storage)?;
+            Ok(())
+        })() {
+            warn!(?e, "persist notification center");
+        }
     }
 
     /// Mirror high-value file-manager transfer failures into the notification center (deduped).
@@ -5161,6 +5216,7 @@ impl MainWindowController {
         }
         self.update_gesture_bounds();
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
+        self.persist_notifications();
         tracing::info!("Main window closed");
         Ok(())
     }

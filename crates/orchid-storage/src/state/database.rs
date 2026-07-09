@@ -24,7 +24,7 @@ use crate::state::tables::{
     SESSION_KEY_CURRENT, SESSION_STATE_TABLE, WIDGET_INSTANCES_TABLE, WORKSPACES_TABLE,
 };
 use crate::state::types::{
-    CacheEntry, FileTag, HistoryEntry, SessionState, WidgetInstance, Workspace,
+    CacheEntry, CacheKind, FileTag, HistoryEntry, SessionState, WidgetInstance, Workspace,
 };
 
 /// Typed wrapper around a [`redb::Database`] carrying the Orchid state tables.
@@ -381,6 +381,22 @@ impl ReadTransaction<'_> {
         Ok(table.get(key)?.map(|g| g.value()))
     }
 
+    /// Load the persisted notification-center list, if any.
+    ///
+    /// # Errors
+    ///
+    /// Propagates redb / bincode errors.
+    pub fn get_notification_center(&self) -> Result<Option<crate::NotificationCenterState>> {
+        let Some(entry) = self.get_cache(&NOTIFICATION_CENTER_CACHE_KEY)? else {
+            return Ok(None);
+        };
+        if entry.kind != CacheKind::NotificationCenter {
+            return Ok(None);
+        }
+        let state = crate::state::codec::bincode_decode(&entry.data)?;
+        Ok(Some(state))
+    }
+
     /// Total bytes stored in the cache table (sum of `size_bytes`).
     ///
     /// # Errors
@@ -400,6 +416,9 @@ impl ReadTransaction<'_> {
         Ok(total)
     }
 }
+
+/// Stable cache key for [`crate::NotificationCenterState`].
+pub const NOTIFICATION_CENTER_CACHE_KEY: [u8; 32] = *b"orchid.notif.center.v1\0\0\0\0\0\0\0\0\0\0";
 
 // =============================================================================
 // Write transactions
@@ -586,6 +605,28 @@ impl WriteTransaction<'_> {
         Ok(())
     }
 
+    /// Persist the notification-center list (replaces any previous snapshot).
+    ///
+    /// # Errors
+    ///
+    /// Propagates redb / bincode errors.
+    pub fn put_notification_center(
+        &mut self,
+        state: &crate::NotificationCenterState,
+    ) -> Result<()> {
+        let data = crate::state::codec::bincode_encode(state)?;
+        let now = Utc::now();
+        let entry = CacheEntry {
+            key: NOTIFICATION_CENTER_CACHE_KEY,
+            kind: CacheKind::NotificationCenter,
+            created_at: now,
+            last_access_at: now,
+            size_bytes: data.len() as u64,
+            data,
+        };
+        self.put_cache(&entry)
+    }
+
     /// Evict every history entry whose `timestamp` is strictly before
     /// `older_than`, removing both the primary row and its timestamp index
     /// entry. Returns the number of rows removed.
@@ -679,7 +720,8 @@ impl WriteTransaction<'_> {
 mod tests {
     use super::*;
     use crate::state::types::{
-        ColorLabel, GridPosition, HistoryEntry, LifecycleState, WidgetSize,
+        ColorLabel, GridPosition, HistoryEntry, LifecycleState, NotificationCenterItem,
+        NotificationCenterState, WidgetSize,
     };
 
     fn new_store() -> StateStore {
@@ -863,5 +905,26 @@ mod tests {
             );
         }
         assert_eq!(r.iter_history_recent(10).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn notification_center_persists_across_transactions() {
+        let store = new_store();
+        let state = NotificationCenterState {
+            items: vec![NotificationCenterItem {
+                id: "n1".into(),
+                title: "Hello".into(),
+                body: "World".into(),
+                time_label: "09:00".into(),
+                severity: 0,
+            }],
+        };
+        {
+            let mut w = store.write().unwrap();
+            w.put_notification_center(&state).unwrap();
+            w.commit().unwrap();
+        }
+        let loaded = store.read().unwrap().get_notification_center().unwrap();
+        assert_eq!(loaded.as_ref(), Some(&state));
     }
 }

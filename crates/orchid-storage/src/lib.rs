@@ -43,10 +43,11 @@ pub use config::{
 pub use error::{Result, StorageError};
 pub use paths::OrchidPaths;
 pub use state::{
-    CacheEntry, CacheKind, ColorLabel, FileManagerTab, FileTag, GridPosition, HistoryEntry,
-    LifecycleState, Migration, ReadTransaction, SchemaMeta, SessionState, StateStore,
+    bincode_decode, bincode_encode, CacheEntry, CacheKind, ColorLabel, FileManagerTab, FileTag,
+    GridPosition, HistoryEntry, LifecycleState, Migration, NotificationCenterItem,
+    NotificationCenterState, ReadTransaction, SchemaMeta, SessionState, StateStore,
     TerminalBackend, TerminalSession, Value, ViewMode, WidgetInstance, WidgetSize, Workspace,
-    WriteTransaction, CURRENT_SCHEMA_VERSION,
+    WriteTransaction, CURRENT_SCHEMA_VERSION, NOTIFICATION_CENTER_CACHE_KEY,
 };
 
 /// Returns the version of this crate.

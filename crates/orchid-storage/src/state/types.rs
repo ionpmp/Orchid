@@ -254,6 +254,30 @@ pub enum CacheKind {
     PdfPagePreview,
     FileMetadata,
     SearchSnippet,
+    /// Serialized [`NotificationCenterState`] blob.
+    NotificationCenter,
+}
+
+/// One row in the in-app notification center.
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+pub struct NotificationCenterItem {
+    /// Stable id (UUID string).
+    pub id: String,
+    /// Short title.
+    pub title: String,
+    /// Body text.
+    pub body: String,
+    /// Pre-formatted local time label shown in the UI.
+    pub time_label: String,
+    /// `0` info, `1` tip, `2` warning, `3` error.
+    pub severity: i32,
+}
+
+/// Persisted notification-center list (newest first).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+pub struct NotificationCenterState {
+    /// Items currently shown in the center.
+    pub items: Vec<NotificationCenterItem>,
 }
 
 #[cfg(test)]
@@ -383,5 +407,20 @@ mod tests {
         assert_eq!(e.kind, back.kind);
         assert_eq!(e.size_bytes, back.size_bytes);
         assert_eq!(e.data, back.data);
+    }
+
+    #[test]
+    fn notification_center_state_roundtrip() {
+        let state = NotificationCenterState {
+            items: vec![NotificationCenterItem {
+                id: "abc".into(),
+                title: "Tip".into(),
+                body: "Hello".into(),
+                time_label: "12:00".into(),
+                severity: 1,
+            }],
+        };
+        let back = roundtrip(&state);
+        assert_eq!(state, back);
     }
 }

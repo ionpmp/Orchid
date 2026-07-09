@@ -85,7 +85,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Universal search (files + commands + settings) — live settings editor for theme/locale/density/bools; complex shortcut/leader fields stay read-only; search debouncer hardening + `SEARCH_LIVE` miss metrics
 
 ### UX
-- [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml
+- [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml (main window + startup window)
 - [x] Built-in themes (Orchid Light/Dark, Solarized, Nord, Catppuccin, High Contrast) — nine bundled themes + JSON loader from `themes_dir`
 - [~] Internationalization (11 languages, RTL) — 11 Fluent catalogues bundled (`en-US`…`ar-SA`); S-size RTL mirrors notification/workspace docking when language starts with `ar`
 - [~] Adaptive layouts (profiles for different screens) — Hybrid density nudges UI scale from canvas width: below 1100 px toward Touch (1.2×), above 1600 px toward Mouse (0.8×)
@@ -101,7 +101,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 - [ ] AI agents (Ollama + OpenAI API)
 - [ ] Graphical resource monitor with history
-- [~] Extended notification system — in-app list with Clear all, per-item dismiss, and a 50-item soft cap; startup tip + bridged FM/password/config status events; persistence / OS toasts deferred
+- [~] Extended notification system — in-app list with Clear all, per-item dismiss, a 50-item soft cap, and redb-backed persistence across sessions; startup tip + bridged FM/password/config status events; OS toasts deferred
 - [ ] Built-in browser (WebView2)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace
