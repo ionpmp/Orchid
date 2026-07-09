@@ -4533,7 +4533,7 @@ impl MainWindowController {
         let path_label = s.to_string();
         let ctrl = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp).await {
+            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true).await {
                 warn!(?e, path = %path_label, "open recent file in viewer");
             }
         }));
@@ -6261,7 +6261,8 @@ impl MainWindowController {
                 if !os.is_file() {
                     continue;
                 }
-                let _ = Self::open_in_viewer_for_controller(tw.clone(), fp).await;
+                // Multi-file open: one viewer widget per path (do not stomp).
+                let _ = Self::open_in_viewer_for_controller(tw.clone(), fp, false).await;
             }
             if let Some(c) = tw.upgrade() {
                 c.schedule_rebuild();
@@ -6518,9 +6519,15 @@ impl MainWindowController {
             .collect()
     }
 
+    /// Open `path` in a viewer on the active workspace.
+    ///
+    /// When `reuse_existing` is true, replace content in the first viewer widget
+    /// (single-file open / recent files). When false, always create a new viewer
+    /// so multi-select open and multi-file drag keep every file.
     async fn open_in_viewer_for_controller(
         ctrl: std::sync::Weak<MainWindowController>,
         path: orchid_fs::FsPath,
+        reuse_existing: bool,
     ) -> Result<Uuid> {
         let Some(c) = ctrl.upgrade() else {
             return Err(UiError::Slint("controller gone".into()));
@@ -6531,16 +6538,18 @@ impl MainWindowController {
             .map_err(|e| UiError::Slint(format!("no active workspace: {e}")))?
             .id;
 
-        for inst in c.widget_manager.instances_for_workspace(ws_id) {
-            if inst.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
-                orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
-                    .await
-                    .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
-                c.recent_files.touch(&path, Some(&c.bus));
-                if let Some(c2) = ctrl.upgrade() {
-                    c2.schedule_rebuild();
+        if reuse_existing {
+            for inst in c.widget_manager.instances_for_workspace(ws_id) {
+                if inst.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
+                    orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
+                        .await
+                        .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+                    c.recent_files.touch(&path, Some(&c.bus));
+                    if let Some(c2) = ctrl.upgrade() {
+                        c2.schedule_rebuild();
+                    }
+                    return Ok(inst.id);
                 }
-                return Ok(inst.id);
             }
         }
 
@@ -7389,8 +7398,10 @@ impl MainWindowController {
                 };
                 let tw2 = Arc::downgrade(self);
                 let _ = slint::spawn_local(Compat::new(async move {
-                    let _ =
-                        MainWindowController::open_in_viewer_for_controller(tw2, fs_path).await;
+                    let _ = MainWindowController::open_in_viewer_for_controller(
+                        tw2, fs_path, true,
+                    )
+                    .await;
                 }));
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany { paths } => {
@@ -7400,9 +7411,11 @@ impl MainWindowController {
                         let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
                             continue;
                         };
+                        // One widget per path — reusing would keep only the last file.
                         let _ = MainWindowController::open_in_viewer_for_controller(
                             tw2.clone(),
                             fs_path,
+                            false,
                         )
                         .await;
                     }
