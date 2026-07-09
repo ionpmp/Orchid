@@ -8,7 +8,7 @@ use parking_lot::{Mutex, RwLock};
 
 use crate::error::{Result, ViewerError};
 use crate::snapshot::{
-    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ViewerSnapshot,
+    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, ViewerSnapshot,
 };
 use crate::viewer_trait::Viewer;
 
@@ -21,7 +21,7 @@ pub struct ArchiveViewer {
     current_inner_path: RwLock<String>,
     selected_entry: RwLock<Option<String>>,
     preview_cache: Mutex<Option<(String, Vec<u8>)>>,
-    last_status: RwLock<Option<String>>,
+    last_status: RwLock<ArchiveStatus>,
 }
 
 impl std::fmt::Debug for ArchiveViewer {
@@ -51,12 +51,12 @@ impl ArchiveViewer {
             current_inner_path: RwLock::new(String::new()),
             selected_entry: RwLock::new(None),
             preview_cache: Mutex::new(None),
-            last_status: RwLock::new(None),
+            last_status: RwLock::new(ArchiveStatus::Idle),
         }
     }
 
     fn clear_status(&self) {
-        *self.last_status.write() = None;
+        *self.last_status.write() = ArchiveStatus::Idle;
     }
 
     fn local_path(&self) -> Result<std::path::PathBuf> {
@@ -201,7 +201,9 @@ impl ArchiveViewer {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join(file_name);
         self.extract_entry(&selected, &output).await?;
-        *self.last_status.write() = Some(format!("Extracted to {}", output.display()));
+        *self.last_status.write() = ArchiveStatus::ExtractedSelected {
+            path: output.display().to_string(),
+        };
         Ok(output)
     }
 
@@ -217,10 +219,10 @@ impl ArchiveViewer {
             .unwrap_or_else(|| std::path::Path::new("."))
             .join(format!("{stem}_extracted"));
         let count = self.extract_all(&output).await?;
-        *self.last_status.write() = Some(format!(
-            "Extracted {count} entries to {}",
-            output.display()
-        ));
+        *self.last_status.write() = ArchiveStatus::ExtractedAll {
+            count,
+            path: output.display().to_string(),
+        };
         Ok((output, count))
     }
 
@@ -296,7 +298,7 @@ impl Viewer for ArchiveViewer {
         *self.current_inner_path.write() = String::new();
         *self.selected_entry.write() = None;
         *self.preview_cache.lock() = None;
-        *self.last_status.write() = None;
+        *self.last_status.write() = ArchiveStatus::Idle;
         *self.path.write() = Some(path);
         Ok(())
     }
@@ -308,7 +310,7 @@ impl Viewer for ArchiveViewer {
         *self.current_inner_path.write() = String::new();
         *self.selected_entry.write() = None;
         *self.preview_cache.lock() = None;
-        *self.last_status.write() = None;
+        *self.last_status.write() = ArchiveStatus::Idle;
         *self.path.write() = None;
         Ok(())
     }
@@ -336,11 +338,7 @@ impl Viewer for ArchiveViewer {
         // Preview is best-effort — only valid when a reader is held.
         let preview = self.compute_preview();
         let total = entries_guard.len() as u32;
-        let info = self
-            .last_status
-            .read()
-            .clone()
-            .unwrap_or_else(|| format!("{format}, {total} entries"));
+        let status = self.last_status.read().clone();
         ViewerSnapshot::Archive(ArchiveSnapshot {
             path_display,
             format,
@@ -349,7 +347,8 @@ impl Viewer for ArchiveViewer {
             selected_path: selected_path.unwrap_or_default(),
             entries: rendered,
             preview,
-            info_text: info,
+            status,
+            info_text: String::new(),
         })
     }
 

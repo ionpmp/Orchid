@@ -42,6 +42,11 @@ pub struct ImageSnapshot {
     pub rotation_degrees: i16,
     pub flipped_horizontal: bool,
     pub flipped_vertical: bool,
+    /// Short format label (e.g. `PNG`) for the localized status strip.
+    pub format_label: String,
+    /// Original file size in bytes (for the localized status strip).
+    pub size_bytes: u64,
+    /// Deprecated: UI builds the status strip from structured fields + Fluent.
     pub info_text: String,
 }
 
@@ -128,6 +133,26 @@ pub struct SelectionRange {
     pub end_column: u32,
 }
 
+/// Transient archive status shown in the footer strip.
+#[derive(Debug, Clone, Default)]
+pub enum ArchiveStatus {
+    /// Default: show format + entry count.
+    #[default]
+    Idle,
+    /// One entry was extracted beside the archive.
+    ExtractedSelected {
+        /// Destination path display.
+        path: String,
+    },
+    /// All entries were extracted to a sibling folder.
+    ExtractedAll {
+        /// Number of entries written.
+        count: u64,
+        /// Destination folder display.
+        path: String,
+    },
+}
+
 /// Archive snapshot.
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -140,6 +165,9 @@ pub struct ArchiveSnapshot {
     pub selected_path: String,
     pub entries: Vec<ArchiveEntryView>,
     pub preview: Option<ArchivePreview>,
+    /// Structured status for the localized footer strip.
+    pub status: ArchiveStatus,
+    /// Deprecated: UI builds the status strip from [`Self::status`] + Fluent.
     pub info_text: String,
 }
 

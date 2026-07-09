@@ -10183,7 +10183,14 @@ fn build_image_snapshot(
         rotation_deg: i32::from(s.rotation_degrees),
         flipped_h: s.flipped_horizontal,
         flipped_v: s.flipped_vertical,
-        info_text: s.info_text.clone().into(),
+        info_text: {
+            let args = orchid_i18n::FluentArgs::new()
+                .with("width", s.width_px.to_string())
+                .with("height", s.height_px.to_string())
+                .with("size", format_byte_size(s.size_bytes))
+                .with("format", s.format_label.clone());
+            locale.tr_args("viewer-image-info", &args).into()
+        },
         path_display: s.path_display.clone().into(),
         fit_label: locale.tr("viewer-image-fit-screen").into(),
         actual_size_label: locale.tr("viewer-image-actual-size").into(),
@@ -10266,7 +10273,7 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager)
         cursor_line: s.cursor_line as i32,
         cursor_col: s.cursor_column as i32,
         visible_lines: ModelRc::new(VecModel::from(lines)),
-        info_text: s.info_text.clone().into(),
+        info_text: SharedString::new(),
         path_display: s.path_display.clone().into(),
         plain_text: s.plain_text.clone().into(),
         mode_label: if s.read_only {
@@ -10373,6 +10380,27 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     let has_file_selected = !s.selected_path.is_empty()
         && s.entries.iter().any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
 
+    let info_text: SharedString = match &s.status {
+        orchid_viewers::ArchiveStatus::Idle => {
+            let args = orchid_i18n::FluentArgs::new()
+                .with("format", s.format.clone())
+                .with("count", s.total_entries.to_string());
+            locale.tr_args("viewer-archive-info", &args).into()
+        }
+        orchid_viewers::ArchiveStatus::ExtractedSelected { path } => {
+            let args = orchid_i18n::FluentArgs::new().with("path", path.clone());
+            locale
+                .tr_args("viewer-archive-extracted-selected", &args)
+                .into()
+        }
+        orchid_viewers::ArchiveStatus::ExtractedAll { count, path } => {
+            let args = orchid_i18n::FluentArgs::new()
+                .with("count", count.to_string())
+                .with("path", path.clone());
+            locale.tr_args("viewer-archive-extracted-all", &args).into()
+        }
+    };
+
     ViewerArchiveModel {
         format: s.format.clone().into(),
         total_entries: s.total_entries as i32,
@@ -10386,7 +10414,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
         preview_kind,
         preview_text,
         preview_binary_size: preview_binary,
-        info_text: s.info_text.clone().into(),
+        info_text,
         path_display: s.path_display.clone().into(),
     }
 }

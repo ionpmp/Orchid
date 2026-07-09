@@ -21,7 +21,7 @@ pub use error::{Result, ViewerError};
 pub use image::{ImageFormat, ImageViewer, LoadedImage, ViewTransform};
 pub use pdf::PdfViewer;
 pub use snapshot::{
-    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ImageSnapshot, PdfSnapshot,
+    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, ImageSnapshot, PdfSnapshot,
     SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
 };
 pub use text::{

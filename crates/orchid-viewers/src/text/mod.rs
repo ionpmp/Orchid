@@ -366,9 +366,6 @@ impl Viewer for TextViewer {
         let line_ending = buffer.line_ending().label().to_string();
         let total = buffer.line_count();
         let cursor = *self.cursor.read();
-        let info = format!(
-            "{encoding}, {line_ending}, {language}, {total} lines"
-        );
         ViewerSnapshot::Text(TextSnapshot {
             path_display,
             language,
@@ -382,7 +379,7 @@ impl Viewer for TextViewer {
             cursor_line: cursor.line,
             cursor_column: cursor.column,
             selection: *self.selection.read(),
-            info_text: info,
+            info_text: String::new(),
             plain_text: buffer.plain_text(),
         })
     }

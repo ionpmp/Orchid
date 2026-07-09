@@ -27,6 +27,8 @@ pub struct ImageViewer {
     image: RwLock<Option<LoadedImage>>,
     transform: RwLock<ViewTransform>,
     viewport: RwLock<(f32, f32)>,
+    /// When true, viewport changes re-apply fit-to-viewport (like PDF fit modes).
+    fit_mode: RwLock<bool>,
     size_limit: u64,
 }
 
@@ -53,22 +55,32 @@ impl ImageViewer {
             image: RwLock::new(None),
             transform: RwLock::new(ViewTransform::default()),
             viewport: RwLock::new((800.0, 600.0)),
+            fit_mode: RwLock::new(true),
             size_limit: DEFAULT_SIZE_LIMIT,
         }
     }
 
     /// Change the viewport size the viewer fits against.
+    ///
+    /// When fit mode is active, re-applies fit-to-viewport so the image
+    /// tracks window / frame resizes (same idea as PDF fit modes).
     pub fn set_viewport(&self, width: f32, height: f32) {
         *self.viewport.write() = (width.max(1.0), height.max(1.0));
+        let should_fit = *self.fit_mode.read();
+        if should_fit {
+            self.apply_fit_transform();
+        }
     }
 
     /// Change zoom, anchored at `(anchor_x, anchor_y)`.
     pub fn set_zoom(&self, factor: f32, anchor_x: f32, anchor_y: f32) {
+        *self.fit_mode.write() = false;
         self.transform.write().set_zoom(factor, anchor_x, anchor_y);
     }
 
     /// Pan by `(dx, dy)` pixels.
     pub fn pan(&self, dx: f32, dy: f32) {
+        *self.fit_mode.write() = false;
         self.transform.write().pan(dx, dy);
     }
 
@@ -91,6 +103,11 @@ impl ImageViewer {
 
     /// Reset transform to best fit.
     pub fn fit_to_viewport(&self) {
+        *self.fit_mode.write() = true;
+        self.apply_fit_transform();
+    }
+
+    fn apply_fit_transform(&self) {
         let image = self.image.read();
         let (vw, vh) = *self.viewport.read();
         let (iw, ih) = match image.as_ref() {
@@ -102,11 +119,13 @@ impl ImageViewer {
 
     /// Reset transform to 1:1.
     pub fn actual_size(&self) {
+        *self.fit_mode.write() = false;
         self.transform.write().reset();
     }
 
     /// Nudge zoom by a factor around the viewport center.
     pub fn zoom_by(&self, factor: f32) {
+        *self.fit_mode.write() = false;
         let (vw, vh) = *self.viewport.read();
         let anchor_x = vw / 2.0;
         let anchor_y = vh / 2.0;
@@ -156,13 +175,6 @@ impl Viewer for ImageViewer {
             return ViewerSnapshot::Loading { path_display };
         };
         let transform = *self.transform.read();
-        let info = format!(
-            "{} × {}, {}, {}",
-            image.width,
-            image.height,
-            format_size(image.original_size_bytes),
-            image.format.label()
-        );
         ViewerSnapshot::Image(ImageSnapshot {
             path_display,
             width_px: image.width,
@@ -174,7 +186,9 @@ impl Viewer for ImageViewer {
             rotation_degrees: transform.rotation_degrees,
             flipped_horizontal: transform.flipped_horizontal,
             flipped_vertical: transform.flipped_vertical,
-            info_text: info,
+            format_label: image.format.label().to_string(),
+            size_bytes: image.original_size_bytes,
+            info_text: String::new(),
         })
     }
 
@@ -193,21 +207,5 @@ impl Viewer for ImageViewer {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
-    }
-}
-
-fn format_size(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-    let f = bytes as f64;
-    if f >= GB {
-        format!("{:.1} GB", f / GB)
-    } else if f >= MB {
-        format!("{:.1} MB", f / MB)
-    } else if f >= KB {
-        format!("{:.0} KB", f / KB)
-    } else {
-        format!("{bytes} B")
     }
 }
