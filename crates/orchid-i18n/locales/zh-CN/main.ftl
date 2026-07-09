@@ -498,6 +498,7 @@ workspace-default-name = 主工作区
 workspace-new = 新建工作区
 workspace-placement-blocked-title = 无法在此放置小组件
 workspace-placement-blocked-body = 该位置与其他小组件重叠或超出网格。请选择空闲单元格。
+group-tooltip-dissolve = 取消小组件分组
 workspace-unnamed = 工作区 { $n }
 dock-add-label = 添加小组件
 catalog-title = 小组件目录

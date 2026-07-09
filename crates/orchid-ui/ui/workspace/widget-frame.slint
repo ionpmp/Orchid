@@ -30,6 +30,7 @@ export component WidgetFrame inherits Rectangle {
     callback resize-moved(length, length);
     callback resize-ended();
     callback group-tab-clicked(string);
+    callback group-tab-closed(string);
     callback group-dissolve-clicked();
     callback terminal-key-pressed(string, bool, bool, bool);
     callback terminal-viewport-changed(length, length);
@@ -245,6 +246,7 @@ export component WidgetFrame inherits Rectangle {
             if model.group-tabs.length > 1 : GroupTabs {
                 tabs: model.group-tabs;
                 tab-clicked(id) => { root.group-tab-clicked(id); }
+                tab-closed(id) => { root.group-tab-closed(id); }
                 dissolve-clicked => { root.group-dissolve-clicked(); }
             }
 

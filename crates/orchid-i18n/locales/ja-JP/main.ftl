@@ -498,6 +498,7 @@ workspace-default-name = メイン
 workspace-new = 新しいワークスペース
 workspace-placement-blocked-title = ここにウィジェットを配置できません
 workspace-placement-blocked-body = 他のウィジェットと重なるか、グリッド外です。空きセルを選んでください。
+group-tooltip-dissolve = ウィジェットのグループを解除
 workspace-unnamed = ワークスペース { $n }
 dock-add-label = ウィジェットを追加
 catalog-title = ウィジェットカタログ

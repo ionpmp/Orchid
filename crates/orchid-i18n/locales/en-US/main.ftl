@@ -508,6 +508,7 @@ workspace-default-name = Main
 workspace-new = New workspace
 workspace-placement-blocked-title = Cannot place widget here
 workspace-placement-blocked-body = That spot overlaps another widget or leaves the grid. Try a free cell.
+group-tooltip-dissolve = Ungroup widgets
 workspace-unnamed = Workspace { $n }
 dock-add-label = Add widget
 catalog-title = Widget catalog

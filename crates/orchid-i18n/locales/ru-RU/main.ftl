@@ -500,6 +500,7 @@ workspace-default-name = Главный
 workspace-new = Новый рабочий стол
 workspace-placement-blocked-title = Нельзя разместить виджет здесь
 workspace-placement-blocked-body = Место пересекается с другим виджетом или выходит за сетку. Выберите свободную ячейку.
+group-tooltip-dissolve = Разгруппировать виджеты
 workspace-unnamed = Рабочий стол { $n }
 dock-add-label = Добавить виджет
 catalog-title = Каталог виджетов

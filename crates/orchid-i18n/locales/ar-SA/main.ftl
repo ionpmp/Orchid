@@ -499,6 +499,7 @@ workspace-default-name = الرئيسية
 workspace-new = مساحة عمل جديدة
 workspace-placement-blocked-title = تعذّر وضع الأداة هنا
 workspace-placement-blocked-body = هذا الموضع يتداخل مع أداة أخرى أو يخرج عن الشبكة. جرّب خلية فارغة.
+group-tooltip-dissolve = فك تجميع عناصر الواجهة
 workspace-unnamed = مساحة عمل { $n }
 dock-add-label = إضافة عنصر واجهة
 catalog-title = دليل عناصر الواجهة

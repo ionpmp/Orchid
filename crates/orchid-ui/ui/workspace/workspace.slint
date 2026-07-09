@@ -24,6 +24,7 @@ export component WorkspaceView inherits Rectangle {
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
     callback group-tab-clicked(string, string);
+    callback group-tab-closed(string, string);
     callback group-dissolve-clicked(string);
     callback terminal-key-pressed(string, string, bool, bool, bool);
     callback terminal-viewport-changed(string, length, length);
@@ -271,6 +272,7 @@ export component WorkspaceView inherits Rectangle {
                     resize-moved(px, py) => { root.widget-resize-moved(w.instance-id, px, py); }
                     resize-ended => { root.widget-resize-ended(w.instance-id); }
                     group-tab-clicked(member-id) => { root.group-tab-clicked(w.group-id, member-id); }
+                    group-tab-closed(member-id) => { root.group-tab-closed(w.group-id, member-id); }
                     group-dissolve-clicked => { root.group-dissolve-clicked(w.group-id); }
                     terminal-key-pressed(text, ctrl, shift, alt) => {
                         root.terminal-key-pressed(w.instance-id, text, ctrl, shift, alt);

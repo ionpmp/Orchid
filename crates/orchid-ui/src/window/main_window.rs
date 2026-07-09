@@ -572,6 +572,7 @@ impl MainWindowController {
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
+        g.set_group_tooltip_dissolve(mgr.tr("group-tooltip-dissolve").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
@@ -1132,6 +1133,14 @@ impl MainWindowController {
             move |group_id, member_id| {
                 if let Some(c) = t.upgrade() {
                     c.on_group_tab_clicked(&group_id, &member_id);
+                }
+            }
+        });
+        self.window.on_group_tab_closed({
+            let t = t.clone();
+            move |group_id, member_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_group_tab_closed(&group_id, &member_id);
                 }
             }
         });
@@ -3248,8 +3257,22 @@ impl MainWindowController {
     fn finish_widget_close(self: &Arc<Self>, u: Uuid) {
         self.close_confirm_overlays.write().remove(&u);
         let wm = self.widget_manager.clone();
+        let gm = self.group_manager.clone();
         let t = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
+            if let Some(group) = gm.find_for_instance(u) {
+                if group.members.len() <= 2 {
+                    if let Ok(released) = gm.dissolve_group(group.id).await {
+                        for mid in released {
+                            if let Ok(inst) = wm.get_instance(mid) {
+                                *inst.group_id.write() = None;
+                            }
+                        }
+                    }
+                } else if let Err(e) = gm.remove_from_group(group.id, u).await {
+                    warn!(?e, "group remove on close");
+                }
+            }
             if let Err(e) = wm.close(u).await {
                 warn!(?e, "close");
             }
@@ -3692,6 +3715,57 @@ impl MainWindowController {
         let _ = slint::spawn_local(async move {
             if let Err(e) = gm.switch_active(gid, mid).await {
                 warn!(?e, "group switch_active");
+            }
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    fn on_group_tab_closed(self: &Arc<Self>, group_id: &SharedString, member_id: &SharedString) {
+        let Ok(gid) = Uuid::parse_str(group_id.as_str()) else {
+            return;
+        };
+        let Ok(mid) = Uuid::parse_str(member_id.as_str()) else {
+            return;
+        };
+        let t = Arc::downgrade(self);
+        let _ = slint::spawn_local(async move {
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            let Ok(group) = c.group_manager.get(gid) else {
+                return;
+            };
+            if !group.members.contains(&mid) {
+                return;
+            }
+            // Closing a tab removes the member from the stack and re-places it;
+            // the widget itself stays open (unlike the frame × which destroys it).
+            if group.members.len() <= 2 {
+                if let Err(e) = c.dissolve_group_internal(gid).await {
+                    warn!(?e, "group dissolve on tab close");
+                }
+            } else {
+                if let Err(e) = c.group_manager.remove_from_group(gid, mid).await {
+                    warn!(?e, "group remove_from_group");
+                    return;
+                }
+                if let Ok(inst) = c.widget_manager.get_instance(mid) {
+                    *inst.group_id.write() = None;
+                }
+                if let Ok(w) = c.workspace_manager.active() {
+                    let all = c.widget_manager.instances_for_workspace(w.id);
+                    if let Ok(inst) = c.widget_manager.get_instance(mid) {
+                        let size = *inst.size.read();
+                        if let Ok(pos) = c
+                            .layout_engine
+                            .auto_place_excluding_with_growth(w.id, size, &all, mid)
+                        {
+                            let _ = c.widget_manager.move_to(mid, pos).await;
+                        }
+                    }
+                }
             }
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();

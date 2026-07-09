@@ -498,6 +498,7 @@ workspace-default-name = Haupt
 workspace-new = Neuer Arbeitsbereich
 workspace-placement-blocked-title = Widget kann hier nicht platziert werden
 workspace-placement-blocked-body = Die Position überlappt ein anderes Widget oder verlässt das Raster. Wählen Sie eine freie Zelle.
+group-tooltip-dissolve = Widget-Gruppe auflösen
 workspace-unnamed = Arbeitsbereich { $n }
 dock-add-label = Widget hinzufügen
 catalog-title = Widget-Katalog

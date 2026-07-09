@@ -498,6 +498,7 @@ workspace-default-name = Principal
 workspace-new = Nouvel espace de travail
 workspace-placement-blocked-title = Impossible de placer le widget ici
 workspace-placement-blocked-body = Cet emplacement chevauche un autre widget ou sort de la grille. Essayez une cellule libre.
+group-tooltip-dissolve = Dissocier les widgets
 workspace-unnamed = Espace de travail { $n }
 dock-add-label = Ajouter un widget
 catalog-title = Catalogue de widgets

@@ -498,6 +498,7 @@ workspace-default-name = 메인
 workspace-new = 새 작업 공간
 workspace-placement-blocked-title = 여기에 위젯을 배치할 수 없습니다
 workspace-placement-blocked-body = 다른 위젯과 겹치거나 그리드를 벗어납니다. 빈 칸을 선택하세요.
+group-tooltip-dissolve = 위젯 그룹 해제
 workspace-unnamed = 작업 공간 { $n }
 dock-add-label = 위젯 추가
 catalog-title = 위젯 카탈로그
