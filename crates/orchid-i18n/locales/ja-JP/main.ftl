@@ -220,6 +220,11 @@ settings.section.privacy = プライバシー
 
 # ---- Settings panel ----
 settings-panel-title = 設定
+settings-config-reload-failed = 設定を適用できませんでした: { $reason }
+settings-field-rejected = 設定を変更できませんでした: { $reason }
+settings-validation-failed = 設定を保存できませんでした: { $reason }
+settings-save-failed = 設定を保存できませんでした: { $reason }
+settings-error-theme-not-found = テーマが見つかりません: { $id }
 settings-panel-hint = 値は現在読み取り専用です。config.toml を直接編集してください。変更は自動的に再読み込みされます。
 settings-panel-coming-soon = このセクションの完全な設定エディターはまだ利用できません。当面は config.toml を直接編集してください。
 settings-panel-ok = 閉じる
@@ -310,6 +315,8 @@ media-play = 再生
 media-pause = 一時停止
 media-next = 次へ
 media-previous = 前へ
+media-control-failed = メディア操作に失敗しました
+media-control-rejected = システムがメディア操作を拒否しました
 
 # ---- Password manager ----
 password-locked = データベースはロックされています
@@ -707,7 +714,7 @@ moon-moonrise-label = 月の出
 moon-moonset-label = 月の入り
 moon-sunrise-label = 日の出
 moon-sunset-label = 日の入り
-moon-libration-label = Libration
+moon-libration-label = 秤動
 
 widget-title-terminal = ターミナル
 widget-close-tooltip = ウィジェットを閉じる
@@ -725,3 +732,5 @@ fm-error-io = ファイル操作に失敗しました: { $reason }
 fm-error-unavailable = ファイルマネージャーを利用できません
 search-open-hint = 開く
 viewer-error-no-archive = アーカイブが開かれていません
+viewer-error-io = ファイルエラーが発生しました
+viewer-error-unknown = ビューアーで予期しないエラーが発生しました

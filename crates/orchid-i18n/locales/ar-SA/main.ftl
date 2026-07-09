@@ -220,6 +220,11 @@ settings.section.privacy = الخصوصية
 
 # ---- Settings panel ----
 settings-panel-title = الإعدادات
+settings-config-reload-failed = تعذّر تطبيق الإعدادات: { $reason }
+settings-field-rejected = تعذّر تغيير الإعداد: { $reason }
+settings-validation-failed = تعذّر حفظ الإعدادات: { $reason }
+settings-save-failed = تعذّر حفظ الإعدادات: { $reason }
+settings-error-theme-not-found = السمة غير موجودة: { $id }
 settings-panel-hint = القيم للقراءة فقط حاليًا. عدّل config.toml مباشرة؛ تُعاد تحميل التغييرات تلقائيًا.
 settings-panel-coming-soon = محرّر الإعدادات الكامل لهذا القسم غير متاح بعد. عدّل config.toml مباشرة في الوقت الحالي.
 settings-panel-ok = إغلاق
@@ -311,6 +316,8 @@ media-play = تشغيل
 media-pause = إيقاف مؤقت
 media-next = التالي
 media-previous = السابق
+media-control-failed = فشل التحكم بالوسائط
+media-control-rejected = رفض النظام التحكم بالوسائط
 
 # ---- Password manager ----
 password-locked = قاعدة البيانات مقفلة
@@ -708,7 +715,7 @@ moon-moonrise-label = شروق القمر
 moon-moonset-label = غروب القمر
 moon-sunrise-label = شروق الشمس
 moon-sunset-label = غروب الشمس
-moon-libration-label = Libration
+moon-libration-label = الترنح
 
 widget-title-terminal = الطرفية
 widget-close-tooltip = إغلاق عنصر الواجهة
@@ -726,3 +733,5 @@ fm-error-io = فشلت عملية الملف: { $reason }
 fm-error-unavailable = مدير الملفات غير متاح
 search-open-hint = فتح
 viewer-error-no-archive = لا يوجد أرشيف مفتوح
+viewer-error-io = حدث خطأ في الملف
+viewer-error-unknown = حدث خطأ غير متوقع في العارض

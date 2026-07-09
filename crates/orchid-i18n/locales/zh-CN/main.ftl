@@ -220,6 +220,11 @@ settings.section.privacy = 隐私
 
 # ---- Settings panel ----
 settings-panel-title = 设置
+settings-config-reload-failed = 无法应用设置：{ $reason }
+settings-field-rejected = 无法更改设置：{ $reason }
+settings-validation-failed = 无法保存设置：{ $reason }
+settings-save-failed = 无法保存设置：{ $reason }
+settings-error-theme-not-found = 未找到主题：{ $id }
 settings-panel-hint = 值目前为只读。请直接编辑 config.toml；更改会自动重新加载。
 settings-panel-coming-soon = 此部分的完整设置编辑器尚不可用。请暂时直接编辑 config.toml。
 settings-panel-ok = 关闭
@@ -310,6 +315,8 @@ media-play = 播放
 media-pause = 暂停
 media-next = 下一首
 media-previous = 上一首
+media-control-failed = 媒体控制失败
+media-control-rejected = 系统拒绝了媒体控制
 
 # ---- Password manager ----
 password-locked = 数据库已锁定
@@ -707,7 +714,7 @@ moon-moonrise-label = 月出
 moon-moonset-label = 月落
 moon-sunrise-label = 日出
 moon-sunset-label = 日落
-moon-libration-label = Libration
+moon-libration-label = 天平动
 
 widget-title-terminal = 终端
 widget-close-tooltip = 关闭小组件
@@ -725,3 +732,5 @@ fm-error-io = 文件操作失败：{ $reason }
 fm-error-unavailable = 文件管理器不可用
 search-open-hint = 打开
 viewer-error-no-archive = 未打开归档
+viewer-error-io = 发生文件错误
+viewer-error-unknown = 查看器发生意外错误

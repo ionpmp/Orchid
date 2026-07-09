@@ -220,6 +220,11 @@ settings.section.privacy = Confidentialité
 
 # ---- Settings panel ----
 settings-panel-title = Paramètres
+settings-config-reload-failed = Impossible d’appliquer les paramètres : { $reason }
+settings-field-rejected = Impossible de modifier le paramètre : { $reason }
+settings-validation-failed = Impossible d’enregistrer les paramètres : { $reason }
+settings-save-failed = Impossible d’enregistrer les paramètres : { $reason }
+settings-error-theme-not-found = Thème introuvable : { $id }
 settings-panel-hint = Les valeurs sont en lecture seule pour l'instant. Modifiez config.toml directement ; les changements se rechargent automatiquement.
 settings-panel-coming-soon = L'éditeur complet de paramètres pour cette section n'est pas encore disponible. Modifiez config.toml directement pour l'instant.
 settings-panel-ok = Fermer
@@ -310,6 +315,8 @@ media-play = Lecture
 media-pause = Pause
 media-next = Suivant
 media-previous = Précédent
+media-control-failed = Échec de la commande multimédia
+media-control-rejected = La commande multimédia a été refusée par le système
 
 # ---- Password manager ----
 password-locked = La base de données est verrouillée
@@ -725,3 +732,5 @@ fm-error-io = Échec de l’opération sur le fichier : { $reason }
 fm-error-unavailable = Le gestionnaire de fichiers est indisponible
 search-open-hint = Ouvrir
 viewer-error-no-archive = Aucune archive n’est ouverte
+viewer-error-io = Une erreur de fichier s’est produite
+viewer-error-unknown = Une erreur inattendue du visionneur s’est produite

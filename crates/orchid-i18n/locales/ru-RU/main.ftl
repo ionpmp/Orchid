@@ -215,6 +215,11 @@ settings.section.privacy = Конфиденциальность
 
 # ---- Settings panel ----
 settings-panel-title = Настройки
+settings-config-reload-failed = Не удалось применить настройки: { $reason }
+settings-field-rejected = Не удалось изменить параметр: { $reason }
+settings-validation-failed = Не удалось сохранить настройки: { $reason }
+settings-save-failed = Не удалось сохранить настройки: { $reason }
+settings-error-theme-not-found = Тема не найдена: { $id }
 settings-panel-hint = Значения пока только для просмотра. Чтобы изменить настройки, отредактируйте config.toml — изменения подхватятся автоматически.
 settings-panel-coming-soon = Полноценный редактор этого раздела пока недоступен. Пока что редактируйте config.toml напрямую.
 settings-panel-ok = Закрыть
@@ -300,6 +305,8 @@ media-play = Воспроизвести
 media-pause = Пауза
 media-next = Следующий
 media-previous = Предыдущий
+media-control-failed = Ошибка управления медиа
+media-control-rejected = Система отклонила управление медиа
 
 # ---- Password manager ----
 password-locked = База паролей заблокирована
@@ -727,3 +734,5 @@ fm-error-io = Ошибка операции с файлом: { $reason }
 fm-error-unavailable = Файловый менеджер недоступен
 search-open-hint = Открыть
 viewer-error-no-archive = Архив не открыт
+viewer-error-io = Произошла ошибка файла
+viewer-error-unknown = Произошла непредвиденная ошибка просмотрщика

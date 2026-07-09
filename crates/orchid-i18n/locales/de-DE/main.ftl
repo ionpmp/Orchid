@@ -220,6 +220,11 @@ settings.section.privacy = Datenschutz
 
 # ---- Settings panel ----
 settings-panel-title = Einstellungen
+settings-config-reload-failed = Einstellungen konnten nicht angewendet werden: { $reason }
+settings-field-rejected = Einstellung konnte nicht geändert werden: { $reason }
+settings-validation-failed = Einstellungen konnten nicht gespeichert werden: { $reason }
+settings-save-failed = Einstellungen konnten nicht gespeichert werden: { $reason }
+settings-error-theme-not-found = Theme nicht gefunden: { $id }
 settings-panel-hint = Werte sind derzeit schreibgeschützt. Bearbeiten Sie config.toml direkt; Änderungen werden automatisch neu geladen.
 settings-panel-coming-soon = Der vollständige Einstellungseditor für diesen Bereich ist noch nicht verfügbar. Bearbeiten Sie vorerst config.toml direkt.
 settings-panel-ok = Schließen
@@ -310,6 +315,8 @@ media-play = Wiedergabe
 media-pause = Pause
 media-next = Weiter
 media-previous = Zurück
+media-control-failed = Mediensteuerung fehlgeschlagen
+media-control-rejected = Mediensteuerung wurde vom System abgelehnt
 
 # ---- Password manager ----
 password-locked = Datenbank ist gesperrt
@@ -725,3 +732,5 @@ fm-error-io = Dateioperation fehlgeschlagen: { $reason }
 fm-error-unavailable = Dateimanager ist nicht verfügbar
 search-open-hint = Öffnen
 viewer-error-no-archive = Kein Archiv geöffnet
+viewer-error-io = Ein Dateifehler ist aufgetreten
+viewer-error-unknown = Ein unerwarteter Viewer-Fehler ist aufgetreten

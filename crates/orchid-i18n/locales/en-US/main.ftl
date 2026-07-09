@@ -223,6 +223,11 @@ settings.section.privacy = Privacy
 
 # ---- Settings panel ----
 settings-panel-title = Settings
+settings-config-reload-failed = Could not apply settings: { $reason }
+settings-field-rejected = Could not change setting: { $reason }
+settings-validation-failed = Settings could not be saved: { $reason }
+settings-save-failed = Could not save settings: { $reason }
+settings-error-theme-not-found = Theme not found: { $id }
 settings-panel-hint = Changes save automatically to config.toml. Shortcut overrides and leader bindings are read-only here — edit those in config.toml directly.
 settings-panel-coming-soon = The full settings editor for this section is not available yet. Edit config.toml directly for now.
 settings-panel-ok = Close
@@ -316,6 +321,8 @@ media-play = Play
 media-pause = Pause
 media-next = Next
 media-previous = Previous
+media-control-failed = Media control failed
+media-control-rejected = Media control was rejected by the system
 
 # ---- Password manager ----
 password-locked = Database is locked
@@ -682,6 +689,8 @@ viewer-error-archive-entry-not-found = Archive entry not found
 viewer-error-thumbnail = Could not generate a thumbnail
 viewer-error-unavailable = Viewer is unavailable
 viewer-error-no-archive = No archive is open
+viewer-error-io = A file error occurred
+viewer-error-unknown = An unexpected viewer error occurred
 viewer-pdf-unavailable = PDF support is unavailable on this build.
 viewer-image-heic-unsupported = HEIC images are not supported yet
 viewer-image-raw-unsupported = RAW images are not supported yet

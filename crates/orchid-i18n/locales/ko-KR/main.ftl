@@ -220,6 +220,11 @@ settings.section.privacy = 개인정보
 
 # ---- Settings panel ----
 settings-panel-title = 설정
+settings-config-reload-failed = 설정을 적용할 수 없습니다: { $reason }
+settings-field-rejected = 설정을 변경할 수 없습니다: { $reason }
+settings-validation-failed = 설정을 저장할 수 없습니다: { $reason }
+settings-save-failed = 설정을 저장할 수 없습니다: { $reason }
+settings-error-theme-not-found = 테마를 찾을 수 없습니다: { $id }
 settings-panel-hint = 값은 현재 읽기 전용입니다. config.toml을 직접 편집하세요. 변경 사항은 자동으로 다시 로드됩니다.
 settings-panel-coming-soon = 이 섹션의 전체 설정 편집기는 아직 사용할 수 없습니다. 지금은 config.toml을 직접 편집하세요.
 settings-panel-ok = 닫기
@@ -310,6 +315,8 @@ media-play = 재생
 media-pause = 일시 정지
 media-next = 다음
 media-previous = 이전
+media-control-failed = 미디어 제어 실패
+media-control-rejected = 시스템에서 미디어 제어를 거부했습니다
 
 # ---- Password manager ----
 password-locked = 데이터베이스가 잠겨 있습니다
@@ -707,7 +714,7 @@ moon-moonrise-label = 월출
 moon-moonset-label = 월몰
 moon-sunrise-label = 일출
 moon-sunset-label = 일몰
-moon-libration-label = Libration
+moon-libration-label = 칭동
 
 widget-title-terminal = 터미널
 widget-close-tooltip = 위젯 닫기
@@ -725,3 +732,5 @@ fm-error-io = 파일 작업 실패: { $reason }
 fm-error-unavailable = 파일 관리자를 사용할 수 없습니다
 search-open-hint = 열기
 viewer-error-no-archive = 열린 아카이브가 없습니다
+viewer-error-io = 파일 오류가 발생했습니다
+viewer-error-unknown = 예기치 않은 뷰어 오류가 발생했습니다

@@ -834,9 +834,14 @@ impl MainWindowController {
                     if c.config_reload_pending.swap(false, Ordering::AcqRel) {
                         if let Err(e) = c.apply_hot_config() {
                             warn!(?e, "config hot-reload");
+                            let reason = ui_localized_error(&c.locale, &e);
+                            let body = c.locale.tr_args(
+                                "settings-config-reload-failed",
+                                &orchid_i18n::FluentArgs::new().with("reason", reason),
+                            );
                             c.push_notification(
                                 &c.locale.tr("settings-panel-title"),
-                                &e.to_string(),
+                                &body,
                                 2,
                             );
                         }
@@ -2691,6 +2696,11 @@ impl MainWindowController {
                 reason = %reason,
                 "settings field rejected"
             );
+            let body = self.locale.tr_args(
+                "settings-field-rejected",
+                &orchid_i18n::FluentArgs::new().with("reason", reason),
+            );
+            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
             return;
         }
         if let Err(e) = cfg.validate() {
@@ -2701,16 +2711,33 @@ impl MainWindowController {
                 error = %e,
                 "settings field failed validation"
             );
+            let body = self.locale.tr_args(
+                "settings-validation-failed",
+                &orchid_i18n::FluentArgs::new().with("reason", e.to_string()),
+            );
+            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
             return;
         }
         let snapshot = cfg.clone();
         drop(cfg);
         if let Err(e) = ConfigLoader::save(&snapshot, &self.config_file_path) {
             warn!(?e, "settings save failed");
+            let reason = storage_localized_error(&self.locale, &e);
+            let body = self.locale.tr_args(
+                "settings-save-failed",
+                &orchid_i18n::FluentArgs::new().with("reason", reason),
+            );
+            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 3);
             return;
         }
         if let Err(e) = self.apply_hot_config() {
             warn!(?e, "settings apply after save");
+            let reason = ui_localized_error(&self.locale, &e);
+            let body = self.locale.tr_args(
+                "settings-config-reload-failed",
+                &orchid_i18n::FluentArgs::new().with("reason", reason),
+            );
+            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
         }
     }
 
@@ -4510,10 +4537,14 @@ impl MainWindowController {
         let Some((inst_id, is_playing)) = self.find_active_media_widget() else {
             return;
         };
+        let t = Arc::downgrade(self);
         let _ = slint::spawn_local(async move {
             let cmd = if is_playing { "pause" } else { "play" };
             if let Err(e) = orchid_widgets::builtin::media::execute_command(inst_id, cmd).await {
                 warn!(?e, "media play/pause");
+                if let Some(c) = t.upgrade() {
+                    c.notify_media_control_failed(&e);
+                }
             }
         });
     }
@@ -4522,11 +4553,20 @@ impl MainWindowController {
         let Some((inst_id, _)) = self.find_active_media_widget() else {
             return;
         };
+        let t = Arc::downgrade(self);
         let _ = slint::spawn_local(async move {
             if let Err(e) = orchid_widgets::builtin::media::execute_command(inst_id, cmd).await {
                 warn!(?e, "media command");
+                if let Some(c) = t.upgrade() {
+                    c.notify_media_control_failed(&e);
+                }
             }
         });
+    }
+
+    fn notify_media_control_failed(self: &Arc<Self>, err: &orchid_widgets::builtin::media::MediaError) {
+        let body = media_localized_error(&self.locale, err);
+        self.push_notification(&self.locale.tr("widget-media-name"), &body, 2);
     }
 
     fn find_active_media_widget(&self) -> Option<(Uuid, bool)> {
@@ -9021,8 +9061,72 @@ fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
         }
         "no viewer" | "viewer widget not live" => locale.tr("viewer-error-unavailable"),
         "not an archive" | "no archive open" => locale.tr("viewer-error-no-archive"),
-        // Callers wrap the result in `viewer-error-with-reason`; keep unknowns raw.
-        _ => msg.to_string(),
+        _ if lower_contains_io(msg) => locale.tr("viewer-error-io"),
+        // Callers wrap the result in `viewer-error-with-reason`.
+        _ => locale.tr("viewer-error-unknown"),
+    }
+}
+
+fn lower_contains_io(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("os error")
+        || lower.contains("i/o error")
+        || lower.contains("io error")
+        || lower.contains("permission denied")
+        || lower.contains("access is denied")
+        || lower.contains("no such file")
+        || lower.contains("failed to read")
+        || lower.contains("failed to write")
+        || lower.contains("failed to open")
+}
+
+fn ui_localized_error(locale: &LocaleManager, err: &UiError) -> String {
+    match err {
+        UiError::ThemeNotFound(id) => locale.tr_args(
+            "settings-error-theme-not-found",
+            &orchid_i18n::FluentArgs::new().with("id", id.as_str()),
+        ),
+        UiError::Io(e) => storage_io_reason(locale, &e.to_string()),
+        UiError::Storage(e) => storage_localized_error(locale, e),
+        other => {
+            let text = other.to_string();
+            let mapped = fm_localized_error(locale, &text);
+            if mapped != text {
+                mapped
+            } else {
+                text
+            }
+        }
+    }
+}
+
+fn storage_localized_error(locale: &LocaleManager, err: &orchid_storage::StorageError) -> String {
+    storage_io_reason(locale, &err.to_string())
+}
+
+fn storage_io_reason(locale: &LocaleManager, text: &str) -> String {
+    let mapped = fm_localized_error(locale, text);
+    if mapped != text {
+        mapped
+    } else {
+        locale.tr("viewer-error-io")
+    }
+}
+
+fn media_localized_error(
+    locale: &LocaleManager,
+    err: &orchid_widgets::builtin::media::MediaError,
+) -> String {
+    use orchid_widgets::builtin::media::MediaError;
+    match err {
+        MediaError::NoSession => locale.tr("media-no-session"),
+        MediaError::Unsupported => locale.tr("media-unsupported"),
+        MediaError::ControlFailed(reason)
+            if reason.to_ascii_lowercase().contains("transport command rejected") =>
+        {
+            locale.tr("media-control-rejected")
+        }
+        MediaError::ControlFailed(_) => locale.tr("media-control-failed"),
     }
 }
 

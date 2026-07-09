@@ -220,6 +220,11 @@ settings.section.privacy = Privacidade
 
 # ---- Settings panel ----
 settings-panel-title = Configurações
+settings-config-reload-failed = Não foi possível aplicar as configurações: { $reason }
+settings-field-rejected = Não foi possível alterar a configuração: { $reason }
+settings-validation-failed = Não foi possível salvar as configurações: { $reason }
+settings-save-failed = Não foi possível salvar as configurações: { $reason }
+settings-error-theme-not-found = Tema não encontrado: { $id }
 settings-panel-hint = Os valores são somente leitura por enquanto. Edite config.toml diretamente; as alterações recarregam automaticamente.
 settings-panel-coming-soon = O editor completo de configurações para esta seção ainda não está disponível. Edite config.toml diretamente por enquanto.
 settings-panel-ok = Fechar
@@ -310,6 +315,8 @@ media-play = Reproduzir
 media-pause = Pausar
 media-next = Próximo
 media-previous = Anterior
+media-control-failed = Falha no controle de mídia
+media-control-rejected = O sistema rejeitou o controle de mídia
 
 # ---- Password manager ----
 password-locked = O banco de dados está bloqueado
@@ -707,7 +714,7 @@ moon-moonrise-label = Nascer da lua
 moon-moonset-label = Pôr da lua
 moon-sunrise-label = Nascer do sol
 moon-sunset-label = Pôr do sol
-moon-libration-label = Libration
+moon-libration-label = Libração
 
 widget-title-terminal = Terminal
 widget-close-tooltip = Fechar widget
@@ -725,3 +732,5 @@ fm-error-io = Falha na operação de arquivo: { $reason }
 fm-error-unavailable = O gerenciador de arquivos está indisponível
 search-open-hint = Abrir
 viewer-error-no-archive = Nenhum arquivo está aberto
+viewer-error-io = Ocorreu um erro de arquivo
+viewer-error-unknown = Ocorreu um erro inesperado do visualizador
