@@ -297,6 +297,44 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "null" | "true" | "false" | "nullptr" => Some(SyntaxScope::Constant),
             _ => None,
         },
+        "java" => match kind {
+            "type_identifier"
+            | "generic_type"
+            | "scoped_type_identifier"
+            | "integral_type"
+            | "floating_point_type"
+            | "boolean_type"
+            | "void_type"
+            | "class_declaration"
+            | "interface_declaration"
+            | "enum_declaration"
+            | "record_declaration" => Some(SyntaxScope::Type),
+            "method_declaration"
+            | "constructor_declaration"
+            | "method_invocation"
+            | "object_creation_expression" => Some(SyntaxScope::Function),
+            "identifier" | "field_access" => Some(SyntaxScope::Variable),
+            "string_literal" | "character_literal" | "text_block" => Some(SyntaxScope::String),
+            "marker_annotation" | "annotation" | "annotation_argument_list" => {
+                Some(SyntaxScope::Attribute)
+            }
+            "null_literal" | "true" | "false" => Some(SyntaxScope::Constant),
+            _ => None,
+        },
+        "ruby" => match kind {
+            "constant" | "scope_resolution" | "class" | "module" => Some(SyntaxScope::Type),
+            "method" | "singleton_method" | "call" | "method_call" | "identifier" => {
+                Some(SyntaxScope::Function)
+            }
+            "instance_variable" | "class_variable" | "global_variable" | "simple_symbol"
+            | "symbol" | "hash_key_symbol" => Some(SyntaxScope::Variable),
+            "string" | "string_content" | "heredoc_content" | "heredoc_beginning"
+            | "heredoc_end" | "regex" | "subshell" => Some(SyntaxScope::String),
+            "integer" | "float" | "complex" | "rational" => Some(SyntaxScope::Number),
+            "true" | "false" | "nil" | "self" => Some(SyntaxScope::Constant),
+            "comment" => Some(SyntaxScope::Comment),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -465,6 +503,24 @@ fn is_keyword_kind(kind: &str) -> bool {
             | "char8_t"
             | "char16_t"
             | "char32_t"
+            // Java / Ruby (shared tokens like this/new/yield/and already listed above)
+            | "abstract"
+            | "synchronized"
+            | "transient"
+            | "native"
+            | "strictfp"
+            | "throws"
+            | "begin"
+            | "end"
+            | "unless"
+            | "rescue"
+            | "ensure"
+            | "retry"
+            | "redo"
+            | "next"
+            | "module"
+            | "undef"
+            | "defined?"
     )
 }
 
@@ -708,6 +764,30 @@ mod tests {
     }
 
     #[test]
+    fn java_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "class Greeter {\n  String greet(String name) {\n    return name;\n  }\n}\n";
+        let lines = h.highlight_lines("java", source, 0, 5);
+        assert_eq!(lines.len(), 5);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for Java"
+        );
+    }
+
+    #[test]
+    fn ruby_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "def greet(name)\n  \"hello #{name}\"\nend\n";
+        let lines = h.highlight_lines("ruby", source, 0, 3);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for Ruby"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
@@ -723,5 +803,7 @@ mod tests {
         assert!(langs.contains(&"css"));
         assert!(langs.contains(&"c"));
         assert!(langs.contains(&"cpp"));
+        assert!(langs.contains(&"java"));
+        assert!(langs.contains(&"ruby"));
     }
 }
