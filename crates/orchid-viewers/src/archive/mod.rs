@@ -181,7 +181,9 @@ impl ArchiveViewer {
             .selected_entry
             .read()
             .clone()
-            .ok_or_else(|| ViewerError::ArchiveEntryNotFound("nothing selected".into()))?;
+            .ok_or_else(|| {
+                ViewerError::ArchiveEntryNotFound("viewer-archive-nothing-selected".into())
+            })?;
         let entry = self
             .entries
             .read()
@@ -191,7 +193,7 @@ impl ArchiveViewer {
             .ok_or_else(|| ViewerError::ArchiveEntryNotFound(selected.clone()))?;
         if entry.is_dir {
             return Err(ViewerError::ArchiveEntryNotFound(
-                "cannot extract a folder".into(),
+                "viewer-archive-cannot-extract-folder".into(),
             ));
         }
         let local = self.local_path()?;

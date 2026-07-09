@@ -1440,6 +1440,15 @@ impl MainWindowController {
                 let _ = slint::spawn_local(Compat::new(async move {
                     if let Err(e) = $fut.await {
                         warn!(?e, "viewer action");
+                        if let Some(c) = tw.upgrade() {
+                            let title = c.locale.tr("widget-viewer-name");
+                            let reason = viewer_localized_error(&c.locale, &e.to_string());
+                            let body = c.locale.tr_args(
+                                "viewer-action-failed",
+                                &orchid_i18n::FluentArgs::new().with("reason", reason),
+                            );
+                            c.push_notification(&title, &body, 3);
+                        }
                     }
                     if let Some(c) = tw.upgrade() {
                         c.schedule_rebuild();
@@ -2465,6 +2474,15 @@ impl MainWindowController {
         let _ = slint::spawn_local(Compat::new(async move {
             if let Err(e) = orchid_widgets::builtin::viewer::text_save(inst).await {
                 warn!(?e, "viewer text Ctrl+S");
+                if let Some(c) = tw.upgrade() {
+                    let title = c.locale.tr("widget-viewer-name");
+                    let reason = viewer_localized_error(&c.locale, &e.to_string());
+                    let body = c.locale.tr_args(
+                        "viewer-text-save-failed",
+                        &orchid_i18n::FluentArgs::new().with("reason", reason),
+                    );
+                    c.push_notification(&title, &body, 3);
+                }
                 return;
             }
             if let Some(c) = tw.upgrade() {
@@ -8798,6 +8816,26 @@ fn active_network_sidebar_index(
         .position(|m| m.uri == active_path)
 }
 
+fn viewer_localized_error(locale: &LocaleManager, err: &str) -> String {
+    // WidgetError wraps ViewerError Display; peel common prefixes first.
+    let mut msg = err;
+    if let Some(rest) = msg.strip_prefix("widget is in an invalid state for this operation: ") {
+        msg = rest;
+    }
+    if let Some(rest) = msg.strip_prefix("archive entry not found: ") {
+        msg = rest;
+    }
+    match msg {
+        "viewer-image-heic-unsupported"
+        | "viewer-image-raw-unsupported"
+        | "viewer-archive-nothing-selected"
+        | "viewer-archive-cannot-extract-folder" => locale.tr(msg),
+        _ if msg.contains("edit outside buffer bounds") => locale.tr("viewer-text-read-only"),
+        _ if msg.contains("PDF support unavailable") => locale.tr("viewer-pdf-unavailable"),
+        _ => msg.to_string(),
+    }
+}
+
 fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
     let lower = err.to_ascii_lowercase();
     match err {
@@ -10120,7 +10158,9 @@ fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel 
             path_display,
             message,
         } if *message == ViewerError::UnsupportedHeic.to_string()
-            || *message == ViewerError::UnsupportedRaw.to_string() =>
+            || *message == ViewerError::UnsupportedRaw.to_string()
+            || message == "viewer-archive-nothing-selected"
+            || message == "viewer-archive-cannot-extract-folder" =>
         {
             model.kind = 2;
             model.status.path_display = path_display.clone().into();
@@ -10134,7 +10174,8 @@ fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel 
             model.kind = 2;
             model.status.path_display = path_display.clone().into();
             model.status.icon = "error".into();
-            let args = orchid_i18n::FluentArgs::new().with("reason", message.as_str());
+            let reason = viewer_localized_error(locale, message);
+            let args = orchid_i18n::FluentArgs::new().with("reason", reason);
             model.status.message = locale.tr_args("viewer-error-with-reason", &args).into();
         }
         Vs::Image(s) => {
