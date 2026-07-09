@@ -4,22 +4,23 @@ import { WeatherModel } from "../workspace/defs.slint";
 export component WeatherView inherits Rectangle {
     in property <WeatherModel> model;
 
+    // ASCII/BMP glyphs — color emoji missing in Slint's default Windows font.
     pure function weather-icon-glyph(name: string) -> string {
         return
-            name == "weather-clear" ? "☀" :
-            name == "weather-partly-cloudy" ? "⛅" :
-            name == "weather-cloudy" ? "☁" :
-            name == "weather-overcast" ? "☁" :
-            name == "weather-fog" ? "🌫" :
-            name == "weather-drizzle" ? "🌦" :
-            name == "weather-rain" ? "🌧" :
-            name == "weather-snow" ? "❄" :
-            name == "weather-sleet" ? "🌨" :
-            name == "weather-thunderstorm" ? "⛈" :
-            name == "weather-hail" ? "🌨" :
-            name == "weather-windy" ? "💨" :
-            name == "weather-unknown" ? "·" :
-            "·";
+            name == "weather-clear" ? "*" :
+            name == "weather-partly-cloudy" ? "+" :
+            name == "weather-cloudy" ? "=" :
+            name == "weather-overcast" ? "=" :
+            name == "weather-fog" ? "~" :
+            name == "weather-drizzle" ? "," :
+            name == "weather-rain" ? "/" :
+            name == "weather-snow" ? "*" :
+            name == "weather-sleet" ? "%" :
+            name == "weather-thunderstorm" ? "!" :
+            name == "weather-hail" ? "%" :
+            name == "weather-windy" ? "~" :
+            name == "weather-unknown" ? "." :
+            ".";
     }
 
     background: transparent;

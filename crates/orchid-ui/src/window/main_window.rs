@@ -578,6 +578,7 @@ impl MainWindowController {
         g.set_search_open_hint(mgr.tr("search-open-hint").into());
         g.set_terminal_tooltip_split_h(mgr.tr("terminal-tooltip-split-h").into());
         g.set_terminal_tooltip_split_v(mgr.tr("terminal-tooltip-split-v").into());
+        g.set_terminal_tooltip_split_drag(mgr.tr("terminal-tooltip-split-drag").into());
         g.set_terminal_tooltip_tab_new(mgr.tr("terminal-tooltip-tab-new").into());
         g.set_terminal_tooltip_tab_close(mgr.tr("terminal-tooltip-tab-close").into());
         g.set_terminal_tooltip_pane_close(mgr.tr("terminal-tooltip-pane-close").into());

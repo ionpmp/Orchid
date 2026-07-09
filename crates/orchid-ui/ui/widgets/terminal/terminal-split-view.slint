@@ -1,5 +1,6 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { TerminalPaneModel, TerminalDividerModel } from "../../workspace/defs.slint";
 import { TerminalView } from "../../workspace/terminal-view.slint";
 
@@ -101,6 +102,23 @@ export component TerminalSplitView inherits Rectangle {
                     let fy = (parent.y + self.mouse-y) / root.height;
                     root.split-drag-moved(div.first-session-id, div.second-session-id, fx, fy);
                 }
+            }
+        }
+        if div-ta.has-hover && !div-ta.pressed : Rectangle {
+            x: (parent.width - div-hint.preferred-width - 12px) / 2;
+            y: (parent.height - div-hint.preferred-height - 6px) / 2;
+            width: div-hint.preferred-width + 12px;
+            height: div-hint.preferred-height + 6px;
+            background: Theme.surface-raised;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+            z: 100;
+            div-hint := Text {
+                x: 6px; y: 3px;
+                text: Strings.terminal-tooltip-split-drag;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
             }
         }
     }
