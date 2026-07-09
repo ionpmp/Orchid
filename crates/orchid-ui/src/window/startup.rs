@@ -270,6 +270,7 @@ fn apply_app_state_to(
         dock_types: ModelRc::new(VecModel::from(vec![DockWidgetType {
             type_id: "terminal".into(),
             label: locale.tr("dock-widget-terminal").into(),
+            description: locale.tr("widget-terminal-desc").into(),
             icon: "terminal".into(),
         }])),
         dock_add_label: locale.tr("dock-add-label").into(),

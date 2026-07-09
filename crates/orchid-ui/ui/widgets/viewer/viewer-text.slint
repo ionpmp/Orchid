@@ -83,7 +83,8 @@ export component ViewerTextView inherits Rectangle {
                 if !model.read-only : Rectangle {
                     width: max(56px, save-label.preferred-width + 16px);
                     height: 28px;
-                    background: save-ta.has-hover ? Theme.surface-raised : transparent;
+                    background: (model.dirty || root.locally-dirty) ? Theme.surface-raised
+                        : save-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     save-ta := TouchArea { clicked => { root.save(); } }
@@ -106,7 +107,8 @@ export component ViewerTextView inherits Rectangle {
                     }
                     save-label := Text {
                         text: model.save-label;
-                        color: Theme.text-primary;
+                        color: (model.dirty || root.locally-dirty)
+                            ? Theme.accent-brand : Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;

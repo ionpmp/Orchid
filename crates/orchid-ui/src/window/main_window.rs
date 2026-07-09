@@ -8332,9 +8332,29 @@ fn filter_catalog_items(locale: &LocaleManager, query: &str) -> Vec<DockWidgetTy
     dock_types_vec(locale)
         .into_iter()
         .filter(|d| {
-            q.is_empty() || d.label.as_str().to_lowercase().contains(&q)
+            q.is_empty()
+                || d.label.as_str().to_lowercase().contains(&q)
+                || d.description.as_str().to_lowercase().contains(&q)
         })
         .collect()
+}
+
+fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> SharedString {
+    let key = match type_id {
+        "terminal" => "widget-terminal-desc",
+        "weather" => "widget-weather-desc",
+        "moon" => "widget-moon-desc",
+        "system" => "widget-system-desc",
+        "rss" => "widget-rss-desc",
+        "recent-files" => "widget-recent-files-desc",
+        "search" | "universal-search" => "widget-search-desc",
+        "media" => "widget-media-desc",
+        "password" => "widget-password-desc",
+        "viewer" => "widget-viewer-desc",
+        "file-manager" => "widget-fm-desc",
+        _ => return SharedString::new(),
+    };
+    locale.tr(key).into()
 }
 
 fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
@@ -8342,56 +8362,67 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
         DockWidgetType {
             type_id: "terminal".into(),
             label: locale.tr("dock-widget-terminal").into(),
+            description: dock_widget_description(locale, "terminal"),
             icon: "terminal".into(),
         },
         DockWidgetType {
             type_id: "weather".into(),
             label: locale.tr("dock-widget-weather").into(),
+            description: dock_widget_description(locale, "weather"),
             icon: "weather".into(),
         },
         DockWidgetType {
             type_id: "moon".into(),
             label: locale.tr("dock-widget-moon").into(),
+            description: dock_widget_description(locale, "moon"),
             icon: "moon".into(),
         },
         DockWidgetType {
             type_id: "system".into(),
             label: locale.tr("dock-widget-system").into(),
+            description: dock_widget_description(locale, "system"),
             icon: "system".into(),
         },
         DockWidgetType {
             type_id: "rss".into(),
             label: locale.tr("dock-widget-rss").into(),
+            description: dock_widget_description(locale, "rss"),
             icon: "rss".into(),
         },
         DockWidgetType {
             type_id: "recent-files".into(),
             label: locale.tr("dock-widget-recent-files").into(),
+            description: dock_widget_description(locale, "recent-files"),
             icon: "recent-files".into(),
         },
         DockWidgetType {
             type_id: "search".into(),
             label: locale.tr("dock-widget-search").into(),
+            description: dock_widget_description(locale, "search"),
             icon: "search".into(),
         },
         DockWidgetType {
             type_id: "media".into(),
             label: locale.tr("dock-widget-media").into(),
+            description: dock_widget_description(locale, "media"),
             icon: "media".into(),
         },
         DockWidgetType {
             type_id: "password".into(),
             label: locale.tr("dock-widget-password").into(),
+            description: dock_widget_description(locale, "password"),
             icon: "password".into(),
         },
         DockWidgetType {
             type_id: "viewer".into(),
             label: locale.tr("dock-widget-viewer").into(),
+            description: dock_widget_description(locale, "viewer"),
             icon: "viewer".into(),
         },
         DockWidgetType {
             type_id: "file-manager".into(),
             label: locale.tr("dock-widget-fm").into(),
+            description: dock_widget_description(locale, "file-manager"),
             icon: "fm".into(),
         },
     ]
@@ -9660,6 +9691,58 @@ fn viewer_syntax_label(locale: &LocaleManager, language_id: &str) -> SharedStrin
     }
 }
 
+fn viewer_format_slug(raw: &str) -> String {
+    raw.trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
+}
+
+fn viewer_image_format_label(locale: &LocaleManager, format_label: &str) -> String {
+    let slug = viewer_format_slug(format_label);
+    if slug.is_empty() {
+        return format_label.to_string();
+    }
+    let key = format!("viewer-image-format-{slug}");
+    let label = locale.tr(&key);
+    if label == key {
+        format_label.to_string()
+    } else {
+        label
+    }
+}
+
+fn viewer_archive_format_label(locale: &LocaleManager, format_label: &str) -> String {
+    let slug = viewer_format_slug(format_label);
+    if slug.is_empty() {
+        return format_label.to_string();
+    }
+    let key = format!("viewer-archive-format-{slug}");
+    let label = locale.tr(&key);
+    if label == key {
+        format_label.to_string()
+    } else {
+        label
+    }
+}
+
+fn viewer_encoding_label(locale: &LocaleManager, encoding: &str) -> SharedString {
+    let slug = viewer_format_slug(encoding);
+    if slug.is_empty() {
+        return encoding.into();
+    }
+    let key = format!("viewer-encoding-{slug}");
+    let label = locale.tr(&key);
+    if label == key {
+        encoding.into()
+    } else {
+        label.into()
+    }
+}
+
 fn apply_settings_field(
     cfg: &mut OrchidConfig,
     section: &str,
@@ -10325,7 +10408,7 @@ fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
     let lines_args = orchid_i18n::FluentArgs::new().with("count", "0");
     ViewerTextModel {
         language: viewer_syntax_label(locale, "plaintext"),
-        encoding: "UTF-8".into(),
+        encoding: viewer_encoding_label(locale, "UTF-8"),
         line_ending: locale.tr("viewer-text-line-ending-lf").into(),
         dirty: false,
         read_only: true,
@@ -10467,7 +10550,7 @@ fn build_image_snapshot(
                 .with("width", s.width_px.to_string())
                 .with("height", s.height_px.to_string())
                 .with("size", locale.format_byte_size(s.size_bytes))
-                .with("format", s.format_label.clone());
+                .with("format", viewer_image_format_label(locale, &s.format_label));
             locale.tr_args("viewer-image-info", &args).into()
         },
         path_display: s.path_display.clone().into(),
@@ -10548,7 +10631,7 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager)
     };
     ViewerTextModel {
         language: viewer_syntax_label(locale, &s.language),
-        encoding: s.encoding.clone().into(),
+        encoding: viewer_encoding_label(locale, &s.encoding),
         line_ending: locale.tr(line_ending_key).into(),
         dirty: s.dirty,
         read_only: s.read_only,
@@ -10652,7 +10735,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
         && s.entries.iter().any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
 
     let header_args = orchid_i18n::FluentArgs::new()
-        .with("format", s.format.clone())
+        .with("format", viewer_archive_format_label(locale, &s.format))
         .with("count", s.total_entries.to_string());
     let header_label: SharedString = locale.tr_args("viewer-archive-info", &header_args).into();
     let path_label: SharedString = if s.current_inner_path.is_empty() {
@@ -10678,7 +10761,7 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     };
 
     ViewerArchiveModel {
-        format: s.format.clone().into(),
+        format: viewer_archive_format_label(locale, &s.format).into(),
         total_entries: s.total_entries as i32,
         current_inner_path: s.current_inner_path.clone().into(),
         header_label,

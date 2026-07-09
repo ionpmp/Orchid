@@ -119,7 +119,7 @@ export component WidgetCatalogPanel inherits Rectangle {
             VerticalLayout {
                 spacing: 2px;
                 for item[i] in WidgetCatalog.items: Rectangle {
-                    height: 40px;
+                    height: item.description != "" ? 56px : 40px;
                     background: item-touch.has-hover ? Theme.surface-base : transparent;
                     border-radius: Theme.radius-md;
 
@@ -128,13 +128,49 @@ export component WidgetCatalogPanel inherits Rectangle {
                             root.pick(item.type-id);
                         }
                     }
+                    if item-touch.has-hover && item.description != "" : Rectangle {
+                        x: parent.x + 8px;
+                        y: parent.height + 2px;
+                        width: min(parent.width - 16px, desc-hint.preferred-width + 12px);
+                        height: desc-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        desc-hint := Text {
+                            x: 6px; y: 3px;
+                            width: parent.width - 12px;
+                            text: item.description;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                        }
+                    }
 
-                    Text {
-                        x: 12px;
-                        text: item.label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                    VerticalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        spacing: 2px;
+                        alignment: center;
+
+                        Text {
+                            text: item.label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: Theme.weight-semibold;
+                            vertical-alignment: center;
+                        }
+
+                        if item.description != "" : Text {
+                            text: item.description;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
                     }
                 }
             }
