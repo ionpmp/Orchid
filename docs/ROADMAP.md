@@ -64,7 +64,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 ### Viewers
 - [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip with active flip accent; localized Fit/Actual Size with active-mode highlight + status strip + toolbar hover hints; viewport re-fit while in fit mode; SVG via `resvg`; HEIC/RAW route to Image with clear unsupported message (native decode pending)
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation (toolbar + PageUp/Down/←/→ when focused), go-to-page input, fit width/page with active-mode highlight, zoom, toolbar hover hints, viewport re-fit; action failures (page/zoom/fit/viewport) surface as localized notifications; requires bundled `pdfium.dll`
-- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown/javascript/typescript/tsx/yaml/go/bash; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S with hover hints, dirty ●, localized line count + LF/CRLF); read-only virtualized scroll (Flickable → text_scroll + viewport-sized window)
+- [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown/javascript/typescript/tsx/yaml/go/bash/html/css; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S with hover hints, dirty ●, localized line count + LF/CRLF); read-only virtualized scroll (Flickable → text_scroll + viewport-sized window)
 - [~] Archives (ZIP, 7z, TAR, TAR.GZ, TAR.XZ) — browse + preview + extract selected/all; localized toolbar header + status strip (format/count + extract feedback); navigate/select/extract failures notify; TAR.XZ via `xz2`
 
 ### Security

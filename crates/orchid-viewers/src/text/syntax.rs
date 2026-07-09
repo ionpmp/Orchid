@@ -240,6 +240,27 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "test_operator" | "file_descriptor" => Some(SyntaxScope::Operator),
             _ => None,
         },
+        "html" => match kind {
+            "tag_name" | "start_tag" | "end_tag" | "self_closing_tag" | "doctype" => {
+                Some(SyntaxScope::Tag)
+            }
+            "attribute_name" => Some(SyntaxScope::Attribute),
+            "attribute_value" | "quoted_attribute_value" => Some(SyntaxScope::String),
+            "text" | "raw_text" => Some(SyntaxScope::Plain),
+            "entity" => Some(SyntaxScope::Constant),
+            _ => None,
+        },
+        "css" => match kind {
+            "tag_name" | "class_name" | "id_name" | "nesting_selector" | "universal_selector" => {
+                Some(SyntaxScope::Tag)
+            }
+            "property_name" | "feature_name" | "attribute_name" => Some(SyntaxScope::Property),
+            "plain_value" | "string_value" | "color_value" | "integer_value" | "float_value"
+            | "unit" => Some(SyntaxScope::String),
+            "function_name" => Some(SyntaxScope::Function),
+            "important" | "keyword_query" | "at_keyword" => Some(SyntaxScope::Keyword),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -561,6 +582,30 @@ mod tests {
     }
 
     #[test]
+    fn html_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "<div class=\"box\">\n  <span>hi</span>\n</div>\n";
+        let lines = h.highlight_lines("html", source, 0, 3);
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for HTML"
+        );
+    }
+
+    #[test]
+    fn css_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = ".box {\n  color: #fff;\n  margin: 1rem;\n}\n";
+        let lines = h.highlight_lines("css", source, 0, 4);
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for CSS"
+        );
+    }
+
+    #[test]
     fn lists_available_languages() {
         let h = SyntaxHighlighter::new();
         let langs = h.available_languages();
@@ -572,5 +617,7 @@ mod tests {
         assert!(langs.contains(&"yaml"));
         assert!(langs.contains(&"go"));
         assert!(langs.contains(&"bash"));
+        assert!(langs.contains(&"html"));
+        assert!(langs.contains(&"css"));
     }
 }

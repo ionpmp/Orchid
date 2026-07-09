@@ -98,6 +98,8 @@ pub const HIGHLIGHT_LANGUAGES: &[&str] = &[
     "yaml",
     "go",
     "bash",
+    "html",
+    "css",
 ];
 
 /// Resolve a canonical language id to a tree-sitter [`Language`].
@@ -115,6 +117,8 @@ pub fn language_for_id(id: &str) -> Option<tree_sitter::Language> {
         "yaml" => Some(tree_sitter_yaml::LANGUAGE.into()),
         "go" => Some(tree_sitter_go::LANGUAGE.into()),
         "bash" => Some(tree_sitter_bash::LANGUAGE.into()),
+        "html" => Some(tree_sitter_html::LANGUAGE.into()),
+        "css" => Some(tree_sitter_css::LANGUAGE.into()),
         _ => None,
     }
 }
@@ -136,6 +140,8 @@ mod tests {
         assert_eq!(detect_language(&path("local:/a/b.tsx"), b""), "tsx");
         assert_eq!(detect_language(&path("local:/a/b.go"), b""), "go");
         assert_eq!(detect_language(&path("local:/a/b.sh"), b""), "bash");
+        assert_eq!(detect_language(&path("local:/a/b.html"), b""), "html");
+        assert_eq!(detect_language(&path("local:/a/b.css"), b""), "css");
         assert_eq!(detect_language(&path("local:/a/unknown.xyz"), b""), PLAINTEXT);
     }
 
