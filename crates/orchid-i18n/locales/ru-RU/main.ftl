@@ -422,6 +422,7 @@ fm-tag-add-title = Добавить тег
 fm-confirm-delete = Удалить { $n } элементов?
 fm-confirm-delete-permanent = Удалить { $n } элементов безвозвратно?
 fm-status-items = { $n } элементов
+fm-loading = Загрузка…
 fm-status-selected = { $n } выделено
 fm-status-total-size = { $size }
 fm-status-bar = { $items } элементов, { $selected } выделено

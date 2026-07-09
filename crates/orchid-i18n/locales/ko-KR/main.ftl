@@ -435,6 +435,7 @@ fm-tag-add-title = 태그 추가
 fm-confirm-delete = { $n }개 항목을 삭제하시겠습니까?
 fm-confirm-delete-permanent = { $n }개 항목을 영구 삭제하시겠습니까?
 fm-status-items = { $n }개 항목
+fm-loading = 로드 중…
 fm-status-selected = { $n }개 선택됨
 fm-status-total-size = { $size }
 fm-status-bar = { $items }개 항목, { $selected }개 선택됨

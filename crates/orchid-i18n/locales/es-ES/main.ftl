@@ -435,6 +435,7 @@ fm-tag-add-title = Añadir etiqueta
 fm-confirm-delete = ¿Eliminar { $n } elementos?
 fm-confirm-delete-permanent = ¿Eliminar permanentemente { $n } elementos?
 fm-status-items = { $n } elementos
+fm-loading = Cargando…
 fm-status-selected = { $n } seleccionados
 fm-status-total-size = { $size }
 fm-status-bar = { $items } elementos, { $selected } seleccionados

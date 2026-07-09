@@ -435,6 +435,7 @@ fm-tag-add-title = 添加标签
 fm-confirm-delete = 删除 { $n } 项？
 fm-confirm-delete-permanent = 永久删除 { $n } 项？
 fm-status-items = { $n } 项
+fm-loading = 正在加载…
 fm-status-selected = 已选 { $n } 项
 fm-status-total-size = { $size }
 fm-status-bar = { $items } 项，已选 { $selected } 项

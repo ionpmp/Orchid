@@ -436,6 +436,7 @@ fm-tag-add-title = إضافة وسم
 fm-confirm-delete = حذف { $n } عناصر؟
 fm-confirm-delete-permanent = حذف { $n } عناصر نهائيًا؟
 fm-status-items = { $n } عناصر
+fm-loading = جارٍ التحميل…
 fm-status-selected = { $n } محدد
 fm-status-total-size = { $size }
 fm-status-bar = { $items } عناصر، { $selected } محدد

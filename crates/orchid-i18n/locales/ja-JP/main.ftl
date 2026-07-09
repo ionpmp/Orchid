@@ -435,6 +435,7 @@ fm-tag-add-title = タグを追加
 fm-confirm-delete = { $n } 項目を削除しますか？
 fm-confirm-delete-permanent = { $n } 項目を完全に削除しますか？
 fm-status-items = { $n } 項目
+fm-loading = 読み込み中…
 fm-status-selected = { $n } 件選択
 fm-status-total-size = { $size }
 fm-status-bar = { $items } 項目、{ $selected } 件選択

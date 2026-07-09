@@ -594,6 +594,7 @@ impl MainWindowController {
         g.set_fm_nav_back(mgr.tr("fm-nav-back").into());
         g.set_fm_nav_forward(mgr.tr("fm-nav-forward").into());
         g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
+        g.set_fm_loading(mgr.tr("fm-loading").into());
         g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());
         g.set_fm_action_new_tab(mgr.tr("fm-action-new-tab").into());
         g.set_fm_action_close_tab(mgr.tr("fm-action-close-tab").into());
@@ -2636,6 +2637,13 @@ impl MainWindowController {
         let title_key = format!("settings.section.{}", section);
         let title = self.locale.tr(&title_key).into();
         let hint = self.locale.tr("settings-panel-hint").into();
+        // Shortcuts (and similar) are view-only in the panel — surface the
+        // dedicated coming-soon copy so users know to edit config.toml.
+        let coming_soon = if section == "shortcuts" {
+            self.locale.tr("settings-panel-coming-soon").into()
+        } else {
+            SharedString::default()
+        };
         let cfg = self.config.read();
         let fields = build_settings_fields(&section, &cfg, &self.locale, &self.theme);
         drop(cfg);
@@ -2645,6 +2653,7 @@ impl MainWindowController {
         g.set_visible(st.visible);
         g.set_panel_title(title);
         g.set_hint_text(hint);
+        g.set_coming_soon_text(coming_soon);
         g.set_config_path(self.config_file_path.display().to_string().into());
         g.set_current_section_id(section.clone().into());
         g.set_selected_section_index(settings_section_index(&section));
@@ -8578,6 +8587,7 @@ fn empty_password_detail() -> PasswordDetail {
         notes: SharedString::new(),
         totp_code: SharedString::new(),
         totp_remaining: 0,
+        totp_remaining_label: SharedString::new(),
         tags: ModelRc::new(VecModel::default()),
     }
 }
@@ -10654,6 +10664,17 @@ fn build_password_model(
                     label: t.clone().into(),
                 })
                 .collect();
+            let totp_remaining = d.totp_remaining_seconds as i32;
+            let totp_remaining_label = if d.totp_code.as_deref().unwrap_or("").is_empty() {
+                SharedString::new()
+            } else {
+                locale
+                    .tr_args(
+                        "password-totp-remaining",
+                        &orchid_i18n::FluentArgs::new().with("s", totp_remaining.to_string()),
+                    )
+                    .into()
+            };
             PasswordDetail {
                 has_selection: true,
                 id: d.id.clone().into(),
@@ -10662,7 +10683,8 @@ fn build_password_model(
                 url: d.url.clone().unwrap_or_default().into(),
                 notes: d.notes.clone().unwrap_or_default().into(),
                 totp_code: d.totp_code.clone().unwrap_or_default().into(),
-                totp_remaining: d.totp_remaining_seconds as i32,
+                totp_remaining,
+                totp_remaining_label,
                 tags: ModelRc::new(VecModel::from(tags)),
             }
         }

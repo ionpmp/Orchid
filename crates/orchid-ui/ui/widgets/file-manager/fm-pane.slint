@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { FmPane as FmPaneModel, FmRenameState } from "../../workspace/defs.slint";
 import { FmTabs } from "fm-tabs.slint";
 import { FmToolbar } from "fm-toolbar.slint";
@@ -165,9 +166,9 @@ export component FmPane inherits Rectangle {
                 if pane.tabs[pane.active-tab].is-loading : VerticalLayout {
                     alignment: center;
                     Text {
-                        text: "...";
-                        color: Theme.accent-brand;
-                        font-size: 32px;
+                        text: Strings.fm-loading;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
                         horizontal-alignment: center;
                     }
                 }
