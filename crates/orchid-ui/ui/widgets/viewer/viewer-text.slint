@@ -8,8 +8,16 @@ export component ViewerTextView inherits Rectangle {
     callback toggle-edit();
     callback save();
     callback text-edited(string);
+    // Whole-line scroll delta for the virtualized read-only window (positive = down).
+    callback text-scroll(int);
 
     background: transparent;
+
+    property <length> line-height: 18px;
+    // Two-way with the read-only Flickable so path changes can reset scroll
+    // without naming a conditionally-created child.
+    property <length> read-viewport-y: 0px;
+    property <string> last-path: "";
 
     // Local draft while editing; re-synced when entering edit mode or when the
     // model path / read-only flag changes from the backend snapshot.
@@ -30,6 +38,11 @@ export component ViewerTextView inherits Rectangle {
             root.locally-dirty = model.dirty;
         } else {
             root.locally-dirty = true;
+        }
+        // New file (or reopen): snap scroll to the backend window start.
+        if (model.path-display != root.last-path) {
+            root.last-path = model.path-display;
+            root.read-viewport-y = -model.first-visible-line * root.line-height;
         }
     }
 
@@ -157,17 +170,39 @@ export component ViewerTextView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
+            // Virtualized read view: tall document viewport + absolute line Y so
+            // Flickable can scroll the full file while only a window of lines is
+            // materialized. viewport-y → text-scroll updates the backend window.
             if model.read-only : Flickable {
                 width: parent.width;
                 height: parent.height;
                 viewport-width: self.width;
-                viewport-height: line-stack.preferred-height;
+                viewport-height: max(self.height, model.total-lines * root.line-height);
+                viewport-y <=> root.read-viewport-y;
 
-                line-stack := VerticalLayout {
-                    spacing: 0;
+                changed viewport-y => {
+                    // viewport-y is ≤ 0; convert to a 0-based first line.
+                    if (model.total-lines <= 0) {
+                        return;
+                    }
+                    let window-lines = max(1, model.visible-lines.length);
+                    let max-first = max(0, model.total-lines - window-lines);
+                    let target = max(0, min(max-first, floor((-self.viewport-y) / root.line-height)));
+                    let delta = target - model.first-visible-line;
+                    if (delta != 0) {
+                        root.text-scroll(delta);
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width;
+                    height: max(parent.height, model.total-lines * root.line-height);
 
                     for line[i] in model.visible-lines : Rectangle {
-                        height: 18px;
+                        y: line.line-number * root.line-height;
+                        height: root.line-height;
+                        width: parent.width;
+
                         HorizontalLayout {
                             spacing: 0;
                             padding-left: 8px;

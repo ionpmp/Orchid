@@ -103,6 +103,18 @@ impl TextViewer {
         *self.visible_line_count.write() = count.max(1);
     }
 
+    /// First line currently shown in the snapshot window.
+    #[must_use]
+    pub fn first_visible_line(&self) -> u32 {
+        *self.first_visible_line.read()
+    }
+
+    /// Number of lines requested for the snapshot window.
+    #[must_use]
+    pub fn visible_line_count(&self) -> u32 {
+        *self.visible_line_count.read()
+    }
+
     /// Scroll the visible window by whole lines (positive = down).
     pub fn scroll_lines(&self, delta: i32) {
         let buffer = self.buffer.read();

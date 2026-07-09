@@ -100,6 +100,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-text-toggle-edit(string);
     callback viewer-text-save(string);
     callback viewer-text-edited(string, string);
+    callback viewer-text-scroll(string, int);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -489,6 +490,7 @@ export component WidgetFrame inherits Rectangle {
                         text-toggle-edit => { root.viewer-text-toggle-edit(root.model.instance-id); }
                         text-save => { root.viewer-text-save(root.model.instance-id); }
                         text-edited(t) => { root.viewer-text-edited(root.model.instance-id, t); }
+                        text-scroll(d) => { root.viewer-text-scroll(root.model.instance-id, d); }
                     }
                 }
 

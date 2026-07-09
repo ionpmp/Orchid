@@ -1808,6 +1808,20 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_text_scroll({
+            let t = t.clone();
+            move |id, delta| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(
+                            tw,
+                            orchid_widgets::builtin::viewer::text_scroll(inst, delta)
+                        );
+                    }
+                }
+            }
+        });
 
         self.window.on_fm_sidebar_clicked({
             let t = t.clone();

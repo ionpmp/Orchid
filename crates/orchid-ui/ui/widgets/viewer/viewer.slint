@@ -36,6 +36,7 @@ export component ViewerView inherits Rectangle {
     callback text-toggle-edit();
     callback text-save();
     callback text-edited(string);
+    callback text-scroll(int);
 
     background: transparent;
 
@@ -110,6 +111,7 @@ export component ViewerView inherits Rectangle {
         toggle-edit => { root.text-toggle-edit(); }
         save => { root.text-save(); }
         text-edited(t) => { root.text-edited(t); }
+        text-scroll(d) => { root.text-scroll(d); }
     }
 
     if model.kind == 6 : ViewerArchiveView {

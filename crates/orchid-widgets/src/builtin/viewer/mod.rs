@@ -174,7 +174,10 @@ fn map_viewer_err(e: orchid_viewers::ViewerError) -> WidgetError {
     WidgetError::InvalidStateForOperation(e.to_string())
 }
 
-/// Update image/PDF viewport size for fit/zoom math.
+/// Approximate monospace line height used by the Slint text viewer.
+const TEXT_LINE_HEIGHT_PX: f32 = 18.0;
+
+/// Update image/PDF/text viewport size for fit/zoom/window math.
 pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     let mut should_refresh = false;
@@ -188,6 +191,11 @@ pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetR
                 pdf.apply_viewport(width, height)
                     .await
                     .map_err(map_viewer_err)?;
+                should_refresh = true;
+            } else if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                let count = (height / TEXT_LINE_HEIGHT_PX).floor().max(1.0) as u32;
+                // Keep the current first line; only resize the window.
+                tv.set_visible_range(tv.first_visible_line(), count);
                 should_refresh = true;
             }
         }

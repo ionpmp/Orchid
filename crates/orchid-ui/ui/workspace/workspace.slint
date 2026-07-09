@@ -86,6 +86,7 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-text-toggle-edit(string);
     callback viewer-text-save(string);
     callback viewer-text-edited(string, string);
+    callback viewer-text-scroll(string, int);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -346,6 +347,7 @@ export component WorkspaceView inherits Rectangle {
                     viewer-text-toggle-edit(id) => { root.viewer-text-toggle-edit(id); }
                     viewer-text-save(id) => { root.viewer-text-save(id); }
                     viewer-text-edited(id, t) => { root.viewer-text-edited(id, t); }
+                    viewer-text-scroll(id, d) => { root.viewer-text-scroll(id, d); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
                     fm-toggle-dual-pane(fm_id) => { root.fm-toggle-dual-pane(fm_id); }
