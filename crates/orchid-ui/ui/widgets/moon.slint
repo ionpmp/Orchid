@@ -4,17 +4,18 @@ import { MoonModel } from "../workspace/defs.slint";
 export component MoonView inherits Rectangle {
     in property <MoonModel> model;
 
+    // ASCII/BMP glyphs — color emoji missing in Slint's default Windows font.
     pure function moon-icon-glyph(name: string) -> string {
         return
-            name == "moon-new" ? "🌑" :
-            name == "moon-waxing-crescent" ? "🌒" :
-            name == "moon-first-quarter" ? "🌓" :
-            name == "moon-waxing-gibbous" ? "🌔" :
-            name == "moon-full" ? "🌕" :
-            name == "moon-waning-gibbous" ? "🌖" :
-            name == "moon-last-quarter" ? "🌗" :
-            name == "moon-waning-crescent" ? "🌘" :
-            "🌑";
+            name == "moon-new" ? "o" :
+            name == "moon-waxing-crescent" ? ")" :
+            name == "moon-first-quarter" ? "D" :
+            name == "moon-waxing-gibbous" ? ")" :
+            name == "moon-full" ? "O" :
+            name == "moon-waning-gibbous" ? "(" :
+            name == "moon-last-quarter" ? "C" :
+            name == "moon-waning-crescent" ? "(" :
+            "o";
     }
 
     background: transparent;
@@ -52,23 +53,53 @@ export component MoonView inherits Rectangle {
             horizontal-stretch: 1;
         }
 
-        for entry[i] in model.values : HorizontalLayout {
-            spacing: 8px;
-            alignment: space-between;
+        for entry[i] in model.values : Rectangle {
+            height: 22px;
 
-            Text {
-                text: entry.label;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                vertical-alignment: center;
+            moon-val-ta := TouchArea { }
+            if moon-val-ta.has-hover && (entry.label != "" || entry.value != "") : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: moon-val-hint.preferred-width + 12px;
+                height: moon-val-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                moon-val-hint := Text {
+                    x: 6px; y: 3px;
+                    text: entry.label + ": " + entry.value;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
             }
 
-            Text {
-                text: entry.value;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-sm;
-                vertical-alignment: center;
-                horizontal-alignment: right;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: space-between;
+                width: 100%;
+                height: 100%;
+
+                Text {
+                    text: entry.label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    wrap: no-wrap;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: entry.value;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
             }
         }
 
