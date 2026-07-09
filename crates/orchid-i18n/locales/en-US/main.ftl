@@ -417,6 +417,7 @@ viewer-syntax-json = JSON
 viewer-syntax-markdown = Markdown
 viewer-syntax-javascript = JavaScript
 viewer-syntax-typescript = TypeScript
+viewer-syntax-tsx = TSX
 viewer-syntax-bash = Shell
 viewer-syntax-c = C
 viewer-syntax-cpp = C++

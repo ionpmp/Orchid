@@ -51,7 +51,8 @@ fn by_extension(ext: &str) -> Option<&'static str> {
         "sql" => "sql",
         "swift" => "swift",
         "toml" => "toml",
-        "ts" | "tsx" => "typescript",
+        "ts" => "typescript",
+        "tsx" => "tsx",
         "xml" | "xhtml" | "plist" => "xml",
         "yaml" | "yml" => "yaml",
         "ini" | "cfg" | "conf" => "ini",
@@ -92,6 +93,8 @@ pub const HIGHLIGHT_LANGUAGES: &[&str] = &[
     "json",
     "markdown",
     "javascript",
+    "typescript",
+    "tsx",
     "yaml",
 ];
 
@@ -105,6 +108,8 @@ pub fn language_for_id(id: &str) -> Option<tree_sitter::Language> {
         "json" => Some(tree_sitter_json::LANGUAGE.into()),
         "markdown" => Some(tree_sitter_md::LANGUAGE.into()),
         "javascript" => Some(tree_sitter_javascript::LANGUAGE.into()),
+        "typescript" => Some(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
+        "tsx" => Some(tree_sitter_typescript::LANGUAGE_TSX.into()),
         "yaml" => Some(tree_sitter_yaml::LANGUAGE.into()),
         _ => None,
     }
@@ -123,6 +128,8 @@ mod tests {
         assert_eq!(detect_language(&path("local:/a/b.rs"), b""), "rust");
         assert_eq!(detect_language(&path("local:/a/b.py"), b""), "python");
         assert_eq!(detect_language(&path("local:/a/b.json"), b""), "json");
+        assert_eq!(detect_language(&path("local:/a/b.ts"), b""), "typescript");
+        assert_eq!(detect_language(&path("local:/a/b.tsx"), b""), "tsx");
         assert_eq!(detect_language(&path("local:/a/unknown.xyz"), b""), PLAINTEXT);
     }
 

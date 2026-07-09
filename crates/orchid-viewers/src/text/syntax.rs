@@ -183,18 +183,27 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "link" | "link_text" | "link_destination" => Some(SyntaxScope::Function),
             _ => None,
         },
-        "javascript" => match kind {
-            "type_identifier" | "type_annotation" => Some(SyntaxScope::Type),
+        "javascript" | "typescript" | "tsx" => match kind {
+            "type_identifier"
+            | "type_annotation"
+            | "predefined_type"
+            | "type_parameter"
+            | "type_alias_declaration"
+            | "interface_declaration"
+            | "enum_declaration" => Some(SyntaxScope::Type),
             "function_declaration"
             | "function"
             | "method_definition"
             | "arrow_function"
             | "generator_function"
-            | "generator_function_declaration" => Some(SyntaxScope::Function),
+            | "generator_function_declaration"
+            | "function_signature" => Some(SyntaxScope::Function),
             "property_identifier" | "shorthand_property_identifier" | "identifier" => {
                 Some(SyntaxScope::Variable)
             }
             "regex" | "regex_pattern" => Some(SyntaxScope::String),
+            "jsx_element" | "jsx_self_closing_element" | "jsx_opening_element"
+            | "jsx_closing_element" | "jsx_attribute" => Some(SyntaxScope::Tag),
             _ => None,
         },
         "yaml" => match kind {
@@ -448,6 +457,18 @@ mod tests {
     }
 
     #[test]
+    fn typescript_highlighting_produces_non_plain_segments() {
+        let h = SyntaxHighlighter::new();
+        let source = "type Id = string;\nfunction greet(name: string): string {\n  return name;\n}\n";
+        let lines = h.highlight_lines("typescript", source, 0, 4);
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines.iter().any(|line| has_non_plain(&line.segments)),
+            "expected at least one non-Plain segment for TypeScript"
+        );
+    }
+
+    #[test]
     fn yaml_highlighting_produces_non_plain_segments() {
         let h = SyntaxHighlighter::new();
         let source = "name: orchid\nversion: 1\n# comment\n";
@@ -466,6 +487,8 @@ mod tests {
         assert!(langs.contains(&"rust"));
         assert!(langs.contains(&"python"));
         assert!(langs.contains(&"javascript"));
+        assert!(langs.contains(&"typescript"));
+        assert!(langs.contains(&"tsx"));
         assert!(langs.contains(&"yaml"));
     }
 }
