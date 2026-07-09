@@ -586,12 +586,22 @@ impl MainWindowController {
         g.set_viewer_image_rotate_ccw(mgr.tr("viewer-image-rotate-ccw").into());
         g.set_viewer_image_flip_h(mgr.tr("viewer-image-flip-h").into());
         g.set_viewer_image_flip_v(mgr.tr("viewer-image-flip-v").into());
+        g.set_viewer_pdf_prev_page(mgr.tr("viewer-pdf-prev-page").into());
+        g.set_viewer_pdf_next_page(mgr.tr("viewer-pdf-next-page").into());
+        g.set_fm_nav_back(mgr.tr("fm-nav-back").into());
+        g.set_fm_nav_forward(mgr.tr("fm-nav-forward").into());
+        g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
+        g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());
         g.set_settings_panel_ok(mgr.tr("settings-panel-ok").into());
         g.set_settings_panel_hint(mgr.tr("settings-panel-hint").into());
         g.set_settings_open_in_editor(mgr.tr("settings-open-in-editor").into());
         g.set_settings_open_config_file(mgr.tr("settings-open-config-file").into());
 
         g.set_media_no_session(mgr.tr("media-no-session").into());
+        g.set_media_play(mgr.tr("media-play").into());
+        g.set_media_pause(mgr.tr("media-pause").into());
+        g.set_media_next(mgr.tr("media-next").into());
+        g.set_media_previous(mgr.tr("media-previous").into());
 
         g.set_password_locked(mgr.tr("password-locked").into());
         g.set_password_no_entries(mgr.tr("password-no-entries").into());

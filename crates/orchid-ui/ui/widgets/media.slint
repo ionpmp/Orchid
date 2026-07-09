@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { Strings } from "../strings_global.slint";
 import { MediaModel } from "../workspace/defs.slint";
 
 export component MediaView inherits Rectangle {
@@ -154,6 +155,23 @@ export component MediaView inherits Rectangle {
                 prev-ta := TouchArea {
                     clicked => { root.previous(); }
                 }
+                if prev-ta.has-hover : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: prev-hint.preferred-width + 12px;
+                    height: prev-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    prev-hint := Text {
+                        x: 6px; y: 3px;
+                        text: Strings.media_previous;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
 
                 Text {
                     text: "<<";
@@ -174,6 +192,23 @@ export component MediaView inherits Rectangle {
                 pp-ta := TouchArea {
                     clicked => { root.play-pause(); }
                 }
+                if pp-ta.has-hover : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: pp-hint.preferred-width + 12px;
+                    height: pp-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    pp-hint := Text {
+                        x: 6px; y: 3px;
+                        text: model.is-playing ? Strings.media_pause : Strings.media_play;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
 
                 Text {
                     text: model.is-playing ? "||" : ">";
@@ -193,6 +228,23 @@ export component MediaView inherits Rectangle {
 
                 next-ta := TouchArea {
                     clicked => { root.next(); }
+                }
+                if next-ta.has-hover : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: next-hint.preferred-width + 12px;
+                    height: next-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    next-hint := Text {
+                        x: 6px; y: 3px;
+                        text: Strings.media_next;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
                 }
 
                 Text {

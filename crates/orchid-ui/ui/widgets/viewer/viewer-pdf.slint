@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { ViewerPdfModel } from "../../workspace/defs.slint";
 
 export component ViewerPdfView inherits Rectangle {
@@ -51,6 +52,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     prev-ta := TouchArea { clicked => { root.prev-page(); } }
+                    if prev-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: prev-hint.preferred-width + 12px;
+                        height: prev-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        prev-hint := Text {
+                            x: 6px; y: 3px;
+                            text: Strings.viewer-pdf-prev-page;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "◀"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -111,6 +129,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     next-ta := TouchArea { clicked => { root.next-page(); } }
+                    if next-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: next-hint.preferred-width + 12px;
+                        height: next-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        next-hint := Text {
+                            x: 6px; y: 3px;
+                            text: Strings.viewer-pdf-next-page;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "▶"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -162,6 +197,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     zi-ta := TouchArea { clicked => { root.zoom-in(); } }
+                    if zi-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: zi-hint.preferred-width + 12px;
+                        height: zi-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        zi-hint := Text {
+                            x: 6px; y: 3px;
+                            text: Strings.viewer-image-zoom-in;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
@@ -171,6 +223,23 @@ export component ViewerPdfView inherits Rectangle {
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     zo-ta := TouchArea { clicked => { root.zoom-out(); } }
+                    if zo-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: zo-hint.preferred-width + 12px;
+                        height: zo-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        zo-hint := Text {
+                            x: 6px; y: 3px;
+                            text: Strings.viewer-image-zoom-out;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
                     Text { text: "−"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
             }

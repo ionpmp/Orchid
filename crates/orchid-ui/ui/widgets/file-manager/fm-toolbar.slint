@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { FmTab } from "../../workspace/defs.slint";
 
 export component FmToolbar inherits Rectangle {
@@ -30,6 +31,23 @@ export component FmToolbar inherits Rectangle {
                 enabled: tab.can-back;
                 clicked => { root.back(); }
             }
+            if back-ta.has-hover && tab.can-back : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: back-hint.preferred-width + 12px;
+                height: back-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                back-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-nav-back;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
             Text { text: "←"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
@@ -44,6 +62,23 @@ export component FmToolbar inherits Rectangle {
                 enabled: tab.can-forward;
                 clicked => { root.forward(); }
             }
+            if fwd-ta.has-hover && tab.can-forward : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: fwd-hint.preferred-width + 12px;
+                height: fwd-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                fwd-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-nav-forward;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
             Text { text: "→"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
@@ -56,6 +91,23 @@ export component FmToolbar inherits Rectangle {
             up-ta := TouchArea {
                 clicked => { root.up(); }
             }
+            if up-ta.has-hover : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: up-hint.preferred-width + 12px;
+                height: up-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                up-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-nav-up;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
             Text { text: "↑"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
@@ -67,6 +119,23 @@ export component FmToolbar inherits Rectangle {
 
             nf-ta := TouchArea {
                 clicked => { root.new-folder(); }
+            }
+            if nf-ta.has-hover : Rectangle {
+                x: parent.x;
+                y: parent.height + 2px;
+                width: nf-hint.preferred-width + 12px;
+                height: nf-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                nf-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-action-new-folder;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
             }
             Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
