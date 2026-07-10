@@ -16,7 +16,7 @@ use std::sync::LazyLock;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use tracing::warn;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
@@ -771,7 +771,7 @@ impl FileManagerInner {
         result
     }
 
-    async fn refresh_all_tabs(&self) {
+    async fn refresh_all_tabs(self: &Arc<Self>) {
         self.refresh_managed_roots().await;
         self.refresh_encrypted_paths().await;
         let show_hidden = self.config.read().show_hidden;
@@ -820,27 +820,46 @@ impl FileManagerInner {
         Ok(())
     }
 
-    async fn refresh_tab(&self, tab: &TabState, show_hidden: bool) {
+    async fn refresh_tab(self: &Arc<Self>, tab: &TabState, show_hidden: bool) {
         let path = tab.path.clone();
+        let t0 = std::time::Instant::now();
+        debug!(path = %path.as_str(), "fm refresh_tab start");
 
-        if is_virtual(&path) {
+        let entries = if is_virtual(&path) {
             self.tab_errors.write().insert(tab.id, None);
             let mut entries = self.list_virtual(&path).await;
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
             self.entries_by_tab.write().insert(tab.id, entries.clone());
-            self.ensure_thumbnails(tab, &entries).await;
-            return;
-        }
+            entries
+        } else {
+            let result = self.navigator.navigate(&path, show_hidden).await;
+            self.tab_errors
+                .write()
+                .insert(tab.id, result.error.clone());
+            let mut entries = result.entries;
+            self.apply_entry_metadata(&mut entries);
+            sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
+            self.entries_by_tab.write().insert(tab.id, entries.clone());
+            entries
+        };
 
-        let result = self.navigator.navigate(&path, show_hidden).await;
-        self.tab_errors
-            .write()
-            .insert(tab.id, result.error.clone());
-        let mut entries = result.entries;
-        self.apply_entry_metadata(&mut entries);
-        sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
-        self.entries_by_tab.write().insert(tab.id, entries.clone());
-        self.ensure_thumbnails(tab, &entries).await;
+        debug!(
+            path = %path.as_str(),
+            entries = entries.len(),
+            elapsed_ms = t0.elapsed().as_millis(),
+            "fm refresh_tab listed"
+        );
+
+        // Thumbnails are expensive (decode up to 64 images). Do them off the
+        // critical navigation path so the listing paints immediately.
+        let mode_cfg = config_for_mode(tab.view_mode, 1.0);
+        if mode_cfg.show_thumbnails {
+            let this = Arc::clone(self);
+            let tab = tab.clone();
+            tokio::spawn(async move {
+                this.ensure_thumbnails(&tab, &entries).await;
+            });
+        }
     }
 
     fn record_recent(&self, path: &orchid_fs::FsPath) {
@@ -2932,10 +2951,13 @@ pub async fn open_path(
     path: &str,
     is_dir_hint: bool,
 ) -> WidgetResult<ActionOutcome> {
+    let t0 = std::time::Instant::now();
+    debug!(%path, is_dir_hint, pane, "fm open_path start");
     let inner = live_inner(instance_id)?;
     let fp = orchid_fs::FsPath::new(path).map_err(map_fs_error)?;
 
     let is_dir = entry_is_directory(&inner, &fp, is_dir_hint).await;
+    debug!(%path, is_dir, elapsed_ms = t0.elapsed().as_millis(), "fm open_path classified");
 
     if is_dir {
         if inner.is_path_encrypted(&fp) {
@@ -2945,6 +2967,7 @@ pub async fn open_path(
             });
         }
         navigate(instance_id, pane, fp).await?;
+        debug!(%path, elapsed_ms = t0.elapsed().as_millis(), "fm open_path navigated");
         return Ok(ActionOutcome::Done);
     }
 
@@ -2956,6 +2979,7 @@ pub async fn open_path(
     }
 
     inner.record_recent(&fp);
+    debug!(%path, elapsed_ms = t0.elapsed().as_millis(), "fm open_path -> viewer");
     Ok(ActionOutcome::OpenInViewer {
         path: path.to_string(),
     })

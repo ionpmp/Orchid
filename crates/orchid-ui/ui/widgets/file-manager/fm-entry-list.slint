@@ -1,6 +1,7 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
 import { FmEntry, FmRenameState } from "../../workspace/defs.slint";
+import { FmEntryIcon } from "fm-icons.slint";
 
 export component FmEntryList inherits Rectangle {
     in property <[FmEntry]> entries;
@@ -29,10 +30,6 @@ export component FmEntryList inherits Rectangle {
     callback pane-drag-hover();
     callback drop-on-current-dir();
     callback drag-scroll-changed(length, length, length, length);
-
-    pure function entry-glyph(is-dir: bool, is-encrypted: bool, is-managed: bool) -> string {
-        return is-dir ? "/" : is-encrypted ? "L" : is-managed ? "M" : "-";
-    }
 
     background: transparent;
 
@@ -287,12 +284,12 @@ export component FmEntryList inherits Rectangle {
                             }
                         }
 
-                        Text {
-                            text: entry-glyph(entry.is-dir, entry.is-encrypted, entry.is-managed);
-                            color: Theme.accent-brand;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            horizontal-alignment: center;
+                        FmEntryIcon {
+                            y: (parent.height - self.height) / 2;
+                            icon-size: 16px;
+                            is-dir: entry.is-dir;
+                            is-encrypted: entry.is-encrypted;
+                            is-managed: entry.is-managed;
                         }
                     }
 
