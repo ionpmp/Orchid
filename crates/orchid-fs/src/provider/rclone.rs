@@ -234,6 +234,13 @@ impl RcloneProvider {
             params.push(format!("user={user}"));
         }
         if let Some(pass) = resolved.mount.password.as_deref().filter(|p| !p.is_empty()) {
+            if resolved.mount.rclone_remote.is_none() {
+                tracing::warn!(
+                    mount = %resolved.mount.name,
+                    "network mount uses inline password; prefer rclone-remote \
+                     (password is plaintext in config.toml and visible in rclone argv)"
+                );
+            }
             params.push(format!("pass={pass}"));
         }
         let subpath = if !resolved.relative_path.is_empty() {

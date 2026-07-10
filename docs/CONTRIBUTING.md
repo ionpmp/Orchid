@@ -32,7 +32,7 @@ Be respectful. We are building a product for a diverse audience and expect the s
 ### Rust
 
 - **Edition:** 2021
-- **MSRV:** 1.82
+- **MSRV:** 1.97
 - **Formatter:** `rustfmt` with settings from `rustfmt.toml`
 - **Linter:** `clippy` with `-D warnings`
 - **Naming:** idiomatic Rust (snake_case for functions/modules, PascalCase for types)

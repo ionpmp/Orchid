@@ -1,0 +1,7 @@
+# Pin the workspace toolchain for local builds and CI.
+# Keep in sync with `[workspace.package].rust-version` in Cargo.toml.
+# Note: 1.82 is no longer viable — several crates.io deps require edition2024.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -81,7 +81,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Search
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown
-- [x] File watcher for incremental updates — `IndexFsSubscriber` consumes `fs.created/modified/deleted/renamed/tags_changed` events, extracts text/PDF content, enqueues into `IndexScheduler`
+- [x] File watcher for incremental updates — `IndexFsSubscriber` + `FileWatcher` on `[search].included-roots` (default: Documents), bootstrap crawl, text/PDF extract → `IndexScheduler` (wired in `OrchidApp::bootstrap`)
 - [x] Universal search (files + commands + settings) — live settings editor for theme/locale/density/bools; complex shortcut/leader fields stay read-only; search debouncer hardening + `SEARCH_LIVE` miss metrics; file hits show Tantivy content snippets in the subtitle when available
 
 ### UX

@@ -5259,6 +5259,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "chrono",
+ "directories",
  "fontdb",
  "fontdue",
  "image",

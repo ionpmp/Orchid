@@ -22,7 +22,7 @@ cargo test -p orchid-storage
 cargo test -p orchid-i18n
 ```
 
-MSRV is **1.82**. Windows + VS Build Tools are required for a full app build;
+MSRV is **1.97**. Windows + VS Build Tools are required for a full app build;
 see [`docs/BUILDING.md`](docs/BUILDING.md) (including `pdfium.dll` for PDF).
 
 ## i18n

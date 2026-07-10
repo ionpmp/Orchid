@@ -29,6 +29,8 @@ pub struct OrchidConfig {
     pub privacy: PrivacyConfig,
     /// File-manager global settings (network mounts, etc.).
     pub file_manager: FileManagerSectionConfig,
+    /// Universal-search / Tantivy indexing settings.
+    pub search: SearchConfig,
     /// First-run tour and gesture hint overlay preferences.
     pub onboarding: OnboardingConfig,
 }
@@ -291,6 +293,42 @@ pub struct FileManagerSectionConfig {
     pub network_mounts: Vec<NetworkMountConfig>,
 }
 
+/// Tantivy indexing scope and extraction toggles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct SearchConfig {
+    /// Roots to watch and index, as Orchid `FsPath` strings
+    /// (e.g. `local:c:/Users/Alice/Documents`). When empty, Orchid indexes the
+    /// user Documents folder (if resolvable).
+    pub included_roots: Vec<String>,
+    /// Glob-style exclusion patterns matched against the path relative to each
+    /// included root (`*.tmp`, `node_modules/**`, …).
+    pub excluded_patterns: Vec<String>,
+    /// Skip content extraction for files larger than this many mebibytes.
+    pub max_file_size_mib: u64,
+    /// Extract plain-text / source content into the index.
+    pub extract_text: bool,
+    /// Extract PDF text when `pdfium.dll` is available.
+    pub extract_pdf: bool,
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            included_roots: Vec::new(),
+            excluded_patterns: vec![
+                "node_modules/**".into(),
+                ".git/**".into(),
+                "target/**".into(),
+                "*.tmp".into(),
+            ],
+            max_file_size_mib: 50,
+            extract_text: true,
+            extract_pdf: true,
+        }
+    }
+}
+
 /// One configured remote mount (SFTP, SMB, WebDAV, …).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -302,8 +340,14 @@ pub struct NetworkMountConfig {
     /// Optional username for on-the-fly rclone connection strings.
     pub user: Option<String>,
     /// Optional password for on-the-fly rclone connection strings.
+    ///
+    /// **Security:** plaintext in `config.toml` and (when used) visible in the
+    /// rclone process argv. Prefer [`Self::rclone_remote`] pointing at a remote
+    /// defined in `rclone.conf` instead.
     pub password: Option<String>,
     /// When set, use this rclone.conf remote name instead of parsing `uri`.
+    /// Preferred over inline [`Self::password`] — credentials stay in rclone's
+    /// own config (or OS keychain via rclone).
     pub rclone_remote: Option<String>,
     /// When false, the mount is hidden from the UI.
     pub enabled: bool,

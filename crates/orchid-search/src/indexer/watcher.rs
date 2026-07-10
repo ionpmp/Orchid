@@ -279,7 +279,7 @@ impl IndexFsSubscriber {
 /// Minimal glob matcher supporting `*` (any segment), `**` (any subtree),
 /// `?` (any single char). Sufficient for exclusion patterns like
 /// `"*.tmp"` and `"node_modules/**"`.
-fn glob_match(pattern: &str, target: &str) -> bool {
+pub(crate) fn glob_match(pattern: &str, target: &str) -> bool {
     glob_match_inner(pattern.as_bytes(), target.as_bytes())
 }
 

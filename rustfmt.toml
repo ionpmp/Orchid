@@ -1,0 +1,5 @@
+# Keep formatting boring and consistent across the workspace.
+edition = "2021"
+max_width = 100
+use_small_heuristics = "Default"
+newline_style = "Unix"

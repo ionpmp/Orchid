@@ -81,14 +81,24 @@ hint-mode-enabled = false
 
 # [file-manager]
 # Remote mounts shown under the file manager Network sidebar.
-# Use Orchid path syntax (`sftp:host/path`) or a URL (`sftp://host/path`).
+# Prefer `rclone-remote` (credentials stay in rclone.conf). Inline `password`
+# is supported for quick tests but is stored in plaintext and may appear in
+# the rclone process command line — avoid it on shared machines.
 # [[file-manager.network-mounts]]
 # name = "Home SFTP"
 # uri = "sftp://myserver/home/alice"
 # user = "alice"
-# password = "secret"
+# # password = "secret"   # discouraged — prefer rclone-remote
 # rclone-remote = "myserver"
 # enabled = true
+
+# [search]
+# Tantivy index roots (Orchid FsPath strings). Empty = user Documents folder.
+# included-roots = ["local:c:/Users/Alice/Documents"]
+# excluded-patterns = ["node_modules/**", ".git/**", "target/**", "*.tmp"]
+# max-file-size-mib = 50
+# extract-text = true
+# extract-pdf = true
 "#;
 
 /// Load / save / reload API for the TOML configuration.

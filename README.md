@@ -15,7 +15,7 @@ Every gesture performed with a finger has a textual representation as a command.
 ## Key Features (MVP)
 
 - 🗂️ **File Manager** — dual-pane, touch-friendly, with tags and virtual folders
-- 💻 **Built-in Terminal** — PowerShell, cmd, WSL, SSH, with inline graphics support (sixel, kitty)
+- 💻 **Built-in Terminal** — PowerShell, cmd, WSL, SSH (inline sixel/kitty graphics planned for v1.x)
 - 🧩 **Widget System** — desktop as a dashboard with configurable grid and workspaces
 - 🔐 **Password Manager** — built-in, KDBX4 format, biometric unlock via Windows Hello
 - 🛡️ **File Encryption** — mark a file or folder as encrypted, age-based cryptography
@@ -34,13 +34,13 @@ Every gesture performed with a finger has a textual representation as a command.
 | Language | Rust |
 | GUI | Slint |
 | Rendering | Skia (Ganesh backend via Slint) |
-| Storage | redb (state) + SQLite (passwords) + files (chunks) |
-| Terminal | portable-pty + alacritty_terminal |
+| Storage | redb (state) + KDBX4 file (passwords) + files (chunks) |
+| Terminal | portable-pty + custom vte emulator |
 | Encryption | age (rage) |
 | Content Addressing | BLAKE3 + FastCDC |
 | Search | Tantivy |
 | PDF | pdfium-render |
-| IPC | Cap'n Proto |
+| Network FS | rclone CLI subprocesses |
 | Configuration | TOML |
 
 ## Status
@@ -58,7 +58,7 @@ Every gesture performed with a finger has a textual representation as a command.
 ## Building from Source
 
 ```bash
-# Requires Rust 1.82+
+# Requires Rust 1.97+
 git clone https://github.com/PLACEHOLDER_ORG/orchid.git
 cd orchid
 cargo build --release
@@ -79,7 +79,8 @@ Index: [`docs/README.md`](docs/README.md)
 
 ## License
 
-Orchid is distributed under the [GNU Affero General Public License v3.0](LICENSE).
+Orchid is distributed under the [GNU Affero General Public License v3.0 or later](LICENSE)
+(`AGPL-3.0-or-later` in `Cargo.toml`).
 
 ## Community
 

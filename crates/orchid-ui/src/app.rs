@@ -4,6 +4,7 @@
 //! theme — plus widget/workspace/terminal state for the desktop shell.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use parking_lot::{Mutex, RwLock};
@@ -69,6 +70,15 @@ pub struct OrchidApp {
     /// Shared network mount list (hot-reloaded from config.toml).
     #[allow(dead_code)] // held for lifetime; FM and rclone providers hold clones
     network_mounts: Arc<RwLock<Vec<NetworkMountConfig>>>,
+    /// Keeps the Tantivy index scheduler workers alive.
+    #[allow(dead_code)]
+    _index_scheduler: Arc<orchid_search::IndexScheduler>,
+    /// Keeps the FS→index bus subscriber alive.
+    #[allow(dead_code)]
+    _index_subscriber: orchid_search::IndexFsSubscriber,
+    /// Active notify watches for search included-roots.
+    #[allow(dead_code)]
+    _index_watch_handles: Vec<orchid_fs::WatchHandle>,
     /// Application-wide recent-files list.
     recent_files: Arc<orchid_widgets::RecentFilesStore>,
     /// KDBX password vault (unlock via passphrase or Windows Hello).
@@ -288,6 +298,69 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("register viewer: {e}")))?;
 
         let tag_manager = Arc::new(orchid_fs::TagManager::new(storage.clone(), bus.clone()));
+
+        // Live Tantivy indexing: subscribe to fs.* bus events, watch configured
+        // roots, and seed the index with a bounded bootstrap crawl.
+        let index_scheduler = Arc::new(orchid_search::IndexScheduler::new(
+            search_engine.clone(),
+            2,
+        ));
+        let mut index_extractor = orchid_search::Extractor::new();
+        if config.read().search.extract_pdf {
+            index_extractor = index_extractor.with_pdf();
+        }
+        let index_extractor = Arc::new(index_extractor);
+        let index_subscriber = orchid_search::IndexFsSubscriber::new(
+            bus.clone(),
+            index_scheduler.clone(),
+            index_extractor.clone(),
+            fs_registry.clone(),
+            tag_manager.clone(),
+        );
+        let (index_scope, index_roots) = build_search_index_scope(&config.read().search);
+        index_subscriber.set_scope(index_scope.clone());
+        index_subscriber
+            .start()
+            .await
+            .map_err(|e| UiError::Slint(format!("search index subscriber: {e}")))?;
+
+        let index_watcher =
+            Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
+        let mut index_watch_handles = Vec::new();
+        for root in &index_roots {
+            match index_watcher.watch(root.clone()).await {
+                Ok(handle) => index_watch_handles.push(handle),
+                Err(e) => {
+                    warn!(error = %e, %root, "search: failed to watch index root");
+                }
+            }
+        }
+
+        {
+            let registry = fs_registry.clone();
+            let scheduler = index_scheduler.clone();
+            let extractor = index_extractor.clone();
+            let tags = tag_manager.clone();
+            let scope = index_scope;
+            let roots = index_roots;
+            tokio::spawn(async move {
+                if let Err(e) = orchid_search::crawl_roots(
+                    registry.as_ref(),
+                    scheduler.as_ref(),
+                    extractor.as_ref(),
+                    tags.as_ref(),
+                    &scope,
+                    &roots,
+                )
+                .await
+                {
+                    warn!(error = %e, "search: bootstrap crawl failed");
+                } else {
+                    info!("search: bootstrap crawl finished");
+                }
+            });
+        }
+
         let thumbnails = Arc::new(
             orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
                 .map_err(|e| UiError::Slint(format!("thumbnail service: {e}")))?,
@@ -538,6 +611,9 @@ impl OrchidApp {
             _managed_ingest_started_sub: Some(managed_ingest_started_sub),
             _managed_ingest_failed_sub: Some(managed_ingest_failed_sub),
             network_mounts,
+            _index_scheduler: index_scheduler,
+            _index_subscriber: index_subscriber,
+            _index_watch_handles: index_watch_handles,
             recent_files,
             password_vault,
             fm_passphrase_vault,
@@ -722,6 +798,47 @@ fn apply_command_shortcut_overrides(
             );
         }
     }
+}
+
+/// Resolve `[search]` config into an [`IndexScope`] plus concrete roots to watch.
+fn build_search_index_scope(
+    cfg: &orchid_storage::SearchConfig,
+) -> (orchid_search::IndexScope, Vec<orchid_fs::FsPath>) {
+    let mut roots = Vec::new();
+    for raw in &cfg.included_roots {
+        match orchid_fs::FsPath::new(raw.trim()) {
+            Ok(p) => roots.push(p),
+            Err(e) => {
+                warn!(error = %e, root = %raw, "search: invalid included-roots entry");
+            }
+        }
+    }
+    if roots.is_empty() {
+        if let Some(docs) = directories::UserDirs::new().and_then(|u| u.document_dir().map(PathBuf::from))
+        {
+            match orchid_fs::FsPath::from_local(&docs) {
+                Ok(p) => {
+                    info!(%p, "search: using Documents folder as default index root");
+                    roots.push(p);
+                }
+                Err(e) => {
+                    warn!(error = %e, "search: could not convert Documents path");
+                }
+            }
+        } else {
+            warn!("search: no included-roots and Documents folder unavailable; index stays empty until configured");
+        }
+    }
+
+    let max_file_size = cfg.max_file_size_mib.saturating_mul(1024 * 1024);
+    let scope = orchid_search::IndexScope {
+        included_roots: roots.clone(),
+        excluded_patterns: cfg.excluded_patterns.clone(),
+        max_file_size,
+        extract_text_content: cfg.extract_text,
+        extract_pdf_content: cfg.extract_pdf,
+    };
+    (scope, roots)
 }
 
 // Keep the import graph obvious for maintainers.

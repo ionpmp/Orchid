@@ -3,7 +3,7 @@
 ## Requirements
 
 - **OS:** Windows 10 (1809+) or Windows 11. Building on Linux/macOS is possible, but the target is Windows.
-- **Rust:** 1.82.0 or newer (pinned via `rust-toolchain.toml`)
+- **Rust:** 1.97.0 or newer (pinned via `rust-toolchain.toml`)
 - **Visual Studio Build Tools 2022** (or Visual Studio with the C++ workload) — required to build native dependencies (Skia, pdfium)
 - **Git** for cloning
 
