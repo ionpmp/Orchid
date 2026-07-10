@@ -145,7 +145,7 @@ async fn copy_directory(
     let items_total = files.len() as u64;
     let mut bytes_done: u64 = 0;
 
-    for (items_done, (src, dst, _size)) in (0_u64..).zip(files.into_iter()) {
+    for (items_done, (src, dst, _size)) in (0_u64..).zip(files) {
         if let Some(c) = &cancel {
             if c.is_cancelled() {
                 return Err(FsError::Cancelled);

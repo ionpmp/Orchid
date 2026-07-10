@@ -110,6 +110,24 @@ impl OrchidApp {
         paths.ensure_directories()?;
 
         let config = Arc::new(RwLock::new(ConfigLoader::load_or_create(&paths.config_file)?));
+        {
+            let mut cfg = config.write();
+            match orchid_crypto::protect_network_mount_passwords(
+                &mut cfg.file_manager.network_mounts,
+            ) {
+                Ok(true) => {
+                    if let Err(e) = ConfigLoader::save(&cfg, &paths.config_file) {
+                        tracing::warn!(?e, "failed to rewrite DPAPI-protected mount passwords");
+                    } else {
+                        tracing::info!("migrated network mount passwords to DPAPI storage");
+                    }
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    tracing::warn!(?e, "could not DPAPI-protect network mount passwords");
+                }
+            }
+        }
 
         let storage = Arc::new(StateStore::open(
             &paths.state_db_path,

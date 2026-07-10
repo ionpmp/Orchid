@@ -36,22 +36,13 @@ pub struct OrchidConfig {
 }
 
 /// First-run onboarding tour and optional gesture hint overlays.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct OnboardingConfig {
     /// When `true`, the first-run tour has been completed or skipped.
     pub completed: bool,
     /// When `true`, subtle gesture hints are shown on the dock and workspace.
     pub hint_mode_enabled: bool,
-}
-
-impl Default for OnboardingConfig {
-    fn default() -> Self {
-        Self {
-            completed: false,
-            hint_mode_enabled: false,
-        }
-    }
 }
 
 /// Application-wide toggles that don't fit any other section.
@@ -341,9 +332,11 @@ pub struct NetworkMountConfig {
     pub user: Option<String>,
     /// Optional password for on-the-fly rclone connection strings.
     ///
-    /// **Security:** plaintext in `config.toml` and (when used) visible in the
-    /// rclone process argv. Prefer [`Self::rclone_remote`] pointing at a remote
-    /// defined in `rclone.conf` instead.
+    /// **Security:** prefer [`Self::rclone_remote`] (credentials stay in
+    /// rclone.conf / OS keychain). When an inline password is required, Orchid
+    /// stores it as a Windows DPAPI blob (`dpapi:<hex>`) in `config.toml` so it
+    /// is not plaintext at rest. The value is still passed on the rclone
+    /// process argv at use time.
     pub password: Option<String>,
     /// When set, use this rclone.conf remote name instead of parsing `uri`.
     /// Preferred over inline [`Self::password`] — credentials stay in rclone's

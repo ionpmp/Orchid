@@ -180,7 +180,7 @@ fn is_heic_ftyp(bytes: &[u8]) -> bool {
     let mut offset = 8;
     while offset + 4 <= bytes.len() {
         let brand = &bytes[offset..offset + 4];
-        if HEIF_BRANDS.iter().any(|b| *b == brand) {
+        if HEIF_BRANDS.contains(&brand) {
             return true;
         }
         // Skip minor_version (4 bytes) after the major brand.

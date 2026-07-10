@@ -265,7 +265,7 @@ mod futures_executor {
     pub fn block_on<F: Future>(fut: F) -> F::Output {
         // Minimal executor: park the current thread, poll once per wake-up.
         let mut fut = Box::pin(fut);
-        let waker = noop_waker();
+        let waker = std::task::Waker::noop();
         let mut cx = Context::from_waker(&waker);
         loop {
             match Pin::as_mut(&mut fut).poll(&mut cx) {
@@ -275,14 +275,6 @@ mod futures_executor {
         }
     }
 
-    fn noop_waker() -> Waker {
-        use std::sync::Arc;
-        struct Noop;
-        impl std::task::Wake for Noop {
-            fn wake(self: Arc<Self>) {}
-        }
-        Waker::from(Arc::new(Noop))
-    }
 }
 
 // -------------------------------------------------------------------------

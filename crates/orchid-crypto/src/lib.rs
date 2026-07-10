@@ -67,7 +67,10 @@ pub use random::{
     fill_secure, generate_password, generate_password_default, random_bytes, random_uuid,
     DEFAULT_PASSWORD_LENGTH,
 };
-pub use secret::{SecretBytes, ZeroizingBytes};
+pub use secret::{
+    is_protected, protect_for_storage, protect_network_mount_passwords, resolve_stored_secret,
+    SecretBytes, ZeroizingBytes,
+};
 pub use vault::{FmPassphraseVault, PasswordVault};
 
 /// Crate version.

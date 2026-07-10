@@ -755,15 +755,12 @@ impl<'a> Perform for Handler<'a> {
                 let bot = if p2 == 0 { self.state.rows } else { p2 };
                 self.state.set_scroll_region(top, bot);
             }
-            'n' => {
-                // Device Status Report
-                if p1 == 6 {
-                    // CPR: cursor position.
-                    let row = self.state.cursor.row + 1;
-                    let col = self.state.cursor.col + 1;
-                    self.responses
-                        .extend_from_slice(format!("\x1b[{row};{col}R").as_bytes());
-                }
+            'n' if p1 == 6 => {
+                // Device Status Report (CPR: cursor position).
+                let row = self.state.cursor.row + 1;
+                let col = self.state.cursor.col + 1;
+                self.responses
+                    .extend_from_slice(format!("\x1b[{row};{col}R").as_bytes());
             }
             _ => {}
         }

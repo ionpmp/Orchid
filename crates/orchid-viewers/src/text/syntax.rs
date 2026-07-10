@@ -98,8 +98,8 @@ fn apply_node_scopes(cursor: &mut TreeCursor, language: &str, scopes: &mut [Synt
 
 fn paint_scope(scopes: &mut [SyntaxScope], start: usize, end: usize, scope: SyntaxScope) {
     let end = end.min(scopes.len());
-    for byte in start..end {
-        scopes[byte] = scope;
+    for slot in &mut scopes[start..end] {
+        *slot = scope;
     }
 }
 

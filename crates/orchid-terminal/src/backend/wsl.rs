@@ -73,7 +73,7 @@ pub fn list_wsl_distros() -> Result<Vec<String>> {
 }
 
 fn utf16le_to_string(bytes: &[u8]) -> Option<String> {
-    if bytes.len() < 2 || bytes.len() % 2 != 0 {
+    if bytes.len() < 2 || !bytes.len().is_multiple_of(2) {
         return None;
     }
     // Skip BOM if present.
