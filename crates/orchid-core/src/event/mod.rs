@@ -13,7 +13,7 @@
 //!
 //! | style | API | runs where |
 //! |---|---|---|
-//! | channel | [`EventBus::subscribe`] | consumer polls `mpsc::Receiver` |
+//! | channel | [`EventBus::subscribe`] | consumer polls [`EventReceiver`] |
 //! | async closure | [`EventBus::subscribe_async`] | spawned on `tokio` |
 //! | sync closure | [`EventBus::subscribe_sync`] | inline in the dispatcher |
 //!
@@ -21,12 +21,14 @@
 //! order (FIFO).
 
 pub mod bus;
+pub mod channel;
 #[allow(clippy::module_inception)]
 pub mod event;
 pub mod priority;
 pub mod subscription;
 
 pub use bus::{EventBus, EventBusConfig, EventBusMetrics, SlowConsumerPolicy};
+pub use channel::EventReceiver;
 pub use event::{AppShuttingDown, AppStarted, ConfigUpdated, Event, EventEnvelope, EventSource};
 pub use priority::HandlerPriority;
 pub use subscription::{EventFilter, SubscriptionHandle, SubscriptionId};
@@ -201,12 +203,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn slow_consumer_drop_oldest_records_drops() {
+    async fn slow_consumer_drop_oldest_evicts_oldest() {
         let bus = EventBus::new(EventBusConfig {
             per_subscriber_buffer: 2,
             slow_consumer_policy: SlowConsumerPolicy::DropOldest,
         });
-        let (_h, _rx) = bus
+        let (_h, mut rx) = bus
             .subscribe(EventFilter::any(), HandlerPriority::Normal)
             .unwrap();
         for i in 0..5 {
@@ -218,6 +220,17 @@ mod tests {
             );
         }
         let m = bus.metrics();
-        assert!(m.total_dropped > 0, "expected some drops, got {m:?}");
+        assert!(m.total_dropped >= 3, "expected ≥3 drops, got {m:?}");
+
+        // Buffer holds the two newest events (3 and 4).
+        let first = rx.recv().await.expect("first");
+        let second = rx.recv().await.expect("second");
+        let v1 = first.downcast::<AppStarted>().expect("AppStarted").version.as_str();
+        let v2 = second
+            .downcast::<AppStarted>()
+            .expect("AppStarted")
+            .version
+            .as_str();
+        assert_eq!((v1, v2), ("3", "4"));
     }
 }

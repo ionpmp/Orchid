@@ -8,11 +8,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
 use crate::error::{CoreError, Result};
+use crate::event::channel::{ChannelInner, ChannelSender, EventReceiver, PushError};
 use crate::event::event::{Event, EventEnvelope, EventSource};
 use crate::event::priority::HandlerPriority;
 use crate::event::subscription::{EventFilter, SubscriptionHandle, SubscriptionId};
@@ -66,8 +66,8 @@ pub struct EventBusMetrics {
 /// Handler flavour stored inside a subscription entry.
 #[allow(clippy::type_complexity)]
 enum HandlerKind {
-    /// Channel-backed subscriber; events are pushed into `tx`.
-    Channel(mpsc::Sender<EventEnvelope>),
+    /// Channel-backed subscriber; events are pushed into a drop-capable queue.
+    Channel(ChannelSender),
     /// Async closure — called via `tokio::spawn`.
     Async(Arc<dyn Fn(EventEnvelope) -> futures_core::BoxFuture + Send + Sync>),
     /// Synchronous closure — called inline in the dispatcher.
@@ -250,11 +250,13 @@ impl EventBus {
         &self,
         filter: EventFilter,
         priority: HandlerPriority,
-    ) -> Result<(SubscriptionHandle, mpsc::Receiver<EventEnvelope>)> {
+    ) -> Result<(SubscriptionHandle, EventReceiver)> {
         if self.inner.shutdown.load(Ordering::SeqCst) {
             return Err(CoreError::BusShutdown);
         }
-        let (tx, rx) = mpsc::channel(self.inner.config.per_subscriber_buffer);
+        let shared = ChannelInner::new(self.inner.config.per_subscriber_buffer);
+        let tx = ChannelSender::new(Arc::clone(&shared));
+        let rx = EventReceiver::new(shared);
         let id = SubscriptionId::new();
         let seq = self.inner.next_seq.fetch_add(1, Ordering::Relaxed);
         self.inner.subs.insert(
@@ -442,61 +444,45 @@ impl EventBus {
     }
 
     /// Push `envelope` into a channel applying the configured slow-consumer
-    /// policy. Returns `true` on successful delivery.
-    fn dispatch_to_channel(
-        &self,
-        tx: &mpsc::Sender<EventEnvelope>,
-        envelope: &EventEnvelope,
-    ) -> bool {
+    /// policy. Returns `true` when the new envelope is queued.
+    fn dispatch_to_channel(&self, tx: &ChannelSender, envelope: &EventEnvelope) -> bool {
         match self.inner.config.slow_consumer_policy {
-            SlowConsumerPolicy::DropOldest => match tx.try_send(envelope.clone()) {
-                Ok(()) => true,
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    // Best-effort: signal overflow. We can't actually pop the
-                    // oldest from `mpsc` without the receiver's help, so the
-                    // practical behaviour is "drop the envelope we were
-                    // trying to send and keep the queue". This matches the
-                    // spec's spirit: when a slow consumer can't keep up,
-                    // something *will* be dropped and a warning is logged.
-                    warn!(
-                        event_type = envelope.event_type,
-                        "slow consumer: channel full, dropping oldest semantics fallback applied",
-                    );
-                    false
+            SlowConsumerPolicy::DropOldest => match tx.push_drop_oldest(envelope.clone()) {
+                Ok(evicted) => {
+                    if evicted {
+                        self.inner.dropped.fetch_add(1, Ordering::Relaxed);
+                        warn!(
+                            event_type = envelope.event_type,
+                            "slow consumer: channel full, dropped oldest event"
+                        );
+                    }
+                    true
                 }
-                Err(mpsc::error::TrySendError::Closed(_)) => false,
+                Err(()) => false,
             },
-            SlowConsumerPolicy::DropNewest => match tx.try_send(envelope.clone()) {
+            SlowConsumerPolicy::DropNewest => match tx.try_push_drop_newest(envelope.clone()) {
                 Ok(()) => true,
-                Err(_) => {
+                Err(PushError::Full) => {
                     warn!(
                         event_type = envelope.event_type,
                         "slow consumer: channel full, dropping new event"
                     );
                     false
                 }
+                Err(PushError::Closed) => false,
             },
             SlowConsumerPolicy::Block { timeout_ms } => {
-                // Blocking requires an async context. From a sync dispatch we
-                // do a brief busy-wait with short sleeps; acceptable for the
-                // occasional contended publish, and any saner caller uses
-                // `DropOldest` / `DropNewest`.
-                let deadline =
-                    std::time::Instant::now() + Duration::from_millis(timeout_ms as u64);
-                loop {
-                    match tx.try_send(envelope.clone()) {
-                        Ok(()) => return true,
-                        Err(mpsc::error::TrySendError::Closed(_)) => return false,
-                        Err(mpsc::error::TrySendError::Full(_)) => {
-                            if std::time::Instant::now() >= deadline {
-                                warn!(
-                                    event_type = envelope.event_type,
-                                    "slow consumer: block timeout exceeded, dropping"
-                                );
-                                return false;
-                            }
-                            std::thread::sleep(Duration::from_millis(1));
-                        }
+                // From a sync dispatch we busy-wait with short sleeps;
+                // acceptable for the occasional contended publish.
+                match tx.push_block(envelope.clone(), Duration::from_millis(timeout_ms as u64)) {
+                    Ok(()) => true,
+                    Err(PushError::Closed) => false,
+                    Err(PushError::Full) => {
+                        warn!(
+                            event_type = envelope.event_type,
+                            "slow consumer: block timeout exceeded, dropping"
+                        );
+                        false
                     }
                 }
             }
