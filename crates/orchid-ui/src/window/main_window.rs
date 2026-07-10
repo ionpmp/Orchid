@@ -6665,14 +6665,23 @@ impl MainWindowController {
                 .unwrap_or(0)
         };
         let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            if let Err(e) = orchid_widgets::builtin::file_manager::navigate_virtual(inst, pane, &item_id).await {
-                warn!(?e, "fm sidebar navigation");
-            }
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
-            }
-        });
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                if let Err(e) =
+                    orchid_widgets::builtin::file_manager::navigate_virtual(inst, pane, &item_id)
+                        .await
+                {
+                    warn!(?e, "fm sidebar navigation");
+                }
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
     }
 
     fn on_fm_toggle_dual_pane(self: &Arc<Self>, fm_id: &SharedString) {
@@ -7006,14 +7015,19 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
-        let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            let _ = orchid_widgets::builtin::file_manager::navigate_back(inst, p).await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
-            }
-        });
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate_back(inst, p).await;
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
     }
 
     fn on_fm_nav_forward(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7021,14 +7035,19 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
-        let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            let _ = orchid_widgets::builtin::file_manager::navigate_forward(inst, p).await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
-            }
-        });
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate_forward(inst, p).await;
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
     }
 
     fn on_fm_nav_up(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7036,14 +7055,19 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
-        let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            let _ = orchid_widgets::builtin::file_manager::navigate_up(inst, p).await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
-            }
-        });
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate_up(inst, p).await;
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
     }
 
     fn on_fm_nav_home(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7072,12 +7096,18 @@ impl MainWindowController {
             return;
         };
         let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
-            }
-        });
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
     }
 
     fn on_fm_view_mode_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
