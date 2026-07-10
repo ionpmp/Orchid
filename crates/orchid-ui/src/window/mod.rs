@@ -2,6 +2,7 @@
 
 pub mod errors;
 pub mod main_window;
+pub mod models;
 pub mod spawn;
 pub mod startup;
 

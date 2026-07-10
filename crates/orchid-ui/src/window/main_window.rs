@@ -14,7 +14,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use async_compat::Compat;
 use parking_lot::Mutex;
 use secrecy::ExposeSecret;
 use slint::Color;
@@ -44,7 +43,7 @@ use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::TerminalPanePayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
-use orchid_widgets::{ViewerPayload, WidgetPayload};
+use orchid_widgets::WidgetPayload;
 use orchid_widgets::{CreateWidgetRequest,
     GroupManager, LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager, WorkspaceManager,
 };
@@ -53,9 +52,16 @@ use parking_lot::RwLock;
 
 use super::errors::{
     fm_localized_error, is_passphrase_retryable, media_localized_error, password_localized_error,
-    search_localized_error, storage_localized_error, ui_localized_error, viewer_localized_error,
+    storage_localized_error, ui_localized_error, viewer_localized_error,
 };
 use super::spawn;
+use super::models::{
+    build_media_model, build_moon_model, build_password_model, build_recent_files_model,
+    build_rss_model, build_search_model, build_system_model, build_viewer_model,
+    build_weather_model, empty_media_model, empty_moon_model, empty_password_model,
+    empty_recent_files_model, empty_rss_model, empty_search_model, empty_system_model,
+    empty_viewer_model, empty_weather_model, PasswordAddDialogOverlay,
+};
 use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
 use crate::widgets::terminal::{
@@ -65,19 +71,16 @@ use crate::widgets::terminal::{
 };
 use crate::terminal_raster;
 use crate::slint_generated::{
-    AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, MoonValueEntry, PasswordAddDialogState,
-    PasswordDetail,
-    PasswordEntryItem, PasswordModel, PasswordTagChip, RecentFileItemEntry, RecentFilesModel,
-    RssItemEntry, RssModel, SearchCandidateEntry,
-    SearchModel, Strings, SystemIndicatorEntry, SystemModel, TerminalCellModel, TerminalDividerModel,
+    AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, PasswordModel, RecentFilesModel,
+    RssModel, SearchCandidateEntry,
+    SearchModel, Strings, SystemModel, TerminalCellModel, TerminalDividerModel,
     TerminalPaneModel, TerminalTabModel,
     Theme,
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu, FmEntry, FmPane,
     FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmPassphraseState, FmManagedPolicyState,
     FmManagedPolicyRow, FmContextSubitem,
-    ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
-    ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
-    WeatherForecastEntry, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel, WorkspaceModel,
+    ViewerModel,
+    WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel, WorkspaceModel,
     WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, NotificationGlobal,
     NotificationItem, OnboardingGlobal, SettingsFieldRow,
     SettingsGlobal,
@@ -217,14 +220,6 @@ pub struct MainWindowController {
     last_history_retention_days: AtomicU32,
 }
 
-#[derive(Debug, Clone, Default)]
-struct PasswordAddDialogOverlay {
-    visible: bool,
-    error: Option<String>,
-    request_autofocus: bool,
-    generated_password: Option<String>,
-    generation_seq: u32,
-}
 
 #[derive(Debug, Clone, Default)]
 struct CatalogUiState {
@@ -1597,7 +1592,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        let _ = slint::spawn_local(Compat::new(async move {
+                        spawn::spawn_local_compat(async move {
                             if let Err(e) =
                                 orchid_widgets::builtin::viewer::image_pan(inst, dx, dy).await
                             {
@@ -1606,7 +1601,7 @@ impl MainWindowController {
                             if let Some(ctrl) = tw.upgrade() {
                                 ctrl.schedule_rebuild();
                             }
-                        }));
+                        });
                     }
                 }
             }
@@ -1803,13 +1798,13 @@ impl MainWindowController {
                     let body = text.to_string();
                     // Push edits without schedule_rebuild so the multiline
                     // TextInput keeps caret position; dirty ● uses local state.
-                    let _ = slint::spawn_local(Compat::new(async move {
+                    spawn::spawn_local_compat(async move {
                         if let Err(e) =
                             orchid_widgets::builtin::viewer::text_push_edit(inst, body).await
                         {
                             warn!(?e, "viewer text edit");
                         }
-                    }));
+                    });
                 }
             }
         });
@@ -2229,7 +2224,7 @@ impl MainWindowController {
         let wsm = self.workspace_manager.clone();
         let loc = self.locale.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let name = loc.tr("workspace-default-name");
             let ws = if wsm.list().is_empty() {
                 match wsm.create(name).await {
@@ -2273,7 +2268,7 @@ impl MainWindowController {
         };
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             if let Err(e) = wsm.switch_to(u).await {
                 warn!(?e, "switch");
             }
@@ -2287,7 +2282,7 @@ impl MainWindowController {
         let wsm = self.workspace_manager.clone();
         let loc = self.locale.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let n = wsm.list().len() as i64 + 1;
             let args = orchid_i18n::FluentArgs::new().with("n", n.to_string());
             let name = loc.tr_args("workspace-unnamed", &args);
@@ -2372,7 +2367,7 @@ impl MainWindowController {
         let focus_search_input =
             type_id_owned == "search" || type_id_owned == "universal-search";
         let focus_password_input = type_id_owned == "password";
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let wid = match wsm.active() {
                 Ok(w) => w.id,
                 Err(_) => return,
@@ -2648,10 +2643,10 @@ impl MainWindowController {
 
     fn dispatch_registry_shortcut(self: &Arc<Self>, cmd_id: String) {
         let this = Arc::clone(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             this.dispatch_command(&cmd_id).await;
             this.schedule_rebuild();
-        }));
+        });
     }
 
     fn sync_settings_global(self: &Arc<Self>) {
@@ -3298,10 +3293,10 @@ impl MainWindowController {
         }
         self.on_command_palette_dismiss();
         let this = Arc::clone(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             this.dispatch_command(&id).await;
             this.schedule_rebuild();
-        }));
+        });
     }
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
@@ -3389,7 +3384,7 @@ impl MainWindowController {
             return;
         };
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = orchid_widgets::builtin::viewer::text_save(u).await {
                 warn!(?e, "viewer text save on close");
                 if let Some(c) = t.upgrade() {
@@ -3401,7 +3396,7 @@ impl MainWindowController {
                 c.clear_close_confirm_overlay(u);
                 c.finish_widget_close(u);
             }
-        }));
+        });
     }
 
     fn on_widget_close_confirm_discard(self: &Arc<Self>, id: &SharedString) {
@@ -3490,7 +3485,7 @@ impl MainWindowController {
         let wm = self.widget_manager.clone();
         let gm = self.group_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Some(group) = gm.find_for_instance(u) {
                 if group.members.len() <= 2 {
                     if let Ok(released) = gm.dissolve_group(group.id).await {
@@ -3527,7 +3522,7 @@ impl MainWindowController {
                 c.password_add_dialogs.write().remove(&u);
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_widget_drag_started(self: &Arc<Self>, id: &SharedString, grab_lx: f32, grab_ly: f32) {
@@ -3672,7 +3667,7 @@ impl MainWindowController {
         let wm = self.widget_manager.clone();
         let le = self.layout_engine.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let end_drag = |c: &Arc<MainWindowController>| {
                 c.drag_offset.lock().remove(&u);
                 c.drag_start_bounds.lock().remove(&u);
@@ -3972,7 +3967,7 @@ impl MainWindowController {
         };
         let gm = self.group_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             if let Err(e) = gm.switch_active(gid, mid).await {
                 warn!(?e, "group switch_active");
             }
@@ -3990,7 +3985,7 @@ impl MainWindowController {
             return;
         };
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let Some(c) = t.upgrade() else {
                 return;
             };
@@ -4047,7 +4042,7 @@ impl MainWindowController {
         };
         let gm = self.group_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let Ok(group) = gm.get(gid) else {
                 return;
             };
@@ -4075,7 +4070,7 @@ impl MainWindowController {
             return;
         }
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let Some(c) = t.upgrade() else {
                 return;
             };
@@ -4275,7 +4270,7 @@ impl MainWindowController {
         let wm = self.widget_manager.clone();
         let le = self.layout_engine.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let Some(c) = t.upgrade() else { return };
             if c.workspace_manager.active().is_err() {
                 return;
@@ -4537,11 +4532,11 @@ impl MainWindowController {
         };
         let path_label = s.to_string();
         let ctrl = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true, true).await {
                 warn!(?e, path = %path_label, "open recent file in viewer");
             }
-        }));
+        });
     }
 
     fn on_media_play_pause(self: &Arc<Self>) {
@@ -4549,7 +4544,7 @@ impl MainWindowController {
             return;
         };
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             let cmd = if is_playing { "pause" } else { "play" };
             if let Err(e) = orchid_widgets::builtin::media::execute_command(inst_id, cmd).await {
                 warn!(?e, "media play/pause");
@@ -4565,7 +4560,7 @@ impl MainWindowController {
             return;
         };
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(async move {
+        spawn::spawn_local(async move {
             if let Err(e) = orchid_widgets::builtin::media::execute_command(inst_id, cmd).await {
                 warn!(?e, "media command");
                 if let Some(c) = t.upgrade() {
@@ -4636,12 +4631,12 @@ impl MainWindowController {
         orchid_widgets::builtin::password::update_search(inst_id, query);
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_password_entry_clicked(self: &Arc<Self>, id: &SharedString) {
@@ -4653,12 +4648,12 @@ impl MainWindowController {
         orchid_widgets::builtin::password::select_entry(inst_id, entry_id);
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_password_copy(self: &Arc<Self>, id: &SharedString, kind: PasswordCopyKind) {
@@ -4670,7 +4665,7 @@ impl MainWindowController {
         let clear_clipboard_secs = self.config.read().privacy.clear_clipboard_seconds;
         let t = Arc::downgrade(self);
         let locale = self.locale.clone();
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let toast_key = match kind {
                 PasswordCopyKind::Password => {
                     match orchid_widgets::builtin::password::copy_password(
@@ -4729,7 +4724,7 @@ impl MainWindowController {
                 cc.password_toasts.write().remove(&inst_id);
                 cc.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_password_open_url(self: &Arc<Self>, url: &SharedString) {
@@ -4774,12 +4769,12 @@ impl MainWindowController {
         };
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_password_lock_vault(self: &Arc<Self>) {
@@ -4838,13 +4833,13 @@ impl MainWindowController {
                 self.password_toasts.write().insert(inst_id, (msg, true));
                 self.schedule_rebuild_after_password_unlock();
                 let t = Arc::downgrade(self);
-                let _ = slint::spawn_local(Compat::new(async move {
+                spawn::spawn_local_compat(async move {
                     tokio::time::sleep(Duration::from_secs(2)).await;
                     if let Some(c) = t.upgrade() {
                         c.password_toasts.write().remove(&inst_id);
                         c.schedule_rebuild_after_password_unlock();
                     }
-                }));
+                });
             }
             Err(e) => {
                 let error = password_localized_error(&self.locale, &e);
@@ -4920,7 +4915,7 @@ impl MainWindowController {
         // arrive via `WidgetSnapshotUpdated` and are patched through
         // `patch_workspace_frames` on the next frame.
         let wm = self.widget_manager.clone();
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             wm.touch(instance_id);
             if let Ok(inst_ref) = wm.get_instance(instance_id) {
                 if *inst_ref.lifecycle.read() == LifecycleState::Sleeping {
@@ -4929,7 +4924,7 @@ impl MainWindowController {
                         .await;
                 }
             }
-        }));
+        });
     }
 
     fn on_search_candidate_activated(self: &Arc<Self>, inst: &SharedString, cand: &SharedString) {
@@ -4938,9 +4933,9 @@ impl MainWindowController {
         };
         let candidate_id = cand.to_string();
         let this = Arc::clone(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             this.dispatch_search_action_target(instance_id, candidate_id).await;
-        }));
+        });
     }
 
     async fn dispatch_search_action_target(self: &Arc<Self>, instance_id: Uuid, candidate_id: String) {
@@ -5016,14 +5011,14 @@ impl MainWindowController {
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
         let idx = tab_idx as usize;
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = switch_tab(&deps, inst, idx) {
                 warn!(?e, %inst, tab_idx = idx, "terminal tab switch");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_tab_new(self: &Arc<Self>, id: &SharedString) {
@@ -5032,14 +5027,14 @@ impl MainWindowController {
         };
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = add_tab(&deps, inst).await {
                 warn!(?e, %inst, "terminal tab add");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_tab_closed(self: &Arc<Self>, id: &SharedString, tab_idx: i32) {
@@ -5052,14 +5047,14 @@ impl MainWindowController {
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
         let idx = tab_idx as usize;
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = close_tab(&deps, inst, idx).await {
                 warn!(?e, %inst, tab_idx = idx, "terminal tab close");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_split_horizontal(self: &Arc<Self>, id: &SharedString) {
@@ -5068,14 +5063,14 @@ impl MainWindowController {
         };
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = split_horizontal(&deps, inst).await {
                 warn!(?e, %inst, "terminal split horizontal");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_split_vertical(self: &Arc<Self>, id: &SharedString) {
@@ -5084,14 +5079,14 @@ impl MainWindowController {
         };
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = split_vertical(&deps, inst).await {
                 warn!(?e, %inst, "terminal split vertical");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_pane_clicked(self: &Arc<Self>, id: &SharedString, session_id: &SharedString) {
@@ -5103,14 +5098,14 @@ impl MainWindowController {
         };
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = focus_pane(&deps, inst, sid) {
                 warn!(?e, %inst, %sid, "terminal pane focus");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_pane_closed(self: &Arc<Self>, id: &SharedString, session_id: &SharedString) {
@@ -5122,14 +5117,14 @@ impl MainWindowController {
         };
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = close_pane(&deps, inst, sid).await {
                 warn!(?e, %inst, %sid, "terminal pane close");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_terminal_split_drag_moved(
@@ -5196,7 +5191,7 @@ impl MainWindowController {
         let deps = self.terminal_deps.clone();
         let tw = Arc::downgrade(self);
         let act = action.to_string();
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let result = match act.as_str() {
                 "split-h" => split_horizontal(&deps, inst).await,
                 "split-v" => split_vertical(&deps, inst).await,
@@ -5214,7 +5209,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
@@ -6110,9 +6105,9 @@ impl MainWindowController {
         if let Ok(iref) = self.widget_manager.get_instance(inst) {
             if *iref.lifecycle.read() == LifecycleState::Sleeping {
                 let wm = self.widget_manager.clone();
-                let _ = slint::spawn_local(Compat::new(async move {
+                spawn::spawn_local_compat(async move {
                     let _ = wm.change_lifecycle(inst, LifecycleState::Active).await;
-                }));
+                });
             }
         }
     }
@@ -6251,7 +6246,7 @@ impl MainWindowController {
 
     fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let mut opened = 0usize;
             let mut skipped = 0usize;
             for p in paths {
@@ -6292,7 +6287,7 @@ impl MainWindowController {
                 }
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn fm_dispatch_drag_transfer(
@@ -6304,7 +6299,7 @@ impl MainWindowController {
         copy: bool,
     ) {
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let result = if copy {
                 orchid_widgets::builtin::file_manager::copy_paths_to_directory(
                     target_inst,
@@ -6337,7 +6332,7 @@ impl MainWindowController {
                 }
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn fm_resolve_move_dest(
@@ -6461,7 +6456,7 @@ impl MainWindowController {
             batch.generation
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             tokio::time::sleep(std::time::Duration::from_millis(80)).await;
             let Some(c) = tw.upgrade() else {
                 return;
@@ -6477,7 +6472,7 @@ impl MainWindowController {
                 return;
             }
             c.on_os_files_dropped(paths);
-        }));
+        });
     }
 
     fn on_os_files_dropped(self: &Arc<Self>, paths: Vec<String>) {
@@ -6494,7 +6489,7 @@ impl MainWindowController {
             .lock()
             .contains(slint::winit_030::winit::keyboard::ModifiersState::CONTROL);
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let result = if copy {
                 orchid_widgets::builtin::file_manager::copy_paths_to_directory(
                     inst,
@@ -6519,7 +6514,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     /// Soft cap for multi-file "open in viewer" to avoid creating dozens of widgets
@@ -6673,14 +6668,14 @@ impl MainWindowController {
                 .unwrap_or(0)
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = orchid_widgets::builtin::file_manager::navigate_virtual(inst, pane, &item_id).await {
                 warn!(?e, "fm sidebar navigation");
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_toggle_dual_pane(self: &Arc<Self>, fm_id: &SharedString) {
@@ -6688,12 +6683,12 @@ impl MainWindowController {
             return;
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_dual_pane(inst).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_toggle_show_hidden(self: &Arc<Self>, fm_id: &SharedString) {
@@ -6701,12 +6696,12 @@ impl MainWindowController {
             return;
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_show_hidden(inst).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_toggle_click_behavior(self: &Arc<Self>, fm_id: &SharedString) {
@@ -6714,12 +6709,12 @@ impl MainWindowController {
             return;
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_click_behavior(inst).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_open_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -6930,12 +6925,12 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         self.set_fm_focus(inst, p);
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::switch_active_pane(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_tab_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, tab_id: &SharedString) {
@@ -6946,12 +6941,12 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let tab = tab_id.to_string();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::switch_to_tab(inst, p, &tab).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_tab_closed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, tab_id: &SharedString) {
@@ -6962,12 +6957,12 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let tab = tab_id.to_string();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::close_tab(inst, p, &tab).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_tab_new(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -6977,12 +6972,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::new_tab(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_new_folder(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -6992,7 +6987,7 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::request_new_folder(inst, p).await {
                 Ok(o) => o,
                 Err(e) => {
@@ -7006,7 +7001,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.apply_fm_action_outcome(inst, outcome);
             }
-        }));
+        });
     }
 
     fn on_fm_nav_back(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7016,12 +7011,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_back(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_nav_forward(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7031,12 +7026,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_forward(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_nav_up(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7046,12 +7041,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_up(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_nav_home(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7061,12 +7056,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate_home(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_breadcrumb_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
@@ -7080,12 +7075,12 @@ impl MainWindowController {
             return;
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_view_mode_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7095,12 +7090,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::cycle_view_mode(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_sort_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7110,12 +7105,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::cycle_sort(inst, p).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_sort_column_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, column: i32) {
@@ -7126,12 +7121,12 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let col = column.max(0).min(3) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::set_sort_column(inst, p, col).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_quick_filter_changed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, q: &SharedString) {
@@ -7142,12 +7137,12 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let query = q.to_string();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::set_quick_filter(inst, p, query).await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_entry_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, ctrl: bool) {
@@ -7165,14 +7160,14 @@ impl MainWindowController {
             orchid_widgets::builtin::file_manager::SelectionMode::Single
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ =
                 orchid_widgets::builtin::file_manager::select_entry(inst, p, &ps_for_select, mode)
                     .await;
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
 
         let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
             .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
@@ -7191,7 +7186,7 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let ps = path.to_string();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::select_entry(
                 inst,
                 p,
@@ -7202,7 +7197,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_entry_double_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, is_dir: bool) {
@@ -7225,7 +7220,7 @@ impl MainWindowController {
 
     fn fm_dispatch_open(self: &Arc<Self>, inst: Uuid, pane: u8, path: String, is_dir: bool) {
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::open_path(
                 inst, pane, &path, is_dir,
             )
@@ -7245,7 +7240,7 @@ impl MainWindowController {
                 c.apply_fm_action_outcome(inst, outcome);
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_fm_entry_context(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, x: f32, y: f32) {
@@ -7277,7 +7272,7 @@ impl MainWindowController {
         }
 
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) =
                 orchid_widgets::builtin::file_manager::focus_context_target(inst, p, &target).await
             {
@@ -7286,7 +7281,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_context_action(self: &Arc<Self>, fm_id: &SharedString, action_id: &SharedString, paths: &ModelRc<SharedString>) {
@@ -7299,7 +7294,7 @@ impl MainWindowController {
             return;
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::run_action_with_opts(
                 inst,
                 &id,
@@ -7321,7 +7316,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.apply_fm_action_outcome(inst, outcome);
             }
-        }));
+        });
     }
 
     fn apply_fm_action_outcome(
@@ -7469,16 +7464,16 @@ impl MainWindowController {
                     return;
                 };
                 let tw2 = Arc::downgrade(self);
-                let _ = slint::spawn_local(Compat::new(async move {
+                spawn::spawn_local_compat(async move {
                     let _ = MainWindowController::open_in_viewer_for_controller(
                         tw2, fs_path, true, true,
                     )
                     .await;
-                }));
+                });
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany { paths } => {
                 let tw2 = Arc::downgrade(self);
-                let _ = slint::spawn_local(Compat::new(async move {
+                spawn::spawn_local_compat(async move {
                     let mut opened = 0usize;
                     let mut skipped = 0usize;
                     for path in paths {
@@ -7517,7 +7512,7 @@ impl MainWindowController {
                         }
                         c.schedule_rebuild();
                     }
-                }));
+                });
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenWithPicker { paths } => {
                 for path in paths {
@@ -7605,7 +7600,7 @@ impl MainWindowController {
             .map(|s| s.to_string())
             .collect();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::run_action_with_opts(
                 inst,
                 &action,
@@ -7640,7 +7635,7 @@ impl MainWindowController {
                     }
                 }
             }
-        }));
+        });
     }
 
     fn on_fm_confirm_no(self: &Arc<Self>, fm_id: &SharedString) {
@@ -7666,7 +7661,7 @@ impl MainWindowController {
         if let Some(parent) = create_parent {
             let newn = new_name.to_string();
             let tw = Arc::downgrade(self);
-            let _ = slint::spawn_local(Compat::new(async move {
+            spawn::spawn_local_compat(async move {
                 if let Err(e) =
                     orchid_widgets::builtin::file_manager::create_folder(inst, &parent, &newn).await
                 {
@@ -7683,13 +7678,13 @@ impl MainWindowController {
                     drop(over);
                     c.schedule_rebuild();
                 }
-            }));
+            });
             return;
         }
         let old = old_path.to_string();
         let newn = new_name.to_string();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) = orchid_widgets::builtin::file_manager::rename(inst, &old, &newn).await {
                 warn!(?e, "fm rename");
                 if let Some(c) = tw.upgrade() {
@@ -7703,7 +7698,7 @@ impl MainWindowController {
                 drop(over);
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_fm_rename_cancel(self: &Arc<Self>, fm_id: &SharedString) {
@@ -7730,7 +7725,7 @@ impl MainWindowController {
             .unwrap_or_default();
         let tag_str = tag.to_string();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let _ =
                 orchid_widgets::builtin::file_manager::add_tag_to_paths(inst, paths, &tag_str).await;
             if let Some(c) = tw.upgrade() {
@@ -7741,7 +7736,7 @@ impl MainWindowController {
                 drop(over);
                 c.schedule_rebuild();
             }
-        }));
+        });
     }
 
     fn on_fm_tag_cancel(self: &Arc<Self>, fm_id: &SharedString) {
@@ -7780,7 +7775,7 @@ impl MainWindowController {
             .unwrap_or(orchid_widgets::builtin::file_manager::PassphrasePurpose::Encrypt);
         let paths = over.passphrase_paths.clone();
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
                 inst,
                 paths,
@@ -7814,7 +7809,7 @@ impl MainWindowController {
                 c.clear_fm_passphrase_overlay(inst);
                 c.apply_fm_action_outcome(inst, outcome);
             }
-        }));
+        });
     }
 
     fn on_fm_passphrase_cancel(self: &Arc<Self>, fm_id: &SharedString) {
@@ -7869,7 +7864,7 @@ impl MainWindowController {
             }
         };
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
                 inst,
                 paths,
@@ -7903,7 +7898,7 @@ impl MainWindowController {
                 c.clear_fm_passphrase_overlay(inst);
                 c.apply_fm_action_outcome(inst, outcome);
             }
-        }));
+        });
     }
 
     fn clear_fm_passphrase_overlay(self: &Arc<Self>, inst: Uuid) {
@@ -7926,7 +7921,7 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) =
                 orchid_widgets::builtin::file_manager::select_all_in_pane(inst, p).await
             {
@@ -7936,7 +7931,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_deselect_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -7946,7 +7941,7 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             if let Err(e) =
                 orchid_widgets::builtin::file_manager::deselect_all_in_pane(inst, p).await
             {
@@ -7956,7 +7951,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
             }
-        }));
+        });
     }
 
     fn on_fm_delete_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
@@ -8006,7 +8001,7 @@ impl MainWindowController {
     fn spawn_fm_action(self: &Arc<Self>, inst: Uuid, action_id: &str, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
         let action_id = action_id.to_string();
-        let _ = slint::spawn_local(Compat::new(async move {
+        spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::run_action(
                 inst,
                 &action_id,
@@ -8026,7 +8021,7 @@ impl MainWindowController {
             if let Some(c) = tw.upgrade() {
                 c.apply_fm_action_outcome(inst, outcome);
             }
-        }));
+        });
     }
 }
 
@@ -8420,57 +8415,6 @@ fn fm_rgba_to_image(rgba: &[u8], width: u32, height: u32) -> Image {
     Image::from_rgba8(buf)
 }
 
-fn base64_decode(input: &str) -> std::result::Result<Vec<u8>, ()> {
-    fn val(b: u8) -> Option<u8> {
-        match b {
-            b'A'..=b'Z' => Some(b - b'A'),
-            b'a'..=b'z' => Some(b - b'a' + 26),
-            b'0'..=b'9' => Some(b - b'0' + 52),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-
-    let bytes: Vec<u8> = input
-        .bytes()
-        .filter(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
-        .collect();
-
-    if bytes.is_empty() {
-        return Ok(Vec::new());
-    }
-    if bytes.len() % 4 != 0 {
-        return Err(());
-    }
-
-    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
-        let a = val(chunk[0]).ok_or(())?;
-        let b = val(chunk[1]).ok_or(())?;
-        let c = if chunk[2] == b'=' {
-            0
-        } else {
-            val(chunk[2]).ok_or(())?
-        };
-        let d = if chunk[3] == b'=' {
-            0
-        } else {
-            val(chunk[3]).ok_or(())?
-        };
-
-        let n = ((a as u32) << 18) | ((b as u32) << 12) | ((c as u32) << 6) | (d as u32);
-        out.push((n >> 16) as u8);
-        if chunk[2] != b'=' {
-            out.push((n >> 8) as u8);
-        }
-        if chunk[3] != b'=' {
-            out.push(n as u8);
-        }
-    }
-
-    Ok(out)
-}
 
 fn is_known_widget_type(type_id: &str) -> bool {
     matches!(
@@ -8652,228 +8596,6 @@ fn default_frame_data_extended(
     )
 }
 
-fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
-    WeatherModel {
-        location: SharedString::new(),
-        current_temp: SharedString::new(),
-        condition_label: locale.tr("weather-loading").into(),
-        condition_icon: SharedString::new(),
-        feels_like: SharedString::new(),
-        humidity: SharedString::new(),
-        wind: SharedString::new(),
-        forecast: ModelRc::new(VecModel::default()),
-        last_updated: locale.tr("weather-loading").into(),
-        status: 2,
-        status_label: locale.tr("weather-status-offline").into(),
-    }
-}
-
-fn empty_moon_model(locale: &LocaleManager) -> MoonModel {
-    MoonModel {
-        phase_label: locale.tr("moon-loading").into(),
-        phase_icon: SharedString::new(),
-        illumination: SharedString::new(),
-        values: ModelRc::new(VecModel::default()),
-    }
-}
-
-fn empty_system_model(locale: &LocaleManager) -> SystemModel {
-    SystemModel {
-        indicators: ModelRc::new(VecModel::from(vec![SystemIndicatorEntry {
-            label: locale.tr("system-loading").into(),
-            value_text: SharedString::new(),
-            percent: -1.0,
-            icon: SharedString::new(),
-            status: 0,
-            status_hint: SharedString::new(),
-        }])),
-    }
-}
-
-fn empty_rss_model(locale: &LocaleManager) -> RssModel {
-    RssModel {
-        items: ModelRc::new(VecModel::default()),
-        last_updated: SharedString::new(),
-        error_summary: SharedString::new(),
-        has_items: false,
-        empty_state_text: locale.tr("rss-loading").into(),
-    }
-}
-
-fn build_rss_model(p: &orchid_widgets::RssPayload, locale: &LocaleManager) -> RssModel {
-    let items: Vec<RssItemEntry> = p
-        .items
-        .iter()
-        .map(|it| RssItemEntry {
-            id: it.id.clone().into(),
-            title: it.title.clone().into(),
-            source: it.source_name.clone().into(),
-            published: it.published_text.clone().into(),
-            summary: it.summary_text.clone().unwrap_or_default().into(),
-            link: it.link.clone().unwrap_or_default().into(),
-        })
-        .collect();
-    let has_items = !items.is_empty();
-    let error_summary = if p.failed_feed_count > 0 {
-        locale
-            .tr_args(
-                "rss-error-summary",
-                &orchid_i18n::FluentArgs::new()
-                    .with("n", p.failed_feed_count.to_string())
-                    .with("total", p.enabled_feed_count.to_string()),
-            )
-            .into()
-    } else {
-        SharedString::new()
-    };
-    let empty_state_text = if p.is_loading {
-        locale.tr("rss-loading").into()
-    } else if p.enabled_feed_count == 0 {
-        locale.tr("rss-no-feeds").into()
-    } else if p.failed_feed_count > 0 && !has_items {
-        locale.tr("rss-fetch-failed").into()
-    } else if !has_items {
-        locale.tr("rss-empty").into()
-    } else {
-        locale.tr("rss-no-feeds").into()
-    };
-    RssModel {
-        items: ModelRc::new(VecModel::from(items)),
-        last_updated: p.last_updated_text.clone().into(),
-        error_summary,
-        has_items,
-        empty_state_text,
-    }
-}
-
-fn empty_recent_files_model(locale: &LocaleManager) -> RecentFilesModel {
-    RecentFilesModel {
-        items: ModelRc::new(VecModel::default()),
-        has_items: false,
-        empty_state_text: locale.tr("recent-files-empty").into(),
-    }
-}
-
-fn build_recent_files_model(
-    p: &orchid_widgets::RecentFilesPayload,
-    locale: &LocaleManager,
-) -> RecentFilesModel {
-    let items: Vec<RecentFileItemEntry> = p
-        .items
-        .iter()
-        .map(|it| RecentFileItemEntry {
-            id: it.id.clone().into(),
-            name: it.name.clone().into(),
-            path: it.path.clone().into(),
-            opened: it.opened_text.clone().into(),
-        })
-        .collect();
-    let has_items = !items.is_empty();
-    RecentFilesModel {
-        items: ModelRc::new(VecModel::from(items)),
-        has_items,
-        empty_state_text: locale.tr("recent-files-empty").into(),
-    }
-}
-
-fn empty_search_model(locale: &LocaleManager) -> SearchModel {
-    SearchModel {
-        query: SharedString::new(),
-        candidates: ModelRc::new(VecModel::default()),
-        is_searching: false,
-        error: SharedString::new(),
-        selected_index: -1,
-        placeholder_text: locale.tr("search-placeholder").into(),
-        empty_state_text: locale.tr("search-empty-state").into(),
-        no_results_text: locale.tr("search-no-results-short").into(),
-        searching_text: locale.tr("search-searching").into(),
-        request_autofocus: false,
-    }
-}
-
-fn empty_media_model(locale: &LocaleManager) -> MediaModel {
-    MediaModel {
-        has_session: false,
-        empty_state_text: locale.tr("media-loading").into(),
-        title: SharedString::new(),
-        artist: SharedString::new(),
-        album: SharedString::new(),
-        source_app: SharedString::new(),
-        position: SharedString::new(),
-        duration: SharedString::new(),
-        progress: 0.0,
-        is_playing: false,
-        has_thumbnail: false,
-        thumbnail: Image::default(),
-    }
-}
-
-fn empty_password_detail() -> PasswordDetail {
-    PasswordDetail {
-        has_selection: false,
-        id: SharedString::new(),
-        title: SharedString::new(),
-        username: SharedString::new(),
-        url: SharedString::new(),
-        notes: SharedString::new(),
-        totp_code: SharedString::new(),
-        totp_remaining: 0,
-        totp_remaining_label: SharedString::new(),
-        tags: ModelRc::new(VecModel::default()),
-    }
-}
-
-fn empty_password_add_dialog(locale: &LocaleManager) -> PasswordAddDialogState {
-    PasswordAddDialogState {
-        visible: false,
-        title: locale.tr("password-add-title").into(),
-        title_label: locale.tr("password-label-title").into(),
-        username_label: locale.tr("password-label-username").into(),
-        password_label: locale.tr("password-label-password").into(),
-        url_label: locale.tr("password-label-url").into(),
-        submit_label: locale.tr("password-add-submit").into(),
-        cancel_label: locale.tr("password-add-cancel").into(),
-        generate_label: locale.tr("password-generate").into(),
-        gen_password: SharedString::new(),
-        gen_seq: 0,
-        error: SharedString::new(),
-        request_autofocus: false,
-    }
-}
-
-fn empty_password_model(locale: &LocaleManager) -> PasswordModel {
-    PasswordModel {
-        is_unlocked: false,
-        lock_reason: SharedString::new(),
-        biometric_available: false,
-        unlock_error: SharedString::new(),
-        entries: ModelRc::new(VecModel::default()),
-        selected: empty_password_detail(),
-        search_query: SharedString::new(),
-        toast_message: SharedString::new(),
-        toast_visible: false,
-        request_autofocus: false,
-        add_dialog: empty_password_add_dialog(locale),
-    }
-}
-
-fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
-    ViewerModel {
-        kind: 0,
-        status: ViewerStatusModel {
-            path_display: SharedString::new(),
-            message: SharedString::new(),
-            icon: SharedString::new(),
-        },
-        empty: ViewerEmptyModel {
-            placeholder_text: locale.tr("viewer-no-file").into(),
-        },
-        image: empty_viewer_image_model(locale),
-        pdf: empty_viewer_pdf_model(locale),
-        text: empty_viewer_text_model(locale),
-        archive: empty_viewer_archive_model(locale),
-    }
-}
 
 #[derive(Clone)]
 struct FileManagerOverlays {
@@ -9755,67 +9477,6 @@ fn locale_display_name(locale_mgr: &LocaleManager, id: &LocaleId) -> String {
     }
 }
 
-fn viewer_syntax_label(locale: &LocaleManager, language_id: &str) -> SharedString {
-    let key = format!("viewer-syntax-{language_id}");
-    let label = locale.tr(&key);
-    if label == key {
-        language_id.into()
-    } else {
-        label.into()
-    }
-}
-
-fn viewer_format_slug(raw: &str) -> String {
-    raw.trim()
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string()
-}
-
-fn viewer_image_format_label(locale: &LocaleManager, format_label: &str) -> String {
-    let slug = viewer_format_slug(format_label);
-    if slug.is_empty() {
-        return format_label.to_string();
-    }
-    let key = format!("viewer-image-format-{slug}");
-    let label = locale.tr(&key);
-    if label == key {
-        format_label.to_string()
-    } else {
-        label
-    }
-}
-
-fn viewer_archive_format_label(locale: &LocaleManager, format_label: &str) -> String {
-    let slug = viewer_format_slug(format_label);
-    if slug.is_empty() {
-        return format_label.to_string();
-    }
-    let key = format!("viewer-archive-format-{slug}");
-    let label = locale.tr(&key);
-    if label == key {
-        format_label.to_string()
-    } else {
-        label
-    }
-}
-
-fn viewer_encoding_label(locale: &LocaleManager, encoding: &str) -> SharedString {
-    let slug = viewer_format_slug(encoding);
-    if slug.is_empty() {
-        return encoding.into();
-    }
-    let key = format!("viewer-encoding-{slug}");
-    let label = locale.tr(&key);
-    if label == key {
-        encoding.into()
-    } else {
-        label.into()
-    }
-}
 
 fn apply_settings_field(
     cfg: &mut OrchidConfig,
@@ -10439,1164 +10100,13 @@ fn build_context_menu(
     }
 }
 
-fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
-    ViewerImageModel {
-        width_px: 0,
-        height_px: 0,
-        rgba_image: Image::default(),
-        zoom: 1.0,
-        pan_x: 0.0,
-        pan_y: 0.0,
-        rotation_deg: 0,
-        flipped_h: false,
-        flipped_v: false,
-        fit_mode: true,
-        info_text: SharedString::new(),
-        path_display: SharedString::new(),
-        fit_label: locale.tr("viewer-image-fit-screen").into(),
-        actual_size_label: locale.tr("viewer-image-actual-size").into(),
-    }
-}
 
-fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
-    ViewerPdfModel {
-        page_count: 0,
-        current_page: 0,
-        page_width_px: 0,
-        page_height_px: 0,
-        page_image: Image::default(),
-        zoom: 1.0,
-        fit_mode: 0,
-        info_text: SharedString::new(),
-        path_display: SharedString::new(),
-        available: true,
-        unavailable_reason: locale.tr("viewer-pdf-unavailable").into(),
-        page_of_label: SharedString::new(),
-        fit_width_label: locale.tr("viewer-pdf-fit-width").into(),
-        fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
-        go_label: locale.tr("viewer-pdf-go").into(),
-    }
-}
 
-fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
-    let lines_args = orchid_i18n::FluentArgs::new().with("count", "0");
-    ViewerTextModel {
-        language: viewer_syntax_label(locale, "plaintext"),
-        encoding: viewer_encoding_label(locale, "UTF-8"),
-        line_ending: locale.tr("viewer-text-line-ending-lf").into(),
-        dirty: false,
-        read_only: true,
-        total_lines: 0,
-        first_visible_line: 0,
-        cursor_line: 0,
-        cursor_col: 0,
-        visible_lines: ModelRc::new(VecModel::default()),
-        info_text: SharedString::new(),
-        path_display: SharedString::new(),
-        plain_text: SharedString::new(),
-        mode_label: locale.tr("viewer-text-read-only").into(),
-        save_label: locale.tr("viewer-text-save").into(),
-        lines_label: locale.tr_args("viewer-text-lines", &lines_args).into(),
-    }
-}
 
-fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
-    ViewerArchiveModel {
-        format: SharedString::new(),
-        total_entries: 0,
-        current_inner_path: SharedString::new(),
-        header_label: SharedString::new(),
-        path_label: locale.tr("viewer-archive-root").into(),
-        breadcrumbs: ModelRc::new(VecModel::default()),
-        entries: ModelRc::new(VecModel::default()),
-        selected_path: SharedString::new(),
-        has_file_selected: false,
-        extract_all_label: locale.tr("viewer-archive-extract-all").into(),
-        extract_selected_label: locale.tr("viewer-archive-extract-selected").into(),
-        nothing_selected_label: locale.tr("viewer-archive-nothing-selected").into(),
-        preview_kind: 0,
-        preview_text: locale.tr("viewer-archive-select-preview").into(),
-        preview_binary_size: SharedString::new(),
-        info_text: SharedString::new(),
-        path_display: SharedString::new(),
-    }
-}
 
-fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> ViewerModel {
-    use orchid_viewers::ViewerError;
-    use orchid_viewers::ViewerSnapshot as Vs;
 
-    let mut model = empty_viewer_model(locale);
 
-    match &p.snapshot {
-        Vs::Loading { path_display } if path_display.is_empty() => {
-            model.kind = 0;
-        }
-        Vs::Loading { path_display } => {
-            model.kind = 1;
-            model.status.path_display = path_display.clone().into();
-            model.status.icon = "loading".into();
-            let args = orchid_i18n::FluentArgs::new().with("path", path_display.as_str());
-            model.status.message = locale.tr_args("viewer-loading-path", &args).into();
-        }
-        Vs::Error {
-            path_display,
-            message,
-        } if *message == ViewerError::PdfUnavailable.to_string() => {
-            model.kind = 4;
-            model.pdf.path_display = path_display.clone().into();
-            model.pdf.available = false;
-            model.pdf.unavailable_reason = locale.tr("viewer-pdf-unavailable").into();
-        }
-        Vs::Error {
-            path_display,
-            message,
-        } if *message == ViewerError::UnsupportedHeic.to_string()
-            || *message == ViewerError::UnsupportedRaw.to_string()
-            || message == "viewer-archive-nothing-selected"
-            || message == "viewer-archive-cannot-extract-folder" =>
-        {
-            model.kind = 2;
-            model.status.path_display = path_display.clone().into();
-            model.status.icon = "error".into();
-            model.status.message = locale.tr(message).into();
-        }
-        Vs::Error {
-            path_display,
-            message,
-        } => {
-            model.kind = 2;
-            model.status.path_display = path_display.clone().into();
-            model.status.icon = "error".into();
-            let reason = viewer_localized_error(locale, message);
-            let args = orchid_i18n::FluentArgs::new().with("reason", reason);
-            model.status.message = locale.tr_args("viewer-error-with-reason", &args).into();
-        }
-        Vs::Image(s) => {
-            model.kind = 3;
-            model.image = build_image_snapshot(s, locale);
-        }
-        Vs::Pdf(s) => {
-            model.kind = 4;
-            model.pdf = build_pdf_snapshot(s, locale);
-        }
-        Vs::Text(s) => {
-            model.kind = 5;
-            model.text = build_text_snapshot(s, locale);
-        }
-        Vs::Archive(s) => {
-            model.kind = 6;
-            model.archive = build_archive_snapshot(s, locale);
-        }
-    }
 
-    model
-}
-
-fn build_image_snapshot(
-    s: &orchid_viewers::ImageSnapshot,
-    locale: &LocaleManager,
-) -> ViewerImageModel {
-    let image = if s.width_px > 0 && s.height_px > 0 && !s.rgba_bytes.is_empty() {
-        let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-            s.rgba_bytes.as_slice(),
-            s.width_px,
-            s.height_px,
-        );
-        Image::from_rgba8(img)
-    } else {
-        Image::default()
-    };
-
-    ViewerImageModel {
-        width_px: s.width_px as i32,
-        height_px: s.height_px as i32,
-        rgba_image: image,
-        zoom: s.zoom,
-        pan_x: s.pan_x,
-        pan_y: s.pan_y,
-        rotation_deg: i32::from(s.rotation_degrees),
-        flipped_h: s.flipped_horizontal,
-        flipped_v: s.flipped_vertical,
-        fit_mode: s.fit_mode,
-        info_text: {
-            let args = orchid_i18n::FluentArgs::new()
-                .with("width", s.width_px.to_string())
-                .with("height", s.height_px.to_string())
-                .with("size", locale.format_byte_size(s.size_bytes))
-                .with("format", viewer_image_format_label(locale, &s.format_label));
-            locale.tr_args("viewer-image-info", &args).into()
-        },
-        path_display: s.path_display.clone().into(),
-        fit_label: locale.tr("viewer-image-fit-screen").into(),
-        actual_size_label: locale.tr("viewer-image-actual-size").into(),
-    }
-}
-
-fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -> ViewerPdfModel {
-    let available = !s.page_rgba_bytes.is_empty() && s.page_count > 0;
-    let image = if available {
-        let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-            s.page_rgba_bytes.as_slice(),
-            s.page_width_px,
-            s.page_height_px,
-        );
-        Image::from_rgba8(img)
-    } else {
-        Image::default()
-    };
-
-    let page_args = orchid_i18n::FluentArgs::new()
-        .with("current", s.current_page.to_string())
-        .with("total", s.page_count.to_string());
-    let info_args = orchid_i18n::FluentArgs::new()
-        .with("current", s.current_page.to_string())
-        .with("total", s.page_count.to_string())
-        .with("width", s.page_width_px.to_string())
-        .with("height", s.page_height_px.to_string())
-        .with("zoom", format!("{:.0}", s.zoom * 100.0));
-
-    ViewerPdfModel {
-        page_count: s.page_count as i32,
-        current_page: s.current_page as i32,
-        page_width_px: s.page_width_px as i32,
-        page_height_px: s.page_height_px as i32,
-        page_image: image,
-        zoom: s.zoom,
-        fit_mode: i32::from(s.fit_mode),
-        info_text: locale.tr_args("viewer-pdf-info", &info_args).into(),
-        path_display: s.path_display.clone().into(),
-        available,
-        unavailable_reason: if available {
-            SharedString::new()
-        } else {
-            locale.tr("viewer-pdf-unavailable").into()
-        },
-        page_of_label: locale.tr_args("viewer-pdf-page-of", &page_args).into(),
-        fit_width_label: locale.tr("viewer-pdf-fit-width").into(),
-        fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
-        go_label: locale.tr("viewer-pdf-go").into(),
-    }
-}
-
-fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager) -> ViewerTextModel {
-    let lines: Vec<ViewerSyntaxLine> = s
-        .visible_lines
-        .iter()
-        .map(|line| {
-            let segments: Vec<ViewerSyntaxSegment> = line
-                .segments
-                .iter()
-                .map(|seg| ViewerSyntaxSegment {
-                    text: seg.text.clone().into(),
-                    scope: syntax_scope_to_int(&seg.scope),
-                })
-                .collect();
-            ViewerSyntaxLine {
-                line_number: line.line_number as i32,
-                segments: ModelRc::new(VecModel::from(segments)),
-            }
-        })
-        .collect();
-
-    let line_ending_key = match s.line_ending.as_str() {
-        "CRLF" => "viewer-text-line-ending-crlf",
-        _ => "viewer-text-line-ending-lf",
-    };
-    ViewerTextModel {
-        language: viewer_syntax_label(locale, &s.language),
-        encoding: viewer_encoding_label(locale, &s.encoding),
-        line_ending: locale.tr(line_ending_key).into(),
-        dirty: s.dirty,
-        read_only: s.read_only,
-        total_lines: s.total_lines as i32,
-        first_visible_line: s.first_visible_line as i32,
-        cursor_line: s.cursor_line as i32,
-        cursor_col: s.cursor_column as i32,
-        visible_lines: ModelRc::new(VecModel::from(lines)),
-        info_text: SharedString::new(),
-        path_display: s.path_display.clone().into(),
-        plain_text: s.plain_text.clone().into(),
-        mode_label: if s.read_only {
-            locale.tr("viewer-text-read-only").into()
-        } else {
-            locale.tr("viewer-text-editing").into()
-        },
-        save_label: locale.tr("viewer-text-save").into(),
-        lines_label: locale
-            .tr_args(
-                "viewer-text-lines",
-                &orchid_i18n::FluentArgs::new().with("count", s.total_lines.to_string()),
-            )
-            .into(),
-    }
-}
-
-fn syntax_scope_to_int(scope: &orchid_viewers::SyntaxScope) -> i32 {
-    use orchid_viewers::SyntaxScope::*;
-    match scope {
-        Plain => 0,
-        Keyword => 1,
-        String => 2,
-        Number => 3,
-        Comment => 4,
-        Function => 5,
-        Type => 6,
-        Variable => 7,
-        Constant => 8,
-        Operator => 9,
-        Punctuation => 10,
-        Attribute => 11,
-        Preprocessor => 12,
-        Tag => 13,
-        Property => 14,
-        Error => 15,
-    }
-}
-
-fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleManager) -> ViewerArchiveModel {
-    let mut entries: Vec<ViewerArchiveEntry> = Vec::with_capacity(s.entries.len() + 1);
-
-    if !s.current_inner_path.is_empty() {
-        entries.push(ViewerArchiveEntry {
-            path_in_archive: SharedString::new(),
-            name: locale.tr("viewer-archive-parent").into(),
-            is_dir: true,
-            size_text: SharedString::new(),
-            modified_text: SharedString::new(),
-            icon: "up".into(),
-            is_up: true,
-        });
-    }
-
-    for e in &s.entries {
-        entries.push(ViewerArchiveEntry {
-            path_in_archive: e.path_in_archive.clone().into(),
-            name: e.name.clone().into(),
-            is_dir: e.is_dir,
-            size_text: locale.format_byte_size(e.size).into(),
-            modified_text: e.modified_text.clone().into(),
-            icon: e.icon.into(),
-            is_up: false,
-        });
-    }
-
-    let breadcrumbs: Vec<SharedString> = s
-        .current_inner_path
-        .split('/')
-        .filter(|seg| !seg.is_empty())
-        .map(|p| p.into())
-        .collect();
-
-    let (preview_kind, preview_text, preview_binary) = match &s.preview {
-        Some(orchid_viewers::ArchivePreview::Text(t)) => (1, t.clone().into(), SharedString::new()),
-        Some(orchid_viewers::ArchivePreview::Binary { size }) => {
-            let args = orchid_i18n::FluentArgs::new().with("size", locale.format_byte_size(*size));
-            (
-                2,
-                SharedString::new(),
-                locale.tr_args("viewer-archive-binary-preview", &args).into(),
-            )
-        }
-        None => (
-            0,
-            locale.tr("viewer-archive-select-preview").into(),
-            SharedString::new(),
-        ),
-    };
-
-    let has_file_selected = !s.selected_path.is_empty()
-        && s.entries.iter().any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
-
-    let header_args = orchid_i18n::FluentArgs::new()
-        .with("format", viewer_archive_format_label(locale, &s.format))
-        .with("count", s.total_entries.to_string());
-    let header_label: SharedString = locale.tr_args("viewer-archive-info", &header_args).into();
-    let path_label: SharedString = if s.current_inner_path.is_empty() {
-        locale.tr("viewer-archive-root").into()
-    } else {
-        s.current_inner_path.clone().into()
-    };
-
-    let info_text: SharedString = match &s.status {
-        orchid_viewers::ArchiveStatus::Idle => SharedString::new(),
-        orchid_viewers::ArchiveStatus::ExtractedSelected { path } => {
-            let args = orchid_i18n::FluentArgs::new().with("path", path.clone());
-            locale
-                .tr_args("viewer-archive-extracted-selected", &args)
-                .into()
-        }
-        orchid_viewers::ArchiveStatus::ExtractedAll { count, path } => {
-            let args = orchid_i18n::FluentArgs::new()
-                .with("count", count.to_string())
-                .with("path", path.clone());
-            locale.tr_args("viewer-archive-extracted-all", &args).into()
-        }
-    };
-
-    ViewerArchiveModel {
-        format: viewer_archive_format_label(locale, &s.format).into(),
-        total_entries: s.total_entries as i32,
-        current_inner_path: s.current_inner_path.clone().into(),
-        header_label,
-        path_label,
-        breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
-        entries: ModelRc::new(VecModel::from(entries)),
-        selected_path: s.selected_path.clone().into(),
-        has_file_selected,
-        extract_all_label: locale.tr("viewer-archive-extract-all").into(),
-        extract_selected_label: locale.tr("viewer-archive-extract-selected").into(),
-        nothing_selected_label: locale.tr("viewer-archive-nothing-selected").into(),
-        preview_kind,
-        preview_text,
-        preview_binary_size: preview_binary,
-        info_text,
-        path_display: s.path_display.clone().into(),
-    }
-}
-
-fn build_media_model(p: &orchid_widgets::MediaPlayerPayload, locale: &LocaleManager) -> MediaModel {
-    let (has_thumb, thumb_img) = p
-        .thumbnail_base64
-        .as_ref()
-        .and_then(|b64| {
-            let bytes = base64_decode(b64).ok()?;
-            let dyn_img = image::load_from_memory(&bytes).ok()?;
-            let rgba = dyn_img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            if w == 0 || h == 0 {
-                return None;
-            }
-            let buf =
-                slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_raw(), w, h);
-            Some((true, Image::from_rgba8(buf)))
-        })
-        .unwrap_or((false, Image::default()));
-    let empty_state_text = if p.is_loading {
-        locale.tr("media-loading").into()
-    } else if p.is_unsupported {
-        locale.tr("media-unsupported").into()
-    } else {
-        locale.tr("media-no-session").into()
-    };
-    MediaModel {
-        // Keep the empty/loading layout until a real session is ready.
-        has_session: p.has_session && !p.is_loading,
-        empty_state_text,
-        title: p.title.clone().into(),
-        artist: p.artist.clone().into(),
-        album: p.album.clone().into(),
-        source_app: p.source_app.clone().into(),
-        position: format_media_duration(p.position_secs).into(),
-        duration: format_media_duration(p.duration_secs).into(),
-        progress: p.progress_fraction.clamp(0.0, 1.0),
-        is_playing: p.is_playing,
-        has_thumbnail: has_thumb,
-        thumbnail: thumb_img,
-    }
-}
-
-fn format_media_duration(secs: u64) -> String {
-    let m = secs / 60;
-    let s = secs % 60;
-    format!("{m}:{s:02}")
-}
-
-fn build_password_model(
-    p: &orchid_widgets::PasswordManagerPayload,
-    toast: Option<(String, bool)>,
-    autofocus: bool,
-    add_dialog: PasswordAddDialogOverlay,
-    locale: &LocaleManager,
-) -> PasswordModel {
-    let entries: Vec<PasswordEntryItem> = p
-        .entries
-        .iter()
-        .map(|e| {
-            let tags: Vec<SharedString> = e.tags.iter().map(|t| t.clone().into()).collect();
-            PasswordEntryItem {
-                id: e.id.clone().into(),
-                title: e.title.clone().into(),
-                username: e.username.clone().into(),
-                url_host: e.url_host.clone().unwrap_or_default().into(),
-                has_totp: e.has_totp,
-                tags: ModelRc::new(VecModel::from(tags)),
-                color_label: e.color_label.clone().unwrap_or_default().into(),
-                modified: e.modified_text.clone().into(),
-            }
-        })
-        .collect();
-
-    let selected = match &p.selected {
-        Some(d) => {
-            let tags: Vec<PasswordTagChip> = d
-                .tags
-                .iter()
-                .map(|t| PasswordTagChip {
-                    label: t.clone().into(),
-                })
-                .collect();
-            let totp_remaining = d.totp_remaining_seconds as i32;
-            let totp_remaining_label = if d.totp_code.as_deref().unwrap_or("").is_empty() {
-                SharedString::new()
-            } else {
-                locale
-                    .tr_args(
-                        "password-totp-remaining",
-                        &orchid_i18n::FluentArgs::new().with("s", totp_remaining.to_string()),
-                    )
-                    .into()
-            };
-            PasswordDetail {
-                has_selection: true,
-                id: d.id.clone().into(),
-                title: d.title.clone().into(),
-                username: d.username.clone().into(),
-                url: d.url.clone().unwrap_or_default().into(),
-                notes: d.notes.clone().unwrap_or_default().into(),
-                totp_code: d.totp_code.clone().unwrap_or_default().into(),
-                totp_remaining,
-                totp_remaining_label,
-                tags: ModelRc::new(VecModel::from(tags)),
-            }
-        }
-        None => empty_password_detail(),
-    };
-
-    let (toast_msg, toast_vis) = toast.unwrap_or((String::new(), false));
-
-    let mut dialog = empty_password_add_dialog(locale);
-    dialog.visible = add_dialog.visible;
-    dialog.error = add_dialog.error.unwrap_or_default().into();
-    dialog.request_autofocus = add_dialog.request_autofocus;
-    dialog.gen_password = add_dialog.generated_password.unwrap_or_default().into();
-    dialog.gen_seq = add_dialog.generation_seq as i32;
-
-    PasswordModel {
-        is_unlocked: p.is_unlocked,
-        lock_reason: p
-            .lock_reason
-            .as_deref()
-            .map(|r| password_localized_error(locale, r))
-            .unwrap_or_default()
-            .into(),
-        biometric_available: p.biometric_available,
-        unlock_error: p
-            .unlock_error
-            .as_deref()
-            .map(|r| password_localized_error(locale, r))
-            .unwrap_or_default()
-            .into(),
-        entries: ModelRc::new(VecModel::from(entries)),
-        selected,
-        search_query: p.search_query.clone().into(),
-        toast_message: toast_msg.into(),
-        toast_visible: toast_vis,
-        request_autofocus: autofocus,
-        add_dialog: dialog,
-    }
-}
-
-fn build_search_model(
-    p: &orchid_widgets::UniversalSearchPayload,
-    locale: &LocaleManager,
-    selected: i32,
-    request_autofocus: bool,
-) -> SearchModel {
-    let candidates: Vec<SearchCandidateEntry> = p
-        .candidates
-        .iter()
-        .map(|c| {
-            let title: SharedString = match c.source_name.as_str() {
-                "commands" | "settings" => locale.tr(c.title.as_str()).into(),
-                _ => c.title.clone().into(),
-            };
-            let source_label = match c.source_name.as_str() {
-                "files" => locale.tr("search-source-files"),
-                "commands" => locale.tr("search-source-commands"),
-                "settings" => locale.tr("search-source-settings"),
-                _ => c.source_name.clone(),
-            };
-            let subtitle: SharedString = match &c.subtitle {
-                Some(s) => s.clone().into(),
-                None => source_label.clone().into(),
-            };
-            SearchCandidateEntry {
-                id: c.id.clone().into(),
-                source_name: source_label.into(),
-                source_icon: c.source_name.as_str().into(),
-                title,
-                subtitle,
-                shortcut: c.shortcut_hint.clone().unwrap_or_default().into(),
-            }
-        })
-        .collect();
-    let max = candidates.len() as i32;
-    let clamped = if candidates.is_empty() {
-        -1
-    } else {
-        selected.clamp(0, max - 1)
-    };
-    let error = p
-        .error
-        .as_deref()
-        .map(|e| search_localized_error(locale, e))
-        .unwrap_or_default();
-    let no_results_text = if !p.query.trim().is_empty() {
-        locale.tr_args(
-            "search-no-results",
-            &orchid_i18n::FluentArgs::new().with("query", p.query.clone()),
-        )
-    } else {
-        locale.tr("search-no-results-short")
-    };
-    SearchModel {
-        query: p.query.clone().into(),
-        candidates: ModelRc::new(VecModel::from(candidates)),
-        is_searching: p.is_searching,
-        error: error.into(),
-        selected_index: clamped,
-        placeholder_text: locale.tr("search-placeholder").into(),
-        empty_state_text: locale.tr("search-empty-state").into(),
-        no_results_text: no_results_text.into(),
-        searching_text: locale.tr("search-searching").into(),
-        request_autofocus,
-    }
-}
-
-fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManager) -> WeatherModel {
-    let condition_label = if p.is_loading {
-        locale.tr("weather-loading")
-    } else if p.status == orchid_widgets::WeatherStatusTag::Error {
-        locale.tr("weather-status-error")
-    } else {
-        locale.tr(p.condition_key)
-    };
-
-    let forecast: Vec<WeatherForecastEntry> = if p.is_loading {
-        Vec::new()
-    } else {
-        p.forecast
-            .iter()
-            .map(|d| {
-                let day_label = match d.day_index {
-                    0 => locale.tr("weather-day-today"),
-                    1 => locale.tr("weather-day-tomorrow"),
-                    _ => d.weekday_label.clone().unwrap_or_default(),
-                };
-                let range_text = locale.tr_args(
-                    "weather-forecast-range",
-                    &orchid_i18n::FluentArgs::new()
-                        .with("high", d.high_text.as_str())
-                        .with("low", d.low_text.as_str()),
-                );
-                let precip_text = d
-                    .precipitation_probability
-                    .map(|pct| {
-                        locale.tr_args(
-                            "weather-precip-chance",
-                            &orchid_i18n::FluentArgs::new().with("pct", pct.to_string()),
-                        )
-                    })
-                    .unwrap_or_default();
-                WeatherForecastEntry {
-                    day_label: day_label.into(),
-                    range_text: range_text.into(),
-                    icon: d.condition_icon.into(),
-                    precip_text: precip_text.into(),
-                }
-            })
-            .collect()
-    };
-
-    let feels_like = if p.is_loading {
-        String::new()
-    } else {
-        p.feels_like_temp
-            .as_ref()
-            .map(|temp| {
-                locale.tr_args(
-                    "weather-feels-like",
-                    &orchid_i18n::FluentArgs::new().with("temp", temp.clone()),
-                )
-            })
-            .unwrap_or_default()
-    };
-
-    let humidity = if p.is_loading {
-        String::new()
-    } else {
-        p.humidity_percent
-            .map(|h| {
-                locale.tr_args(
-                    "weather-humidity-line",
-                    &orchid_i18n::FluentArgs::new()
-                        .with("label", locale.tr("weather-humidity-label"))
-                        .with("h", h.to_string()),
-                )
-            })
-            .unwrap_or_default()
-    };
-
-    let wind = if p.is_loading {
-        String::new()
-    } else {
-        match (p.wind_speed_kph, p.wind_direction.as_deref()) {
-            (Some(kph), Some(dir_key)) if !dir_key.is_empty() => {
-                let dir = if dir_key.starts_with("weather-wind-") {
-                    locale.tr(dir_key)
-                } else {
-                    // Legacy payloads may still carry English compass abbreviations.
-                    dir_key.to_string()
-                };
-                locale.tr_args(
-                    "weather-wind-line",
-                    &orchid_i18n::FluentArgs::new()
-                        .with("label", locale.tr("weather-wind-label"))
-                        .with("speed", format!("{kph:.0}"))
-                        .with("dir", dir),
-                )
-            }
-            (Some(kph), _) => locale.tr_args(
-                "weather-wind-line-no-dir",
-                &orchid_i18n::FluentArgs::new()
-                    .with("label", locale.tr("weather-wind-label"))
-                    .with("speed", format!("{kph:.0}")),
-            ),
-            _ => String::new(),
-        }
-    };
-
-    let last_updated = if p.is_loading {
-        locale.tr("weather-loading")
-    } else if p.status == orchid_widgets::WeatherStatusTag::Error {
-        locale.tr("weather-status-error")
-    } else {
-        p.fetched_at
-            .map(|at| format_weather_updated(at, locale))
-            .unwrap_or_default()
-    };
-
-    let status = weather_status_to_int(&p.status);
-    WeatherModel {
-        location: p.location_name.clone().into(),
-        current_temp: if p.is_loading {
-            SharedString::new()
-        } else {
-            p.current_temp_text.clone().into()
-        },
-        condition_label: condition_label.into(),
-        condition_icon: if p.is_loading {
-            SharedString::new()
-        } else {
-            p.condition_icon.into()
-        },
-        feels_like: feels_like.into(),
-        humidity: humidity.into(),
-        wind: wind.into(),
-        forecast: ModelRc::new(VecModel::from(forecast)),
-        last_updated: last_updated.into(),
-        status,
-        status_label: locale.tr(weather_status_i18n_key(status)).into(),
-    }
-}
-
-fn format_weather_updated(at: chrono::DateTime<chrono::Utc>, locale: &LocaleManager) -> String {
-    let secs = (chrono::Utc::now() - at).num_seconds().max(0);
-    if secs < 60 {
-        locale.tr("weather-updated-just-now")
-    } else if secs < 3600 {
-        locale.tr_args(
-            "weather-updated-minutes",
-            &orchid_i18n::FluentArgs::new().with("m", (secs / 60).to_string()),
-        )
-    } else if secs < 86400 {
-        locale.tr_args(
-            "weather-updated-hours",
-            &orchid_i18n::FluentArgs::new().with("h", (secs / 3600).to_string()),
-        )
-    } else {
-        locale.tr_args(
-            "weather-updated-days",
-            &orchid_i18n::FluentArgs::new().with("d", (secs / 86400).to_string()),
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use orchid_i18n::default_language;
-
-    fn test_locale() -> LocaleManager {
-        LocaleManager::new(default_language(), None).expect("locale")
-    }
-
-    fn sample_media_payload() -> orchid_widgets::MediaPlayerPayload {
-        orchid_widgets::MediaPlayerPayload {
-            has_session: true,
-            title: "t".into(),
-            artist: "a".into(),
-            album: "al".into(),
-            source_app: "app".into(),
-            position_secs: 0,
-            duration_secs: 60,
-            progress_fraction: 0.5,
-            is_playing: true,
-            thumbnail_base64: None,
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn media_empty_state_text() {
-        let locale = test_locale();
-        let loading = build_media_model(
-            &orchid_widgets::MediaPlayerPayload {
-                is_loading: true,
-                ..Default::default()
-            },
-            &locale,
-        );
-        assert_eq!(loading.empty_state_text.as_str(), "Loading media…");
-        assert!(!loading.has_session);
-
-        let loading_with_session = build_media_model(
-            &orchid_widgets::MediaPlayerPayload {
-                has_session: true,
-                is_loading: true,
-                ..Default::default()
-            },
-            &locale,
-        );
-        assert!(!loading_with_session.has_session);
-
-        let unsupported = build_media_model(
-            &orchid_widgets::MediaPlayerPayload {
-                is_unsupported: true,
-                ..Default::default()
-            },
-            &locale,
-        );
-        assert_eq!(
-            unsupported.empty_state_text.as_str(),
-            "Media controls are not available on this platform"
-        );
-    }
-
-    #[test]
-    fn media_progress_clamps() {
-        let mut p = sample_media_payload();
-        p.progress_fraction = 1.5;
-        let m = build_media_model(&p, &test_locale());
-        assert!(m.progress <= 1.0);
-
-        p.progress_fraction = -0.3;
-        let m = build_media_model(&p, &test_locale());
-        assert!(m.progress >= 0.0);
-    }
-
-    #[test]
-    fn format_weather_updated_uses_locale_keys() {
-        let locale = test_locale();
-        let at = chrono::Utc::now() - chrono::Duration::seconds(30);
-        assert_eq!(
-            format_weather_updated(at, &locale),
-            locale.tr("weather-updated-just-now")
-        );
-    }
-
-    #[test]
-    fn build_weather_model_localizes_humidity_and_wind() {
-        let locale = test_locale();
-        let model = build_weather_model(
-            &orchid_widgets::WeatherPayload {
-                location_name: "Home".into(),
-                current_temp_text: "20°C".into(),
-                feels_like_temp: None,
-                condition_key: "weather-condition-clear",
-                condition_icon: "weather-clear",
-                humidity_percent: Some(45),
-                wind_speed_kph: Some(12.0),
-                wind_direction: Some("weather-wind-ne".into()),
-                forecast: vec![],
-                fetched_at: None,
-                is_loading: false,
-                status: orchid_widgets::WeatherStatusTag::Fresh,
-            },
-            &locale,
-        );
-        assert_eq!(
-            model.humidity.as_str(),
-            locale.tr_args(
-                "weather-humidity-line",
-                &orchid_i18n::FluentArgs::new()
-                    .with("label", locale.tr("weather-humidity-label"))
-                    .with("h", "45"),
-            )
-        );
-        assert!(model.wind.as_str().contains("NE"));
-        assert!(model.wind.as_str().contains("12"));
-    }
-}
-
-fn weather_status_to_int(s: &orchid_widgets::WeatherStatusTag) -> i32 {
-    use orchid_widgets::WeatherStatusTag::*;
-    match s {
-        Fresh => 0,
-        Stale => 1,
-        Offline => 2,
-        Error => 3,
-    }
-}
-
-fn weather_status_i18n_key(status: i32) -> &'static str {
-    match status {
-        0 => "weather-status-fresh",
-        1 => "weather-status-stale",
-        2 => "weather-status-offline",
-        _ => "weather-status-error",
-    }
-}
-
-fn build_moon_model(p: &orchid_widgets::MoonPayload, locale: &LocaleManager) -> MoonModel {
-    let phase_label = if p.is_loading {
-        locale.tr("moon-loading")
-    } else {
-        locale.tr(p.phase_key)
-    };
-
-    let illumination = p
-        .illumination_percent
-        .map(|pct| {
-            locale.tr_args(
-                "moon-illumination",
-                &orchid_i18n::FluentArgs::new().with("pct", format!("{pct:.0}")),
-            )
-        })
-        .unwrap_or_default();
-
-    let mut values = Vec::new();
-    if let Some(days) = p.age_days {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-age-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-age",
-                    &orchid_i18n::FluentArgs::new().with("days", format!("{days:.1}")),
-                )
-                .into(),
-        });
-    }
-    if let Some(km) = p.distance_km {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-distance-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-distance",
-                    &orchid_i18n::FluentArgs::new().with("km", format!("{km:.0}")),
-                )
-                .into(),
-        });
-    }
-    if let Some(ref date) = p.next_full_date {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-next-full-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-next-full",
-                    &orchid_i18n::FluentArgs::new().with("date", date.clone()),
-                )
-                .into(),
-        });
-    }
-    if let Some(ref date) = p.next_new_date {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-next-new-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-next-new",
-                    &orchid_i18n::FluentArgs::new().with("date", date.clone()),
-                )
-                .into(),
-        });
-    }
-    if let Some(ref time) = p.moonrise_time {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-moonrise-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-moonrise",
-                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
-                )
-                .into(),
-        });
-    }
-    if let Some(ref time) = p.moonset_time {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-moonset-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-moonset",
-                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
-                )
-                .into(),
-        });
-    }
-    if let Some(ref time) = p.sunrise_time {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-sunrise-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-sunrise",
-                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
-                )
-                .into(),
-        });
-    }
-    if let Some(ref time) = p.sunset_time {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-sunset-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-sunset",
-                    &orchid_i18n::FluentArgs::new().with("time", time.clone()),
-                )
-                .into(),
-        });
-    }
-    if let (Some(lat), Some(lon)) = (p.libration_lat_deg, p.libration_lon_deg) {
-        values.push(MoonValueEntry {
-            label: locale.tr("moon-libration-label").into(),
-            value: locale
-                .tr_args(
-                    "moon-libration",
-                    &orchid_i18n::FluentArgs::new()
-                        .with("lat", format!("{lat:.1}"))
-                        .with("lon", format!("{lon:.1}")),
-                )
-                .into(),
-        });
-    }
-
-    MoonModel {
-        phase_label: phase_label.into(),
-        phase_icon: p.phase_icon.into(),
-        illumination: illumination.into(),
-        values: ModelRc::new(VecModel::from(values)),
-    }
-}
-
-fn build_system_model(p: &orchid_widgets::SystemPayload, locale: &LocaleManager) -> SystemModel {
-    if p.is_loading {
-        return empty_system_model(locale);
-    }
-    let indicators: Vec<SystemIndicatorEntry> = p
-        .indicators
-        .iter()
-        .map(|i| {
-            let label = system_indicator_label(i, locale);
-            let value_text = system_indicator_value(i, locale);
-            let status = indicator_status_to_int(&i.status);
-            let status_hint = system_indicator_status_hint(locale, &label, &value_text, status);
-            SystemIndicatorEntry {
-                label,
-                value_text,
-                percent: i
-                    .percent
-                    .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
-                    .unwrap_or(-1.0),
-                icon: i.icon.into(),
-                status,
-                status_hint,
-            }
-        })
-        .collect();
-
-    SystemModel {
-        indicators: ModelRc::new(VecModel::from(indicators)),
-    }
-}
-
-fn system_indicator_status_hint(
-    locale: &LocaleManager,
-    label: &SharedString,
-    value_text: &SharedString,
-    status: i32,
-) -> SharedString {
-    let key = match status {
-        2 => "system-status-critical",
-        1 => "system-status-warning",
-        _ => return SharedString::new(),
-    };
-    locale
-        .tr_args(
-            key,
-            &orchid_i18n::FluentArgs::new()
-                .with("label", label.as_str())
-                .with("value", value_text.as_str()),
-        )
-        .into()
-}
-
-fn system_indicator_label(
-    i: &orchid_widgets::SystemIndicator,
-    locale: &LocaleManager,
-) -> SharedString {
-    use orchid_widgets::SystemIndicatorKind;
-    match i.kind {
-        SystemIndicatorKind::Cpu => locale.tr("system-cpu-label").into(),
-        SystemIndicatorKind::Memory => locale.tr("system-memory-label").into(),
-        SystemIndicatorKind::Disk => locale
-            .tr_args(
-                "system-disk-label",
-                &orchid_i18n::FluentArgs::new().with(
-                    "mount",
-                    i.name_suffix.clone().unwrap_or_default(),
-                ),
-            )
-            .into(),
-        SystemIndicatorKind::Network => locale
-            .tr_args(
-                "system-network-label",
-                &orchid_i18n::FluentArgs::new().with(
-                    "name",
-                    i.name_suffix.clone().unwrap_or_default(),
-                ),
-            )
-            .into(),
-        SystemIndicatorKind::Battery => locale.tr("system-battery-label").into(),
-        SystemIndicatorKind::Uptime => locale.tr("system-uptime-label").into(),
-    }
-}
-
-fn system_indicator_value(
-    i: &orchid_widgets::SystemIndicator,
-    locale: &LocaleManager,
-) -> SharedString {
-    use orchid_widgets::SystemIndicatorKind;
-    if i.kind == SystemIndicatorKind::Network {
-        locale
-            .tr_args(
-                "system-network-rate",
-                &orchid_i18n::FluentArgs::new()
-                    .with("up", i.network_up.clone().unwrap_or_default())
-                    .with("down", i.network_down.clone().unwrap_or_default()),
-            )
-            .into()
-    } else {
-        i.value_text.clone().into()
-    }
-}
-
-fn indicator_status_to_int(s: &orchid_widgets::IndicatorStatus) -> i32 {
-    use orchid_widgets::IndicatorStatus::*;
-    match s {
-        Normal => 0,
-        Warning => 1,
-        Critical => 2,
-    }
-}
 
 /// Slint `KeyboardModifiers` → [`orchid_core::Modifiers`].
 fn slint_kb_modifiers(ctrl: bool, shift: bool, alt: bool) -> orchid_core::Modifiers {
