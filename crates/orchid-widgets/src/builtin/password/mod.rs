@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
+use crate::widget::config as state_codec;
 use crate::widget::payloads::{
     PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
 };
@@ -25,6 +26,13 @@ use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
 use orchid_storage::{LifecycleState, WidgetSize};
+
+/// Non-secret UI prefs (search filter + last selection). Never stores credentials.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct PasswordPersisted {
+    search_query: String,
+    selected_id: Option<Uuid>,
+}
 
 /// Stable type id.
 pub const TYPE_ID: &str = "password-manager";
@@ -264,7 +272,7 @@ impl PasswordHandle {
         state.selected_id = None;
         state.error = None;
         state.unlock_error = None;
-        state.search_query.clear();
+        // Keep `search_query` so UI filter prefs survive lock and persist across restarts.
     }
 
     fn refresh_entries(&self, query: Option<String>) {
@@ -494,9 +502,17 @@ impl Widget for PasswordManagerWidget {
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        Ok(Vec::new())
+        let state = self.inner.state.read();
+        state_codec::save_state(&PasswordPersisted {
+            search_query: state.search_query.clone(),
+            selected_id: state.selected_id,
+        })
     }
-    fn restore_state(&mut self, _bytes: &[u8]) -> WidgetResult<()> {
+    fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
+        let persisted: PasswordPersisted = state_codec::restore_state(bytes)?;
+        let mut state = self.inner.state.write();
+        state.search_query = persisted.search_query;
+        state.selected_id = persisted.selected_id;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -506,7 +522,7 @@ impl Widget for PasswordManagerWidget {
             max_size: None,
             preferred_size: Some(WidgetSize::Large),
             allows_grouping: false,
-            keeps_state_when_unloaded: false,
+            keeps_state_when_unloaded: true,
             has_settings_panel: false,
         }
     }
@@ -619,13 +635,28 @@ pub fn descriptor(
     clipboard: Arc<dyn orchid_crypto::SecureClipboard>,
 ) -> WidgetDescriptor {
     let deps = PasswordDeps { vault, clipboard };
-    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, _bytes| {
-        Ok(Box::new(PasswordManagerWidget::new(
+    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
+        let persisted = match state_bytes {
+            Some(bytes) => {
+                state_codec::restore_state::<PasswordPersisted>(bytes).unwrap_or_default()
+            }
+            None => PasswordPersisted::default(),
+        };
+        let widget = PasswordManagerWidget::new(
             ctx.instance_id,
             deps.clone(),
             ctx.bus.clone(),
             ctx.locale.clone(),
-        )) as Box<dyn Widget>)
+        );
+        {
+            let mut state = widget.inner.state.write();
+            state.search_query = persisted.search_query;
+            state.selected_id = persisted.selected_id;
+        }
+        if widget.inner.deps.vault.is_unlocked() {
+            widget.inner.refresh_entries(None);
+        }
+        Ok(Box::new(widget) as Box<dyn Widget>)
     });
     WidgetDescriptor {
         type_id: TYPE_ID,
