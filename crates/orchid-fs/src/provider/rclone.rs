@@ -100,7 +100,7 @@ impl RcloneProvider {
                 reason: format!(
                     "rclone {} failed: {}",
                     args.first().copied().unwrap_or(""),
-                    stderr.trim()
+                    redact_secrets(stderr.trim())
                 ),
             })
         }
@@ -202,7 +202,7 @@ impl RcloneProvider {
                 reason: format!(
                     "rclone {} failed: {}",
                     args.first().copied().unwrap_or(""),
-                    stderr.trim()
+                    redact_secrets(stderr.trim())
                 ),
             })
         }
@@ -286,7 +286,7 @@ impl RcloneProvider {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(FsError::InvalidPath {
-                reason: format!("rclone lsjson failed: {}", stderr.trim()),
+                reason: format!("rclone lsjson failed: {}", redact_secrets(stderr.trim())),
             });
         }
         if output.stdout.is_empty() {
@@ -401,7 +401,7 @@ impl FsProvider for RcloneProvider {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(FsError::InvalidPath {
-                reason: format!("rclone cat failed: {}", stderr.trim()),
+                reason: format!("rclone cat failed: {}", redact_secrets(stderr.trim())),
             });
         }
         Ok(output.stdout)
@@ -444,7 +444,7 @@ impl FsProvider for RcloneProvider {
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             Err(FsError::InvalidPath {
-                reason: format!("rclone rcat failed: {}", stderr.trim()),
+                reason: format!("rclone rcat failed: {}", redact_secrets(stderr.trim())),
             })
         }
     }
@@ -737,6 +737,52 @@ fn parse_rclone_stats_percent(line: &str) -> Option<u64> {
         .map(str::trim)
         .find(|part| part.ends_with('%'))
         .and_then(|part| part.trim_end_matches('%').trim().parse().ok())
+}
+
+/// Strip inline credentials from rclone stderr / connection strings before they
+/// reach logs or UI error strings.
+fn redact_secrets(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Match `pass=` case-insensitively and redact until `,` / `:` / whitespace / end.
+        let rest = &text[i..];
+        let lower = rest.to_ascii_lowercase();
+        if let Some(rel) = lower.find("pass=") {
+            out.push_str(&text[i..i + rel]);
+            out.push_str("pass=***");
+            i += rel + "pass=".len();
+            while i < bytes.len() {
+                let c = bytes[i] as char;
+                if c == ',' || c == ':' || c.is_whitespace() {
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        out.push_str(rest);
+        break;
+    }
+    out
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact_secrets;
+
+    #[test]
+    fn redacts_pass_in_connection_string() {
+        let s = redact_secrets("rclone failed: :sftp,host=h,pass=s3cret:/path");
+        assert!(!s.contains("s3cret"));
+        assert!(s.contains("pass=***"));
+    }
+
+    #[test]
+    fn leaves_unrelated_text() {
+        assert_eq!(redact_secrets("permission denied"), "permission denied");
+    }
 }
 
 /// Register one [`RcloneProvider`] per supported scheme.
