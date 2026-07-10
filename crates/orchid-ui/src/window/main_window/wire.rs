@@ -4,6 +4,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
 
+use slint::ComponentHandle;
+
 use tracing::warn;
 use uuid::Uuid;
 
