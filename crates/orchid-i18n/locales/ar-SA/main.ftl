@@ -385,6 +385,7 @@ viewer-archive-extracted-all = ØªÙ… Ø§Ø³ØªØ®Ø±Ø§Ø¬ { $count }
 viewer-archive-nothing-selected = Ù„Ù… ÙŠØªÙ… ØªØ­Ø¯ÙŠØ¯ Ø£ÙŠ Ø´ÙŠØ¡ Ù„Ù„Ø§Ø³ØªØ®Ø±Ø§Ø¬
 viewer-archive-cannot-extract-folder = Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ù…Ø¬Ù„Ø¯
 viewer-action-failed = ÙØ´Ù„Øª Ø¹Ù…Ù„ÙŠØ© Ø§Ù„Ø¹Ø§Ø±Ø¶: { $reason }
+viewer-multi-open-capped = تم فتح { $opened } من { $cap } ملفًا ({ $skipped } تم تخطيها للحفاظ على استجابة الواجهة)
 viewer-text-save-failed = ØªØ¹Ø°Ø± Ø­ÙØ¸ Ø§Ù„Ù…Ù„Ù: { $reason }
 viewer-text-read-only = Ù„Ù„Ù‚Ø±Ø§Ø¡Ø© ÙÙ‚Ø·
 viewer-text-editing = ØªØ­Ø±ÙŠØ±

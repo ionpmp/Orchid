@@ -384,6 +384,7 @@ viewer-archive-extracted-all = { $count } ä»¶ã‚’ { $path } ã«å±•
 viewer-archive-nothing-selected = å±•é–‹ã™ã‚‹é …ç›®ãŒé¸æŠžã•ã‚Œã¦ã„ã¾ã›ã‚“
 viewer-archive-cannot-extract-folder = ãƒ•ã‚©ãƒ«ãƒ€ãƒ¼ã¯å±•é–‹ã§ãã¾ã›ã‚“
 viewer-action-failed = ãƒ“ãƒ¥ãƒ¼ã‚¢ãƒ¼æ“ä½œã«å¤±æ•—ã—ã¾ã—ãŸ: { $reason }
+viewer-multi-open-capped = { $cap } 件中 { $opened } 件を開きました（応答性のため { $skipped } 件をスキップ）
 viewer-text-save-failed = ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä¿å­˜ã§ãã¾ã›ã‚“ã§ã—ãŸ: { $reason }
 viewer-text-read-only = èª­ã¿å–ã‚Šå°‚ç”¨
 viewer-text-editing = ç·¨é›†ä¸­

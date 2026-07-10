@@ -2453,18 +2453,17 @@ pub async fn run_action_with_opts(
                 ActivePane::Left => 0,
                 ActivePane::Right => 1,
             };
-            return open_path(instance_id, pane, p, false).await;
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            let is_dir = entry_is_directory(&inner, &fp, false).await;
+            return open_path(instance_id, pane, p, is_dir).await;
         }
         "fs.open-all" => {
             let mut files = Vec::new();
             for p in target_paths {
                 let fp = orchid_fs::FsPath::new(&p).map_err(map_fs_error)?;
-                if let Some(provider) = inner.deps.registry.for_path(&fp) {
-                    if let Ok(meta) = provider.metadata(&fp).await {
-                        if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
-                            continue;
-                        }
-                    }
+                // Skip directories even when provider metadata fails (OS fallback in helper).
+                if entry_is_directory(&inner, &fp, false).await {
+                    continue;
                 }
                 files.push(p);
             }
@@ -2976,6 +2975,15 @@ async fn entry_is_directory(
     if let Some(provider) = inner.deps.registry.for_path(fp) {
         if let Ok(meta) = provider.metadata(fp).await {
             return matches!(meta.kind, orchid_fs::FsEntryKind::Directory);
+        }
+    }
+    // Provider metadata can fail under load; fall back to OS + UI hint.
+    if let Ok(local) = fp.to_local() {
+        if local.is_dir() {
+            return true;
+        }
+        if local.is_file() {
+            return false;
         }
     }
     is_dir_hint

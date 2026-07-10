@@ -384,6 +384,7 @@ viewer-archive-extracted-all = ExtraÃ­das { $count } entradas en { $path }
 viewer-archive-nothing-selected = No hay nada seleccionado para extraer
 viewer-archive-cannot-extract-folder = No se puede extraer una carpeta
 viewer-action-failed = FallÃ³ la acciÃ³n del visor: { $reason }
+viewer-multi-open-capped = Se abrieron { $opened } de { $cap } archivos ({ $skipped } omitidos para mantener la interfaz fluida)
 viewer-text-save-failed = No se pudo guardar el archivo: { $reason }
 viewer-text-read-only = Solo lectura
 viewer-text-editing = EdiciÃ³n

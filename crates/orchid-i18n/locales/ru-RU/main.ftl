@@ -372,6 +372,7 @@ viewer-archive-extracted-all = Ð˜Ð·Ð²Ð»ÐµÑ‡ÐµÐ½Ð¾ { $count } 
 viewer-archive-nothing-selected = ÐÐ¸Ñ‡ÐµÐ³Ð¾ Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð¾ Ð´Ð»Ñ Ð¸Ð·Ð²Ð»ÐµÑ‡ÐµÐ½Ð¸Ñ
 viewer-archive-cannot-extract-folder = ÐÐµÐ»ÑŒÐ·Ñ Ð¸Ð·Ð²Ð»ÐµÑ‡ÑŒ Ð¿Ð°Ð¿ÐºÑƒ
 viewer-action-failed = Ð”ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€Ñ‰Ð¸ÐºÐ° Ð½Ðµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ: { $reason }
+viewer-multi-open-capped = Открыто { $opened } из { $cap } файлов ({ $skipped } пропущено, чтобы интерфейс оставался отзывчивым)
 viewer-text-save-failed = ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ñ„Ð°Ð¹Ð»: { $reason }
 viewer-text-read-only = Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ñ‡Ñ‚ÐµÐ½Ð¸Ðµ
 viewer-text-editing = Ð ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ðµ

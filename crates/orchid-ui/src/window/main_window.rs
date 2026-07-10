@@ -4533,7 +4533,7 @@ impl MainWindowController {
         let path_label = s.to_string();
         let ctrl = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
-            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true).await {
+            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true, true).await {
                 warn!(?e, path = %path_label, "open recent file in viewer");
             }
         }));
@@ -6247,6 +6247,8 @@ impl MainWindowController {
     fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
         let _ = slint::spawn_local(Compat::new(async move {
+            let mut opened = 0usize;
+            let mut skipped = 0usize;
             for p in paths {
                 let Ok(fp) = orchid_fs::FsPath::new(&p) else {
                     continue;
@@ -6261,10 +6263,28 @@ impl MainWindowController {
                 if !os.is_file() {
                     continue;
                 }
-                // Multi-file open: one viewer widget per path (do not stomp).
-                let _ = Self::open_in_viewer_for_controller(tw.clone(), fp, false).await;
+                if opened >= Self::VIEWER_MULTI_OPEN_CAP {
+                    skipped += 1;
+                    continue;
+                }
+                // Multi-file open: one viewer per path; rebuild once after the batch.
+                if Self::open_in_viewer_for_controller(tw.clone(), fp, false, false)
+                    .await
+                    .is_ok()
+                {
+                    opened += 1;
+                }
             }
             if let Some(c) = tw.upgrade() {
+                if skipped > 0 {
+                    let title = c.locale.tr("widget-viewer-name");
+                    let args = orchid_i18n::FluentArgs::new()
+                        .with("opened", opened.to_string())
+                        .with("skipped", skipped.to_string())
+                        .with("cap", Self::VIEWER_MULTI_OPEN_CAP.to_string());
+                    let body = c.locale.tr_args("viewer-multi-open-capped", &args);
+                    c.push_notification(&title, &body, 2);
+                }
                 c.schedule_rebuild();
             }
         }));
@@ -6497,7 +6517,19 @@ impl MainWindowController {
         }));
     }
 
+    /// Soft cap for multi-file "open in viewer" to avoid creating dozens of widgets
+    /// and flooding the UI rebuild loop (hang / OOM).
+    const VIEWER_MULTI_OPEN_CAP: usize = 8;
+
     fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
+        self.fm_selected_entries(inst, pane)
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect()
+    }
+
+    /// Selected FM entries as `(path, is_dir)` from the cached snapshot.
+    fn fm_selected_entries(&self, inst: Uuid, pane: u8) -> Vec<(String, bool)> {
         let cache = self.widget_manager.snapshot_cache();
         let Some(snap) = cache.get(inst).map(|s| (*s).clone()) else {
             return Vec::new();
@@ -6515,8 +6547,31 @@ impl MainWindowController {
         tab.entries
             .iter()
             .filter(|e| e.is_selected)
-            .map(|e| e.path.clone())
+            .map(|e| (e.path.clone(), e.is_dir))
             .collect()
+    }
+
+    /// Look up `is_dir` for a path in the FM snapshot (fallback `false`).
+    fn fm_entry_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(snap) = cache.get(inst) else {
+            return false;
+        };
+        let WidgetPayload::FileManager(fm) = &snap.payload else {
+            return false;
+        };
+        let pane_idx = usize::from(pane.min(1));
+        let Some(pane) = fm.panes.get(pane_idx) else {
+            return false;
+        };
+        let Some(tab) = pane.tabs.get(pane.active_tab as usize) else {
+            return false;
+        };
+        tab.entries
+            .iter()
+            .find(|e| e.path == path)
+            .map(|e| e.is_dir)
+            .unwrap_or(false)
     }
 
     /// Open `path` in a viewer on the active workspace.
@@ -6524,10 +6579,14 @@ impl MainWindowController {
     /// When `reuse_existing` is true, replace content in the first viewer widget
     /// (single-file open / recent files). When false, always create a new viewer
     /// so multi-select open and multi-file drag keep every file.
+    ///
+    /// When `schedule_rebuild` is false, the caller must rebuild once after a batch
+    /// (avoids N full workspace rebuilds that freeze the UI).
     async fn open_in_viewer_for_controller(
         ctrl: std::sync::Weak<MainWindowController>,
         path: orchid_fs::FsPath,
         reuse_existing: bool,
+        schedule_rebuild: bool,
     ) -> Result<Uuid> {
         let Some(c) = ctrl.upgrade() else {
             return Err(UiError::Slint("controller gone".into()));
@@ -6545,8 +6604,10 @@ impl MainWindowController {
                         .await
                         .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
                     c.recent_files.touch(&path, Some(&c.bus));
-                    if let Some(c2) = ctrl.upgrade() {
-                        c2.schedule_rebuild();
+                    if schedule_rebuild {
+                        if let Some(c2) = ctrl.upgrade() {
+                            c2.schedule_rebuild();
+                        }
                     }
                     return Ok(inst.id);
                 }
@@ -6573,12 +6634,17 @@ impl MainWindowController {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
 
+        // Place off the (0,0) placeholder so stacked multi-open widgets stay usable.
+        Self::move_new_widget_to_free_slot(&c.layout_engine, &c.widget_manager, ws_id, id).await;
+
         orchid_widgets::builtin::viewer::open_path(id, path.clone())
             .await
             .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
         c.recent_files.touch(&path, Some(&c.bus));
-        if let Some(c2) = ctrl.upgrade() {
-            c2.schedule_rebuild();
+        if schedule_rebuild {
+            if let Some(c2) = ctrl.upgrade() {
+                c2.schedule_rebuild();
+            }
         }
         Ok(id)
     }
@@ -6657,11 +6723,11 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
-        let paths = self.fm_selected_paths(inst, p);
-        let Some(path) = paths.first() else {
+        let entries = self.fm_selected_entries(inst, p);
+        let Some((path, is_dir)) = entries.first() else {
             return;
         };
-        self.fm_dispatch_open(inst, p, path.clone(), false);
+        self.fm_dispatch_open(inst, p, path.clone(), *is_dir);
     }
 
     fn on_fm_entry_drag_start(self: &Arc<Self>, fm_id: &SharedString, pane: i32, _path: &SharedString) {
@@ -7108,7 +7174,8 @@ impl MainWindowController {
         if behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
             return;
         }
-        self.fm_dispatch_open(inst, p, ps, false);
+        let is_dir = self.fm_entry_is_dir(inst, p, &ps);
+        self.fm_dispatch_open(inst, p, ps, is_dir);
     }
 
     fn on_fm_entry_shift_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
@@ -7399,7 +7466,7 @@ impl MainWindowController {
                 let tw2 = Arc::downgrade(self);
                 let _ = slint::spawn_local(Compat::new(async move {
                     let _ = MainWindowController::open_in_viewer_for_controller(
-                        tw2, fs_path, true,
+                        tw2, fs_path, true, true,
                     )
                     .await;
                 }));
@@ -7407,17 +7474,43 @@ impl MainWindowController {
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany { paths } => {
                 let tw2 = Arc::downgrade(self);
                 let _ = slint::spawn_local(Compat::new(async move {
+                    let mut opened = 0usize;
+                    let mut skipped = 0usize;
                     for path in paths {
                         let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
                             continue;
                         };
-                        // One widget per path — reusing would keep only the last file.
-                        let _ = MainWindowController::open_in_viewer_for_controller(
+                        if opened >= MainWindowController::VIEWER_MULTI_OPEN_CAP {
+                            skipped += 1;
+                            continue;
+                        }
+                        // One widget per path; rebuild once after the batch.
+                        if MainWindowController::open_in_viewer_for_controller(
                             tw2.clone(),
                             fs_path,
                             false,
+                            false,
                         )
-                        .await;
+                        .await
+                        .is_ok()
+                        {
+                            opened += 1;
+                        }
+                    }
+                    if let Some(c) = tw2.upgrade() {
+                        if skipped > 0 {
+                            let title = c.locale.tr("widget-viewer-name");
+                            let args = orchid_i18n::FluentArgs::new()
+                                .with("opened", opened.to_string())
+                                .with("skipped", skipped.to_string())
+                                .with(
+                                    "cap",
+                                    MainWindowController::VIEWER_MULTI_OPEN_CAP.to_string(),
+                                );
+                            let body = c.locale.tr_args("viewer-multi-open-capped", &args);
+                            c.push_notification(&title, &body, 2);
+                        }
+                        c.schedule_rebuild();
                     }
                 }));
             }

@@ -384,6 +384,7 @@ viewer-archive-extracted-all = { $count } EintrÃ¤ge extrahiert nach { $path }
 viewer-archive-nothing-selected = Nichts zum Extrahieren ausgewÃ¤hlt
 viewer-archive-cannot-extract-folder = Ordner kÃ¶nnen nicht extrahiert werden
 viewer-action-failed = Viewer-Aktion fehlgeschlagen: { $reason }
+viewer-multi-open-capped = Geöffnet: { $opened } von { $cap } Dateien ({ $skipped } übersprungen, damit die UI reagiert)
 viewer-text-save-failed = Datei konnte nicht gespeichert werden: { $reason }
 viewer-text-read-only = SchreibgeschÃ¼tzt
 viewer-text-editing = Bearbeitung
