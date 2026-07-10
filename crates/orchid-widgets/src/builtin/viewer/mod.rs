@@ -16,12 +16,19 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::error::WidgetError;
 use crate::events::WidgetSnapshotUpdated;
+use crate::widget::config as state_codec;
 use crate::widget::payloads::ViewerPayload;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "viewer";
+
+/// Persisted viewer state (path only — scroll/zoom rehydrate on open).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct ViewerPersisted {
+    path: Option<String>,
+}
 
 /// Live viewer widget cores keyed by instance id (for UI callbacks).
 static VIEWER_LIVE: LazyLock<DashMap<Uuid, Arc<ViewerWidgetInner>>> = LazyLock::new(DashMap::new);
@@ -47,6 +54,8 @@ struct ViewerWidgetInner {
     viewer: Mutex<Option<Box<dyn Viewer>>>,
     snapshot: RwLock<Option<ViewerSnapshot>>,
     path: RwLock<Option<orchid_fs::FsPath>>,
+    /// Path restored from persistence; opened in `on_create`.
+    pending_path: RwLock<Option<orchid_fs::FsPath>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -152,9 +161,22 @@ impl ViewerWidget {
                 viewer: Mutex::new(None),
                 snapshot: RwLock::new(None),
                 path: RwLock::new(None),
+                pending_path: RwLock::new(None),
                 bus,
             }),
         }
+    }
+
+    /// Build a viewer that will reopen `path` on create.
+    pub fn with_pending_path(
+        instance_id: Uuid,
+        deps: ViewerDeps,
+        bus: Arc<orchid_core::EventBus>,
+        path: orchid_fs::FsPath,
+    ) -> Self {
+        let w = Self::new(instance_id, deps, bus);
+        *w.inner.pending_path.write() = Some(path);
+        w
     }
 
     /// Open a path on this widget instance.
@@ -667,6 +689,12 @@ impl Widget for ViewerWidget {
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         VIEWER_LIVE.insert(self.inner.instance_id, Arc::clone(&self.inner));
+        let pending = self.inner.pending_path.write().take();
+        if let Some(path) = pending {
+            if let Err(e) = self.inner.open_path(path).await {
+                warn!(error = %e, "viewer: failed to reopen persisted path");
+            }
+        }
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
@@ -719,9 +747,22 @@ impl Widget for ViewerWidget {
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        Ok(Vec::new())
+        let path = self
+            .inner
+            .path
+            .read()
+            .as_ref()
+            .map(|p| p.as_str().to_string());
+        state_codec::save_state(&ViewerPersisted { path })
     }
-    fn restore_state(&mut self, _bytes: &[u8]) -> WidgetResult<()> {
+    fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
+        let persisted: ViewerPersisted = state_codec::restore_state(bytes)?;
+        if let Some(raw) = persisted.path {
+            match orchid_fs::FsPath::new(&raw) {
+                Ok(p) => *self.inner.pending_path.write() = Some(p),
+                Err(e) => warn!(error = %e, path = %raw, "viewer: invalid persisted path"),
+            }
+        }
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -731,7 +772,7 @@ impl Widget for ViewerWidget {
             max_size: None,
             preferred_size: Some(WidgetSize::Large),
             allows_grouping: true,
-            keeps_state_when_unloaded: false,
+            keeps_state_when_unloaded: true,
             has_settings_panel: false,
         }
     }
@@ -753,8 +794,23 @@ fn title_from(path_display: &str) -> String {
 /// (provider registry + syntax highlighter).
 #[must_use]
 pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
-    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, _bytes| {
-        Ok(Box::new(ViewerWidget::new(ctx.instance_id, deps.clone(), ctx.bus.clone())) as Box<dyn Widget>)
+    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
+        let persisted = match state_bytes {
+            Some(bytes) => state_codec::restore_state::<ViewerPersisted>(bytes).unwrap_or_default(),
+            None => ViewerPersisted::default(),
+        };
+        let widget = match persisted.path.as_deref().and_then(|raw| {
+            orchid_fs::FsPath::new(raw).ok()
+        }) {
+            Some(path) => ViewerWidget::with_pending_path(
+                ctx.instance_id,
+                deps.clone(),
+                ctx.bus.clone(),
+                path,
+            ),
+            None => ViewerWidget::new(ctx.instance_id, deps.clone(), ctx.bus.clone()),
+        };
+        Ok(Box::new(widget) as Box<dyn Widget>)
     });
     WidgetDescriptor {
         type_id: TYPE_ID,

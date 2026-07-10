@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
+use crate::widget::config as state_codec;
 use crate::widget::payloads::{SearchCandidateView, UniversalSearchPayload};
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
@@ -25,6 +26,12 @@ use tracing::warn;
 
 pub use aggregator::SearchAggregator;
 pub use sources::{ActionTarget, CommandsSource, FilesSource, SearchCandidate, SearchSource, SettingsSource};
+
+/// Persisted universal-search UI state.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct SearchPersisted {
+    query: String,
+}
 
 /// Live search widget cores keyed by instance id (for UI-side query / activation
 /// without holding `Arc<UniversalSearchWidget>`).
@@ -262,6 +269,10 @@ impl Widget for UniversalSearchWidget {
             *self.inner.error.write() = None;
         }
         self.start_debouncer();
+        // Re-run a restored query after the debouncer is alive.
+        if !self.inner.query.read().trim().is_empty() {
+            self.inner.notify.notify_one();
+        }
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
@@ -310,9 +321,12 @@ impl Widget for UniversalSearchWidget {
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        Ok(Vec::new())
+        let query = self.inner.query.read().clone();
+        state_codec::save_state(&SearchPersisted { query })
     }
-    fn restore_state(&mut self, _bytes: &[u8]) -> WidgetResult<()> {
+    fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
+        let persisted: SearchPersisted = state_codec::restore_state(bytes)?;
+        *self.inner.query.write() = persisted.query;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -322,7 +336,7 @@ impl Widget for UniversalSearchWidget {
             max_size: None,
             preferred_size: Some(WidgetSize::Large),
             allows_grouping: false,
-            keeps_state_when_unloaded: false,
+            keeps_state_when_unloaded: true,
             has_settings_panel: false,
         }
     }
@@ -341,13 +355,21 @@ impl Drop for UniversalSearchWidget {
 #[must_use]
 pub fn descriptor(aggregator: Arc<SearchAggregator>) -> WidgetDescriptor {
     let agg = aggregator;
-    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, _bytes| {
-        Ok(Box::new(UniversalSearchWidget::new(
+    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
+        let persisted = match state_bytes {
+            Some(bytes) => state_codec::restore_state::<SearchPersisted>(bytes).unwrap_or_default(),
+            None => SearchPersisted::default(),
+        };
+        let widget = UniversalSearchWidget::new(
             ctx.instance_id,
             Some(agg.clone()),
             ctx.bus.clone(),
             ctx.locale.clone(),
-        )) as Box<dyn Widget>)
+        );
+        if !persisted.query.is_empty() {
+            *widget.inner.query.write() = persisted.query;
+        }
+        Ok(Box::new(widget) as Box<dyn Widget>)
     });
     base_descriptor(factory)
 }
@@ -356,13 +378,21 @@ pub fn descriptor(aggregator: Arc<SearchAggregator>) -> WidgetDescriptor {
 /// during bootstrap before the search index is wired up.
 #[must_use]
 pub fn descriptor_stub() -> WidgetDescriptor {
-    let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, _bytes| {
-        Ok(Box::new(UniversalSearchWidget::new(
+    let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
+        let persisted = match state_bytes {
+            Some(bytes) => state_codec::restore_state::<SearchPersisted>(bytes).unwrap_or_default(),
+            None => SearchPersisted::default(),
+        };
+        let widget = UniversalSearchWidget::new(
             ctx.instance_id,
             None,
             ctx.bus.clone(),
             ctx.locale.clone(),
-        )) as Box<dyn Widget>)
+        );
+        if !persisted.query.is_empty() {
+            *widget.inner.query.write() = persisted.query;
+        }
+        Ok(Box::new(widget) as Box<dyn Widget>)
     });
     base_descriptor(factory)
 }
