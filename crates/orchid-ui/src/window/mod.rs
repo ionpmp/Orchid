@@ -1,6 +1,8 @@
 //! Per-window controllers.
 
+pub mod errors;
 pub mod main_window;
+pub mod spawn;
 pub mod startup;
 
 pub use main_window::MainWindowController;
