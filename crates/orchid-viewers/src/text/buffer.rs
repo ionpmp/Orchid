@@ -150,7 +150,7 @@ impl TextBuffer {
     /// Replace the entire buffer contents (LF-normalised). Marks dirty when changed.
     pub fn replace_content(&mut self, text: &str) {
         let normalized = text.replace("\r\n", "\n");
-        if self.rope.as_str() == normalized {
+        if self.rope == normalized {
             return;
         }
         self.rope = Rope::from_str(&normalized);

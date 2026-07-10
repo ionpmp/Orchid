@@ -260,13 +260,13 @@ impl SearchEngine {
 mod futures_executor {
     use std::future::Future;
     use std::pin::Pin;
-    use std::task::{Context, Poll, Waker};
+    use std::task::{Context, Poll};
 
     pub fn block_on<F: Future>(fut: F) -> F::Output {
         // Minimal executor: park the current thread, poll once per wake-up.
         let mut fut = Box::pin(fut);
         let waker = std::task::Waker::noop();
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(waker);
         loop {
             match Pin::as_mut(&mut fut).poll(&mut cx) {
                 Poll::Ready(v) => return v,
