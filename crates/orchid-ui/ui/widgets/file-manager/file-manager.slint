@@ -60,6 +60,7 @@ export component FileManagerView inherits Rectangle {
     callback rename-selected(int);
     callback deselect-all(int);
     callback open-selected(int);
+    callback move-selection(int, int, bool);
     callback entry-drag-start(int, string);
     callback entry-drag-hover(int, string);
     callback entry-drag-drop(int, string);
@@ -256,6 +257,7 @@ export component FileManagerView inherits Rectangle {
                 rename-selected => { root.rename-selected(0); }
                 deselect-all => { root.deselect-all(0); }
                 open-selected => { root.open-selected(0); }
+                move-selection(delta, extend) => { root.move-selection(0, delta, extend); }
                 rename-commit(old, new) => { root.rename-commit(old, new); }
                 rename-cancel => { root.rename-cancel(); }
                 entry-drag-start(p) => { root.entry-drag-start(0, p); }
@@ -319,6 +321,7 @@ export component FileManagerView inherits Rectangle {
                         rename-selected => { root.rename-selected(0); }
                         deselect-all => { root.deselect-all(0); }
                         open-selected => { root.open-selected(0); }
+                        move-selection(delta, extend) => { root.move-selection(0, delta, extend); }
                         rename-commit(old, new) => { root.rename-commit(old, new); }
                         rename-cancel => { root.rename-cancel(); }
                         entry-drag-start(p) => { root.entry-drag-start(0, p); }
@@ -380,6 +383,7 @@ export component FileManagerView inherits Rectangle {
                         rename-selected => { root.rename-selected(1); }
                         deselect-all => { root.deselect-all(1); }
                         open-selected => { root.open-selected(1); }
+                        move-selection(delta, extend) => { root.move-selection(1, delta, extend); }
                         rename-commit(old, new) => { root.rename-commit(old, new); }
                         rename-cancel => { root.rename-cancel(); }
                         entry-drag-start(p) => { root.entry-drag-start(1, p); }

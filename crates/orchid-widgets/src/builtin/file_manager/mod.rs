@@ -1018,6 +1018,30 @@ impl FileManagerInner {
         }
     }
 
+    fn move_selection_in_pane(&self, pane: u8, delta: i32, extend: bool) {
+        let (tab_id, ordered) = {
+            let state = self.state.lock();
+            let tab = match active_tab_ref(&state, pane) {
+                Ok(t) => t,
+                Err(_) => return,
+            };
+            (tab.id, self.filtered_paths_for_tab(tab))
+        };
+        let mut state = self.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.tabs.iter_mut().find(|t| t.id == tab_id)
+            } else {
+                state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
+            }
+        } else {
+            state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
+        };
+        if let Some(t) = tab {
+            t.selection.select_relative(&ordered, delta, extend);
+        }
+    }
+
     fn deselect_all_in_pane(&self, pane: u8) {
         let mut state = self.state.lock();
         let tab = if pane == 1 {
@@ -2895,6 +2919,20 @@ pub async fn deselect_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<(
     let inner = live_inner(instance_id)?;
     inner.deselect_all_in_pane(pane);
     inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+/// Move selection by `delta` entries in `pane`'s active tab (filtered order).
+/// With `extend`, grows a range from the anchor (Shift+arrows).
+pub async fn select_relative(
+    instance_id: Uuid,
+    pane: u8,
+    delta: i32,
+    extend: bool,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.move_selection_in_pane(pane, delta, extend);
+    inner.publish_refresh();
     Ok(())
 }
 

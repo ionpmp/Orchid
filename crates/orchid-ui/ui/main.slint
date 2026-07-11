@@ -193,6 +193,7 @@ export component MainWindow inherits Window {
     callback fm-rename-selected(string, int);
     callback fm-deselect-all(string, int);
     callback fm-open-selected(string, int);
+    callback fm-move-selection(string, int, int, bool);
     callback fm-entry-drag-start(string, int, string);
     callback fm-entry-drag-hover(string, int, string);
     callback fm-entry-drag-drop(string, int, string);
@@ -465,6 +466,7 @@ export component MainWindow inherits Window {
             fm-rename-selected(fm_id, p) => { root.fm-rename-selected(fm_id, p); }
             fm-deselect-all(fm_id, p) => { root.fm-deselect-all(fm_id, p); }
             fm-open-selected(fm_id, p) => { root.fm-open-selected(fm_id, p); }
+            fm-move-selection(fm_id, p, delta, extend) => { root.fm-move-selection(fm_id, p, delta, extend); }
             fm-entry-drag-start(fm_id, p, path) => { root.fm-entry-drag-start(fm_id, p, path); }
             fm-entry-drag-hover(fm_id, p, path) => { root.fm-entry-drag-hover(fm_id, p, path); }
             fm-entry-drag-drop(fm_id, p, path) => { root.fm-entry-drag-drop(fm_id, p, path); }

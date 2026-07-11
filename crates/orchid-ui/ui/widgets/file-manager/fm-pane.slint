@@ -45,6 +45,7 @@ export component FmPane inherits Rectangle {
     callback rename-selected();
     callback deselect-all();
     callback open-selected();
+    callback move-selection(int, bool);
     callback rename-commit(string, string);
     callback rename-cancel();
     callback entry-drag-start(string);
@@ -59,6 +60,11 @@ export component FmPane inherits Rectangle {
     callback crumb-drag-drop(string);
 
     background: Theme.surface-base;
+
+    property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
+        && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3);
+    property <length> grid-tile: grid-view && pane.tabs[pane.active-tab].view-mode == 3 ? 220px : 100px;
+    property <int> grid-cols: max(1, floor((root.width - 8px) / (grid-tile + 8px)));
 
     pane-keys := FocusScope {
         width: parent.width;
@@ -107,6 +113,45 @@ export component FmPane inherits Rectangle {
                     return accept;
                 }
                 return reject;
+            }
+            if (event.text == Key.Backspace) {
+                if (!rename.active) {
+                    root.nav-up();
+                    return accept;
+                }
+                return reject;
+            }
+            if (!rename.active) {
+                if (event.text == Key.UpArrow) {
+                    root.move-selection(root.grid-view ? -root.grid-cols : -1, event.modifiers.shift);
+                    return accept;
+                }
+                if (event.text == Key.DownArrow) {
+                    root.move-selection(root.grid-view ? root.grid-cols : 1, event.modifiers.shift);
+                    return accept;
+                }
+                if (event.text == Key.LeftArrow) {
+                    if (root.grid-view) {
+                        root.move-selection(-1, event.modifiers.shift);
+                        return accept;
+                    }
+                    return reject;
+                }
+                if (event.text == Key.RightArrow) {
+                    if (root.grid-view) {
+                        root.move-selection(1, event.modifiers.shift);
+                        return accept;
+                    }
+                    return reject;
+                }
+                if (event.text == Key.Home) {
+                    root.move-selection(-100000, event.modifiers.shift);
+                    return accept;
+                }
+                if (event.text == Key.End) {
+                    root.move-selection(100000, event.modifiers.shift);
+                    return accept;
+                }
             }
             if (event.text == Key.Escape) {
                 root.deselect-all();
@@ -206,9 +251,21 @@ export component FmPane inherits Rectangle {
                         sort-size-label: pane.tabs[pane.active-tab].sort-size-label;
                         sort-modified-label: pane.tabs[pane.active-tab].sort-modified-label;
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
-                        entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
-                        entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
-                        entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
+                        entry-clicked(p, ctrl) => {
+                            root.pane-focused();
+                            pane-keys.focus();
+                            root.entry-clicked(p, ctrl);
+                        }
+                        entry-shift-clicked(p) => {
+                            root.pane-focused();
+                            pane-keys.focus();
+                            root.entry-shift-clicked(p);
+                        }
+                        entry-double-clicked(p, is_dir) => {
+                            root.pane-focused();
+                            pane-keys.focus();
+                            root.entry-double-clicked(p, is_dir);
+                        }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
                         sort-column-clicked(col) => { root.sort-column-clicked(col); }
                         rename-commit(old, new) => { root.rename-commit(old, new); }
@@ -234,9 +291,21 @@ export component FmPane inherits Rectangle {
                         drag-active: root.drag-active;
                         drag-drop-target: root.drag-drop-target;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
-                        entry-clicked(p, ctrl) => { root.entry-clicked(p, ctrl); }
-                        entry-shift-clicked(p) => { root.entry-shift-clicked(p); }
-                        entry-double-clicked(p, is_dir) => { root.entry-double-clicked(p, is_dir); }
+                        entry-clicked(p, ctrl) => {
+                            root.pane-focused();
+                            pane-keys.focus();
+                            root.entry-clicked(p, ctrl);
+                        }
+                        entry-shift-clicked(p) => {
+                            root.pane-focused();
+                            pane-keys.focus();
+                            root.entry-shift-clicked(p);
+                        }
+                        entry-double-clicked(p, is_dir) => {
+                            root.pane-focused();
+                            pane-keys.focus();
+                            root.entry-double-clicked(p, is_dir);
+                        }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
                         rename-commit(old, new) => { root.rename-commit(old, new); }
                         rename-cancel => { root.rename-cancel(); }

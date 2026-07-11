@@ -143,6 +143,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-rename-selected(string, int);
     callback fm-deselect-all(string, int);
     callback fm-open-selected(string, int);
+    callback fm-move-selection(string, int, int, bool);
     callback fm-entry-drag-start(string, int, string);
     callback fm-entry-drag-hover(string, int, string);
     callback fm-entry-drag-drop(string, int, string);
@@ -540,6 +541,7 @@ export component WidgetFrame inherits Rectangle {
                     rename-selected(p) => { root.fm-rename-selected(root.model.instance-id, p); }
                     deselect-all(p) => { root.fm-deselect-all(root.model.instance-id, p); }
                     open-selected(p) => { root.fm-open-selected(root.model.instance-id, p); }
+                    move-selection(p, delta, extend) => { root.fm-move-selection(root.model.instance-id, p, delta, extend); }
                     entry-drag-start(p, path) => { root.fm-entry-drag-start(root.model.instance-id, p, path); }
                     entry-drag-hover(p, path) => { root.fm-entry-drag-hover(root.model.instance-id, p, path); }
                     entry-drag-drop(p, path) => { root.fm-entry-drag-drop(root.model.instance-id, p, path); }

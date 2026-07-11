@@ -1346,6 +1346,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_move_selection({
+            let t = t.clone();
+            move |fm_id, pane, delta, extend| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_move_selection(&fm_id, pane, delta, extend);
+                }
+            }
+        });
         self.window.on_fm_entry_drag_start({
             let t = t.clone();
             move |fm_id, pane, path| {

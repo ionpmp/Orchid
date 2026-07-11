@@ -671,6 +671,31 @@ impl MainWindowController {
         };
         self.fm_dispatch_open(inst, p, path.clone(), *is_dir);
     }
+        pub(super) fn on_fm_move_selection(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        delta: i32,
+        extend: bool,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            if let Err(e) =
+                orchid_widgets::builtin::file_manager::select_relative(inst, p, delta, extend)
+                    .await
+            {
+                warn!(?e, "fm move selection");
+                return;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.fm_refresh_ui(inst).await;
+            }
+        });
+    }
         pub(super) fn on_fm_entry_drag_start(self: &Arc<Self>, fm_id: &SharedString, pane: i32, _path: &SharedString) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
