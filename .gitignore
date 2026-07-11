@@ -19,6 +19,7 @@ debug/
 # Optional Rust tooling caches
 .sccache/
 .cache/
+.cargo-local/
 
 # ---------------------------------------------------------------------------
 # Secrets and local env
