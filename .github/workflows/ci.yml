@@ -44,3 +44,9 @@ jobs:
 
       - name: i18n key parity
         run: python scripts/i18n_sync_keys.py
+
+      - name: cargo-deny (licenses + sources)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses sources
+          rust-version: "1.97.0"

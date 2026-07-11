@@ -1,0 +1,52 @@
+# cargo-deny configuration for Orchid (AGPL-3.0-or-later).
+# Docs: https://embarkstudios.github.io/cargo-deny/
+#
+# CI gates on `licenses` + `sources` (see `.github/workflows/ci.yml`).
+# `cargo deny check advisories` still surfaces RustSec hits locally; ignore
+# entries can be added here as the tree is audited.
+
+[graph]
+targets = [
+    { triple = "x86_64-pc-windows-msvc" },
+]
+
+[advisories]
+version = 2
+yanked = "warn"
+# Only fail unmaintained/unsound for direct workspace deps for now.
+unmaintained = "workspace"
+unsound = "workspace"
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+    "AGPL-3.0-or-later",
+    # Slint: GPL-3.0-only OR Slint royalty-free / commercial LicenseRefs
+    "GPL-3.0-only",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
