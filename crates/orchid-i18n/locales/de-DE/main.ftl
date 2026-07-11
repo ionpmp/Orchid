@@ -659,6 +659,7 @@ workspace-unnamed = Arbeitsbereich { $n }
 dock-add-label = Widget hinzufÃ¼gen
 catalog-title = Widget-Katalog
 catalog-search-placeholder = Widgets suchenâ€¦
+catalog-no-results = Keine passenden Widgets
 dock-widget-terminal = Terminal
 dock-widget-weather = Wetter
 dock-widget-moon = Mond

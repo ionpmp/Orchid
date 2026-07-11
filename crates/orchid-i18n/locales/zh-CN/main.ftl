@@ -659,6 +659,7 @@ workspace-unnamed = å·¥ä½œåŒº { $n }
 dock-add-label = æ·»åŠ å°ç»„ä»¶
 catalog-title = å°ç»„ä»¶ç›®å½•
 catalog-search-placeholder = æœç´¢å°ç»„ä»¶â€¦
+catalog-no-results = 没有匹配的小组件
 dock-widget-terminal = ç»ˆç«¯
 dock-widget-weather = å¤©æ°”
 dock-widget-moon = æœˆäº®

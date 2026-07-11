@@ -1,5 +1,4 @@
 import { Theme } from "../../theme_global.slint";
-import { Strings } from "../../strings_global.slint";
 import { FmTab } from "../../workspace/defs.slint";
 
 export component FmTabs inherits Rectangle {
@@ -27,23 +26,6 @@ export component FmTabs inherits Rectangle {
             tab-ta := TouchArea {
                 clicked => { root.tab-clicked(i, tab.id); }
             }
-            if tab-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: tab-hint.preferred-width + 12px;
-                height: tab-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                tab-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.path-display;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
 
             HorizontalLayout {
                 padding-left: 8px;
@@ -70,23 +52,6 @@ export component FmTabs inherits Rectangle {
                     close-ta := TouchArea {
                         clicked => { root.tab-closed(i, tab.id); }
                     }
-                    if close-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: close-hint.preferred-width + 12px;
-                        height: close-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        close-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.fm-action-close-tab;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
 
                     Text {
                         text: "×";
@@ -107,23 +72,6 @@ export component FmTabs inherits Rectangle {
 
             new-ta := TouchArea {
                 clicked => { root.tab-new(); }
-            }
-            if new-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: new-hint.preferred-width + 12px;
-                height: new-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                new-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-action-new-tab;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
             }
 
             Text {

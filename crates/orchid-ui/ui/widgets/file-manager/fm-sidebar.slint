@@ -29,23 +29,6 @@ export component FmSidebar inherits Rectangle {
                     enabled: !item.is-section-header;
                     clicked => { root.clicked(item.id); }
                 }
-                if item-ta.has-hover && !item.is-section-header : Rectangle {
-                    x: parent.x + 8px;
-                    y: parent.height + 2px;
-                    width: side-hint.preferred-width + 12px;
-                    height: side-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    side-hint := Text {
-                        x: 6px; y: 3px;
-                        text: item.label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
 
                 HorizontalLayout {
                     padding-left: 8px + (item.indent * 12px);

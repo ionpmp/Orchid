@@ -661,6 +661,7 @@ workspace-unnamed = Ð Ð°Ð±Ð¾Ñ‡Ð¸Ð¹ ÑÑ‚Ð¾Ð» { $n }
 dock-add-label = Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð²Ð¸Ð´Ð¶ÐµÑ‚
 catalog-title = ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð²Ð¸Ð´Ð¶ÐµÑ‚Ð¾Ð²
 catalog-search-placeholder = ÐŸÐ¾Ð¸ÑÐº Ð²Ð¸Ð´Ð¶ÐµÑ‚Ð°â€¦
+catalog-no-results = Нет подходящих виджетов
 dock-widget-terminal = Ð¢ÐµÑ€Ð¼Ð¸Ð½Ð°Ð»
 dock-widget-weather = ÐŸÐ¾Ð³Ð¾Ð´Ð°
 dock-widget-moon = Ð›ÑƒÐ½Ð°

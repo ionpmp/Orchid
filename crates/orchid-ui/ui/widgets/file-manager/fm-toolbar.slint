@@ -36,23 +36,6 @@ export component FmToolbar inherits Rectangle {
                     }
                 }
             }
-            if back-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: back-hint.preferred-width + 12px;
-                height: back-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                back-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.can-back ? Strings.fm-nav-back : Strings.fm-nav-back-disabled;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
             Text { text: "←"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
@@ -71,23 +54,6 @@ export component FmToolbar inherits Rectangle {
                     }
                 }
             }
-            if fwd-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: fwd-hint.preferred-width + 12px;
-                height: fwd-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                fwd-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.can-forward ? Strings.fm-nav-forward : Strings.fm-nav-forward-disabled;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
             Text { text: "→"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
@@ -99,23 +65,6 @@ export component FmToolbar inherits Rectangle {
 
             up-ta := TouchArea {
                 clicked => { root.up(); }
-            }
-            if up-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: up-hint.preferred-width + 12px;
-                height: up-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                up-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-nav-up;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
             }
             Text { text: "↑"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
@@ -129,23 +78,6 @@ export component FmToolbar inherits Rectangle {
             home-ta := TouchArea {
                 clicked => { root.home(); }
             }
-            if home-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: home-hint.preferred-width + 12px;
-                height: home-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                home-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-nav-home;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
             Text { text: "⌂"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
 
@@ -157,23 +89,6 @@ export component FmToolbar inherits Rectangle {
 
             nf-ta := TouchArea {
                 clicked => { root.new-folder(); }
-            }
-            if nf-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: nf-hint.preferred-width + 12px;
-                height: nf-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                nf-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-action-new-folder;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
             }
             Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
         }
@@ -188,26 +103,6 @@ export component FmToolbar inherits Rectangle {
 
             sort-ta := TouchArea {
                 clicked => { root.sort-cycle(); }
-            }
-            if sort-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: sort-hint.preferred-width + 12px;
-                height: sort-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                sort-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.sort-by == 0 ? tab.sort-name-label
-                        : tab.sort-by == 1 ? tab.sort-size-label
-                        : tab.sort-by == 2 ? tab.sort-modified-label
-                        : tab.sort-type-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
             }
             Text {
                 text: tab.sort-by == 0 ? (tab.sort-descending ? "A↓" : "A↑")
@@ -229,26 +124,6 @@ export component FmToolbar inherits Rectangle {
 
             vm-ta := TouchArea {
                 clicked => { root.view-mode-cycle(); }
-            }
-            if vm-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: vm-hint.preferred-width + 12px;
-                height: vm-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                vm-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.view-mode == 0 ? Strings.fm-view-icons
-                        : tab.view-mode == 1 ? Strings.fm-view-list
-                        : tab.view-mode == 2 ? Strings.fm-view-details
-                        : Strings.fm-view-gallery;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
             }
             Text {
                 text: tab.view-mode == 0 ? "▦"

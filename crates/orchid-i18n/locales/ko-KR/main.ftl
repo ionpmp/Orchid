@@ -659,6 +659,7 @@ workspace-unnamed = ìž‘ì—… ê³µê°„ { $n }
 dock-add-label = ìœ„ì ¯ ì¶”ê°€
 catalog-title = ìœ„ì ¯ ì¹´íƒˆë¡œê·¸
 catalog-search-placeholder = ìœ„ì ¯ ê²€ìƒ‰â€¦
+catalog-no-results = 일치하는 위젯 없음
 dock-widget-terminal = í„°ë¯¸ë„
 dock-widget-weather = ë‚ ì”¨
 dock-widget-moon = ë‹¬

@@ -133,10 +133,13 @@ impl MainWindowController {
         pub(super) fn fm_wake_instance(self: &Arc<Self>, inst: Uuid) {
         self.widget_manager.touch(inst);
         if let Ok(iref) = self.widget_manager.get_instance(inst) {
-            if *iref.lifecycle.read() == LifecycleState::Sleeping {
+            let state = *iref.lifecycle.read();
+            if state == LifecycleState::Sleeping || state == LifecycleState::Unloaded {
                 let wm = self.widget_manager.clone();
                 spawn::spawn_local_compat(async move {
-                    let _ = wm.change_lifecycle(inst, LifecycleState::Active).await;
+                    if let Err(e) = wm.change_lifecycle(inst, LifecycleState::Active).await {
+                        warn!(?e, %inst, "fm wake to Active failed");
+                    }
                 });
             }
         }
@@ -699,6 +702,9 @@ impl MainWindowController {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
         if !entry.drag_active {
+            return;
+        }
+        if entry.drag_drop_target == folder && entry.drag_target_pane == pane {
             return;
         }
         entry.drag_drop_target = folder;

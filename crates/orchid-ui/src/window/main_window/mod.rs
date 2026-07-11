@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
+use slint::ComponentHandle;
 use slint::Image;
 use slint::Model;
 use slint::ModelRc;
@@ -26,7 +27,7 @@ use uuid::Uuid;
 
 use orchid_core::{
     default_bindings_mirrored, ActionContext, ActionDispatcher, CommandPalette,
-    CommandRegistry, ConfigUpdated, EventBus, EventFilter, GestureConfig,
+    CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter, GestureConfig,
     GestureRecognizer, HandlerPriority, HistoryRecorder, InputEvent, InputMapper, ParsedCommand,
     Point, RecognizedGesture, ScreenBounds, Shortcut, SubscriptionHandle, TouchEvent, TouchPhase,
 };
@@ -568,6 +569,7 @@ impl MainWindowController {
         g.set_workspace_new_label(mgr.tr("workspace-new").into());
         g.set_catalog_title(mgr.tr("catalog-title").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
+        g.set_catalog_no_results(mgr.tr("catalog-no-results").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
         g.set_widget_resize_tooltip(mgr.tr("widget-resize-tooltip").into());
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
@@ -971,9 +973,9 @@ impl MainWindowController {
         let wsm = self.workspace_manager.clone();
         let t = Arc::downgrade(self);
         let type_id_owned = type_id.to_string();
-        let focus_search_input =
-            type_id_owned == "search" || type_id_owned == "universal-search";
-        let focus_password_input = type_id_owned == "password";
+        let canonical = orchid_widgets::WidgetRegistry::canonical_type_id(&type_id_owned);
+        let focus_search_input = canonical == "universal-search";
+        let focus_password_input = canonical == "password-manager";
         spawn::spawn_local(async move {
             let wid = match wsm.active() {
                 Ok(w) => w.id,
@@ -1070,11 +1072,12 @@ impl MainWindowController {
         let items = filter_catalog_items(&self.locale, &cat.search_query);
         sync_vec_model(&self.catalog_items, items);
         let g = self.window.global::<WidgetCatalog>();
-        g.set_visible(cat.visible);
+        // Push model + query before `visible` so a freshly mounted panel sees rows.
+        g.set_items(self.catalog_items.clone());
+        g.set_search_query(cat.search_query.into());
         g.set_screen_x(cat.screen_x);
         g.set_screen_y(cat.screen_y);
-        g.set_search_query(cat.search_query.into());
-        g.set_items(self.catalog_items.clone());
+        g.set_visible(cat.visible);
     }
 
     fn command_palette_shortcut(&self) -> Shortcut {
@@ -1699,7 +1702,8 @@ impl MainWindowController {
                 return;
             }
         }
-        self.spawn_add_widget("universal-search", AddWidgetPlacement::AutoSlot);
+        // UI allowlist + dock use the short id; registry maps it to `universal-search`.
+        self.spawn_add_widget("search", AddWidgetPlacement::AutoSlot);
     }
 
     fn show_widget_catalog_center(self: &Arc<Self>) {
@@ -4694,16 +4698,16 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
 
 fn is_known_widget_type(type_id: &str) -> bool {
     matches!(
-        type_id,
+        orchid_widgets::WidgetRegistry::canonical_type_id(type_id),
         "terminal"
             | "weather"
             | "moon"
             | "system"
             | "rss"
             | "recent-files"
-            | "search"
-            | "media"
-            | "password"
+            | "universal-search"
+            | "media-player"
+            | "password-manager"
             | "viewer"
             | "file-manager"
     )
@@ -4717,6 +4721,8 @@ fn filter_catalog_items(locale: &LocaleManager, query: &str) -> Vec<DockWidgetTy
             q.is_empty()
                 || d.label.as_str().to_lowercase().contains(&q)
                 || d.description.as_str().to_lowercase().contains(&q)
+                || d.type_id.as_str().to_lowercase().contains(&q)
+                || d.icon.as_str().to_lowercase().contains(&q)
         })
         .collect()
 }

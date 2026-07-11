@@ -659,6 +659,7 @@ workspace-unnamed = ãƒ¯ãƒ¼ã‚¯ã‚¹ãƒšãƒ¼ã‚¹ { $n }
 dock-add-label = ã‚¦ã‚£ã‚¸ã‚§ãƒƒãƒˆã‚’è¿½åŠ 
 catalog-title = ã‚¦ã‚£ã‚¸ã‚§ãƒƒãƒˆã‚«ã‚¿ãƒ­ã‚°
 catalog-search-placeholder = ã‚¦ã‚£ã‚¸ã‚§ãƒƒãƒˆã‚’æ¤œç´¢â€¦
+catalog-no-results = 一致するウィジェットがありません
 dock-widget-terminal = ã‚¿ãƒ¼ãƒŸãƒŠãƒ«
 dock-widget-weather = å¤©æ°—
 dock-widget-moon = æœˆ

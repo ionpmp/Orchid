@@ -660,6 +660,7 @@ workspace-unnamed = Ù…Ø³Ø§Ø­Ø© Ø¹Ù…Ù„ { $n }
 dock-add-label = Ø¥Ø¶Ø§ÙØ© Ø¹Ù†ØµØ± ÙˆØ§Ø¬Ù‡Ø©
 catalog-title = Ø¯Ù„ÙŠÙ„ Ø¹Ù†Ø§ØµØ± Ø§Ù„ÙˆØ§Ø¬Ù‡Ø©
 catalog-search-placeholder = Ø§Ù„Ø¨Ø­Ø« ÙÙŠ Ø¹Ù†Ø§ØµØ± Ø§Ù„ÙˆØ§Ø¬Ù‡Ø©â€¦
+catalog-no-results = لا توجد عناصر واجهة مطابقة
 dock-widget-terminal = Ø§Ù„Ø·Ø±ÙÙŠØ©
 dock-widget-weather = Ø§Ù„Ø·Ù‚Ø³
 dock-widget-moon = Ø§Ù„Ù‚Ù…Ø±

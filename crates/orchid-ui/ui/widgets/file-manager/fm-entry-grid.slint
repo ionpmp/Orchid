@@ -1,5 +1,4 @@
 import { Theme } from "../../theme_global.slint";
-import { Strings } from "../../strings_global.slint";
 import { FmEntry, FmRenameState } from "../../workspace/defs.slint";
 import { FmEntryIcon } from "fm-icons.slint";
 
@@ -11,6 +10,9 @@ export component FmEntryGrid inherits Rectangle {
     in property <string> drag-drop-target;
 
     property <string> pressing-path: "";
+    property <length> press-x: 0px;
+    property <length> press-y: 0px;
+    property <length> drag-threshold: 6px;
 
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
@@ -97,26 +99,6 @@ export component FmEntryGrid inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
 
-                        glyph-ta := TouchArea { }
-                        if glyph-ta.has-hover && (entry.is-encrypted || entry.is-managed) : Rectangle {
-                            x: 8px;
-                            y: parent.height - 28px;
-                            width: glyph-hint.preferred-width + 12px;
-                            height: glyph-hint.preferred-height + 6px;
-                            background: Theme.surface-raised;
-                            border-radius: Theme.radius-md;
-                            border-width: 1px;
-                            border-color: Theme.border-default;
-                            z: 100;
-                            glyph-hint := Text {
-                                x: 6px; y: 3px;
-                                text: entry.is-encrypted ? Strings.fm-entry-encrypted-hint
-                                    : Strings.fm-entry-managed-hint;
-                                color: Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                            }
-                        }
-
                         FmEntryIcon {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
@@ -177,7 +159,10 @@ export component FmEntryGrid inherits Rectangle {
                 width: 100%;
                 height: 100%;
                 enabled: !(rename.active && entry.path == rename.path);
-                double-clicked => { root.entry-double-clicked(entry.path, entry.is-dir); }
+                double-clicked => {
+                    root.pressing-path = "";
+                    root.entry-double-clicked(entry.path, entry.is-dir);
+                }
                 pointer-event(e) => {
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                         if (e.modifiers.shift) {
@@ -187,11 +172,18 @@ export component FmEntryGrid inherits Rectangle {
                         }
                         if (entry.is-selected) {
                             root.pressing-path = entry.path;
+                            root.press-x = self.mouse-x;
+                            root.press-y = self.mouse-y;
+                        } else {
+                            root.pressing-path = "";
                         }
                     }
                     if (pressing-path != "" && e.kind == PointerEventKind.move) {
-                        root.entry-drag-start(pressing-path);
-                        root.pressing-path = "";
+                        if (abs(self.mouse-x - press-x) >= drag-threshold
+                            || abs(self.mouse-y - press-y) >= drag-threshold) {
+                            root.entry-drag-start(pressing-path);
+                            root.pressing-path = "";
+                        }
                     }
                     if (drag-active && entry.is-dir) {
                         if (e.kind == PointerEventKind.move) {
@@ -210,23 +202,6 @@ export component FmEntryGrid inherits Rectangle {
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                         root.entry-context(entry.path, self.mouse-x, self.mouse-y);
                     }
-                }
-            }
-            if tile-ta.has-hover && !(rename.active && entry.path == rename.path) : Rectangle {
-                x: 4px;
-                y: parent.height + 2px;
-                width: name-hint.preferred-width + 12px;
-                height: name-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                name-hint := Text {
-                    x: 6px; y: 3px;
-                    text: entry.name;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
                 }
             }
         }
