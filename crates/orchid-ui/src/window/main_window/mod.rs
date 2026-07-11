@@ -1039,10 +1039,16 @@ impl MainWindowController {
     fn sync_widget_catalog_global(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        sync_vec_model(&self.catalog_items, items);
+        debug!(
+            count = items.len(),
+            query = %cat.search_query,
+            visible = cat.visible,
+            "widget catalog sync"
+        );
+        sync_vec_model(&self.catalog_items, items.clone());
+        // Fresh ModelRc so a panel remounted under `if visible` always sees rows.
         let g = self.window.global::<WidgetCatalog>();
-        // Push model + query before `visible` so a freshly mounted panel sees rows.
-        g.set_items(self.catalog_items.clone());
+        g.set_items(ModelRc::new(VecModel::from(items)));
         g.set_search_query(cat.search_query.into());
         g.set_screen_x(cat.screen_x);
         g.set_screen_y(cat.screen_y);
