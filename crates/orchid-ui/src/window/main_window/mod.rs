@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use parking_lot::Mutex;
 use slint::ComponentHandle;
@@ -26,41 +26,36 @@ use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 use orchid_core::{
-    default_bindings_mirrored, ActionContext, ActionDispatcher, CommandPalette,
-    CommandRegistry, ConfigUpdated, Event, EventBus, EventFilter, GestureConfig,
-    GestureRecognizer, HandlerPriority, HistoryRecorder, InputEvent, InputMapper, ParsedCommand,
-    Point, RecognizedGesture, ScreenBounds, Shortcut, SubscriptionHandle, TouchEvent, TouchPhase,
+    ActionContext, ActionDispatcher, CommandPalette, CommandRegistry, ConfigUpdated, Event,
+    EventBus, EventFilter, GestureConfig, GestureRecognizer, HandlerPriority, HistoryRecorder,
+    InputMapper, ParsedCommand, ScreenBounds, SubscriptionHandle,
 };
 use orchid_i18n::{LocaleId, LocaleManager};
-use orchid_storage::{ConfigLoader, OrchidConfig, StateStore, WidgetSize};
+use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
 use orchid_terminal::SessionManager;
-use orchid_terminal::{FontMetrics};
+use orchid_terminal::FontMetrics;
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::WidgetPayload;
-use orchid_widgets::{CreateWidgetRequest,
-    GroupManager, LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager, WorkspaceManager,
+use orchid_widgets::{
+    CreateWidgetRequest, GroupManager, LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager,
+    WorkspaceManager,
 };
 use orchid_widgets::SharedInstance;
 use parking_lot::RwLock;
 
-use super::errors::{
-    storage_localized_error, ui_localized_error, viewer_localized_error,
-};
 use super::spawn;
 use super::models::{
-    blank_terminal, build_file_manager_model,
-    build_media_model, build_moon_model, build_palette_candidates, build_password_model,
-    build_recent_files_model, build_rss_model, build_search_model, build_settings_fields,
-    build_settings_sections, build_system_model, build_terminal_divider_models,
-    build_terminal_model, build_terminal_tab_models, build_viewer_model, build_weather_model,
+    blank_terminal, build_file_manager_model, build_media_model, build_moon_model,
+    build_password_model, build_recent_files_model, build_rss_model, build_search_model,
+    build_system_model, build_terminal_divider_models, build_terminal_model,
+    build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
     empty_recent_files_model, empty_rename_state, empty_rss_model, empty_search_model,
-    empty_system_model, empty_tag_state, empty_viewer_model, empty_weather_model, locale_display_name, settings_section_id,
-    settings_section_index, theme_display_name, FileManagerOverlays, PasswordAddDialogOverlay,
-    SETTINGS_SECTION_IDS,
+    empty_system_model, empty_tag_state, empty_viewer_model, empty_weather_model,
+    locale_display_name, theme_display_name, FileManagerOverlays, PasswordAddDialogOverlay,
 };
 use crate::error::{Result, UiError};
 use crate::terminal_font_metrics;
@@ -68,43 +63,28 @@ use crate::widgets::terminal::TerminalWidgetDeps;
 use crate::terminal_raster;
 use crate::slint_generated::{
     AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, PasswordModel, RecentFilesModel,
-    RssModel, SearchCandidateEntry,
-    SearchModel, Strings, SystemModel, TerminalCellModel,
-    Theme,
-    FileManagerModel,
-    ViewerModel,
-    WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary, CommandPaletteGlobal, NavigationGlobal, NotificationGlobal,
-    NotificationItem, OnboardingGlobal, SettingsFieldRow,
-    SettingsGlobal,
+    RssModel, SearchCandidateEntry, SearchModel, Strings, SystemModel, TerminalCellModel, Theme,
+    FileManagerModel, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
+    WidgetFrameModel, WorkspaceModel, WorkspaceSummary, NotificationItem, SettingsFieldRow,
     SettingsSectionEntry, GroupTabModel,
 };
 use crate::theme::ThemeManager;
 
 mod canvas;
 mod fm;
+mod input;
 mod media_search;
 mod password;
+mod shell_ui;
 mod terminal;
 mod wire;
 
 use canvas::ResizeInteraction;
 
 
-/// Max command palette hits (fuzzy search or browse).
-const COMMAND_PALETTE_LIMIT: usize = 50;
-
 /// Top switcher (40) + bottom dock (64 when visible) = canvas height inset in [`workspace.slint`].
 const WORKSPACE_SWITCHER_H: f32 = 40.0;
 const DOCK_H: f32 = 64.0;
-
-const ONBOARDING_STEP_COUNT: i32 = 4;
-const ONBOARDING_STEP_KEYS: [(&str, &str); 4] = [
-    ("onboarding-step-welcome-title", "onboarding-step-welcome-body"),
-    ("onboarding-step-workspace-title", "onboarding-step-workspace-body"),
-    ("onboarding-step-palette-title", "onboarding-step-palette-body"),
-    ("onboarding-step-gestures-title", "onboarding-step-gestures-body"),
-];
 
 
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
@@ -346,7 +326,7 @@ impl MainWindowController {
                 let rows: Vec<NotificationItem> = saved
                     .items
                     .into_iter()
-                    .take(Self::NOTIFICATION_LIST_CAP)
+                    .take(shell_ui::NOTIFICATION_LIST_CAP)
                     .map(|n| NotificationItem {
                         id: n.id.into(),
                         title: n.title.into(),
@@ -645,7 +625,7 @@ impl MainWindowController {
             theme_display_name(&self.locale, &th.meta.id, &th.meta.display_name).into(),
         );
         g.set_current_language(locale_display_name(&self.locale, &language).into());
-        g.set_current_density(self.locale.tr(density_i18n_key(density)).into());
+        g.set_current_density(self.locale.tr(shell_ui::density_i18n_key(density)).into());
         // Slint 1.16 has no Window `layout-direction`; drive RTL via `is-rtl`.
         let is_rtl = language.as_str().to_ascii_lowercase().starts_with("ar");
         g.set_is_rtl(is_rtl);
@@ -1069,790 +1049,6 @@ impl MainWindowController {
         g.set_visible(cat.visible);
     }
 
-    fn command_palette_shortcut(&self) -> Shortcut {
-        self.config
-            .read()
-            .shortcuts
-            .overrides
-            .get("command-palette")
-            .and_then(|s| Shortcut::parse(s).ok())
-            .unwrap_or_else(|| Shortcut::parse("Ctrl+Shift+P").expect("valid default shortcut"))
-    }
-
-    fn leader_key_shortcut(&self) -> Option<Shortcut> {
-        let cfg = self.config.read();
-        let key = cfg.shortcuts.leader_key.as_ref()?;
-        if key.is_empty() {
-            return None;
-        }
-        Shortcut::parse(key).ok()
-    }
-
-    fn clear_leader_pending(&self) {
-        *self.leader_pending_until.lock() = None;
-    }
-
-    /// Ctrl+S fallback for the last edited text viewer (when focus left the TextInput).
-    fn try_viewer_text_ctrl_s(
-        self: &Arc<Self>,
-        mods: slint::winit_030::winit::keyboard::ModifiersState,
-        logical: &slint::winit_030::winit::keyboard::Key,
-    ) -> bool {
-        use slint::winit_030::winit::keyboard::Key;
-        if !mods.control_key() || mods.shift_key() || mods.alt_key() || mods.super_key() {
-            return false;
-        }
-        let is_s = matches!(logical, Key::Character(s) if s.eq_ignore_ascii_case("s"));
-        if !is_s {
-            return false;
-        }
-        let Some(inst) = *self.last_text_edit_instance.lock() else {
-            return false;
-        };
-        let cache = self.widget_manager.snapshot_cache();
-        let Some(ws) = cache.get(inst) else {
-            return false;
-        };
-        let WidgetPayload::Viewer(v) = &ws.payload else {
-            return false;
-        };
-        let orchid_viewers::ViewerSnapshot::Text(t) = &v.snapshot else {
-            return false;
-        };
-        if t.read_only {
-            return false;
-        }
-        let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            if let Err(e) = orchid_widgets::builtin::viewer::text_save(inst).await {
-                warn!(?e, "viewer text Ctrl+S");
-                if let Some(c) = tw.upgrade() {
-                    let title = c.locale.tr("widget-viewer-name");
-                    let reason = viewer_localized_error(&c.locale, &e.to_string());
-                    let body = c.locale.tr_args(
-                        "viewer-text-save-failed",
-                        &orchid_i18n::FluentArgs::new().with("reason", reason),
-                    );
-                    c.push_notification(&title, &body, 3);
-                }
-                return;
-            }
-            if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
-            }
-        });
-        true
-    }
-
-    fn try_activate_leader(
-        &self,
-        mods: slint::winit_030::winit::keyboard::ModifiersState,
-        logical: &slint::winit_030::winit::keyboard::Key,
-    ) -> bool {
-        let Some(sc) = self.leader_key_shortcut() else {
-            return false;
-        };
-        if !winit_modifiers_match(sc.modifiers, mods) || !winit_key_matches(sc.key, logical) {
-            return false;
-        }
-        let timeout_ms = self.config.read().shortcuts.leader_timeout_ms;
-        *self.leader_pending_until.lock() =
-            Some(Instant::now() + Duration::from_millis(timeout_ms));
-        debug!(target: "orchid_ui::shortcuts", "leader-key armed");
-        true
-    }
-
-    fn try_leader_chord(
-        &self,
-        mods: slint::winit_030::winit::keyboard::ModifiersState,
-        logical: &slint::winit_030::winit::keyboard::Key,
-    ) -> Option<String> {
-        use slint::winit_030::winit::keyboard::{Key, NamedKey};
-        {
-            let guard = self.leader_pending_until.lock();
-            let until = (*guard)?;
-            if Instant::now() > until {
-                drop(guard);
-                self.clear_leader_pending();
-                return None;
-            }
-        }
-
-        if mods.control_key() || mods.alt_key() || mods.super_key() {
-            self.clear_leader_pending();
-            return None;
-        }
-
-        let key_str = match logical {
-            Key::Character(s) => {
-                let ch = s.chars().next()?;
-                if ch.is_ascii_alphabetic() {
-                    ch.to_ascii_lowercase().to_string()
-                } else {
-                    self.clear_leader_pending();
-                    return None;
-                }
-            }
-            Key::Named(NamedKey::Escape) => {
-                self.clear_leader_pending();
-                return None;
-            }
-            _ => {
-                self.clear_leader_pending();
-                return None;
-            }
-        };
-
-        let cmd_id = self
-            .config
-            .read()
-            .shortcuts
-            .leader_bindings
-            .get(&key_str)
-            .cloned();
-        self.clear_leader_pending();
-        if let Some(ref id) = cmd_id {
-            debug!(target: "orchid_ui::shortcuts", cmd_id = %id, key = %key_str, "leader chord");
-        }
-        cmd_id
-    }
-
-    fn apply_command_shortcut_overrides(self: &Arc<Self>) {
-        let overrides = self.config.read().shortcuts.overrides.clone();
-        if overrides.is_empty() {
-            return;
-        }
-        for result in self.command_registry.apply_shortcut_overrides(&overrides) {
-            if let Err(reason) = result.outcome {
-                warn!(
-                    command = %result.command_id,
-                    reason = %reason,
-                    "shortcut override rejected"
-                );
-            }
-        }
-    }
-
-    fn apply_input_gesture_bindings(self: &Arc<Self>) {
-        let cfg = self.config.read();
-        let swap = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
-            || cfg.input.mirror_edge_swipes;
-        self.input_mapper.set_bindings(default_bindings_mirrored(swap));
-    }
-
-    fn dispatch_registry_shortcut(self: &Arc<Self>, cmd_id: String) {
-        let this = Arc::clone(self);
-        spawn::spawn_local_compat(async move {
-            this.dispatch_command(&cmd_id).await;
-            this.schedule_rebuild();
-        });
-    }
-
-    fn sync_settings_global(self: &Arc<Self>) {
-        let st = self.settings.read().clone();
-        let section = if st.section.is_empty() {
-            SETTINGS_SECTION_IDS[0].to_string()
-        } else {
-            st.section.clone()
-        };
-        let title_key = format!("settings.section.{}", section);
-        let title = self.locale.tr(&title_key).into();
-        let hint = self.locale.tr("settings-panel-hint").into();
-        // Shortcuts (and similar) are view-only in the panel — surface the
-        // dedicated coming-soon copy so users know to edit config.toml.
-        let coming_soon = if section == "shortcuts" {
-            self.locale.tr("settings-panel-coming-soon").into()
-        } else {
-            SharedString::default()
-        };
-        let cfg = self.config.read();
-        let fields = build_settings_fields(
-            &section,
-            &cfg,
-            &self.locale,
-            &self.theme,
-            &self.command_registry,
-        );
-        drop(cfg);
-        sync_vec_model(&self.settings_sections, build_settings_sections(&self.locale));
-        sync_vec_model(&self.settings_fields, fields);
-        let g = self.window.global::<SettingsGlobal>();
-        g.set_visible(st.visible);
-        g.set_panel_title(title);
-        g.set_hint_text(hint);
-        g.set_coming_soon_text(coming_soon);
-        g.set_config_path(self.config_file_path.display().to_string().into());
-        g.set_current_section_id(section.clone().into());
-        g.set_selected_section_index(settings_section_index(&section));
-        g.set_sections(self.settings_sections.clone());
-        g.set_fields(self.settings_fields.clone());
-    }
-
-    fn on_settings_field_changed(self: &Arc<Self>, section: &str, key: &str, value: &str) {
-        if !self.settings.read().visible {
-            return;
-        }
-        let mut cfg = self.config.write();
-        if let Err(reason) = apply_settings_field(&mut cfg, section, key, value, &self.locale) {
-            warn!(
-                section = %section,
-                key = %key,
-                value = %value,
-                reason = %reason,
-                "settings field rejected"
-            );
-            let body = self.locale.tr_args(
-                "settings-field-rejected",
-                &orchid_i18n::FluentArgs::new().with("reason", reason),
-            );
-            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
-            return;
-        }
-        if let Err(e) = cfg.validate() {
-            warn!(
-                section = %section,
-                key = %key,
-                value = %value,
-                error = %e,
-                "settings field failed validation"
-            );
-            let body = self.locale.tr_args(
-                "settings-validation-failed",
-                &orchid_i18n::FluentArgs::new().with("reason", e.to_string()),
-            );
-            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
-            return;
-        }
-        let snapshot = cfg.clone();
-        drop(cfg);
-        if let Err(e) = ConfigLoader::save(&snapshot, &self.config_file_path) {
-            warn!(?e, "settings save failed");
-            let reason = storage_localized_error(&self.locale, &e);
-            let body = self.locale.tr_args(
-                "settings-save-failed",
-                &orchid_i18n::FluentArgs::new().with("reason", reason),
-            );
-            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 3);
-            return;
-        }
-        if let Err(e) = self.apply_hot_config() {
-            warn!(?e, "settings apply after save");
-            let reason = ui_localized_error(&self.locale, &e);
-            let body = self.locale.tr_args(
-                "settings-config-reload-failed",
-                &orchid_i18n::FluentArgs::new().with("reason", reason),
-            );
-            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
-        }
-    }
-
-    fn open_settings(self: &Arc<Self>, section: &str) {
-        self.on_command_palette_dismiss();
-        let section = if SETTINGS_SECTION_IDS.iter().any(|&id| id == section) {
-            section.to_string()
-        } else {
-            SETTINGS_SECTION_IDS[0].to_string()
-        };
-        {
-            let mut st = self.settings.write();
-            st.visible = true;
-            st.section = section;
-        }
-        self.sync_settings_global();
-    }
-
-    fn on_settings_dismiss(self: &Arc<Self>) {
-        if !self.settings.read().visible {
-            return;
-        }
-        self.settings.write().visible = false;
-        self.sync_settings_global();
-    }
-
-    fn on_settings_section_selected(self: &Arc<Self>, idx: i32) {
-        if !self.settings.read().visible {
-            return;
-        }
-        self.settings.write().section = settings_section_id(idx).to_string();
-        self.sync_settings_global();
-    }
-
-    fn open_config_file(self: &Arc<Self>) {
-        let path = self.config_file_path.clone();
-        if !path.exists() {
-            warn!(?path, "config file missing");
-            return;
-        }
-        if let Err(e) = opener::open(&path) {
-            warn!(?e, path = %path.display(), "open config file");
-        }
-    }
-
-    fn sync_navigation_global(self: &Arc<Self>) {
-        let nav = self.navigation.read().clone();
-        let hint_mode = self.config.read().onboarding.hint_mode_enabled;
-        let g = self.window.global::<NavigationGlobal>();
-        g.set_workspace_panel_visible(nav.workspace_panel_visible);
-        g.set_notification_center_visible(nav.notification_center_visible);
-        g.set_dock_visible(nav.dock_visible);
-        g.set_hint_mode_enabled(hint_mode);
-        g.set_workspace_panel_title(self.locale.tr("navigation-workspace-panel-title").into());
-        g.set_notification_center_title(self.locale.tr("notification-center-title").into());
-        g.set_notification_center_placeholder(
-            self.locale.tr("notification-center-placeholder").into(),
-        );
-        g.set_panel_dismiss_label(self.locale.tr("notification-center-dismiss").into());
-        g.set_hint_dock_label(self.locale.tr("onboarding-hint-dock").into());
-        g.set_hint_workspace_label(self.locale.tr("onboarding-hint-workspace").into());
-        g.set_hint_gestures_label(self.locale.tr("onboarding-hint-gestures").into());
-    }
-
-    fn sync_notification_global(self: &Arc<Self>) {
-        let g = self.window.global::<NotificationGlobal>();
-        g.set_notifications(self.notifications.clone());
-        g.set_clear_all_label(self.locale.tr("notification-center-clear").into());
-        g.set_dismiss_label(self.locale.tr("notification-center-dismiss").into());
-        g.set_empty_placeholder(self.locale.tr("notification-center-placeholder").into());
-    }
-
-    /// Soft cap so bridges/toasts cannot grow the in-memory list without bound.
-    const NOTIFICATION_LIST_CAP: usize = 50;
-
-    fn push_notification(self: &Arc<Self>, title: &str, body: &str, severity: i32) {
-        let item = NotificationItem {
-            id: uuid::Uuid::new_v4().to_string().into(),
-            title: title.into(),
-            body: body.into(),
-            time_label: self
-                .config
-                .read()
-                .locale
-                .format_time(chrono::Utc::now())
-                .into(),
-            severity,
-        };
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
-        {
-            model.insert(0, item);
-            while model.row_count() > Self::NOTIFICATION_LIST_CAP {
-                model.remove(model.row_count() - 1);
-            }
-        }
-        self.sync_notification_global();
-        self.persist_notifications();
-    }
-
-    fn clear_notifications(self: &Arc<Self>) {
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
-        {
-            model.set_vec(Vec::new());
-        }
-        self.sync_notification_global();
-        self.persist_notifications();
-    }
-
-    fn dismiss_notification(self: &Arc<Self>, id: &str) {
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
-        {
-            if let Some(idx) = (0..model.row_count()).find(|&i| {
-                model.row_data(i).is_some_and(|item| item.id.as_str() == id)
-            }) {
-                model.remove(idx);
-            }
-        }
-        self.sync_notification_global();
-        self.persist_notifications();
-    }
-
-    fn snapshot_notifications(&self) -> orchid_storage::NotificationCenterState {
-        let mut items = Vec::new();
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
-        {
-            for i in 0..model.row_count() {
-                if let Some(row) = model.row_data(i) {
-                    items.push(orchid_storage::NotificationCenterItem {
-                        id: row.id.to_string(),
-                        title: row.title.to_string(),
-                        body: row.body.to_string(),
-                        time_label: row.time_label.to_string(),
-                        severity: row.severity,
-                    });
-                }
-            }
-        }
-        orchid_storage::NotificationCenterState { items }
-    }
-
-    fn persist_notifications(self: &Arc<Self>) {
-        let state = self.snapshot_notifications();
-        if let Err(e) = (|| -> Result<()> {
-            let mut w = self.storage.write().map_err(UiError::Storage)?;
-            w.put_notification_center(&state)
-                .map_err(UiError::Storage)?;
-            w.commit().map_err(UiError::Storage)?;
-            Ok(())
-        })() {
-            warn!(?e, "persist notification center");
-        }
-    }
-
-    /// Mirror high-value file-manager transfer failures into the notification center (deduped).
-
-
-    fn ensure_startup_notification_tip(self: &Arc<Self>) {
-        if self
-            .notification_tip_pushed
-            .swap(true, Ordering::AcqRel)
-        {
-            return;
-        }
-        if self.notifications.row_count() > 0 {
-            return;
-        }
-        self.push_notification(
-            &self.locale.tr("notification-center-tip-title"),
-            &self.locale.tr("notification-center-tip-body"),
-            1,
-        );
-    }
-
-    fn sync_onboarding_global(self: &Arc<Self>) {
-        let ob = self.onboarding.read().clone();
-        let step = ob.current_step.clamp(0, ONBOARDING_STEP_COUNT - 1) as usize;
-        let (title_key, body_key) = ONBOARDING_STEP_KEYS[step];
-        let g = self.window.global::<OnboardingGlobal>();
-        g.set_overlay_visible(ob.overlay_visible);
-        g.set_current_step(step as i32);
-        g.set_step_count(ONBOARDING_STEP_COUNT);
-        let progress = self.locale.tr_args(
-            "onboarding-step-progress",
-            &orchid_i18n::FluentArgs::new()
-                .with("current", (step + 1).to_string())
-                .with("total", ONBOARDING_STEP_COUNT.to_string()),
-        );
-        g.set_step_progress_label(progress.into());
-        g.set_step_title(self.locale.tr(title_key).into());
-        g.set_step_body(self.locale.tr(body_key).into());
-        g.set_back_label(self.locale.tr("onboarding-back").into());
-        g.set_next_label(self.locale.tr("onboarding-next").into());
-        g.set_skip_label(self.locale.tr("onboarding-skip").into());
-        g.set_finish_label(self.locale.tr("onboarding-finish").into());
-    }
-
-    fn save_config_to_disk(self: &Arc<Self>) {
-        let mut cfg = self.config.read().clone();
-        if let Err(e) = cfg.validate() {
-            warn!(?e, "config validation failed on save");
-            return;
-        }
-        match orchid_crypto::protect_network_mount_passwords(&mut cfg.file_manager.network_mounts)
-        {
-            Ok(true) => {
-                self.config.write().file_manager.network_mounts =
-                    cfg.file_manager.network_mounts.clone();
-            }
-            Ok(false) => {}
-            Err(e) => warn!(?e, "could not DPAPI-protect mount passwords before save"),
-        }
-        if let Err(e) = ConfigLoader::save(&cfg, &self.config_file_path) {
-            warn!(?e, "failed to save config.toml");
-        }
-    }
-
-    fn complete_onboarding(self: &Arc<Self>) {
-        {
-            let mut cfg = self.config.write();
-            cfg.onboarding.completed = true;
-        }
-        self.onboarding.write().overlay_visible = false;
-        self.save_config_to_disk();
-        self.sync_onboarding_global();
-    }
-
-    fn ensure_workspace_mode_for_onboarding(self: &Arc<Self>) {
-        if self.window.global::<AppState>().get_mode() == 0 {
-            self.on_get_started();
-        }
-    }
-
-    fn on_onboarding_next(self: &Arc<Self>) {
-        if !self.onboarding.read().overlay_visible {
-            return;
-        }
-        let step = self.onboarding.read().current_step;
-        if step + 1 >= ONBOARDING_STEP_COUNT {
-            self.ensure_workspace_mode_for_onboarding();
-            self.complete_onboarding();
-            return;
-        }
-        if step == 0 {
-            self.ensure_workspace_mode_for_onboarding();
-        }
-        {
-            let mut ob = self.onboarding.write();
-            ob.current_step = step + 1;
-        }
-        self.sync_onboarding_global();
-    }
-
-    fn on_onboarding_back(self: &Arc<Self>) {
-        let mut ob = self.onboarding.write();
-        if !ob.overlay_visible || ob.current_step <= 0 {
-            return;
-        }
-        ob.current_step -= 1;
-        drop(ob);
-        self.sync_onboarding_global();
-    }
-
-    fn on_onboarding_skip(self: &Arc<Self>) {
-        if !self.onboarding.read().overlay_visible {
-            return;
-        }
-        self.ensure_workspace_mode_for_onboarding();
-        self.complete_onboarding();
-    }
-
-    fn toggle_hint_mode(self: &Arc<Self>) {
-        {
-            let mut cfg = self.config.write();
-            cfg.onboarding.hint_mode_enabled = !cfg.onboarding.hint_mode_enabled;
-        }
-        self.save_config_to_disk();
-        self.sync_navigation_global();
-    }
-
-    fn toggle_workspace_panel(self: &Arc<Self>) {
-        self.on_command_palette_dismiss();
-        {
-            let mut nav = self.navigation.write();
-            nav.workspace_panel_visible = !nav.workspace_panel_visible;
-            if nav.workspace_panel_visible {
-                nav.notification_center_visible = false;
-            }
-        }
-        self.sync_navigation_global();
-    }
-
-    fn toggle_notification_center(self: &Arc<Self>) {
-        self.on_command_palette_dismiss();
-        let opening = {
-            let mut nav = self.navigation.write();
-            nav.notification_center_visible = !nav.notification_center_visible;
-            if nav.notification_center_visible {
-                nav.workspace_panel_visible = false;
-            }
-            nav.notification_center_visible
-        };
-        if opening {
-            self.ensure_startup_notification_tip();
-        }
-        self.sync_navigation_global();
-    }
-
-    fn toggle_dock(self: &Arc<Self>) {
-        {
-            let mut nav = self.navigation.write();
-            nav.dock_visible = !nav.dock_visible;
-        }
-        self.sync_navigation_global();
-        self.update_gesture_bounds();
-        let _ = self.sync_canvas_size_from_winit();
-        self.schedule_rebuild();
-    }
-
-    fn on_navigation_workspace_panel_dismiss(self: &Arc<Self>) {
-        if !self.navigation.read().workspace_panel_visible {
-            return;
-        }
-        self.navigation.write().workspace_panel_visible = false;
-        self.sync_navigation_global();
-    }
-
-    fn on_notification_center_dismiss(self: &Arc<Self>) {
-        if !self.navigation.read().notification_center_visible {
-            return;
-        }
-        self.navigation.write().notification_center_visible = false;
-        self.sync_navigation_global();
-    }
-
-    fn show_universal_search(self: &Arc<Self>) {
-        self.on_command_palette_dismiss();
-        if let Ok(w) = self.workspace_manager.active() {
-            if let Some(inst) = self
-                .widget_manager
-                .instances_for_workspace(w.id)
-                .into_iter()
-                .find(|inst| inst.type_id == "universal-search" || inst.type_id == "search")
-            {
-                *self.search_autofocus_pending.lock() = Some(inst.id);
-                self.schedule_rebuild();
-                return;
-            }
-        }
-        // UI allowlist + dock use the short id; registry maps it to `universal-search`.
-        self.spawn_add_widget("search", AddWidgetPlacement::AutoSlot);
-    }
-
-    fn show_widget_catalog_center(self: &Arc<Self>) {
-        let (vw, vh) = *self.canvas_size.lock();
-        let (scroll_x, scroll_y) = *self.canvas_scroll.lock();
-        {
-            let mut cat = self.catalog.write();
-            cat.visible = true;
-            cat.content_x = vw / 2.0 + scroll_x;
-            cat.content_y = vh / 2.0 + scroll_y;
-            cat.screen_x = vw / 2.0;
-            cat.screen_y = WORKSPACE_SWITCHER_H + vh / 2.0;
-            cat.search_query.clear();
-        }
-        self.sync_widget_catalog_global();
-    }
-
-    fn update_gesture_bounds(self: &Arc<Self>) {
-        let win = self.window.window();
-        let p = win.size();
-        if p.width < 2 || p.height < 2 {
-            return;
-        }
-        let log = p.to_logical(win.scale_factor());
-        self.gesture_recognizer.lock().set_bounds(ScreenBounds::new(
-            log.width,
-            log.height,
-        ));
-    }
-
-    fn handle_recognized_gestures(
-        self: &Arc<Self>,
-        gestures: impl IntoIterator<Item = RecognizedGesture>,
-    ) {
-        let gestures: Vec<_> = gestures.into_iter().collect();
-        if gestures.is_empty() {
-            return;
-        }
-        let win = self.window.window();
-        let p = win.size();
-        if p.width < 2 || p.height < 2 {
-            return;
-        }
-        let log = p.to_logical(win.scale_factor());
-        let bounds = ScreenBounds::new(log.width, log.height);
-        for gesture in gestures {
-            if let Some(cmd_id) = self.input_mapper.resolve_gesture(&gesture, bounds) {
-                debug!(target: "orchid_ui::gestures", cmd_id = %cmd_id, ?gesture, "gesture resolved");
-                self.dispatch_registry_shortcut(cmd_id);
-            }
-        }
-    }
-
-    fn feed_touch_input(self: &Arc<Self>, touch: TouchEvent) {
-        let gestures = self.gesture_recognizer.lock().feed(&InputEvent::Touch(touch));
-        self.handle_recognized_gestures(gestures);
-    }
-
-    fn sync_command_palette_global(self: &Arc<Self>) {
-        let st = self.palette.read().clone();
-        let candidates = build_palette_candidates(
-            &self.command_palette,
-            &self.command_registry,
-            &self.locale,
-            &st.query,
-            COMMAND_PALETTE_LIMIT,
-        );
-        sync_vec_model(&self.palette_candidates, candidates);
-        let count = self.palette_candidates.row_count();
-        let selected = if count == 0 {
-            -1
-        } else {
-            st.selected_index.clamp(0, count as i32 - 1)
-        };
-        let no_results_text = if !st.query.trim().is_empty() {
-            self.locale.tr_args(
-                "search-no-results",
-                &orchid_i18n::FluentArgs::new().with("query", st.query.clone()),
-            )
-        } else {
-            self.locale.tr("search-no-results-short")
-        };
-        let g = self.window.global::<CommandPaletteGlobal>();
-        g.set_visible(st.visible);
-        g.set_model(SearchModel {
-            query: st.query.clone().into(),
-            candidates: self.palette_candidates.clone(),
-            is_searching: false,
-            error: SharedString::new(),
-            selected_index: selected,
-            placeholder_text: self.locale.tr("command-palette-placeholder").into(),
-            empty_state_text: self.locale.tr("command-palette-empty").into(),
-            no_results_text: no_results_text.into(),
-            searching_text: self.locale.tr("search-searching").into(),
-            request_autofocus: st.request_autofocus,
-        });
-        if st.request_autofocus {
-            self.palette.write().request_autofocus = false;
-        }
-    }
-
-    fn toggle_command_palette(self: &Arc<Self>) {
-        if self.palette.read().visible {
-            self.on_command_palette_dismiss();
-        } else {
-            self.open_command_palette();
-        }
-    }
-
-    fn open_command_palette(self: &Arc<Self>) {
-        {
-            let mut st = self.palette.write();
-            st.visible = true;
-            st.query.clear();
-            st.selected_index = 0;
-            st.request_autofocus = true;
-        }
-        self.sync_command_palette_global();
-    }
-
-    fn on_command_palette_dismiss(self: &Arc<Self>) {
-        if !self.palette.read().visible {
-            return;
-        }
-        self.palette.write().visible = false;
-        self.sync_command_palette_global();
-    }
-
-    fn on_command_palette_query_changed(self: &Arc<Self>, query: &SharedString) {
-        {
-            let mut st = self.palette.write();
-            st.query = query.to_string();
-            st.selected_index = 0;
-        }
-        self.sync_command_palette_global();
-    }
-
-    fn on_command_palette_selection_changed(self: &Arc<Self>, new_idx: i32) {
-        let count = self.palette_candidates.row_count();
-        let clamped = if count == 0 {
-            -1
-        } else {
-            new_idx.clamp(0, count as i32 - 1)
-        };
-        self.palette.write().selected_index = clamped;
-        self.sync_command_palette_global();
-    }
-
-    fn on_command_palette_candidate_activated(self: &Arc<Self>, cmd_id: &SharedString) {
-        let id = cmd_id.to_string();
-        if id.is_empty() {
-            return;
-        }
-        self.on_command_palette_dismiss();
-        let this = Arc::clone(self);
-        spawn::spawn_local_compat(async move {
-            this.dispatch_command(&id).await;
-            this.schedule_rebuild();
-        });
-    }
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
         if cmd_id == "command-palette" {
@@ -2721,17 +1917,17 @@ impl MainWindowController {
                                     // leader armed; consume without dispatching
                                 } else {
                                 let palette_sc = c.command_palette_shortcut();
-                                if winit_modifiers_match(palette_sc.modifiers, mods)
-                                    && winit_key_matches(palette_sc.key, &event.logical_key)
+                                if input::winit_modifiers_match(palette_sc.modifiers, mods)
+                                    && input::winit_key_matches(palette_sc.key, &event.logical_key)
                                 {
                                     c.toggle_command_palette();
                                 } else if c.try_viewer_text_ctrl_s(mods, &event.logical_key) {
                                     // Saved focused/last text editor; consume.
                                 } else if let Some(shortcut) =
-                                    winit_to_shortcut(mods, &event.logical_key)
+                                    input::winit_to_shortcut(mods, &event.logical_key)
                                 {
                                     if let Some(cmd_id) =
-                                        resolve_registry_shortcut(&c.command_registry, &shortcut)
+                                        input::resolve_registry_shortcut(&c.command_registry, &shortcut)
                                     {
                                         c.dispatch_registry_shortcut(cmd_id);
                                     }
@@ -2749,7 +1945,7 @@ impl MainWindowController {
                 }
                 WindowEvent::Touch(touch) => {
                     if let Some(c) = tw.upgrade() {
-                        if let Some(ev) = winit_touch_to_orchid(&touch, c.window.window()) {
+                        if let Some(ev) = input::winit_touch_to_orchid(&touch, c.window.window()) {
                             c.feed_touch_input(ev);
                         }
                     }
@@ -2921,7 +2117,7 @@ impl MainWindowController {
 
 /// Replace all rows in a `VecModel` wrapped by `ModelRc` without creating a new `ModelRc`, so
 /// `for` loops in Slint keep the same item instances and retain focus/scroll state.
-fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+pub(super) fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     let v = model
         .as_any()
         .downcast_ref::<VecModel<T>>()
@@ -2938,194 +2134,6 @@ fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     }
 }
 
-
-fn resolve_registry_shortcut(
-    registry: &CommandRegistry,
-    shortcut: &Shortcut,
-) -> Option<String> {
-    registry.list_all().into_iter().find_map(|desc| {
-        registry
-            .effective_shortcut(&desc.id)
-            .filter(|s| shortcuts_equivalent(s, shortcut))
-            .map(|_| desc.id)
-    })
-}
-
-/// Match shortcuts from winit, allowing an extra Shift for punctuation keys
-/// (e.g. `Win+?` is typed as Win+Shift+? on US layouts).
-fn shortcuts_equivalent(expected: &Shortcut, actual: &Shortcut) -> bool {
-    use orchid_core::{Key, Modifiers};
-    if expected == actual {
-        return true;
-    }
-    if expected.key != actual.key {
-        return false;
-    }
-    if matches!(expected.key, Key::Char(c) if !c.is_ascii_alphabetic())
-        && !expected.modifiers.contains(Modifiers::SHIFT)
-        && actual.modifiers == expected.modifiers | Modifiers::SHIFT
-    {
-        return true;
-    }
-    false
-}
-
-fn winit_to_shortcut(
-    state: slint::winit_030::winit::keyboard::ModifiersState,
-    logical: &slint::winit_030::winit::keyboard::Key,
-) -> Option<Shortcut> {
-    use orchid_core::{Key as Ok, Modifiers};
-    use slint::winit_030::winit::keyboard::{Key, NamedKey};
-
-    let mut modifiers = Modifiers::empty();
-    if state.control_key() {
-        modifiers |= Modifiers::CTRL;
-    }
-    if state.shift_key() {
-        modifiers |= Modifiers::SHIFT;
-    }
-    if state.alt_key() {
-        modifiers |= Modifiers::ALT;
-    }
-    if state.super_key() {
-        modifiers |= Modifiers::WIN;
-    }
-
-    let key = match logical {
-        Key::Character(s) => {
-            let ch = s.chars().next()?;
-            if ch.is_ascii_alphabetic() {
-                Ok::Char(ch.to_ascii_lowercase())
-            } else {
-                Ok::Char(ch)
-            }
-        }
-        Key::Named(NamedKey::Escape) => Ok::Escape,
-        Key::Named(NamedKey::Enter) => Ok::Enter,
-        Key::Named(NamedKey::Tab) => Ok::Tab,
-        Key::Named(NamedKey::Backspace) => Ok::Backspace,
-        Key::Named(NamedKey::Delete) => Ok::Delete,
-        Key::Named(NamedKey::Insert) => Ok::Insert,
-        Key::Named(NamedKey::Home) => Ok::Home,
-        Key::Named(NamedKey::End) => Ok::End,
-        Key::Named(NamedKey::PageUp) => Ok::PageUp,
-        Key::Named(NamedKey::PageDown) => Ok::PageDown,
-        Key::Named(NamedKey::ArrowUp) => Ok::ArrowUp,
-        Key::Named(NamedKey::ArrowDown) => Ok::ArrowDown,
-        Key::Named(NamedKey::ArrowLeft) => Ok::ArrowLeft,
-        Key::Named(NamedKey::ArrowRight) => Ok::ArrowRight,
-        Key::Named(NamedKey::Space) => Ok::Space,
-        Key::Named(named) => Ok::F(winit_named_f_index(named)?),
-        _ => return None,
-    };
-    Some(Shortcut::new(modifiers, key))
-}
-
-fn winit_touch_to_orchid(
-    touch: &slint::winit_030::winit::event::Touch,
-    window: &slint::Window,
-) -> Option<TouchEvent> {
-    use slint::winit_030::winit::event::TouchPhase as WinitTouchPhase;
-
-    let scale = f64::from(window.scale_factor());
-    let logical: slint::winit_030::winit::dpi::LogicalPosition<f64> =
-        touch.location.to_logical(scale);
-    let phase = match touch.phase {
-        WinitTouchPhase::Started => TouchPhase::Began,
-        WinitTouchPhase::Moved => TouchPhase::Moved,
-        WinitTouchPhase::Ended => TouchPhase::Ended,
-        WinitTouchPhase::Cancelled => TouchPhase::Cancelled,
-    };
-    Some(TouchEvent {
-        pointer_id: touch.id as u32,
-        phase,
-        position: Point::new(logical.x as f32, logical.y as f32),
-        pressure: 1.0,
-        size: 10.0,
-        timestamp: Instant::now(),
-    })
-}
-
-fn winit_modifiers_match(
-    shortcut_mods: orchid_core::Modifiers,
-    state: slint::winit_030::winit::keyboard::ModifiersState,
-) -> bool {
-    use orchid_core::Modifiers;
-    state.control_key() == shortcut_mods.contains(Modifiers::CTRL)
-        && state.shift_key() == shortcut_mods.contains(Modifiers::SHIFT)
-        && state.alt_key() == shortcut_mods.contains(Modifiers::ALT)
-        && state.super_key() == shortcut_mods.contains(Modifiers::WIN)
-}
-
-fn winit_key_matches(
-    shortcut_key: orchid_core::Key,
-    logical: &slint::winit_030::winit::keyboard::Key,
-) -> bool {
-    use orchid_core::Key as Ok;
-    use slint::winit_030::winit::keyboard::{Key, NamedKey};
-    match (shortcut_key, logical) {
-        (Ok::Char(c), Key::Character(s)) => s.as_str().eq_ignore_ascii_case(&c.to_string()),
-        (Ok::Escape, Key::Named(NamedKey::Escape)) => true,
-        (Ok::Enter, Key::Named(NamedKey::Enter)) => true,
-        (Ok::Tab, Key::Named(NamedKey::Tab)) => true,
-        (Ok::Backspace, Key::Named(NamedKey::Backspace)) => true,
-        (Ok::Delete, Key::Named(NamedKey::Delete)) => true,
-        (Ok::Insert, Key::Named(NamedKey::Insert)) => true,
-        (Ok::Home, Key::Named(NamedKey::Home)) => true,
-        (Ok::End, Key::Named(NamedKey::End)) => true,
-        (Ok::PageUp, Key::Named(NamedKey::PageUp)) => true,
-        (Ok::PageDown, Key::Named(NamedKey::PageDown)) => true,
-        (Ok::ArrowUp, Key::Named(NamedKey::ArrowUp)) => true,
-        (Ok::ArrowDown, Key::Named(NamedKey::ArrowDown)) => true,
-        (Ok::ArrowLeft, Key::Named(NamedKey::ArrowLeft)) => true,
-        (Ok::ArrowRight, Key::Named(NamedKey::ArrowRight)) => true,
-        (Ok::Space, Key::Named(NamedKey::Space)) => true,
-        (Ok::F(n), Key::Named(named)) => winit_named_f_index(named) == Some(n),
-        _ => false,
-    }
-}
-
-fn winit_named_f_index(key: &slint::winit_030::winit::keyboard::NamedKey) -> Option<u8> {
-    use slint::winit_030::winit::keyboard::NamedKey;
-    Some(match key {
-        NamedKey::F1 => 1,
-        NamedKey::F2 => 2,
-        NamedKey::F3 => 3,
-        NamedKey::F4 => 4,
-        NamedKey::F5 => 5,
-        NamedKey::F6 => 6,
-        NamedKey::F7 => 7,
-        NamedKey::F8 => 8,
-        NamedKey::F9 => 9,
-        NamedKey::F10 => 10,
-        NamedKey::F11 => 11,
-        NamedKey::F12 => 12,
-        NamedKey::F13 => 13,
-        NamedKey::F14 => 14,
-        NamedKey::F15 => 15,
-        NamedKey::F16 => 16,
-        NamedKey::F17 => 17,
-        NamedKey::F18 => 18,
-        NamedKey::F19 => 19,
-        NamedKey::F20 => 20,
-        NamedKey::F21 => 21,
-        NamedKey::F22 => 22,
-        NamedKey::F23 => 23,
-        NamedKey::F24 => 24,
-        NamedKey::F25 => 25,
-        NamedKey::F26 => 26,
-        NamedKey::F27 => 27,
-        NamedKey::F28 => 28,
-        NamedKey::F29 => 29,
-        NamedKey::F30 => 30,
-        NamedKey::F31 => 31,
-        NamedKey::F32 => 32,
-        NamedKey::F33 => 33,
-        NamedKey::F34 => 34,
-        NamedKey::F35 => 35,
-        _ => return None,
-    })
-}
 
 /// Empty [`WorkspaceModel`] for startup mode or when no layout is available yet.
 pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
@@ -3338,157 +2346,6 @@ pub(super) fn empty_close_confirm_dialog() -> WidgetCloseConfirmDialog {
         cancel_label: SharedString::new(),
     }
 }
-
-fn apply_settings_field(
-    cfg: &mut OrchidConfig,
-    section: &str,
-    key: &str,
-    value: &str,
-    locale: &LocaleManager,
-) -> Result<(), String> {
-    match (section, key) {
-        ("general", "open-on-startup") => {
-            cfg.general.open_on_startup = parse_settings_bool(value)?;
-        }
-        ("appearance", "theme") => {
-            if value.is_empty() {
-                return Err("theme id must not be empty".into());
-            }
-            cfg.appearance.theme = value.to_string();
-        }
-        ("appearance", "density") => {
-            cfg.appearance.density = match value {
-                "touch" => orchid_storage::Density::Touch,
-                "mouse" => orchid_storage::Density::Mouse,
-                "hybrid" => orchid_storage::Density::Hybrid,
-                other => return Err(format!("unknown density `{other}`")),
-            };
-        }
-        ("appearance", "font-family") => {
-            let trimmed = value.trim();
-            let system_default = locale.tr("settings-value-system-default");
-            cfg.appearance.font_family = if trimmed.is_empty() || trimmed == system_default {
-                None
-            } else {
-                Some(trimmed.to_string())
-            };
-        }
-        ("appearance", "font-scale") => {
-            cfg.appearance.font_scale = value
-                .parse::<f32>()
-                .map_err(|_| format!("invalid font scale `{value}`"))?;
-        }
-        ("appearance", "reduce-motion") => {
-            cfg.appearance.reduce_motion = parse_settings_bool(value)?;
-        }
-        ("appearance", "follow-system-theme") => {
-            cfg.appearance.follow_system_theme = parse_settings_bool(value)?;
-        }
-        ("appearance", "dark-theme") => {
-            if value.is_empty() {
-                return Err("dark theme id must not be empty".into());
-            }
-            cfg.appearance.dark_theme = value.to_string();
-        }
-        ("appearance", "light-theme") => {
-            if value.is_empty() {
-                return Err("light theme id must not be empty".into());
-            }
-            cfg.appearance.light_theme = value.to_string();
-        }
-        ("input", "primary-hand") => {
-            cfg.input.primary_hand = match value {
-                "left" => orchid_storage::Hand::Left,
-                "right" => orchid_storage::Hand::Right,
-                other => return Err(format!("unknown hand `{other}`")),
-            };
-        }
-        ("input", "mirror-edge-swipes") => {
-            cfg.input.mirror_edge_swipes = parse_settings_bool(value)?;
-        }
-        ("shortcuts", "leader-key") => {
-            cfg.shortcuts.leader_key = if value.is_empty() {
-                None
-            } else {
-                Some(value.to_string())
-            };
-        }
-        ("shortcuts", "leader-timeout") => {
-            cfg.shortcuts.leader_timeout_ms = value
-                .parse::<u64>()
-                .map_err(|_| format!("invalid leader timeout `{value}`"))?;
-        }
-        ("locale", "language") => {
-            if value.is_empty() {
-                return Err("language tag must not be empty".into());
-            }
-            cfg.locale.language = value.to_string();
-        }
-        ("locale", "date-format") => {
-            let trimmed = value.trim();
-            let default_label = locale.tr("settings-value-default");
-            cfg.locale.date_format = if trimmed.is_empty() || trimmed == default_label {
-                None
-            } else {
-                Some(trimmed.to_string())
-            };
-        }
-        ("locale", "time-format") => {
-            let trimmed = value.trim();
-            let default_label = locale.tr("settings-value-default");
-            cfg.locale.time_format = if trimmed.is_empty() || trimmed == default_label {
-                None
-            } else {
-                Some(trimmed.to_string())
-            };
-        }
-        ("locale", "first-day-of-week") => {
-            cfg.locale.first_day_of_week = match value {
-                "0" => 0,
-                "1" => 1,
-                other => return Err(format!("first day of week must be 0 or 1, got `{other}`")),
-            };
-        }
-        ("privacy", "record-action-history") => {
-            cfg.privacy.record_action_history = parse_settings_bool(value)?;
-        }
-        ("privacy", "history-retention-days") => {
-            cfg.privacy.history_retention_days = value
-                .parse::<u32>()
-                .map_err(|_| format!("invalid history retention `{value}`"))?;
-        }
-        ("privacy", "clear-clipboard-seconds") => {
-            cfg.privacy.clear_clipboard_seconds = value
-                .parse::<u32>()
-                .map_err(|_| format!("invalid clipboard timeout `{value}`"))?;
-        }
-        ("privacy", "vault-auto-lock-seconds") => {
-            cfg.privacy.vault_auto_lock_seconds = value
-                .parse::<u32>()
-                .map_err(|_| format!("invalid vault auto-lock `{value}`"))?;
-        }
-        _ => return Err(format!("field `{section}.{key}` is not editable")),
-    }
-    Ok(())
-}
-
-fn parse_settings_bool(value: &str) -> Result<bool, String> {
-    match value {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        other => Err(format!("expected true/false, got `{other}`")),
-    }
-}
-
-fn density_i18n_key(density: orchid_storage::Density) -> &'static str {
-    match density {
-        orchid_storage::Density::Touch => "density-touch",
-        orchid_storage::Density::Mouse => "density-mouse",
-        orchid_storage::Density::Hybrid => "density-hybrid",
-    }
-}
-
-
 
 fn open_with_application_picker(path: &str) -> std::io::Result<()> {
     #[cfg(windows)]
