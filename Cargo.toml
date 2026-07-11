@@ -146,7 +146,7 @@ chardetng = "0.1"
 
 # HTTP client / feeds
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
-feed-rs = "2"
+feed-rs = "2.4"
 futures = "0.3"
 opener = "0.7"
 

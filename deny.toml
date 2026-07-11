@@ -16,6 +16,10 @@ yanked = "warn"
 # Only fail unmaintained/unsound for direct workspace deps for now.
 unmaintained = "workspace"
 unsound = "workspace"
+ignore = [
+    # Direct dep; no maintained semver-compatible successor yet (postcard/rkyv migration later).
+    { id = "RUSTSEC-2025-0141", reason = "bincode 2.x is unmaintained; Orchid still uses it for compact widget state blobs" },
+]
 
 [licenses]
 version = 2
