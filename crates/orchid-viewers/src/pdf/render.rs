@@ -1,6 +1,13 @@
-//! Synchronous Pdfium page rendering (runs on a blocking thread pool).
+//! Synchronous Pdfium page rendering.
+//!
+//! Rendering runs on a dedicated worker thread so a loaded document can be
+//! reused across page / zoom / viewport changes without re-parsing the PDF
+//! bytes on every frame.
 
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, OnceLock};
 
 use pdfium_render::prelude::*;
 
@@ -35,36 +42,237 @@ pub struct RenderedPage {
     pub zoom: f32,
 }
 
-/// Render `page` (1-based) from in-memory PDF bytes.
+/// Opaque handle for an opened PDF in the worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PdfSessionId(u64);
+
+static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
+
+enum WorkerRequest {
+    Open {
+        bytes: Arc<Vec<u8>>,
+        reply: Sender<Result<(PdfSessionId, u32)>>,
+    },
+    Render {
+        session: PdfSessionId,
+        page: u32,
+        viewport: (f32, f32),
+        fit_mode: FitMode,
+        zoom: f32,
+        reply: Sender<Result<RenderedPage>>,
+    },
+    Close {
+        session: PdfSessionId,
+        reply: Sender<()>,
+    },
+}
+
+static WORKER_TX: OnceLock<Sender<WorkerRequest>> = OnceLock::new();
+
+fn worker_sender() -> Sender<WorkerRequest> {
+    WORKER_TX
+        .get_or_init(|| {
+            let (tx, rx) = mpsc::channel();
+            std::thread::Builder::new()
+                .name("orchid-pdfium".into())
+                .spawn(move || worker_loop(rx))
+                .expect("spawn pdfium worker");
+            tx
+        })
+        .clone()
+}
+
+fn worker_loop(rx: Receiver<WorkerRequest>) {
+    let mut inbox: VecDeque<WorkerRequest> = VecDeque::new();
+    let mut documents: HashMap<PdfSessionId, Arc<Vec<u8>>> = HashMap::new();
+
+    while let Some(req) = next_request(&rx, &mut inbox) {
+        match req {
+            WorkerRequest::Open { bytes, reply } => {
+                let page_count = with_pdfium(|pdfium| {
+                    let document = pdfium
+                        .load_pdf_from_byte_slice(bytes.as_slice(), None)
+                        .map_err(|e| ViewerError::PdfRender {
+                            page: 1,
+                            reason: format!("load document: {e}"),
+                        })?;
+                    let count = u32::from(document.pages().len());
+                    if count == 0 {
+                        return Err(ViewerError::PdfEmpty);
+                    }
+                    Ok(count)
+                });
+                match page_count {
+                    Ok(count) => {
+                        let id = PdfSessionId(NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
+                        documents.insert(id, bytes);
+                        let _ = reply.send(Ok((id, count)));
+                    }
+                    Err(e) => {
+                        let _ = reply.send(Err(e));
+                    }
+                }
+            }
+            WorkerRequest::Close { session, reply } => {
+                documents.remove(&session);
+                let _ = reply.send(());
+            }
+            WorkerRequest::Render {
+                session,
+                page,
+                viewport,
+                fit_mode,
+                zoom,
+                reply,
+            } => {
+                let Some(bytes) = documents.get(&session).cloned() else {
+                    let _ = reply.send(Err(ViewerError::PdfEmpty));
+                    continue;
+                };
+
+                let interrupted = with_pdfium(|pdfium| -> Result<Option<WorkerRequest>> {
+                    let document = match pdfium.load_pdf_from_byte_slice(bytes.as_slice(), None) {
+                        Ok(doc) => doc,
+                        Err(e) => {
+                            let _ = reply.send(Err(ViewerError::PdfRender {
+                                page,
+                                reason: format!("load document: {e}"),
+                            }));
+                            return Ok(None);
+                        }
+                    };
+
+                    let first =
+                        render_from_document(&document, page, viewport, fit_mode, zoom);
+                    let _ = reply.send(first);
+
+                    // Keep the parsed document warm while this session keeps rendering.
+                    loop {
+                        match next_request(&rx, &mut inbox) {
+                            Some(WorkerRequest::Render {
+                                session: next_session,
+                                page,
+                                viewport,
+                                fit_mode,
+                                zoom,
+                                reply,
+                            }) if next_session == session => {
+                                let rendered = render_from_document(
+                                    &document, page, viewport, fit_mode, zoom,
+                                );
+                                let _ = reply.send(rendered);
+                            }
+                            Some(other) => return Ok(Some(other)),
+                            None => return Ok(None),
+                        }
+                    }
+                });
+
+                match interrupted {
+                    Ok(Some(other)) => inbox.push_front(other),
+                    Ok(None) => {}
+                    Err(e) => {
+                        tracing::warn!(error = %e, "pdf worker render session failed");
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn next_request(
+    rx: &Receiver<WorkerRequest>,
+    inbox: &mut VecDeque<WorkerRequest>,
+) -> Option<WorkerRequest> {
+    inbox.pop_front().or_else(|| rx.recv().ok())
+}
+
+/// Open a PDF in the worker and return `(session, page_count)`.
+///
+/// # Errors
+///
+/// Propagates Pdfium load failures.
+pub fn open_document(bytes: Arc<Vec<u8>>) -> Result<(PdfSessionId, u32)> {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    worker_sender()
+        .send(WorkerRequest::Open {
+            bytes,
+            reply: reply_tx,
+        })
+        .map_err(|_| ViewerError::PdfUnavailable)?;
+    reply_rx
+        .recv()
+        .map_err(|_| ViewerError::PdfUnavailable)?
+}
+
+/// Drop a previously opened session.
+pub fn close_document(session: PdfSessionId) {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if worker_sender()
+        .send(WorkerRequest::Close {
+            session,
+            reply: reply_tx,
+        })
+        .is_ok()
+    {
+        let _ = reply_rx.recv();
+    }
+}
+
+/// Render `page` (1-based) from an opened session.
 ///
 /// # Errors
 ///
 /// Propagates Pdfium / decode failures as [`ViewerError`].
 pub fn render_page(
-    bytes: &[u8],
+    session: PdfSessionId,
     page: u32,
     viewport: (f32, f32),
     fit_mode: FitMode,
     zoom: f32,
 ) -> Result<RenderedPage> {
-    with_pdfium(|pdfium| render_with_pdfium(pdfium, bytes, page, viewport, fit_mode, zoom))
+    let (reply_tx, reply_rx) = mpsc::channel();
+    worker_sender()
+        .send(WorkerRequest::Render {
+            session,
+            page,
+            viewport,
+            fit_mode,
+            zoom,
+            reply: reply_tx,
+        })
+        .map_err(|_| ViewerError::PdfUnavailable)?;
+    reply_rx
+        .recv()
+        .map_err(|_| ViewerError::PdfUnavailable)?
 }
 
-fn render_with_pdfium(
-    pdfium: &Pdfium,
+/// One-shot helper for tests: open bytes, render, then close.
+///
+/// # Errors
+///
+/// Propagates Pdfium failures.
+pub fn render_page_from_bytes(
     bytes: &[u8],
     page: u32,
     viewport: (f32, f32),
     fit_mode: FitMode,
     zoom: f32,
 ) -> Result<RenderedPage> {
-    let document = pdfium
-        .load_pdf_from_byte_slice(bytes, None)
-        .map_err(|e| ViewerError::PdfRender {
-            page,
-            reason: format!("load document: {e}"),
-        })?;
+    let bytes = Arc::new(bytes.to_vec());
+    let (session, _) = open_document(bytes)?;
+    let rendered = render_page(session, page, viewport, fit_mode, zoom);
+    close_document(session);
+    rendered
+}
 
+fn render_from_document(
+    document: &PdfDocument<'_>,
+    page: u32,
+    viewport: (f32, f32),
+    fit_mode: FitMode,
+    zoom: f32,
+) -> Result<RenderedPage> {
     let page_count = u32::from(document.pages().len());
     if page_count == 0 {
         return Err(ViewerError::PdfEmpty);
@@ -179,7 +387,7 @@ startxref
 
     #[test]
     fn render_minimal_pdf_page() {
-        let page = render_page(MINIMAL_PDF, 1, (640.0, 480.0), FitMode::FitWidth, 1.0)
+        let page = render_page_from_bytes(MINIMAL_PDF, 1, (640.0, 480.0), FitMode::FitWidth, 1.0)
             .expect("pdfium should render minimal PDF when available");
         assert_eq!(page.page_count, 1);
         assert_eq!(page.current_page, 1);
@@ -189,5 +397,18 @@ startxref
             page.rgba.len(),
             (page.width_px * page.height_px * 4) as usize
         );
+    }
+
+    #[test]
+    fn reuse_open_document_across_renders() {
+        let bytes = Arc::new(MINIMAL_PDF.to_vec());
+        let (session, count) = open_document(Arc::clone(&bytes)).expect("open");
+        assert_eq!(count, 1);
+        let a = render_page(session, 1, (640.0, 480.0), FitMode::FitWidth, 1.0).expect("render a");
+        let b = render_page(session, 1, (800.0, 600.0), FitMode::FitPage, 1.0).expect("render b");
+        close_document(session);
+        assert_eq!(a.page_count, 1);
+        assert_eq!(b.page_count, 1);
+        assert!(b.width_px > 0);
     }
 }

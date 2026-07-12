@@ -71,8 +71,13 @@ impl SyntaxHighlighter {
         if line_count == 0 {
             return Vec::new();
         }
-        let scopes = byte_scopes(source, tree, language);
-        scoped_lines(source, &scopes, first_line, line_count)
+        let Some((window_start, window_end)) =
+            visible_byte_window(source, first_line, line_count)
+        else {
+            return Vec::new();
+        };
+        let scopes = byte_scopes_window(source, tree, language, window_start, window_end);
+        scoped_lines_window(source, &scopes, window_start, first_line, line_count)
     }
 
     /// Languages the registry currently supports.
@@ -104,21 +109,50 @@ fn plain_lines(source: &str, first_line: u32, line_count: u32) -> Vec<SyntaxLine
 }
 
 fn byte_scopes(source: &str, tree: &Tree, language: &str) -> Vec<SyntaxScope> {
-    let mut scopes = vec![SyntaxScope::Plain; source.len()];
+    byte_scopes_window(source, tree, language, 0, source.len())
+}
+
+fn byte_scopes_window(
+    source: &str,
+    tree: &Tree,
+    language: &str,
+    window_start: usize,
+    window_end: usize,
+) -> Vec<SyntaxScope> {
+    let window_end = window_end.min(source.len()).max(window_start);
+    let mut scopes = vec![SyntaxScope::Plain; window_end.saturating_sub(window_start)];
+    if scopes.is_empty() {
+        return scopes;
+    }
     let mut cursor = tree.walk();
-    apply_node_scopes(&mut cursor, language, &mut scopes);
+    apply_node_scopes_window(&mut cursor, language, window_start, window_end, &mut scopes);
     scopes
 }
 
-fn apply_node_scopes(cursor: &mut TreeCursor, language: &str, scopes: &mut [SyntaxScope]) {
+fn apply_node_scopes_window(
+    cursor: &mut TreeCursor,
+    language: &str,
+    window_start: usize,
+    window_end: usize,
+    scopes: &mut [SyntaxScope],
+) {
     let node = cursor.node();
+    if node.end_byte() <= window_start || node.start_byte() >= window_end {
+        return;
+    }
     if let Some(scope) = scope_for_node(language, &node) {
-        paint_scope(scopes, node.start_byte(), node.end_byte(), scope);
+        paint_scope_window(
+            scopes,
+            window_start,
+            node.start_byte(),
+            node.end_byte(),
+            scope,
+        );
     }
 
     if cursor.goto_first_child() {
         loop {
-            apply_node_scopes(cursor, language, scopes);
+            apply_node_scopes_window(cursor, language, window_start, window_end, scopes);
             if !cursor.goto_next_sibling() {
                 break;
             }
@@ -127,11 +161,49 @@ fn apply_node_scopes(cursor: &mut TreeCursor, language: &str, scopes: &mut [Synt
     }
 }
 
-fn paint_scope(scopes: &mut [SyntaxScope], start: usize, end: usize, scope: SyntaxScope) {
-    let end = end.min(scopes.len());
-    for slot in &mut scopes[start..end] {
+fn paint_scope_window(
+    scopes: &mut [SyntaxScope],
+    window_start: usize,
+    abs_start: usize,
+    abs_end: usize,
+    scope: SyntaxScope,
+) {
+    let start = abs_start.max(window_start);
+    let end = abs_end.min(window_start + scopes.len());
+    if start >= end {
+        return;
+    }
+    let rel_start = start - window_start;
+    let rel_end = end - window_start;
+    for slot in &mut scopes[rel_start..rel_end] {
         *slot = scope;
     }
+}
+
+fn visible_byte_window(source: &str, first_line: u32, line_count: u32) -> Option<(usize, usize)> {
+    if line_count == 0 {
+        return None;
+    }
+    let mut byte = 0usize;
+    let mut window_start = None;
+    let mut window_end = source.len();
+    let last_line = first_line.saturating_add(line_count.saturating_sub(1));
+
+    for (idx, line) in source.split('\n').enumerate() {
+        let line_number = idx as u32;
+        let line_end = byte + line.len();
+        if line_number == first_line {
+            window_start = Some(byte);
+        }
+        if line_number == last_line {
+            window_end = line_end;
+            break;
+        }
+        byte = line_end.saturating_add(1);
+    }
+
+    let start = window_start?;
+    Some((start, window_end.min(source.len()).max(start)))
 }
 
 fn scope_for_node(language: &str, node: &Node) -> Option<SyntaxScope> {
@@ -737,9 +809,10 @@ fn is_keyword_kind(kind: &str) -> bool {
     )
 }
 
-fn scoped_lines(
+fn scoped_lines_window(
     source: &str,
     scopes: &[SyntaxScope],
+    window_start: usize,
     first_line: u32,
     line_count: u32,
 ) -> Vec<SyntaxLine> {
@@ -752,10 +825,12 @@ fn scoped_lines(
         let line_end = line_start.saturating_add(line.len());
 
         if line_number >= first_line && out.len() < line_count as usize {
-            let line_scopes = if line.is_empty() {
+            let rel_start = line_start.saturating_sub(window_start);
+            let rel_end = line_end.saturating_sub(window_start).min(scopes.len());
+            let line_scopes = if line.is_empty() || rel_start >= scopes.len() {
                 &[]
             } else {
-                &scopes[line_start..line_end.min(scopes.len())]
+                &scopes[rel_start..rel_end.max(rel_start)]
             };
             out.push(SyntaxLine {
                 line_number,
@@ -770,6 +845,15 @@ fn scoped_lines(
     }
 
     out
+}
+
+fn scoped_lines(
+    source: &str,
+    scopes: &[SyntaxScope],
+    first_line: u32,
+    line_count: u32,
+) -> Vec<SyntaxLine> {
+    scoped_lines_window(source, scopes, 0, first_line, line_count)
 }
 
 fn line_to_segments(line: &str, scopes: &[SyntaxScope]) -> Vec<SyntaxSegment> {

@@ -29,8 +29,10 @@ pub const DEFAULT_SIZE_LIMIT: u64 = 256 * 1024 * 1024;
 /// PDF viewer.
 pub struct PdfViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
-    /// Shared payload so re-renders only clone the `Arc`, not the whole file.
+    /// Shared payload kept for diagnostics; the pdfium worker owns the live
+    /// parsed document keyed by [`session`].
     bytes: RwLock<Option<Arc<Vec<u8>>>>,
+    session: RwLock<Option<render::PdfSessionId>>,
     page_count: RwLock<u32>,
     current_page: RwLock<u32>,
     zoom: RwLock<f32>,
@@ -61,6 +63,7 @@ impl PdfViewer {
         Self {
             path: RwLock::new(None),
             bytes: RwLock::new(None),
+            session: RwLock::new(None),
             page_count: RwLock::new(0),
             current_page: RwLock::new(1),
             zoom: RwLock::new(1.0),
@@ -166,16 +169,15 @@ impl PdfViewer {
     }
 
     async fn rerender_at_page(&self, page: u32) -> Result<()> {
-        let bytes = self
-            .bytes
+        let session = self
+            .session
             .read()
-            .clone()
             .ok_or(ViewerError::PdfEmpty)?;
         let viewport = *self.viewport.read();
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();
         let rendered = tokio::task::spawn_blocking(move || {
-            render::render_page(bytes.as_slice(), page, viewport, fit_mode, zoom)
+            render::render_page(session, page, viewport, fit_mode, zoom)
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
@@ -217,9 +219,11 @@ impl Viewer for PdfViewer {
         let zoom = *self.zoom.read();
         let path_for_task = path.clone();
         let bytes = Arc::new(bytes);
-        let bytes_for_render = Arc::clone(&bytes);
-        let rendered = tokio::task::spawn_blocking(move || {
-            render::render_page(bytes_for_render.as_slice(), 1, viewport, fit_mode, zoom)
+        let bytes_for_worker = Arc::clone(&bytes);
+        let (session, rendered) = tokio::task::spawn_blocking(move || {
+            let (session, _) = render::open_document(bytes_for_worker)?;
+            let rendered = render::render_page(session, 1, viewport, fit_mode, zoom)?;
+            Ok::<_, ViewerError>((session, rendered))
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
@@ -227,6 +231,9 @@ impl Viewer for PdfViewer {
             reason: format!("join: {e}"),
         })??;
 
+        if let Some(old) = self.session.write().replace(session) {
+            render::close_document(old);
+        }
         *self.path.write() = Some(path_for_task);
         *self.bytes.write() = Some(bytes);
         *self.page_count.write() = rendered.page_count;
@@ -237,6 +244,17 @@ impl Viewer for PdfViewer {
     }
 
     async fn close(&mut self) -> Result<()> {
+        // Take the session out before awaiting so the parking_lot guard is not held
+        // across `.await` (that would make this future !Send).
+        let session = self.session.write().take();
+        if let Some(session) = session {
+            tokio::task::spawn_blocking(move || render::close_document(session))
+                .await
+                .map_err(|e| ViewerError::PdfRender {
+                    page: 0,
+                    reason: format!("join: {e}"),
+                })?;
+        }
         *self.path.write() = None;
         *self.bytes.write() = None;
         *self.page_count.write() = 0;
