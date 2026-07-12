@@ -22,7 +22,11 @@ impl SyntaxHighlighter {
         Self
     }
 
-    /// Highlight `count` lines of `source` starting at `first_line`.
+    /// Highlight `line_count` lines of the **full** document `source`,
+    /// starting at `first_line` (0-based).
+    ///
+    /// `source` must be the entire file (LF-normalised). Parsing only a
+    /// visible window loses multi-line context (block comments, strings).
     ///
     /// When no grammar is registered for `language`, each line is returned
     /// as a single [`SyntaxScope::Plain`] segment.
@@ -34,20 +38,40 @@ impl SyntaxHighlighter {
         first_line: u32,
         line_count: u32,
     ) -> Vec<SyntaxLine> {
-        let Some(ts_lang) = language_for_id(language) else {
+        let Some(tree) = self.parse(language, source, None) else {
             return plain_lines(source, first_line, line_count);
         };
+        self.highlight_from_tree(language, source, &tree, first_line, line_count)
+    }
 
+    /// Parse `source` with an optional previous tree for incremental updates.
+    #[must_use]
+    pub fn parse(
+        &self,
+        language: &str,
+        source: &str,
+        old_tree: Option<&Tree>,
+    ) -> Option<Tree> {
+        let ts_lang = language_for_id(language)?;
         let mut parser = Parser::new();
-        if parser.set_language(&ts_lang).is_err() {
-            return plain_lines(source, first_line, line_count);
+        parser.set_language(&ts_lang).ok()?;
+        parser.parse(source, old_tree)
+    }
+
+    /// Highlight a visible window using an already-parsed tree.
+    #[must_use]
+    pub fn highlight_from_tree(
+        &self,
+        language: &str,
+        source: &str,
+        tree: &Tree,
+        first_line: u32,
+        line_count: u32,
+    ) -> Vec<SyntaxLine> {
+        if line_count == 0 {
+            return Vec::new();
         }
-
-        let Some(tree) = parser.parse(source, None) else {
-            return plain_lines(source, first_line, line_count);
-        };
-
-        let scopes = byte_scopes(source, &tree, language);
+        let scopes = byte_scopes(source, tree, language);
         scoped_lines(source, &scopes, first_line, line_count)
     }
 
@@ -60,9 +84,16 @@ impl SyntaxHighlighter {
 
 fn plain_lines(source: &str, first_line: u32, line_count: u32) -> Vec<SyntaxLine> {
     let mut out = Vec::with_capacity(line_count as usize);
-    for (offset, line) in source.split('\n').take(line_count as usize).enumerate() {
+    for (idx, line) in source.split('\n').enumerate() {
+        let line_number = idx as u32;
+        if line_number < first_line {
+            continue;
+        }
+        if out.len() >= line_count as usize {
+            break;
+        }
         out.push(SyntaxLine {
-            line_number: first_line + offset as u32,
+            line_number,
             segments: vec![SyntaxSegment {
                 text: line.to_string(),
                 scope: SyntaxScope::Plain,
@@ -715,21 +746,27 @@ fn scoped_lines(
     let mut out = Vec::with_capacity(line_count as usize);
     let mut byte_offset = 0usize;
 
-    for (offset, line) in source.split('\n').take(line_count as usize).enumerate() {
+    for (idx, line) in source.split('\n').enumerate() {
+        let line_number = idx as u32;
         let line_start = byte_offset;
         let line_end = line_start.saturating_add(line.len());
-        let line_scopes = if line.is_empty() {
-            &[]
-        } else {
-            &scopes[line_start..line_end.min(scopes.len())]
-        };
 
-        out.push(SyntaxLine {
-            line_number: first_line + offset as u32,
-            segments: line_to_segments(line, line_scopes),
-        });
+        if line_number >= first_line && out.len() < line_count as usize {
+            let line_scopes = if line.is_empty() {
+                &[]
+            } else {
+                &scopes[line_start..line_end.min(scopes.len())]
+            };
+            out.push(SyntaxLine {
+                line_number,
+                segments: line_to_segments(line, line_scopes),
+            });
+        }
 
         byte_offset = line_end.saturating_add(1);
+        if out.len() >= line_count as usize && line_number >= first_line {
+            break;
+        }
     }
 
     out
@@ -784,6 +821,24 @@ mod tests {
 
     fn has_non_plain(segments: &[SyntaxSegment]) -> bool {
         segments.iter().any(|s| s.scope != SyntaxScope::Plain)
+    }
+
+    #[test]
+    fn block_comment_keeps_scope_when_window_starts_mid_comment() {
+        let h = SyntaxHighlighter::new();
+        let source = "/*\ncomment body\nstill comment\n*/\nfn main() {}\n";
+        // Visible window starts on line 1 ("comment body"), inside the block comment.
+        let lines = h.highlight_lines("rust", source, 1, 2);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].line_number, 1);
+        assert!(
+            lines[0]
+                .segments
+                .iter()
+                .any(|s| s.scope == SyntaxScope::Comment),
+            "expected comment scope when window starts mid block-comment, got {:?}",
+            lines[0].segments
+        );
     }
 
     #[test]

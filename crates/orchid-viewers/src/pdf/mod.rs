@@ -29,7 +29,8 @@ pub const DEFAULT_SIZE_LIMIT: u64 = 256 * 1024 * 1024;
 /// PDF viewer.
 pub struct PdfViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
-    bytes: RwLock<Option<Vec<u8>>>,
+    /// Shared payload so re-renders only clone the `Arc`, not the whole file.
+    bytes: RwLock<Option<Arc<Vec<u8>>>>,
     page_count: RwLock<u32>,
     current_page: RwLock<u32>,
     zoom: RwLock<f32>,
@@ -174,7 +175,7 @@ impl PdfViewer {
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();
         let rendered = tokio::task::spawn_blocking(move || {
-            render::render_page(&bytes, page, viewport, fit_mode, zoom)
+            render::render_page(bytes.as_slice(), page, viewport, fit_mode, zoom)
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
@@ -215,9 +216,10 @@ impl Viewer for PdfViewer {
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();
         let path_for_task = path.clone();
-        let bytes_for_render = bytes.clone();
+        let bytes = Arc::new(bytes);
+        let bytes_for_render = Arc::clone(&bytes);
         let rendered = tokio::task::spawn_blocking(move || {
-            render::render_page(&bytes_for_render, 1, viewport, fit_mode, zoom)
+            render::render_page(bytes_for_render.as_slice(), 1, viewport, fit_mode, zoom)
         })
         .await
         .map_err(|e| ViewerError::PdfRender {

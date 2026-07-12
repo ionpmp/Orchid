@@ -7,9 +7,10 @@ pub mod persistence;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use std::sync::mpsc as std_mpsc;
+
 use bytes::Bytes;
 use parking_lot::{Mutex, RwLock};
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -27,7 +28,7 @@ pub use manager::SessionManager;
 pub(crate) struct PtyIoShell {
     pub(crate) reader_handle: Mutex<Option<JoinHandle<()>>>,
     pub(crate) writer_handle: Mutex<Option<JoinHandle<()>>>,
-    pub(crate) writer_tx: mpsc::UnboundedSender<Bytes>,
+    pub(crate) writer_tx: std_mpsc::Sender<Bytes>,
 }
 
 /// Full runtime state of a live terminal session.

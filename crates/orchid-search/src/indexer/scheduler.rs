@@ -1,4 +1,8 @@
 //! Batched, async index scheduler that drains tasks into a [`SearchEngine`].
+//!
+//! A single worker owns the receive side of the channel. Extra concurrency
+//! would not help: [`SearchEngine`]'s Tantivy `IndexWriter` is already
+//! serialised behind a mutex.
 
 use std::sync::Arc;
 
@@ -24,7 +28,7 @@ pub enum IndexTask {
 #[derive(Clone)]
 pub struct IndexScheduler {
     tx: mpsc::UnboundedSender<IndexTask>,
-    workers: Arc<parking_lot::Mutex<Vec<JoinHandle<()>>>>,
+    worker: Arc<parking_lot::Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl std::fmt::Debug for IndexScheduler {
@@ -36,21 +40,17 @@ impl std::fmt::Debug for IndexScheduler {
 const BATCH_MAX: usize = 64;
 
 impl IndexScheduler {
-    /// Spawn `concurrency` background workers.
+    /// Spawn a single background worker that drains the task queue.
+    ///
+    /// `concurrency` is retained for API compatibility but ignored: indexing
+    /// is single-threaded because the Tantivy writer is serialised.
     #[must_use]
-    pub fn new(engine: Arc<SearchEngine>, concurrency: usize) -> Self {
+    pub fn new(engine: Arc<SearchEngine>, _concurrency: usize) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
-        let rx = Arc::new(tokio::sync::Mutex::new(rx));
-        let workers = (0..concurrency.max(1))
-            .map(|_| {
-                let engine = Arc::clone(&engine);
-                let rx = Arc::clone(&rx);
-                tokio::spawn(async move { worker_loop(engine, rx).await })
-            })
-            .collect();
+        let worker = tokio::spawn(async move { worker_loop(engine, rx).await });
         Self {
             tx,
-            workers: Arc::new(parking_lot::Mutex::new(workers)),
+            worker: Arc::new(parking_lot::Mutex::new(Some(worker))),
         }
     }
 
@@ -88,16 +88,15 @@ impl IndexScheduler {
             .map_err(|_| SearchError::IndexClosed)
     }
 
-    /// Shut the scheduler down and join every worker.
+    /// Shut the scheduler down and join the worker.
     ///
     /// # Errors
     ///
     /// Never errors in the current implementation.
     pub async fn shutdown(self) -> Result<()> {
         drop(self.tx);
-        let handles = std::mem::take(&mut *self.workers.lock());
-        for h in handles {
-            let _ = h.await;
+        if let Some(handle) = self.worker.lock().take() {
+            let _ = handle.await;
         }
         Ok(())
     }
@@ -105,14 +104,12 @@ impl IndexScheduler {
 
 async fn worker_loop(
     engine: Arc<SearchEngine>,
-    rx: Arc<tokio::sync::Mutex<mpsc::UnboundedReceiver<IndexTask>>>,
+    mut rx: mpsc::UnboundedReceiver<IndexTask>,
 ) {
     loop {
-        let task = {
-            let mut guard = rx.lock().await;
-            guard.recv().await
+        let Some(task) = rx.recv().await else {
+            break;
         };
-        let Some(task) = task else { break };
         let mut batch: Vec<IndexDocument> = Vec::new();
         match task {
             IndexTask::Upsert(doc) => batch.push(doc),
@@ -131,18 +128,15 @@ async fn worker_loop(
         }
         // Drain any additional upserts already queued.
         while batch.len() < BATCH_MAX {
-            let mut guard = rx.lock().await;
-            match guard.try_recv() {
+            match rx.try_recv() {
                 Ok(IndexTask::Upsert(d)) => batch.push(d),
                 Ok(IndexTask::Remove(path)) => {
-                    drop(guard);
                     if let Err(e) = engine.remove(&path).await {
                         warn!(error = %e, %path, "index remove failed");
                     }
                     break;
                 }
                 Ok(IndexTask::Flush) => {
-                    drop(guard);
                     if let Err(e) = engine.commit().await {
                         warn!(error = %e, "index commit failed");
                     }

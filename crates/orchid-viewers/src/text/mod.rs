@@ -7,10 +7,12 @@ pub mod syntax;
 pub mod undo;
 
 use std::any::Any;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
+use tree_sitter::Tree;
 
 use crate::error::{Result, ViewerError};
 use crate::snapshot::{SelectionRange, TextSnapshot, ViewerSnapshot};
@@ -41,12 +43,24 @@ pub struct CursorPos {
     pub column: u32,
 }
 
+/// Cached tree-sitter parse of the full document.
+struct ParseCache {
+    generation: u64,
+    language: String,
+    tree: Tree,
+    /// Full LF-normalised source used to build `tree` (needed for scopes).
+    source: String,
+}
+
 /// Text viewer / editor.
 pub struct TextViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
     buffer: RwLock<Option<TextBuffer>>,
     language: RwLock<String>,
     highlighter: Arc<SyntaxHighlighter>,
+    /// Bumped on every buffer mutation so the parse cache can be invalidated.
+    content_generation: AtomicU64,
+    parse_cache: Mutex<Option<ParseCache>>,
     undo: Mutex<UndoStack>,
     cursor: RwLock<CursorPos>,
     selection: RwLock<Option<SelectionRange>>,
@@ -75,6 +89,8 @@ impl TextViewer {
             buffer: RwLock::new(None),
             language: RwLock::new(PLAINTEXT.into()),
             highlighter,
+            content_generation: AtomicU64::new(0),
+            parse_cache: Mutex::new(None),
             undo: Mutex::new(UndoStack::new(500)),
             cursor: RwLock::new(CursorPos::default()),
             selection: RwLock::new(None),
@@ -84,6 +100,58 @@ impl TextViewer {
             registry: RwLock::new(None),
             size_limit: DEFAULT_SIZE_LIMIT,
         }
+    }
+
+    fn bump_content_generation(&self) {
+        self.content_generation.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Ensure a fresh tree-sitter parse for the current buffer generation.
+    fn highlight_visible(&self, buffer: &TextBuffer, first: u32, count: u32) -> Vec<crate::snapshot::SyntaxLine> {
+        let language = self.language.read().clone();
+        let generation = self.content_generation.load(Ordering::Relaxed);
+        let mut cache = self.parse_cache.lock();
+
+        let needs_reparse = match cache.as_ref() {
+            Some(c) => c.generation != generation || c.language != language,
+            None => true,
+        };
+
+        if needs_reparse {
+            let source = buffer.plain_text();
+            // Full reparse on content/language change. True `Tree::edit`
+            // incremental updates can land later; stale trees without edits
+            // must not be reused as `old_tree`.
+            let tree = self.highlighter.parse(&language, &source, None);
+            match tree {
+                Some(tree) => {
+                    *cache = Some(ParseCache {
+                        generation,
+                        language: language.clone(),
+                        tree,
+                        source,
+                    });
+                }
+                None => {
+                    *cache = None;
+                    return self.highlighter.highlight_lines(
+                        &language,
+                        &source,
+                        first,
+                        count.min(buffer.line_count()),
+                    );
+                }
+            }
+        }
+
+        let cached = cache.as_ref().expect("parse cache populated above");
+        self.highlighter.highlight_from_tree(
+            &cached.language,
+            &cached.source,
+            &cached.tree,
+            first,
+            count.min(buffer.line_count()),
+        )
     }
 
     /// Switch read / edit mode.
@@ -155,6 +223,7 @@ impl TextViewer {
             return Err(ViewerError::EditOutOfBounds);
         };
         buffer.insert(cursor.line, cursor.column, text)?;
+        self.bump_content_generation();
         let advance_cols = text.chars().count() as u32;
         *self.cursor.write() = CursorPos {
             line: cursor.line,
@@ -189,6 +258,7 @@ impl TextViewer {
             .text_range(start.line, start.column, end.line, end.column)?
             .to_string();
         buffer.delete(start.line, start.column, end.line, end.column)?;
+        self.bump_content_generation();
         *self.cursor.write() = start;
         self.undo.lock().push(TextOp {
             kind: TextOpKind::Delete,
@@ -221,6 +291,7 @@ impl TextViewer {
             return Ok(());
         }
         buffer.replace_content(text);
+        self.bump_content_generation();
         self.undo.lock().clear();
         Ok(())
     }
@@ -248,6 +319,7 @@ impl TextViewer {
         match op.kind {
             TextOpKind::Insert => {
                 buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                self.bump_content_generation();
                 *self.cursor.write() = CursorPos {
                     line: op.start_line,
                     column: op.start_column,
@@ -255,6 +327,7 @@ impl TextViewer {
             }
             TextOpKind::Delete => {
                 buffer.insert(op.start_line, op.start_column, &op.text)?;
+                self.bump_content_generation();
                 *self.cursor.write() = CursorPos {
                     line: op.end_line,
                     column: op.end_column,
@@ -287,6 +360,7 @@ impl TextViewer {
         match op.kind {
             TextOpKind::Insert => {
                 buffer.insert(op.start_line, op.start_column, &op.text)?;
+                self.bump_content_generation();
                 *self.cursor.write() = CursorPos {
                     line: op.end_line,
                     column: op.end_column,
@@ -294,6 +368,7 @@ impl TextViewer {
             }
             TextOpKind::Delete => {
                 buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                self.bump_content_generation();
                 *self.cursor.write() = CursorPos {
                     line: op.start_line,
                     column: op.start_column,
@@ -344,6 +419,8 @@ impl Viewer for TextViewer {
         *self.registry.write() = Some(registry);
         *self.cursor.write() = CursorPos::default();
         *self.first_visible_line.write() = 0;
+        self.content_generation.store(0, Ordering::Relaxed);
+        *self.parse_cache.lock() = None;
         self.undo.lock().clear();
         Ok(())
     }
@@ -352,6 +429,8 @@ impl Viewer for TextViewer {
         *self.buffer.write() = None;
         *self.path.write() = None;
         *self.registry.write() = None;
+        self.content_generation.store(0, Ordering::Relaxed);
+        *self.parse_cache.lock() = None;
         self.undo.lock().clear();
         Ok(())
     }
@@ -368,12 +447,8 @@ impl Viewer for TextViewer {
         };
         let first = *self.first_visible_line.read();
         let count = *self.visible_line_count.read();
-        let slice = buffer.visible_slice(first, count);
-        let source = slice.join("\n");
         let language = self.language.read().clone();
-        let highlighted =
-            self.highlighter
-                .highlight_lines(&language, &source, first, count.min(buffer.line_count()));
+        let highlighted = self.highlight_visible(buffer, first, count);
         let encoding = buffer.encoding().name().to_string();
         let line_ending = buffer.line_ending().label().to_string();
         let total = buffer.line_count();

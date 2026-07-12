@@ -2,8 +2,7 @@
 
 use std::io::{Read, Write};
 use std::sync::Arc;
-
-use parking_lot::Mutex;
+use std::sync::mpsc as std_mpsc;
 
 use bytes::Bytes;
 use tokio::sync::mpsc;
@@ -17,10 +16,10 @@ use crate::pty::PtyHandle;
 pub struct PtyIo {
     /// Background reader task.
     pub reader_handle: JoinHandle<()>,
-    /// Background writer task.
+    /// Background writer task (one long-lived blocking thread).
     pub writer_handle: JoinHandle<()>,
     /// Send queue used by user code to push keystrokes to the PTY.
-    pub writer_tx: mpsc::UnboundedSender<Bytes>,
+    pub writer_tx: std_mpsc::Sender<Bytes>,
     /// Byte chunks streamed from the PTY.
     pub bytes_rx: mpsc::UnboundedReceiver<Bytes>,
 }
@@ -71,7 +70,9 @@ pub fn start_io(handle: Arc<PtyHandle>) -> Result<PtyIo> {
     let _ = handle; // `handle` is still used by the spawn site via Arc.
 
     let (bytes_tx, bytes_rx) = mpsc::unbounded_channel::<Bytes>();
-    let (writer_tx, mut writer_rx) = mpsc::unbounded_channel::<Bytes>();
+    // Sync channel so one blocking writer thread can `recv` without
+    // `spawn_blocking` per keystroke.
+    let (writer_tx, writer_rx) = std_mpsc::channel::<Bytes>();
 
     let reader_handle = tokio::task::spawn_blocking(move || {
         let mut reader = reader;
@@ -98,26 +99,15 @@ pub fn start_io(handle: Arc<PtyHandle>) -> Result<PtyIo> {
         }
     });
 
-    // The writer lives in a parking_lot::Mutex so we can move into closures
-    // run on spawn_blocking; write calls themselves are sync.
-    let writer = Arc::new(Mutex::new(writer));
-    let writer_handle = tokio::spawn(async move {
-        while let Some(chunk) = writer_rx.recv().await {
-            let writer = Arc::clone(&writer);
-            let bytes = chunk;
-            let result = tokio::task::spawn_blocking(move || -> Result<()> {
-                let mut w = writer.lock();
-                w.write_all(&bytes)
-                    .map_err(|e| TerminalError::WriteFailed(e.to_string()))?;
-                w.flush()
-                    .map_err(|e| TerminalError::WriteFailed(e.to_string()))?;
-                Ok(())
-            })
-            .await;
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => warn!(error = %e, "pty write failed"),
-                Err(e) => warn!(error = %e, "pty write task panicked"),
+    let writer_handle = tokio::task::spawn_blocking(move || {
+        let mut writer = writer;
+        while let Ok(chunk) = writer_rx.recv() {
+            if let Err(e) = writer
+                .write_all(&chunk)
+                .and_then(|()| writer.flush())
+            {
+                warn!(error = %e, "pty write failed");
+                break;
             }
         }
         debug!("pty writer shutting down");
