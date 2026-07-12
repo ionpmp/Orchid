@@ -249,6 +249,35 @@ impl TextBuffer {
         Ok(())
     }
 
+    /// Byte offset of `(line, column)` in the LF-normalised rope (UTF-8).
+    ///
+    /// Tree-sitter edits use byte offsets; `column` is a character index.
+    #[must_use]
+    pub fn byte_index(&self, line: u32, column: u32) -> Option<usize> {
+        let char_idx = self.line_col_to_char(line, column)?;
+        Some(self.rope.char_to_byte(char_idx))
+    }
+
+    /// Tree-sitter [`tree_sitter::Point`] for `(line, column)`.
+    ///
+    /// The point's `column` is a **byte** offset within the row.
+    #[must_use]
+    pub fn tree_sitter_point(&self, line: u32, column: u32) -> Option<tree_sitter::Point> {
+        let line_text = self.line(line)?;
+        if column as usize > line_text.chars().count() {
+            return None;
+        }
+        let byte_col: usize = line_text
+            .chars()
+            .take(column as usize)
+            .map(char::len_utf8)
+            .sum();
+        Some(tree_sitter::Point {
+            row: line as usize,
+            column: byte_col,
+        })
+    }
+
     fn line_col_to_char(&self, line: u32, column: u32) -> Option<usize> {
         let line_count = self.rope.len_lines();
         if line as usize > line_count {

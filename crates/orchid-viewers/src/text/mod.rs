@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
-use tree_sitter::Tree;
+use tree_sitter::{InputEdit, Point, Tree};
 
 use crate::error::{Result, ViewerError};
 use crate::snapshot::{SelectionRange, TextSnapshot, ViewerSnapshot};
@@ -102,12 +102,50 @@ impl TextViewer {
         }
     }
 
-    fn bump_content_generation(&self) {
-        self.content_generation.fetch_add(1, Ordering::Relaxed);
+    fn bump_content_generation(&self) -> u64 {
+        self.content_generation.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// Apply a tree-sitter edit to the cached AST, or drop the cache on failure.
+    fn sync_parse_cache_after_edit(&self, edit: InputEdit, new_source: String) {
+        let generation = self.bump_content_generation();
+        let language = self.language.read().clone();
+        let mut cache = self.parse_cache.lock();
+        let Some(cached) = cache.as_mut() else {
+            return;
+        };
+        if cached.language != language {
+            *cache = None;
+            return;
+        }
+        cached.tree.edit(&edit);
+        match self
+            .highlighter
+            .parse(&language, &new_source, Some(&cached.tree))
+        {
+            Some(tree) => {
+                cached.tree = tree;
+                cached.source = new_source;
+                cached.generation = generation;
+            }
+            None => {
+                *cache = None;
+            }
+        }
+    }
+
+    fn invalidate_parse_cache(&self) {
+        self.bump_content_generation();
+        *self.parse_cache.lock() = None;
     }
 
     /// Ensure a fresh tree-sitter parse for the current buffer generation.
-    fn highlight_visible(&self, buffer: &TextBuffer, first: u32, count: u32) -> Vec<crate::snapshot::SyntaxLine> {
+    fn highlight_visible(
+        &self,
+        buffer: &TextBuffer,
+        first: u32,
+        count: u32,
+    ) -> Vec<crate::snapshot::SyntaxLine> {
         let language = self.language.read().clone();
         let generation = self.content_generation.load(Ordering::Relaxed);
         let mut cache = self.parse_cache.lock();
@@ -119,9 +157,6 @@ impl TextViewer {
 
         if needs_reparse {
             let source = buffer.plain_text();
-            // Full reparse on content/language change. True `Tree::edit`
-            // incremental updates can land later; stale trees without edits
-            // must not be reused as `old_tree`.
             let tree = self.highlighter.parse(&language, &source, None);
             match tree {
                 Some(tree) => {
@@ -152,6 +187,35 @@ impl TextViewer {
             first,
             count.min(buffer.line_count()),
         )
+    }
+
+    fn insert_edit(buffer: &TextBuffer, at: CursorPos, text: &str) -> Option<InputEdit> {
+        let start_byte = buffer.byte_index(at.line, at.column)?;
+        let start_position = buffer.tree_sitter_point(at.line, at.column)?;
+        let new_end_position = point_after_insert(start_position, text);
+        Some(InputEdit {
+            start_byte,
+            old_end_byte: start_byte,
+            new_end_byte: start_byte + text.len(),
+            start_position,
+            old_end_position: start_position,
+            new_end_position,
+        })
+    }
+
+    fn delete_edit(buffer: &TextBuffer, start: CursorPos, end: CursorPos) -> Option<InputEdit> {
+        let start_byte = buffer.byte_index(start.line, start.column)?;
+        let old_end_byte = buffer.byte_index(end.line, end.column)?;
+        let start_position = buffer.tree_sitter_point(start.line, start.column)?;
+        let old_end_position = buffer.tree_sitter_point(end.line, end.column)?;
+        Some(InputEdit {
+            start_byte,
+            old_end_byte,
+            new_end_byte: start_byte,
+            start_position,
+            old_end_position,
+            new_end_position: start_position,
+        })
     }
 
     /// Switch read / edit mode.
@@ -222,19 +286,19 @@ impl TextViewer {
         let Some(buffer) = buffer.as_mut() else {
             return Err(ViewerError::EditOutOfBounds);
         };
+        let edit = Self::insert_edit(buffer, cursor, text).ok_or(ViewerError::EditOutOfBounds)?;
         buffer.insert(cursor.line, cursor.column, text)?;
-        self.bump_content_generation();
-        let advance_cols = text.chars().count() as u32;
-        *self.cursor.write() = CursorPos {
-            line: cursor.line,
-            column: cursor.column + advance_cols,
-        };
+        let new_source = buffer.plain_text();
+        let end = cursor_after_insert(cursor, text);
+        drop(buffer);
+        self.sync_parse_cache_after_edit(edit, new_source);
+        *self.cursor.write() = end;
         self.undo.lock().push(TextOp {
             kind: TextOpKind::Insert,
             start_line: cursor.line,
             start_column: cursor.column,
-            end_line: cursor.line,
-            end_column: cursor.column + advance_cols,
+            end_line: end.line,
+            end_column: end.column,
             text: text.into(),
             timestamp: std::time::Instant::now(),
         });
@@ -254,11 +318,14 @@ impl TextViewer {
         let Some(buffer) = buffer.as_mut() else {
             return Err(ViewerError::EditOutOfBounds);
         };
+        let edit = Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
         let deleted = buffer
             .text_range(start.line, start.column, end.line, end.column)?
             .to_string();
         buffer.delete(start.line, start.column, end.line, end.column)?;
-        self.bump_content_generation();
+        let new_source = buffer.plain_text();
+        drop(buffer);
+        self.sync_parse_cache_after_edit(edit, new_source);
         *self.cursor.write() = start;
         self.undo.lock().push(TextOp {
             kind: TextOpKind::Delete,
@@ -291,7 +358,9 @@ impl TextViewer {
             return Ok(());
         }
         buffer.replace_content(text);
-        self.bump_content_generation();
+        drop(buffer);
+        // Whole-document replace: cheaper to invalidate than synthesise one huge edit.
+        self.invalidate_parse_cache();
         self.undo.lock().clear();
         Ok(())
     }
@@ -318,16 +387,33 @@ impl TextViewer {
         };
         match op.kind {
             TextOpKind::Insert => {
-                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
-                self.bump_content_generation();
-                *self.cursor.write() = CursorPos {
+                let start = CursorPos {
                     line: op.start_line,
                     column: op.start_column,
                 };
+                let end = CursorPos {
+                    line: op.end_line,
+                    column: op.end_column,
+                };
+                let edit =
+                    Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                let new_source = buffer.plain_text();
+                drop(buffer);
+                self.sync_parse_cache_after_edit(edit, new_source);
+                *self.cursor.write() = start;
             }
             TextOpKind::Delete => {
+                let at = CursorPos {
+                    line: op.start_line,
+                    column: op.start_column,
+                };
+                let edit =
+                    Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
                 buffer.insert(op.start_line, op.start_column, &op.text)?;
-                self.bump_content_generation();
+                let new_source = buffer.plain_text();
+                drop(buffer);
+                self.sync_parse_cache_after_edit(edit, new_source);
                 *self.cursor.write() = CursorPos {
                     line: op.end_line,
                     column: op.end_column,
@@ -359,20 +445,37 @@ impl TextViewer {
         };
         match op.kind {
             TextOpKind::Insert => {
+                let at = CursorPos {
+                    line: op.start_line,
+                    column: op.start_column,
+                };
+                let edit =
+                    Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
                 buffer.insert(op.start_line, op.start_column, &op.text)?;
-                self.bump_content_generation();
+                let new_source = buffer.plain_text();
+                drop(buffer);
+                self.sync_parse_cache_after_edit(edit, new_source);
                 *self.cursor.write() = CursorPos {
                     line: op.end_line,
                     column: op.end_column,
                 };
             }
             TextOpKind::Delete => {
-                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
-                self.bump_content_generation();
-                *self.cursor.write() = CursorPos {
+                let start = CursorPos {
                     line: op.start_line,
                     column: op.start_column,
                 };
+                let end = CursorPos {
+                    line: op.end_line,
+                    column: op.end_column,
+                };
+                let edit =
+                    Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                let new_source = buffer.plain_text();
+                drop(buffer);
+                self.sync_parse_cache_after_edit(edit, new_source);
+                *self.cursor.write() = start;
             }
         }
         Ok(())
@@ -514,9 +617,40 @@ impl Viewer for TextViewer {
     }
 }
 
+fn cursor_after_insert(start: CursorPos, text: &str) -> CursorPos {
+    if !text.contains('\n') {
+        return CursorPos {
+            line: start.line,
+            column: start.column + text.chars().count() as u32,
+        };
+    }
+    let last = text.rsplit('\n').next().unwrap_or("");
+    let extra_lines = text.bytes().filter(|&b| b == b'\n').count() as u32;
+    CursorPos {
+        line: start.line + extra_lines,
+        column: last.chars().count() as u32,
+    }
+}
+
+fn point_after_insert(start: Point, text: &str) -> Point {
+    if !text.contains('\n') {
+        return Point {
+            row: start.row,
+            column: start.column + text.len(),
+        };
+    }
+    let last = text.rsplit('\n').next().unwrap_or("");
+    let extra_lines = text.bytes().filter(|&b| b == b'\n').count();
+    Point {
+        row: start.row + extra_lines,
+        column: last.len(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::snapshot::SyntaxScope;
     use crate::text::syntax::SyntaxHighlighter;
     use std::sync::Arc;
 
@@ -572,5 +706,75 @@ mod tests {
         assert!(t.dirty);
         assert!(!t.read_only);
         assert_eq!(t.plain_text, "new text");
+    }
+
+    #[test]
+    fn incremental_edit_keeps_highlight_cache_in_sync() {
+        let tv = viewer();
+        *tv.language.write() = "rust".into();
+        *tv.buffer.write() =
+            Some(TextBuffer::from_bytes(b"fn main() {\n    let x = 1;\n}\n").unwrap());
+        tv.set_mode(TextViewerMode::Edit);
+        tv.set_visible_range(0, 3);
+
+        // Prime the parse cache via snapshot.
+        let first = tv.snapshot();
+        let ViewerSnapshot::Text(t0) = first else {
+            panic!("expected text");
+        };
+        assert!(
+            t0.visible_lines
+                .iter()
+                .any(|l| l.segments.iter().any(|s| s.scope != SyntaxScope::Plain)),
+            "expected initial highlight"
+        );
+        let gen_before = tv.content_generation.load(Ordering::Relaxed);
+        assert!(tv.parse_cache.lock().is_some());
+
+        // Insert inside the function body.
+        *tv.cursor.write() = CursorPos {
+            line: 1,
+            column: 4,
+        };
+        tv.insert("let y = 2;\n    ").unwrap();
+
+        let gen_after = tv.content_generation.load(Ordering::Relaxed);
+        assert!(gen_after > gen_before);
+        let cache = tv.parse_cache.lock();
+        let cached = cache.as_ref().expect("cache should survive incremental edit");
+        assert_eq!(cached.generation, gen_after);
+        assert!(cached.source.contains("let y = 2;"));
+        drop(cache);
+
+        let second = tv.snapshot();
+        let ViewerSnapshot::Text(t1) = second else {
+            panic!("expected text");
+        };
+        assert!(t1.plain_text.contains("let y = 2;"));
+        assert!(
+            t1.visible_lines
+                .iter()
+                .any(|l| l.segments.iter().any(|s| s.scope != SyntaxScope::Plain)),
+            "expected highlight after incremental edit"
+        );
+    }
+
+    #[test]
+    fn cursor_after_multiline_insert() {
+        let start = CursorPos { line: 2, column: 3 };
+        assert_eq!(
+            cursor_after_insert(start, "abc"),
+            CursorPos {
+                line: 2,
+                column: 6
+            }
+        );
+        assert_eq!(
+            cursor_after_insert(start, "a\nb\nc"),
+            CursorPos {
+                line: 4,
+                column: 1
+            }
+        );
     }
 }
