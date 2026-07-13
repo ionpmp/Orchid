@@ -121,9 +121,11 @@ pub async fn load_image(
                 limit: size_limit_bytes,
             });
         }
-        return tokio::task::spawn_blocking(move || decode_local_mmap(&os_path, size, ext.as_deref()))
-            .await
-            .map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
+        return tokio::task::spawn_blocking(move || {
+            decode_local_mmap(&os_path, size_limit_bytes, ext.as_deref())
+        })
+        .await
+        .map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
     }
 
     let bytes = provider.read(path).await?;
@@ -141,13 +143,28 @@ pub async fn load_image(
 
 fn decode_local_mmap(
     os_path: &std::path::Path,
-    size: u64,
+    size_limit_bytes: u64,
     extension: Option<&str>,
 ) -> Result<LoadedImage> {
+    let meta = std::fs::metadata(os_path).map_err(orchid_fs::FsError::Io)?;
+    let size = meta.len();
+    if size > size_limit_bytes {
+        return Err(ViewerError::FileTooLarge {
+            size,
+            limit: size_limit_bytes,
+        });
+    }
     let file = std::fs::File::open(os_path).map_err(orchid_fs::FsError::Io)?;
-    // SAFETY: the file is opened read-only and not truncated while mapped;
-    // decode finishes before `map` is dropped.
+    // SAFETY: opened read-only; we do not truncate/write the file while mapped.
+    // Concurrent writers may still change bytes on some platforms — decode may
+    // then fail or produce garbage, which surfaces as ImageDecode.
     let map = unsafe { memmap2::Mmap::map(&file) }.map_err(orchid_fs::FsError::Io)?;
+    if map.len() as u64 > size_limit_bytes {
+        return Err(ViewerError::FileTooLarge {
+            size: map.len() as u64,
+            limit: size_limit_bytes,
+        });
+    }
     decode_bytes(&map, size, extension)
 }
 
@@ -385,9 +402,9 @@ fn unpremultiply_rgba_inplace(data: &mut [u8]) {
             px[2] = 0;
         } else if a != 255 {
             let a_f = f32::from(a);
-            px[0] = ((f32::from(px[0]) * 255.0 / a_f) + 0.5) as u8;
-            px[1] = ((f32::from(px[1]) * 255.0 / a_f) + 0.5) as u8;
-            px[2] = ((f32::from(px[2]) * 255.0 / a_f) + 0.5) as u8;
+            px[0] = ((f32::from(px[0]) * 255.0 / a_f) + 0.5).min(255.0) as u8;
+            px[1] = ((f32::from(px[1]) * 255.0 / a_f) + 0.5).min(255.0) as u8;
+            px[2] = ((f32::from(px[2]) * 255.0 / a_f) + 0.5).min(255.0) as u8;
         }
     }
 }
@@ -428,8 +445,7 @@ mod tests {
         let mut img = image::RgbaImage::new(1, 1);
         img.put_pixel(0, 0, image::Rgba([1, 2, 3, 255]));
         img.save(&path).unwrap();
-        let loaded = decode_local_mmap(&path, std::fs::metadata(&path).unwrap().len(), Some("png"))
-            .unwrap();
+        let loaded = decode_local_mmap(&path, u64::MAX, Some("png")).unwrap();
         assert_eq!(loaded.width, 1);
         assert_eq!(loaded.height, 1);
         assert_eq!(loaded.rgba[0..4], [1, 2, 3, 255]);

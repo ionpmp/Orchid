@@ -29,35 +29,47 @@ fn from_rgba(src: RgbaImage, template: &LoadedImage) -> LoadedImage {
 }
 
 /// Rotate 90° clockwise.
-#[must_use]
-pub fn rotate_90_cw(src: &LoadedImage) -> LoadedImage {
-    let view = rgba_view(src).expect("rgba buffer must round-trip");
+///
+/// # Errors
+///
+/// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt.
+pub fn rotate_90_cw(src: &LoadedImage) -> Result<LoadedImage> {
+    let view = rgba_view(src)?;
     let out = imageops::rotate90(&view);
-    from_rgba(out, src)
+    Ok(from_rgba(out, src))
 }
 
 /// Rotate 180°.
-#[must_use]
-pub fn rotate_180(src: &LoadedImage) -> LoadedImage {
-    let view = rgba_view(src).expect("rgba buffer must round-trip");
+///
+/// # Errors
+///
+/// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt.
+pub fn rotate_180(src: &LoadedImage) -> Result<LoadedImage> {
+    let view = rgba_view(src)?;
     let out = imageops::rotate180(&view);
-    from_rgba(out, src)
+    Ok(from_rgba(out, src))
 }
 
 /// Flip horizontally.
-#[must_use]
-pub fn flip_horizontal(src: &LoadedImage) -> LoadedImage {
-    let view = rgba_view(src).expect("rgba buffer must round-trip");
+///
+/// # Errors
+///
+/// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt.
+pub fn flip_horizontal(src: &LoadedImage) -> Result<LoadedImage> {
+    let view = rgba_view(src)?;
     let out = imageops::flip_horizontal(&view);
-    from_rgba(out, src)
+    Ok(from_rgba(out, src))
 }
 
 /// Flip vertically.
-#[must_use]
-pub fn flip_vertical(src: &LoadedImage) -> LoadedImage {
-    let view = rgba_view(src).expect("rgba buffer must round-trip");
+///
+/// # Errors
+///
+/// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt.
+pub fn flip_vertical(src: &LoadedImage) -> Result<LoadedImage> {
+    let view = rgba_view(src)?;
     let out = imageops::flip_vertical(&view);
-    from_rgba(out, src)
+    Ok(from_rgba(out, src))
 }
 
 /// Crop to `(x, y, w, h)` in pixels. Out-of-bounds returns [`ViewerError::ImageDecode`].
@@ -94,11 +106,14 @@ pub fn crop(src: &LoadedImage, x: u32, y: u32, w: u32, h: u32) -> Result<LoadedI
 }
 
 /// Resize to `(target_w, target_h)` with `Lanczos3`.
-#[must_use]
-pub fn resize(src: &LoadedImage, target_w: u32, target_h: u32) -> LoadedImage {
-    let view = rgba_view(src).expect("rgba buffer must round-trip");
+///
+/// # Errors
+///
+/// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt.
+pub fn resize(src: &LoadedImage, target_w: u32, target_h: u32) -> Result<LoadedImage> {
+    let view = rgba_view(src)?;
     let out = imageops::resize(&view, target_w, target_h, imageops::FilterType::Lanczos3);
-    from_rgba(out, src)
+    Ok(from_rgba(out, src))
 }
 
 #[cfg(test)]
@@ -125,7 +140,7 @@ mod tests {
     #[test]
     fn rotate_90_cw_rearranges_pixels() {
         let src = two_by_two();
-        let out = rotate_90_cw(&src);
+        let out = rotate_90_cw(&src).unwrap();
         // Expected rotation:
         //   (B, R)
         //   (W, G)
@@ -138,7 +153,7 @@ mod tests {
     #[test]
     fn flip_horizontal_swaps_columns() {
         let src = two_by_two();
-        let out = flip_horizontal(&src);
+        let out = flip_horizontal(&src).unwrap();
         assert_eq!(out.rgba[0..4], [0, 255, 0, 255]); // was G
         assert_eq!(out.rgba[4..8], [255, 0, 0, 255]); // was R
     }

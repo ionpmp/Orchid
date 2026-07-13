@@ -14,32 +14,52 @@ use crate::slint_generated::{
 };
 
 /// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
-struct FmThumbCacheEntry {
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct FmThumbCacheKey {
+    ptr: usize,
+    len: usize,
     width: u32,
     height: u32,
+    tip: u64,
+}
+
+struct FmThumbCacheEntry {
     image: Image,
 }
 
 thread_local! {
-    static FM_THUMB_CACHE: std::cell::RefCell<HashMap<usize, FmThumbCacheEntry>> =
+    static FM_THUMB_CACHE: std::cell::RefCell<HashMap<FmThumbCacheKey, FmThumbCacheEntry>> =
         std::cell::RefCell::new(HashMap::new());
 }
 const FM_THUMB_CACHE_CAP: usize = 64;
+
+fn fm_thumb_tip(bytes: &[u8]) -> u64 {
+    let mut tip = 0u64;
+    for (i, b) in bytes.iter().take(8).enumerate() {
+        tip |= u64::from(*b) << (i * 8);
+    }
+    if bytes.len() > 8 {
+        let mut tail = 0u64;
+        for (i, b) in bytes.iter().rev().take(8).enumerate() {
+            tail |= u64::from(*b) << (i * 8);
+        }
+        tip ^= tail.rotate_left(17);
+    }
+    tip
+}
 
 fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
     if width == 0 || height == 0 || rgba.is_empty() {
         return Image::default();
     }
-    let key = Arc::as_ptr(rgba) as usize;
-    let cached = FM_THUMB_CACHE.with(|cache| {
-        cache.borrow().get(&key).and_then(|c| {
-            if c.width == width && c.height == height {
-                Some(c.image.clone())
-            } else {
-                None
-            }
-        })
-    });
+    let key = FmThumbCacheKey {
+        ptr: Arc::as_ptr(rgba) as usize,
+        len: rgba.len(),
+        width,
+        height,
+        tip: fm_thumb_tip(rgba.as_slice()),
+    };
+    let cached = FM_THUMB_CACHE.with(|cache| cache.borrow().get(&key).map(|c| c.image.clone()));
     if let Some(image) = cached {
         return image;
     }
@@ -53,14 +73,7 @@ fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
                 cache.remove(&old);
             }
         }
-        cache.insert(
-            key,
-            FmThumbCacheEntry {
-                width,
-                height,
-                image: image.clone(),
-            },
-        );
+        cache.insert(key, FmThumbCacheEntry { image: image.clone() });
     });
     image
 }

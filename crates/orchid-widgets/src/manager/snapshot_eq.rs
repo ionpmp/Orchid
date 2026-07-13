@@ -95,9 +95,8 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.cursor_column == b.cursor_column
                 && selection_eq(a.selection, b.selection)
                 && text_lines_eq(&a.visible_lines, &b.visible_lines)
-                && (a.read_only && b.read_only
-                    || std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
-                    || a.plain_text == b.plain_text)
+                && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
+                    || a.plain_text.as_ref() == b.plain_text.as_ref())
         }
         (Vs::Archive(a), Vs::Archive(b)) => {
             a.path_display == b.path_display
@@ -527,5 +526,36 @@ mod tests {
         });
         let b = a.clone();
         assert!(payload_renders_equal(&a, &b));
+    }
+
+    #[test]
+    fn text_viewer_read_only_still_compares_plain_text() {
+        use orchid_viewers::{TextSnapshot, ViewerSnapshot};
+        use std::sync::Arc;
+
+        let make = |plain: &str| {
+            WidgetPayload::Viewer(ViewerPayload {
+                snapshot: ViewerSnapshot::Text(TextSnapshot {
+                    path_display: "local:/a.rs".into(),
+                    language: "rust".into(),
+                    encoding: "UTF-8".into(),
+                    line_ending: "LF".into(),
+                    dirty: false,
+                    read_only: true,
+                    total_lines: 1,
+                    visible_lines: Vec::new(),
+                    first_visible_line: 0,
+                    cursor_line: 0,
+                    cursor_column: 0,
+                    selection: None,
+                    info_text: String::new(),
+                    plain_text: Arc::from(plain),
+                }),
+            })
+        };
+        let a = make("old");
+        let b = make("new");
+        assert!(!payload_renders_equal(&a, &b));
+        assert!(payload_renders_equal(&a, &make("old")));
     }
 }

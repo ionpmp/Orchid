@@ -197,7 +197,11 @@ pub type SharedProvider = Arc<dyn FsProvider>;
 /// Read up to `n` bytes from the start of a file through a provider.
 ///
 /// Prefer this over [`FsProvider::read`] when only a magic-byte / MIME sample
-/// is needed — large files are not fully materialised into memory.
+/// is needed — large **local** files are not fully materialised into memory.
+///
+/// Note: some providers (notably rclone today) implement [`FsProvider::read_stream`]
+/// by buffering the whole object first; prefix reads are still correct but not
+/// cheaper than a full read for those backends.
 ///
 /// # Errors
 ///
@@ -205,9 +209,19 @@ pub type SharedProvider = Arc<dyn FsProvider>;
 pub async fn read_prefix(provider: &dyn FsProvider, path: &FsPath, n: usize) -> Result<Vec<u8>> {
     use tokio::io::AsyncReadExt;
 
+    if n == 0 {
+        return Ok(Vec::new());
+    }
     let mut reader = provider.read_stream(path).await?;
     let mut buf = vec![0u8; n];
-    let read = reader.read(&mut buf).await?;
-    buf.truncate(read);
+    let mut filled = 0usize;
+    while filled < n {
+        let read = reader.read(&mut buf[filled..]).await?;
+        if read == 0 {
+            break;
+        }
+        filled += read;
+    }
+    buf.truncate(filled);
     Ok(buf)
 }

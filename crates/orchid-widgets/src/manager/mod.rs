@@ -190,8 +190,10 @@ impl WidgetManager {
             || prev
                 .as_deref()
                 .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
-        self.inner.snapshot_cache.put(id, snap);
+        // Match the snapshot pump: skip put when render-identical to avoid
+        // allocating a fresh Arc on every event-driven refresh.
         if changed {
+            self.inner.snapshot_cache.put(id, snap);
             self.inner.frame_dirty.lock().insert(id);
         }
     }

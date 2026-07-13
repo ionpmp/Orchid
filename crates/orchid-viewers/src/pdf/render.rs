@@ -143,6 +143,22 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                     continue;
                 };
 
+                // Ensure Pdfium is bound before moving `req` into the worker
+                // closure — otherwise a bind failure drops the reply channel
+                // and the caller blocks forever on recv.
+                if let Err(e) = with_pdfium(|_| Ok::<(), ViewerError>(())) {
+                    match req {
+                        WorkerRequest::Render { reply, .. } => {
+                            let _ = reply.send(Err(e));
+                        }
+                        WorkerRequest::ExtractText { reply, .. } => {
+                            let _ = reply.send(Err(e));
+                        }
+                        _ => unreachable!(),
+                    }
+                    continue;
+                }
+
                 let interrupted = with_pdfium(|pdfium| -> Result<Option<WorkerRequest>> {
                     let document = match pdfium.load_pdf_from_byte_slice(bytes.as_slice(), None) {
                         Ok(doc) => doc,
@@ -166,8 +182,11 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
 
                     fulfill_pdf_request(&document, req);
 
-                    // Keep the parsed document warm while this session keeps
-                    // rendering or extracting text.
+                    // Keep the parsed document warm for a bounded burst of
+                    // same-session Render/ExtractText. Cap the burst so other
+                    // sessions (Open/Close/render) are not starved.
+                    const MAX_WARM_FOLLOWUPS: usize = 16;
+                    let mut followups = 0usize;
                     loop {
                         match next_request(&rx, &mut inbox) {
                             Some(
@@ -180,7 +199,13 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                                     ..
                                 }),
                             ) if next_session == session => {
+                                if followups >= MAX_WARM_FOLLOWUPS {
+                                    // Yield: re-queue this request so the main
+                                    // loop can service other sessions first.
+                                    return Ok(Some(next));
+                                }
                                 fulfill_pdf_request(&document, next);
+                                followups += 1;
                             }
                             Some(other) => return Ok(Some(other)),
                             None => return Ok(None),
@@ -192,7 +217,8 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                     Ok(Some(other)) => inbox.push_front(other),
                     Ok(None) => {}
                     Err(e) => {
-                        tracing::warn!(error = %e, "pdf worker session failed");
+                        // Bind already succeeded above; unexpected here.
+                        tracing::error!(error = %e, "pdf worker session failed unexpectedly");
                     }
                 }
             }

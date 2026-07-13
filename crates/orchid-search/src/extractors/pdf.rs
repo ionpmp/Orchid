@@ -11,6 +11,10 @@ use crate::error::{Result, SearchError};
 use crate::extractors::ContentExtractor;
 use crate::extractors::text::MAX_CONTENT_BYTES;
 
+/// Soft ceiling for mapping a PDF during search indexing (keeps RSS bounded).
+/// Content extracted into the index is still capped at [`MAX_CONTENT_BYTES`].
+pub const MAX_PDF_MMAP_BYTES: u64 = 64 * 1024 * 1024;
+
 /// Extract text from PDF pages via pdfium.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PdfExtractor;
@@ -30,26 +34,40 @@ impl ContentExtractor for PdfExtractor {
         let path_str = path.to_string();
         if path.is_local() {
             let os_path = path.to_local()?;
+            let path_for_err = path_str.clone();
             return tokio::task::spawn_blocking(move || extract_local_mmap(&os_path, &path_str))
                 .await
                 .map_err(|e| SearchError::Extraction {
-                    path: String::new(),
+                    path: path_for_err,
                     reason: format!("join: {e}"),
                 })?;
         }
         let bytes = provider.read(path).await?;
+        let path_for_err = path_str.clone();
         tokio::task::spawn_blocking(move || extract_sync(&bytes, &path_str))
             .await
             .map_err(|e| SearchError::Extraction {
-                path: String::new(),
+                path: path_for_err,
                 reason: format!("join: {e}"),
             })?
     }
 }
 
 fn extract_local_mmap(os_path: &std::path::Path, path: &str) -> Result<String> {
+    let meta = std::fs::metadata(os_path)?;
+    if meta.len() > MAX_PDF_MMAP_BYTES {
+        return Err(SearchError::Extraction {
+            path: path.to_string(),
+            reason: format!(
+                "PDF too large to index ({} bytes > {} byte limit)",
+                meta.len(),
+                MAX_PDF_MMAP_BYTES
+            ),
+        });
+    }
     let file = std::fs::File::open(os_path)?;
     // SAFETY: read-only mapping; extract finishes before the map is dropped.
+    // Concurrent writers may change bytes while mapped — pdfium may then fail.
     let map = unsafe { memmap2::Mmap::map(&file)? };
     extract_sync(&map, path)
 }

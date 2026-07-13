@@ -361,3 +361,21 @@ fn map_io(path: &Path) -> impl FnOnce(std::io::Error) -> FsError + '_ {
         _ => FsError::Io(e),
     }
 }
+
+#[cfg(test)]
+mod read_prefix_tests {
+    use crate::provider::{read_prefix, LocalProvider};
+    use crate::FsPath;
+
+    #[tokio::test]
+    async fn read_prefix_caps_and_fills() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.bin");
+        std::fs::write(&path, vec![0xABu8; 64 * 1024]).unwrap();
+        let fs_path = FsPath::from_local(&path).unwrap();
+        let provider = LocalProvider::new();
+        let sample = read_prefix(&provider, &fs_path, 4096).await.unwrap();
+        assert_eq!(sample.len(), 4096);
+        assert!(sample.iter().all(|&b| b == 0xAB));
+    }
+}

@@ -11,32 +11,58 @@ use crate::slint_generated::{
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
-struct RgbaImageCacheEntry {
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct RgbaCacheKey {
+    ptr: usize,
+    len: usize,
     width: u32,
     height: u32,
+    /// First/last sample to detect allocator address reuse with different bytes.
+    tip: u64,
+}
+
+struct RgbaImageCacheEntry {
     image: Image,
 }
 
 thread_local! {
-    static RGBA_IMAGE_CACHE: std::cell::RefCell<HashMap<usize, RgbaImageCacheEntry>> = std::cell::RefCell::new(HashMap::new());
+    static RGBA_IMAGE_CACHE: std::cell::RefCell<HashMap<RgbaCacheKey, RgbaImageCacheEntry>> =
+        std::cell::RefCell::new(HashMap::new());
 }
 const RGBA_IMAGE_CACHE_CAP: usize = 8;
+
+fn rgba_cache_key(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> RgbaCacheKey {
+    RgbaCacheKey {
+        ptr: Arc::as_ptr(rgba) as usize,
+        len: rgba.len(),
+        width,
+        height,
+        tip: rgba_tip(rgba.as_slice()),
+    }
+}
+
+fn rgba_tip(bytes: &[u8]) -> u64 {
+    let mut tip = 0u64;
+    for (i, b) in bytes.iter().take(8).enumerate() {
+        tip |= u64::from(*b) << (i * 8);
+    }
+    if bytes.len() > 8 {
+        let mut tail = 0u64;
+        for (i, b) in bytes.iter().rev().take(8).enumerate() {
+            tail |= u64::from(*b) << (i * 8);
+        }
+        tip ^= tail.rotate_left(17);
+    }
+    tip
+}
 
 fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
     if width == 0 || height == 0 || rgba.is_empty() {
         return Image::default();
     }
-    let key = Arc::as_ptr(rgba) as usize;
+    let key = rgba_cache_key(rgba, width, height);
 
-    let cached = RGBA_IMAGE_CACHE.with(|cache| {
-        cache.borrow().get(&key).and_then(|c| {
-            if c.width == width && c.height == height {
-                Some(c.image.clone())
-            } else {
-                None
-            }
-        })
-    });
+    let cached = RGBA_IMAGE_CACHE.with(|cache| cache.borrow().get(&key).map(|c| c.image.clone()));
 
     if let Some(image) = cached {
         return image;
@@ -52,19 +78,11 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
     RGBA_IMAGE_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         if cache.len() >= RGBA_IMAGE_CACHE_CAP {
-            // Drop an arbitrary entry; keys are stable Arc addresses while buffers live.
             if let Some(old) = cache.keys().next().copied() {
                 cache.remove(&old);
             }
         }
-        cache.insert(
-            key,
-            RgbaImageCacheEntry {
-                width,
-                height,
-                image: image.clone(),
-            },
-        );
+        cache.insert(key, RgbaImageCacheEntry { image: image.clone() });
     });
 
     image
