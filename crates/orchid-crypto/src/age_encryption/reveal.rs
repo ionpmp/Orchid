@@ -422,6 +422,8 @@ async fn wipe_session(session: &RevealSession) {
 }
 
 async fn wipe_file(path: &Path) {
+    // Best-effort logical overwrite. Not a physical secure erase — see
+    // docs/SECURITY.md ("Disk wipe after encryption / reveal").
     const BLOCK: usize = 64 * 1024;
     let Ok(meta) = tokio::fs::metadata(path).await else {
         return;

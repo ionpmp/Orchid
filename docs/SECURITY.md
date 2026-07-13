@@ -43,3 +43,15 @@ Inline `password` fields under `[file-manager.network-mounts]` are stored in **p
 - DPAPI / Windows Hello unlock protects secrets from *other users* on the machine, not from malware running as the same user.
 - Content-addressed chunk storage stores chunk payloads in plaintext by design; encrypt at the managed/encrypted-folder layer when needed.
 - `RCLONE_BIN` overrides which rclone binary is executed — treat a compromised environment as out of scope for mount isolation.
+
+## Disk wipe after encryption / reveal
+
+When Orchid encrypts a file in place or tears down a reveal session, it may
+overwrite the plaintext with zeros before `unlink` (best-effort, size-capped).
+
+**This is not a guarantee of physical erasure.** On NTFS with journaling, and
+especially on SSDs with wear-leveling / TRIM, overwriting a file often writes
+new blocks while the previous plaintext sectors remain until the drive
+reclaims them. Treat overwrite-before-delete as defense-in-depth against
+casual recovery tools, not as a substitute for full-disk encryption (BitLocker)
+or media sanitization when the threat model requires cryptographic erasure.

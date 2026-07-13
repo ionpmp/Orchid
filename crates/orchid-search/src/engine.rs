@@ -217,7 +217,7 @@ impl SearchEngine {
                 let meta = inner.index.load_metas()?;
                 let segment_ids: Vec<_> = meta.segments.iter().map(|s| s.id()).collect();
                 if segment_ids.len() > 1 {
-                    let _ = futures_executor::block_on(w.merge(&segment_ids));
+                    let _ = futures::executor::block_on(w.merge(&segment_ids));
                 }
             }
             Ok(())
@@ -251,30 +251,6 @@ impl SearchEngine {
             reason: format!("join: {e}"),
         })
     }
-}
-
-// `tantivy::IndexWriter::merge` returns a future; we need a synchronous
-// driver for the `spawn_blocking` context. Use `futures_executor`, which is
-// already pulled in transitively by Tantivy. If it isn't, we fall back to
-// a tiny hand-rolled block_on.
-mod futures_executor {
-    use std::future::Future;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
-
-    pub fn block_on<F: Future>(fut: F) -> F::Output {
-        // Minimal executor: park the current thread, poll once per wake-up.
-        let mut fut = Box::pin(fut);
-        let waker = std::task::Waker::noop();
-        let mut cx = Context::from_waker(waker);
-        loop {
-            match Pin::as_mut(&mut fut).poll(&mut cx) {
-                Poll::Ready(v) => return v,
-                Poll::Pending => std::thread::yield_now(),
-            }
-        }
-    }
-
 }
 
 // -------------------------------------------------------------------------

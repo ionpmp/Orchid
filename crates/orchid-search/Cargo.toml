@@ -25,6 +25,7 @@ pdfium-render.workspace = true
 orchid-core.workspace = true
 orchid-storage.workspace = true
 orchid-fs.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

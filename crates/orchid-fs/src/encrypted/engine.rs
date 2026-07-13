@@ -432,6 +432,8 @@ fn plaintext_path_for_encrypted(path: &FsPath) -> Result<FsPath> {
 }
 
 async fn overwrite_then_delete(path: &std::path::Path) -> Result<()> {
+    // Best-effort logical overwrite. Not a physical secure erase — see
+    // docs/SECURITY.md ("Disk wipe after encryption / reveal").
     use tokio::io::AsyncWriteExt;
     const BLOCK: usize = 64 * 1024;
     let meta = tokio::fs::metadata(path).await?;

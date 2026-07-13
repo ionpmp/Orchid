@@ -7,6 +7,10 @@
 //! auth flow to use. The actual passphrase / X25519 key is NEVER written
 //! to disk by this crate — it is supplied fresh at every reveal and lives
 //! only in memory for the duration of the operation.
+//!
+//! In-place encrypt may overwrite the plaintext with zeros before unlink.
+//! That is best-effort only — see `docs/SECURITY.md` ("Disk wipe after
+//! encryption / reveal") for SSD / NTFS limits.
 
 pub mod engine;
 pub(crate) mod index;

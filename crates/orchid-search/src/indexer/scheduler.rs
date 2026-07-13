@@ -77,7 +77,11 @@ impl IndexScheduler {
             .map_err(|_| SearchError::IndexClosed)
     }
 
-    /// Ask the scheduler to flush after draining pending work.
+    /// Ask the scheduler to commit after draining pending work.
+    ///
+    /// Upsert batches and removes already commit automatically so live FS
+    /// indexing is searchable without an explicit flush; this remains useful
+    /// for crawl completion and tests that want a deterministic barrier.
     ///
     /// # Errors
     ///
@@ -111,11 +115,17 @@ async fn worker_loop(
             break;
         };
         let mut batch: Vec<IndexDocument> = Vec::new();
+        let mut pending_commit = false;
         match task {
             IndexTask::Upsert(doc) => batch.push(doc),
             IndexTask::Remove(path) => {
                 if let Err(e) = engine.remove(&path).await {
                     warn!(error = %e, %path, "index remove failed");
+                }
+                // Deletes must become searchable without an explicit flush —
+                // the FS watcher never calls flush on its own.
+                if let Err(e) = engine.commit().await {
+                    warn!(error = %e, "index commit failed");
                 }
                 continue;
             }
@@ -131,15 +141,23 @@ async fn worker_loop(
             match rx.try_recv() {
                 Ok(IndexTask::Upsert(d)) => batch.push(d),
                 Ok(IndexTask::Remove(path)) => {
+                    // Apply the pending upsert batch first so remove-after-upsert
+                    // ordering stays correct, then remove + commit below.
+                    if !batch.is_empty() {
+                        debug!(count = batch.len(), "flushing batch");
+                        if let Err(e) = engine.upsert_batch(std::mem::take(&mut batch)).await {
+                            warn!(error = %e, "index upsert_batch failed");
+                        }
+                    }
                     if let Err(e) = engine.remove(&path).await {
                         warn!(error = %e, %path, "index remove failed");
                     }
+                    pending_commit = true;
                     break;
                 }
                 Ok(IndexTask::Flush) => {
-                    if let Err(e) = engine.commit().await {
-                        warn!(error = %e, "index commit failed");
-                    }
+                    // Defer commit until after the upsert batch is written.
+                    pending_commit = true;
                     break;
                 }
                 Err(_) => break,
@@ -149,6 +167,14 @@ async fn worker_loop(
             debug!(count = batch.len(), "flushing batch");
             if let Err(e) = engine.upsert_batch(batch).await {
                 warn!(error = %e, "index upsert_batch failed");
+            }
+            // Live FS events never send Flush; commit after each batch so
+            // incremental indexing is visible to search without a crawl.
+            pending_commit = true;
+        }
+        if pending_commit {
+            if let Err(e) = engine.commit().await {
+                warn!(error = %e, "index commit failed");
             }
         }
     }

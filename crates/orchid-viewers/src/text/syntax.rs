@@ -847,15 +847,6 @@ fn scoped_lines_window(
     out
 }
 
-fn scoped_lines(
-    source: &str,
-    scopes: &[SyntaxScope],
-    first_line: u32,
-    line_count: u32,
-) -> Vec<SyntaxLine> {
-    scoped_lines_window(source, scopes, 0, first_line, line_count)
-}
-
 fn line_to_segments(line: &str, scopes: &[SyntaxScope]) -> Vec<SyntaxSegment> {
     if line.is_empty() {
         return vec![SyntaxSegment {
