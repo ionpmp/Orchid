@@ -253,17 +253,14 @@ export component FmPane inherits Rectangle {
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
                         entry-clicked(p, ctrl) => {
                             root.pane-focused();
-                            pane-keys.focus();
                             root.entry-clicked(p, ctrl);
                         }
                         entry-shift-clicked(p) => {
                             root.pane-focused();
-                            pane-keys.focus();
                             root.entry-shift-clicked(p);
                         }
                         entry-double-clicked(p, is_dir) => {
                             root.pane-focused();
-                            pane-keys.focus();
                             root.entry-double-clicked(p, is_dir);
                         }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }
@@ -293,17 +290,14 @@ export component FmPane inherits Rectangle {
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         entry-clicked(p, ctrl) => {
                             root.pane-focused();
-                            pane-keys.focus();
                             root.entry-clicked(p, ctrl);
                         }
                         entry-shift-clicked(p) => {
                             root.pane-focused();
-                            pane-keys.focus();
                             root.entry-shift-clicked(p);
                         }
                         entry-double-clicked(p, is_dir) => {
                             root.pane-focused();
-                            pane-keys.focus();
                             root.entry-double-clicked(p, is_dir);
                         }
                         entry-context(p, x, y) => { root.entry-context(p, x, y); }

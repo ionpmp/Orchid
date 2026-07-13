@@ -1,5 +1,6 @@
 //! File-manager handlers for [`MainWindowController`].
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -146,7 +147,13 @@ impl MainWindowController {
     }
         pub(super) async fn fm_refresh_ui(self: &Arc<Self>, inst: Uuid) {
         let _ = self.widget_manager.refresh_snapshot_cache(inst).await;
-        self.schedule_rebuild();
+        // Prefer an in-place frame patch. A full workspace rebuild remounts FM
+        // TouchAreas/FocusScopes and can freeze the Slint event loop on Windows
+        // when it lands around a click/navigate.
+        if let Err(e) = self.patch_workspace_frames(&[inst]) {
+            warn!(?e, "fm_refresh_ui patch");
+            self.schedule_rebuild();
+        }
     }
         pub(super) fn widget_bounds_at_canvas_point(
         &self,
@@ -420,22 +427,7 @@ impl MainWindowController {
             .read()
             .get(&inst)
             .cloned()
-            .unwrap_or_else(|| FileManagerOverlays {
-                context_menu: empty_context_menu(),
-                confirm_dialog: empty_confirm_dialog(),
-                rename: empty_rename_state(),
-                tag: empty_tag_state(),
-                tag_paths: Vec::new(),
-                passphrase: empty_passphrase_state(),
-                managed_policy: empty_managed_policy_state(),
-                passphrase_paths: Vec::new(),
-                passphrase_purpose: None,
-                create_folder_parent: None,
-                drag_active: false,
-                drag_paths: Vec::new(),
-                drag_drop_target: String::new(),
-                drag_target_pane: -1,
-            })
+            .unwrap_or_else(default_fm_overlays)
     }
         pub(super) fn clear_fm_drag(&self, inst: Uuid) {
         let mut over = self.fm_overlays.write();
@@ -708,7 +700,7 @@ impl MainWindowController {
             return;
         }
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.drag_active = true;
         entry.drag_paths = paths;
         entry.drag_drop_target.clear();
@@ -725,7 +717,7 @@ impl MainWindowController {
     }
         pub(super) fn set_fm_drag_hover(self: &Arc<Self>, inst: Uuid, pane: i32, folder: String) {
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         if !entry.drag_active {
             return;
         }
@@ -739,7 +731,7 @@ impl MainWindowController {
     }
         pub(super) fn clear_fm_drag_hover_to_pane(self: &Arc<Self>, inst: Uuid, pane: i32) {
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         if !entry.drag_active {
             return;
         }
@@ -850,7 +842,7 @@ impl MainWindowController {
             return;
         };
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         if !entry.drag_active {
             return;
         }
@@ -1119,6 +1111,40 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         self.set_fm_focus(inst, p);
         let ps = path.to_string();
+
+        // Workspace rebuild remounts TouchAreas between clicks, so Slint's
+        // `double-clicked` often never fires. Detect a second click here.
+        const DOUBLE_CLICK_MS: u128 = 500;
+        let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
+            .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
+        let open_from_double = if !ctrl
+            && behavior == orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen
+        {
+            let now = Instant::now();
+            let mut last = self.fm_last_click.lock();
+            let is_double = last.as_ref().is_some_and(|(prev_inst, prev_pane, prev_path, t)| {
+                *prev_inst == inst
+                    && *prev_pane == p
+                    && prev_path == &ps
+                    && now.duration_since(*t).as_millis() <= DOUBLE_CLICK_MS
+            });
+            *last = Some((inst, p, ps.clone(), now));
+            is_double
+        } else {
+            *self.fm_last_click.lock() = Some((inst, p, ps.clone(), Instant::now()));
+            false
+        };
+
+        if open_from_double {
+            debug!(%ps, "fm entry second click -> open");
+            // Cancel any drag armed by the second press; do not race a
+            // select/refresh rebuild against navigate.
+            self.clear_fm_drag(inst);
+            let is_dir = self.fm_entry_is_dir(inst, p, &ps);
+            self.fm_try_dispatch_open(inst, p, ps, is_dir);
+            return;
+        }
+
         let ps_for_select = ps.clone();
         let mode = if ctrl {
             orchid_widgets::builtin::file_manager::SelectionMode::Toggle
@@ -1135,13 +1161,11 @@ impl MainWindowController {
             }
         });
 
-        let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
-            .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
         if behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
             return;
         }
         let is_dir = self.fm_entry_is_dir(inst, p, &ps);
-        self.fm_dispatch_open(inst, p, ps, is_dir);
+        self.fm_try_dispatch_open(inst, p, ps, is_dir);
     }
         pub(super) fn on_fm_entry_shift_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
         let p = pane.max(0) as u8;
@@ -1174,12 +1198,36 @@ impl MainWindowController {
         let behavior = orchid_widgets::builtin::file_manager::click_behavior(inst)
             .unwrap_or(orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen);
         if is_dir {
-            self.fm_dispatch_open(inst, p, raw, true);
+            self.fm_try_dispatch_open(inst, p, raw, true);
             return;
         }
         if behavior == orchid_widgets::builtin::file_manager::ClickBehavior::DoubleToOpen {
-            self.fm_dispatch_open(inst, p, raw, false);
+            self.fm_try_dispatch_open(inst, p, raw, false);
         }
+    }
+        /// Open a path unless the same path was just opened (Slint + Rust double-click).
+        pub(super) fn fm_try_dispatch_open(
+        self: &Arc<Self>,
+        inst: Uuid,
+        pane: u8,
+        path: String,
+        is_dir: bool,
+    ) {
+        const OPEN_DEBOUNCE_MS: u128 = 400;
+        {
+            let now = Instant::now();
+            let mut last = self.fm_last_open.lock();
+            if last.as_ref().is_some_and(|(prev_inst, prev_path, t)| {
+                *prev_inst == inst
+                    && prev_path == &path
+                    && now.duration_since(*t).as_millis() <= OPEN_DEBOUNCE_MS
+            }) {
+                debug!(%path, "fm open debounced");
+                return;
+            }
+            *last = Some((inst, path.clone(), now));
+        }
+        self.fm_dispatch_open(inst, pane, path, is_dir);
     }
         pub(super) fn fm_dispatch_open(self: &Arc<Self>, inst: Uuid, pane: u8, path: String, is_dir: bool) {
         let tw = Arc::downgrade(self);
@@ -1197,6 +1245,10 @@ impl MainWindowController {
                     Err(e) => warn!(?e, %path, elapsed_ms, "fm_dispatch_open err"),
                 }
                 let _ = wm.refresh_snapshot_cache(inst).await;
+                // Drop any dirty marks so the 60Hz tick does not remount FM while the
+                // activating click is still settling (that freezes Slint on Windows).
+                let _ = wm.drain_frame_dirty_ids();
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 (path, outcome)
             },
             move |(path, outcome)| async move {
@@ -1204,6 +1256,31 @@ impl MainWindowController {
                     return;
                 };
                 match outcome {
+                    Ok(orchid_widgets::builtin::file_manager::ActionOutcome::Done) => {
+                        debug!(%path, "fm open applying ui");
+                        c.clear_fm_drag(inst);
+                        {
+                            let mut over = c.fm_overlays.write();
+                            let entry =
+                                over.entry(inst).or_insert_with(default_fm_overlays);
+                            entry.context_menu = empty_context_menu();
+                            entry.confirm_dialog = empty_confirm_dialog();
+                            entry.rename = empty_rename_state();
+                            entry.tag = empty_tag_state();
+                            entry.tag_paths.clear();
+                            entry.create_folder_parent = None;
+                        }
+                        c.rebuild_pending.store(false, Ordering::Release);
+                        let _ = c.widget_manager.drain_frame_dirty_ids();
+                        debug!(%path, "fm open patching frames");
+                        match c.patch_workspace_frames(&[inst]) {
+                            Ok(()) => debug!(%path, "fm open patched"),
+                            Err(e) => {
+                                warn!(?e, "fm open patch frames");
+                                c.schedule_rebuild();
+                            }
+                        }
+                    }
                     Ok(o) => {
                         c.apply_fm_action_outcome(inst, o);
                         c.schedule_rebuild();
@@ -1235,7 +1312,7 @@ impl MainWindowController {
         };
         let menu = build_context_menu(&actions, &target_paths, x, y, &self.locale);
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.context_menu = menu;
         drop(over);
         self.schedule_rebuild();
@@ -1298,13 +1375,17 @@ impl MainWindowController {
         match outcome {
             orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.context_menu = empty_context_menu();
                 entry.confirm_dialog = empty_confirm_dialog();
                 entry.rename = empty_rename_state();
                 entry.tag = empty_tag_state();
                 entry.tag_paths.clear();
                 entry.create_folder_parent = None;
+                entry.drag_active = false;
+                entry.drag_paths.clear();
+                entry.drag_drop_target.clear();
+                entry.drag_target_pane = -1;
                 drop(over);
                 self.schedule_rebuild();
             }
@@ -1336,7 +1417,7 @@ impl MainWindowController {
                     )),
                 };
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.confirm_dialog = dlg;
                 entry.context_menu = empty_context_menu();
                 drop(over);
@@ -1344,7 +1425,7 @@ impl MainWindowController {
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename { path, current_name } => {
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.create_folder_parent = None;
                 entry.rename = FmRenameState {
                     active: true,
@@ -1360,7 +1441,7 @@ impl MainWindowController {
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsCreateFolder { parent } => {
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.create_folder_parent = Some(parent);
                 entry.rename = FmRenameState {
                     active: true,
@@ -1376,7 +1457,7 @@ impl MainWindowController {
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsTag { paths } => {
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.tag_paths = paths;
                 entry.tag = FmTagState {
                     active: true,
@@ -1395,7 +1476,7 @@ impl MainWindowController {
             } => {
                 let (title, hint, ok_label) = fm_passphrase_dialog_labels(self.locale.as_ref(), purpose);
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.passphrase_paths = paths;
                 entry.passphrase_purpose = Some(purpose);
                 entry.passphrase = FmPassphraseState {
@@ -1422,7 +1503,7 @@ impl MainWindowController {
                 policy,
             } => {
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.managed_policy =
                     build_managed_policy_state(self.locale.as_ref(), &path, policy.as_ref());
                 entry.context_menu = empty_context_menu();
@@ -1529,7 +1610,7 @@ impl MainWindowController {
                     pending_paths: ModelRc::new(VecModel::default()),
                 };
                 let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.confirm_dialog = dlg;
                 entry.context_menu = empty_context_menu();
                 drop(over);
@@ -1542,7 +1623,7 @@ impl MainWindowController {
             return;
         };
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.context_menu = empty_context_menu();
         drop(over);
         self.schedule_rebuild();
@@ -1558,7 +1639,7 @@ impl MainWindowController {
         let action = over.confirm_dialog.pending_action.to_string();
         if action.is_empty() {
             let mut over = self.fm_overlays.write();
-            let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
             entry.confirm_dialog = empty_confirm_dialog();
             drop(over);
             self.schedule_rebuild();
@@ -1593,7 +1674,7 @@ impl MainWindowController {
                 match outcome {
                     orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
                         let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                         entry.confirm_dialog = empty_confirm_dialog();
                         entry.context_menu = empty_context_menu();
                         drop(over);
@@ -1611,7 +1692,7 @@ impl MainWindowController {
             return;
         };
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.confirm_dialog = empty_confirm_dialog();
         drop(over);
         self.schedule_rebuild();
@@ -1639,7 +1720,7 @@ impl MainWindowController {
                 }
                 if let Some(c) = tw.upgrade() {
                     let mut over = c.fm_overlays.write();
-                    let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                    let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                     entry.rename = empty_rename_state();
                     entry.create_folder_parent = None;
                     drop(over);
@@ -1660,7 +1741,7 @@ impl MainWindowController {
             }
             if let Some(c) = tw.upgrade() {
                 let mut over = c.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.rename = empty_rename_state();
                 drop(over);
                 c.schedule_rebuild();
@@ -1672,7 +1753,7 @@ impl MainWindowController {
             return;
         };
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.rename = empty_rename_state();
         entry.create_folder_parent = None;
         drop(over);
@@ -1695,7 +1776,7 @@ impl MainWindowController {
                 orchid_widgets::builtin::file_manager::add_tag_to_paths(inst, paths, &tag_str).await;
             if let Some(c) = tw.upgrade() {
                 let mut over = c.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(|| c.ensure_fm_overlays(inst));
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.tag = empty_tag_state();
                 entry.tag_paths.clear();
                 drop(over);
@@ -1708,7 +1789,7 @@ impl MainWindowController {
             return;
         };
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.tag = empty_tag_state();
         entry.tag_paths.clear();
         drop(over);
@@ -1862,7 +1943,7 @@ impl MainWindowController {
     }
         pub(super) fn clear_fm_passphrase_overlay(self: &Arc<Self>, inst: Uuid) {
         let mut over = self.fm_overlays.write();
-        let entry = over.entry(inst).or_insert_with(|| self.ensure_fm_overlays(inst));
+        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.passphrase = empty_passphrase_state();
         entry.passphrase_paths.clear();
         entry.passphrase_purpose = None;
@@ -1974,5 +2055,24 @@ impl MainWindowController {
                 c.apply_fm_action_outcome(inst, outcome);
             }
         });
+    }
+}
+
+fn default_fm_overlays() -> FileManagerOverlays {
+    FileManagerOverlays {
+        context_menu: empty_context_menu(),
+        confirm_dialog: empty_confirm_dialog(),
+        rename: empty_rename_state(),
+        tag: empty_tag_state(),
+        tag_paths: Vec::new(),
+        passphrase: empty_passphrase_state(),
+        managed_policy: empty_managed_policy_state(),
+        passphrase_paths: Vec::new(),
+        passphrase_purpose: None,
+        create_folder_parent: None,
+        drag_active: false,
+        drag_paths: Vec::new(),
+        drag_drop_target: String::new(),
+        drag_target_pane: -1,
     }
 }

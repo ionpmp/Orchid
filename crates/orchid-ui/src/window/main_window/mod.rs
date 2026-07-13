@@ -156,6 +156,10 @@ pub struct MainWindowController {
     last_text_edit_instance: Arc<Mutex<Option<Uuid>>>,
     /// Last interacted file-manager instance and pane (for drop targeting).
     fm_focus: Arc<Mutex<Option<(Uuid, u8)>>>,
+    /// Recent entry click for synthesizing double-open across workspace rebuilds.
+    fm_last_click: Arc<Mutex<Option<(Uuid, u8, String, Instant)>>>,
+    /// Debounce duplicate open from Slint double-click + Rust double-click.
+    fm_last_open: Arc<Mutex<Option<(Uuid, String, Instant)>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
     last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
     /// Canvas flickable scroll offset (content coordinates).
@@ -431,6 +435,8 @@ impl MainWindowController {
             close_confirm_overlays: Arc::new(RwLock::new(HashMap::new())),
             last_text_edit_instance: Arc::new(Mutex::new(None)),
             fm_focus: Arc::new(Mutex::new(None)),
+            fm_last_click: Arc::new(Mutex::new(None)),
+            fm_last_open: Arc::new(Mutex::new(None)),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
             keyboard_modifiers: Arc::new(Mutex::new(
@@ -1564,6 +1570,7 @@ impl MainWindowController {
                             overlays,
                             pl.instance_id,
                             &self.locale,
+                            false,
                         ),
                     )
                 }

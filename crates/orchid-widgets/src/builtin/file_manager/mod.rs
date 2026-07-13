@@ -772,6 +772,10 @@ impl FileManagerInner {
     }
 
     async fn refresh_all_tabs(self: &Arc<Self>) {
+        self.refresh_all_tabs_with_publish(true).await;
+    }
+
+    async fn refresh_all_tabs_with_publish(self: &Arc<Self>, publish: bool) {
         self.refresh_managed_roots().await;
         self.refresh_encrypted_paths().await;
         let show_hidden = self.config.read().show_hidden;
@@ -788,7 +792,9 @@ impl FileManagerInner {
         if let Some(rt) = right {
             self.refresh_tab(&rt, show_hidden).await;
         }
-        self.publish_refresh();
+        if publish {
+            self.publish_refresh();
+        }
     }
 
     async fn paste_clipboard(self: &Arc<Self>) -> WidgetResult<()> {
@@ -2037,6 +2043,15 @@ fn active_tab_ref(
 
 /// Navigate the given `pane` (0 left, 1 right) to `path`.
 pub async fn navigate(instance_id: Uuid, pane: u8, path: orchid_fs::FsPath) -> WidgetResult<()> {
+    navigate_inner(instance_id, pane, path, true).await
+}
+
+async fn navigate_inner(
+    instance_id: Uuid,
+    pane: u8,
+    path: orchid_fs::FsPath,
+    publish: bool,
+) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
         let mut state = inner.state.lock();
@@ -2050,7 +2065,7 @@ pub async fn navigate(instance_id: Uuid, pane: u8, path: orchid_fs::FsPath) -> W
             state.left_pane.active_tab_mut().navigate_to(path);
         }
     }
-    inner.refresh_all_tabs().await;
+    inner.refresh_all_tabs_with_publish(publish).await;
     Ok(())
 }
 
@@ -3004,7 +3019,7 @@ pub async fn open_path(
                 purpose: PassphrasePurpose::Reveal,
             });
         }
-        navigate(instance_id, pane, fp).await?;
+        navigate_inner(instance_id, pane, fp, false).await?;
         debug!(%path, elapsed_ms = t0.elapsed().as_millis(), "fm open_path navigated");
         return Ok(ActionOutcome::Done);
     }

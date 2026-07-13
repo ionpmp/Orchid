@@ -58,6 +58,7 @@ pub(crate) fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerMod
         show_hidden_label: locale.tr("fm-show-hidden-off").into(),
         single_click_open: false,
         single_click_open_label: locale.tr("fm-click-single-off").into(),
+        request_autofocus: false,
         drag_active: false,
         drag_drop_target: SharedString::new(),
         drag_target_pane: -1,
@@ -475,6 +476,7 @@ pub(crate) fn build_file_manager_model(
     overlays: FileManagerOverlays,
     instance_id: Uuid,
     locale: &LocaleManager,
+    request_autofocus: bool,
 ) -> FileManagerModel {
     let active_path = p
         .panes
@@ -684,6 +686,7 @@ pub(crate) fn build_file_manager_model(
         } else {
             locale.tr("fm-click-single-off").into()
         },
+        request_autofocus,
         drag_active: overlays.drag_active,
         drag_drop_target: overlays.drag_drop_target.clone().into(),
         drag_target_pane: overlays.drag_target_pane,
