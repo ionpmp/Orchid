@@ -35,9 +35,9 @@ pub use operations::{
 };
 pub use path::FsPath;
 pub use provider::{
-    normalize_mount_uri, register_rclone_providers, FsCapabilities, FsChange, FsChangeKind,
-    FsProvider, FsProviderRegistry, FsWatcherHandle, LocalProvider, RcloneProvider, RCLONE_SCHEMES,
-    ProviderId,
+    normalize_mount_uri, read_prefix, register_rclone_providers, FsCapabilities, FsChange,
+    FsChangeKind, FsProvider, FsProviderRegistry, FsWatcherHandle, LocalProvider, ProviderId,
+    RcloneProvider, RCLONE_SCHEMES,
 };
 pub use tag::{TagManager, TagsChangedEvent};
 pub use watcher::{

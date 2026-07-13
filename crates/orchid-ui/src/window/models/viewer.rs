@@ -27,7 +27,7 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
         return Image::default();
     }
     let key = Arc::as_ptr(rgba) as usize;
-    
+
     let cached = RGBA_IMAGE_CACHE.with(|cache| {
         cache.borrow().get(&key).and_then(|c| {
             if c.width == width && c.height == height {
@@ -37,18 +37,18 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
             }
         })
     });
-    
+
     if let Some(image) = cached {
         return image;
     }
-    
+
     let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
         rgba.as_slice(),
         width,
         height,
     );
     let image = Image::from_rgba8(buf);
-    
+
     RGBA_IMAGE_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         if cache.len() >= RGBA_IMAGE_CACHE_CAP {
@@ -66,7 +66,7 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
             },
         );
     });
-    
+
     image
 }
 
@@ -378,7 +378,10 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
     }
 }
 
-fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager) -> ViewerTextModel {
+fn build_text_snapshot(
+    s: &orchid_viewers::TextSnapshot,
+    locale: &LocaleManager,
+) -> ViewerTextModel {
     let lines: Vec<ViewerSyntaxLine> = s
         .visible_lines
         .iter()
@@ -415,7 +418,7 @@ fn build_text_snapshot(s: &orchid_viewers::TextSnapshot, locale: &LocaleManager)
         visible_lines: ModelRc::new(VecModel::from(lines)),
         info_text: SharedString::new(),
         path_display: s.path_display.clone().into(),
-        plain_text: s.plain_text.clone().into(),
+        plain_text: SharedString::from(s.plain_text.as_ref()),
         mode_label: if s.read_only {
             locale.tr("viewer-text-read-only").into()
         } else {
@@ -453,7 +456,10 @@ fn syntax_scope_to_int(scope: &orchid_viewers::SyntaxScope) -> i32 {
     }
 }
 
-fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleManager) -> ViewerArchiveModel {
+fn build_archive_snapshot(
+    s: &orchid_viewers::ArchiveSnapshot,
+    locale: &LocaleManager,
+) -> ViewerArchiveModel {
     let mut entries: Vec<ViewerArchiveEntry> = Vec::with_capacity(s.entries.len() + 1);
 
     if !s.current_inner_path.is_empty() {
@@ -494,7 +500,9 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
             (
                 2,
                 SharedString::new(),
-                locale.tr_args("viewer-archive-binary-preview", &args).into(),
+                locale
+                    .tr_args("viewer-archive-binary-preview", &args)
+                    .into(),
             )
         }
         None => (
@@ -505,7 +513,9 @@ fn build_archive_snapshot(s: &orchid_viewers::ArchiveSnapshot, locale: &LocaleMa
     };
 
     let has_file_selected = !s.selected_path.is_empty()
-        && s.entries.iter().any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
+        && s.entries
+            .iter()
+            .any(|e| e.path_in_archive == s.selected_path && !e.is_dir);
 
     let header_args = orchid_i18n::FluentArgs::new()
         .with("format", viewer_archive_format_label(locale, &s.format))

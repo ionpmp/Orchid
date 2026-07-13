@@ -11,9 +11,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use dashmap::DashMap;
-use orchid_core::{
-    Event, EventEnvelope, EventFilter, HandlerPriority, SubscriptionHandle,
-};
+use orchid_core::{Event, EventEnvelope, EventFilter, HandlerPriority, SubscriptionHandle};
 use orchid_storage::{LifecycleState, StateStore};
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -27,9 +25,9 @@ use crate::registry::WidgetRegistry;
 use crate::widget::instance::{SharedInstance, WidgetInstanceRuntime};
 use crate::widget::lifecycle::LifecycleController;
 use crate::widget::snapshot::WidgetSnapshot;
-use snapshot_eq::payload_renders_equal;
-use crate::widget::WidgetSnapshotCache;
 use crate::widget::WidgetContext;
+use crate::widget::WidgetSnapshotCache;
+use snapshot_eq::payload_renders_equal;
 
 pub use operations::CreateWidgetRequest;
 
@@ -177,12 +175,7 @@ impl WidgetManager {
 
     /// Fill [`WidgetSnapshotCache`] for every known instance (e.g. after restore).
     pub async fn prime_snapshot_caches(&self) -> Result<()> {
-        let ids: Vec<Uuid> = self
-            .inner
-            .instances
-            .iter()
-            .map(|e| *e.key())
-            .collect();
+        let ids: Vec<Uuid> = self.inner.instances.iter().map(|e| *e.key()).collect();
         for id in ids {
             if let Err(e) = self.refresh_snapshot_cache(id).await {
                 warn!(widget_id = %id, error = %e, "prime snapshot cache failed");
@@ -311,8 +304,8 @@ impl WidgetManager {
             };
 
             let now = Utc::now();
-            let canonical_type = crate::registry::WidgetRegistry::canonical_type_id(&row.widget_type)
-                .to_string();
+            let canonical_type =
+                crate::registry::WidgetRegistry::canonical_type_id(&row.widget_type).to_string();
             let runtime = Arc::new(WidgetInstanceRuntime {
                 id: row.id,
                 workspace_id: row.workspace_id,
@@ -430,12 +423,7 @@ impl WidgetManager {
             warn!(error = %e, "final snapshot failed during shutdown");
         }
         // Walk every instance and invoke on_close.
-        let ids: Vec<Uuid> = self
-            .inner
-            .instances
-            .iter()
-            .map(|e| *e.key())
-            .collect();
+        let ids: Vec<Uuid> = self.inner.instances.iter().map(|e| *e.key()).collect();
         for id in ids {
             // Final snapshot already wrote layout + state; only drop runtime
             // hooks here — deleting rows would wipe persisted widgets on the
@@ -479,8 +467,10 @@ async fn run_snapshot_pump(inner: &WidgetManagerInner) {
             let changed = prev
                 .as_deref()
                 .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
-            inner.snapshot_cache.put(id, snap);
+            // Skip put when render-identical: avoids allocating a fresh
+            // Arc<WidgetSnapshot> (~30 Hz) for every idle active widget.
             if changed {
+                inner.snapshot_cache.put(id, snap);
                 inner.frame_dirty.lock().insert(id);
             }
         }

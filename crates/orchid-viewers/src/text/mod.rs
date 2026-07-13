@@ -61,6 +61,9 @@ pub struct TextViewer {
     /// Bumped on every buffer mutation so the parse cache can be invalidated.
     content_generation: AtomicU64,
     parse_cache: Mutex<Option<ParseCache>>,
+    /// Generation-keyed full document text for snapshots (avoids rope→String
+    /// on every ~30 Hz pump tick when content is unchanged).
+    plain_cache: Mutex<Option<(u64, Arc<str>)>>,
     undo: Mutex<UndoStack>,
     cursor: RwLock<CursorPos>,
     selection: RwLock<Option<SelectionRange>>,
@@ -91,6 +94,7 @@ impl TextViewer {
             highlighter,
             content_generation: AtomicU64::new(0),
             parse_cache: Mutex::new(None),
+            plain_cache: Mutex::new(None),
             undo: Mutex::new(UndoStack::new(500)),
             cursor: RwLock::new(CursorPos::default()),
             selection: RwLock::new(None),
@@ -106,9 +110,36 @@ impl TextViewer {
         self.content_generation.fetch_add(1, Ordering::Relaxed) + 1
     }
 
+    fn remember_plain_text(&self, generation: u64, text: Arc<str>) {
+        *self.plain_cache.lock() = Some((generation, text));
+    }
+
+    /// Shared LF-normalised document text for the current content generation.
+    fn cached_plain_text(&self, buffer: &TextBuffer) -> Arc<str> {
+        let generation = self.content_generation.load(Ordering::Relaxed);
+        if let Some((gen, text)) = self.plain_cache.lock().as_ref() {
+            if *gen == generation {
+                return Arc::clone(text);
+            }
+        }
+        // Reuse parse-cache source when it matches this generation.
+        if let Some(cached) = self.parse_cache.lock().as_ref() {
+            if cached.generation == generation {
+                let text: Arc<str> = Arc::from(cached.source.as_str());
+                self.remember_plain_text(generation, Arc::clone(&text));
+                return text;
+            }
+        }
+        let text: Arc<str> = Arc::from(buffer.plain_text());
+        self.remember_plain_text(generation, Arc::clone(&text));
+        text
+    }
+
     /// Apply a tree-sitter edit to the cached AST, or drop the cache on failure.
     fn sync_parse_cache_after_edit(&self, edit: InputEdit, new_source: String) {
         let generation = self.bump_content_generation();
+        let plain: Arc<str> = Arc::from(new_source.as_str());
+        self.remember_plain_text(generation, Arc::clone(&plain));
         let language = self.language.read().clone();
         let mut cache = self.parse_cache.lock();
         let Some(cached) = cache.as_mut() else {
@@ -137,6 +168,7 @@ impl TextViewer {
     fn invalidate_parse_cache(&self) {
         self.bump_content_generation();
         *self.parse_cache.lock() = None;
+        *self.plain_cache.lock() = None;
     }
 
     /// Ensure a fresh tree-sitter parse for the current buffer generation.
@@ -340,9 +372,11 @@ impl TextViewer {
         Ok(())
     }
 
-    /// Replace the entire buffer with `text` (plain edit-mode push from the UI).
+    /// Replace buffer contents with `text` (plain edit-mode push from the UI).
     ///
-    /// Full-document replaces clear the undo stack (MVP; typing undo uses insert/delete).
+    /// Prefers a single contiguous delete or insert (common typing path) so
+    /// tree-sitter and undo stay incremental. Selection-replace (delete+insert)
+    /// updates the rope in place but invalidates the parse cache.
     ///
     /// # Errors
     ///
@@ -351,18 +385,129 @@ impl TextViewer {
         if *self.mode.read() != TextViewerMode::Edit {
             return Err(ViewerError::EditOutOfBounds);
         }
-        {
+        let normalized = text.replace("\r\n", "\n");
+
+        enum Outcome {
+            Unchanged,
+            Incremental {
+                edit: InputEdit,
+                new_source: String,
+                op: TextOp,
+                cursor: CursorPos,
+            },
+            /// Rope already updated; drop parse cache / undo (mixed middle replace).
+            InPlaceInvalidate {
+                cursor: CursorPos,
+            },
+        }
+
+        let outcome = {
             let mut guard = self.buffer.write();
             let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
-            if buffer.plain_text() == text.replace("\r\n", "\n") {
-                return Ok(());
+            if buffer.content_eq(&normalized) {
+                Outcome::Unchanged
+            } else {
+                match buffer.single_span_diff(&normalized) {
+                    None => {
+                        buffer.replace_content(&normalized);
+                        Outcome::InPlaceInvalidate {
+                            cursor: CursorPos::default(),
+                        }
+                    }
+                    Some((start_b, old_end_b, new_end_b)) => {
+                        let start_char = buffer.byte_to_char(start_b);
+                        let old_end_char = buffer.byte_to_char(old_end_b);
+                        let (start_line, start_column) = buffer.line_col_at_char(start_char);
+                        let (end_line, end_column) = buffer.line_col_at_char(old_end_char);
+                        let start = CursorPos {
+                            line: start_line,
+                            column: start_column,
+                        };
+                        let end = CursorPos {
+                            line: end_line,
+                            column: end_column,
+                        };
+                        let inserted = &normalized[start_b..new_end_b];
+                        let deleted_empty = start_b == old_end_b;
+                        let inserted_empty = inserted.is_empty();
+
+                        if !deleted_empty && inserted_empty {
+                            let edit = Self::delete_edit(buffer, start, end)
+                                .ok_or(ViewerError::EditOutOfBounds)?;
+                            let deleted = buffer
+                                .text_range(start_line, start_column, end_line, end_column)?
+                                .to_string();
+                            buffer.delete(start_line, start_column, end_line, end_column)?;
+                            let new_source = buffer.plain_text();
+                            Outcome::Incremental {
+                                edit,
+                                new_source,
+                                op: TextOp {
+                                    kind: TextOpKind::Delete,
+                                    start_line,
+                                    start_column,
+                                    end_line,
+                                    end_column,
+                                    text: deleted,
+                                    timestamp: std::time::Instant::now(),
+                                },
+                                cursor: start,
+                            }
+                        } else if deleted_empty && !inserted_empty {
+                            let edit = Self::insert_edit(buffer, start, inserted)
+                                .ok_or(ViewerError::EditOutOfBounds)?;
+                            buffer.insert(start_line, start_column, inserted)?;
+                            let new_source = buffer.plain_text();
+                            let cursor = cursor_after_insert(start, inserted);
+                            Outcome::Incremental {
+                                edit,
+                                new_source,
+                                op: TextOp {
+                                    kind: TextOpKind::Insert,
+                                    start_line,
+                                    start_column,
+                                    end_line: cursor.line,
+                                    end_column: cursor.column,
+                                    text: inserted.to_string(),
+                                    timestamp: std::time::Instant::now(),
+                                },
+                                cursor,
+                            }
+                        } else {
+                            if !deleted_empty {
+                                buffer.delete(start_line, start_column, end_line, end_column)?;
+                            }
+                            if !inserted_empty {
+                                buffer.insert(start_line, start_column, inserted)?;
+                            }
+                            let cursor = cursor_after_insert(start, inserted);
+                            Outcome::InPlaceInvalidate { cursor }
+                        }
+                    }
+                }
             }
-            buffer.replace_content(text);
+        };
+
+        match outcome {
+            Outcome::Unchanged => Ok(()),
+            Outcome::InPlaceInvalidate { cursor } => {
+                self.invalidate_parse_cache();
+                self.undo.lock().clear();
+                *self.cursor.write() = cursor;
+                Ok(())
+            }
+            Outcome::Incremental {
+                edit,
+                new_source,
+                op,
+                cursor,
+            } => {
+                self.sync_parse_cache_after_edit(edit, new_source);
+                *self.cursor.write() = cursor;
+                self.undo.lock().push(op);
+                Ok(())
+            }
         }
-        // Whole-document replace: cheaper to invalidate than synthesise one huge edit.
-        self.invalidate_parse_cache();
-        self.undo.lock().clear();
-        Ok(())
     }
 
     /// Undo the last edit op.
@@ -394,8 +539,8 @@ impl TextViewer {
                 let (edit, new_source) = {
                     let mut guard = self.buffer.write();
                     let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
-                    let edit =
-                        Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit = Self::delete_edit(buffer, start, end)
+                        .ok_or(ViewerError::EditOutOfBounds)?;
                     buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
                     (edit, buffer.plain_text())
                 };
@@ -410,8 +555,8 @@ impl TextViewer {
                 let (edit, new_source) = {
                     let mut guard = self.buffer.write();
                     let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
-                    let edit =
-                        Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit = Self::insert_edit(buffer, at, &op.text)
+                        .ok_or(ViewerError::EditOutOfBounds)?;
                     buffer.insert(op.start_line, op.start_column, &op.text)?;
                     (edit, buffer.plain_text())
                 };
@@ -450,8 +595,8 @@ impl TextViewer {
                 let (edit, new_source) = {
                     let mut guard = self.buffer.write();
                     let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
-                    let edit =
-                        Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit = Self::insert_edit(buffer, at, &op.text)
+                        .ok_or(ViewerError::EditOutOfBounds)?;
                     buffer.insert(op.start_line, op.start_column, &op.text)?;
                     (edit, buffer.plain_text())
                 };
@@ -473,8 +618,8 @@ impl TextViewer {
                 let (edit, new_source) = {
                     let mut guard = self.buffer.write();
                     let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
-                    let edit =
-                        Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit = Self::delete_edit(buffer, start, end)
+                        .ok_or(ViewerError::EditOutOfBounds)?;
                     buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
                     (edit, buffer.plain_text())
                 };
@@ -528,6 +673,7 @@ impl Viewer for TextViewer {
         *self.first_visible_line.write() = 0;
         self.content_generation.store(0, Ordering::Relaxed);
         *self.parse_cache.lock() = None;
+        *self.plain_cache.lock() = None;
         self.undo.lock().clear();
         Ok(())
     }
@@ -538,6 +684,7 @@ impl Viewer for TextViewer {
         *self.registry.write() = None;
         self.content_generation.store(0, Ordering::Relaxed);
         *self.parse_cache.lock() = None;
+        *self.plain_cache.lock() = None;
         self.undo.lock().clear();
         Ok(())
     }
@@ -574,7 +721,7 @@ impl Viewer for TextViewer {
             cursor_column: cursor.column,
             selection: *self.selection.read(),
             info_text: String::new(),
-            plain_text: buffer.plain_text(),
+            plain_text: self.cached_plain_text(buffer),
         })
     }
 
@@ -677,7 +824,10 @@ mod tests {
         assert!(tv.insert("x").is_err());
         tv.set_mode(TextViewerMode::Edit);
         assert!(tv.insert("x").is_ok());
-        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("xhi"));
+        assert_eq!(
+            tv.buffer.read().as_ref().unwrap().line(0).as_deref(),
+            Some("xhi")
+        );
         assert!(tv.is_dirty());
     }
 
@@ -686,13 +836,36 @@ mod tests {
         let tv = viewer();
         *tv.buffer.write() = Some(TextBuffer::from_bytes(b"abcd").unwrap());
         tv.set_mode(TextViewerMode::Edit);
-        tv.delete(CursorPos { line: 0, column: 1 }, CursorPos { line: 0, column: 3 })
-            .unwrap();
-        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("ad"));
+        tv.delete(
+            CursorPos { line: 0, column: 1 },
+            CursorPos { line: 0, column: 3 },
+        )
+        .unwrap();
+        assert_eq!(
+            tv.buffer.read().as_ref().unwrap().line(0).as_deref(),
+            Some("ad")
+        );
         tv.undo().unwrap();
-        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("abcd"));
+        assert_eq!(
+            tv.buffer.read().as_ref().unwrap().line(0).as_deref(),
+            Some("abcd")
+        );
         tv.redo().unwrap();
-        assert_eq!(tv.buffer.read().as_ref().unwrap().line(0).as_deref(), Some("ad"));
+        assert_eq!(
+            tv.buffer.read().as_ref().unwrap().line(0).as_deref(),
+            Some("ad")
+        );
+    }
+
+    #[test]
+    fn replace_content_incremental_insert_keeps_undo() {
+        let tv = viewer();
+        *tv.buffer.write() = Some(TextBuffer::from_bytes(b"abc").unwrap());
+        tv.set_mode(TextViewerMode::Edit);
+        tv.replace_content("abXc").unwrap();
+        assert_eq!(tv.buffer.read().as_ref().unwrap().plain_text(), "abXc");
+        tv.undo().unwrap();
+        assert_eq!(tv.buffer.read().as_ref().unwrap().plain_text(), "abc");
     }
 
     #[test]
@@ -709,7 +882,7 @@ mod tests {
         };
         assert!(t.dirty);
         assert!(!t.read_only);
-        assert_eq!(t.plain_text, "new text");
+        assert_eq!(t.plain_text.as_ref(), "new text");
     }
 
     #[test]
@@ -736,16 +909,15 @@ mod tests {
         assert!(tv.parse_cache.lock().is_some());
 
         // Insert inside the function body.
-        *tv.cursor.write() = CursorPos {
-            line: 1,
-            column: 4,
-        };
+        *tv.cursor.write() = CursorPos { line: 1, column: 4 };
         tv.insert("let y = 2;\n    ").unwrap();
 
         let gen_after = tv.content_generation.load(Ordering::Relaxed);
         assert!(gen_after > gen_before);
         let cache = tv.parse_cache.lock();
-        let cached = cache.as_ref().expect("cache should survive incremental edit");
+        let cached = cache
+            .as_ref()
+            .expect("cache should survive incremental edit");
         assert_eq!(cached.generation, gen_after);
         assert!(cached.source.contains("let y = 2;"));
         drop(cache);
@@ -768,17 +940,11 @@ mod tests {
         let start = CursorPos { line: 2, column: 3 };
         assert_eq!(
             cursor_after_insert(start, "abc"),
-            CursorPos {
-                line: 2,
-                column: 6
-            }
+            CursorPos { line: 2, column: 6 }
         );
         assert_eq!(
             cursor_after_insert(start, "a\nb\nc"),
-            CursorPos {
-                line: 4,
-                column: 1
-            }
+            CursorPos { line: 4, column: 1 }
         );
     }
 }

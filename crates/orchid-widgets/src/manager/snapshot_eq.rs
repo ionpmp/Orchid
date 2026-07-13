@@ -12,10 +12,7 @@ use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> bool {
     match (a, b) {
         (WidgetPayload::Empty, WidgetPayload::Empty) => true,
-        (
-            WidgetPayload::Text { lines: la },
-            WidgetPayload::Text { lines: lb },
-        ) => la == lb,
+        (WidgetPayload::Text { lines: la }, WidgetPayload::Text { lines: lb }) => la == lb,
         (
             WidgetPayload::KeyValueList { entries: ea },
             WidgetPayload::KeyValueList { entries: eb },
@@ -27,10 +24,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
             system_payload_eq(a, b)
         }
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
-        (
-            WidgetPayload::UniversalSearch(a),
-            WidgetPayload::UniversalSearch(b),
-        ) => search_payload_eq(a, b),
+        (WidgetPayload::UniversalSearch(a), WidgetPayload::UniversalSearch(b)) => {
+            search_payload_eq(a, b)
+        }
         (WidgetPayload::MediaPlayer(a), WidgetPayload::MediaPlayer(b)) => media_payload_eq(a, b),
         (WidgetPayload::PasswordManager(a), WidgetPayload::PasswordManager(b)) => {
             password_payload_eq(a, b)
@@ -96,7 +92,9 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.cursor_column == b.cursor_column
                 && selection_eq(a.selection, b.selection)
                 && text_lines_eq(&a.visible_lines, &b.visible_lines)
-                && (a.read_only && b.read_only || a.plain_text == b.plain_text)
+                && (a.read_only && b.read_only
+                    || std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
+                    || a.plain_text == b.plain_text)
         }
         (Vs::Archive(a), Vs::Archive(b)) => {
             a.path_display == b.path_display
@@ -141,9 +139,11 @@ fn text_lines_eq(a: &[orchid_viewers::SyntaxLine], b: &[orchid_viewers::SyntaxLi
         && a.iter().zip(b.iter()).all(|(la, lb)| {
             la.line_number == lb.line_number
                 && la.segments.len() == lb.segments.len()
-                && la.segments.iter().zip(lb.segments.iter()).all(|(sa, sb)| {
-                    sa.text == sb.text && sa.scope == sb.scope
-                })
+                && la
+                    .segments
+                    .iter()
+                    .zip(lb.segments.iter())
+                    .all(|(sa, sb)| sa.text == sb.text && sa.scope == sb.scope)
         })
 }
 
@@ -153,9 +153,10 @@ fn archive_preview_eq(
 ) -> bool {
     match (a, b) {
         (None, None) => true,
-        (Some(orchid_viewers::ArchivePreview::Text(ta)), Some(orchid_viewers::ArchivePreview::Text(tb))) => {
-            ta == tb
-        }
+        (
+            Some(orchid_viewers::ArchivePreview::Text(ta)),
+            Some(orchid_viewers::ArchivePreview::Text(tb)),
+        ) => ta == tb,
         (
             Some(orchid_viewers::ArchivePreview::Binary { size: sa }),
             Some(orchid_viewers::ArchivePreview::Binary { size: sb }),
@@ -224,8 +225,7 @@ fn weather_forecast_day_eq(a: &WeatherForecastDay, b: &WeatherForecastDay) -> bo
 
 fn forecast_eq(a: &[WeatherForecastDay], b: &[WeatherForecastDay]) -> bool {
     a.len() == b.len()
-        && a
-            .iter()
+        && a.iter()
             .zip(b.iter())
             .all(|(x, y)| weather_forecast_day_eq(x, y))
 }
@@ -261,8 +261,7 @@ fn system_indicator_eq(a: &SystemIndicator, b: &SystemIndicator) -> bool {
 fn system_payload_eq(a: &SystemPayload, b: &SystemPayload) -> bool {
     a.is_loading == b.is_loading
         && a.indicators.len() == b.indicators.len()
-        && a
-            .indicators
+        && a.indicators
             .iter()
             .zip(b.indicators.iter())
             .all(|(x, y)| system_indicator_eq(x, y))
@@ -299,8 +298,7 @@ fn rss_payload_eq(a: &RssPayload, b: &RssPayload) -> bool {
         && a.enabled_feed_count == b.enabled_feed_count
         && a.failed_feed_count == b.failed_feed_count
         && a.items.len() == b.items.len()
-        && a
-            .items
+        && a.items
             .iter()
             .zip(b.items.iter())
             .all(|(x, y)| rss_item_eq(x, y))
@@ -320,8 +318,7 @@ fn search_payload_eq(a: &UniversalSearchPayload, b: &UniversalSearchPayload) -> 
         && a.is_searching == b.is_searching
         && a.error == b.error
         && a.candidates.len() == b.candidates.len()
-        && a
-            .candidates
+        && a.candidates
             .iter()
             .zip(b.candidates.iter())
             .all(|(x, y)| search_candidate_eq(x, y))
@@ -371,8 +368,7 @@ fn password_payload_eq(a: &PasswordManagerPayload, b: &PasswordManagerPayload) -
         && a.unlock_error == b.unlock_error
         && a.search_query == b.search_query
         && a.entries.len() == b.entries.len()
-        && a
-            .entries
+        && a.entries
             .iter()
             .zip(b.entries.iter())
             .all(|(x, y)| password_entry_eq(x, y))
@@ -385,16 +381,9 @@ fn password_payload_eq(a: &PasswordManagerPayload, b: &PasswordManagerPayload) -
 
 fn recent_files_payload_eq(a: &RecentFilesPayload, b: &RecentFilesPayload) -> bool {
     a.items.len() == b.items.len()
-        && a
-            .items
-            .iter()
-            .zip(b.items.iter())
-            .all(|(x, y)| {
-                x.id == y.id
-                    && x.name == y.name
-                    && x.path == y.path
-                    && x.opened_text == y.opened_text
-            })
+        && a.items.iter().zip(b.items.iter()).all(|(x, y)| {
+            x.id == y.id && x.name == y.name && x.path == y.path && x.opened_text == y.opened_text
+        })
 }
 
 #[cfg(test)]

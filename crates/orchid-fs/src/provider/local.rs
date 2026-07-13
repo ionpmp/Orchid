@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
-use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tracing::warn;
 
@@ -57,17 +56,16 @@ impl FsProvider for LocalProvider {
 
     async fn list(&self, path: &FsPath) -> Result<Vec<FsEntry>> {
         let os_path = path.to_local()?;
-        let mut rd = tokio::fs::read_dir(&os_path).await.map_err(map_io(&os_path))?;
+        let mut rd = tokio::fs::read_dir(&os_path)
+            .await
+            .map_err(map_io(&os_path))?;
         let mut out = Vec::new();
         while let Some(entry) = rd.next_entry().await? {
             let entry_path = entry.path();
             let Ok(fs_path) = FsPath::from_local(&entry_path) else {
                 continue;
             };
-            let name = entry
-                .file_name()
-                .to_string_lossy()
-                .into_owned();
+            let name = entry.file_name().to_string_lossy().into_owned();
             let metadata = os_metadata_to_fs(&entry_path).await?;
             out.push(FsEntry {
                 path: fs_path,
@@ -102,7 +100,9 @@ impl FsProvider for LocalProvider {
         path: &FsPath,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Unpin + Send>> {
         let os_path = path.to_local()?;
-        let file = tokio::fs::File::open(&os_path).await.map_err(map_io(&os_path))?;
+        let file = tokio::fs::File::open(&os_path)
+            .await
+            .map_err(map_io(&os_path))?;
         Ok(Box::new(file))
     }
 
@@ -111,7 +111,9 @@ impl FsProvider for LocalProvider {
         if let Some(parent) = os_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        tokio::fs::write(&os_path, bytes).await.map_err(map_io(&os_path))
+        tokio::fs::write(&os_path, bytes)
+            .await
+            .map_err(map_io(&os_path))
     }
 
     async fn write_stream(
@@ -154,7 +156,9 @@ impl FsProvider for LocalProvider {
 
     async fn remove(&self, path: &FsPath, recursive: bool) -> Result<()> {
         let os_path = path.to_local()?;
-        let meta = tokio::fs::metadata(&os_path).await.map_err(map_io(&os_path))?;
+        let meta = tokio::fs::metadata(&os_path)
+            .await
+            .map_err(map_io(&os_path))?;
         if meta.is_dir() {
             if recursive {
                 tokio::fs::remove_dir_all(&os_path)
@@ -172,10 +176,7 @@ impl FsProvider for LocalProvider {
         }
     }
 
-    async fn watch(
-        &self,
-        path: &FsPath,
-    ) -> Result<Option<Box<dyn FsWatcherHandle>>> {
+    async fn watch(&self, path: &FsPath) -> Result<Option<Box<dyn FsWatcherHandle>>> {
         let os_path = path.to_local()?;
         let (tx, rx) = mpsc::unbounded_channel::<Vec<FsChange>>();
         let mut debouncer = new_debouncer(
@@ -261,9 +262,9 @@ impl FsWatcherHandle for LocalWatcherHandle {
 fn notify_kind_to_fs_change(kind: &notify::EventKind) -> Option<FsChangeKind> {
     use notify::event::{CreateKind, EventKind, ModifyKind, RemoveKind, RenameMode};
     match kind {
-        EventKind::Create(CreateKind::Any | CreateKind::File | CreateKind::Folder | CreateKind::Other) => {
-            Some(FsChangeKind::Created)
-        }
+        EventKind::Create(
+            CreateKind::Any | CreateKind::File | CreateKind::Folder | CreateKind::Other,
+        ) => Some(FsChangeKind::Created),
         EventKind::Modify(ModifyKind::Name(RenameMode::Both | RenameMode::To)) => {
             // We don't know the `from` path from this event alone; the
             // aggregated `FileWatcher` may correlate To/From later. For the
@@ -272,9 +273,9 @@ fn notify_kind_to_fs_change(kind: &notify::EventKind) -> Option<FsChangeKind> {
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::From)) => Some(FsChangeKind::Deleted),
         EventKind::Modify(_) => Some(FsChangeKind::Modified),
-        EventKind::Remove(RemoveKind::Any | RemoveKind::File | RemoveKind::Folder | RemoveKind::Other) => {
-            Some(FsChangeKind::Deleted)
-        }
+        EventKind::Remove(
+            RemoveKind::Any | RemoveKind::File | RemoveKind::Folder | RemoveKind::Other,
+        ) => Some(FsChangeKind::Deleted),
         _ => None,
     }
 }
@@ -348,10 +349,7 @@ async fn os_metadata_to_fs(path: &Path) -> Result<FsMetadata> {
 fn system_time_to_utc(t: Option<SystemTime>) -> Option<DateTime<Utc>> {
     let t = t?;
     let dur = t.duration_since(SystemTime::UNIX_EPOCH).ok()?;
-    DateTime::<Utc>::from_timestamp(
-        dur.as_secs() as i64,
-        dur.subsec_nanos(),
-    )
+    DateTime::<Utc>::from_timestamp(dur.as_secs() as i64, dur.subsec_nanos())
 }
 
 fn map_io(path: &Path) -> impl FnOnce(std::io::Error) -> FsError + '_ {
@@ -362,19 +360,4 @@ fn map_io(path: &Path) -> impl FnOnce(std::io::Error) -> FsError + '_ {
         std::io::ErrorKind::AlreadyExists => FsError::AlreadyExists(path_str),
         _ => FsError::Io(e),
     }
-}
-
-/// Asynchronous helper that reads up to `n` bytes from the start of a file
-/// through a provider. Used for MIME sniffing.
-#[allow(dead_code)]
-pub(crate) async fn read_prefix(
-    provider: &dyn FsProvider,
-    path: &FsPath,
-    n: usize,
-) -> Result<Vec<u8>> {
-    let mut reader = provider.read_stream(path).await?;
-    let mut buf = vec![0u8; n];
-    let read = reader.read(&mut buf).await?;
-    buf.truncate(read);
-    Ok(buf)
 }

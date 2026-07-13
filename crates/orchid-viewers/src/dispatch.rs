@@ -68,11 +68,12 @@ pub async fn select_viewer(
     let provider = registry
         .for_path(path)
         .ok_or_else(|| orchid_fs::FsError::ProviderNotFound(path.scheme().to_string()))?;
-    // Read a small head — archives usually recognise in the first 512 B.
-    let sample = match provider.read(path).await {
-        Ok(bytes) => bytes.into_iter().take(4096).collect::<Vec<_>>(),
-        Err(e) => return Err(ViewerError::Fs(e)),
-    };
+    // Read a small head only — archives usually recognise in the first 512 B.
+    // Avoid `provider.read` here: opening a large image/PDF must not load the
+    // whole file just to sniff magic bytes (open() reads again below).
+    let sample = orchid_fs::read_prefix(provider.as_ref(), path, 4096)
+        .await
+        .map_err(ViewerError::Fs)?;
 
     let kind = kind_for(path, &sample).ok_or_else(|| ViewerError::UnsupportedType {
         mime: None,

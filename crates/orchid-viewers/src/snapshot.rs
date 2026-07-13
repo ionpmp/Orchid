@@ -85,8 +85,9 @@ pub struct TextSnapshot {
     pub cursor_column: u32,
     pub selection: Option<SelectionRange>,
     pub info_text: String,
-    /// Full LF-normalised file text (for plain edit mode).
-    pub plain_text: String,
+    /// Full LF-normalised file text (for plain edit / selectable read mode).
+    /// Shared via `Arc` so snapshot pump ticks do not re-allocate the document.
+    pub plain_text: Arc<str>,
 }
 
 /// A single highlighted line.

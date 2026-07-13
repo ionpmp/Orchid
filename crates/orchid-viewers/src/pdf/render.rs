@@ -122,36 +122,24 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                 documents.remove(&session);
                 let _ = reply.send(());
             }
-            WorkerRequest::ExtractText {
-                session,
-                page,
-                reply,
-            } => {
-                let Some(bytes) = documents.get(&session).cloned() else {
-                    let _ = reply.send(Err(ViewerError::PdfEmpty));
-                    continue;
+            // Render and ExtractText share a warm parsed document for the
+            // same session so page/zoom/text churn does not re-parse bytes.
+            req @ (WorkerRequest::Render { .. } | WorkerRequest::ExtractText { .. }) => {
+                let session = match &req {
+                    WorkerRequest::Render { session, .. }
+                    | WorkerRequest::ExtractText { session, .. } => *session,
+                    _ => unreachable!(),
                 };
-                let extracted = with_pdfium(|pdfium| {
-                    let document = pdfium
-                        .load_pdf_from_byte_slice(bytes.as_slice(), None)
-                        .map_err(|e| ViewerError::PdfRender {
-                            page,
-                            reason: format!("load document: {e}"),
-                        })?;
-                    extract_text_from_document(&document, page)
-                });
-                let _ = reply.send(extracted);
-            }
-            WorkerRequest::Render {
-                session,
-                page,
-                viewport,
-                fit_mode,
-                zoom,
-                reply,
-            } => {
                 let Some(bytes) = documents.get(&session).cloned() else {
-                    let _ = reply.send(Err(ViewerError::PdfEmpty));
+                    match req {
+                        WorkerRequest::Render { reply, .. } => {
+                            let _ = reply.send(Err(ViewerError::PdfEmpty));
+                        }
+                        WorkerRequest::ExtractText { reply, .. } => {
+                            let _ = reply.send(Err(ViewerError::PdfEmpty));
+                        }
+                        _ => unreachable!(),
+                    }
                     continue;
                 };
 
@@ -159,33 +147,40 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                     let document = match pdfium.load_pdf_from_byte_slice(bytes.as_slice(), None) {
                         Ok(doc) => doc,
                         Err(e) => {
-                            let _ = reply.send(Err(ViewerError::PdfRender {
-                                page,
+                            let err = ViewerError::PdfRender {
+                                page: 1,
                                 reason: format!("load document: {e}"),
-                            }));
+                            };
+                            match req {
+                                WorkerRequest::Render { reply, .. } => {
+                                    let _ = reply.send(Err(err));
+                                }
+                                WorkerRequest::ExtractText { reply, .. } => {
+                                    let _ = reply.send(Err(err));
+                                }
+                                _ => unreachable!(),
+                            }
                             return Ok(None);
                         }
                     };
 
-                    let first =
-                        render_from_document(&document, page, viewport, fit_mode, zoom);
-                    let _ = reply.send(first);
+                    fulfill_pdf_request(&document, req);
 
-                    // Keep the parsed document warm while this session keeps rendering.
+                    // Keep the parsed document warm while this session keeps
+                    // rendering or extracting text.
                     loop {
                         match next_request(&rx, &mut inbox) {
-                            Some(WorkerRequest::Render {
-                                session: next_session,
-                                page,
-                                viewport,
-                                fit_mode,
-                                zoom,
-                                reply,
-                            }) if next_session == session => {
-                                let rendered = render_from_document(
-                                    &document, page, viewport, fit_mode, zoom,
-                                );
-                                let _ = reply.send(rendered);
+                            Some(
+                                next @ (WorkerRequest::Render {
+                                    session: next_session,
+                                    ..
+                                }
+                                | WorkerRequest::ExtractText {
+                                    session: next_session,
+                                    ..
+                                }),
+                            ) if next_session == session => {
+                                fulfill_pdf_request(&document, next);
                             }
                             Some(other) => return Ok(Some(other)),
                             None => return Ok(None),
@@ -197,10 +192,33 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                     Ok(Some(other)) => inbox.push_front(other),
                     Ok(None) => {}
                     Err(e) => {
-                        tracing::warn!(error = %e, "pdf worker render session failed");
+                        tracing::warn!(error = %e, "pdf worker session failed");
                     }
                 }
             }
+        }
+    }
+}
+
+fn fulfill_pdf_request(document: &PdfDocument<'_>, req: WorkerRequest) {
+    match req {
+        WorkerRequest::Render {
+            page,
+            viewport,
+            fit_mode,
+            zoom,
+            reply,
+            ..
+        } => {
+            let rendered = render_from_document(document, page, viewport, fit_mode, zoom);
+            let _ = reply.send(rendered);
+        }
+        WorkerRequest::ExtractText { page, reply, .. } => {
+            let extracted = extract_text_from_document(document, page);
+            let _ = reply.send(extracted);
+        }
+        WorkerRequest::Open { .. } | WorkerRequest::Close { .. } => {
+            unreachable!("fulfill_pdf_request only handles Render/ExtractText")
         }
     }
 }
@@ -225,9 +243,7 @@ pub fn open_document(bytes: Arc<Vec<u8>>) -> Result<(PdfSessionId, u32)> {
             reply: reply_tx,
         })
         .map_err(|_| ViewerError::PdfUnavailable)?;
-    reply_rx
-        .recv()
-        .map_err(|_| ViewerError::PdfUnavailable)?
+    reply_rx.recv().map_err(|_| ViewerError::PdfUnavailable)?
 }
 
 /// Drop a previously opened session.
@@ -267,9 +283,7 @@ pub fn render_page(
             reply: reply_tx,
         })
         .map_err(|_| ViewerError::PdfUnavailable)?;
-    reply_rx
-        .recv()
-        .map_err(|_| ViewerError::PdfUnavailable)?
+    reply_rx.recv().map_err(|_| ViewerError::PdfUnavailable)?
 }
 
 /// Extract Unicode text for `page` (1-based) from an opened session.
@@ -286,9 +300,7 @@ pub fn extract_page_text(session: PdfSessionId, page: u32) -> Result<String> {
             reply: reply_tx,
         })
         .map_err(|_| ViewerError::PdfUnavailable)?;
-    reply_rx
-        .recv()
-        .map_err(|_| ViewerError::PdfUnavailable)?
+    reply_rx.recv().map_err(|_| ViewerError::PdfUnavailable)?
 }
 
 /// One-shot helper for tests: open bytes, render, then close.

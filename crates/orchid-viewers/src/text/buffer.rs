@@ -147,10 +147,147 @@ impl TextBuffer {
         self.rope.to_string()
     }
 
+    /// Compare LF-normalised contents to `other` without allocating the rope.
+    #[must_use]
+    pub fn content_eq(&self, other: &str) -> bool {
+        if self.rope.len_bytes() != other.len() {
+            return false;
+        }
+        let mut offset = 0usize;
+        for chunk in self.rope.chunks() {
+            let end = offset + chunk.len();
+            if other.as_bytes().get(offset..end) != Some(chunk.as_bytes()) {
+                return false;
+            }
+            offset = end;
+        }
+        true
+    }
+
+    /// Byte span of a single contiguous difference vs LF-normalised `new_text`.
+    ///
+    /// Returns `(start_byte, old_end_byte, new_end_byte)` on the UTF-8 byte
+    /// axis, or `None` when the texts are equal or the change is empty.
+    #[must_use]
+    pub fn single_span_diff(&self, new_text: &str) -> Option<(usize, usize, usize)> {
+        let old_len = self.rope.len_bytes();
+        let new_bytes = new_text.as_bytes();
+        let new_len = new_bytes.len();
+
+        let mut prefix = 0usize;
+        'prefix: for chunk in self.rope.chunks() {
+            for &b in chunk.as_bytes() {
+                if prefix >= new_len || new_bytes[prefix] != b {
+                    break 'prefix;
+                }
+                prefix += 1;
+            }
+        }
+        while prefix > 0 && !new_text.is_char_boundary(prefix) {
+            prefix -= 1;
+        }
+        // Align to a rope char boundary as well (same UTF-8 stream).
+        prefix = self.align_byte_to_char_boundary(prefix);
+
+        let mut old_suffix = 0usize;
+        let mut new_suffix = 0usize;
+        let old_remain = old_len.saturating_sub(prefix);
+        let new_remain = new_len.saturating_sub(prefix);
+        let max_suffix = old_remain.min(new_remain);
+
+        // Walk suffix from the end without materialising the rope.
+        while old_suffix < max_suffix {
+            let old_idx = old_len - 1 - old_suffix;
+            let new_idx = new_len - 1 - new_suffix;
+            let old_byte = self.byte_at(old_idx)?;
+            if old_byte != new_bytes[new_idx] {
+                break;
+            }
+            old_suffix += 1;
+            new_suffix += 1;
+        }
+        // Ensure suffix does not overlap prefix and lands on char boundaries.
+        while old_suffix > 0 {
+            let old_cut = old_len - old_suffix;
+            let new_cut = new_len - new_suffix;
+            if old_cut < prefix || new_cut < prefix {
+                old_suffix -= 1;
+                new_suffix -= 1;
+                continue;
+            }
+            if !new_text.is_char_boundary(new_cut) || !self.is_char_boundary_byte(old_cut) {
+                old_suffix -= 1;
+                new_suffix -= 1;
+                continue;
+            }
+            break;
+        }
+
+        let old_end = old_len - old_suffix;
+        let new_end = new_len - new_suffix;
+        if prefix == old_end && prefix == new_end {
+            return None;
+        }
+        Some((prefix, old_end, new_end))
+    }
+
+    /// Line/column at a char index in the LF-normalised rope.
+    #[must_use]
+    pub fn line_col_at_char(&self, char_idx: usize) -> (u32, u32) {
+        let len = self.rope.len_chars();
+        let idx = char_idx.min(len);
+        let line = self.rope.char_to_line(idx) as u32;
+        let line_start = self.rope.line_to_char(line as usize);
+        (line, (idx - line_start) as u32)
+    }
+
+    /// Convert a UTF-8 byte index to a char index.
+    #[must_use]
+    pub fn byte_to_char(&self, byte_idx: usize) -> usize {
+        let capped = byte_idx.min(self.rope.len_bytes());
+        self.rope
+            .byte_to_char(self.align_byte_to_char_boundary(capped))
+    }
+
+    fn byte_at(&self, byte_idx: usize) -> Option<u8> {
+        if byte_idx >= self.rope.len_bytes() {
+            return None;
+        }
+        let mut offset = 0usize;
+        for chunk in self.rope.chunks() {
+            let end = offset + chunk.len();
+            if byte_idx < end {
+                return Some(chunk.as_bytes()[byte_idx - offset]);
+            }
+            offset = end;
+        }
+        None
+    }
+
+    fn is_char_boundary_byte(&self, byte_idx: usize) -> bool {
+        if byte_idx == 0 || byte_idx == self.rope.len_bytes() {
+            return true;
+        }
+        // UTF-8 continuation bytes have top bits 10xxxxxx.
+        self.byte_at(byte_idx)
+            .is_some_and(|b| (b & 0b1100_0000) != 0b1000_0000)
+    }
+
+    fn align_byte_to_char_boundary(&self, mut byte_idx: usize) -> usize {
+        let len = self.rope.len_bytes();
+        if byte_idx > len {
+            byte_idx = len;
+        }
+        while byte_idx > 0 && !self.is_char_boundary_byte(byte_idx) {
+            byte_idx -= 1;
+        }
+        byte_idx
+    }
+
     /// Replace the entire buffer contents (LF-normalised). Marks dirty when changed.
     pub fn replace_content(&mut self, text: &str) {
         let normalized = text.replace("\r\n", "\n");
-        if self.rope == normalized {
+        if self.content_eq(&normalized) {
             return;
         }
         self.rope = Rope::from_str(&normalized);
@@ -381,6 +518,17 @@ mod tests {
         // to_bytes puts CRLF back.
         let out = buf.to_bytes().unwrap();
         assert!(out.windows(2).any(|w| w == b"\r\n"));
+    }
+
+    #[test]
+    fn content_eq_and_single_span_diff() {
+        let buf = TextBuffer::from_bytes(b"hello world").unwrap();
+        assert!(buf.content_eq("hello world"));
+        assert!(!buf.content_eq("hello"));
+
+        let (start, old_end, new_end) = buf.single_span_diff("hello Xorld").unwrap();
+        assert_eq!(&"hello world".as_bytes()[start..old_end], b"w");
+        assert_eq!(&"hello Xorld".as_bytes()[start..new_end], b"X");
     }
 
     #[test]

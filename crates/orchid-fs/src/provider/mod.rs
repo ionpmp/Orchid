@@ -159,10 +159,7 @@ pub trait FsProvider: Send + Sync + 'static {
     async fn remove(&self, path: &FsPath, recursive: bool) -> Result<()>;
 
     /// Start a native watcher on `path` if supported.
-    async fn watch(
-        &self,
-        path: &FsPath,
-    ) -> Result<Option<Box<dyn FsWatcherHandle>>>;
+    async fn watch(&self, path: &FsPath) -> Result<Option<Box<dyn FsWatcherHandle>>>;
 
     /// Feature matrix.
     fn capabilities(&self) -> FsCapabilities;
@@ -196,3 +193,21 @@ pub trait FsProvider: Send + Sync + 'static {
 
 /// Convenience alias for shared providers.
 pub type SharedProvider = Arc<dyn FsProvider>;
+
+/// Read up to `n` bytes from the start of a file through a provider.
+///
+/// Prefer this over [`FsProvider::read`] when only a magic-byte / MIME sample
+/// is needed — large files are not fully materialised into memory.
+///
+/// # Errors
+///
+/// Propagates provider / IO errors from [`FsProvider::read_stream`].
+pub async fn read_prefix(provider: &dyn FsProvider, path: &FsPath, n: usize) -> Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+
+    let mut reader = provider.read_stream(path).await?;
+    let mut buf = vec![0u8; n];
+    let read = reader.read(&mut buf).await?;
+    buf.truncate(read);
+    Ok(buf)
+}
