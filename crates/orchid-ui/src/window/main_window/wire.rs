@@ -123,11 +123,11 @@ impl MainWindowController {
                 }
             }
         });
-        self.window.on_dock_add_clicked({
+        self.window.on_workspace_orb_dismiss({
             let t = t.clone();
-            move |tid| {
+            move || {
                 if let Some(c) = t.upgrade() {
-                    c.on_dock_add(&tid);
+                    c.on_workspace_orb_dismiss();
                 }
             }
         });
@@ -232,14 +232,6 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.open_config_file();
-                }
-            }
-        });
-        self.window.on_navigation_workspace_panel_dismiss({
-            let t = t.clone();
-            move || {
-                if let Some(c) = t.upgrade() {
-                    c.on_navigation_workspace_panel_dismiss();
                 }
             }
         });
@@ -686,9 +678,9 @@ impl MainWindowController {
                             c.push_notification(&title, &body, 3);
                         }
                     }
-                    if let Some(c) = tw.upgrade() {
-                        c.schedule_rebuild();
-                    }
+                    // Snapshot updates publish WidgetSnapshotUpdated → frame-dirty →
+                    // patch_workspace_frames. A full workspace rebuild here made pan /
+                    // scroll / zoom hitch on every interaction.
                 });
             }};
         }
@@ -784,18 +776,15 @@ impl MainWindowController {
         self.window.on_viewer_image_pan({
             let t = t.clone();
             move |id, dx, dy| {
-                if let Some(c) = t.upgrade() {
+                if t.upgrade().is_some() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
-                        let tw = Arc::downgrade(&c);
                         spawn::spawn_local_compat(async move {
                             if let Err(e) =
                                 orchid_widgets::builtin::viewer::image_pan(inst, dx, dy).await
                             {
                                 warn!(?e, "viewer pan");
                             }
-                            if let Some(ctrl) = tw.upgrade() {
-                                ctrl.schedule_rebuild();
-                            }
+                            // Frame patch via WidgetSnapshotUpdated (no full rebuild).
                         });
                     }
                 }
@@ -894,6 +883,66 @@ impl MainWindowController {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_go_to_page(inst, page));
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_copy_text({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        spawn::spawn_local_compat(async move {
+                            let text = match orchid_widgets::builtin::viewer::pdf_current_page_text(
+                                inst,
+                            )
+                            .await
+                            {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    warn!(?e, "viewer pdf copy text");
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let reason =
+                                            viewer_localized_error(&c.locale, &e.to_string());
+                                        let body = c.locale.tr_args(
+                                            "viewer-action-failed",
+                                            &orchid_i18n::FluentArgs::new().with("reason", reason),
+                                        );
+                                        c.push_notification(&title, &body, 3);
+                                    }
+                                    return;
+                                }
+                            };
+                            let Some(c) = tw.upgrade() else {
+                                return;
+                            };
+                            match crate::widgets::terminal::ArboardClipboard::new() {
+                                Ok(cb) => {
+                                    if let Err(e) = cb.copy(&text) {
+                                        warn!(?e, "viewer pdf clipboard copy");
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let body = c.locale.tr("viewer-pdf-copy-failed");
+                                        c.push_notification(&title, &body, 3);
+                                    } else {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let body = if text.trim().is_empty() {
+                                            c.locale.tr("viewer-pdf-copy-empty")
+                                        } else {
+                                            c.locale.tr("viewer-pdf-copied")
+                                        };
+                                        c.push_notification(&title, &body, 1);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(?e, "viewer pdf clipboard open");
+                                    let title = c.locale.tr("widget-viewer-name");
+                                    let body = c.locale.tr("viewer-pdf-copy-failed");
+                                    c.push_notification(&title, &body, 3);
+                                }
+                            }
+                        });
                     }
                 }
             }

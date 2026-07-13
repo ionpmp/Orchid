@@ -1,0 +1,303 @@
+import { Theme } from "../theme_global.slint";
+import { Strings } from "../strings_global.slint";
+import { NavigationGlobal } from "../navigation_global.slint";
+import { AppState } from "../app_state_global.slint";
+import { WorkspaceSummary } from "defs.slint";
+
+/// Bottom-corner quarter-sphere control for switching and creating workspaces.
+/// Opens on hover or click; edge-swipe / command can also open it via NavigationGlobal.
+export component WorkspaceOrb inherits Rectangle {
+    in property <[WorkspaceSummary]> workspaces;
+
+    callback workspace-clicked(string);
+    callback workspace-create-clicked();
+    callback dismiss-requested();
+
+    private property <length> orb-size: 76px;
+    private property <bool> sticky-open: false;
+    private property <bool> mirrored: AppState.edge-panels-mirrored;
+    private property <bool> menu-visible: root.sticky-open
+        || NavigationGlobal.workspace-orb-open
+        || cluster.has-hover;
+
+    width: 100%;
+    height: 100%;
+    background: transparent;
+
+    // Click-away dismiss while sticky or opened from a command/gesture.
+    if root.sticky-open || NavigationGlobal.workspace-orb-open: TouchArea {
+        z: 90;
+        clicked => {
+            root.sticky-open = false;
+            root.dismiss-requested();
+        }
+    }
+
+    cluster := TouchArea {
+        z: 100;
+        x: root.mirrored ? parent.width - self.width : 0;
+        y: parent.height - self.height;
+
+        HorizontalLayout {
+            alignment: root.mirrored ? end : start;
+
+            VerticalLayout {
+                alignment: end;
+                spacing: 10px;
+
+                if root.menu-visible: Rectangle {
+                    width: max(200px, menu-list.preferred-width + 16px);
+                    height: menu-list.preferred-height + 16px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
+                    drop-shadow-color: #00000040;
+                    drop-shadow-offset-y: Theme.reduce-motion ? 0px : 4px;
+                    horizontal-stretch: 0;
+
+                menu-list := VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+
+                    Text {
+                        text: NavigationGlobal.workspace-panel-title;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-medium;
+                    }
+
+                    for ws[i] in root.workspaces: Rectangle {
+                        height: 36px;
+                        background: ws.is-active ? Theme.accent-brand : Theme.surface-base;
+                        border-radius: Theme.radius-md;
+
+                        ws-ta := TouchArea {
+                            clicked => {
+                                root.workspace-clicked(ws.id);
+                                root.sticky-open = false;
+                                root.dismiss-requested();
+                            }
+                        }
+                        states [
+                            hover when ws-ta.has-hover && !ws.is-active: {
+                                background: Theme.surface-raised;
+                            }
+                        ]
+
+                        Text {
+                            text: ws.name;
+                            color: ws.is-active ? Theme.text-primary : Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: ws.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+                    }
+
+                    Rectangle {
+                        height: 36px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+
+                        new-ta := TouchArea {
+                            clicked => {
+                                root.workspace-create-clicked();
+                                root.sticky-open = false;
+                                root.dismiss-requested();
+                            }
+                        }
+                        states [
+                            hover when new-ta.has-hover: {
+                                border-color: Theme.accent-brand;
+                            }
+                        ]
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 8px;
+                            alignment: center;
+
+                            Text {
+                                text: "+";
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-lg;
+                                font-weight: Theme.weight-semibold;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: Strings.workspace-new-label;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            orb := Rectangle {
+                width: root.orb-size;
+                height: root.orb-size;
+                background: transparent;
+                clip: true;
+                horizontal-stretch: 0;
+
+                orb-ta := TouchArea {
+                    clicked => {
+                        if root.sticky-open || NavigationGlobal.workspace-orb-open {
+                            root.sticky-open = false;
+                            root.dismiss-requested();
+                        } else {
+                            root.sticky-open = true;
+                        }
+                    }
+                }
+
+                // Soft glow behind the quarter disc.
+                Rectangle {
+                    x: root.mirrored ? parent.width - root.orb-size * 1.15 : -root.orb-size * 0.15;
+                    y: parent.height - root.orb-size * 1.15;
+                    width: root.orb-size * 1.3;
+                    height: root.orb-size * 1.3;
+                    border-radius: root.orb-size;
+                    background: #f0a04b33;
+                }
+
+                // Citrus pulp fill — quarter disc (center at screen corner).
+                Path {
+                    width: 100%;
+                    height: 100%;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 100;
+                    viewbox-height: 100;
+                    fill: #f0a04b;
+                    MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
+                    LineTo { x: root.mirrored ? 100 : 0; y: 0; }
+                    ArcTo {
+                        radius-x: 100;
+                        radius-y: 100;
+                        x: root.mirrored ? 0 : 100;
+                        y: 100;
+                        sweep: !root.mirrored;
+                    }
+                    Close {}
+                }
+
+                // Inner rings — cross-section of the fruit.
+                Path {
+                    width: 100%;
+                    height: 100%;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 100;
+                    viewbox-height: 100;
+                    stroke: #fff4e6cc;
+                    stroke-width: 1.5px;
+                    fill: transparent;
+                    MoveTo {
+                        x: root.mirrored ? 100 - 70 * 0.7071 : 70 * 0.7071;
+                        y: 100 - 70 * 0.7071;
+                    }
+                    ArcTo {
+                        radius-x: 70;
+                        radius-y: 70;
+                        x: root.mirrored ? 100 - 70 : 70;
+                        y: 100;
+                        sweep: !root.mirrored;
+                    }
+                }
+                Path {
+                    width: 100%;
+                    height: 100%;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 100;
+                    viewbox-height: 100;
+                    stroke: #fff4e699;
+                    stroke-width: 1.25px;
+                    fill: transparent;
+                    MoveTo {
+                        x: root.mirrored ? 100 - 42 * 0.7071 : 42 * 0.7071;
+                        y: 100 - 42 * 0.7071;
+                    }
+                    ArcTo {
+                        radius-x: 42;
+                        radius-y: 42;
+                        x: root.mirrored ? 100 - 42 : 42;
+                        y: 100;
+                        sweep: !root.mirrored;
+                    }
+                }
+
+                // Radial membranes (parts).
+                Path {
+                    width: 100%;
+                    height: 100%;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 100;
+                    viewbox-height: 100;
+                    stroke: #fff4e6dd;
+                    stroke-width: 1.5px;
+                    fill: transparent;
+                    MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
+                    LineTo {
+                        x: root.mirrored ? 100 - 92 * 0.9659 : 92 * 0.9659;
+                        y: 100 - 92 * 0.2588;
+                    }
+                    MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
+                    LineTo {
+                        x: root.mirrored ? 100 - 92 * 0.7071 : 92 * 0.7071;
+                        y: 100 - 92 * 0.7071;
+                    }
+                    MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
+                    LineTo {
+                        x: root.mirrored ? 100 - 92 * 0.2588 : 92 * 0.2588;
+                        y: 100 - 92 * 0.9659;
+                    }
+                }
+
+                // Pith core at the corner.
+                Rectangle {
+                    x: root.mirrored ? parent.width - 14px : 0;
+                    y: parent.height - 14px;
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 14px;
+                    background: #fff4e6;
+                }
+
+                // Hover / open highlight rim.
+                if cluster.has-hover || root.sticky-open || NavigationGlobal.workspace-orb-open: Path {
+                    width: 100%;
+                    height: 100%;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 100;
+                    viewbox-height: 100;
+                    stroke: #ffffffaa;
+                    stroke-width: 2px;
+                    fill: transparent;
+                    MoveTo { x: root.mirrored ? 100 : 0; y: 0; }
+                    ArcTo {
+                        radius-x: 100;
+                        radius-y: 100;
+                        x: root.mirrored ? 0 : 100;
+                        y: 100;
+                        sweep: !root.mirrored;
+                    }
+                }
+            }
+            }
+        }
+    }
+}

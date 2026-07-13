@@ -25,8 +25,8 @@ includes 39 exported components and 8 shared globals (47 Slint units total):
 - **Globals** — `Theme`, `Strings`, `AppState`, `WidgetCatalog`,
   `CommandPaletteGlobal`, `SettingsGlobal`, `NavigationGlobal`,
   `NotificationGlobal`
-- **Workspace shell** — `WorkspaceView`, `WidgetFrame`, `WidgetDock`,
-  `WorkspaceSwitcher`, `WidgetCatalogPanel`, `TerminalView`, `GroupTabs`
+- **Workspace shell** — `WorkspaceView`, `WidgetFrame`, `WorkspaceOrb`,
+  `WidgetCatalogPanel`, `TerminalView`, `GroupTabs`
   (stack widgets by dropping headers; switch / reorder / dissolve; Alt+drag
   to detach)
 - **Overlays** — `CommandPalettePanel`, `SettingsPanel`, `WorkspacePanel`,

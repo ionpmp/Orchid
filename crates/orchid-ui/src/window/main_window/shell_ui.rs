@@ -24,7 +24,7 @@ use crate::window::models::{
 };
 use crate::window::spawn;
 
-use super::{AddWidgetPlacement, MainWindowController, WORKSPACE_SWITCHER_H, sync_vec_model};
+use super::{AddWidgetPlacement, MainWindowController, WORKSPACE_CHROME_H, sync_vec_model};
 
 const COMMAND_PALETTE_LIMIT: usize = 50;
 
@@ -184,9 +184,8 @@ impl MainWindowController {
         let nav = self.navigation.read().clone();
         let hint_mode = self.config.read().onboarding.hint_mode_enabled;
         let g = self.window.global::<NavigationGlobal>();
-        g.set_workspace_panel_visible(nav.workspace_panel_visible);
+        g.set_workspace_orb_open(nav.workspace_orb_open);
         g.set_notification_center_visible(nav.notification_center_visible);
-        g.set_dock_visible(nav.dock_visible);
         g.set_hint_mode_enabled(hint_mode);
         g.set_workspace_panel_title(self.locale.tr("navigation-workspace-panel-title").into());
         g.set_notification_center_title(self.locale.tr("notification-center-title").into());
@@ -408,12 +407,12 @@ impl MainWindowController {
         self.sync_navigation_global();
     }
 
-    pub(super) fn toggle_workspace_panel(self: &Arc<Self>) {
+    pub(super) fn toggle_workspace_orb(self: &Arc<Self>) {
         self.on_command_palette_dismiss();
         {
             let mut nav = self.navigation.write();
-            nav.workspace_panel_visible = !nav.workspace_panel_visible;
-            if nav.workspace_panel_visible {
+            nav.workspace_orb_open = !nav.workspace_orb_open;
+            if nav.workspace_orb_open {
                 nav.notification_center_visible = false;
             }
         }
@@ -426,7 +425,7 @@ impl MainWindowController {
             let mut nav = self.navigation.write();
             nav.notification_center_visible = !nav.notification_center_visible;
             if nav.notification_center_visible {
-                nav.workspace_panel_visible = false;
+                nav.workspace_orb_open = false;
             }
             nav.notification_center_visible
         };
@@ -436,22 +435,11 @@ impl MainWindowController {
         self.sync_navigation_global();
     }
 
-    pub(super) fn toggle_dock(self: &Arc<Self>) {
-        {
-            let mut nav = self.navigation.write();
-            nav.dock_visible = !nav.dock_visible;
-        }
-        self.sync_navigation_global();
-        self.update_gesture_bounds();
-        let _ = self.sync_canvas_size_from_winit();
-        self.schedule_rebuild();
-    }
-
-    pub(super) fn on_navigation_workspace_panel_dismiss(self: &Arc<Self>) {
-        if !self.navigation.read().workspace_panel_visible {
+    pub(super) fn on_workspace_orb_dismiss(self: &Arc<Self>) {
+        if !self.navigation.read().workspace_orb_open {
             return;
         }
-        self.navigation.write().workspace_panel_visible = false;
+        self.navigation.write().workspace_orb_open = false;
         self.sync_navigation_global();
     }
 
@@ -477,7 +465,7 @@ impl MainWindowController {
                 return;
             }
         }
-        // UI allowlist + dock use the short id; registry maps it to `universal-search`.
+        // UI allowlist uses the short id; registry maps it to `universal-search`.
         self.spawn_add_widget("search", AddWidgetPlacement::AutoSlot);
     }
 
@@ -490,7 +478,7 @@ impl MainWindowController {
             cat.content_x = vw / 2.0 + scroll_x;
             cat.content_y = vh / 2.0 + scroll_y;
             cat.screen_x = vw / 2.0;
-            cat.screen_y = WORKSPACE_SWITCHER_H + vh / 2.0;
+            cat.screen_y = WORKSPACE_CHROME_H + vh / 2.0;
             cat.search_query.clear();
         }
         self.sync_widget_catalog_global();

@@ -137,7 +137,7 @@ impl InputMapper {
 /// |------------------------------|---------------------------------------|
 /// | Edge swipe from left         | `"navigation.show_workspace_panel"`   |
 /// | Edge swipe from right        | `"notification.show_center"`          |
-/// | Edge swipe from bottom       | `"dock.show"`                         |
+/// | Edge swipe from bottom       | `"dock.show"` (widget catalog)        |
 /// | Edge swipe from top          | `"search.show_universal"`             |
 /// | Three-finger swipe up        | `"widget.show_all"`                   |
 /// | Four-finger swipe left       | `"workspace.switch_previous"`         |
