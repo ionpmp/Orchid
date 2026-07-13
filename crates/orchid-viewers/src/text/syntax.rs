@@ -108,6 +108,7 @@ fn plain_lines(source: &str, first_line: u32, line_count: u32) -> Vec<SyntaxLine
     out
 }
 
+#[cfg(test)]
 fn byte_scopes(source: &str, tree: &Tree, language: &str) -> Vec<SyntaxScope> {
     byte_scopes_window(source, tree, language, 0, source.len())
 }

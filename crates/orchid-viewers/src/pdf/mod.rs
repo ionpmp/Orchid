@@ -190,6 +190,22 @@ impl PdfViewer {
         *self.rendered.write() = Some(rendered);
         Ok(())
     }
+
+    /// Extract Unicode text for the current page (for clipboard copy).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ViewerError::PdfEmpty`] when no document is open, or Pdfium failures.
+    pub async fn current_page_text(&self) -> Result<String> {
+        let session = self.session.read().ok_or(ViewerError::PdfEmpty)?;
+        let page = (*self.current_page.read()).max(1);
+        tokio::task::spawn_blocking(move || render::extract_page_text(session, page))
+            .await
+            .map_err(|e| ViewerError::PdfRender {
+                page,
+                reason: format!("join: {e}"),
+            })?
+    }
 }
 
 #[async_trait]

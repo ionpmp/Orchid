@@ -61,6 +61,11 @@ enum WorkerRequest {
         zoom: f32,
         reply: Sender<Result<RenderedPage>>,
     },
+    ExtractText {
+        session: PdfSessionId,
+        page: u32,
+        reply: Sender<Result<String>>,
+    },
     Close {
         session: PdfSessionId,
         reply: Sender<()>,
@@ -116,6 +121,26 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
             WorkerRequest::Close { session, reply } => {
                 documents.remove(&session);
                 let _ = reply.send(());
+            }
+            WorkerRequest::ExtractText {
+                session,
+                page,
+                reply,
+            } => {
+                let Some(bytes) = documents.get(&session).cloned() else {
+                    let _ = reply.send(Err(ViewerError::PdfEmpty));
+                    continue;
+                };
+                let extracted = with_pdfium(|pdfium| {
+                    let document = pdfium
+                        .load_pdf_from_byte_slice(bytes.as_slice(), None)
+                        .map_err(|e| ViewerError::PdfRender {
+                            page,
+                            reason: format!("load document: {e}"),
+                        })?;
+                    extract_text_from_document(&document, page)
+                });
+                let _ = reply.send(extracted);
             }
             WorkerRequest::Render {
                 session,
@@ -247,11 +272,31 @@ pub fn render_page(
         .map_err(|_| ViewerError::PdfUnavailable)?
 }
 
+/// Extract Unicode text for `page` (1-based) from an opened session.
+///
+/// # Errors
+///
+/// Propagates Pdfium failures as [`ViewerError`].
+pub fn extract_page_text(session: PdfSessionId, page: u32) -> Result<String> {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    worker_sender()
+        .send(WorkerRequest::ExtractText {
+            session,
+            page,
+            reply: reply_tx,
+        })
+        .map_err(|_| ViewerError::PdfUnavailable)?;
+    reply_rx
+        .recv()
+        .map_err(|_| ViewerError::PdfUnavailable)?
+}
+
 /// One-shot helper for tests: open bytes, render, then close.
 ///
 /// # Errors
 ///
 /// Propagates Pdfium failures.
+#[cfg(test)]
 pub fn render_page_from_bytes(
     bytes: &[u8],
     page: u32,
@@ -264,6 +309,29 @@ pub fn render_page_from_bytes(
     let rendered = render_page(session, page, viewport, fit_mode, zoom);
     close_document(session);
     rendered
+}
+
+fn extract_text_from_document(document: &PdfDocument<'_>, page: u32) -> Result<String> {
+    let page_count = u32::from(document.pages().len());
+    if page_count == 0 {
+        return Err(ViewerError::PdfEmpty);
+    }
+    let current_page = page.clamp(1, page_count);
+    let pdf_page = document
+        .pages()
+        .get(u16::try_from(current_page - 1).unwrap_or(0))
+        .map_err(|e| ViewerError::PdfRender {
+            page: current_page,
+            reason: format!("open page: {e}"),
+        })?;
+    let text = pdf_page
+        .text()
+        .map_err(|e| ViewerError::PdfRender {
+            page: current_page,
+            reason: format!("load text: {e}"),
+        })?
+        .all();
+    Ok(text)
 }
 
 fn render_from_document(
