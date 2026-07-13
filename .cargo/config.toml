@@ -1,0 +1,7 @@
+# Increase default stack size on Windows to match Linux (~8 MiB).
+# Required for Slint compile (build.rs) and large UI trees; MSVC defaults to 1 MiB.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8000000"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8000000"]
