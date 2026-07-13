@@ -26,6 +26,7 @@ export component ViewerView inherits Rectangle {
     callback pdf-zoom-in();
     callback pdf-zoom-out();
     callback pdf-go-to-page(int);
+    callback pdf-copy-text();
 
     callback archive-navigate-into(string);
     callback archive-navigate-up();
@@ -102,6 +103,7 @@ export component ViewerView inherits Rectangle {
         zoom-in => { root.pdf-zoom-in(); }
         zoom-out => { root.pdf-zoom-out(); }
         go-to-page(p) => { root.pdf-go-to-page(p); }
+        copy-text => { root.pdf-copy-text(); }
     }
 
     if model.kind == 5 : ViewerTextView {

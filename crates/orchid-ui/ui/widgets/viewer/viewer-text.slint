@@ -8,16 +8,10 @@ export component ViewerTextView inherits Rectangle {
     callback toggle-edit();
     callback save();
     callback text-edited(string);
-    // Whole-line scroll delta for the virtualized read-only window (positive = down).
+    // Kept for API compatibility; selectable TextInput scrolls locally.
     callback text-scroll(int);
 
     background: transparent;
-
-    property <length> line-height: 18px;
-    // Two-way with the read-only Flickable so path changes can reset scroll
-    // without naming a conditionally-created child.
-    property <length> read-viewport-y: 0px;
-    property <string> last-path: "";
 
     // Local draft while editing; re-synced when entering edit mode or when the
     // model path / read-only flag changes from the backend snapshot.
@@ -38,11 +32,6 @@ export component ViewerTextView inherits Rectangle {
             root.locally-dirty = model.dirty;
         } else {
             root.locally-dirty = true;
-        }
-        // New file (or reopen): snap scroll to the backend window start.
-        if (model.path-display != root.last-path) {
-            root.last-path = model.path-display;
-            root.read-viewport-y = -model.first-visible-line * root.line-height;
         }
     }
 
@@ -170,91 +159,9 @@ export component ViewerTextView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // Virtualized read view: tall document viewport + absolute line Y so
-            // Flickable can scroll the full file while only a window of lines is
-            // materialized. viewport-y → text-scroll updates the backend window.
-            if model.read-only : Flickable {
-                width: parent.width;
-                height: parent.height;
-                viewport-width: self.width;
-                viewport-height: max(self.height, model.total-lines * root.line-height);
-                viewport-y <=> root.read-viewport-y;
-
-                changed viewport-y => {
-                    // viewport-y is ≤ 0; convert to a 0-based first line.
-                    if (model.total-lines <= 0) {
-                        return;
-                    }
-                    let window-lines = max(1, model.visible-lines.length);
-                    let max-first = max(0, model.total-lines - window-lines);
-                    let target = max(0, min(max-first, floor((-self.viewport-y) / root.line-height)));
-                    let delta = target - model.first-visible-line;
-                    if (delta != 0) {
-                        root.text-scroll(delta);
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width;
-                    height: max(parent.height, model.total-lines * root.line-height);
-
-                    for line[i] in model.visible-lines : Rectangle {
-                        y: line.line-number * root.line-height;
-                        height: root.line-height;
-                        width: parent.width;
-
-                        HorizontalLayout {
-                            spacing: 0;
-                            padding-left: 8px;
-                            padding-right: 8px;
-
-                            Rectangle {
-                                width: 56px;
-                                Text {
-                                    text: line.line-number;
-                                    color: Theme.text-tertiary;
-                                    font-family: Theme.font-family-mono;
-                                    font-size: Theme.font-size-sm;
-                                    horizontal-alignment: right;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            HorizontalLayout {
-                                spacing: 0;
-                                padding-left: 8px;
-                                horizontal-stretch: 1;
-
-                                for seg[j] in line.segments : Text {
-                                    text: seg.text;
-                                    color:
-                                        seg.scope == 1 ? #c586c0 :
-                                        seg.scope == 2 ? #ce9178 :
-                                        seg.scope == 3 ? #b5cea8 :
-                                        seg.scope == 4 ? #6a9955 :
-                                        seg.scope == 5 ? #dcdcaa :
-                                        seg.scope == 6 ? #4ec9b0 :
-                                        seg.scope == 7 ? #9cdcfe :
-                                        seg.scope == 8 ? #4fc1ff :
-                                        seg.scope == 9 ? #d4d4d4 :
-                                        seg.scope == 10 ? #d4d4d4 :
-                                        seg.scope == 11 ? #c586c0 :
-                                        seg.scope == 12 ? #c586c0 :
-                                        seg.scope == 13 ? #4ec9b0 :
-                                        seg.scope == 14 ? #9cdcfe :
-                                        seg.scope == 15 ? #f44747 :
-                                        Theme.text-primary;
-                                    font-family: Theme.font-family-mono;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !model.read-only : Flickable {
+            // Read-only uses a selectable TextInput so OS copy (Ctrl+C) works.
+            // Edit mode keeps the same control without read-only.
+            Flickable {
                 width: parent.width;
                 height: parent.height;
                 viewport-width: self.width;
@@ -271,6 +178,7 @@ export component ViewerTextView inherits Rectangle {
                         text: root.draft-text;
                         single-line: false;
                         wrap: no-wrap;
+                        read-only: model.read-only;
                         color: Theme.text-primary;
                         font-family: Theme.font-family-mono;
                         font-size: Theme.font-size-sm;
@@ -280,12 +188,17 @@ export component ViewerTextView inherits Rectangle {
                                 && !event.modifiers.alt
                                 && (event.text == "s" || event.text == "S"))
                             {
-                                root.save();
-                                return accept;
+                                if (!model.read-only) {
+                                    root.save();
+                                    return accept;
+                                }
                             }
                             return reject;
                         }
                         edited => {
+                            if (model.read-only) {
+                                return;
+                            }
                             root.draft-text = self.text;
                             root.locally-dirty = true;
                             root.text-edited(self.text);

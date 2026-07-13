@@ -12,6 +12,7 @@ export component ViewerPdfView inherits Rectangle {
     callback zoom-in();
     callback zoom-out();
     callback go-to-page(int);
+    callback copy-text();
 
     background: transparent;
 
@@ -221,6 +222,44 @@ export component ViewerPdfView inherits Rectangle {
                         }
                     }
                     Text { text: "▶"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    min-width: 72px; height: 28px;
+                    background: copy-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    copy-ta := TouchArea { clicked => { root.copy-text(); pdf-keys.focus(); } }
+                    if copy-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: copy-hint.preferred-width + 12px;
+                        height: copy-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        copy-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.copy-text-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.copy-text-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
 
                 Rectangle { width: 8px; }

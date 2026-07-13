@@ -90,6 +90,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-pdf-zoom-in(string);
     callback viewer-pdf-zoom-out(string);
     callback viewer-pdf-go-to-page(string, int);
+    callback viewer-pdf-copy-text(string);
 
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
@@ -481,6 +482,7 @@ export component WidgetFrame inherits Rectangle {
                         pdf-zoom-in => { root.viewer-pdf-zoom-in(root.model.instance-id); }
                         pdf-zoom-out => { root.viewer-pdf-zoom-out(root.model.instance-id); }
                         pdf-go-to-page(p) => { root.viewer-pdf-go-to-page(root.model.instance-id, p); }
+                        pdf-copy-text => { root.viewer-pdf-copy-text(root.model.instance-id); }
 
                         archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
                         archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }
