@@ -1,4 +1,4 @@
-﻿# Orchid Simplified Chinese (zh-CN) message catalog.
+# Orchid Simplified Chinese (zh-CN) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -282,12 +282,12 @@ command.settings.open_config_file.desc = åœ¨é»˜è®¤ç¼–è¾‘å™¨
 command.password.lock.name = é”å®šå¯†ç åº“
 command.password.lock.desc = ä»Žå†…å­˜ä¸­æ¸…é™¤å·²è§£é”çš„å¯†ç æ•°æ®åº“
 
-command.navigation.show_workspace_panel.name = æ˜¾ç¤ºå·¥ä½œåŒºé¢æ¿
-command.navigation.show_workspace_panel.desc = åˆ‡æ¢å·¥ä½œåŒºä¾§è¾¹æ 
+command.navigation.show_workspace_panel.name = 显示工作区
+command.navigation.show_workspace_panel.desc = 打开工作区切换器
 command.notification.show_center.name = æ˜¾ç¤ºé€šçŸ¥ä¸­å¿ƒ
 command.notification.show_center.desc = åˆ‡æ¢é€šçŸ¥ä¸­å¿ƒ
-command.dock.show.name = æ˜¾ç¤ºç¨‹åºåž
-command.dock.show.desc = åˆ‡æ¢å°ç»„ä»¶ç¨‹åºåž
+command.dock.show.name = 显示小组件目录
+command.dock.show.desc = 打开小组件目录
 command.search.show_universal.name = å…¨å±€æœç´¢
 command.search.show_universal.desc = æ‰“å¼€æˆ–èšç„¦å…¨å±€æœç´¢
 command.onboarding.toggle_hint_mode.name = åˆ‡æ¢æç¤ºæ¨¡å¼
@@ -357,6 +357,10 @@ viewer-pdf-page-of = ç¬¬ { $current } é¡µï¼Œå…± { $total } é¡µ
 viewer-pdf-fit-width = é€‚åº”å®½åº¦
 viewer-pdf-fit-page = é€‚åº”é¡µé¢
 viewer-pdf-go = è½¬åˆ°
+viewer-pdf-copy-text = 复制文本
+viewer-pdf-copied = 已复制页面文本
+viewer-pdf-copy-empty = 此页没有文本
+viewer-pdf-copy-failed = 无法复制文本
 viewer-pdf-prev-page = ä¸Šä¸€é¡µ
 viewer-pdf-next-page = ä¸‹ä¸€é¡µ
 viewer-pdf-info = PDF Â· ç¬¬ { $current } / { $total } é¡µ Â· { $width } Ã— { $height } px Â· { $zoom }%
@@ -643,8 +647,8 @@ onboarding-step-palette-title = å‘½ä»¤é¢æ¿
 onboarding-step-palette-body = æŒ‰ Ctrl+Shift+P è¿è¡Œä»»æ„å‘½ä»¤ã€‚æ¯é¡¹éƒ½æ˜¾ç¤ºé”®ç›˜å¿«æ·é”®ï¼Œæ–¹ä¾¿æ‚¨è¾¹ç”¨è¾¹å­¦ã€‚
 onboarding-step-gestures-title = æ‰‹åŠ¿ä¸Žæç¤º
 onboarding-step-gestures-body = ä»Žå±å¹•è¾¹ç¼˜æ»‘åŠ¨æ‰“å¼€é¢æ¿å’Œç¨‹åºåžã€‚éšæ—¶æŒ‰ Win+? åˆ‡æ¢æç¤ºæ¨¡å¼ï¼ŒæŸ¥çœ‹å½“å‰å¯ç”¨çš„æ“ä½œã€‚
-onboarding-hint-workspace = ä»Žå·¦è¾¹ç¼˜æ»‘åŠ¨æ‰“å¼€å·¥ä½œåŒº
-onboarding-hint-dock = ä»Žåº•è¾¹ç¼˜å‘ä¸Šæ»‘åŠ¨æ‰“å¼€ç¨‹åºåž
+onboarding-hint-workspace = 悬停或点击角落控件切换工作区
+onboarding-hint-dock = 长按画布或三指上滑打开小组件
 onboarding-hint-gestures = Win+? åˆ‡æ¢è¿™äº›æç¤º
 workspace-default-name = ä¸»å·¥ä½œåŒº
 workspace-new = æ–°å»ºå·¥ä½œåŒº

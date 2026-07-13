@@ -1,4 +1,4 @@
-﻿# Orchid Brazilian Portuguese (pt-BR) message catalog.
+# Orchid Brazilian Portuguese (pt-BR) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -282,12 +282,12 @@ command.settings.open_config_file.desc = Abrir config.toml no editor padrÃ£o
 command.password.lock.name = Bloquear cofre de senhas
 command.password.lock.desc = Remover o banco de senhas desbloqueado da memÃ³ria
 
-command.navigation.show_workspace_panel.name = Mostrar painel de Ã¡reas de trabalho
-command.navigation.show_workspace_panel.desc = Mostrar ou ocultar a barra lateral de Ã¡reas de trabalho
+command.navigation.show_workspace_panel.name = Mostrar áreas de trabalho
+command.navigation.show_workspace_panel.desc = Abrir o seletor de áreas de trabalho
 command.notification.show_center.name = Mostrar central de notificaÃ§Ãµes
 command.notification.show_center.desc = Mostrar ou ocultar a central de notificaÃ§Ãµes
-command.dock.show.name = Mostrar dock
-command.dock.show.desc = Mostrar ou ocultar o dock de widgets
+command.dock.show.name = Mostrar catálogo de widgets
+command.dock.show.desc = Abrir o catálogo de widgets
 command.search.show_universal.name = Busca universal
 command.search.show_universal.desc = Abrir ou focar a busca universal
 command.onboarding.toggle_hint_mode.name = Alternar modo de dicas
@@ -357,6 +357,10 @@ viewer-pdf-page-of = PÃ¡gina { $current } de { $total }
 viewer-pdf-fit-width = Ajustar Ã  largura
 viewer-pdf-fit-page = Ajustar Ã  pÃ¡gina
 viewer-pdf-go = Ir
+viewer-pdf-copy-text = Copiar texto
+viewer-pdf-copied = Texto da página copiado
+viewer-pdf-copy-empty = Nenhum texto nesta página
+viewer-pdf-copy-failed = Não foi possível copiar o texto
 viewer-pdf-prev-page = PÃ¡gina anterior
 viewer-pdf-next-page = PrÃ³xima pÃ¡gina
 viewer-pdf-info = PDF Â· pÃ¡g. { $current } / { $total } Â· { $width } Ã— { $height } px Â· { $zoom }%
@@ -643,8 +647,8 @@ onboarding-step-palette-title = Paleta de comandos
 onboarding-step-palette-body = Pressione Ctrl+Shift+P para executar qualquer comando. Cada entrada mostra seu atalho de teclado para vocÃª aprender no caminho.
 onboarding-step-gestures-title = Gestos e dicas
 onboarding-step-gestures-body = Deslize das bordas da tela para painÃ©is e o dock. Pressione Win+? a qualquer momento para alternar o modo de dicas e ver o que estÃ¡ disponÃ­vel.
-onboarding-hint-workspace = Deslize da borda esquerda para Ã¡reas de trabalho
-onboarding-hint-dock = Deslize de baixo para cima da borda inferior para o dock
+onboarding-hint-workspace = Passe o mouse ou toque no controle do canto para áreas de trabalho
+onboarding-hint-dock = Pressione longamente a tela ou deslize três dedos para cima para widgets
 onboarding-hint-gestures = Win+? alterna estas dicas
 workspace-default-name = Principal
 workspace-new = Novo espaÃ§o de trabalho

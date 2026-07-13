@@ -285,12 +285,12 @@ command.settings.open_config_file.desc = Open config.toml in the default editor
 command.password.lock.name = Lock password vault
 command.password.lock.desc = Clear the unlocked password database from memory
 
-command.navigation.show_workspace_panel.name = Show workspace panel
-command.navigation.show_workspace_panel.desc = Toggle the workspace sidebar
+command.navigation.show_workspace_panel.name = Show workspaces
+command.navigation.show_workspace_panel.desc = Open the workspace switcher
 command.notification.show_center.name = Show notification center
 command.notification.show_center.desc = Toggle the notification center overlay
-command.dock.show.name = Show dock
-command.dock.show.desc = Toggle the widget dock
+command.dock.show.name = Show widget catalog
+command.dock.show.desc = Open the widget catalog
 command.search.show_universal.name = Universal search
 command.search.show_universal.desc = Open or focus universal search
 
@@ -361,6 +361,10 @@ viewer-pdf-page-of = Page { $current } of { $total }
 viewer-pdf-fit-width = Fit width
 viewer-pdf-fit-page = Fit page
 viewer-pdf-go = Go
+viewer-pdf-copy-text = Copy text
+viewer-pdf-copied = Page text copied
+viewer-pdf-copy-empty = No text on this page
+viewer-pdf-copy-failed = Could not copy text
 viewer-pdf-prev-page = Previous page
 viewer-pdf-next-page = Next page
 viewer-pdf-info = PDF · page { $current } / { $total } · { $width } × { $height } px · { $zoom }%
@@ -651,16 +655,16 @@ onboarding-step-welcome-title = Welcome to Orchid
 onboarding-step-welcome-body = Orchid is a touch-first workspace where gestures, commands, and widgets are three forms of the same action. This short tour shows the essentials.
 
 onboarding-step-workspace-title = Your workspace
-onboarding-step-workspace-body = Switch workspaces at the top, arrange widgets on the canvas, and add new ones from the dock at the bottom.
+onboarding-step-workspace-body = Switch workspaces from the corner control, arrange widgets on the canvas, and add new ones from the widget catalog.
 
 onboarding-step-palette-title = Command palette
 onboarding-step-palette-body = Press Ctrl+Shift+P to run any command. Every entry shows its keyboard shortcut so you can learn as you go.
 
 onboarding-step-gestures-title = Gestures and hints
-onboarding-step-gestures-body = Swipe from screen edges for panels and the dock. Press Win+? anytime to toggle hint mode and see what is available in the current context.
+onboarding-step-gestures-body = Swipe from screen edges for notifications and the workspace switcher. Long-press the canvas or swipe up with three fingers for the widget catalog. Press Win+? anytime to toggle hint mode.
 
-onboarding-hint-workspace = Swipe from the left edge for workspaces
-onboarding-hint-dock = Swipe up from the bottom edge for the dock
+onboarding-hint-workspace = Hover or tap the corner control for workspaces
+onboarding-hint-dock = Long-press the canvas or swipe up with three fingers for widgets
 onboarding-hint-gestures = Win+? toggles these hints
 
 workspace-default-name = Main

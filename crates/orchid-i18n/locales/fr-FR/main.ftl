@@ -1,4 +1,4 @@
-﻿# Orchid French (fr-FR) message catalog.
+# Orchid French (fr-FR) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -282,12 +282,12 @@ command.settings.open_config_file.desc = Ouvrir config.toml dans l'Ã©diteur pa
 command.password.lock.name = Verrouiller le coffre de mots de passe
 command.password.lock.desc = Effacer la base de mots de passe dÃ©verrouillÃ©e de la mÃ©moire
 
-command.navigation.show_workspace_panel.name = Afficher le panneau d'espaces de travail
-command.navigation.show_workspace_panel.desc = Afficher ou masquer la barre latÃ©rale des espaces de travail
+command.navigation.show_workspace_panel.name = Afficher les espaces de travail
+command.navigation.show_workspace_panel.desc = Ouvrir le sélecteur d’espaces de travail
 command.notification.show_center.name = Afficher le centre de notifications
 command.notification.show_center.desc = Afficher ou masquer le centre de notifications
-command.dock.show.name = Afficher le dock
-command.dock.show.desc = Afficher ou masquer le dock de widgets
+command.dock.show.name = Afficher le catalogue de widgets
+command.dock.show.desc = Ouvrir le catalogue de widgets
 command.search.show_universal.name = Recherche universelle
 command.search.show_universal.desc = Ouvrir ou focaliser la recherche universelle
 command.onboarding.toggle_hint_mode.name = Basculer le mode d'indications
@@ -357,6 +357,10 @@ viewer-pdf-page-of = Page { $current } sur { $total }
 viewer-pdf-fit-width = Ajuster Ã  la largeur
 viewer-pdf-fit-page = Ajuster Ã  la page
 viewer-pdf-go = Aller
+viewer-pdf-copy-text = Copier le texte
+viewer-pdf-copied = Texte de la page copié
+viewer-pdf-copy-empty = Pas de texte sur cette page
+viewer-pdf-copy-failed = Impossible de copier le texte
 viewer-pdf-prev-page = Page prÃ©cÃ©dente
 viewer-pdf-next-page = Page suivante
 viewer-pdf-info = PDF Â· page { $current } / { $total } Â· { $width } Ã— { $height } px Â· { $zoom }%
@@ -643,8 +647,8 @@ onboarding-step-palette-title = Palette de commandes
 onboarding-step-palette-body = Appuyez sur Ctrl+Shift+P pour exÃ©cuter une commande. Chaque entrÃ©e affiche son raccourci clavier pour apprendre en pratiquant.
 onboarding-step-gestures-title = Gestes et indications
 onboarding-step-gestures-body = Balayez depuis les bords de l'Ã©cran pour les panneaux et le dock. Appuyez sur Win+? Ã  tout moment pour basculer le mode d'indications et voir ce qui est disponible.
-onboarding-hint-workspace = Balayez depuis le bord gauche pour les espaces de travail
-onboarding-hint-dock = Balayez vers le haut depuis le bord infÃ©rieur pour le dock
+onboarding-hint-workspace = Survolez ou touchez le contrôle d’angle pour les espaces de travail
+onboarding-hint-dock = Appui long sur le canevas ou balayage à trois doigts vers le haut pour les widgets
 onboarding-hint-gestures = Win+? bascule ces indications
 workspace-default-name = Principal
 workspace-new = Nouvel espace de travail

@@ -1,4 +1,4 @@
-﻿# Orchid German (de-DE) message catalog.
+# Orchid German (de-DE) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -282,12 +282,12 @@ command.settings.open_config_file.desc = config.toml im Standardeditor Ã¶ffnen
 command.password.lock.name = Passwort-Tresor sperren
 command.password.lock.desc = Entsperrte Passwortdatenbank aus dem Speicher entfernen
 
-command.navigation.show_workspace_panel.name = Arbeitsbereichs-Panel anzeigen
-command.navigation.show_workspace_panel.desc = Seitenleiste fÃ¼r Arbeitsbereiche ein-/ausblenden
+command.navigation.show_workspace_panel.name = Arbeitsbereiche anzeigen
+command.navigation.show_workspace_panel.desc = Arbeitsbereich-Umschalter öffnen
 command.notification.show_center.name = Benachrichtigungszentrale anzeigen
 command.notification.show_center.desc = Benachrichtigungszentrale ein-/ausblenden
-command.dock.show.name = Dock anzeigen
-command.dock.show.desc = Widget-Dock ein-/ausblenden
+command.dock.show.name = Widget-Katalog anzeigen
+command.dock.show.desc = Widget-Katalog öffnen
 command.search.show_universal.name = Universelle Suche
 command.search.show_universal.desc = Universelle Suche Ã¶ffnen oder fokussieren
 command.onboarding.toggle_hint_mode.name = Hinweismodus umschalten
@@ -357,6 +357,10 @@ viewer-pdf-page-of = Seite { $current } von { $total }
 viewer-pdf-fit-width = An Breite anpassen
 viewer-pdf-fit-page = An Seite anpassen
 viewer-pdf-go = Los
+viewer-pdf-copy-text = Text kopieren
+viewer-pdf-copied = Seitentext kopiert
+viewer-pdf-copy-empty = Kein Text auf dieser Seite
+viewer-pdf-copy-failed = Text konnte nicht kopiert werden
 viewer-pdf-prev-page = Vorherige Seite
 viewer-pdf-next-page = NÃ¤chste Seite
 viewer-pdf-info = PDF Â· Seite { $current } / { $total } Â· { $width } Ã— { $height } px Â· { $zoom }%
@@ -643,8 +647,8 @@ onboarding-step-palette-title = Befehls-Palette
 onboarding-step-palette-body = DrÃ¼cken Sie Ctrl+Shift+P, um einen Befehl auszufÃ¼hren. Jeder Eintrag zeigt sein TastenkÃ¼rzel, damit Sie beim Arbeiten lernen kÃ¶nnen.
 onboarding-step-gestures-title = Gesten und Hinweise
 onboarding-step-gestures-body = Wischen Sie von den BildschirmrÃ¤ndern fÃ¼r Panels und das Dock. DrÃ¼cken Sie jederzeit Win+?, um den Hinweismodus umzuschalten und zu sehen, was im aktuellen Kontext verfÃ¼gbar ist.
-onboarding-hint-workspace = Vom linken Rand wischen fÃ¼r Arbeitsbereiche
-onboarding-hint-dock = Vom unteren Rand nach oben wischen fÃ¼r das Dock
+onboarding-hint-workspace = Eckensteuerung berühren oder anklicken für Arbeitsbereiche
+onboarding-hint-dock = Lange auf die Leinwand drücken oder mit drei Fingern nach oben wischen für Widgets
 onboarding-hint-gestures = Win+? schaltet diese Hinweise um
 workspace-default-name = Haupt
 workspace-new = Neuer Arbeitsbereich
