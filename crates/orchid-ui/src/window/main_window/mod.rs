@@ -1060,11 +1060,8 @@ impl MainWindowController {
     fn sync_widget_catalog_global(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        // Catalog UI binds to `workspace.dock-types` (same model as the bottom dock).
-        // Keep that model in sync so open/search/dismiss never leave an empty list.
-        sync_vec_model(&self.workspace_dock_types, items.clone());
         sync_vec_model(&self.catalog_items, items);
-        let count = self.workspace_dock_types.row_count();
+        let count = self.catalog_items.row_count();
         tracing::info!(
             count,
             query = %cat.search_query,
@@ -1084,9 +1081,8 @@ impl MainWindowController {
     fn sync_widget_catalog_items_only(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        sync_vec_model(&self.workspace_dock_types, items.clone());
         sync_vec_model(&self.catalog_items, items);
-        let count = self.workspace_dock_types.row_count();
+        let count = self.catalog_items.row_count();
         tracing::info!(
             count,
             query = %cat.search_query,

@@ -523,8 +523,8 @@ export component WorkspaceView inherits Rectangle {
         WidgetCatalogPanel {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            // Same ModelRc as the bottom dock — that list already paints.
-            items: root.workspace.dock-types;
+            // Bind to the dedicated catalog items model instead of the bottom dock model.
+            items: WidgetCatalog.items;
             search-query: WidgetCatalog.search-query;
             pick(type-id) => { root.catalog-pick(type-id); }
             dismiss => { root.catalog-dismiss(); }

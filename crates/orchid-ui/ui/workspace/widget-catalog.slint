@@ -2,11 +2,11 @@ import { Theme } from "../theme_global.slint";
 import { Strings } from "../strings_global.slint";
 import { DockWidgetType } from "defs.slint";
 
+/// Widget picker. List data must come from the same model as the bottom dock
+/// (`workspace.dock-types`) — that binding is known to paint rows in Slint.
 export component WidgetCatalogPanel inherits Rectangle {
     in property <[DockWidgetType]> items;
-    /// Driven from Rust only when the catalog opens/clears; typing updates via `edited`.
     in property <string> search-query;
-    in property <bool> is-empty;
 
     callback pick(string);
     callback dismiss();
@@ -22,14 +22,11 @@ export component WidgetCatalogPanel inherits Rectangle {
     drop-shadow-color: #00000050;
     clip: true;
 
-    // Local draft so one-way `in` search-query resets do not fight keystrokes mid-edit.
+    // Local edit buffer so Rust one-way `search-query` resets do not fight typing.
     property <string> draft-query: "";
-    property <bool> editing: false;
 
     changed search-query => {
-        if (!root.editing) {
-            root.draft-query = root.search-query;
-        }
+        root.draft-query = root.search-query;
     }
 
     VerticalLayout {
@@ -102,26 +99,16 @@ export component WidgetCatalogPanel inherits Rectangle {
                         vertical-alignment: center;
                         single-line: true;
                         edited => {
-                            root.editing = true;
                             root.search-changed(self.text);
-                        }
-                        accepted => {
-                            root.editing = false;
-                        }
-                        changed has-focus => {
-                            if (!self.has-focus) {
-                                root.editing = false;
-                                root.draft-query = root.search-query;
-                            }
                         }
                     }
                 }
             }
         }
 
-        if root.is-empty : Text {
-            horizontal-stretch: 1;
+        if root.items.length == 0 : Text {
             vertical-stretch: 1;
+            horizontal-stretch: 1;
             text: Strings.catalog-no-results;
             color: Theme.text-tertiary;
             font-size: Theme.font-size-sm;
@@ -129,16 +116,15 @@ export component WidgetCatalogPanel inherits Rectangle {
             vertical-alignment: center;
         }
 
-        if !root.is-empty : Flickable {
+        if root.items.length > 0 : Flickable {
             vertical-stretch: 1;
+            horizontal-stretch: 1;
             viewport-width: self.width;
-            // Fixed min viewport so the list always has paint space on first mount.
-            viewport-height: max(300px, catalog-list.preferred-height);
-            height: 300px;
+            viewport-height: max(self.height, catalog-list.preferred-height);
 
             catalog-list := VerticalLayout {
                 spacing: 2px;
-                width: parent.width;
+                width: parent.viewport-width;
 
                 for item[i] in root.items: Rectangle {
                     height: item.description != "" ? 56px : 40px;
