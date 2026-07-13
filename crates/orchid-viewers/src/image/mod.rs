@@ -15,7 +15,9 @@ use crate::error::{Result, ViewerError};
 use crate::snapshot::{ImageSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
-pub use loader::{load_image, rgba_arc, ImageFormat, LoadedImage};
+pub use loader::{
+    is_image_file_extension, load_image, rgba_arc, ImageFormat, LoadedImage, IMAGE_FILE_EXTENSIONS,
+};
 pub use transform::ViewTransform;
 
 /// Max image size this viewer accepts. 128 MiB.

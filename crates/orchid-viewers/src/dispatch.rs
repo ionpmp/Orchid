@@ -42,8 +42,7 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
         return match ext.as_str() {
             "pdf" => Some(ViewerKind::Pdf),
             "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
-            "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "tiff" | "tif" | "avif" | "tga"
-            | "svg" | "heic" | "heif" | "cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2" => {
+            other if crate::image::loader::is_image_file_extension(other) => {
                 Some(ViewerKind::Image)
             }
             _ => Some(ViewerKind::Text),

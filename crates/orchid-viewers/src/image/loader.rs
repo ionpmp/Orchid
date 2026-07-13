@@ -1,12 +1,26 @@
 //! Image loading.
 //!
 //! Raster formats use the [`image`](image) crate's built-in decoders. SVG is
-//! rasterized via [`resvg`]. RAW remains out of scope for now.
+//! rasterized via [`resvg`]. HEIC/RAW are recognised and rejected with clear
+//! errors until native decode lands.
 
 use std::sync::Arc;
 
 use crate::error::{Result, ViewerError};
 use image::GenericImageView;
+
+/// Extensions the image viewer / FM treat as images (including pending HEIC/RAW).
+pub const IMAGE_FILE_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "webp", "bmp", "gif", "tiff", "tif", "avif", "tga", "svg", "heic",
+    "heif", "cr2", "nef", "arw", "dng", "raf", "orf", "rw2",
+];
+
+/// True when `ext` (no leading dot) is a known image extension.
+#[must_use]
+pub fn is_image_file_extension(ext: &str) -> bool {
+    let lower = ext.to_ascii_lowercase();
+    IMAGE_FILE_EXTENSIONS.iter().any(|e| *e == lower)
+}
 
 /// Decoded image in RGBA8.
 #[derive(Debug, Clone)]
@@ -96,12 +110,15 @@ pub async fn load_image(
             limit: size_limit_bytes,
         });
     }
-    tokio::task::spawn_blocking(move || decode_bytes(&bytes, size))
+    let ext = path
+        .extension()
+        .map(|e| e.to_ascii_lowercase());
+    tokio::task::spawn_blocking(move || decode_bytes(&bytes, size, ext.as_deref()))
         .await
         .map_err(|e| ViewerError::ImageDecode(e.to_string()))?
 }
 
-fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<LoadedImage> {
     if looks_like_svg(bytes) {
         return decode_svg(bytes, size);
     }
@@ -110,6 +127,12 @@ fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     }
     if looks_like_raw(bytes) {
         return Err(ViewerError::UnsupportedRaw);
+    }
+    // TIFF-based camera RAW (NEF/ARW/DNG) often lacks a unique magic; use the
+    // extension so users get the dedicated unsupported message, not a generic
+    // decode failure from the `image` crate.
+    if let Some(err) = unsupported_by_extension(extension) {
+        return Err(err);
     }
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
@@ -124,6 +147,14 @@ fn decode_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
         format: guessed,
         original_size_bytes: size,
     })
+}
+
+fn unsupported_by_extension(extension: Option<&str>) -> Option<ViewerError> {
+    match extension? {
+        "heic" | "heif" => Some(ViewerError::UnsupportedHeic),
+        "cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2" => Some(ViewerError::UnsupportedRaw),
+        _ => None,
+    }
 }
 
 /// True when `bytes` look like an SVG document (XML sniff).
@@ -292,7 +323,7 @@ mod tests {
         img.write_to(&mut cursor, image::ImageFormat::Png).unwrap();
         let bytes = cursor.into_inner();
 
-        let loaded = decode_bytes(&bytes, bytes.len() as u64).unwrap();
+        let loaded = decode_bytes(&bytes, bytes.len() as u64, None).unwrap();
         assert_eq!(loaded.width, 2);
         assert_eq!(loaded.height, 2);
         assert_eq!(loaded.format, ImageFormat::Png);
@@ -308,7 +339,7 @@ mod tests {
 </svg>"##;
         assert!(looks_like_svg(svg));
 
-        let loaded = decode_bytes(svg, svg.len() as u64).unwrap();
+        let loaded = decode_bytes(svg, svg.len() as u64, Some("svg")).unwrap();
         assert_eq!(loaded.format, ImageFormat::Svg);
         assert_eq!(loaded.width, 4);
         assert_eq!(loaded.height, 4);
@@ -349,12 +380,18 @@ mod tests {
     #[test]
     fn heic_decode_returns_clear_error() {
         let bytes = heic_ftyp(b"heic");
-        let err = decode_bytes(&bytes, bytes.len() as u64).unwrap_err();
+        let err = decode_bytes(&bytes, bytes.len() as u64, None).unwrap_err();
         assert!(
             matches!(err, ViewerError::UnsupportedHeic),
             "unexpected error: {err:?}"
         );
         assert_eq!(err.to_string(), "viewer-image-heic-unsupported");
+    }
+
+    #[test]
+    fn heic_extension_without_ftyp_returns_clear_error() {
+        let err = decode_bytes(b"not-a-heic", 10, Some("heic")).unwrap_err();
+        assert!(matches!(err, ViewerError::UnsupportedHeic));
     }
 
     #[test]
@@ -379,12 +416,33 @@ mod tests {
     #[test]
     fn raw_decode_returns_clear_error() {
         let bytes = b"FUJIFILMCCD-RAW \x00";
-        let err = decode_bytes(bytes, bytes.len() as u64).unwrap_err();
+        let err = decode_bytes(bytes, bytes.len() as u64, None).unwrap_err();
         assert!(
             matches!(err, ViewerError::UnsupportedRaw),
             "unexpected error: {err:?}"
         );
         assert_eq!(err.to_string(), "viewer-image-raw-unsupported");
+    }
+
+    #[test]
+    fn tiff_based_raw_extensions_return_clear_error() {
+        // Minimal TIFF header that is not Canon CR2 magic.
+        let bytes = b"II*\0\x08\0\0\0not-cr2";
+        for ext in ["nef", "arw", "dng"] {
+            let err = decode_bytes(bytes, bytes.len() as u64, Some(ext)).unwrap_err();
+            assert!(
+                matches!(err, ViewerError::UnsupportedRaw),
+                "ext={ext} unexpected: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn image_file_extension_list_covers_heic_and_raw() {
+        assert!(is_image_file_extension("HEIC"));
+        assert!(is_image_file_extension("nef"));
+        assert!(is_image_file_extension("svg"));
+        assert!(!is_image_file_extension("pdf"));
     }
 
     #[test]

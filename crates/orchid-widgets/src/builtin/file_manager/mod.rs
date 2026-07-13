@@ -1810,15 +1810,9 @@ fn is_image_entry(e: &orchid_fs::FsEntry) -> bool {
     if e.metadata.mime.as_deref().map(|m| m.starts_with("image/")).unwrap_or(false) {
         return true;
     }
-    let ext = e
-        .path
+    e.path
         .extension()
-        .map(|x| x.to_lowercase())
-        .unwrap_or_default();
-    matches!(
-        ext.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tif" | "tiff" | "avif"
-    )
+        .is_some_and(orchid_viewers::is_image_file_extension)
 }
 
 fn viewer_thumb_size(size: config::ThumbnailSize) -> orchid_viewers::ThumbnailSize {

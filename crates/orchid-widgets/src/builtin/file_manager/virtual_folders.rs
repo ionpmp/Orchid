@@ -136,7 +136,9 @@ pub fn entry_matches_category(entry: &FsEntry, cat: FileCategory) -> bool {
     let ext = entry.path.extension().map(|e| e.to_lowercase());
     match cat {
         FileCategory::Images => mime_is_prefix(mime, "image/")
-            || ext_in(&ext, &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "avif", "svg"]),
+            || ext
+                .as_deref()
+                .is_some_and(orchid_viewers::is_image_file_extension),
         FileCategory::Documents => {
             mime_is_prefix(mime, "text/")
                 || mime == Some("application/pdf")
@@ -168,9 +170,7 @@ fn mime_is_prefix(mime: Option<&str>, prefix: &str) -> bool {
 #[must_use]
 pub fn category_search_extensions(cat: FileCategory) -> &'static [&'static str] {
     match cat {
-        FileCategory::Images => &[
-            "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "avif", "svg",
-        ],
+        FileCategory::Images => orchid_viewers::IMAGE_FILE_EXTENSIONS,
         FileCategory::Documents => &[
             "pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ppt", "pptx", "csv",
             "ods", "odp",

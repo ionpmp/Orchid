@@ -18,7 +18,10 @@ pub mod viewer_trait;
 pub use archive::ArchiveViewer;
 pub use dispatch::{kind_for, select_viewer, ViewerKind};
 pub use error::{Result, ViewerError};
-pub use image::{ImageFormat, ImageViewer, LoadedImage, ViewTransform};
+pub use image::{
+    is_image_file_extension, ImageFormat, ImageViewer, LoadedImage, ViewTransform,
+    IMAGE_FILE_EXTENSIONS,
+};
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, ImageSnapshot, PdfSnapshot,
