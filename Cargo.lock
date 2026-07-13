@@ -5336,6 +5336,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-yaml",
  "uuid",
+ "windows 0.58.0",
  "zip",
 ]
 
