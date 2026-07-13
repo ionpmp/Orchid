@@ -1,12 +1,74 @@
 use orchid_i18n::LocaleManager;
 use orchid_widgets::ViewerPayload;
 use slint::{Image, ModelRc, SharedString, VecModel};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
     ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
 };
+
+/// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
+struct RgbaImageCacheEntry {
+    width: u32,
+    height: u32,
+    image: Image,
+}
+
+thread_local! {
+    static RGBA_IMAGE_CACHE: std::cell::RefCell<HashMap<usize, RgbaImageCacheEntry>> = std::cell::RefCell::new(HashMap::new());
+}
+const RGBA_IMAGE_CACHE_CAP: usize = 8;
+
+fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
+    if width == 0 || height == 0 || rgba.is_empty() {
+        return Image::default();
+    }
+    let key = Arc::as_ptr(rgba) as usize;
+    
+    let cached = RGBA_IMAGE_CACHE.with(|cache| {
+        cache.borrow().get(&key).and_then(|c| {
+            if c.width == width && c.height == height {
+                Some(c.image.clone())
+            } else {
+                None
+            }
+        })
+    });
+    
+    if let Some(image) = cached {
+        return image;
+    }
+    
+    let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+        rgba.as_slice(),
+        width,
+        height,
+    );
+    let image = Image::from_rgba8(buf);
+    
+    RGBA_IMAGE_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= RGBA_IMAGE_CACHE_CAP {
+            // Drop an arbitrary entry; keys are stable Arc addresses while buffers live.
+            if let Some(old) = cache.keys().next().copied() {
+                cache.remove(&old);
+            }
+        }
+        cache.insert(
+            key,
+            RgbaImageCacheEntry {
+                width,
+                height,
+                image: image.clone(),
+            },
+        );
+    });
+    
+    image
+}
 
 fn viewer_syntax_label(locale: &LocaleManager, language_id: &str) -> SharedString {
     let key = format!("viewer-syntax-{language_id}");
@@ -106,6 +168,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         fit_width_label: locale.tr("viewer-pdf-fit-width").into(),
         fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
         go_label: locale.tr("viewer-pdf-go").into(),
+        copy_text_label: locale.tr("viewer-pdf-copy-text").into(),
     }
 }
 
@@ -246,16 +309,7 @@ fn build_image_snapshot(
     s: &orchid_viewers::ImageSnapshot,
     locale: &LocaleManager,
 ) -> ViewerImageModel {
-    let image = if s.width_px > 0 && s.height_px > 0 && !s.rgba_bytes.is_empty() {
-        let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-            s.rgba_bytes.as_slice(),
-            s.width_px,
-            s.height_px,
-        );
-        Image::from_rgba8(img)
-    } else {
-        Image::default()
-    };
+    let image = slint_image_from_rgba(&s.rgba_bytes, s.width_px, s.height_px);
 
     ViewerImageModel {
         width_px: s.width_px as i32,
@@ -285,12 +339,7 @@ fn build_image_snapshot(
 fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -> ViewerPdfModel {
     let available = !s.page_rgba_bytes.is_empty() && s.page_count > 0;
     let image = if available {
-        let img = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-            s.page_rgba_bytes.as_slice(),
-            s.page_width_px,
-            s.page_height_px,
-        );
-        Image::from_rgba8(img)
+        slint_image_from_rgba(&s.page_rgba_bytes, s.page_width_px, s.page_height_px)
     } else {
         Image::default()
     };
@@ -325,6 +374,7 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         fit_width_label: locale.tr("viewer-pdf-fit-width").into(),
         fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
         go_label: locale.tr("viewer-pdf-go").into(),
+        copy_text_label: locale.tr("viewer-pdf-copy-text").into(),
     }
 }
 

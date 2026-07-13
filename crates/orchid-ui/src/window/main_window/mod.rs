@@ -82,9 +82,8 @@ mod wire;
 use canvas::ResizeInteraction;
 
 
-/// Top switcher (40) + bottom dock (64 when visible) = canvas height inset in [`workspace.slint`].
-const WORKSPACE_SWITCHER_H: f32 = 40.0;
-const DOCK_H: f32 = 64.0;
+/// Canvas fills the window; the workspace orb overlays the bottom corner.
+const WORKSPACE_CHROME_H: f32 = 0.0;
 
 
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
@@ -232,17 +231,15 @@ struct SettingsUiState {
 
 #[derive(Debug, Clone)]
 struct NavigationUiState {
-    workspace_panel_visible: bool,
+    workspace_orb_open: bool,
     notification_center_visible: bool,
-    dock_visible: bool,
 }
 
 impl Default for NavigationUiState {
     fn default() -> Self {
         Self {
-            workspace_panel_visible: false,
+            workspace_orb_open: false,
             notification_center_visible: false,
-            dock_visible: true,
         }
     }
 }
@@ -783,12 +780,7 @@ impl MainWindowController {
     }
 
     fn canvas_inset_h(&self) -> f32 {
-        WORKSPACE_SWITCHER_H
-            + if self.navigation.read().dock_visible {
-                DOCK_H
-            } else {
-                0.0
-            }
+        WORKSPACE_CHROME_H
     }
 
     /// Match [`Self::canvas_size`] to the window client in logical pixels (workspace canvas area).
@@ -949,10 +941,6 @@ impl MainWindowController {
         self.spawn_add_widget(type_id.as_str(), placement);
     }
 
-    fn on_dock_add(self: &Arc<Self>, type_id: &SharedString) {
-        self.spawn_add_widget(type_id.as_str(), AddWidgetPlacement::AutoSlot);
-    }
-
     fn spawn_add_widget(self: &Arc<Self>, type_id: &str, placement: AddWidgetPlacement) {
         if !is_known_widget_type(type_id) {
             warn!(type_id, "unknown widget type");
@@ -1089,6 +1077,7 @@ impl MainWindowController {
             "widget catalog filter"
         );
         let g = self.window.global::<WidgetCatalog>();
+        g.set_items(self.catalog_items.clone());
         g.set_is_empty(count == 0);
     }
 
@@ -1111,7 +1100,7 @@ impl MainWindowController {
             return;
         }
         if cmd_id == "navigation.show_workspace_panel" {
-            self.toggle_workspace_panel();
+            self.toggle_workspace_orb();
             return;
         }
         if cmd_id == "notification.show_center" {
@@ -1119,7 +1108,7 @@ impl MainWindowController {
             return;
         }
         if cmd_id == "dock.show" {
-            self.toggle_dock();
+            self.show_widget_catalog_center();
             return;
         }
         if cmd_id == "search.show_universal" {
@@ -1928,7 +1917,7 @@ impl MainWindowController {
                         let scale = win.scale_factor();
                         let logical: slint::winit_030::winit::dpi::LogicalPosition<f64> =
                             position.to_logical(f64::from(scale));
-                        let canvas_y = logical.y - f64::from(WORKSPACE_SWITCHER_H);
+                        let canvas_y = logical.y;
                         if canvas_y >= 0.0 {
                             let (scroll_x, scroll_y) = *c.canvas_scroll.lock();
                             *c.last_canvas_pointer.lock() = Some((
@@ -1956,10 +1945,10 @@ impl MainWindowController {
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {
                                 c.on_settings_dismiss();
-                            } else if c.navigation.read().workspace_panel_visible
+                            } else if c.navigation.read().workspace_orb_open
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {
-                                c.on_navigation_workspace_panel_dismiss();
+                                c.on_workspace_orb_dismiss();
                             } else if c.navigation.read().notification_center_visible
                                 && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                             {

@@ -2,8 +2,7 @@ import { Theme } from "../theme_global.slint";
 import { Strings } from "../strings_global.slint";
 import { DockWidgetType } from "defs.slint";
 
-/// Widget picker. List data must come from the same model as the bottom dock
-/// (`workspace.dock-types`) — that binding is known to paint rows in Slint.
+/// Widget picker catalog panel.
 export component WidgetCatalogPanel inherits Rectangle {
     in property <[DockWidgetType]> items;
     in property <string> search-query;
