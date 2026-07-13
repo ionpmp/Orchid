@@ -1,8 +1,9 @@
 //! Image loading.
 //!
 //! Raster formats use the [`image`](image) crate's built-in decoders. SVG is
-//! rasterized via [`resvg`]. HEIC/RAW are recognised and rejected with clear
-//! errors until native decode lands.
+//! rasterized via [`resvg`]. On Windows, HEIC/HEIF is decoded through WIC when
+//! the OS HEIF codec is installed; otherwise (and for RAW) we return a clear
+//! unsupported error.
 
 use std::sync::Arc;
 
@@ -122,8 +123,8 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
     if looks_like_svg(bytes) {
         return decode_svg(bytes, size);
     }
-    if looks_like_heic(bytes) {
-        return Err(ViewerError::UnsupportedHeic);
+    if looks_like_heic(bytes) || matches!(extension, Some("heic" | "heif")) {
+        return decode_heic(bytes, size);
     }
     if looks_like_raw(bytes) {
         return Err(ViewerError::UnsupportedRaw);
@@ -149,9 +150,20 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
     })
 }
 
+fn decode_heic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    #[cfg(windows)]
+    {
+        return crate::image::heic_wic::decode_heic_wic(bytes, size);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (bytes, size);
+        Err(ViewerError::UnsupportedHeic)
+    }
+}
+
 fn unsupported_by_extension(extension: Option<&str>) -> Option<ViewerError> {
     match extension? {
-        "heic" | "heif" => Some(ViewerError::UnsupportedHeic),
         "cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2" => Some(ViewerError::UnsupportedRaw),
         _ => None,
     }

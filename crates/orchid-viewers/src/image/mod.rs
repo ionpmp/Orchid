@@ -6,6 +6,9 @@ pub mod loader;
 pub mod operations;
 pub mod transform;
 
+#[cfg(windows)]
+mod heic_wic;
+
 use std::sync::Arc;
 
 use async_trait::async_trait;

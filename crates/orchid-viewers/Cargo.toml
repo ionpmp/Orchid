@@ -54,6 +54,14 @@ orchid-core.workspace = true
 orchid-storage.workspace = true
 orchid-fs.workspace = true
 
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com",
+]
+
 # Archive readers are wrapped through orchid-fs; direct deps are not needed
 # in the viewers crate.
 
