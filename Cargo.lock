@@ -5191,6 +5191,7 @@ dependencies = [
  "dashmap 6.1.0",
  "encoding_rs",
  "futures",
+ "memmap2",
  "orchid-core",
  "orchid-fs",
  "orchid-storage",

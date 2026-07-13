@@ -91,6 +91,9 @@ impl ImageFormat {
 
 /// Load an image via the given provider registry.
 ///
+/// Local files are memory-mapped so the compressed bytes are not copied into a
+/// heap `Vec` before decode. Network / archive paths still use a full read.
+///
 /// # Errors
 ///
 /// * [`ViewerError::Fs`] on read failure.
@@ -104,6 +107,25 @@ pub async fn load_image(
     let provider = registry
         .for_path(path)
         .ok_or_else(|| orchid_fs::FsError::ProviderNotFound(path.scheme().to_string()))?;
+    let ext = path.extension().map(|e| e.to_ascii_lowercase());
+
+    if path.is_local() {
+        let os_path = path.to_local()?;
+        let meta = tokio::fs::metadata(&os_path)
+            .await
+            .map_err(orchid_fs::FsError::Io)?;
+        let size = meta.len();
+        if size > size_limit_bytes {
+            return Err(ViewerError::FileTooLarge {
+                size,
+                limit: size_limit_bytes,
+            });
+        }
+        return tokio::task::spawn_blocking(move || decode_local_mmap(&os_path, size, ext.as_deref()))
+            .await
+            .map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
+    }
+
     let bytes = provider.read(path).await?;
     let size = bytes.len() as u64;
     if size > size_limit_bytes {
@@ -112,12 +134,21 @@ pub async fn load_image(
             limit: size_limit_bytes,
         });
     }
-    let ext = path
-        .extension()
-        .map(|e| e.to_ascii_lowercase());
     tokio::task::spawn_blocking(move || decode_bytes(&bytes, size, ext.as_deref()))
         .await
         .map_err(|e| ViewerError::ImageDecode(e.to_string()))?
+}
+
+fn decode_local_mmap(
+    os_path: &std::path::Path,
+    size: u64,
+    extension: Option<&str>,
+) -> Result<LoadedImage> {
+    let file = std::fs::File::open(os_path).map_err(orchid_fs::FsError::Io)?;
+    // SAFETY: the file is opened read-only and not truncated while mapped;
+    // decode finishes before `map` is dropped.
+    let map = unsafe { memmap2::Mmap::map(&file) }.map_err(orchid_fs::FsError::Io)?;
+    decode_bytes(&map, size, extension)
 }
 
 fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<LoadedImage> {
@@ -333,10 +364,11 @@ fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
 
     // tiny-skia stores premultiplied RGBA; convert to straight alpha for the
     // shared image pipeline (`image::RgbaImage` / DisplayedImage).
-    let rgba = Arc::new(unpremultiply_rgba(pixmap.data()));
+    let mut rgba = pixmap.take();
+    unpremultiply_rgba_inplace(&mut rgba);
 
     Ok(LoadedImage {
-        rgba,
+        rgba: Arc::new(rgba),
         width,
         height,
         format: ImageFormat::Svg,
@@ -344,23 +376,20 @@ fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     })
 }
 
-fn unpremultiply_rgba(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len());
-    for px in data.chunks_exact(4) {
-        let (r, g, b, a) = (px[0], px[1], px[2], px[3]);
+fn unpremultiply_rgba_inplace(data: &mut [u8]) {
+    for px in data.chunks_exact_mut(4) {
+        let a = px[3];
         if a == 0 {
-            out.extend_from_slice(&[0, 0, 0, 0]);
-        } else if a == 255 {
-            out.extend_from_slice(px);
-        } else {
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
+        } else if a != 255 {
             let a_f = f32::from(a);
-            out.push(((f32::from(r) * 255.0 / a_f) + 0.5) as u8);
-            out.push(((f32::from(g) * 255.0 / a_f) + 0.5) as u8);
-            out.push(((f32::from(b) * 255.0 / a_f) + 0.5) as u8);
-            out.push(a);
+            px[0] = ((f32::from(px[0]) * 255.0 / a_f) + 0.5) as u8;
+            px[1] = ((f32::from(px[1]) * 255.0 / a_f) + 0.5) as u8;
+            px[2] = ((f32::from(px[2]) * 255.0 / a_f) + 0.5) as u8;
         }
     }
-    out
 }
 
 /// Shared pixel buffer for the snapshot's `rgba_bytes`.
@@ -390,6 +419,20 @@ mod tests {
         assert_eq!(loaded.height, 2);
         assert_eq!(loaded.format, ImageFormat::Png);
         assert_eq!(loaded.rgba[0..4], [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn decode_local_mmap_reads_png_from_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tiny.png");
+        let mut img = image::RgbaImage::new(1, 1);
+        img.put_pixel(0, 0, image::Rgba([1, 2, 3, 255]));
+        img.save(&path).unwrap();
+        let loaded = decode_local_mmap(&path, std::fs::metadata(&path).unwrap().len(), Some("png"))
+            .unwrap();
+        assert_eq!(loaded.width, 1);
+        assert_eq!(loaded.height, 1);
+        assert_eq!(loaded.rgba[0..4], [1, 2, 3, 255]);
     }
 
     #[test]

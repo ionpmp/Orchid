@@ -21,6 +21,7 @@ dashmap.workspace = true
 encoding_rs.workspace = true
 chardetng.workspace = true
 pdfium-render.workspace = true
+memmap2.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true

@@ -27,8 +27,17 @@ impl ContentExtractor for PdfExtractor {
         provider: &dyn orchid_fs::FsProvider,
         path: &orchid_fs::FsPath,
     ) -> Result<String> {
-        let bytes = provider.read(path).await?;
         let path_str = path.to_string();
+        if path.is_local() {
+            let os_path = path.to_local()?;
+            return tokio::task::spawn_blocking(move || extract_local_mmap(&os_path, &path_str))
+                .await
+                .map_err(|e| SearchError::Extraction {
+                    path: String::new(),
+                    reason: format!("join: {e}"),
+                })?;
+        }
+        let bytes = provider.read(path).await?;
         tokio::task::spawn_blocking(move || extract_sync(&bytes, &path_str))
             .await
             .map_err(|e| SearchError::Extraction {
@@ -36,6 +45,13 @@ impl ContentExtractor for PdfExtractor {
                 reason: format!("join: {e}"),
             })?
     }
+}
+
+fn extract_local_mmap(os_path: &std::path::Path, path: &str) -> Result<String> {
+    let file = std::fs::File::open(os_path)?;
+    // SAFETY: read-only mapping; extract finishes before the map is dropped.
+    let map = unsafe { memmap2::Mmap::map(&file)? };
+    extract_sync(&map, path)
 }
 
 fn extract_sync(bytes: &[u8], path: &str) -> Result<String> {

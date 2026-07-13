@@ -39,13 +39,10 @@ impl ContentExtractor for TextExtractor {
         provider: &dyn orchid_fs::FsProvider,
         path: &orchid_fs::FsPath,
     ) -> Result<String> {
-        let raw = provider.read(path).await?;
-        let trimmed: &[u8] = if raw.len() > MAX_CONTENT_BYTES {
-            &raw[..MAX_CONTENT_BYTES]
-        } else {
-            &raw
-        };
-        Ok(decode_best_effort(trimmed))
+        // Cap the read at the index budget — avoid loading a 50 MiB log just to
+        // keep the first 2 MiB.
+        let raw = orchid_fs::read_prefix(provider, path, MAX_CONTENT_BYTES).await?;
+        Ok(decode_best_effort(&raw))
     }
 }
 
