@@ -275,6 +275,7 @@ fn apply_app_state_to(
         workspaces: ModelRc::new(VecModel::default()),
         active_workspace_id: "".into(),
         widgets: ModelRc::new(VecModel::default()),
+        floating_widgets: ModelRc::new(VecModel::default()),
         dock_types: ModelRc::new(VecModel::from(vec![DockWidgetType {
             type_id: "terminal".into(),
             label: locale.tr("dock-widget-terminal").into(),
@@ -286,5 +287,8 @@ fn apply_app_state_to(
         grid_rows: 10,
         canvas_content_width: 1f32,
         canvas_content_height: 1f32,
+        canvas_scroll_x: 0f32,
+        canvas_scroll_y: 0f32,
+        canvas_scroll_gen: 0,
     });
 }

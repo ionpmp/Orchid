@@ -24,10 +24,56 @@ use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDes
 /// Stable type id.
 pub const TYPE_ID: &str = "viewer";
 
-/// Persisted viewer state (path only — scroll/zoom rehydrate on open).
+/// Persisted viewer state (path + optional floating overlay rect).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 struct ViewerPersisted {
     path: Option<String>,
+    /// When true, the viewer renders in the floating overlay (not the grid).
+    #[serde(default)]
+    floating: bool,
+    #[serde(default)]
+    float_x: Option<f32>,
+    #[serde(default)]
+    float_y: Option<f32>,
+    #[serde(default)]
+    float_w: Option<f32>,
+    #[serde(default)]
+    float_h: Option<f32>,
+}
+
+impl ViewerPersisted {
+    fn floating_bounds(&self) -> Option<crate::layout::PixelBounds> {
+        if !self.floating {
+            return None;
+        }
+        Some(crate::layout::PixelBounds {
+            x: self.float_x.unwrap_or(40.0),
+            y: self.float_y.unwrap_or(40.0),
+            width: self.float_w.unwrap_or(480.0).max(120.0),
+            height: self.float_h.unwrap_or(360.0).max(120.0),
+        })
+    }
+
+    fn from_live(path: Option<String>, floating: Option<crate::layout::PixelBounds>) -> Self {
+        match floating {
+            Some(b) => Self {
+                path,
+                floating: true,
+                float_x: Some(b.x),
+                float_y: Some(b.y),
+                float_w: Some(b.width),
+                float_h: Some(b.height),
+            },
+            None => Self {
+                path,
+                floating: false,
+                float_x: None,
+                float_y: None,
+                float_w: None,
+                float_h: None,
+            },
+        }
+    }
 }
 
 /// Live viewer widget cores keyed by instance id (for UI callbacks).
@@ -56,6 +102,8 @@ struct ViewerWidgetInner {
     path: RwLock<Option<orchid_fs::FsPath>>,
     /// Path restored from persistence; opened in `on_create`.
     pending_path: RwLock<Option<orchid_fs::FsPath>>,
+    /// Floating overlay bounds when undocked from the canvas grid.
+    floating: RwLock<Option<crate::layout::PixelBounds>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -162,6 +210,7 @@ impl ViewerWidget {
                 snapshot: RwLock::new(None),
                 path: RwLock::new(None),
                 pending_path: RwLock::new(None),
+                floating: RwLock::new(None),
                 bus,
             }),
         }
@@ -179,6 +228,19 @@ impl ViewerWidget {
         w
     }
 
+    /// Build a viewer with pending path and floating overlay bounds.
+    pub fn with_pending_path_and_floating(
+        instance_id: Uuid,
+        deps: ViewerDeps,
+        bus: Arc<orchid_core::EventBus>,
+        path: orchid_fs::FsPath,
+        floating: crate::layout::PixelBounds,
+    ) -> Self {
+        let w = Self::with_pending_path(instance_id, deps, bus, path);
+        *w.inner.floating.write() = Some(floating);
+        w
+    }
+
     /// Open a path on this widget instance.
     pub async fn open_path(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
         self.inner.open_path(path).await
@@ -190,6 +252,16 @@ impl ViewerWidget {
         self.inner.path.read().clone()
     }
 
+    /// Floating overlay bounds when the viewer is undocked.
+    #[must_use]
+    pub fn floating_bounds(&self) -> Option<crate::layout::PixelBounds> {
+        *self.inner.floating.read()
+    }
+
+    /// Set or clear floating overlay bounds.
+    pub fn set_floating_bounds(&self, bounds: Option<crate::layout::PixelBounds>) {
+        *self.inner.floating.write() = bounds;
+    }
 }
 
 fn map_viewer_err(e: orchid_viewers::ViewerError) -> WidgetError {
@@ -237,6 +309,50 @@ pub async fn open_path(instance_id: Uuid, path: orchid_fs::FsPath) -> WidgetResu
             WidgetError::InvalidStateForOperation("viewer widget not live".into())
         })?;
     inner.open_path(path).await
+}
+
+fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<ViewerWidgetInner>> {
+    VIEWER_LIVE
+        .get(&instance_id)
+        .map(|e| Arc::clone(e.value()))
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))
+}
+
+/// Current open path for a live viewer instance, if any.
+#[must_use]
+pub fn current_path(instance_id: Uuid) -> Option<orchid_fs::FsPath> {
+    VIEWER_LIVE
+        .get(&instance_id)
+        .and_then(|e| e.value().path.read().clone())
+}
+
+/// Floating overlay bounds for a live viewer, if undocked.
+#[must_use]
+pub fn floating_bounds(instance_id: Uuid) -> Option<crate::layout::PixelBounds> {
+    VIEWER_LIVE
+        .get(&instance_id)
+        .and_then(|e| *e.value().floating.read())
+}
+
+/// Set or clear floating overlay bounds on a live viewer.
+pub fn set_floating_bounds(
+    instance_id: Uuid,
+    bounds: Option<crate::layout::PixelBounds>,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    *inner.floating.write() = bounds;
+    Ok(())
+}
+
+/// Find a live viewer in `instance_ids` that already has `path` open.
+#[must_use]
+pub fn find_instance_for_path(instance_ids: &[Uuid], path: &orchid_fs::FsPath) -> Option<Uuid> {
+    for id in instance_ids {
+        if current_path(*id).as_ref() == Some(path) {
+            return Some(*id);
+        }
+    }
+    None
 }
 
 /// Image toolbar: zoom in (~10%).
@@ -672,13 +788,6 @@ pub async fn text_save(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
-fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<ViewerWidgetInner>> {
-    VIEWER_LIVE
-        .get(&instance_id)
-        .map(|e| Arc::clone(e.value()))
-        .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))
-}
-
 #[async_trait]
 impl Widget for ViewerWidget {
     fn type_id(&self) -> &'static str {
@@ -753,16 +862,19 @@ impl Widget for ViewerWidget {
             .read()
             .as_ref()
             .map(|p| p.as_str().to_string());
-        state_codec::save_state(&ViewerPersisted { path })
+        let floating = *self.inner.floating.read();
+        state_codec::save_state(&ViewerPersisted::from_live(path, floating))
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let persisted: ViewerPersisted = state_codec::restore_state(bytes)?;
+        let floating = persisted.floating_bounds();
         if let Some(raw) = persisted.path {
             match orchid_fs::FsPath::new(&raw) {
                 Ok(p) => *self.inner.pending_path.write() = Some(p),
                 Err(e) => warn!(error = %e, path = %raw, "viewer: invalid persisted path"),
             }
         }
+        *self.inner.floating.write() = floating;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -799,16 +911,30 @@ pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
             Some(bytes) => state_codec::restore_state::<ViewerPersisted>(bytes).unwrap_or_default(),
             None => ViewerPersisted::default(),
         };
-        let widget = match persisted.path.as_deref().and_then(|raw| {
-            orchid_fs::FsPath::new(raw).ok()
-        }) {
-            Some(path) => ViewerWidget::with_pending_path(
+        let widget = match (
+            persisted.path.as_deref().and_then(|raw| orchid_fs::FsPath::new(raw).ok()),
+            persisted.floating_bounds(),
+        ) {
+            (Some(path), Some(floating)) => ViewerWidget::with_pending_path_and_floating(
+                ctx.instance_id,
+                deps.clone(),
+                ctx.bus.clone(),
+                path,
+                floating,
+            ),
+            (Some(path), None) => ViewerWidget::with_pending_path(
                 ctx.instance_id,
                 deps.clone(),
                 ctx.bus.clone(),
                 path,
             ),
-            None => ViewerWidget::new(ctx.instance_id, deps.clone(), ctx.bus.clone()),
+            (None, floating) => {
+                let w = ViewerWidget::new(ctx.instance_id, deps.clone(), ctx.bus.clone());
+                if let Some(b) = floating {
+                    w.set_floating_bounds(Some(b));
+                }
+                w
+            }
         };
         Ok(Box::new(widget) as Box<dyn Widget>)
     });

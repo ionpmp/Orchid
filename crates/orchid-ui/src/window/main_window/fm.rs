@@ -163,7 +163,39 @@ impl MainWindowController {
     ) -> Option<(Uuid, orchid_widgets::PixelBounds)> {
         let w = self.workspace_manager.active().ok()?;
         let (vw, vh) = *self.canvas_size.lock();
-        let instances = self.widget_manager.instances_for_workspace(w.id);
+        let (sx, sy) = *self.canvas_scroll.lock();
+        let all = self.widget_manager.instances_for_workspace(w.id);
+        let off = self.drag_offset.lock();
+
+        // Floating viewers sit above the canvas; hit-test them first (viewport → content).
+        if type_id == orchid_widgets::builtin::viewer::TYPE_ID {
+            let stack = self.floating_z_stack.lock().clone();
+            for id in stack.iter().rev() {
+                let Some(mut b) = orchid_widgets::builtin::viewer::floating_bounds(*id) else {
+                    continue;
+                };
+                if let Some((dx, dy)) = off.get(id) {
+                    b.x += dx;
+                    b.y += dy;
+                }
+                // Convert viewport-relative floating bounds to content space.
+                let content_bounds = orchid_widgets::PixelBounds {
+                    x: b.x + sx,
+                    y: b.y + sy,
+                    width: b.width,
+                    height: b.height,
+                };
+                if content_x >= content_bounds.x
+                    && content_y >= content_bounds.y
+                    && content_x < content_bounds.x + content_bounds.width
+                    && content_y < content_bounds.y + content_bounds.height
+                {
+                    return Some((*id, content_bounds));
+                }
+            }
+        }
+
+        let instances = Self::docked_instances(&all);
         self.layout_engine
             .grow_grid_to_fit_instances(w.id, &instances);
         let snap = self.layout_engine.snapshot(
@@ -174,7 +206,6 @@ impl MainWindowController {
                 height_px: vh,
             },
         );
-        let off = self.drag_offset.lock();
         for pl in snap.cells.iter().rev() {
             let mut b = pl.bounds;
             if let Some((dx, dy)) = off.get(&pl.instance_id) {
@@ -302,11 +333,13 @@ impl MainWindowController {
                     continue;
                 }
                 // Multi-file open: one viewer per path; rebuild once after the batch.
-                if Self::open_in_viewer_for_controller(tw.clone(), fp, false, false)
-                    .await
-                    .is_ok()
-                {
-                    opened += 1;
+                // Cap counts only newly created viewers (focus of already-open does not).
+                match Self::open_in_viewer_for_controller(tw.clone(), fp, false).await {
+                    Ok((_, true)) => {
+                        opened += 1;
+                    }
+                    Ok((_, false)) => {}
+                    Err(_) => {}
                 }
             }
             if let Some(c) = tw.upgrade() {
@@ -1518,7 +1551,7 @@ impl MainWindowController {
                 let tw2 = Arc::downgrade(self);
                 spawn::spawn_local_compat(async move {
                     let _ = MainWindowController::open_in_viewer_for_controller(
-                        tw2, fs_path, true, true,
+                        tw2, fs_path, true,
                     )
                     .await;
                 });
@@ -1537,16 +1570,18 @@ impl MainWindowController {
                             continue;
                         }
                         // One widget per path; rebuild once after the batch.
-                        if MainWindowController::open_in_viewer_for_controller(
+                        match MainWindowController::open_in_viewer_for_controller(
                             tw2.clone(),
                             fs_path,
                             false,
-                            false,
                         )
                         .await
-                        .is_ok()
                         {
-                            opened += 1;
+                            Ok((_, true)) => {
+                                opened += 1;
+                            }
+                            Ok((_, false)) => {}
+                            Err(_) => {}
                         }
                     }
                     if let Some(c) = tw2.upgrade() {

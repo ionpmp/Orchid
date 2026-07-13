@@ -33,7 +33,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Dual-pane mode
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
-- [x] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (move/copy with Ctrl), FM→viewer content zone (multi-file opens a viewer per path, soft cap 8 + one rebuild + auto-place), cross-widget FM move, transfer progress + failure toast; canvas + FM content-zone hit-test; wheel-scroll during drag; Enter/single-click open uses real `is_dir` from FM snapshot
+- [x] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (move/copy with Ctrl), FM→viewer content zone (multi-file: floating viewer per new path / focus if already open, soft cap 8 + one rebuild), cross-widget FM move, transfer progress + failure toast; canvas + FM content-zone hit-test; wheel-scroll during drag; Enter/single-click open uses real `is_dir` from FM snapshot
 - [x] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; localized breadcrumbs + empty states; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] Quick filter
@@ -62,6 +62,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
 
 ### Viewers
+- [x] Floating open — new documents open in a viewport-relative floating overlay above the canvas; reopening the same path focuses the existing viewer (group tab + scroll when docked); header-drag onto a free grid slot docks to the canvas
 - [~] Images (PNG, JPEG, WebP, AVIF, HEIC, BMP, GIF, SVG, RAW) — `ImageViewer` + zoom/pan/rotate/flip with active flip accent; keyboard shortcuts when focused (+/− zoom, F fit, 1 actual, arrows pan, R/Shift+R rotate, H/V flip); localized Fit/Actual Size with active-mode highlight + status strip + toolbar hover hints; viewport re-fit while in fit mode; SVG via `resvg`; HEIC/HEIF via Windows WIC when the OS HEIF codec is installed (clear unsupported message otherwise); RAW opens via largest embedded JPEG preview when present (full demosaic still pending)
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation (toolbar + PageUp/Down/←/→ when focused), go-to-page input, fit width/page with active-mode highlight, zoom, toolbar hover hints, viewport re-fit; action failures (page/zoom/fit/viewport) surface as localized notifications; requires bundled `pdfium.dll`
 - [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown/javascript/typescript/tsx/yaml/go/bash/html/css/c/cpp/java/ruby/sql/php/kotlin; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S with hover hints, dirty ●, localized line count + LF/CRLF); read-only virtualized scroll (Flickable → text_scroll + viewport-sized window)

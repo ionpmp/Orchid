@@ -137,7 +137,13 @@ pub struct MainWindowController {
     /// [`sync_vec_model`].
     workspace_workspaces: ModelRc<WorkspaceSummary>,
     workspace_widgets: ModelRc<WidgetFrameModel>,
+    /// Floating (undocked) viewer frames, viewport-relative.
+    workspace_floating_widgets: ModelRc<WidgetFrameModel>,
     workspace_dock_types: ModelRc<DockWidgetType>,
+    /// Paint order for floating viewers (last = top).
+    floating_z_stack: Arc<Mutex<Vec<Uuid>>>,
+    /// Bumped when requesting a programmatic canvas scroll.
+    canvas_scroll_gen: AtomicU32,
     /// Per universal-search instance: selected candidate row (clamped on rebuild).
     search_selection: Arc<RwLock<HashMap<Uuid, i32>>>,
     /// Set when a search widget is created from the dock; cleared after the next workspace rebuild.
@@ -310,6 +316,8 @@ impl MainWindowController {
             ModelRc::new(VecModel::<WorkspaceSummary>::default());
         let workspace_widgets: ModelRc<WidgetFrameModel> =
             ModelRc::new(VecModel::<WidgetFrameModel>::default());
+        let workspace_floating_widgets: ModelRc<WidgetFrameModel> =
+            ModelRc::new(VecModel::<WidgetFrameModel>::default());
         let workspace_dock_types: ModelRc<DockWidgetType> =
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let catalog_items: ModelRc<DockWidgetType> =
@@ -425,7 +433,10 @@ impl MainWindowController {
             last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
             workspace_workspaces,
             workspace_widgets,
+            workspace_floating_widgets,
             workspace_dock_types,
+            floating_z_stack: Arc::new(Mutex::new(Vec::new())),
+            canvas_scroll_gen: AtomicU32::new(0),
             search_selection: Arc::new(RwLock::new(HashMap::new())),
             search_autofocus_pending: Arc::new(Mutex::new(None)),
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
@@ -913,7 +924,11 @@ impl MainWindowController {
         if !self.catalog.read().visible {
             return;
         }
-        self.catalog.write().visible = false;
+        {
+            let mut cat = self.catalog.write();
+            cat.visible = false;
+            cat.search_query.clear();
+        }
         self.sync_widget_catalog_global();
     }
 
@@ -1045,39 +1060,40 @@ impl MainWindowController {
     fn sync_widget_catalog_global(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        let empty = items.is_empty();
-        debug!(
-            count = items.len(),
+        // Catalog UI binds to `workspace.dock-types` (same model as the bottom dock).
+        // Keep that model in sync so open/search/dismiss never leave an empty list.
+        sync_vec_model(&self.workspace_dock_types, items.clone());
+        sync_vec_model(&self.catalog_items, items);
+        let count = self.workspace_dock_types.row_count();
+        tracing::info!(
+            count,
             query = %cat.search_query,
             visible = cat.visible,
             "widget catalog sync"
         );
-        sync_vec_model(&self.catalog_items, items.clone());
         let g = self.window.global::<WidgetCatalog>();
-        // Fresh ModelRc so bindings refresh when the overlay becomes visible.
-        g.set_items(ModelRc::new(VecModel::from(items)));
-        g.set_is_empty(empty);
-        // Push search text only on full sync (open/dismiss/locale), not on each keystroke.
+        g.set_items(self.catalog_items.clone());
+        g.set_is_empty(count == 0);
         g.set_search_query(cat.search_query.clone().into());
         g.set_screen_x(cat.screen_x);
         g.set_screen_y(cat.screen_y);
         g.set_visible(cat.visible);
     }
 
-    /// Update catalog rows while typing without resetting the TextInput binding.
+    /// Update filtered rows while typing without resetting the TextInput binding.
     fn sync_widget_catalog_items_only(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        let empty = items.is_empty();
-        debug!(
-            count = items.len(),
+        sync_vec_model(&self.workspace_dock_types, items.clone());
+        sync_vec_model(&self.catalog_items, items);
+        let count = self.workspace_dock_types.row_count();
+        tracing::info!(
+            count,
             query = %cat.search_query,
             "widget catalog filter"
         );
-        sync_vec_model(&self.catalog_items, items.clone());
         let g = self.window.global::<WidgetCatalog>();
-        g.set_items(ModelRc::new(VecModel::from(items)));
-        g.set_is_empty(empty);
+        g.set_is_empty(count == 0);
     }
 
 
@@ -1673,6 +1689,7 @@ impl MainWindowController {
             width: bounds.width,
             height: bounds.height,
             z_order,
+            is_floating: false,
             placement_valid: true,
             snap_visible: false,
             snap_x: 0.0,
@@ -1749,10 +1766,12 @@ impl MainWindowController {
             .active()
             .map_err(|e| UiError::Slint(format!("{e}")))?;
         let (vw, vh) = *self.canvas_size.lock();
-        let instances = self.widget_manager.instances_for_workspace(w.id);
+        let all_instances = self.widget_manager.instances_for_workspace(w.id);
+        self.sync_floating_z_stack(&all_instances);
+        let instances = Self::docked_instances(&all_instances);
         self.layout_engine
             .grow_grid_to_fit_instances(w.id, &instances);
-        let n_inst = instances.len();
+        let n_inst = all_instances.len();
         let view = ViewportSize {
             width_px: vw,
             height_px: vh,
@@ -1832,13 +1851,21 @@ impl MainWindowController {
                     pty_changed_needs_rebuild = true;
                 }
             }
-            frames.push(self.build_widget_frame_for_placed(
+            let mut frame = self.build_widget_frame_for_placed(
                 pl,
                 idx as i32,
                 bounds,
                 &iref,
-            ));
+            );
+            frame.is_floating = false;
+            frames.push(frame);
         }
+
+        let floating_frames = self.build_floating_frames(&all_instances, &off, &ro);
+
+        let (scroll_x, scroll_y) = *self.canvas_scroll.lock();
+        let scroll_gen = self.canvas_scroll_gen.load(Ordering::Relaxed) as i32;
+
         let wlist: Vec<WorkspaceSummary> = self
             .workspace_manager
             .list()
@@ -1860,17 +1887,22 @@ impl MainWindowController {
         let n_frames = frames.len();
         sync_vec_model(&self.workspace_workspaces, wlist);
         sync_vec_model(&self.workspace_widgets, frames);
+        sync_vec_model(&self.workspace_floating_widgets, floating_frames);
         sync_vec_model(&self.workspace_dock_types, dock_types_vec(&self.locale));
         app_g.set_workspace(WorkspaceModel {
             workspaces: self.workspace_workspaces.clone(),
             active_workspace_id: w.id.to_string().into(),
             widgets: self.workspace_widgets.clone(),
+            floating_widgets: self.workspace_floating_widgets.clone(),
             dock_types: self.workspace_dock_types.clone(),
             dock_add_label: self.locale.tr("dock-add-label").into(),
             grid_columns: i32::from(snap.grid_columns),
             grid_rows: i32::from(snap.grid_rows),
             canvas_content_width: canvas_content_w,
             canvas_content_height: canvas_content_h,
+            canvas_scroll_x: scroll_x,
+            canvas_scroll_y: scroll_y,
+            canvas_scroll_gen: scroll_gen,
         });
         if pty_changed_needs_rebuild {
             self.schedule_rebuild();
@@ -2024,12 +2056,171 @@ impl MainWindowController {
 
     const VIEWER_MULTI_OPEN_CAP: usize = 8;
 
+    /// Instances that participate in the canvas grid (excludes floating viewers).
+    fn docked_instances(instances: &[SharedInstance]) -> Vec<SharedInstance> {
+        instances
+            .iter()
+            .filter(|i| {
+                if i.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
+                    orchid_widgets::builtin::viewer::floating_bounds(i.id).is_none()
+                } else {
+                    true
+                }
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn is_floating_viewer(&self, id: Uuid) -> bool {
+        orchid_widgets::builtin::viewer::floating_bounds(id).is_some()
+    }
+
+    fn sync_floating_z_stack(&self, instances: &[SharedInstance]) {
+        let live: HashSet<Uuid> = instances
+            .iter()
+            .filter(|i| i.type_id == orchid_widgets::builtin::viewer::TYPE_ID)
+            .filter(|i| orchid_widgets::builtin::viewer::floating_bounds(i.id).is_some())
+            .map(|i| i.id)
+            .collect();
+        let mut stack = self.floating_z_stack.lock();
+        stack.retain(|id| live.contains(id));
+        for id in &live {
+            if !stack.contains(id) {
+                stack.push(*id);
+            }
+        }
+    }
+
+    fn raise_floating(&self, id: Uuid) {
+        let mut stack = self.floating_z_stack.lock();
+        stack.retain(|x| *x != id);
+        stack.push(id);
+    }
+
+    fn default_floating_bounds(&self) -> PixelBounds {
+        let (vw, vh) = *self.canvas_size.lock();
+        let view = ViewportSize {
+            width_px: vw.max(320.0),
+            height_px: vh.max(240.0),
+        };
+        let size = WidgetSize::Large;
+        let cell = self.layout_engine.pixel_bounds_for(
+            orchid_storage::GridPosition { col: 0, row: 0 },
+            size,
+            view,
+        );
+        let width = cell.width.max(320.0);
+        let height = cell.height.max(240.0);
+        let n = self.floating_z_stack.lock().len() as f32;
+        let x = ((vw - width) * 0.5 + n * 24.0).max(16.0);
+        let y = ((vh - height) * 0.5 + n * 24.0).max(16.0);
+        PixelBounds {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn build_floating_frames(
+        &self,
+        _instances: &[SharedInstance],
+        off: &HashMap<Uuid, (f32, f32)>,
+        ro: &HashMap<Uuid, PixelBounds>,
+    ) -> Vec<WidgetFrameModel> {
+        let stack = self.floating_z_stack.lock().clone();
+        let mut frames = Vec::new();
+        for (zi, id) in stack.iter().enumerate() {
+            let Some(bounds0) = orchid_widgets::builtin::viewer::floating_bounds(*id) else {
+                continue;
+            };
+            let Ok(iref) = self.widget_manager.get_instance(*id) else {
+                continue;
+            };
+            let mut bounds = ro.get(id).copied().unwrap_or(bounds0);
+            if let Some(o) = off.get(id) {
+                bounds.x += o.0;
+                bounds.y += o.1;
+            }
+            let pl = PlacedWidget {
+                instance_id: *id,
+                group_id: None,
+                bounds,
+                z_order: zi as u32,
+            };
+            let mut frame = self.build_widget_frame_for_placed(&pl, zi as i32, bounds, &iref);
+            frame.is_floating = true;
+            frames.push(frame);
+        }
+        frames
+    }
+
+    fn request_canvas_scroll_to(&self, bounds: PixelBounds) {
+        let (vw, vh) = *self.canvas_size.lock();
+        let (cur_x, cur_y) = *self.canvas_scroll.lock();
+        let mut sx = cur_x;
+        let mut sy = cur_y;
+        if bounds.x < cur_x {
+            sx = bounds.x.max(0.0);
+        } else if bounds.x + bounds.width > cur_x + vw {
+            sx = (bounds.x + bounds.width - vw).max(0.0);
+        }
+        if bounds.y < cur_y {
+            sy = bounds.y.max(0.0);
+        } else if bounds.y + bounds.height > cur_y + vh {
+            sy = (bounds.y + bounds.height - vh).max(0.0);
+        }
+        *self.canvas_scroll.lock() = (sx, sy);
+        self.canvas_scroll_gen.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn focus_viewer(self: &Arc<Self>, id: Uuid) {
+        if let Some(group) = self.group_manager.find_for_instance(id) {
+            if group.members.len() >= 2 && group.active_instance() != Some(id) {
+                let gm = self.group_manager.clone();
+                let t = Arc::downgrade(self);
+                spawn::spawn_local(async move {
+                    let _ = gm.switch_active(group.id, id).await;
+                    if let Some(c) = t.upgrade() {
+                        c.focus_viewer_ui(id);
+                        c.schedule_rebuild();
+                    }
+                });
+                return;
+            }
+        }
+        self.focus_viewer_ui(id);
+        self.schedule_rebuild();
+    }
+
+    fn focus_viewer_ui(&self, id: Uuid) {
+        if self.is_floating_viewer(id) {
+            self.raise_floating(id);
+            return;
+        }
+        let Ok(w) = self.workspace_manager.active() else {
+            return;
+        };
+        let (vw, vh) = *self.canvas_size.lock();
+        let instances = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
+        let snap = self.layout_engine.snapshot(
+            w.id,
+            &instances,
+            ViewportSize {
+                width_px: vw,
+                height_px: vh,
+            },
+        );
+        if let Some(pl) = snap.cells.iter().find(|c| c.instance_id == id) {
+            self.request_canvas_scroll_to(pl.bounds);
+        }
+    }
+
     async fn open_in_viewer_for_controller(
         ctrl: std::sync::Weak<MainWindowController>,
         path: orchid_fs::FsPath,
-        reuse_existing: bool,
         schedule_rebuild: bool,
-    ) -> Result<Uuid> {
+    ) -> Result<(Uuid, bool)> {
         let Some(c) = ctrl.upgrade() else {
             return Err(UiError::Slint("controller gone".into()));
         };
@@ -2039,21 +2230,20 @@ impl MainWindowController {
             .map_err(|e| UiError::Slint(format!("no active workspace: {e}")))?
             .id;
 
-        if reuse_existing {
-            for inst in c.widget_manager.instances_for_workspace(ws_id) {
-                if inst.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
-                    orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
-                        .await
-                        .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
-                    c.recent_files.touch(&path, Some(&c.bus));
-                    if schedule_rebuild {
-                        if let Some(c2) = ctrl.upgrade() {
-                            c2.schedule_rebuild();
-                        }
-                    }
-                    return Ok(inst.id);
-                }
-            }
+        let viewer_ids: Vec<Uuid> = c
+            .widget_manager
+            .instances_for_workspace(ws_id)
+            .into_iter()
+            .filter(|i| i.type_id == orchid_widgets::builtin::viewer::TYPE_ID)
+            .map(|i| i.id)
+            .collect();
+
+        if let Some(existing) =
+            orchid_widgets::builtin::viewer::find_instance_for_path(&viewer_ids, &path)
+        {
+            c.recent_files.touch(&path, Some(&c.bus));
+            c.focus_viewer(existing);
+            return Ok((existing, false));
         }
 
         let id = c
@@ -2069,15 +2259,16 @@ impl MainWindowController {
             .await
             .map_err(|e| UiError::Slint(format!("viewer create: {e}")))?;
 
+        let bounds = c.default_floating_bounds();
         for _ in 0..50 {
-            if c.widget_manager.get_instance(id).is_ok() {
+            if c.widget_manager.get_instance(id).is_ok()
+                && orchid_widgets::builtin::viewer::set_floating_bounds(id, Some(bounds)).is_ok()
+            {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
-
-        // Place off the (0,0) placeholder so stacked multi-open widgets stay usable.
-        Self::move_new_widget_to_free_slot(&c.layout_engine, &c.widget_manager, ws_id, id).await;
+        c.raise_floating(id);
 
         orchid_widgets::builtin::viewer::open_path(id, path.clone())
             .await
@@ -2088,7 +2279,7 @@ impl MainWindowController {
                 c2.schedule_rebuild();
             }
         }
-        Ok(id)
+        Ok((id, true))
     }
 
 
@@ -2173,12 +2364,16 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
         workspaces: ModelRc::new(VecModel::default()),
         active_workspace_id: SharedString::new(),
         widgets: ModelRc::new(VecModel::default()),
+        floating_widgets: ModelRc::new(VecModel::default()),
         dock_types: ModelRc::new(VecModel::from(dock_types_vec(locale))),
         dock_add_label: locale.tr("dock-add-label").into(),
         grid_columns: 16,
         grid_rows: 10,
         canvas_content_width: 1f32,
         canvas_content_height: 1f32,
+        canvas_scroll_x: 0f32,
+        canvas_scroll_y: 0f32,
+        canvas_scroll_gen: 0,
     }
 }
 

@@ -38,7 +38,7 @@ impl MainWindowController {
         let path_label = s.to_string();
         let ctrl = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true, true).await {
+            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true).await {
                 warn!(?e, path = %path_label, "open recent file in viewer");
             }
         });

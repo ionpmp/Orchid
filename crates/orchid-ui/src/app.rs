@@ -652,14 +652,19 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("no active workspace: {e}")))?
             .id;
 
-        for inst in self.widget_manager.instances_for_workspace(ws_id) {
-            if inst.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
-                orchid_widgets::builtin::viewer::open_path(inst.id, path.clone())
-                    .await
-                    .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
-                self.recent_files.touch(&path, Some(&self.bus));
-                return Ok(inst.id);
-            }
+        let viewer_ids: Vec<Uuid> = self
+            .widget_manager
+            .instances_for_workspace(ws_id)
+            .into_iter()
+            .filter(|i| i.type_id == orchid_widgets::builtin::viewer::TYPE_ID)
+            .map(|i| i.id)
+            .collect();
+
+        if let Some(existing) =
+            orchid_widgets::builtin::viewer::find_instance_for_path(&viewer_ids, &path)
+        {
+            self.recent_files.touch(&path, Some(&self.bus));
+            return Ok(existing);
         }
 
         let id = self
@@ -676,7 +681,18 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("viewer create: {e}")))?;
 
         for _ in 0..50 {
-            if self.widget_manager.get_instance(id).is_ok() {
+            if self.widget_manager.get_instance(id).is_ok()
+                && orchid_widgets::builtin::viewer::set_floating_bounds(
+                    id,
+                    Some(orchid_widgets::PixelBounds {
+                        x: 40.0,
+                        y: 40.0,
+                        width: 480.0,
+                        height: 360.0,
+                    }),
+                )
+                .is_ok()
+            {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;

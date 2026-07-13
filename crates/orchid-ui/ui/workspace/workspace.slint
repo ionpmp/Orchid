@@ -194,6 +194,18 @@ export component WorkspaceView inherits Rectangle {
         // so wheel / drag scrolling works when the logical grid is taller than the visible area.
         // `interactive: false`: otherwise Slint starts canvas flick after 8px move in 500ms and
         // cancels the widget header TouchArea — vertical widget drags fail. Wheel scroll still works.
+        property <int> applied-scroll-gen: -1;
+
+        scroll-apply-timer := Timer {
+            interval: 1ms;
+            running: root.workspace.canvas-scroll-gen != canvas.applied-scroll-gen;
+            triggered => {
+                canvas-flick.viewport-x = root.workspace.canvas-scroll-x;
+                canvas-flick.viewport-y = root.workspace.canvas-scroll-y;
+                canvas.applied-scroll-gen = root.workspace.canvas-scroll-gen;
+            }
+        }
+
         canvas-flick := Flickable {
             interactive: false;
             width: parent.width;
@@ -418,37 +430,64 @@ export component WorkspaceView inherits Rectangle {
             }
         }
 
-        // Keep the catalog panel mounted; toggling `if visible` remounts the `for`
-        // loop against model bindings and often paints an empty list.
-        Rectangle {
-            width: parent.width;
-            height: parent.height;
-            visible: WidgetCatalog.visible;
-            background: #00000028;
-
-            catalog-backdrop := TouchArea {
-                clicked => {
-                    root.catalog-dismiss();
-                }
-            }
-
-            WidgetCatalogPanel {
-                x: min(max(WidgetCatalog.screen-x, 8px), parent.width - self.width - 8px);
-                y: min(max(WidgetCatalog.screen-y, 8px), parent.height - self.height - 8px);
-                items: WidgetCatalog.items;
-                search-query: WidgetCatalog.search-query;
-                is-empty: WidgetCatalog.is-empty;
-                pick(type-id) => {
-                    root.catalog-pick(type-id);
-                }
-                dismiss => {
-                    root.catalog-dismiss();
-                }
-                search-changed(q) => {
-                    root.catalog-search-changed(q);
-                }
-            }
+        // Floating viewers: viewport-relative, above the scrollable canvas.
+        for w[i] in root.workspace.floating-widgets: WidgetFrame {
+            x: w.x;
+            y: w.y;
+            width: w.width;
+            height: w.height;
+            model: w;
+            close-clicked => { root.widget-close-clicked(w.instance-id); }
+            close-confirm-save(id) => { root.widget-close-confirm-save(id); }
+            close-confirm-discard(id) => { root.widget-close-confirm-discard(id); }
+            close-confirm-cancel(id) => { root.widget-close-confirm-cancel(id); }
+            drag-started(dx, dy) => { root.widget-drag-started(w.instance-id, dx, dy); }
+            drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
+            drag-ended => { root.widget-drag-ended(w.instance-id); }
+            resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
+            resize-moved(px, py) => { root.widget-resize-moved(w.instance-id, px, py); }
+            resize-ended => { root.widget-resize-ended(w.instance-id); }
+            viewer-image-zoom-in(id) => { root.viewer-image-zoom-in(id); }
+            viewer-image-zoom-out(id) => { root.viewer-image-zoom-out(id); }
+            viewer-image-fit(id) => { root.viewer-image-fit(id); }
+            viewer-image-actual-size(id) => { root.viewer-image-actual-size(id); }
+            viewer-image-rotate-cw(id) => { root.viewer-image-rotate-cw(id); }
+            viewer-image-rotate-ccw(id) => { root.viewer-image-rotate-ccw(id); }
+            viewer-image-flip-h(id) => { root.viewer-image-flip-h(id); }
+            viewer-image-flip-v(id) => { root.viewer-image-flip-v(id); }
+            viewer-image-pan(id, dx, dy) => { root.viewer-image-pan(id, dx, dy); }
+            viewer-viewport-changed(id, vw, vh) => { root.viewer-viewport-changed(id, vw, vh); }
+            viewer-pdf-prev-page(id) => { root.viewer-pdf-prev-page(id); }
+            viewer-pdf-next-page(id) => { root.viewer-pdf-next-page(id); }
+            viewer-pdf-fit-width(id, w_) => { root.viewer-pdf-fit-width(id, w_); }
+            viewer-pdf-fit-page(id, w_, h_) => { root.viewer-pdf-fit-page(id, w_, h_); }
+            viewer-pdf-zoom-in(id) => { root.viewer-pdf-zoom-in(id); }
+            viewer-pdf-zoom-out(id) => { root.viewer-pdf-zoom-out(id); }
+            viewer-pdf-go-to-page(id, p) => { root.viewer-pdf-go-to-page(id, p); }
+            viewer-archive-navigate-into(id, path) => { root.viewer-archive-navigate-into(id, path); }
+            viewer-archive-navigate-up(id) => { root.viewer-archive-navigate-up(id); }
+            viewer-archive-select(id, path) => { root.viewer-archive-select(id, path); }
+            viewer-archive-extract-selected(id) => { root.viewer-archive-extract-selected(id); }
+            viewer-archive-extract-all(id) => { root.viewer-archive-extract-all(id); }
+            viewer-text-toggle-edit(id) => { root.viewer-text-toggle-edit(id); }
+            viewer-text-save(id) => { root.viewer-text-save(id); }
+            viewer-text-edited(id, t) => { root.viewer-text-edited(id, t); }
+            viewer-text-scroll(id, d) => { root.viewer-text-scroll(id, d); }
         }
+
+        for w[i] in root.workspace.floating-widgets: Rectangle {
+            visible: w.snap-visible;
+            x: w.snap-x;
+            y: w.snap-y;
+            width: w.snap-width;
+            height: w.snap-height;
+            background: transparent;
+            border-width: 2px;
+            border-color: w.placement-valid ? Theme.accent-brand : #e35d6a;
+            border-radius: Theme.radius-md;
+            opacity: 0.9;
+        }
+
     }
 
     WidgetDock {
@@ -465,6 +504,32 @@ export component WorkspaceView inherits Rectangle {
         dock-types: root.workspace.dock-types;
         dock-add-label: root.workspace.dock-add-label;
         add-clicked(type-id) => { root.dock-add-clicked(type-id); }
+    }
+
+    // Full-window overlay (not inside clipped canvas). Mount only while open so the
+    // `for` loop binds to the live dock model at creation time.
+    if WidgetCatalog.visible: Rectangle {
+        z: 200;
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: #00000028;
+
+        TouchArea {
+            clicked => { root.catalog-dismiss(); }
+        }
+
+        WidgetCatalogPanel {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            // Same ModelRc as the bottom dock — that list already paints.
+            items: root.workspace.dock-types;
+            search-query: WidgetCatalog.search-query;
+            pick(type-id) => { root.catalog-pick(type-id); }
+            dismiss => { root.catalog-dismiss(); }
+            search-changed(q) => { root.catalog-search-changed(q); }
+        }
     }
 
     if NavigationGlobal.hint-mode-enabled && NavigationGlobal.dock-visible: Rectangle {

@@ -180,6 +180,8 @@ impl MainWindowController {
                 c.password_toasts.write().remove(&u);
                 c.password_autofocus_pending.write().remove(&u);
                 c.password_add_dialogs.write().remove(&u);
+                c.floating_z_stack.lock().retain(|id| *id != u);
+                let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, None);
                 c.schedule_rebuild();
             }
         });
@@ -190,8 +192,15 @@ impl MainWindowController {
             return;
         };
         self.drag_grab.lock().insert(u, (grab_lx, grab_ly));
+        if self.is_floating_viewer(u) {
+            if let Some(b) = orchid_widgets::builtin::viewer::floating_bounds(u) {
+                self.drag_start_bounds.lock().insert(u, b);
+                self.raise_floating(u);
+            }
+            return;
+        }
         if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
-            let inst = self.widget_manager.instances_for_workspace(w.id);
+            let inst = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
             let (vw, vh) = *self.canvas_size.lock();
             self.layout_engine.grow_grid_to_fit_instances(w.id, &inst);
             for pl in self
@@ -221,6 +230,19 @@ impl MainWindowController {
         self.apply_drag_frame_preview(u, canvas_x, canvas_y);
     }
 
+    fn frame_model_for_instance(
+        &self,
+        instance: Uuid,
+    ) -> Option<&VecModel<WidgetFrameModel>> {
+        let floating = self.is_floating_viewer(instance);
+        let model = if floating {
+            &self.workspace_floating_widgets
+        } else {
+            &self.workspace_widgets
+        };
+        model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>()
+    }
+
     /// O(1) update of the dragged widget's `x`/`y` in the Slint model (no full rebuild).
     pub(super) fn apply_drag_frame_preview(self: &Arc<Self>, instance: Uuid, canvas_x: f32, canvas_y: f32) {
         let Some((gx, gy)) = self.drag_grab.lock().get(&instance).copied() else {
@@ -239,18 +261,16 @@ impl MainWindowController {
             .entry(instance)
             .or_insert((0.0, 0.0)) = (fx - start.x, fy - start.y);
 
-        let (snap_bounds, placement_valid) = self.drag_snap_preview(instance, fx, fy);
+        let floating = self.is_floating_viewer(instance);
+        let (snap_bounds, placement_valid) = if floating {
+            self.floating_drag_snap_preview(instance, fx, fy)
+        } else {
+            self.drag_snap_preview(instance, fx, fy)
+        };
 
-        let v = match self
-            .workspace_widgets
-            .as_any()
-            .downcast_ref::<VecModel<WidgetFrameModel>>()
-        {
-            Some(m) => m,
-            None => {
-                self.schedule_rebuild();
-                return;
-            }
+        let Some(v) = self.frame_model_for_instance(instance) else {
+            self.schedule_rebuild();
+            return;
         };
         let needle = instance.to_string();
         for r in 0..v.row_count() {
@@ -274,7 +294,9 @@ impl MainWindowController {
                 row.snap_visible = false;
             }
             v.set_row_data(r, row);
-            self.sync_canvas_scroll_extent();
+            if !floating {
+                self.sync_canvas_scroll_extent();
+            }
             return;
         }
         self.schedule_rebuild();
@@ -302,10 +324,47 @@ impl MainWindowController {
         let le = &self.layout_engine;
         let pos = le.placement_from_content_top_left(viewport, top_left_x, top_left_y, size);
         let (pos, size) = le.snap(pos, size);
-        let all = self.widget_manager.instances_for_workspace(w.id);
+        let all = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
         let valid = le.can_place(w.id, instance, pos, size, &all).is_ok();
         let bounds = le.pixel_bounds_for(pos, size, viewport);
         (Some(bounds), valid)
+    }
+
+    /// Floating drag: pointer is viewport-relative; snap ghost also viewport-relative.
+    pub(super) fn floating_drag_snap_preview(
+        self: &Arc<Self>,
+        instance: Uuid,
+        viewport_x: f32,
+        viewport_y: f32,
+    ) -> (Option<PixelBounds>, bool) {
+        let Ok(w) = self.workspace_manager.active() else {
+            return (None, true);
+        };
+        let Ok(inst) = self.widget_manager.get_instance(instance) else {
+            return (None, true);
+        };
+        let size = *inst.size.read();
+        let (vw, vh) = *self.canvas_size.lock();
+        let (sx, sy) = *self.canvas_scroll.lock();
+        let viewport = ViewportSize {
+            width_px: vw,
+            height_px: vh,
+        };
+        let content_x = viewport_x + sx;
+        let content_y = viewport_y + sy;
+        let le = &self.layout_engine;
+        let pos = le.placement_from_content_top_left(viewport, content_x, content_y, size);
+        let (pos, size) = le.snap(pos, size);
+        let all = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
+        let valid = le.can_place(w.id, instance, pos, size, &all).is_ok();
+        let content_bounds = le.pixel_bounds_for(pos, size, viewport);
+        let viewport_bounds = PixelBounds {
+            x: content_bounds.x - sx,
+            y: content_bounds.y - sy,
+            width: content_bounds.width,
+            height: content_bounds.height,
+        };
+        (Some(viewport_bounds), valid)
     }
 
     pub(super) fn on_widget_drag_ended(self: &Arc<Self>, id: &SharedString) {
@@ -324,6 +383,12 @@ impl MainWindowController {
             (Some(o), Some(s)) => (o, s),
             _ => return,
         };
+
+        if self.is_floating_viewer(u) {
+            self.finish_floating_drag(u, start, off);
+            return;
+        }
+
         let wm = self.widget_manager.clone();
         let le = self.layout_engine.clone();
         let t = Arc::downgrade(self);
@@ -365,7 +430,7 @@ impl MainWindowController {
                 height_px: vh,
             };
             let pos = le.placement_from_content_top_left(viewport, new_x, new_y, size);
-            let all = c.widget_manager.instances_for_workspace(w.id);
+            let all = Self::docked_instances(&c.widget_manager.instances_for_workspace(w.id));
 
             // Drop onto another widget's header → form / join a group.
             if let Some(target_id) = c.find_group_drop_target(u, new_x, new_y, start.width) {
@@ -446,6 +511,72 @@ impl MainWindowController {
         });
     }
 
+    fn finish_floating_drag(self: &Arc<Self>, u: Uuid, start: PixelBounds, off: (f32, f32)) {
+        let new_x = start.x + off.0;
+        let new_y = start.y + off.1;
+        let wm = self.widget_manager.clone();
+        let le = self.layout_engine.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            let end_drag = |c: &Arc<MainWindowController>| {
+                c.drag_offset.lock().remove(&u);
+                c.drag_start_bounds.lock().remove(&u);
+                c.drag_grab.lock().remove(&u);
+            };
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            let w = match c.workspace_manager.active() {
+                Ok(w) => w,
+                Err(_) => {
+                    end_drag(&c);
+                    c.schedule_rebuild();
+                    return;
+                }
+            };
+            let Ok(inst) = wm.get_instance(u) else {
+                end_drag(&c);
+                c.schedule_rebuild();
+                return;
+            };
+            let size = *inst.size.read();
+            let (vw, vh) = *c.canvas_size.lock();
+            let (sx, sy) = *c.canvas_scroll.lock();
+            let viewport = ViewportSize {
+                width_px: vw,
+                height_px: vh,
+            };
+            let content_x = new_x + sx;
+            let content_y = new_y + sy;
+            let pos = le.placement_from_content_top_left(viewport, content_x, content_y, size);
+            let (pos, size) = le.snap(pos, size);
+            let all = Self::docked_instances(&c.widget_manager.instances_for_workspace(w.id));
+            if le.can_place(w.id, u, pos, size, &all).is_ok() {
+                if let Err(e) = wm.move_to(u, pos).await {
+                    warn!(?e, "floating dock move");
+                }
+                if let Err(e) = wm.resize(u, size).await {
+                    warn!(?e, "floating dock resize");
+                }
+                let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, None);
+                c.floating_z_stack.lock().retain(|id| *id != u);
+                end_drag(&c);
+                c.schedule_rebuild();
+                return;
+            }
+            // Stay floating at the drop position.
+            let dropped = PixelBounds {
+                x: new_x,
+                y: new_y,
+                width: start.width,
+                height: start.height,
+            };
+            let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, Some(dropped));
+            end_drag(&c);
+            c.schedule_rebuild();
+        });
+    }
+
     /// Header hit-test: pointer near another frame's title bar → group drop target.
     pub(super) fn find_group_drop_target(
         self: &Arc<Self>,
@@ -458,7 +589,7 @@ impl MainWindowController {
             return None;
         };
         let (vw, vh) = *self.canvas_size.lock();
-        let instances = self.widget_manager.instances_for_workspace(w.id);
+        let instances = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
         let snap = self.layout_engine.snapshot(
             w.id,
             &instances,
@@ -753,9 +884,20 @@ impl MainWindowController {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
+        if self.is_floating_viewer(u) {
+            if let Some(b) = orchid_widgets::builtin::viewer::floating_bounds(u) {
+                *self.resize_state.lock() = Some(ResizeInteraction {
+                    instance_id: u,
+                    corner: corner.to_string(),
+                    start: b,
+                    press_canvas: (press_x, press_y),
+                });
+            }
+            return;
+        }
         if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
             let (vw, vh) = *self.canvas_size.lock();
-            let inst = self.widget_manager.instances_for_workspace(w.id);
+            let inst = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
             self.layout_engine.grow_grid_to_fit_instances(w.id, &inst);
             for pl in self
                 .layout_engine
@@ -825,17 +967,16 @@ impl MainWindowController {
 
     /// O(1) update of a frame's bounds during live resize (no full `rebuild_workspace_model`).
     pub(super) fn apply_resize_frame_preview(self: &Arc<Self>, instance: Uuid, b: PixelBounds) {
-        let (snap_bounds, placement_valid) = self.resize_snap_preview(instance, &b);
-        let v = match self
-            .workspace_widgets
-            .as_any()
-            .downcast_ref::<VecModel<WidgetFrameModel>>()
-        {
-            Some(m) => m,
-            None => {
-                self.schedule_rebuild();
-                return;
-            }
+        let floating = self.is_floating_viewer(instance);
+        let (snap_bounds, placement_valid) = if floating {
+            // Free pixel resize while floating — no grid snap required.
+            (None, true)
+        } else {
+            self.resize_snap_preview(instance, &b)
+        };
+        let Some(v) = self.frame_model_for_instance(instance) else {
+            self.schedule_rebuild();
+            return;
         };
         let needle = instance.to_string();
         for r in 0..v.row_count() {
@@ -861,7 +1002,9 @@ impl MainWindowController {
                 row.snap_visible = false;
             }
             v.set_row_data(r, row);
-            self.sync_canvas_scroll_extent();
+            if !floating {
+                self.sync_canvas_scroll_extent();
+            }
             return;
         }
         self.schedule_rebuild();
@@ -882,7 +1025,7 @@ impl MainWindowController {
         };
         let le = &self.layout_engine;
         let (pos, size) = le.placement_from_free_bounds(bounds, viewport);
-        let all = self.widget_manager.instances_for_workspace(w.id);
+        let all = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
         let valid = le.can_place(w.id, instance, pos, size, &all).is_ok();
         let snapped = le.pixel_bounds_for(pos, size, viewport);
         (Some(snapped), valid)
@@ -927,6 +1070,13 @@ impl MainWindowController {
         let Some(pb) = self.resize_override.lock().remove(&u) else {
             return;
         };
+
+        if self.is_floating_viewer(u) {
+            let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, Some(pb));
+            self.schedule_rebuild();
+            return;
+        }
+
         let wm = self.widget_manager.clone();
         let le = self.layout_engine.clone();
         let t = Arc::downgrade(self);
@@ -948,7 +1098,7 @@ impl MainWindowController {
                     return;
                 }
             };
-            let all = c.widget_manager.instances_for_workspace(ws_id);
+            let all = Self::docked_instances(&c.widget_manager.instances_for_workspace(ws_id));
             if le.can_place(ws_id, u, new_pos, new_size, &all).is_err() {
                 c.push_notification(
                     &c.locale.tr("workspace-placement-blocked-title"),

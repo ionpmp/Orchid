@@ -565,6 +565,8 @@ export struct WidgetFrameModel {
     width: length,
     height: length,
     z-order: int,
+    /// True when rendered in the floating overlay (not the canvas grid).
+    is-floating: bool,
     /// False while a live drag/resize would collide or leave the grid.
     placement-valid: bool,
     /// Show the snapped-cell ghost overlay during drag/resize.
@@ -616,6 +618,8 @@ export struct WorkspaceModel {
     workspaces: [WorkspaceSummary],
     active-workspace-id: string,
     widgets: [WidgetFrameModel],
+    /// Undocked viewers rendered above the canvas (viewport-relative).
+    floating-widgets: [WidgetFrameModel],
     dock-types: [DockWidgetType],
     dock-add-label: string,
     grid-columns: int,
@@ -624,4 +628,9 @@ export struct WorkspaceModel {
     canvas-content-width: length,
     /// Scrollable canvas height; grows when [`grid-rows`] exceeds the visible row stride.
     canvas-content-height: length,
+    /// Programmatic canvas scroll target (content coordinates).
+    canvas-scroll-x: length,
+    canvas-scroll-y: length,
+    /// Bumped when Rust wants the Flickable to jump to canvas-scroll-*.
+    canvas-scroll-gen: int,
 }
