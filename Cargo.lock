@@ -5190,6 +5190,7 @@ dependencies = [
  "chrono",
  "dashmap 6.1.0",
  "encoding_rs",
+ "futures",
  "orchid-core",
  "orchid-fs",
  "orchid-storage",
