@@ -339,6 +339,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_widget_activate({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_activate(&id);
+                }
+            }
+        });
         self.window.on_widget_resize_started({
             let t = t.clone();
             move |id, corner, press_x, press_y| {
@@ -663,7 +671,10 @@ impl MainWindowController {
         });
 
         macro_rules! viewer_spawn {
-            ($weak:expr, $fut:expr) => {{
+            ($weak:expr, $inst:expr, $fut:expr) => {{
+                if let Some(c) = $weak.upgrade() {
+                    c.bring_floating_to_front($inst);
+                }
                 let tw = $weak.clone();
                 spawn::spawn_local_compat(async move {
                     if let Err(e) = $fut.await {
@@ -691,7 +702,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_zoom_in(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_zoom_in(inst));
                     }
                 }
             }
@@ -702,7 +713,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_zoom_out(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_zoom_out(inst));
                     }
                 }
             }
@@ -713,7 +724,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_fit(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_fit(inst));
                     }
                 }
             }
@@ -724,7 +735,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_actual_size(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_actual_size(inst));
                     }
                 }
             }
@@ -735,7 +746,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_rotate_cw(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_rotate_cw(inst));
                     }
                 }
             }
@@ -746,7 +757,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_rotate_ccw(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_rotate_ccw(inst));
                     }
                 }
             }
@@ -757,7 +768,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_flip_h(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_flip_h(inst));
                     }
                 }
             }
@@ -768,7 +779,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::image_flip_v(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::image_flip_v(inst));
                     }
                 }
             }
@@ -776,15 +787,15 @@ impl MainWindowController {
         self.window.on_viewer_image_pan({
             let t = t.clone();
             move |id, dx, dy| {
-                if t.upgrade().is_some() {
+                if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        c.bring_floating_to_front(inst);
                         spawn::spawn_local_compat(async move {
                             if let Err(e) =
                                 orchid_widgets::builtin::viewer::image_pan(inst, dx, dy).await
                             {
                                 warn!(?e, "viewer pan");
                             }
-                            // Frame patch via WidgetSnapshotUpdated (no full rebuild).
                         });
                     }
                 }
@@ -795,11 +806,14 @@ impl MainWindowController {
             move |id, w, h| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
-                        let tw = Arc::downgrade(&c);
-                        viewer_spawn!(
-                            tw,
-                            orchid_widgets::builtin::viewer::set_viewport(inst, w, h)
-                        );
+                        // Viewport size updates must not steal z-order.
+                        spawn::spawn_local_compat(async move {
+                            if let Err(e) =
+                                orchid_widgets::builtin::viewer::set_viewport(inst, w, h).await
+                            {
+                                warn!(?e, "viewer viewport");
+                            }
+                        });
                     }
                 }
             }
@@ -810,7 +824,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_prev_page(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::pdf_prev_page(inst));
                     }
                 }
             }
@@ -821,7 +835,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_next_page(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::pdf_next_page(inst));
                     }
                 }
             }
@@ -834,6 +848,7 @@ impl MainWindowController {
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
+                            inst,
                             orchid_widgets::builtin::viewer::pdf_fit_width(inst, vw)
                         );
                     }
@@ -848,6 +863,7 @@ impl MainWindowController {
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
+                            inst,
                             orchid_widgets::builtin::viewer::pdf_fit_page(inst, vw, vh)
                         );
                     }
@@ -860,7 +876,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_zoom_in(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::pdf_zoom_in(inst));
                     }
                 }
             }
@@ -871,7 +887,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_zoom_out(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::pdf_zoom_out(inst));
                     }
                 }
             }
@@ -882,7 +898,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::pdf_go_to_page(inst, page));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::pdf_go_to_page(inst, page));
                     }
                 }
             }
@@ -956,6 +972,7 @@ impl MainWindowController {
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
+                            inst,
                             orchid_widgets::builtin::viewer::archive_navigate_into(inst, p)
                         );
                     }
@@ -968,7 +985,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::archive_navigate_up(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::archive_navigate_up(inst));
                     }
                 }
             }
@@ -982,6 +999,7 @@ impl MainWindowController {
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
+                            inst,
                             orchid_widgets::builtin::viewer::archive_select(inst, p)
                         );
                     }
@@ -994,7 +1012,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::archive_extract_selected(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::archive_extract_selected(inst));
                     }
                 }
             }
@@ -1005,7 +1023,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::archive_extract_all(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::archive_extract_all(inst));
                     }
                 }
             }
@@ -1016,7 +1034,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::text_toggle_edit(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::text_toggle_edit(inst));
                     }
                 }
             }
@@ -1027,7 +1045,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
-                        viewer_spawn!(tw, orchid_widgets::builtin::viewer::text_save(inst));
+                        viewer_spawn!(tw, inst, orchid_widgets::builtin::viewer::text_save(inst));
                     }
                 }
             }
@@ -1060,6 +1078,7 @@ impl MainWindowController {
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
+                            inst,
                             orchid_widgets::builtin::viewer::text_scroll(inst, delta)
                         );
                     }

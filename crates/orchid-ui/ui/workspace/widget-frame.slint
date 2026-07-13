@@ -24,6 +24,8 @@ export component WidgetFrame inherits Rectangle {
     callback close-confirm-save(string);
     callback close-confirm-discard(string);
     callback close-confirm-cancel(string);
+    /// Floating viewers: click (pointer up) brings this frame to the front.
+    callback activated();
     callback drag-started(length, length);
     callback drag-moved(length, length);
     callback drag-ended();
@@ -165,6 +167,18 @@ export component WidgetFrame inherits Rectangle {
     animate border-color, drop-shadow-blur, drop-shadow-offset-y {
         duration: Theme.reduce-motion ? 0ms : 100ms;
         easing: ease-out;
+    }
+
+    // Declared first so later TouchAreas (header, toolbars, content) win hit-tests.
+    // Catches clicks on uncovered chrome / page surface and raises floating viewers.
+    if model.is-floating : TouchArea {
+        width: 100%;
+        height: 100%;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.up) {
+                root.activated();
+            }
+        }
     }
 
     header := Rectangle {

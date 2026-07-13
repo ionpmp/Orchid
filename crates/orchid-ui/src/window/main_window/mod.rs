@@ -2082,6 +2082,35 @@ impl MainWindowController {
         stack.push(id);
     }
 
+    /// Raise a floating viewer and refresh the overlay model so paint / hit-test
+    /// order matches the stack (Slint `for` order; later = on top).
+    pub(crate) fn bring_floating_to_front(self: &Arc<Self>, id: Uuid) {
+        if !self.is_floating_viewer(id) {
+            return;
+        }
+        let already_top = self.floating_z_stack.lock().last().copied() == Some(id);
+        self.raise_floating(id);
+        if already_top {
+            return;
+        }
+        self.sync_floating_widgets_model();
+    }
+
+    /// Rebuild only the floating overlay rows (no full workspace rebuild).
+    fn sync_floating_widgets_model(&self) {
+        let Ok(w) = self.workspace_manager.active() else {
+            return;
+        };
+        let all_instances = self.widget_manager.instances_for_workspace(w.id);
+        self.sync_floating_z_stack(&all_instances);
+        let off = self.drag_offset.lock().clone();
+        let ro = self.resize_override.lock().clone();
+        let floating_frames = self.build_floating_frames(&all_instances, &off, &ro);
+        sync_vec_model(&self.workspace_floating_widgets, floating_frames);
+        // Keep AppState.workspace.floating-widgets pointing at the same ModelRc;
+        // sync_vec_model mutates it in place.
+    }
+
     fn default_floating_bounds(&self) -> PixelBounds {
         let (vw, vh) = *self.canvas_size.lock();
         let view = ViewportSize {
@@ -2096,9 +2125,10 @@ impl MainWindowController {
         );
         let width = cell.width.max(320.0);
         let height = cell.height.max(240.0);
+        // Stagger so a new floating viewer does not fully cover the previous one.
         let n = self.floating_z_stack.lock().len() as f32;
-        let x = ((vw - width) * 0.5 + n * 24.0).max(16.0);
-        let y = ((vh - height) * 0.5 + n * 24.0).max(16.0);
+        let x = ((vw - width) * 0.5 + n * 48.0).max(16.0);
+        let y = ((vh - height) * 0.5 + n * 36.0).max(16.0);
         PixelBounds {
             x,
             y,
@@ -2180,6 +2210,7 @@ impl MainWindowController {
 
     fn focus_viewer_ui(&self, id: Uuid) {
         if self.is_floating_viewer(id) {
+            // `focus_viewer` always follows with `schedule_rebuild`; stack raise is enough here.
             self.raise_floating(id);
             return;
         }

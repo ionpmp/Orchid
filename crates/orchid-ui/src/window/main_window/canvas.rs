@@ -187,6 +187,13 @@ impl MainWindowController {
         });
     }
 
+    pub(super) fn on_widget_activate(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        self.bring_floating_to_front(u);
+    }
+
     pub(super) fn on_widget_drag_started(self: &Arc<Self>, id: &SharedString, grab_lx: f32, grab_ly: f32) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
@@ -379,15 +386,27 @@ impl MainWindowController {
             let ds = self.drag_start_bounds.lock();
             (doff.get(&u).copied(), ds.get(&u).copied())
         };
+
+        if self.is_floating_viewer(u) {
+            match (off, start) {
+                (Some(o), Some(s)) if o.0.abs() > 0.5 || o.1.abs() > 0.5 => {
+                    self.finish_floating_drag(u, s, o);
+                }
+                _ => {
+                    // Title-bar click (no drag): clear grab and bring to front.
+                    self.drag_offset.lock().remove(&u);
+                    self.drag_start_bounds.lock().remove(&u);
+                    self.drag_grab.lock().remove(&u);
+                    self.bring_floating_to_front(u);
+                }
+            }
+            return;
+        }
+
         let (off, start) = match (off, start) {
             (Some(o), Some(s)) => (o, s),
             _ => return,
         };
-
-        if self.is_floating_viewer(u) {
-            self.finish_floating_drag(u, start, off);
-            return;
-        }
 
         let wm = self.widget_manager.clone();
         let le = self.layout_engine.clone();
@@ -886,6 +905,7 @@ impl MainWindowController {
         };
         if self.is_floating_viewer(u) {
             if let Some(b) = orchid_widgets::builtin::viewer::floating_bounds(u) {
+                self.raise_floating(u);
                 *self.resize_state.lock() = Some(ResizeInteraction {
                     instance_id: u,
                     corner: corner.to_string(),

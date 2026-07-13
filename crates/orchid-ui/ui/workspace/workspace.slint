@@ -19,6 +19,7 @@ export component WorkspaceView inherits Rectangle {
     callback widget-drag-started(string, length, length);
     callback widget-drag-moved(string, length, length);
     callback widget-drag-ended(string);
+    callback widget-activate(string);
     callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
@@ -410,6 +411,7 @@ export component WorkspaceView inherits Rectangle {
             drag-started(dx, dy) => { root.widget-drag-started(w.instance-id, dx, dy); }
             drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
             drag-ended => { root.widget-drag-ended(w.instance-id); }
+            activated => { root.widget-activate(w.instance-id); }
             resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
             resize-moved(px, py) => { root.widget-resize-moved(w.instance-id, px, py); }
             resize-ended => { root.widget-resize-ended(w.instance-id); }
