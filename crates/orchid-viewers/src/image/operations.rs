@@ -10,14 +10,14 @@ use crate::error::{Result, ViewerError};
 use crate::image::loader::LoadedImage;
 
 fn to_rgba(image: &LoadedImage) -> Result<RgbaImage> {
-    RgbaImage::from_raw(image.width, image.height, image.rgba.clone())
+    RgbaImage::from_raw(image.width, image.height, image.rgba.as_ref().clone())
         .ok_or_else(|| ViewerError::ImageDecode("invalid RGBA buffer".into()))
 }
 
 fn from_rgba(src: RgbaImage, template: &LoadedImage) -> LoadedImage {
     let (w, h) = src.dimensions();
     LoadedImage {
-        rgba: src.into_raw(),
+        rgba: std::sync::Arc::new(src.into_raw()),
         width: w,
         height: h,
         format: template.format,
@@ -89,12 +89,12 @@ mod tests {
     fn two_by_two() -> LoadedImage {
         LoadedImage {
             #[rustfmt::skip]
-            rgba: vec![
+            rgba: std::sync::Arc::new(vec![
                 // Row 0: (R, G)
                 255, 0, 0, 255,   0, 255, 0, 255,
                 // Row 1: (B, W)
                 0, 0, 255, 255,  255, 255, 255, 255,
-            ],
+            ]),
             width: 2,
             height: 2,
             format: ImageFormat::Png,

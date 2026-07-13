@@ -19,7 +19,7 @@ use crate::image::loader::{ImageFormat, LoadedImage};
 pub(crate) fn decode_heic_wic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     decode_heic_wic_inner(bytes)
         .map(|(rgba, width, height)| LoadedImage {
-            rgba,
+            rgba: std::sync::Arc::new(rgba),
             width,
             height,
             format: ImageFormat::Heic,

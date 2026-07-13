@@ -184,7 +184,7 @@ impl Viewer for ImageViewer {
             path_display,
             width_px: image.width,
             height_px: image.height,
-            rgba_bytes: Arc::new(image.rgba.clone()),
+            rgba_bytes: Arc::clone(&image.rgba),
             zoom: transform.zoom,
             pan_x: transform.pan_x,
             pan_y: transform.pan_y,

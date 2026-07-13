@@ -27,7 +27,8 @@ pub fn is_image_file_extension(ext: &str) -> bool {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct LoadedImage {
-    pub rgba: Vec<u8>,
+    /// Shared pixel buffer so pan/zoom snapshots do not clone megabytes.
+    pub rgba: Arc<Vec<u8>>,
     pub width: u32,
     pub height: u32,
     pub format: ImageFormat,
@@ -134,7 +135,7 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
         .unwrap_or(ImageFormat::Unknown);
     let img = image::load_from_memory(bytes).map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
     let (w, h) = img.dimensions();
-    let rgba = img.to_rgba8().into_raw();
+    let rgba = Arc::new(img.to_rgba8().into_raw());
     Ok(LoadedImage {
         rgba,
         width: w,
@@ -147,7 +148,7 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
 fn decode_heic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     #[cfg(windows)]
     {
-        return crate::image::heic_wic::decode_heic_wic(bytes, size);
+        crate::image::heic_wic::decode_heic_wic(bytes, size)
     }
     #[cfg(not(windows))]
     {
@@ -176,7 +177,7 @@ fn decode_raw_preview(bytes: &[u8], size: u64) -> Result<LoadedImage> {
         ViewerError::UnsupportedRaw
     })?;
     let (w, h) = img.dimensions();
-    let rgba = img.to_rgba8().into_raw();
+    let rgba = Arc::new(img.to_rgba8().into_raw());
     Ok(LoadedImage {
         rgba,
         width: w,
@@ -210,9 +211,7 @@ fn largest_embedded_jpeg(data: &[u8]) -> Option<&[u8]> {
             break;
         };
         let slice = &data[start..end];
-        if slice.len() >= MIN_PREVIEW_BYTES
-            && best.map_or(true, |b| slice.len() > b.len())
-        {
+        if slice.len() >= MIN_PREVIEW_BYTES && best.is_none_or(|b| slice.len() > b.len()) {
             best = Some(slice);
         }
         i = end;
@@ -334,7 +333,7 @@ fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
 
     // tiny-skia stores premultiplied RGBA; convert to straight alpha for the
     // shared image pipeline (`image::RgbaImage` / DisplayedImage).
-    let rgba = unpremultiply_rgba(pixmap.data());
+    let rgba = Arc::new(unpremultiply_rgba(pixmap.data()));
 
     Ok(LoadedImage {
         rgba,
@@ -364,10 +363,10 @@ fn unpremultiply_rgba(data: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Build an `Arc<Vec<u8>>` suitable for the snapshot's `rgba_bytes`.
+/// Shared pixel buffer for the snapshot's `rgba_bytes`.
 #[must_use]
 pub fn rgba_arc(image: &LoadedImage) -> Arc<Vec<u8>> {
-    Arc::new(image.rgba.clone())
+    Arc::clone(&image.rgba)
 }
 
 #[cfg(test)]
