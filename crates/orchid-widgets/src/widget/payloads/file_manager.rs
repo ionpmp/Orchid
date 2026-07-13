@@ -107,7 +107,8 @@ pub struct EntryPayload {
     pub has_thumbnail: bool,
     pub thumbnail_key: Option<String>,
     /// RGBA8 pixels when a thumbnail was generated for icon/gallery modes.
-    pub thumbnail_rgba: Option<Vec<u8>>,
+    /// Shared via `Arc` so snapshot ticks do not clone every thumb buffer.
+    pub thumbnail_rgba: Option<std::sync::Arc<Vec<u8>>>,
     pub thumbnail_width: u32,
     pub thumbnail_height: u32,
     pub is_selected: bool,

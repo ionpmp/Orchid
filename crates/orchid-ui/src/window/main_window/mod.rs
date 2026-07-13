@@ -1205,7 +1205,22 @@ impl MainWindowController {
             .as_any()
             .downcast_ref::<VecModel<WidgetFrameModel>>()
             .expect("workspace widgets must be VecModel-backed");
+        let mut need_floating_sync = false;
         for id in &unique {
+            // Floating viewers live in a separate model; patch content in place
+            // when possible, otherwise rebuild the floating overlay.
+            if self.is_floating_viewer(*id) {
+                if !self.try_patch_viewer_row(
+                    &self.workspace_floating_widgets,
+                    *id,
+                    None,
+                    None,
+                    true,
+                ) {
+                    need_floating_sync = true;
+                }
+                continue;
+            }
             let Some((idx, pl)) = snap
                 .cells
                 .iter()
@@ -1231,6 +1246,19 @@ impl MainWindowController {
                     .max(1.0);
                 let _ = self.resize_terminal_pty_to_content(*id, cw, ch);
             }
+            // Viewer fast path: update geometry + viewer model only; keep the
+            // rest of the frame (empty sibling models) intact.
+            if iref.type_id == orchid_widgets::builtin::viewer::TYPE_ID
+                && self.try_patch_viewer_row(
+                    &self.workspace_widgets,
+                    *id,
+                    Some(bounds),
+                    Some(idx as i32),
+                    false,
+                )
+            {
+                continue;
+            }
             let new_row = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
             let needle = id.to_string();
             for r in 0..v.row_count() {
@@ -1243,7 +1271,63 @@ impl MainWindowController {
                 }
             }
         }
+        if need_floating_sync {
+            self.sync_floating_widgets_model();
+        }
         Ok(())
+    }
+
+    /// Patch an existing viewer frame row without rebuilding empty sibling models.
+    ///
+    /// Returns `false` when the row is missing or the cached payload is not a viewer.
+    fn try_patch_viewer_row(
+        &self,
+        model: &ModelRc<WidgetFrameModel>,
+        id: Uuid,
+        bounds: Option<PixelBounds>,
+        z_order: Option<i32>,
+        is_floating: bool,
+    ) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let orchid_widgets::WidgetPayload::Viewer(vp) = &ws.payload else {
+            return false;
+        };
+        let Some(v) = model
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+        else {
+            return false;
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            if let Some(b) = bounds {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
+            }
+            if let Some(z) = z_order {
+                row.z_order = z;
+            }
+            row.is_floating = is_floating;
+            row.title = ws.title.clone().into();
+            row.viewer = build_viewer_model(vp, &self.locale);
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+            return true;
+        }
+        false
     }
 
     fn build_widget_frame_for_placed(

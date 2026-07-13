@@ -1595,7 +1595,7 @@ fn build_tab_payload(
                 if let Some(t) = thumb_cache.get(path_key) {
                     (
                         true,
-                        Some(t.rgba.as_ref().clone()),
+                        Some(std::sync::Arc::clone(&t.rgba)),
                         t.width,
                         t.height,
                     )

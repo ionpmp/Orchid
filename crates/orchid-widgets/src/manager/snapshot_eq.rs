@@ -1,10 +1,10 @@
 //! Render-equality helpers for [`super::snapshot_renders_unchanged`].
 
 use crate::widget::payloads::{
-    MediaPlayerPayload, MoonPayload, PasswordEntryDetailView, PasswordEntryView,
-    PasswordManagerPayload, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView,
-    SystemIndicator, SystemPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
-    WeatherPayload,
+    EntryPayload, FileManagerPayload, MediaPlayerPayload, MoonPayload, PasswordEntryDetailView,
+    PasswordEntryView, PasswordManagerPayload, RecentFilesPayload, RssItemView, RssPayload,
+    SearchCandidateView, SystemIndicator, SystemPayload, UniversalSearchPayload, ViewerPayload,
+    WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -36,6 +36,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         }
         // Viewer / file-manager carry large trees; compare structurally when possible.
         (WidgetPayload::Viewer(a), WidgetPayload::Viewer(b)) => viewer_payload_eq(a, b),
+        (WidgetPayload::FileManager(a), WidgetPayload::FileManager(b)) => {
+            file_manager_payload_eq(a, b)
+        }
         _ => false,
     }
 }
@@ -116,6 +119,97 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
         }
         _ => false,
     }
+}
+
+fn file_manager_payload_eq(a: &FileManagerPayload, b: &FileManagerPayload) -> bool {
+    a.active_pane == b.active_pane
+        && a.dual_pane == b.dual_pane
+        && a.clipboard_count == b.clipboard_count
+        && a.clipboard_is_cut == b.clipboard_is_cut
+        && a.ingest_in_flight == b.ingest_in_flight
+        && a.transfer_active == b.transfer_active
+        && a.transfer_progress.to_bits() == b.transfer_progress.to_bits()
+        && a.transfer_is_copy == b.transfer_is_copy
+        && a.transfer_current == b.transfer_current
+        && a.transfer_error == b.transfer_error
+        && a.passphrase_error == b.passphrase_error
+        && a.ingest_error == b.ingest_error
+        && a.activity_notice_key == b.activity_notice_key
+        && a.activity_notice_name == b.activity_notice_name
+        && a.activity_indicator == b.activity_indicator
+        && a.managed_folders.len() == b.managed_folders.len()
+        && a.managed_folders
+            .iter()
+            .zip(b.managed_folders.iter())
+            .all(|(x, y)| {
+                x.path == y.path
+                    && x.files_tracked == y.files_tracked
+                    && x.dedup_bytes == y.dedup_bytes
+                    && x.policy_max_bytes == y.policy_max_bytes
+                    && x.policy_retention_days == y.policy_retention_days
+                    && x.policy_exclude_count == y.policy_exclude_count
+            })
+        && a.network_mounts.len() == b.network_mounts.len()
+        && a.network_mounts
+            .iter()
+            .zip(b.network_mounts.iter())
+            .all(|(x, y)| x.name == y.name && x.uri == y.uri)
+        && a.panes.len() == b.panes.len()
+        && a.panes.iter().zip(b.panes.iter()).all(|(pa, pb)| {
+            pa.active_tab == pb.active_tab
+                && pa.tabs.len() == pb.tabs.len()
+                && pa.tabs.iter().zip(pb.tabs.iter()).all(|(ta, tb)| {
+                    ta.tab_id == tb.tab_id
+                        && ta.path_display == tb.path_display
+                        && ta.can_go_back == tb.can_go_back
+                        && ta.can_go_forward == tb.can_go_forward
+                        && ta.view_mode == tb.view_mode
+                        && ta.selection_count == tb.selection_count
+                        && ta.item_count == tb.item_count
+                        && ta.managed_files_tracked == tb.managed_files_tracked
+                        && ta.managed_dedup_bytes == tb.managed_dedup_bytes
+                        && ta.quick_filter == tb.quick_filter
+                        && ta.is_loading == tb.is_loading
+                        && ta.error == tb.error
+                        && ta.sort_by == tb.sort_by
+                        && ta.sort_descending == tb.sort_descending
+                        && ta.breadcrumbs == tb.breadcrumbs
+                        && ta.entries.len() == tb.entries.len()
+                        && ta
+                            .entries
+                            .iter()
+                            .zip(tb.entries.iter())
+                            .all(|(ea, eb)| fm_entry_eq(ea, eb))
+                })
+        })
+}
+
+fn fm_entry_eq(a: &EntryPayload, b: &EntryPayload) -> bool {
+    a.path == b.path
+        && a.name == b.name
+        && a.is_dir == b.is_dir
+        && a.size_text == b.size_text
+        && a.modified_text == b.modified_text
+        && a.type_text == b.type_text
+        && a.icon == b.icon
+        && a.has_thumbnail == b.has_thumbnail
+        && a.thumbnail_key == b.thumbnail_key
+        && a.thumbnail_width == b.thumbnail_width
+        && a.thumbnail_height == b.thumbnail_height
+        && a.is_selected == b.is_selected
+        && a.is_hidden == b.is_hidden
+        && a.is_encrypted == b.is_encrypted
+        && a.is_managed == b.is_managed
+        && a.is_starred == b.is_starred
+        && a.color_label == b.color_label
+        && a.tags == b.tags
+        && match (&a.thumbnail_rgba, &b.thumbnail_rgba) {
+            (None, None) => true,
+            (Some(ra), Some(rb)) => {
+                std::sync::Arc::ptr_eq(ra, rb) || (ra.len() == rb.len() && ra.as_slice() == rb.as_slice())
+            }
+            _ => false,
+        }
 }
 
 fn selection_eq(

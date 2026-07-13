@@ -83,7 +83,7 @@ impl ThumbnailCache {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await?;
         }
-        let rgba = (*thumb.rgba).clone();
+        let rgba = Arc::try_unwrap(Arc::clone(&thumb.rgba)).unwrap_or_else(|a| (*a).clone());
         let w = thumb.width;
         let h = thumb.height;
         let bytes = tokio::task::spawn_blocking(move || {

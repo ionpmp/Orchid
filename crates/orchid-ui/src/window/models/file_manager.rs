@@ -2,6 +2,8 @@
 
 use orchid_i18n::LocaleManager;
 use slint::{Image, ModelRc, SharedString, VecModel};
+use std::collections::HashMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use super::super::errors::fm_localized_error;
@@ -11,13 +13,56 @@ use crate::slint_generated::{
     FmPassphraseState, FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
 };
 
-fn fm_rgba_to_image(rgba: &[u8], width: u32, height: u32) -> Image {
+/// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
+struct FmThumbCacheEntry {
+    width: u32,
+    height: u32,
+    image: Image,
+}
+
+thread_local! {
+    static FM_THUMB_CACHE: std::cell::RefCell<HashMap<usize, FmThumbCacheEntry>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+const FM_THUMB_CACHE_CAP: usize = 64;
+
+fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
     if width == 0 || height == 0 || rgba.is_empty() {
         return Image::default();
     }
+    let key = Arc::as_ptr(rgba) as usize;
+    let cached = FM_THUMB_CACHE.with(|cache| {
+        cache.borrow().get(&key).and_then(|c| {
+            if c.width == width && c.height == height {
+                Some(c.image.clone())
+            } else {
+                None
+            }
+        })
+    });
+    if let Some(image) = cached {
+        return image;
+    }
     let buf =
-        slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba, width, height);
-    Image::from_rgba8(buf)
+        slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_slice(), width, height);
+    let image = Image::from_rgba8(buf);
+    FM_THUMB_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= FM_THUMB_CACHE_CAP {
+            if let Some(old) = cache.keys().next().copied() {
+                cache.remove(&old);
+            }
+        }
+        cache.insert(
+            key,
+            FmThumbCacheEntry {
+                width,
+                height,
+                image: image.clone(),
+            },
+        );
+    });
+    image
 }
 #[derive(Clone)]
 pub(crate) struct FileManagerOverlays {
