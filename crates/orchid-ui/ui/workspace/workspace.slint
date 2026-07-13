@@ -418,9 +418,12 @@ export component WorkspaceView inherits Rectangle {
             }
         }
 
-        if WidgetCatalog.visible: Rectangle {
+        // Keep the catalog panel mounted; toggling `if visible` remounts the `for`
+        // loop against model bindings and often paints an empty list.
+        Rectangle {
             width: parent.width;
             height: parent.height;
+            visible: WidgetCatalog.visible;
             background: #00000028;
 
             catalog-backdrop := TouchArea {
@@ -432,12 +435,9 @@ export component WorkspaceView inherits Rectangle {
             WidgetCatalogPanel {
                 x: min(max(WidgetCatalog.screen-x, 8px), parent.width - self.width - 8px);
                 y: min(max(WidgetCatalog.screen-y, 8px), parent.height - self.height - 8px);
-                // Prefer workspace.dock-types (same model as the bottom dock) when not filtering,
-                // so the panel never mounts against an empty/stale global model.
-                items: WidgetCatalog.search-query == ""
-                    ? root.workspace.dock-types
-                    : WidgetCatalog.items;
+                items: WidgetCatalog.items;
                 search-query: WidgetCatalog.search-query;
+                is-empty: WidgetCatalog.is-empty;
                 pick(type-id) => {
                     root.catalog-pick(type-id);
                 }

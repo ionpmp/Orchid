@@ -919,7 +919,7 @@ impl MainWindowController {
 
     fn on_catalog_search_changed(self: &Arc<Self>, query: &SharedString) {
         self.catalog.write().search_query = query.to_string();
-        self.sync_widget_catalog_global();
+        self.sync_widget_catalog_items_only();
     }
 
     fn on_catalog_pick(self: &Arc<Self>, type_id: &SharedString) {
@@ -1045,6 +1045,7 @@ impl MainWindowController {
     fn sync_widget_catalog_global(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
+        let empty = items.is_empty();
         debug!(
             count = items.len(),
             query = %cat.search_query,
@@ -1052,13 +1053,31 @@ impl MainWindowController {
             "widget catalog sync"
         );
         sync_vec_model(&self.catalog_items, items.clone());
-        // Fresh ModelRc so a panel remounted under `if visible` always sees rows.
         let g = self.window.global::<WidgetCatalog>();
+        // Fresh ModelRc so bindings refresh when the overlay becomes visible.
         g.set_items(ModelRc::new(VecModel::from(items)));
-        g.set_search_query(cat.search_query.into());
+        g.set_is_empty(empty);
+        // Push search text only on full sync (open/dismiss/locale), not on each keystroke.
+        g.set_search_query(cat.search_query.clone().into());
         g.set_screen_x(cat.screen_x);
         g.set_screen_y(cat.screen_y);
         g.set_visible(cat.visible);
+    }
+
+    /// Update catalog rows while typing without resetting the TextInput binding.
+    fn sync_widget_catalog_items_only(self: &Arc<Self>) {
+        let cat = self.catalog.read().clone();
+        let items = filter_catalog_items(&self.locale, &cat.search_query);
+        let empty = items.is_empty();
+        debug!(
+            count = items.len(),
+            query = %cat.search_query,
+            "widget catalog filter"
+        );
+        sync_vec_model(&self.catalog_items, items.clone());
+        let g = self.window.global::<WidgetCatalog>();
+        g.set_items(ModelRc::new(VecModel::from(items)));
+        g.set_is_empty(empty);
     }
 
 

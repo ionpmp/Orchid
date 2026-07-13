@@ -3,10 +3,10 @@ import { Strings } from "../strings_global.slint";
 import { DockWidgetType } from "defs.slint";
 
 export component WidgetCatalogPanel inherits Rectangle {
-    // Prefer a local model property: `for` over a global model is unreliable when
-    // the panel is mounted under `if WidgetCatalog.visible`.
     in property <[DockWidgetType]> items;
+    /// Driven from Rust only when the catalog opens/clears; typing updates via `edited`.
     in property <string> search-query;
+    in property <bool> is-empty;
 
     callback pick(string);
     callback dismiss();
@@ -21,6 +21,16 @@ export component WidgetCatalogPanel inherits Rectangle {
     drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
     drop-shadow-color: #00000050;
     clip: true;
+
+    // Local draft so one-way `in` search-query resets do not fight keystrokes mid-edit.
+    property <string> draft-query: "";
+    property <bool> editing: false;
+
+    changed search-query => {
+        if (!root.editing) {
+            root.draft-query = root.search-query;
+        }
+    }
 
     VerticalLayout {
         padding: 12px;
@@ -74,7 +84,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     horizontal-stretch: 1;
                     height: 100%;
 
-                    if root.search-query == "" : Text {
+                    if root.draft-query == "" : Text {
                         width: parent.width;
                         height: parent.height;
                         text: Strings.catalog-search-placeholder;
@@ -86,79 +96,83 @@ export component WidgetCatalogPanel inherits Rectangle {
                     catalog-input := TextInput {
                         width: parent.width;
                         height: parent.height;
-                        text: root.search-query;
+                        text <=> root.draft-query;
                         color: Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                         single-line: true;
                         edited => {
+                            root.editing = true;
                             root.search-changed(self.text);
+                        }
+                        accepted => {
+                            root.editing = false;
+                        }
+                        changed has-focus => {
+                            if (!self.has-focus) {
+                                root.editing = false;
+                                root.draft-query = root.search-query;
+                            }
                         }
                     }
                 }
             }
         }
 
-        Rectangle {
+        if root.is-empty : Text {
+            horizontal-stretch: 1;
             vertical-stretch: 1;
-            clip: true;
+            text: Strings.catalog-no-results;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
 
-            if root.items.length == 0 : Text {
+        if !root.is-empty : Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            // Fixed min viewport so the list always has paint space on first mount.
+            viewport-height: max(300px, catalog-list.preferred-height);
+            height: 300px;
+
+            catalog-list := VerticalLayout {
+                spacing: 2px;
                 width: parent.width;
-                height: parent.height;
-                text: Strings.catalog-no-results;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
 
-            Flickable {
-                width: parent.width;
-                height: parent.height;
-                viewport-width: self.width;
-                viewport-height: max(self.height, catalog-list.preferred-height);
+                for item[i] in root.items: Rectangle {
+                    height: item.description != "" ? 56px : 40px;
+                    background: item-touch.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
 
-                catalog-list := VerticalLayout {
-                    spacing: 2px;
-                    width: parent.width;
+                    item-touch := TouchArea {
+                        clicked => { root.pick(item.type-id); }
+                    }
 
-                    for item[i] in root.items: Rectangle {
-                        height: item.description != "" ? 56px : 40px;
-                        background: item-touch.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
+                    VerticalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        spacing: 2px;
+                        alignment: center;
 
-                        item-touch := TouchArea {
-                            clicked => {
-                                root.pick(item.type-id);
-                            }
+                        Text {
+                            text: item.label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: Theme.weight-semibold;
+                            vertical-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
                         }
 
-                        VerticalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
-                            padding-top: 8px;
-                            padding-bottom: 8px;
-                            spacing: 2px;
-                            alignment: center;
-
-                            Text {
-                                text: item.label;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                font-weight: Theme.weight-semibold;
-                                vertical-alignment: center;
-                                wrap: no-wrap;
-                                overflow: elide;
-                            }
-
-                            if item.description != "" : Text {
-                                text: item.description;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                wrap: no-wrap;
-                                overflow: elide;
-                            }
+                        if item.description != "" : Text {
+                            text: item.description;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            wrap: no-wrap;
+                            overflow: elide;
                         }
                     }
                 }
