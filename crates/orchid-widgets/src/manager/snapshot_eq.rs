@@ -3,7 +3,8 @@
 use crate::widget::payloads::{
     MediaPlayerPayload, MoonPayload, PasswordEntryDetailView, PasswordEntryView,
     PasswordManagerPayload, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView,
-    SystemIndicator, SystemPayload, UniversalSearchPayload, WeatherForecastDay, WeatherPayload,
+    SystemIndicator, SystemPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
+    WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -37,7 +38,149 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::RecentFiles(a), WidgetPayload::RecentFiles(b)) => {
             recent_files_payload_eq(a, b)
         }
-        // Viewer / file-manager carry large trees; treat inequality as the safe default.
+        // Viewer / file-manager carry large trees; compare structurally when possible.
+        (WidgetPayload::Viewer(a), WidgetPayload::Viewer(b)) => viewer_payload_eq(a, b),
+        _ => false,
+    }
+}
+
+fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
+    use orchid_viewers::ViewerSnapshot as Vs;
+    match (&a.snapshot, &b.snapshot) {
+        (Vs::Loading { path_display: pa }, Vs::Loading { path_display: pb }) => pa == pb,
+        (
+            Vs::Error {
+                path_display: pa,
+                message: ma,
+            },
+            Vs::Error {
+                path_display: pb,
+                message: mb,
+            },
+        ) => pa == pb && ma == mb,
+        (Vs::Image(a), Vs::Image(b)) => {
+            a.path_display == b.path_display
+                && a.width_px == b.width_px
+                && a.height_px == b.height_px
+                && std::sync::Arc::ptr_eq(&a.rgba_bytes, &b.rgba_bytes)
+                && a.zoom.to_bits() == b.zoom.to_bits()
+                && a.pan_x.to_bits() == b.pan_x.to_bits()
+                && a.pan_y.to_bits() == b.pan_y.to_bits()
+                && a.rotation_degrees == b.rotation_degrees
+                && a.flipped_horizontal == b.flipped_horizontal
+                && a.flipped_vertical == b.flipped_vertical
+                && a.fit_mode == b.fit_mode
+                && a.format_label == b.format_label
+                && a.size_bytes == b.size_bytes
+        }
+        (Vs::Pdf(a), Vs::Pdf(b)) => {
+            a.path_display == b.path_display
+                && a.page_count == b.page_count
+                && a.current_page == b.current_page
+                && a.page_width_px == b.page_width_px
+                && a.page_height_px == b.page_height_px
+                && std::sync::Arc::ptr_eq(&a.page_rgba_bytes, &b.page_rgba_bytes)
+                && a.zoom.to_bits() == b.zoom.to_bits()
+                && a.fit_mode == b.fit_mode
+        }
+        (Vs::Text(a), Vs::Text(b)) => {
+            a.path_display == b.path_display
+                && a.language == b.language
+                && a.encoding == b.encoding
+                && a.line_ending == b.line_ending
+                && a.dirty == b.dirty
+                && a.read_only == b.read_only
+                && a.total_lines == b.total_lines
+                && a.first_visible_line == b.first_visible_line
+                && a.cursor_line == b.cursor_line
+                && a.cursor_column == b.cursor_column
+                && selection_eq(a.selection, b.selection)
+                && text_lines_eq(&a.visible_lines, &b.visible_lines)
+                && (a.read_only && b.read_only || a.plain_text == b.plain_text)
+        }
+        (Vs::Archive(a), Vs::Archive(b)) => {
+            a.path_display == b.path_display
+                && a.format == b.format
+                && a.total_entries == b.total_entries
+                && a.current_inner_path == b.current_inner_path
+                && a.selected_path == b.selected_path
+                && a.entries.len() == b.entries.len()
+                && a.entries.iter().zip(b.entries.iter()).all(|(x, y)| {
+                    x.path_in_archive == y.path_in_archive
+                        && x.name == y.name
+                        && x.is_dir == y.is_dir
+                        && x.size == y.size
+                        && x.modified_text == y.modified_text
+                        && x.icon == y.icon
+                })
+                && archive_preview_eq(&a.preview, &b.preview)
+                && archive_status_eq(&a.status, &b.status)
+        }
+        _ => false,
+    }
+}
+
+fn selection_eq(
+    a: Option<orchid_viewers::SelectionRange>,
+    b: Option<orchid_viewers::SelectionRange>,
+) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.start_line == b.start_line
+                && a.start_column == b.start_column
+                && a.end_line == b.end_line
+                && a.end_column == b.end_column
+        }
+        _ => false,
+    }
+}
+
+fn text_lines_eq(a: &[orchid_viewers::SyntaxLine], b: &[orchid_viewers::SyntaxLine]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b.iter()).all(|(la, lb)| {
+            la.line_number == lb.line_number
+                && la.segments.len() == lb.segments.len()
+                && la.segments.iter().zip(lb.segments.iter()).all(|(sa, sb)| {
+                    sa.text == sb.text && sa.scope == sb.scope
+                })
+        })
+}
+
+fn archive_preview_eq(
+    a: &Option<orchid_viewers::ArchivePreview>,
+    b: &Option<orchid_viewers::ArchivePreview>,
+) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(orchid_viewers::ArchivePreview::Text(ta)), Some(orchid_viewers::ArchivePreview::Text(tb))) => {
+            ta == tb
+        }
+        (
+            Some(orchid_viewers::ArchivePreview::Binary { size: sa }),
+            Some(orchid_viewers::ArchivePreview::Binary { size: sb }),
+        ) => sa == sb,
+        _ => false,
+    }
+}
+
+fn archive_status_eq(a: &orchid_viewers::ArchiveStatus, b: &orchid_viewers::ArchiveStatus) -> bool {
+    match (a, b) {
+        (orchid_viewers::ArchiveStatus::Idle, orchid_viewers::ArchiveStatus::Idle) => true,
+        (
+            orchid_viewers::ArchiveStatus::ExtractedSelected { path: pa },
+            orchid_viewers::ArchiveStatus::ExtractedSelected { path: pb },
+        ) => pa == pb,
+        (
+            orchid_viewers::ArchiveStatus::ExtractedAll {
+                count: ca,
+                path: pa,
+            },
+            orchid_viewers::ArchiveStatus::ExtractedAll {
+                count: cb,
+                path: pb,
+            },
+        ) => ca == cb && pa == pb,
         _ => false,
     }
 }

@@ -171,7 +171,7 @@ impl WidgetManager {
         let Some(snap) = snapshot else {
             return Ok(());
         };
-        self.store_snapshot(inst.id, snap, true);
+        self.store_snapshot(inst.id, snap, false);
         Ok(())
     }
 
