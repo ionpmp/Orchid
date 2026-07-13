@@ -2,8 +2,8 @@
 //!
 //! Raster formats use the [`image`](image) crate's built-in decoders. SVG is
 //! rasterized via [`resvg`]. On Windows, HEIC/HEIF is decoded through WIC when
-//! the OS HEIF codec is installed; otherwise (and for RAW) we return a clear
-//! unsupported error.
+//! the OS HEIF codec is installed; otherwise we return a clear unsupported
+//! error. Camera RAW opens via the largest embedded JPEG preview when present.
 
 use std::sync::Arc;
 
@@ -126,14 +126,8 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
     if looks_like_heic(bytes) || matches!(extension, Some("heic" | "heif")) {
         return decode_heic(bytes, size);
     }
-    if looks_like_raw(bytes) {
-        return Err(ViewerError::UnsupportedRaw);
-    }
-    // TIFF-based camera RAW (NEF/ARW/DNG) often lacks a unique magic; use the
-    // extension so users get the dedicated unsupported message, not a generic
-    // decode failure from the `image` crate.
-    if let Some(err) = unsupported_by_extension(extension) {
-        return Err(err);
+    if looks_like_raw(bytes) || is_raw_extension(extension) {
+        return decode_raw_preview(bytes, size);
     }
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
@@ -162,11 +156,68 @@ fn decode_heic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     }
 }
 
-fn unsupported_by_extension(extension: Option<&str>) -> Option<ViewerError> {
-    match extension? {
-        "cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2" => Some(ViewerError::UnsupportedRaw),
-        _ => None,
+fn is_raw_extension(extension: Option<&str>) -> bool {
+    matches!(
+        extension,
+        Some("cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2")
+    )
+}
+
+/// Show camera RAW via the largest embedded JPEG preview when present.
+///
+/// Full demosaic is deferred; most CR2/NEF/ARW/DNG files ship a usable JPEG
+/// that file managers already rely on for quick look.
+fn decode_raw_preview(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    let Some(jpeg) = largest_embedded_jpeg(bytes) else {
+        return Err(ViewerError::UnsupportedRaw);
+    };
+    let img = image::load_from_memory(jpeg).map_err(|e| {
+        tracing::debug!(error = %e, "RAW embedded JPEG decode failed");
+        ViewerError::UnsupportedRaw
+    })?;
+    let (w, h) = img.dimensions();
+    let rgba = img.to_rgba8().into_raw();
+    Ok(LoadedImage {
+        rgba,
+        width: w,
+        height: h,
+        format: ImageFormat::Raw,
+        original_size_bytes: size,
+    })
+}
+
+/// Scan for JPEG SOI…EOI segments and return the largest one (preview > thumb).
+fn largest_embedded_jpeg(data: &[u8]) -> Option<&[u8]> {
+    const MIN_PREVIEW_BYTES: usize = 4 * 1024;
+    let mut best: Option<&[u8]> = None;
+    let mut i = 0;
+    while i + 1 < data.len() {
+        if data[i] != 0xFF || data[i + 1] != 0xD8 {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        i += 2;
+        let mut end = None;
+        while i + 1 < data.len() {
+            if data[i] == 0xFF && data[i + 1] == 0xD9 {
+                end = Some(i + 2);
+                break;
+            }
+            i += 1;
+        }
+        let Some(end) = end else {
+            break;
+        };
+        let slice = &data[start..end];
+        if slice.len() >= MIN_PREVIEW_BYTES
+            && best.map_or(true, |b| slice.len() > b.len())
+        {
+            best = Some(slice);
+        }
+        i = end;
     }
+    best
 }
 
 /// True when `bytes` look like an SVG document (XML sniff).
@@ -437,8 +488,56 @@ mod tests {
     }
 
     #[test]
+    fn largest_embedded_jpeg_picks_bigger_segment() {
+        let mut small = vec![0xFF, 0xD8];
+        small.extend(std::iter::repeat_n(1u8, 9 * 1024));
+        small.extend_from_slice(&[0xFF, 0xD9]);
+
+        let mut big = vec![0xFF, 0xD8];
+        big.extend(std::iter::repeat_n(2u8, 12 * 1024));
+        big.extend_from_slice(&[0xFF, 0xD9]);
+
+        let mut container = Vec::new();
+        container.extend_from_slice(b"FUJIFILMCCD-RAW ");
+        container.extend_from_slice(&small);
+        container.extend_from_slice(&[0, 1, 2, 3]);
+        container.extend_from_slice(&big);
+
+        let found = largest_embedded_jpeg(&container).unwrap();
+        assert_eq!(found.len(), big.len());
+        assert!(found.starts_with(&[0xFF, 0xD8]));
+        assert!(found.ends_with(&[0xFF, 0xD9]));
+    }
+
+    #[test]
+    fn raw_preview_decodes_embedded_jpeg() {
+        let mut img = image::RgbImage::new(256, 256);
+        for (i, p) in img.pixels_mut().enumerate() {
+            let v = (i % 256) as u8;
+            *p = image::Rgb([v, 200, 40]);
+        }
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut cursor, image::ImageFormat::Jpeg).unwrap();
+        let jpeg = cursor.into_inner();
+        assert!(
+            jpeg.len() >= 4 * 1024,
+            "fixture JPEG too small for preview floor: {} bytes",
+            jpeg.len()
+        );
+
+        let mut container = Vec::new();
+        container.extend_from_slice(b"II*\0\x08\0\0\0CR");
+        container.extend_from_slice(&jpeg);
+
+        let loaded = decode_raw_preview(&container, container.len() as u64).unwrap();
+        assert_eq!(loaded.format, ImageFormat::Raw);
+        assert_eq!(loaded.width, 256);
+        assert_eq!(loaded.height, 256);
+    }
+
+    #[test]
     fn tiff_based_raw_extensions_return_clear_error() {
-        // Minimal TIFF header that is not Canon CR2 magic.
+        // Minimal TIFF header that is not Canon CR2 magic and has no JPEG.
         let bytes = b"II*\0\x08\0\0\0not-cr2";
         for ext in ["nef", "arw", "dng"] {
             let err = decode_bytes(bytes, bytes.len() as u64, Some(ext)).unwrap_err();

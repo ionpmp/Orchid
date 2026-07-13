@@ -282,15 +282,16 @@ impl TextViewer {
             return Err(ViewerError::EditOutOfBounds);
         }
         let cursor = *self.cursor.read();
-        let mut buffer = self.buffer.write();
-        let Some(buffer) = buffer.as_mut() else {
-            return Err(ViewerError::EditOutOfBounds);
+        let (edit, new_source, end) = {
+            let mut guard = self.buffer.write();
+            let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+            let edit =
+                Self::insert_edit(buffer, cursor, text).ok_or(ViewerError::EditOutOfBounds)?;
+            buffer.insert(cursor.line, cursor.column, text)?;
+            let new_source = buffer.plain_text();
+            let end = cursor_after_insert(cursor, text);
+            (edit, new_source, end)
         };
-        let edit = Self::insert_edit(buffer, cursor, text).ok_or(ViewerError::EditOutOfBounds)?;
-        buffer.insert(cursor.line, cursor.column, text)?;
-        let new_source = buffer.plain_text();
-        let end = cursor_after_insert(cursor, text);
-        drop(buffer);
         self.sync_parse_cache_after_edit(edit, new_source);
         *self.cursor.write() = end;
         self.undo.lock().push(TextOp {
@@ -314,17 +315,17 @@ impl TextViewer {
         if *self.mode.read() != TextViewerMode::Edit {
             return Err(ViewerError::EditOutOfBounds);
         }
-        let mut buffer = self.buffer.write();
-        let Some(buffer) = buffer.as_mut() else {
-            return Err(ViewerError::EditOutOfBounds);
+        let (edit, deleted, new_source) = {
+            let mut guard = self.buffer.write();
+            let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+            let edit = Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+            let deleted = buffer
+                .text_range(start.line, start.column, end.line, end.column)?
+                .to_string();
+            buffer.delete(start.line, start.column, end.line, end.column)?;
+            let new_source = buffer.plain_text();
+            (edit, deleted, new_source)
         };
-        let edit = Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
-        let deleted = buffer
-            .text_range(start.line, start.column, end.line, end.column)?
-            .to_string();
-        buffer.delete(start.line, start.column, end.line, end.column)?;
-        let new_source = buffer.plain_text();
-        drop(buffer);
         self.sync_parse_cache_after_edit(edit, new_source);
         *self.cursor.write() = start;
         self.undo.lock().push(TextOp {
@@ -350,15 +351,14 @@ impl TextViewer {
         if *self.mode.read() != TextViewerMode::Edit {
             return Err(ViewerError::EditOutOfBounds);
         }
-        let mut buffer = self.buffer.write();
-        let Some(buffer) = buffer.as_mut() else {
-            return Err(ViewerError::EditOutOfBounds);
-        };
-        if buffer.plain_text() == text.replace("\r\n", "\n") {
-            return Ok(());
+        {
+            let mut guard = self.buffer.write();
+            let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+            if buffer.plain_text() == text.replace("\r\n", "\n") {
+                return Ok(());
+            }
+            buffer.replace_content(text);
         }
-        buffer.replace_content(text);
-        drop(buffer);
         // Whole-document replace: cheaper to invalidate than synthesise one huge edit.
         self.invalidate_parse_cache();
         self.undo.lock().clear();
@@ -381,10 +381,6 @@ impl TextViewer {
         let Some(op) = op else {
             return Ok(());
         };
-        let mut buffer = self.buffer.write();
-        let Some(buffer) = buffer.as_mut() else {
-            return Err(ViewerError::EditOutOfBounds);
-        };
         match op.kind {
             TextOpKind::Insert => {
                 let start = CursorPos {
@@ -395,11 +391,14 @@ impl TextViewer {
                     line: op.end_line,
                     column: op.end_column,
                 };
-                let edit =
-                    Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
-                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
-                let new_source = buffer.plain_text();
-                drop(buffer);
+                let (edit, new_source) = {
+                    let mut guard = self.buffer.write();
+                    let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit =
+                        Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+                    buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                    (edit, buffer.plain_text())
+                };
                 self.sync_parse_cache_after_edit(edit, new_source);
                 *self.cursor.write() = start;
             }
@@ -408,11 +407,14 @@ impl TextViewer {
                     line: op.start_line,
                     column: op.start_column,
                 };
-                let edit =
-                    Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
-                buffer.insert(op.start_line, op.start_column, &op.text)?;
-                let new_source = buffer.plain_text();
-                drop(buffer);
+                let (edit, new_source) = {
+                    let mut guard = self.buffer.write();
+                    let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit =
+                        Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
+                    buffer.insert(op.start_line, op.start_column, &op.text)?;
+                    (edit, buffer.plain_text())
+                };
                 self.sync_parse_cache_after_edit(edit, new_source);
                 *self.cursor.write() = CursorPos {
                     line: op.end_line,
@@ -439,21 +441,20 @@ impl TextViewer {
         let Some(op) = op else {
             return Ok(());
         };
-        let mut buffer = self.buffer.write();
-        let Some(buffer) = buffer.as_mut() else {
-            return Err(ViewerError::EditOutOfBounds);
-        };
         match op.kind {
             TextOpKind::Insert => {
                 let at = CursorPos {
                     line: op.start_line,
                     column: op.start_column,
                 };
-                let edit =
-                    Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
-                buffer.insert(op.start_line, op.start_column, &op.text)?;
-                let new_source = buffer.plain_text();
-                drop(buffer);
+                let (edit, new_source) = {
+                    let mut guard = self.buffer.write();
+                    let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit =
+                        Self::insert_edit(buffer, at, &op.text).ok_or(ViewerError::EditOutOfBounds)?;
+                    buffer.insert(op.start_line, op.start_column, &op.text)?;
+                    (edit, buffer.plain_text())
+                };
                 self.sync_parse_cache_after_edit(edit, new_source);
                 *self.cursor.write() = CursorPos {
                     line: op.end_line,
@@ -469,11 +470,14 @@ impl TextViewer {
                     line: op.end_line,
                     column: op.end_column,
                 };
-                let edit =
-                    Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
-                buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
-                let new_source = buffer.plain_text();
-                drop(buffer);
+                let (edit, new_source) = {
+                    let mut guard = self.buffer.write();
+                    let buffer = guard.as_mut().ok_or(ViewerError::EditOutOfBounds)?;
+                    let edit =
+                        Self::delete_edit(buffer, start, end).ok_or(ViewerError::EditOutOfBounds)?;
+                    buffer.delete(op.start_line, op.start_column, op.end_line, op.end_column)?;
+                    (edit, buffer.plain_text())
+                };
                 self.sync_parse_cache_after_edit(edit, new_source);
                 *self.cursor.write() = start;
             }
