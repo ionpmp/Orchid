@@ -1,10 +1,19 @@
-import { DockWidgetType } from "workspace/defs.slint";
-
 export global WidgetCatalog {
     in property <bool> visible;
     in property <length> screen-x;
     in property <length> screen-y;
     in property <string> search-query;
-    in property <bool> is-empty;
-    in property <[DockWidgetType]> items;
+    in property <bool> is-empty: false;
+    // Defaults true so the hardcoded list paints even before the first Rust sync.
+    in property <bool> show-terminal: true;
+    in property <bool> show-weather: true;
+    in property <bool> show-moon: true;
+    in property <bool> show-system: true;
+    in property <bool> show-rss: true;
+    in property <bool> show-recent-files: true;
+    in property <bool> show-search: true;
+    in property <bool> show-media: true;
+    in property <bool> show-password: true;
+    in property <bool> show-viewer: true;
+    in property <bool> show-file-manager: true;
 }

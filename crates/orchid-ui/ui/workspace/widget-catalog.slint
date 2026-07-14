@@ -1,12 +1,59 @@
 import { Theme } from "../theme_global.slint";
 import { Strings } from "../strings_global.slint";
-import { DockWidgetType } from "defs.slint";
+import { WidgetCatalog } from "../widget_catalog_global.slint";
+
+/// One catalog row — hardcoded type-id, labels from Strings.
+component CatalogRow inherits Rectangle {
+    in property <string> type-id;
+    in property <string> label;
+    in property <string> description;
+    in property <bool> row-visible: true;
+    callback pick(string);
+
+    height: root.row-visible ? (root.description != "" ? 56px : 40px) : 0px;
+    visible: root.row-visible;
+    background: item-touch.has-hover ? Theme.surface-base : transparent;
+    border-radius: Theme.radius-md;
+    clip: true;
+
+    item-touch := TouchArea {
+        clicked => { root.pick(root.type-id); }
+    }
+
+    VerticalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 2px;
+        alignment: center;
+
+        Text {
+            text: root.label;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            font-weight: Theme.weight-semibold;
+            vertical-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
+        }
+
+        if root.description != "" : Text {
+            text: root.description;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            wrap: no-wrap;
+            overflow: elide;
+        }
+    }
+}
 
 /// Widget picker catalog panel.
+///
+/// Rows are hardcoded (labels from Strings) because Slint `for` over a model
+/// passed into this overlay has repeatedly painted an empty list. Visibility
+/// of each row is driven by `WidgetCatalog.show-*` flags from Rust filtering.
 export component WidgetCatalogPanel inherits Rectangle {
-    in property <[DockWidgetType]> items;
-    in property <string> search-query;
-
     callback pick(string);
     callback dismiss();
     callback search-changed(string);
@@ -21,11 +68,11 @@ export component WidgetCatalogPanel inherits Rectangle {
     drop-shadow-color: #00000050;
     clip: true;
 
-    // Local edit buffer so Rust one-way `search-query` resets do not fight typing.
     property <string> draft-query: "";
+    property <string> mirrored-query: WidgetCatalog.search-query;
 
-    changed search-query => {
-        root.draft-query = root.search-query;
+    changed mirrored-query => {
+        root.draft-query = root.mirrored-query;
     }
 
     VerticalLayout {
@@ -107,9 +154,9 @@ export component WidgetCatalogPanel inherits Rectangle {
             }
         }
 
-        if root.items.length == 0 : Text {
-            vertical-stretch: 1;
+        if WidgetCatalog.is-empty : Text {
             horizontal-stretch: 1;
+            vertical-stretch: 1;
             text: Strings.catalog-no-results;
             color: Theme.text-tertiary;
             font-size: Theme.font-size-sm;
@@ -117,51 +164,93 @@ export component WidgetCatalogPanel inherits Rectangle {
             vertical-alignment: center;
         }
 
-        if root.items.length > 0 : Flickable {
-            vertical-stretch: 1;
+        if !WidgetCatalog.is-empty : Flickable {
             horizontal-stretch: 1;
+            vertical-stretch: 1;
+            height: 300px;
             viewport-width: self.width;
-            viewport-height: catalog-list.preferred-height.max(self.height);
+            viewport-height: max(300px, catalog-list.preferred-height);
 
             catalog-list := VerticalLayout {
                 spacing: 2px;
-                width: parent.viewport-width;
+                width: parent.width;
 
-                for item[i] in root.items: Rectangle {
-                    height: item.description != "" ? 56px : 40px;
-                    background: item-touch.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-
-                    item-touch := TouchArea {
-                        clicked => { root.pick(item.type-id); }
-                    }
-
-                    VerticalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        padding-top: 8px;
-                        padding-bottom: 8px;
-                        spacing: 2px;
-                        alignment: center;
-
-                        Text {
-                            text: item.label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-semibold;
-                            vertical-alignment: center;
-                            wrap: no-wrap;
-                            overflow: elide;
-                        }
-
-                        if item.description != "" : Text {
-                            text: item.description;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            wrap: no-wrap;
-                            overflow: elide;
-                        }
-                    }
+                CatalogRow {
+                    type-id: "terminal";
+                    label: Strings.dock-widget-terminal;
+                    description: Strings.widget-terminal-desc;
+                    row-visible: WidgetCatalog.show-terminal;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "weather";
+                    label: Strings.dock-widget-weather;
+                    description: Strings.widget-weather-desc;
+                    row-visible: WidgetCatalog.show-weather;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "moon";
+                    label: Strings.dock-widget-moon;
+                    description: Strings.widget-moon-desc;
+                    row-visible: WidgetCatalog.show-moon;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "system";
+                    label: Strings.dock-widget-system;
+                    description: Strings.widget-system-desc;
+                    row-visible: WidgetCatalog.show-system;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "rss";
+                    label: Strings.dock-widget-rss;
+                    description: Strings.widget-rss-desc;
+                    row-visible: WidgetCatalog.show-rss;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "recent-files";
+                    label: Strings.dock-widget-recent-files;
+                    description: Strings.widget-recent-files-desc;
+                    row-visible: WidgetCatalog.show-recent-files;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "search";
+                    label: Strings.dock-widget-search;
+                    description: Strings.widget-search-desc;
+                    row-visible: WidgetCatalog.show-search;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "media";
+                    label: Strings.dock-widget-media;
+                    description: Strings.widget-media-desc;
+                    row-visible: WidgetCatalog.show-media;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "password";
+                    label: Strings.dock-widget-password;
+                    description: Strings.widget-password-desc;
+                    row-visible: WidgetCatalog.show-password;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "viewer";
+                    label: Strings.dock-widget-viewer;
+                    description: Strings.widget-viewer-desc;
+                    row-visible: WidgetCatalog.show-viewer;
+                    pick(id) => { root.pick(id); }
+                }
+                CatalogRow {
+                    type-id: "file-manager";
+                    label: Strings.dock-widget-fm;
+                    description: Strings.widget-fm-desc;
+                    row-visible: WidgetCatalog.show-file-manager;
+                    pick(id) => { root.pick(id); }
                 }
             }
         }

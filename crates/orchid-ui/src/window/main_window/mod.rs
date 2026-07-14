@@ -175,7 +175,6 @@ pub struct MainWindowController {
     os_drop_batch: Arc<Mutex<OsDropBatch>>,
     /// Long-press widget catalog (search + pick).
     catalog: Arc<RwLock<CatalogUiState>>,
-    catalog_items: ModelRc<DockWidgetType>,
     command_palette: Arc<CommandPalette>,
     palette: Arc<RwLock<PaletteUiState>>,
     palette_candidates: ModelRc<SearchCandidateEntry>,
@@ -313,8 +312,6 @@ impl MainWindowController {
             ModelRc::new(VecModel::<WidgetFrameModel>::default());
         let workspace_dock_types: ModelRc<DockWidgetType> =
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
-        let catalog_items: ModelRc<DockWidgetType> =
-            ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let palette_candidates: ModelRc<SearchCandidateEntry> =
             ModelRc::new(VecModel::<SearchCandidateEntry>::default());
         let settings_sections: ModelRc<SettingsSectionEntry> =
@@ -449,7 +446,6 @@ impl MainWindowController {
             leader_pending_until: Arc::new(Mutex::new(None)),
             os_drop_batch: Arc::new(Mutex::new(OsDropBatch::default())),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
-            catalog_items,
             palette: Arc::new(RwLock::new(PaletteUiState::default())),
             palette_candidates,
             settings: Arc::new(RwLock::new(SettingsUiState::default())),
@@ -550,6 +546,28 @@ impl MainWindowController {
         g.set_dock_add_label(mgr.tr("dock-add-label").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_catalog_no_results(mgr.tr("catalog-no-results").into());
+        g.set_dock_widget_terminal(mgr.tr("dock-widget-terminal").into());
+        g.set_dock_widget_weather(mgr.tr("dock-widget-weather").into());
+        g.set_dock_widget_moon(mgr.tr("dock-widget-moon").into());
+        g.set_dock_widget_system(mgr.tr("dock-widget-system").into());
+        g.set_dock_widget_rss(mgr.tr("dock-widget-rss").into());
+        g.set_dock_widget_recent_files(mgr.tr("dock-widget-recent-files").into());
+        g.set_dock_widget_search(mgr.tr("dock-widget-search").into());
+        g.set_dock_widget_media(mgr.tr("dock-widget-media").into());
+        g.set_dock_widget_password(mgr.tr("dock-widget-password").into());
+        g.set_dock_widget_viewer(mgr.tr("dock-widget-viewer").into());
+        g.set_dock_widget_fm(mgr.tr("dock-widget-fm").into());
+        g.set_widget_terminal_desc(mgr.tr("widget-terminal-desc").into());
+        g.set_widget_weather_desc(mgr.tr("widget-weather-desc").into());
+        g.set_widget_moon_desc(mgr.tr("widget-moon-desc").into());
+        g.set_widget_system_desc(mgr.tr("widget-system-desc").into());
+        g.set_widget_rss_desc(mgr.tr("widget-rss-desc").into());
+        g.set_widget_recent_files_desc(mgr.tr("widget-recent-files-desc").into());
+        g.set_widget_search_desc(mgr.tr("widget-search-desc").into());
+        g.set_widget_media_desc(mgr.tr("widget-media-desc").into());
+        g.set_widget_password_desc(mgr.tr("widget-password-desc").into());
+        g.set_widget_viewer_desc(mgr.tr("widget-viewer-desc").into());
+        g.set_widget_fm_desc(mgr.tr("widget-fm-desc").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
         g.set_widget_resize_tooltip(mgr.tr("widget-resize-tooltip").into());
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
@@ -1042,18 +1060,18 @@ impl MainWindowController {
     fn sync_widget_catalog_global(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        sync_vec_model(&self.catalog_items, items.clone());
-        let count = self.catalog_items.row_count();
+        let empty = items.is_empty();
+        let visible_ids: std::collections::HashSet<&str> =
+            items.iter().map(|d| d.type_id.as_str()).collect();
         tracing::info!(
-            count,
+            count = items.len(),
             query = %cat.search_query,
             visible = cat.visible,
             "widget catalog sync"
         );
         let g = self.window.global::<WidgetCatalog>();
-        let model: ModelRc<DockWidgetType> = ModelRc::new(VecModel::from(items));
-        g.set_items(model);
-        g.set_is_empty(count == 0);
+        apply_catalog_row_visibility(&g, &visible_ids);
+        g.set_is_empty(empty);
         g.set_search_query(cat.search_query.clone().into());
         g.set_screen_x(cat.screen_x);
         g.set_screen_y(cat.screen_y);
@@ -1064,17 +1082,17 @@ impl MainWindowController {
     fn sync_widget_catalog_items_only(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        sync_vec_model(&self.catalog_items, items.clone());
-        let count = self.catalog_items.row_count();
+        let empty = items.is_empty();
+        let visible_ids: std::collections::HashSet<&str> =
+            items.iter().map(|d| d.type_id.as_str()).collect();
         tracing::info!(
-            count,
+            count = items.len(),
             query = %cat.search_query,
             "widget catalog filter"
         );
         let g = self.window.global::<WidgetCatalog>();
-        let model: ModelRc<DockWidgetType> = ModelRc::new(VecModel::from(items));
-        g.set_items(model);
-        g.set_is_empty(count == 0);
+        apply_catalog_row_visibility(&g, &visible_ids);
+        g.set_is_empty(empty);
     }
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
@@ -2387,6 +2405,23 @@ fn is_known_widget_type(type_id: &str) -> bool {
             | "viewer"
             | "file-manager"
     )
+}
+
+fn apply_catalog_row_visibility(
+    g: &crate::slint_generated::WidgetCatalog,
+    visible_ids: &std::collections::HashSet<&str>,
+) {
+    g.set_show_terminal(visible_ids.contains("terminal"));
+    g.set_show_weather(visible_ids.contains("weather"));
+    g.set_show_moon(visible_ids.contains("moon"));
+    g.set_show_system(visible_ids.contains("system"));
+    g.set_show_rss(visible_ids.contains("rss"));
+    g.set_show_recent_files(visible_ids.contains("recent-files"));
+    g.set_show_search(visible_ids.contains("search"));
+    g.set_show_media(visible_ids.contains("media"));
+    g.set_show_password(visible_ids.contains("password"));
+    g.set_show_viewer(visible_ids.contains("viewer"));
+    g.set_show_file_manager(visible_ids.contains("file-manager"));
 }
 
 fn filter_catalog_items(locale: &LocaleManager, query: &str) -> Vec<DockWidgetType> {

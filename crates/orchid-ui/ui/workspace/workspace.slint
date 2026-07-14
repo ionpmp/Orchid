@@ -479,8 +479,6 @@ export component WorkspaceView inherits Rectangle {
         WidgetCatalogPanel {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            items: WidgetCatalog.items;
-            search-query: WidgetCatalog.search-query;
             pick(type-id) => { root.catalog-pick(type-id); }
             dismiss => { root.catalog-dismiss(); }
             search-changed(q) => { root.catalog-search-changed(q); }
