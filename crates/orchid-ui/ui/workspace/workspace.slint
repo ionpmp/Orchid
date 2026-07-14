@@ -145,6 +145,7 @@ export component WorkspaceView inherits Rectangle {
     callback canvas-scrolled(length, length);
     callback catalog-pick(string);
     callback catalog-dismiss();
+    callback catalog-show();
     callback catalog-search-changed(string);
 
     background: Theme.surface-base;
@@ -496,6 +497,7 @@ export component WorkspaceView inherits Rectangle {
         workspaces: root.workspace.workspaces;
         workspace-clicked(id) => { root.workspace-clicked(id); }
         workspace-create-clicked => { root.workspace-create-clicked(); }
+        catalog-requested => { root.catalog-show(); }
         toggle-requested => { root.workspace-orb-toggle(); }
         dismiss-requested => { root.workspace-orb-dismiss(); }
     }

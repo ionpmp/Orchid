@@ -11,6 +11,7 @@ export component WorkspaceOrb inherits Rectangle {
 
     callback workspace-clicked(string);
     callback workspace-create-clicked();
+    callback catalog-requested();
     callback toggle-requested();
     callback dismiss-requested();
 
@@ -92,6 +93,49 @@ export component WorkspaceOrb inherits Rectangle {
                                 vertical-alignment: center;
                                 wrap: no-wrap;
                                 overflow: elide;
+                            }
+                        }
+
+                        Rectangle {
+                            height: 36px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            horizontal-stretch: 1;
+
+                            add-ta := TouchArea {
+                                clicked => {
+                                    root.catalog-requested();
+                                    root.dismiss-requested();
+                                }
+                            }
+                            states [
+                                hover when add-ta.has-hover: {
+                                    border-color: Theme.accent-brand;
+                                }
+                            ]
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                Text {
+                                    text: "⊞";
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-md;
+                                    font-weight: Theme.weight-semibold;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: Strings.dock-add-label;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
                             }
                         }
 

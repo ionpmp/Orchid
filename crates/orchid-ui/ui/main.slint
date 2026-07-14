@@ -209,6 +209,7 @@ export component MainWindow inherits Window {
     callback canvas-scrolled(length, length);
     callback catalog-pick(string);
     callback catalog-dismiss();
+    callback catalog-show();
     callback catalog-search-changed(string);
     callback command-palette-query-changed(string);
     callback command-palette-candidate-activated(string);
@@ -483,6 +484,7 @@ export component MainWindow inherits Window {
             canvas-scrolled(vx, vy) => { root.canvas-scrolled(vx, vy); }
             catalog-pick(type-id) => { root.catalog-pick(type-id); }
             catalog-dismiss => { root.catalog-dismiss(); }
+            catalog-show => { root.catalog-show(); }
             catalog-search-changed(q) => { root.catalog-search-changed(q); }
             }
 

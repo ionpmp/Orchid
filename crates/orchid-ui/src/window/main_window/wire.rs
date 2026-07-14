@@ -171,6 +171,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_catalog_show({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.show_widget_catalog_center();
+                }
+            }
+        });
         self.window.on_catalog_search_changed({
             let t = t.clone();
             move |q| {
@@ -812,7 +820,7 @@ impl MainWindowController {
         self.window.on_viewer_viewport_changed({
             let t = t.clone();
             move |id, w, h| {
-                if let Some(c) = t.upgrade() {
+                if let Some(_c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         // Viewport size updates must not steal z-order.
                         spawn::spawn_local_compat(async move {

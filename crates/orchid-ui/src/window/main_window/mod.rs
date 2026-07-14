@@ -551,6 +551,7 @@ impl MainWindowController {
         g.set_get_started_label(mgr.tr("startup-get-started").into());
         g.set_workspace_new_label(mgr.tr("workspace-new").into());
         g.set_catalog_title(mgr.tr("catalog-title").into());
+        g.set_dock_add_label(mgr.tr("dock-add-label").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_catalog_no_results(mgr.tr("catalog-no-results").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
