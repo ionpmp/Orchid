@@ -15,13 +15,13 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use parking_lot::Mutex;
+use slint::winit_030::WinitWindowAccessor;
 use slint::ComponentHandle;
 use slint::Image;
 use slint::Model;
 use slint::ModelRc;
 use slint::SharedString;
 use slint::VecModel;
-use slint::winit_030::WinitWindowAccessor;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
@@ -32,19 +32,18 @@ use orchid_core::{
 };
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
-use orchid_terminal::SessionManager;
 use orchid_terminal::FontMetrics;
+use orchid_terminal::SessionManager;
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
+use orchid_widgets::SharedInstance;
 use orchid_widgets::WidgetPayload;
 use orchid_widgets::{
     CreateWidgetRequest, GroupManager, LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager,
     WorkspaceManager,
 };
-use orchid_widgets::SharedInstance;
 use parking_lot::RwLock;
 
-use super::spawn;
 use super::models::{
     blank_terminal, build_file_manager_model, build_media_model, build_moon_model,
     build_password_model, build_recent_files_model, build_rss_model, build_search_model,
@@ -57,18 +56,19 @@ use super::models::{
     empty_system_model, empty_tag_state, empty_viewer_model, empty_weather_model,
     locale_display_name, theme_display_name, FileManagerOverlays, PasswordAddDialogOverlay,
 };
+use super::spawn;
 use crate::error::{Result, UiError};
-use crate::terminal_font_metrics;
-use crate::widgets::terminal::TerminalWidgetDeps;
-use crate::terminal_raster;
 use crate::slint_generated::{
-    AppState, DockWidgetType, MainWindow, MediaModel, MoonModel, PasswordModel, RecentFilesModel,
-    RssModel, SearchCandidateEntry, SearchModel, Strings, SystemModel, TerminalCellModel, Theme,
-    FileManagerModel, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
-    WidgetFrameModel, WorkspaceModel, WorkspaceSummary, NotificationItem, SettingsFieldRow,
-    SettingsSectionEntry, GroupTabModel,
+    AppState, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel, MoonModel,
+    NotificationItem, PasswordModel, RecentFilesModel, RssModel, SearchCandidateEntry, SearchModel,
+    SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel, TerminalCellModel, Theme,
+    ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel,
+    WorkspaceModel, WorkspaceSummary,
 };
+use crate::terminal_font_metrics;
+use crate::terminal_raster;
 use crate::theme::ThemeManager;
+use crate::widgets::terminal::TerminalWidgetDeps;
 
 mod canvas;
 mod fm;
@@ -81,10 +81,8 @@ mod wire;
 
 use canvas::ResizeInteraction;
 
-
 /// Canvas fills the window; the workspace orb overlays the bottom corner.
 const WORKSPACE_CHROME_H: f32 = 0.0;
-
 
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
@@ -204,7 +202,6 @@ pub struct MainWindowController {
     last_history_retention_days: AtomicU32,
 }
 
-
 #[derive(Debug, Clone, Default)]
 struct CatalogUiState {
     visible: bool,
@@ -255,7 +252,6 @@ enum AddWidgetPlacement {
     AutoSlot,
     CanvasPoint { content_x: f32, content_y: f32 },
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PasswordCopyKind {
@@ -648,9 +644,7 @@ impl MainWindowController {
         let swap_edges = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
             || cfg.input.mirror_edge_swipes;
         // Panels must dock on the same edges as the swipe targets that open them.
-        g.set_edge_panels_mirrored(orchid_core::input::edge_panels_mirrored(
-            is_rtl, swap_edges,
-        ));
+        g.set_edge_panels_mirrored(orchid_core::input::edge_panels_mirrored(is_rtl, swap_edges));
         Ok(())
     }
 
@@ -662,10 +656,8 @@ impl MainWindowController {
                 .set_enabled(cfg.privacy.record_action_history);
         }
         let retention_days = cfg.privacy.history_retention_days;
-        let retention_changed = retention_days
-            != self
-                .last_history_retention_days
-                .load(Ordering::Acquire);
+        let retention_changed =
+            retention_days != self.last_history_retention_days.load(Ordering::Acquire);
         if let Ok(lang) = LocaleId::parse(&cfg.locale.language) {
             self.locale.set_current(lang);
         }
@@ -713,8 +705,7 @@ impl MainWindowController {
     /// [`OrchidConfig::privacy::history_retention_days`].
     fn evict_history_by_retention_policy(self: &Arc<Self>) -> Result<()> {
         let days = self.config.read().privacy.history_retention_days;
-        let cutoff =
-            chrono::Utc::now() - chrono::Duration::days(i64::from(days));
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(i64::from(days));
         let mut w = self.storage.write().map_err(UiError::Storage)?;
         let removed = w
             .evict_history_older_than(cutoff)
@@ -804,7 +795,6 @@ impl MainWindowController {
             false
         }
     }
-
 
     fn on_get_started(self: &Arc<Self>) {
         let le = self.layout_engine.clone();
@@ -982,7 +972,10 @@ impl MainWindowController {
                 AddWidgetPlacement::AutoSlot => {
                     Self::move_new_widget_to_free_slot(&le, &wm, wid, new_id).await;
                 }
-                AddWidgetPlacement::CanvasPoint { content_x, content_y } => {
+                AddWidgetPlacement::CanvasPoint {
+                    content_x,
+                    content_y,
+                } => {
                     if let Some(c) = t.upgrade() {
                         c.place_widget_at_canvas_point(wid, new_id, size, content_x, content_y)
                             .await;
@@ -1049,7 +1042,7 @@ impl MainWindowController {
     fn sync_widget_catalog_global(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        sync_vec_model(&self.catalog_items, items);
+        sync_vec_model(&self.catalog_items, items.clone());
         let count = self.catalog_items.row_count();
         tracing::info!(
             count,
@@ -1058,7 +1051,8 @@ impl MainWindowController {
             "widget catalog sync"
         );
         let g = self.window.global::<WidgetCatalog>();
-        g.set_items(self.catalog_items.clone());
+        let model: ModelRc<DockWidgetType> = ModelRc::new(VecModel::from(items));
+        g.set_items(model);
         g.set_is_empty(count == 0);
         g.set_search_query(cat.search_query.clone().into());
         g.set_screen_x(cat.screen_x);
@@ -1070,7 +1064,7 @@ impl MainWindowController {
     fn sync_widget_catalog_items_only(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
-        sync_vec_model(&self.catalog_items, items);
+        sync_vec_model(&self.catalog_items, items.clone());
         let count = self.catalog_items.row_count();
         tracing::info!(
             count,
@@ -1078,10 +1072,10 @@ impl MainWindowController {
             "widget catalog filter"
         );
         let g = self.window.global::<WidgetCatalog>();
-        g.set_items(self.catalog_items.clone());
+        let model: ModelRc<DockWidgetType> = ModelRc::new(VecModel::from(items));
+        g.set_items(model);
         g.set_is_empty(count == 0);
     }
-
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {
         if cmd_id == "command-palette" {
@@ -1134,11 +1128,7 @@ impl MainWindowController {
                 return;
             }
         };
-        let ctx = ActionContext::new(
-            self.bus.clone(),
-            self.storage.clone(),
-            self.config.clone(),
-        );
+        let ctx = ActionContext::new(self.bus.clone(), self.storage.clone(), self.config.clone());
         let dispatcher = self.action_dispatcher();
         if let Err(e) = dispatcher.dispatch(action, &ctx).await {
             warn!(?e, cmd_id = %cmd_id, "dispatch command");
@@ -1152,7 +1142,6 @@ impl MainWindowController {
             .unwrap_or(WidgetSize::Medium)
     }
 
-
     /// Content area of [`widget-frame.slint`] below the title bar (`height - 32px`); must match
     /// what `terminal-viewport-changed` would report as `w`/`h`.
     const WIDGET_FRAME_HEADER_PX: f32 = 32.0;
@@ -1160,9 +1149,6 @@ impl MainWindowController {
     const TERMINAL_TAB_BAR_PX: f32 = 29.0;
     /// Height of [`group-tabs.slint`] when a frame is part of a multi-widget group.
     const GROUP_TAB_BAR_PX: f32 = 28.0;
-
-
-
 
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
@@ -1196,9 +1182,7 @@ impl MainWindowController {
             width_px: vw,
             height_px: vh,
         };
-        let snap = self
-            .layout_engine
-            .snapshot(w.id, &instances, view);
+        let snap = self.layout_engine.snapshot(w.id, &instances, view);
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
         let v = self
@@ -1296,10 +1280,7 @@ impl MainWindowController {
         let orchid_widgets::WidgetPayload::Viewer(vp) = &ws.payload else {
             return false;
         };
-        let Some(v) = model
-            .as_any()
-            .downcast_ref::<VecModel<WidgetFrameModel>>()
-        else {
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
         let needle = id.to_string();
@@ -1373,14 +1354,7 @@ impl MainWindowController {
                         let scale = self.window.window().scale_factor();
                         let glyph_fb = self.mono_font_glyph_fallback.as_ref();
                         terminal_raster::render_terminal(
-                            t,
-                            f,
-                            glyph_fb,
-                            size_md,
-                            cw,
-                            ch,
-                            scale,
-                            ccol,
+                            t, f, glyph_fb, size_md, cw, ch, scale, ccol,
                         )
                         .unwrap_or_default()
                     } else {
@@ -1493,11 +1467,7 @@ impl MainWindowController {
                         .read()
                         .get(&pl.instance_id)
                         .copied()
-                        .unwrap_or(if s.candidates.is_empty() {
-                            -1
-                        } else {
-                            0
-                        });
+                        .unwrap_or(if s.candidates.is_empty() { -1 } else { 0 });
                     let request_autofocus = matches!(
                         *self.search_autofocus_pending.lock(),
                         Some(id) if id == pl.instance_id
@@ -1552,7 +1522,9 @@ impl MainWindowController {
                         .copied()
                         .unwrap_or(false);
                     if autofocus {
-                        self.password_autofocus_pending.write().remove(&pl.instance_id);
+                        self.password_autofocus_pending
+                            .write()
+                            .remove(&pl.instance_id);
                     }
                     let add_dialog = self
                         .password_add_dialogs
@@ -1670,13 +1642,7 @@ impl MainWindowController {
                         empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
-                        build_file_manager_model(
-                            fm,
-                            overlays,
-                            pl.instance_id,
-                            &self.locale,
-                            false,
-                        ),
+                        build_file_manager_model(fm, overlays, pl.instance_id, &self.locale, false),
                     )
                 }
                 _ => (
@@ -1742,7 +1708,10 @@ impl MainWindowController {
         } else {
             default_terminal_divider_models()
         };
-        let (cw, ch) = (self.font_metrics.cell_width_px, self.font_metrics.cell_height_px);
+        let (cw, ch) = (
+            self.font_metrics.cell_width_px,
+            self.font_metrics.cell_height_px,
+        );
         let close_confirm = self
             .close_confirm_overlays
             .read()
@@ -1825,7 +1794,10 @@ impl MainWindowController {
                 }
             })
             .collect();
-        (group.id.to_string().into(), ModelRc::new(VecModel::from(tabs)))
+        (
+            group.id.to_string().into(),
+            ModelRc::new(VecModel::from(tabs)),
+        )
     }
 
     /// Rebuild the Slint [`WorkspaceModel`].
@@ -1846,9 +1818,7 @@ impl MainWindowController {
             width_px: vw,
             height_px: vh,
         };
-        let snap = self
-            .layout_engine
-            .snapshot(w.id, &instances, view);
+        let snap = self.layout_engine.snapshot(w.id, &instances, view);
         let app_g = self.window.global::<AppState>();
         let off = self.drag_offset.lock().clone();
         let ro = self.resize_override.lock().clone();
@@ -1866,9 +1836,7 @@ impl MainWindowController {
                     .map(|g| g.id)
             }) {
                 if let Ok(group) = self.group_manager.get(gid) {
-                    if group.members.len() >= 2
-                        && group.active_instance() != Some(pl.instance_id)
-                    {
+                    if group.members.len() >= 2 && group.active_instance() != Some(pl.instance_id) {
                         continue;
                     }
                 }
@@ -1883,11 +1851,9 @@ impl MainWindowController {
                     width_px: vw,
                     height_px: vh,
                 };
-                bounds = self.layout_engine.pixel_bounds_for(
-                    group.position,
-                    group.size,
-                    view,
-                );
+                bounds = self
+                    .layout_engine
+                    .pixel_bounds_for(group.position, group.size, view);
             }
             if let Some(o) = off.get(&pl.instance_id) {
                 bounds.x += o.0;
@@ -1921,12 +1887,7 @@ impl MainWindowController {
                     pty_changed_needs_rebuild = true;
                 }
             }
-            let mut frame = self.build_widget_frame_for_placed(
-                pl,
-                idx as i32,
-                bounds,
-                &iref,
-            );
+            let mut frame = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
             frame.is_floating = false;
             frames.push(frame);
         }
@@ -1993,101 +1954,109 @@ impl MainWindowController {
     pub fn run(self: Arc<Self>) -> Result<()> {
         tracing::info!("Opening main window");
         let tw = Arc::downgrade(&self);
-        self.window.window().on_winit_window_event(move |_winit_window, event| {
-            use slint::winit_030::{EventResult, winit::event::WindowEvent};
-            match event {
-                WindowEvent::CursorMoved { position, .. } => {
-                    if let Some(c) = tw.upgrade() {
-                        let win = c.window.window();
-                        let scale = win.scale_factor();
-                        let logical: slint::winit_030::winit::dpi::LogicalPosition<f64> =
-                            position.to_logical(f64::from(scale));
-                        let canvas_y = logical.y;
-                        if canvas_y >= 0.0 {
-                            let (scroll_x, scroll_y) = *c.canvas_scroll.lock();
-                            *c.last_canvas_pointer.lock() = Some((
-                                logical.x as f32 + scroll_x,
-                                canvas_y as f32 + scroll_y,
-                            ));
+        self.window
+            .window()
+            .on_winit_window_event(move |_winit_window, event| {
+                use slint::winit_030::{winit::event::WindowEvent, EventResult};
+                match event {
+                    WindowEvent::CursorMoved { position, .. } => {
+                        if let Some(c) = tw.upgrade() {
+                            let win = c.window.window();
+                            let scale = win.scale_factor();
+                            let logical: slint::winit_030::winit::dpi::LogicalPosition<f64> =
+                                position.to_logical(f64::from(scale));
+                            let canvas_y = logical.y;
+                            if canvas_y >= 0.0 {
+                                let (scroll_x, scroll_y) = *c.canvas_scroll.lock();
+                                *c.last_canvas_pointer.lock() =
+                                    Some((logical.x as f32 + scroll_x, canvas_y as f32 + scroll_y));
+                            }
                         }
                     }
-                }
-                WindowEvent::ModifiersChanged(modifiers) => {
-                    if let Some(c) = tw.upgrade() {
-                        *c.keyboard_modifiers.lock() = modifiers.state();
-                    }
-                }
-                WindowEvent::KeyboardInput { event, .. } => {
-                    use slint::winit_030::winit::event::ElementState;
-                    use slint::winit_030::winit::keyboard::{Key, NamedKey};
-                    if event.state == ElementState::Pressed {
+                    WindowEvent::ModifiersChanged(modifiers) => {
                         if let Some(c) = tw.upgrade() {
-                            if c.palette.read().visible
-                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
-                            {
-                                c.on_command_palette_dismiss();
-                            } else if c.settings.read().visible
-                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
-                            {
-                                c.on_settings_dismiss();
-                            } else if c.navigation.read().workspace_orb_open
-                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
-                            {
-                                c.on_workspace_orb_dismiss();
-                            } else if c.navigation.read().notification_center_visible
-                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
-                            {
-                                c.on_notification_center_dismiss();
-                            } else if c.leader_pending_until.lock().is_some()
-                                && matches!(event.logical_key, Key::Named(NamedKey::Escape))
-                            {
-                                c.clear_leader_pending();
-                            } else {
-                                let mods = *c.keyboard_modifiers.lock();
-                                if let Some(cmd_id) = c.try_leader_chord(mods, &event.logical_key)
+                            *c.keyboard_modifiers.lock() = modifiers.state();
+                        }
+                    }
+                    WindowEvent::KeyboardInput { event, .. } => {
+                        use slint::winit_030::winit::event::ElementState;
+                        use slint::winit_030::winit::keyboard::{Key, NamedKey};
+                        if event.state == ElementState::Pressed {
+                            if let Some(c) = tw.upgrade() {
+                                if c.palette.read().visible
+                                    && matches!(event.logical_key, Key::Named(NamedKey::Escape))
                                 {
-                                    c.dispatch_registry_shortcut(cmd_id);
-                                } else if c.try_activate_leader(mods, &event.logical_key) {
-                                    // leader armed; consume without dispatching
+                                    c.on_command_palette_dismiss();
+                                } else if c.settings.read().visible
+                                    && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                                {
+                                    c.on_settings_dismiss();
+                                } else if c.navigation.read().workspace_orb_open
+                                    && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                                {
+                                    c.on_workspace_orb_dismiss();
+                                } else if c.navigation.read().notification_center_visible
+                                    && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                                {
+                                    c.on_notification_center_dismiss();
+                                } else if c.leader_pending_until.lock().is_some()
+                                    && matches!(event.logical_key, Key::Named(NamedKey::Escape))
+                                {
+                                    c.clear_leader_pending();
                                 } else {
-                                let palette_sc = c.command_palette_shortcut();
-                                if input::winit_modifiers_match(palette_sc.modifiers, mods)
-                                    && input::winit_key_matches(palette_sc.key, &event.logical_key)
-                                {
-                                    c.toggle_command_palette();
-                                } else if c.try_viewer_text_ctrl_s(mods, &event.logical_key) {
-                                    // Saved focused/last text editor; consume.
-                                } else if let Some(shortcut) =
-                                    input::winit_to_shortcut(mods, &event.logical_key)
-                                {
+                                    let mods = *c.keyboard_modifiers.lock();
                                     if let Some(cmd_id) =
-                                        input::resolve_registry_shortcut(&c.command_registry, &shortcut)
+                                        c.try_leader_chord(mods, &event.logical_key)
                                     {
                                         c.dispatch_registry_shortcut(cmd_id);
+                                    } else if c.try_activate_leader(mods, &event.logical_key) {
+                                        // leader armed; consume without dispatching
+                                    } else {
+                                        let palette_sc = c.command_palette_shortcut();
+                                        if input::winit_modifiers_match(palette_sc.modifiers, mods)
+                                            && input::winit_key_matches(
+                                                palette_sc.key,
+                                                &event.logical_key,
+                                            )
+                                        {
+                                            c.toggle_command_palette();
+                                        } else if c.try_viewer_text_ctrl_s(mods, &event.logical_key)
+                                        {
+                                            // Saved focused/last text editor; consume.
+                                        } else if let Some(shortcut) =
+                                            input::winit_to_shortcut(mods, &event.logical_key)
+                                        {
+                                            if let Some(cmd_id) = input::resolve_registry_shortcut(
+                                                &c.command_registry,
+                                                &shortcut,
+                                            ) {
+                                                c.dispatch_registry_shortcut(cmd_id);
+                                            }
+                                        }
                                     }
-                                }
                                 }
                             }
                         }
                     }
-                }
-                WindowEvent::DroppedFile(path_buf) => {
-                    let path = path_buf.to_string_lossy().into_owned();
-                    if let Some(c) = tw.upgrade() {
-                        c.queue_os_file_drop(path);
-                    }
-                }
-                WindowEvent::Touch(touch) => {
-                    if let Some(c) = tw.upgrade() {
-                        if let Some(ev) = input::winit_touch_to_orchid(&touch, c.window.window()) {
-                            c.feed_touch_input(ev);
+                    WindowEvent::DroppedFile(path_buf) => {
+                        let path = path_buf.to_string_lossy().into_owned();
+                        if let Some(c) = tw.upgrade() {
+                            c.queue_os_file_drop(path);
                         }
                     }
+                    WindowEvent::Touch(touch) => {
+                        if let Some(c) = tw.upgrade() {
+                            if let Some(ev) =
+                                input::winit_touch_to_orchid(&touch, c.window.window())
+                            {
+                                c.feed_touch_input(ev);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-            EventResult::Propagate
-        });
+                EventResult::Propagate
+            });
         self.window
             .show()
             .map_err(|e| UiError::Slint(format!("show: {e}")))?;
@@ -2104,25 +2073,6 @@ impl MainWindowController {
         tracing::info!("Main window closed");
         Ok(())
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     const VIEWER_MULTI_OPEN_CAP: usize = 8;
 
@@ -2382,61 +2332,6 @@ impl MainWindowController {
         }
         Ok((id, true))
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 /// Replace all rows in a `VecModel` wrapped by `ModelRc` without creating a new `ModelRc`, so
@@ -2458,7 +2353,6 @@ pub(super) fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: V
     }
 }
 
-
 /// Empty [`WorkspaceModel`] for startup mode or when no layout is available yet.
 pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
     WorkspaceModel {
@@ -2477,9 +2371,6 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
         canvas_scroll_gen: 0,
     }
 }
-
-
-
 
 fn is_known_widget_type(type_id: &str) -> bool {
     matches!(
@@ -2663,7 +2554,6 @@ fn default_frame_data_extended(
     )
 }
 
-
 pub(super) fn empty_close_confirm_dialog() -> WidgetCloseConfirmDialog {
     WidgetCloseConfirmDialog {
         visible: false,
@@ -2702,13 +2592,3 @@ do shell script "open -a " & quoted form of appPath & " " & quoted form of "{esc
     }
     Ok(())
 }
-
-
-
-
-
-
-
-
-
-
