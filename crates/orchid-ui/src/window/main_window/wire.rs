@@ -131,6 +131,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_workspace_orb_toggle({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.toggle_workspace_orb();
+                }
+            }
+        });
         self.window.on_canvas_long_pressed({
             let t = t.clone();
             move |cx, cy, vx, vy| {

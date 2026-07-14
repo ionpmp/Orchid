@@ -77,6 +77,7 @@ export component MainWindow inherits Window {
     callback workspace-clicked(string);
     callback workspace-create-clicked();
     callback workspace-orb-dismiss();
+    callback workspace-orb-toggle();
     callback widget-close-clicked(string);
     callback widget-close-confirm-save(string);
     callback widget-close-confirm-discard(string);
@@ -343,6 +344,7 @@ export component MainWindow inherits Window {
             workspace-clicked(id) => { root.workspace-clicked(id); }
             workspace-create-clicked => { root.workspace-create-clicked(); }
             workspace-orb-dismiss => { root.workspace-orb-dismiss(); }
+            workspace-orb-toggle => { root.workspace-orb-toggle(); }
             widget-close-clicked(id) => { root.widget-close-clicked(id); }
             widget-close-confirm-save(id) => { root.widget-close-confirm-save(id); }
             widget-close-confirm-discard(id) => { root.widget-close-confirm-discard(id); }

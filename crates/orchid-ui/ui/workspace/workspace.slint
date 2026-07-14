@@ -12,6 +12,7 @@ export component WorkspaceView inherits Rectangle {
     callback workspace-clicked(string);
     callback workspace-create-clicked();
     callback workspace-orb-dismiss();
+    callback workspace-orb-toggle();
     callback widget-close-clicked(string);
     callback widget-close-confirm-save(string);
     callback widget-close-confirm-discard(string);
@@ -495,6 +496,7 @@ export component WorkspaceView inherits Rectangle {
         workspaces: root.workspace.workspaces;
         workspace-clicked(id) => { root.workspace-clicked(id); }
         workspace-create-clicked => { root.workspace-create-clicked(); }
+        toggle-requested => { root.workspace-orb-toggle(); }
         dismiss-requested => { root.workspace-orb-dismiss(); }
     }
 
