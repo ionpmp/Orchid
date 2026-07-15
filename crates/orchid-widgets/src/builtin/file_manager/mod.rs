@@ -24,11 +24,13 @@ use crate::error::WidgetError;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload,
-    NetworkMountPayload, PanePayload, TabPayload,
+    EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
+    PanePayload, TabPayload,
 };
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use clipboard::{ClipboardOperation, FileClipboard};
@@ -184,14 +186,17 @@ struct FileManagerInner {
     config: RwLock<FileManagerConfig>,
     /// Entries per tab id. Keeps dual-pane tabs independent.
     entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
-    /// Decoded thumbnails keyed by entry path (icon / gallery modes).
+    /// Decoded image thumbnails keyed by entry path (icon / gallery modes).
     thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
+    /// OS shell icons keyed by entry path (list / details / icons when no image preview).
+    shell_icon_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
     /// Cached managed-folder root paths for [`apply_entry_metadata`].
     managed_roots: RwLock<Vec<String>>,
     /// Cached ingest stats per managed root path.
     managed_stats: RwLock<std::collections::HashMap<String, orchid_fs::ManagedFolderStats>>,
     /// Cached policy per managed root path.
-    managed_policies: RwLock<std::collections::HashMap<String, Option<orchid_fs::ManagedFolderPolicy>>>,
+    managed_policies:
+        RwLock<std::collections::HashMap<String, Option<orchid_fs::ManagedFolderPolicy>>>,
     /// Last ingested file name shown briefly in the status bar.
     ingest_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Managed ingest operations in progress (across all instances).
@@ -236,11 +241,8 @@ impl FileManagerWidget {
         initial_path: orchid_fs::FsPath,
     ) -> Self {
         let config = FileManagerConfig::default();
-        let state = FileManagerState::single_pane(
-            initial_path,
-            config.default_view_mode,
-            config.sort_by,
-        );
+        let state =
+            FileManagerState::single_pane(initial_path, config.default_view_mode, config.sort_by);
         let navigator = Arc::new(Navigator::new(deps.registry.clone()));
         Self {
             inner: Arc::new(FileManagerInner {
@@ -251,6 +253,7 @@ impl FileManagerWidget {
                 config: RwLock::new(config),
                 entries_by_tab: RwLock::new(std::collections::HashMap::new()),
                 thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
+                shell_icon_rgba: RwLock::new(std::collections::HashMap::new()),
                 managed_roots: RwLock::new(Vec::new()),
                 managed_stats: RwLock::new(std::collections::HashMap::new()),
                 managed_policies: RwLock::new(std::collections::HashMap::new()),
@@ -277,10 +280,7 @@ impl FileManagerWidget {
         let (left, right) = {
             let state = self.inner.state.lock().clone();
             let left = state.left_pane.active_tab().clone();
-            let right = state
-                .right_pane
-                .as_ref()
-                .map(|p| p.active_tab().clone());
+            let right = state.right_pane.as_ref().map(|p| p.active_tab().clone());
             (left, right)
         };
 
@@ -377,12 +377,7 @@ impl Widget for FileManagerWidget {
         let config = self.inner.config.read().clone();
         let state = self.inner.state.lock().clone();
         let entries_map = self.inner.entries_by_tab.read().clone();
-        let left_pane = build_pane_payload(
-            &state.left_pane,
-            &entries_map,
-            &config,
-            &*self.inner,
-        );
+        let left_pane = build_pane_payload(&state.left_pane, &entries_map, &config, &*self.inner);
         let dual_pane = config.dual_pane;
         let mut panes = vec![left_pane];
         if dual_pane {
@@ -416,33 +411,33 @@ impl Widget for FileManagerWidget {
             payload: WidgetPayload::FileManager({
                 let transfer = self.inner.transfer.read().clone();
                 FileManagerPayload {
-                panes,
-                active_pane,
-                dual_pane,
-                clipboard_count,
-                clipboard_is_cut,
-                managed_folders: self.inner.managed_folder_payloads(),
-                network_mounts: self.inner.network_mount_payloads(),
-                activity_indicator: self.inner.activity_indicator_label(),
-                ingest_in_flight: self.inner.ingest_in_flight.load(Ordering::Relaxed),
-                transfer_active: transfer.active,
-                transfer_progress: if transfer.active && transfer.total_bytes > 0 {
-                    (transfer.processed_bytes as f32 / transfer.total_bytes as f32).min(1.0)
-                } else {
-                    0.0
-                },
-                transfer_is_copy: transfer.is_copy,
-                transfer_current: if transfer.active {
-                    Some(transfer.current_name.clone())
-                } else {
-                    None
-                },
-                transfer_error: self.inner.transfer_error_label(),
-                passphrase_error: self.inner.passphrase_error_label(),
-                ingest_error: self.inner.ingest_error_label(),
-                activity_notice_key: self.inner.activity_notice_key(),
-                activity_notice_name: self.inner.activity_notice_name(),
-            }
+                    panes,
+                    active_pane,
+                    dual_pane,
+                    clipboard_count,
+                    clipboard_is_cut,
+                    managed_folders: self.inner.managed_folder_payloads(),
+                    network_mounts: self.inner.network_mount_payloads(),
+                    activity_indicator: self.inner.activity_indicator_label(),
+                    ingest_in_flight: self.inner.ingest_in_flight.load(Ordering::Relaxed),
+                    transfer_active: transfer.active,
+                    transfer_progress: if transfer.active && transfer.total_bytes > 0 {
+                        (transfer.processed_bytes as f32 / transfer.total_bytes as f32).min(1.0)
+                    } else {
+                        0.0
+                    },
+                    transfer_is_copy: transfer.is_copy,
+                    transfer_current: if transfer.active {
+                        Some(transfer.current_name.clone())
+                    } else {
+                        None
+                    },
+                    transfer_error: self.inner.transfer_error_label(),
+                    passphrase_error: self.inner.passphrase_error_label(),
+                    ingest_error: self.inner.ingest_error_label(),
+                    activity_notice_key: self.inner.activity_notice_key(),
+                    activity_notice_name: self.inner.activity_notice_name(),
+                }
             }),
         })
     }
@@ -536,7 +531,10 @@ impl FileManagerInner {
 
     fn activity_notice_key(&self) -> Option<String> {
         let at = *self.activity_notice_at.read();
-        if at.map(|t| t.elapsed() < std::time::Duration::from_secs(8)).unwrap_or(false) {
+        if at
+            .map(|t| t.elapsed() < std::time::Duration::from_secs(8))
+            .unwrap_or(false)
+        {
             self.activity_notice_key.read().clone()
         } else {
             None
@@ -545,7 +543,10 @@ impl FileManagerInner {
 
     fn activity_notice_name(&self) -> Option<String> {
         let at = *self.activity_notice_at.read();
-        if at.map(|t| t.elapsed() < std::time::Duration::from_secs(8)).unwrap_or(false) {
+        if at
+            .map(|t| t.elapsed() < std::time::Duration::from_secs(8))
+            .unwrap_or(false)
+        {
             self.activity_notice_name.read().clone()
         } else {
             None
@@ -735,10 +736,13 @@ impl FileManagerInner {
                     continue;
                 }
             }
-            let name = src
-                .file_name()
-                .map(str::to_string)
-                .unwrap_or_else(|| if is_copy { "copy".into() } else { "moved".into() });
+            let name = src.file_name().map(str::to_string).unwrap_or_else(|| {
+                if is_copy {
+                    "copy".into()
+                } else {
+                    "moved".into()
+                }
+            });
             let dest = dest_dir.join(&name);
             if src == dest {
                 continue;
@@ -782,10 +786,7 @@ impl FileManagerInner {
         let (left, right) = {
             let state = self.state.lock().clone();
             let left = state.left_pane.active_tab().clone();
-            let right = state
-                .right_pane
-                .as_ref()
-                .map(|p| p.active_tab().clone());
+            let right = state.right_pane.as_ref().map(|p| p.active_tab().clone());
             (left, right)
         };
         self.refresh_tab(&left, show_hidden).await;
@@ -839,9 +840,7 @@ impl FileManagerInner {
             entries
         } else {
             let result = self.navigator.navigate(&path, show_hidden).await;
-            self.tab_errors
-                .write()
-                .insert(tab.id, result.error.clone());
+            self.tab_errors.write().insert(tab.id, result.error.clone());
             let mut entries = result.entries;
             self.apply_entry_metadata(&mut entries);
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
@@ -856,30 +855,26 @@ impl FileManagerInner {
             "fm refresh_tab listed"
         );
 
-        // Thumbnails are expensive (decode up to 64 images). Do them off the
-        // critical navigation path so the listing paints immediately.
-        let mode_cfg = config_for_mode(tab.view_mode, 1.0);
-        if mode_cfg.show_thumbnails {
-            let this = Arc::clone(self);
-            let tab = tab.clone();
-            tokio::spawn(async move {
+        // Shell icons + image thumbnails are off the critical navigation path
+        // so the listing paints immediately with geometric fallbacks.
+        let this = Arc::clone(self);
+        let tab = tab.clone();
+        tokio::spawn(async move {
+            this.ensure_shell_icons(&tab, &entries).await;
+            let mode_cfg = config_for_mode(tab.view_mode, 1.0);
+            if mode_cfg.show_thumbnails {
                 this.ensure_thumbnails(&tab, &entries).await;
-            });
-        }
+            }
+        });
     }
 
     fn record_recent(&self, path: &orchid_fs::FsPath) {
-        self.deps
-            .recent_files
-            .touch(path, Some(&self.bus));
+        self.deps.recent_files.touch(path, Some(&self.bus));
     }
 
     fn collect_catalog_candidates(&self) -> Vec<orchid_fs::FsPath> {
-        let mut paths: Vec<orchid_fs::FsPath> = self
-            .deps
-            .tag_manager
-            .starred_paths()
-            .unwrap_or_default();
+        let mut paths: Vec<orchid_fs::FsPath> =
+            self.deps.tag_manager.starred_paths().unwrap_or_default();
         paths.extend(
             self.deps
                 .recent_files
@@ -1063,21 +1058,14 @@ impl FileManagerInner {
     }
 
     async fn create_folder_at(&self, parent: &orchid_fs::FsPath, name: &str) -> WidgetResult<()> {
-        if name.is_empty()
-            || name.contains('/')
-            || name.contains('\\')
-            || name.contains(':')
-        {
+        if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains(':') {
             return Err(WidgetError::InvalidStateForOperation(
                 "fm-invalid-folder-name".into(),
             ));
         }
         let new_path = parent.join(name);
-        let provider = self
-            .deps
-            .registry
-            .for_path(parent)
-            .ok_or_else(|| {
+        let provider =
+            self.deps.registry.for_path(parent).ok_or_else(|| {
                 WidgetError::InvalidStateForOperation("fm-no-provider-parent".into())
             })?;
         provider
@@ -1085,6 +1073,46 @@ impl FileManagerInner {
             .await
             .map_err(map_fs_error)?;
         Ok(())
+    }
+
+    async fn ensure_shell_icons(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+        let size = match tab.view_mode {
+            ViewMode::Icons | ViewMode::Gallery => orchid_fs::ShellIconSize::Large,
+            ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::Small,
+        };
+        let mut generated = false;
+        // Shell icons are cheap (especially once the extension cache is warm).
+        for e in entries.iter().take(256) {
+            let path_key = e.path.as_str().to_string();
+            if self.shell_icon_rgba.read().contains_key(&path_key) {
+                continue;
+            }
+            let path = e.path.clone();
+            let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
+            let icon = match tokio::task::spawn_blocking(move || {
+                orchid_fs::shell_icon(&path, is_dir, size)
+            })
+            .await
+            {
+                Ok(icon) => icon,
+                Err(_) => continue,
+            };
+            let Some(icon) = icon else {
+                continue;
+            };
+            self.shell_icon_rgba.write().insert(
+                path_key,
+                orchid_viewers::Thumbnail {
+                    rgba: icon.rgba,
+                    width: icon.width,
+                    height: icon.height,
+                },
+            );
+            generated = true;
+        }
+        if generated {
+            self.publish_refresh();
+        }
     }
 
     async fn ensure_thumbnails(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
@@ -1167,11 +1195,7 @@ impl FileManagerInner {
             return entries;
         }
         if raw == "virtual:starred" {
-            let paths = self
-                .deps
-                .tag_manager
-                .starred_paths()
-                .unwrap_or_default();
+            let paths = self.deps.tag_manager.starred_paths().unwrap_or_default();
             let mut entries: Vec<orchid_fs::FsEntry> = paths
                 .into_iter()
                 .take(200)
@@ -1314,9 +1338,10 @@ impl FileManagerInner {
         {
             return true;
         }
-        self.encrypted_paths.read().iter().any(|p| {
-            path.as_str() == p || path.as_str().starts_with(p)
-        })
+        self.encrypted_paths
+            .read()
+            .iter()
+            .any(|p| path.as_str() == p || path.as_str().starts_with(p))
     }
 
     async fn refresh_encrypted_paths(&self) {
@@ -1527,9 +1552,9 @@ impl FileManagerInner {
                     }
                 }
             }
-            let parent = fp
-                .parent()
-                .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-no-parent-folder".into()))?;
+            let parent = fp.parent().ok_or_else(|| {
+                WidgetError::InvalidStateForOperation("fm-no-parent-folder".into())
+            })?;
             folder_candidates.push(parent);
         }
         let first = folder_candidates[0].as_str();
@@ -1587,12 +1612,21 @@ fn build_tab_payload(
 
     let locale = inner.deps.orchid_config.read().locale.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
+    let shell_cache = inner.shell_icon_rgba.read();
     let entry_payloads: Vec<EntryPayload> = entries_filtered
         .into_iter()
         .map(|e| {
             let path_key = e.path.as_str();
+            // Prefer image previews; fall back to OS association icons.
             let (has_thumbnail, thumbnail_rgba, thumbnail_width, thumbnail_height) =
                 if let Some(t) = thumb_cache.get(path_key) {
+                    (
+                        true,
+                        Some(std::sync::Arc::clone(&t.rgba)),
+                        t.width,
+                        t.height,
+                    )
+                } else if let Some(t) = shell_cache.get(path_key) {
                     (
                         true,
                         Some(std::sync::Arc::clone(&t.rgba)),
@@ -1633,11 +1667,7 @@ fn build_tab_payload(
                 is_encrypted: e.metadata.extended.is_encrypted,
                 is_managed: e.metadata.extended.is_managed,
                 is_starred: e.metadata.extended.starred,
-                color_label: e
-                    .metadata
-                    .extended
-                    .color_label
-                    .map(color_label_to_str),
+                color_label: e.metadata.extended.color_label.map(color_label_to_str),
                 tags: e.metadata.extended.tags.clone(),
             }
         })
@@ -1655,21 +1685,9 @@ fn build_tab_payload(
     let error = if entry_payloads.is_empty() {
         virtual_folders::empty_placeholder_for_path(tab.path.as_str())
             .map(String::from)
-            .or_else(|| {
-                inner
-                    .tab_errors
-                    .read()
-                    .get(&tab.id)
-                    .cloned()
-                    .flatten()
-            })
+            .or_else(|| inner.tab_errors.read().get(&tab.id).cloned().flatten())
     } else {
-        inner
-            .tab_errors
-            .read()
-            .get(&tab.id)
-            .cloned()
-            .flatten()
+        inner.tab_errors.read().get(&tab.id).cloned().flatten()
     };
     TabPayload {
         tab_id: tab.id.to_string(),
@@ -1740,16 +1758,8 @@ fn sort_entries(entries: &mut [orchid_fs::FsEntry], sort_by: SortBy, descending:
             SortBy::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
             SortBy::Size => a.metadata.size.cmp(&b.metadata.size),
             SortBy::Modified => {
-                let am = a
-                    .metadata
-                    .modified
-                    .map(|t| t.timestamp())
-                    .unwrap_or(0);
-                let bm = b
-                    .metadata
-                    .modified
-                    .map(|t| t.timestamp())
-                    .unwrap_or(0);
+                let am = a.metadata.modified.map(|t| t.timestamp()).unwrap_or(0);
+                let bm = b.metadata.modified.map(|t| t.timestamp()).unwrap_or(0);
                 am.cmp(&bm)
             }
             SortBy::Type => {
@@ -1763,7 +1773,8 @@ fn sort_entries(entries: &mut [orchid_fs::FsEntry], sort_by: SortBy, descending:
                     .extension()
                     .map(|e| e.to_lowercase())
                     .unwrap_or_default();
-                ae.cmp(&be).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                ae.cmp(&be)
+                    .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
             }
         };
         if descending {
@@ -1807,7 +1818,12 @@ fn classify(
 }
 
 fn is_image_entry(e: &orchid_fs::FsEntry) -> bool {
-    if e.metadata.mime.as_deref().map(|m| m.starts_with("image/")).unwrap_or(false) {
+    if e.metadata
+        .mime
+        .as_deref()
+        .map(|m| m.starts_with("image/"))
+        .unwrap_or(false)
+    {
         return true;
     }
     e.path
@@ -1981,12 +1997,8 @@ pub fn context_menu_for(
         all_managed: selected_entries
             .iter()
             .all(|e| e.metadata.extended.is_managed),
-        all_starred: selected_entries
-            .iter()
-            .all(|e| e.metadata.extended.starred),
-        any_starred: selected_entries
-            .iter()
-            .any(|e| e.metadata.extended.starred),
+        all_starred: selected_entries.iter().all(|e| e.metadata.extended.starred),
+        any_starred: selected_entries.iter().any(|e| e.metadata.extended.starred),
         known_tags: inner
             .deps
             .tag_manager
@@ -2023,10 +2035,7 @@ pub async fn focus_context_target(
     Ok(())
 }
 
-fn active_tab_ref(
-    state: &FileManagerState,
-    pane: u8,
-) -> WidgetResult<&TabState> {
+fn active_tab_ref(state: &FileManagerState, pane: u8) -> WidgetResult<&TabState> {
     if pane == 1 {
         if let Some(r) = state.right_pane.as_ref() {
             return Ok(r.active_tab());
@@ -2135,9 +2144,8 @@ pub async fn navigate_home(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 /// Switch to tab by string id.
 pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    let want = Uuid::parse_str(tab_id).map_err(|_| {
-        WidgetError::InvalidStateForOperation("invalid tab id".into())
-    })?;
+    let want = Uuid::parse_str(tab_id)
+        .map_err(|_| WidgetError::InvalidStateForOperation("invalid tab id".into()))?;
     {
         let mut state = inner.state.lock();
         if pane == 1 {
@@ -2159,9 +2167,8 @@ pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetR
 /// Close tab by id.
 pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    let want = Uuid::parse_str(tab_id).map_err(|_| {
-        WidgetError::InvalidStateForOperation("invalid tab id".into())
-    })?;
+    let want = Uuid::parse_str(tab_id)
+        .map_err(|_| WidgetError::InvalidStateForOperation("invalid tab id".into()))?;
     {
         let mut state = inner.state.lock();
         let target = if pane == 1 {
@@ -2183,8 +2190,10 @@ pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResul
             }
             if let Some(idx) = state.left_pane.tabs.iter().position(|t| t.id == want) {
                 state.left_pane.tabs.remove(idx);
-                state.left_pane.active_tab =
-                    state.left_pane.active_tab.min(state.left_pane.tabs.len().saturating_sub(1));
+                state.left_pane.active_tab = state
+                    .left_pane
+                    .active_tab
+                    .min(state.left_pane.tabs.len().saturating_sub(1));
             }
         }
     }
@@ -2201,7 +2210,8 @@ pub async fn new_tab(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 let path = r.active_tab().path.clone();
-                r.tabs.push(TabState::new(path, cfg.default_view_mode, cfg.sort_by));
+                r.tabs
+                    .push(TabState::new(path, cfg.default_view_mode, cfg.sort_by));
                 r.active_tab = r.tabs.len().saturating_sub(1);
             } else {
                 let path = state.left_pane.active_tab().path.clone();
@@ -2236,6 +2246,53 @@ pub async fn switch_active_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()>
         };
     }
     inner.publish_refresh();
+    Ok(())
+}
+
+/// Snapshot live file-manager config for the settings dialog.
+#[must_use]
+pub fn current_config(instance_id: Uuid) -> Option<FileManagerConfig> {
+    FM_LIVE
+        .get(&instance_id)
+        .map(|inner| inner.config.read().clone())
+}
+
+/// Apply a settings mutation. For dual_pane changes, mirror the pane create/destroy logic from toggle_dual_pane.
+pub async fn update_config(
+    instance_id: Uuid,
+    mutate: impl FnOnce(&mut FileManagerConfig),
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let before_dual = inner.config.read().dual_pane;
+    let before_hidden = inner.config.read().show_hidden;
+    {
+        let mut cfg = inner.config.write();
+        mutate(&mut cfg);
+    }
+    let after = inner.config.read().clone();
+    if before_dual != after.dual_pane {
+        let enabled = after.dual_pane;
+        {
+            let mut state = inner.state.lock();
+            if enabled && state.right_pane.is_none() {
+                let path = state.left_pane.active_tab().path.clone();
+                state.right_pane = Some(PaneState::with_single_tab(TabState::new(
+                    path,
+                    after.default_view_mode,
+                    after.sort_by,
+                )));
+            }
+            if !enabled {
+                state.right_pane = None;
+                state.active_pane = ActivePane::Left;
+            }
+        }
+        inner.publish_refresh();
+    } else if before_hidden != after.show_hidden {
+        inner.refresh_all_tabs().await;
+    } else {
+        inner.publish_refresh();
+    }
     Ok(())
 }
 
@@ -2345,9 +2402,8 @@ pub async fn cycle_sort(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 
 /// Set sort column for the active tab in `pane`; toggles direction when the column is unchanged.
 pub async fn set_sort_column(instance_id: Uuid, pane: u8, column: u8) -> WidgetResult<()> {
-    let sort_by = sort_by_from_u8(column).ok_or_else(|| {
-        WidgetError::InvalidStateForOperation("invalid sort column".into())
-    })?;
+    let sort_by = sort_by_from_u8(column)
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("invalid sort column".into()))?;
     let inner = live_inner(instance_id)?;
     {
         let mut state = inner.state.lock();
@@ -2418,7 +2474,10 @@ pub async fn select_entry(
             .unwrap_or_default();
         (
             tab.id,
-            entries.into_iter().map(|e| e.path.as_str().to_string()).collect(),
+            entries
+                .into_iter()
+                .map(|e| e.path.as_str().to_string())
+                .collect(),
         )
     };
     {
@@ -2457,7 +2516,13 @@ pub async fn run_action(
     action_id: &str,
     target_paths: Vec<String>,
 ) -> WidgetResult<ActionOutcome> {
-    run_action_with_opts(instance_id, action_id, target_paths, RunActionOpts::default()).await
+    run_action_with_opts(
+        instance_id,
+        action_id,
+        target_paths,
+        RunActionOpts::default(),
+    )
+    .await
 }
 
 /// Like [`run_action`] with extra flags (e.g. skip delete confirmation).
@@ -2617,11 +2682,7 @@ pub async fn run_action_with_opts(
         "fs.rename" => {
             if target_paths.len() == 1 {
                 let p = target_paths[0].clone();
-                let current_name = p
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(p.as_str())
-                    .to_string();
+                let current_name = p.rsplit('/').next().unwrap_or(p.as_str()).to_string();
                 return Ok(ActionOutcome::NeedsRename {
                     path: p,
                     current_name,
@@ -2699,9 +2760,7 @@ pub async fn run_action_with_opts(
                     ActivePane::Left => 0,
                     ActivePane::Right => 1,
                 };
-                active_tab_ref(&state, pane)
-                    .map(|t| t.path.clone())
-                    .ok()
+                active_tab_ref(&state, pane).map(|t| t.path.clone()).ok()
             };
             if let Some(parent) = parent {
                 if !is_virtual(&parent) {
@@ -2971,9 +3030,7 @@ pub async fn apply_passphrase(
         PassphrasePurpose::RevealInViewer => {
             let revealed = inner.reveal_paths(&paths, &passphrase).await?;
             if let Some(path) = revealed.first() {
-                ActionOutcome::OpenInViewer {
-                    path: path.clone(),
-                }
+                ActionOutcome::OpenInViewer { path: path.clone() }
             } else {
                 ActionOutcome::Done
             }

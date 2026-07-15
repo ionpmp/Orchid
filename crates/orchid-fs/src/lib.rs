@@ -11,6 +11,7 @@ pub mod archive;
 pub mod encrypted;
 pub mod entry;
 pub mod error;
+pub mod icon;
 pub mod managed;
 pub mod mime;
 pub mod operations;
@@ -25,6 +26,7 @@ pub use encrypted::{
 };
 pub use entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
 pub use error::{FsError, Result};
+pub use icon::{shell_icon, ShellIcon, ShellIconSize};
 pub use managed::{
     ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
     ManagedFolderConfig, ManagedFolderEngine, ManagedFolderPolicy, ManagedFolderStats,

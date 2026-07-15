@@ -41,7 +41,13 @@ serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
-features = ["Win32_Storage_FileSystem", "Win32_Foundation"]
+features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+]
 
 [dev-dependencies]
 tempfile.workspace = true
