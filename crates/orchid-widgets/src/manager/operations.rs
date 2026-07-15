@@ -77,6 +77,7 @@ impl WidgetManager {
             storage: self.inner.storage.clone(),
             config: self.inner.config.clone(),
             locale: self.inner.locale.clone(),
+            jobs: self.inner.jobs.clone(),
             instance_id,
             workspace_id,
         };
@@ -237,7 +238,10 @@ impl WidgetManager {
     pub async fn change_lifecycle(&self, id: Uuid, target: LifecycleState) -> Result<()> {
         let instance = self.get_instance(id)?;
         let ctx = self.context_for(&instance);
-        self.inner.lifecycle.transition(&instance, &ctx, target).await?;
+        self.inner
+            .lifecycle
+            .transition(&instance, &ctx, target)
+            .await?;
 
         // Persist lifecycle change.
         let bytes = {
@@ -286,14 +290,13 @@ impl WidgetManager {
                     .inner
                     .registry
                     .get(&instance.type_id)
-                    .ok_or_else(|| {
-                        WidgetError::UnknownWidgetType(instance.type_id.clone())
-                    })?;
+                    .ok_or_else(|| WidgetError::UnknownWidgetType(instance.type_id.clone()))?;
                 let ctx = WidgetContext {
                     bus: self.inner.bus.clone(),
                     storage: self.inner.storage.clone(),
                     config: self.inner.config.clone(),
                     locale: self.inner.locale.clone(),
+                    jobs: self.inner.jobs.clone(),
                     instance_id: instance.id,
                     workspace_id,
                 };

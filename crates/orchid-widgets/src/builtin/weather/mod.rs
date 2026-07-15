@@ -17,7 +17,6 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
@@ -32,6 +31,10 @@ pub use types::{CurrentWeather, DailyForecast, Location, WeatherCondition, Weath
 
 /// Stable type id for the weather widget.
 pub const TYPE_ID: &str = "weather";
+
+fn job_key(instance_id: Uuid) -> String {
+    format!("weather:{instance_id}")
+}
 
 /// Live weather handles for UI callbacks (city picker / switch).
 static WEATHER_LIVE: LazyLock<DashMap<Uuid, Arc<WeatherHandle>>> = LazyLock::new(DashMap::new);
@@ -99,12 +102,17 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut WeatherConfig))
     let Some(h) = WEATHER_LIVE.get(&instance_id) else {
         return;
     };
+    let before_interval = h.config.read().refresh_interval_minutes;
     {
         let mut cfg = h.config.write();
         mutate(&mut cfg);
         cfg.normalize();
     }
+    let after_interval = h.config.read().refresh_interval_minutes;
     h.publish();
+    if before_interval != after_interval {
+        h.schedule_job();
+    }
 }
 
 /// Coords cache key (centi-degrees) so float noise does not duplicate entries.
@@ -134,6 +142,7 @@ struct WeatherHandle {
     ui: Arc<RwLock<UiState>>,
     bus: Arc<orchid_core::EventBus>,
     orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+    jobs: Arc<orchid_core::BackgroundJobQueue>,
 }
 
 impl std::fmt::Debug for WeatherHandle {
@@ -152,6 +161,37 @@ impl WeatherHandle {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    fn refresh_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(
+            (self.config.read().refresh_interval_minutes as u64).max(1) * 60,
+        )
+    }
+
+    fn schedule_job(self: &Arc<Self>) {
+        let handle = Arc::clone(self);
+        let interval = self.refresh_interval();
+        self.jobs
+            .schedule(job_key(self.instance_id), interval, move || {
+                let provider = handle.provider.clone();
+                let config = handle.config.clone();
+                let cache = handle.cache.clone();
+                let last_error = handle.last_error.clone();
+                let is_fetching = handle.is_fetching.clone();
+                let bus = handle.bus.clone();
+                let instance_id = handle.instance_id;
+                async move {
+                    fetch_all_locations(
+                        provider, config, cache, last_error, is_fetching, bus, instance_id,
+                    )
+                    .await;
+                }
+            });
+    }
+
+    fn cancel_job(&self) {
+        self.jobs.cancel(&job_key(self.instance_id));
     }
 
     fn set_picker_open(&self, open: bool) {
@@ -291,7 +331,6 @@ impl WeatherHandle {
 /// Weather widget implementation.
 pub struct WeatherWidget {
     handle: Arc<WeatherHandle>,
-    refresh: PeriodicRefresh,
 }
 
 impl std::fmt::Debug for WeatherWidget {
@@ -310,11 +349,10 @@ impl WeatherWidget {
         provider: Arc<dyn WeatherProvider>,
         bus: Arc<orchid_core::EventBus>,
         orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+        jobs: Arc<orchid_core::BackgroundJobQueue>,
     ) -> Self {
         let mut config = config;
         config.normalize();
-        let refresh_interval =
-            std::time::Duration::from_secs((config.refresh_interval_minutes as u64).max(1) * 60);
         let handle = Arc::new(WeatherHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
@@ -325,17 +363,16 @@ impl WeatherWidget {
             ui: Arc::new(RwLock::new(UiState::default())),
             bus,
             orchid_config,
+            jobs,
         });
         WEATHER_LIVE.insert(instance_id, Arc::clone(&handle));
-        Self {
-            handle,
-            refresh: PeriodicRefresh::new(refresh_interval),
-        }
+        Self { handle }
     }
 }
 
 impl Drop for WeatherWidget {
     fn drop(&mut self) {
+        self.handle.cancel_job();
         WEATHER_LIVE.remove(&self.handle.instance_id);
     }
 }
@@ -391,57 +428,25 @@ impl Widget for WeatherWidget {
     }
 
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        fetch_all_locations(
-            self.handle.provider.clone(),
-            self.handle.config.clone(),
-            self.handle.cache.clone(),
-            self.handle.last_error.clone(),
-            self.handle.is_fetching.clone(),
-            self.handle.bus.clone(),
-            self.handle.instance_id,
-        )
-        .await;
+        // Always-on fetch: first tick runs immediately via BackgroundJobQueue.
+        self.handle.schedule_job();
         Ok(())
     }
 
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let provider = self.handle.provider.clone();
-        let config = self.handle.config.clone();
-        let cache = self.handle.cache.clone();
-        let last_error = self.handle.last_error.clone();
-        let is_fetching = self.handle.is_fetching.clone();
-        let bus = self.handle.bus.clone();
-        let instance_id = self.handle.instance_id;
-
-        self.refresh.start(move || {
-            let provider = provider.clone();
-            let config = config.clone();
-            let cache = cache.clone();
-            let last_error = last_error.clone();
-            let is_fetching = is_fetching.clone();
-            let bus = bus.clone();
-            async move {
-                fetch_all_locations(
-                    provider, config, cache, last_error, is_fetching, bus, instance_id,
-                )
-                .await;
-            }
-        });
         Ok(())
     }
 
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
         Ok(())
     }
 
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
         Ok(())
     }
 
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
+        self.handle.cancel_job();
         Ok(())
     }
 
@@ -724,6 +729,7 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
             provider.clone(),
             ctx.bus.clone(),
             ctx.config.clone(),
+            ctx.jobs.clone(),
         );
         Ok(Box::new(widget) as Box<dyn Widget>)
     });

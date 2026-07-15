@@ -8,9 +8,7 @@ use std::sync::Arc;
 
 use orchid_core::{EventBus, EventBusConfig};
 use orchid_storage::GridPosition;
-use orchid_widgets::{
-    CreateWidgetRequest, WidgetManager, WidgetManagerOptions, WidgetRegistry,
-};
+use orchid_widgets::{CreateWidgetRequest, WidgetManager, WidgetManagerOptions, WidgetRegistry};
 use parking_lot::RwLock;
 use uuid::Uuid;
 
@@ -50,7 +48,8 @@ async fn snapshot_and_restore_preserves_widgets() {
             storage,
             config.clone(),
             test_locale(),
-            WidgetManagerOptions::default(),
+            Arc::new(orchid_core::BackgroundJobQueue::new()),
+        WidgetManagerOptions::default(),
         );
         let mut ids = Vec::new();
         for _ in 0..3 {
@@ -81,13 +80,13 @@ async fn snapshot_and_restore_preserves_widgets() {
         storage,
         config,
         test_locale(),
+        Arc::new(orchid_core::BackgroundJobQueue::new()),
         WidgetManagerOptions::default(),
     );
     let restored = manager.restore_from_storage().await.unwrap();
     assert_eq!(restored, 3);
 
-    let mut actual: Vec<Uuid> =
-        manager.list_instances().iter().map(|i| i.id).collect();
+    let mut actual: Vec<Uuid> = manager.list_instances().iter().map(|i| i.id).collect();
     actual.sort();
     let mut expected = created_ids.clone();
     expected.sort();
@@ -128,7 +127,8 @@ async fn shutdown_keeps_widgets_and_grid_position_on_disk() {
             storage,
             config.clone(),
             test_locale(),
-            WidgetManagerOptions::default(),
+            Arc::new(orchid_core::BackgroundJobQueue::new()),
+        WidgetManagerOptions::default(),
         );
         manager.start().await.unwrap();
         let id = manager
@@ -156,6 +156,7 @@ async fn shutdown_keeps_widgets_and_grid_position_on_disk() {
         storage,
         config,
         test_locale(),
+        Arc::new(orchid_core::BackgroundJobQueue::new()),
         WidgetManagerOptions::default(),
     );
     assert_eq!(manager.restore_from_storage().await.unwrap(), 1);

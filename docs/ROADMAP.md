@@ -50,7 +50,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Inline graphics (sixel + kitty) — deferred to v1.x
 
 ### Widgets
-- [x] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, idle sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge and the Slint workspace dashboard (switcher, layout grid, drag/resize with snap ghost + collision feedback, dock show/hide + hover animations, group tab strip with drag-to-stack / switch / reorder / dissolve / Alt-drag detach).
+- [x] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, visibility-driven Active↔Sleeping, Sleeping→Unloaded sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-core::BackgroundJobQueue` runs always-on interval work (RSS/weather fetch; foundation for agents). `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge and the Slint workspace dashboard (switcher, layout grid, drag/resize with snap ghost + collision feedback, dock show/hide + hover animations, group tab strip with drag-to-stack / switch / reorder / dissolve / Alt-drag detach).
 - [x] Widget: Weather
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators
@@ -100,7 +100,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ## v1.x — 9–18 months
 
-- [ ] AI agents (Ollama + OpenAI API)
+- [ ] AI agents (Ollama + OpenAI API) — will enqueue on `BackgroundJobQueue` (already used for RSS/weather)
 - [ ] Graphical resource monitor with history
 - [~] Extended notification system — in-app list with Clear all, per-item dismiss, a 50-item soft cap, and redb-backed persistence across sessions; startup tip + bridged FM/password/config/viewer action failures (incl. PDF/archive/viewport + FM rename/delete/drop/context); OS toasts deferred
 - [ ] Built-in browser (WebView2)

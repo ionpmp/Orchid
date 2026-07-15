@@ -41,16 +41,16 @@ pub mod command;
 pub mod error;
 pub mod event;
 pub mod input;
+pub mod job;
 
 pub use action::{
     Action, ActionContext, ActionDispatcher, ActionMiddleware, ActionOutcome, HistoryRecorder,
     ReversiblePair, REVERSIBLE_WINDOW_SECONDS,
 };
 pub use command::{
-    is_reserved, parse_command_line, parse_command_line_with_registry, ActionFactory,
-    CommandArg, CommandArgKind, CommandCategory, CommandDescriptor, CommandPalette,
-    CommandRegistry, Key, Modifiers, PaletteResult, ParsedCommand, Shortcut,
-    ShortcutOverrideResult, TerminalInvocation,
+    is_reserved, parse_command_line, parse_command_line_with_registry, ActionFactory, CommandArg,
+    CommandArgKind, CommandCategory, CommandDescriptor, CommandPalette, CommandRegistry, Key,
+    Modifiers, PaletteResult, ParsedCommand, Shortcut, ShortcutOverrideResult, TerminalInvocation,
 };
 pub use error::{CoreError, Result};
 pub use event::{
@@ -59,11 +59,12 @@ pub use event::{
     SubscriptionHandle, SubscriptionId,
 };
 pub use input::{
-    default_bindings, default_bindings_mirrored, Edge, GestureConfig, GesturePattern, GestureRecognizer, InputBindings,
-    InputEvent, InputMapper, KeyEventKind, KeyboardEvent, MouseButton, MouseButtons, MouseEvent,
-    MouseEventKind, PenEvent, Point, RecognizedGesture, ScreenBounds, ScreenZone, SwipeDirection,
-    TouchEvent, TouchPhase,
+    default_bindings, default_bindings_mirrored, Edge, GestureConfig, GesturePattern,
+    GestureRecognizer, InputBindings, InputEvent, InputMapper, KeyEventKind, KeyboardEvent,
+    MouseButton, MouseButtons, MouseEvent, MouseEventKind, PenEvent, Point, RecognizedGesture,
+    ScreenBounds, ScreenZone, SwipeDirection, TouchEvent, TouchPhase,
 };
+pub use job::{BackgroundJobQueue, BoxedJobFuture, JobFactory};
 
 /// Returns the version of this crate.
 ///

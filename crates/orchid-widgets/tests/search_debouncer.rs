@@ -59,7 +59,9 @@ async fn make_search_manager() -> (WidgetManager, uuid::Uuid) {
     let storage = Arc::new(StateStore::open_in_memory("search-debouncer").unwrap());
     let config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
     let widget_registry = Arc::new(WidgetRegistry::new());
-    let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+    let agg = Arc::new(SearchAggregator::new(vec![
+        Arc::new(EchoSource) as Arc<dyn SearchSource>
+    ]));
     widget_registry.register(search::descriptor(agg)).unwrap();
 
     let manager = WidgetManager::new(
@@ -68,6 +70,7 @@ async fn make_search_manager() -> (WidgetManager, uuid::Uuid) {
         storage,
         config,
         test_locale(),
+        Arc::new(orchid_core::BackgroundJobQueue::new()),
         WidgetManagerOptions::default(),
     );
     manager.start().await.unwrap();

@@ -55,11 +55,14 @@ let storage = Arc::new(orchid_storage::StateStore::open_in_memory("demo").unwrap
 let config = Arc::new(parking_lot::RwLock::new(orchid_storage::OrchidConfig::default()));
 
 let registry = Arc::new(WidgetRegistry::new());
+let jobs = Arc::new(orchid_core::BackgroundJobQueue::new());
 let widgets = WidgetManager::new(
     registry.clone(),
     bus.clone(),
     storage.clone(),
     config.clone(),
+    /* locale */ Arc::new(orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None).unwrap()),
+    jobs,
     WidgetManagerOptions::default(),
 );
 let workspaces = WorkspaceManager::new(bus.clone(), storage.clone());

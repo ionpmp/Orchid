@@ -4,11 +4,12 @@ pub mod config;
 pub mod provider;
 pub mod types;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use tracing::warn;
 use uuid::Uuid;
@@ -17,9 +18,10 @@ use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{RssItemView, RssPayload};
-use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::{FeedSource, RssConfig};
@@ -29,15 +31,120 @@ pub use types::{FeedData, FeedItem};
 /// Stable type id.
 pub const TYPE_ID: &str = "rss";
 
+fn job_key(instance_id: Uuid) -> String {
+    format!("rss:{instance_id}")
+}
+
+static RSS_LIVE: LazyLock<DashMap<Uuid, Arc<RssHandle>>> = LazyLock::new(DashMap::new);
+
+struct RssHandle {
+    instance_id: Uuid,
+    config: Arc<RwLock<RssConfig>>,
+    data: Arc<RwLock<FeedData>>,
+    provider: RssProvider,
+    bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
+    jobs: Arc<orchid_core::BackgroundJobQueue>,
+}
+
+impl RssHandle {
+    fn publish(&self) {
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+    }
+
+    fn enabled_feeds(&self) -> Vec<FeedSource> {
+        self.config
+            .read()
+            .feeds
+            .iter()
+            .filter(|f| f.enabled)
+            .cloned()
+            .collect()
+    }
+
+    fn refresh_interval(&self) -> Duration {
+        Duration::from_secs(self.config.read().refresh_interval_minutes.max(1) as u64 * 60)
+    }
+
+    /// Schedule (or replace) the always-on feed fetch job.
+    fn schedule_job(self: &Arc<Self>) {
+        let handle = Arc::clone(self);
+        let interval = self.refresh_interval();
+        self.jobs.schedule(job_key(self.instance_id), interval, move || {
+            let handle = Arc::clone(&handle);
+            async move {
+                let feeds = handle.enabled_feeds();
+                let provider = handle.provider.clone();
+                let data_slot = handle.data.clone();
+                let bus = handle.bus.clone();
+                let instance_id = handle.instance_id;
+                RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
+            }
+        });
+    }
+
+    fn cancel_job(&self) {
+        self.jobs.cancel(&job_key(self.instance_id));
+    }
+}
+
+fn feeds_differ(before: &RssConfig, after: &RssConfig) -> bool {
+    if before.feeds.len() != after.feeds.len() {
+        return true;
+    }
+    before.feeds.iter().zip(&after.feeds).any(|(a, b)| {
+        a.name != b.name || a.url != b.url || a.enabled != b.enabled
+    })
+}
+
+/// Snapshot the live RSS config for the settings dialog.
+#[must_use]
+pub fn current_config(instance_id: Uuid) -> Option<RssConfig> {
+    RSS_LIVE
+        .get(&instance_id)
+        .map(|h| h.config.read().clone())
+}
+
+/// Apply a settings-dialog mutation to the live RSS config.
+pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut RssConfig)) {
+    let Some(h) = RSS_LIVE.get(&instance_id) else {
+        return;
+    };
+    let before = h.config.read().clone();
+    {
+        let mut cfg = h.config.write();
+        mutate(&mut cfg);
+        cfg.normalize();
+    }
+    let after = h.config.read().clone();
+    let interval_changed =
+        before.refresh_interval_minutes != after.refresh_interval_minutes;
+    if feeds_differ(&before, &after) {
+        let provider = h.provider.clone();
+        let feeds = h.enabled_feeds();
+        let data_slot = h.data.clone();
+        let bus = h.bus.clone();
+        let instance_id = h.instance_id;
+        tokio::spawn(async move {
+            RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
+        });
+    } else {
+        h.publish();
+    }
+    if interval_changed {
+        h.schedule_job();
+    }
+}
+
 /// RSS widget.
 pub struct RssWidget {
     instance_id: Uuid,
-    config: RwLock<RssConfig>,
-    provider: RssProvider,
-    data: Arc<RwLock<FeedData>>,
-    refresh: PeriodicRefresh,
-    bus: Arc<orchid_core::EventBus>,
-    locale: Arc<orchid_i18n::LocaleManager>,
+    handle: Arc<RssHandle>,
 }
 
 impl std::fmt::Debug for RssWidget {
@@ -56,16 +163,21 @@ impl RssWidget {
         client: reqwest::Client,
         bus: Arc<orchid_core::EventBus>,
         locale: Arc<orchid_i18n::LocaleManager>,
+        jobs: Arc<orchid_core::BackgroundJobQueue>,
     ) -> Self {
-        let interval = Duration::from_secs(cfg.refresh_interval_minutes.max(1) as u64 * 60);
-        Self {
+        let handle = Arc::new(RssHandle {
             instance_id,
-            config: RwLock::new(cfg),
-            provider: RssProvider::new(client),
+            config: Arc::new(RwLock::new(cfg)),
             data: Arc::new(RwLock::new(FeedData::default())),
-            refresh: PeriodicRefresh::new(interval),
+            provider: RssProvider::new(client),
             bus,
             locale,
+            jobs,
+        });
+        RSS_LIVE.insert(instance_id, Arc::clone(&handle));
+        Self {
+            instance_id,
+            handle,
         }
     }
 
@@ -102,68 +214,35 @@ impl Widget for RssWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let feeds = self
-            .config
-            .read()
-            .feeds
-            .iter()
-            .filter(|f| f.enabled)
-            .cloned()
-            .collect::<Vec<_>>();
-        let provider = self.provider.clone();
-        let data_slot = self.data.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
-        Self::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
+        // Always-on fetch: first tick runs immediately via BackgroundJobQueue.
+        self.handle.schedule_job();
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let feeds = self
-            .config
-            .read()
-            .feeds
-            .iter()
-            .filter(|f| f.enabled)
-            .cloned()
-            .collect::<Vec<_>>();
-        let provider = self.provider.clone();
-        let data_slot = self.data.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
-        self.refresh.start(move || {
-            let feeds = feeds.clone();
-            let provider = provider.clone();
-            let data_slot = data_slot.clone();
-            let bus = bus.clone();
-            async move {
-                Self::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
-            }
-        });
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
         Ok(())
     }
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
         Ok(())
     }
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
+        self.handle.cancel_job();
+        RSS_LIVE.remove(&self.instance_id);
         Ok(())
     }
     async fn on_resize(&mut self, _ctx: &WidgetContext, _size: WidgetSize) -> WidgetResult<()> {
         Ok(())
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let cfg = self.config.read().clone();
-        let data = self.data.read().clone();
+        let cfg = self.handle.config.read().clone();
+        let data = self.handle.data.read().clone();
         let enabled_feed_count = cfg.feeds.iter().filter(|f| f.enabled).count() as u32;
         let failed_feed_count = data.per_feed_errors.len() as u32;
         let is_loading = data.fetched_at.is_none();
         let last_updated_text = match data.fetched_at {
-            Some(at) => format_relative(&self.locale, at),
+            Some(at) => format_relative(&self.handle.locale, at),
             None => String::new(),
         };
 
@@ -176,14 +255,14 @@ impl Widget for RssWidget {
             .map(|it| RssItemView {
                 id: it.id.clone(),
                 title: if it.title.trim().is_empty() {
-                    self.locale.tr("rss-item-untitled")
+                    self.handle.locale.tr("rss-item-untitled")
                 } else {
                     it.title.clone()
                 },
                 source_name: it.source_name.clone(),
                 published_text: it
                     .published
-                    .map(|t| format_item_relative(&self.locale, now, t))
+                    .map(|t| format_item_relative(&self.handle.locale, now, t))
                     .unwrap_or_default(),
                 summary_text: it.summary.clone(),
                 link: it.link.clone(),
@@ -193,7 +272,7 @@ impl Widget for RssWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: self.locale.tr("widget-rss-name").into(),
+            title: self.handle.locale.tr("widget-rss-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::RssFeed(RssPayload {
                 items,
@@ -205,12 +284,12 @@ impl Widget for RssWidget {
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        state_codec::save_state(&*self.config.read())
+        state_codec::save_state(&*self.handle.config.read())
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let mut cfg: RssConfig = state_codec::restore_state(bytes)?;
         cfg.normalize();
-        *self.config.write() = cfg;
+        *self.handle.config.write() = cfg;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -289,6 +368,7 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
             http_client.clone(),
             ctx.bus.clone(),
             ctx.locale.clone(),
+            ctx.jobs.clone(),
         )) as Box<dyn Widget>)
     });
     WidgetDescriptor {

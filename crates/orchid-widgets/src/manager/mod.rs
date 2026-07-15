@@ -34,18 +34,19 @@ pub use operations::CreateWidgetRequest;
 /// Knobs for the background sweepers.
 #[derive(Debug, Clone)]
 pub struct WidgetManagerOptions {
-    /// How long a widget must sit idle before being moved to `Sleeping`.
-    pub idle_sleep_after: Duration,
-    /// How long a widget must sit in `Sleeping` before being unloaded.
+    /// How long a widget may remain `Sleeping` before being unloaded.
+    ///
+    /// Active ↔ Sleeping is owned by visibility ([`crate::visibility`] /
+    /// [`WidgetManager::apply_visibility`]); this option only gates
+    /// Sleeping → Unloaded memory reclaim.
     pub idle_unload_after: Duration,
-    /// How often the sweepers run.
+    /// How often the unload sweeper runs.
     pub sweeper_interval: Duration,
 }
 
 impl Default for WidgetManagerOptions {
     fn default() -> Self {
         Self {
-            idle_sleep_after: Duration::from_secs(5 * 60),
             idle_unload_after: Duration::from_secs(30 * 60),
             sweeper_interval: Duration::from_secs(30),
         }
@@ -60,10 +61,11 @@ pub(crate) struct WidgetManagerInner {
     storage: Arc<StateStore>,
     config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     locale: Arc<orchid_i18n::LocaleManager>,
+    jobs: Arc<orchid_core::BackgroundJobQueue>,
     instances: DashMap<Uuid, SharedInstance>,
     lifecycle: LifecycleController,
     options: RwLock<WidgetManagerOptions>,
-    /// Idle lifecycle sweeper.
+    /// Idle lifecycle sweeper (Sleeping → Unloaded only).
     sweeper: Mutex<Option<JoinHandle<()>>>,
     /// Pumps [`Widget::snapshot`] for active instances into [`WidgetSnapshotCache`].
     snapshot_pump: Mutex<Option<JoinHandle<()>>>,
@@ -100,6 +102,7 @@ impl WidgetManager {
         storage: Arc<StateStore>,
         config: Arc<RwLock<orchid_storage::OrchidConfig>>,
         locale: Arc<orchid_i18n::LocaleManager>,
+        jobs: Arc<orchid_core::BackgroundJobQueue>,
         options: WidgetManagerOptions,
     ) -> Self {
         let lifecycle = LifecycleController::new(bus.clone());
@@ -111,6 +114,7 @@ impl WidgetManager {
                 storage,
                 config,
                 locale,
+                jobs,
                 instances: DashMap::new(),
                 lifecycle,
                 options: RwLock::new(options),
@@ -121,6 +125,12 @@ impl WidgetManager {
                 snapshot_refresh_sub: parking_lot::Mutex::new(None),
             }),
         }
+    }
+
+    /// Always-on job queue shared with widget contexts.
+    #[must_use]
+    pub fn jobs(&self) -> &Arc<orchid_core::BackgroundJobQueue> {
+        &self.inner.jobs
     }
 
     /// Access to the underlying registry (for commands and UI helpers).
@@ -205,8 +215,36 @@ impl WidgetManager {
             storage: self.inner.storage.clone(),
             config: self.inner.config.clone(),
             locale: self.inner.locale.clone(),
+            jobs: self.inner.jobs.clone(),
             instance_id: instance.id,
             workspace_id: instance.workspace_id,
+        }
+    }
+
+    /// Align every instance's lifecycle with canvas visibility.
+    ///
+    /// * ids in `visible` that are `Sleeping` or `Unloaded` → `Active` (+ touch)
+    /// * ids not in `visible` that are `Active` → `Sleeping`
+    ///
+    /// Errors are logged per-instance; this never fails the whole sync.
+    pub async fn apply_visibility(&self, visible: &[Uuid]) {
+        let visible: HashSet<Uuid> = visible.iter().copied().collect();
+        let all: Vec<SharedInstance> = self.list_instances();
+        for inst in all {
+            let id = inst.id;
+            let state = *inst.lifecycle.read();
+            if visible.contains(&id) {
+                self.touch(id);
+                if state == LifecycleState::Sleeping || state == LifecycleState::Unloaded {
+                    if let Err(e) = self.change_lifecycle(id, LifecycleState::Active).await {
+                        warn!(widget_id = %id, error = %e, "apply_visibility: wake failed");
+                    }
+                }
+            } else if state == LifecycleState::Active {
+                if let Err(e) = self.change_lifecycle(id, LifecycleState::Sleeping).await {
+                    warn!(widget_id = %id, error = %e, "apply_visibility: sleep failed");
+                }
+            }
         }
     }
 
@@ -294,6 +332,7 @@ impl WidgetManager {
                 storage: self.inner.storage.clone(),
                 config: self.inner.config.clone(),
                 locale: self.inner.locale.clone(),
+                jobs: self.inner.jobs.clone(),
                 instance_id: row.id,
                 workspace_id: row.workspace_id,
             };
@@ -486,10 +525,7 @@ async fn run_snapshot_pump(inner: &WidgetManagerInner) {
 }
 
 async fn run_sweepers(inner: &WidgetManagerInner) {
-    let (idle, stale) = {
-        let opts = inner.options.read();
-        (opts.idle_sleep_after, opts.idle_unload_after)
-    };
+    let stale = inner.options.read().idle_unload_after;
     let instances: Vec<SharedInstance> = inner
         .instances
         .iter()
@@ -502,14 +538,14 @@ async fn run_sweepers(inner: &WidgetManagerInner) {
             storage: inner.storage.clone(),
             config: inner.config.clone(),
             locale: inner.locale.clone(),
+            jobs: inner.jobs.clone(),
             instance_id: instance.id,
             workspace_id: instance.workspace_id,
         }
     };
 
-    if let Err(e) = inner.lifecycle.sleep_idle(&instances, idle, &ctx_for).await {
-        warn!(error = %e, "sleep_idle sweep failed");
-    }
+    // Active ↔ Sleeping is owned by visibility (apply_visibility). The sweeper
+    // only reclaims memory from long-sleeping instances.
     if let Err(e) = inner
         .lifecycle
         .unload_stale(&instances, stale, &ctx_for)

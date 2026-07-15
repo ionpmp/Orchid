@@ -20,12 +20,16 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{SearchCandidateView, UniversalSearchPayload};
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 use tracing::warn;
 
 pub use aggregator::SearchAggregator;
-pub use sources::{ActionTarget, CommandsSource, FilesSource, SearchCandidate, SearchSource, SettingsSource};
+pub use sources::{
+    ActionTarget, CommandsSource, FilesSource, SearchCandidate, SearchSource, SettingsSource,
+};
 
 /// Persisted universal-search UI state.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -97,7 +101,10 @@ pub fn universal_search_push_query(instance_id: Uuid, query: String) {
 /// Look up the [`ActionTarget`] for `candidate_id` on `instance_id`.
 ///
 /// Returns `None` if the instance is unknown or the candidate id is stale.
-pub fn universal_search_action_target(instance_id: Uuid, candidate_id: &str) -> Option<ActionTarget> {
+pub fn universal_search_action_target(
+    instance_id: Uuid,
+    candidate_id: &str,
+) -> Option<ActionTarget> {
     SEARCH_LIVE.get(&instance_id).and_then(|inner| {
         inner
             .candidates
@@ -149,14 +156,18 @@ impl Inner {
                     *inner.is_searching.write() = false;
                     inner.bus.publish(
                         orchid_core::EventSource::Widget(inner.instance_id),
-                        WidgetSnapshotUpdated { instance_id: inner.instance_id },
+                        WidgetSnapshotUpdated {
+                            instance_id: inner.instance_id,
+                        },
                     );
                     continue;
                 }
                 *inner.is_searching.write() = true;
                 inner.bus.publish(
                     orchid_core::EventSource::Widget(inner.instance_id),
-                    WidgetSnapshotUpdated { instance_id: inner.instance_id },
+                    WidgetSnapshotUpdated {
+                        instance_id: inner.instance_id,
+                    },
                 );
 
                 let candidates = match inner.aggregator.as_ref() {
@@ -167,7 +178,9 @@ impl Inner {
                 *inner.is_searching.write() = false;
                 inner.bus.publish(
                     orchid_core::EventSource::Widget(inner.instance_id),
-                    WidgetSnapshotUpdated { instance_id: inner.instance_id },
+                    WidgetSnapshotUpdated {
+                        instance_id: inner.instance_id,
+                    },
                 );
             }
         });
@@ -383,12 +396,8 @@ pub fn descriptor_stub() -> WidgetDescriptor {
             Some(bytes) => state_codec::restore_state::<SearchPersisted>(bytes).unwrap_or_default(),
             None => SearchPersisted::default(),
         };
-        let widget = UniversalSearchWidget::new(
-            ctx.instance_id,
-            None,
-            ctx.bus.clone(),
-            ctx.locale.clone(),
-        );
+        let widget =
+            UniversalSearchWidget::new(ctx.instance_id, None, ctx.bus.clone(), ctx.locale.clone());
         if !persisted.query.is_empty() {
             *widget.inner.query.write() = persisted.query;
         }
@@ -419,12 +428,12 @@ mod live_tests {
 
     use super::*;
     use async_trait::async_trait;
-    use parking_lot::RwLock;
     use orchid_core::{EventBus, EventBusConfig};
     use orchid_storage::StateStore;
+    use parking_lot::RwLock;
 
-    use crate::Widget;
     use crate::widget::snapshot::WidgetPayload;
+    use crate::Widget;
     use sources::{ActionTarget, SearchCandidate, SearchSource};
 
     /// Deterministic source so the debouncer path can be asserted without Tantivy.
@@ -467,6 +476,7 @@ mod live_tests {
                 orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None)
                     .expect("test locale"),
             ),
+            jobs: Arc::new(orchid_core::BackgroundJobQueue::new()),
             instance_id,
             workspace_id: Uuid::new_v4(),
         }
@@ -476,7 +486,9 @@ mod live_tests {
     async fn push_query_after_sleep_still_populates_candidates() {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let id = Uuid::new_v4();
-        let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+        let agg = Arc::new(SearchAggregator::new(vec![
+            Arc::new(EchoSource) as Arc<dyn SearchSource>
+        ]));
         let ctx = test_ctx(id, bus.clone());
         let mut w = UniversalSearchWidget::new(id, Some(agg), bus, ctx.locale.clone());
         w.on_activate(&ctx).await.expect("activate");
@@ -498,7 +510,9 @@ mod live_tests {
     async fn push_query_after_debouncer_stopped_still_populates_candidates() {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let id = Uuid::new_v4();
-        let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+        let agg = Arc::new(SearchAggregator::new(vec![
+            Arc::new(EchoSource) as Arc<dyn SearchSource>
+        ]));
         let ctx = test_ctx(id, bus.clone());
         let mut w = UniversalSearchWidget::new(id, Some(agg), bus, ctx.locale.clone());
         w.on_activate(&ctx).await.expect("activate");
@@ -521,7 +535,9 @@ mod live_tests {
     async fn update_query_triggers_debounced_search() {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let id = Uuid::new_v4();
-        let agg = Arc::new(SearchAggregator::new(vec![Arc::new(EchoSource) as Arc<dyn SearchSource>]));
+        let agg = Arc::new(SearchAggregator::new(vec![
+            Arc::new(EchoSource) as Arc<dyn SearchSource>
+        ]));
         let ctx = test_ctx(id, bus.clone());
         let mut w = UniversalSearchWidget::new(id, Some(agg), bus, ctx.locale.clone());
         w.on_activate(&ctx).await.expect("activate");

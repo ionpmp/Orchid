@@ -9,9 +9,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
-use orchid_core::{
-    Event, EventBus, EventBusConfig, EventFilter, EventSource, HandlerPriority,
-};
+use orchid_core::{Event, EventBus, EventBusConfig, EventFilter, EventSource, HandlerPriority};
 use orchid_storage::{LifecycleState, StateStore};
 use orchid_widgets::{
     CreateWidgetRequest, WidgetLifecycleChanged, WidgetManager, WidgetManagerOptions,
@@ -22,7 +20,12 @@ use uuid::Uuid;
 
 use common::{register_dummy, DummyCounters};
 
-fn make_manager() -> (WidgetManager, Arc<WidgetRegistry>, Arc<DummyCounters>, Arc<EventBus>) {
+fn make_manager() -> (
+    WidgetManager,
+    Arc<WidgetRegistry>,
+    Arc<DummyCounters>,
+    Arc<EventBus>,
+) {
     let registry = Arc::new(WidgetRegistry::new());
     let counters = register_dummy(&registry);
     let bus = Arc::new(EventBus::new(EventBusConfig::default()));
@@ -34,6 +37,7 @@ fn make_manager() -> (WidgetManager, Arc<WidgetRegistry>, Arc<DummyCounters>, Ar
         storage,
         config,
         test_locale(),
+        Arc::new(orchid_core::BackgroundJobQueue::new()),
         WidgetManagerOptions::default(),
     );
     (manager, registry, counters, bus)
@@ -97,7 +101,10 @@ async fn lifecycle_transitions_emit_events_and_invoke_callbacks() {
         .iter()
         .any(|e| e.from == LifecycleState::Sleeping && e.to == LifecycleState::Active);
     assert!(saw_sleep, "expected a Sleeping transition event");
-    assert!(saw_reactivate, "expected a Sleeping→Active transition event");
+    assert!(
+        saw_reactivate,
+        "expected a Sleeping→Active transition event"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

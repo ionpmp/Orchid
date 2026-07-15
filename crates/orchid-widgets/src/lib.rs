@@ -13,6 +13,7 @@ pub mod layout;
 pub mod manager;
 pub mod recent_files;
 pub mod registry;
+pub mod visibility;
 pub mod widget;
 pub mod workspace;
 
@@ -49,6 +50,7 @@ pub use commands::build_command_set;
 pub use manager::operations::CreateWidgetRequest;
 pub use manager::{WidgetManager, WidgetManagerOptions};
 pub use recent_files::{RecentFileEntry, RecentFilesStore, RecentFilesUpdated};
+pub use visibility::visible_instance_ids;
 
 /// Crate version.
 #[must_use]

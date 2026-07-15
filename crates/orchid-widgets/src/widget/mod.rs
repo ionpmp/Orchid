@@ -23,9 +23,8 @@ pub use descriptor::{WidgetCategory, WidgetDescriptor, WidgetFactory};
 pub use instance::WidgetInstanceRuntime;
 pub use lifecycle::LifecycleController;
 pub use snapshot::{
-    TerminalPayload, TerminalPayloadCell, TerminalPanePayload, TerminalDividerPayload,
-    TerminalTabPayload, WidgetPayload, WidgetSnapshot,
-    WidgetStatus,
+    TerminalDividerPayload, TerminalPanePayload, TerminalPayload, TerminalPayloadCell,
+    TerminalTabPayload, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 pub use snapshot_cache::WidgetSnapshotCache;
 
@@ -61,6 +60,9 @@ pub struct WidgetContext {
     pub config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     /// Localized UI strings.
     pub locale: Arc<orchid_i18n::LocaleManager>,
+    /// Always-on job queue (network refresh, future agents). Independent of
+    /// widget visibility / lifecycle.
+    pub jobs: Arc<orchid_core::BackgroundJobQueue>,
     /// Instance id (stable for the widget's lifetime).
     pub instance_id: Uuid,
     /// Workspace this widget currently lives on.

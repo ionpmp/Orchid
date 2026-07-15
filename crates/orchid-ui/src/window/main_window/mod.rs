@@ -39,8 +39,8 @@ use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::SharedInstance;
 use orchid_widgets::WidgetPayload;
 use orchid_widgets::{
-    CreateWidgetRequest, GroupManager, LayoutEngine, PlacedWidget, RecentFilesStore, WidgetManager,
-    WorkspaceManager,
+    visible_instance_ids, CreateWidgetRequest, GroupManager, LayoutEngine, PlacedWidget,
+    RecentFilesStore, WidgetManager, WorkspaceManager,
 };
 use parking_lot::RwLock;
 
@@ -54,7 +54,8 @@ use super::models::{
     empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
     empty_recent_files_model, empty_rename_state, empty_rss_model, empty_search_model,
     empty_system_model, empty_tag_state, empty_viewer_model, empty_weather_model,
-    locale_display_name, theme_display_name, FileManagerOverlays, PasswordAddDialogOverlay,
+    locale_display_name, theme_display_name, widget_has_settings, FileManagerOverlays,
+    PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
@@ -63,7 +64,7 @@ use crate::slint_generated::{
     NotificationItem, PasswordModel, RecentFilesModel, RssModel, SearchCandidateEntry, SearchModel,
     SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel, TerminalCellModel, Theme,
     ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel,
-    WorkspaceModel, WorkspaceSummary,
+    WidgetSettingsDialog, WorkspaceModel, WorkspaceSummary,
 };
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
@@ -78,6 +79,7 @@ mod password;
 mod shell_ui;
 mod terminal;
 mod weather;
+mod widget_settings;
 mod wire;
 
 use canvas::ResizeInteraction;
@@ -122,6 +124,8 @@ pub struct MainWindowController {
     canvas_size: Arc<Mutex<(f32, f32)>>,
     /// When true, a later [`MainWindow::on_ui_tick`] flushes [`rebuild_workspace_model`].
     rebuild_pending: Arc<AtomicBool>,
+    /// Debounces concurrent [`Self::sync_widget_visibility`] spawns from [`Self::schedule_rebuild`].
+    visibility_sync_pending: Arc<AtomicBool>,
     /// Set when `config.toml` hot-reload completes; applied on the next UI tick.
     config_reload_pending: Arc<AtomicBool>,
     /// Last `Window::scale_factor` used to raster the terminal; when it changes, we re-raster.
@@ -156,6 +160,8 @@ pub struct MainWindowController {
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
     /// Unsaved text close-confirm overlays for viewer widgets.
     close_confirm_overlays: Arc<RwLock<HashMap<Uuid, WidgetCloseConfirmDialog>>>,
+    /// Per-widget settings dialog overlays.
+    settings_dialog_overlays: Arc<RwLock<HashMap<Uuid, WidgetSettingsDialog>>>,
     /// Last text-viewer instance that received an edit (for Ctrl+S when focus left the input).
     last_text_edit_instance: Arc<Mutex<Option<Uuid>>>,
     /// Last interacted file-manager instance and pane (for drop targeting).
@@ -419,6 +425,7 @@ impl MainWindowController {
             resize_state: Arc::new(Mutex::new(None)),
             canvas_size: Arc::new(Mutex::new((800.0, 500.0))),
             rebuild_pending: Arc::new(AtomicBool::new(false)),
+            visibility_sync_pending: Arc::new(AtomicBool::new(false)),
             config_reload_pending,
             last_window_scale: parking_lot::Mutex::new(0.0),
             last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
@@ -435,6 +442,7 @@ impl MainWindowController {
             password_add_dialogs: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
             close_confirm_overlays: Arc::new(RwLock::new(HashMap::new())),
+            settings_dialog_overlays: Arc::new(RwLock::new(HashMap::new())),
             last_text_edit_instance: Arc::new(Mutex::new(None)),
             fm_focus: Arc::new(Mutex::new(None)),
             fm_last_click: Arc::new(Mutex::new(None)),
@@ -547,6 +555,9 @@ impl MainWindowController {
         g.set_dock_add_label(mgr.tr("dock-add-label").into());
         g.set_catalog_search_placeholder(mgr.tr("catalog-search-placeholder").into());
         g.set_catalog_no_results(mgr.tr("catalog-no-results").into());
+        g.set_catalog_sort_default(mgr.tr("catalog-sort-default").into());
+        g.set_catalog_sort_name_asc(mgr.tr("catalog-sort-name-asc").into());
+        g.set_catalog_sort_name_desc(mgr.tr("catalog-sort-name-desc").into());
         g.set_dock_widget_terminal(mgr.tr("dock-widget-terminal").into());
         g.set_dock_widget_weather(mgr.tr("dock-widget-weather").into());
         g.set_dock_widget_moon(mgr.tr("dock-widget-moon").into());
@@ -570,6 +581,7 @@ impl MainWindowController {
         g.set_widget_viewer_desc(mgr.tr("widget-viewer-desc").into());
         g.set_widget_fm_desc(mgr.tr("widget-fm-desc").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+        g.set_widget_settings_tooltip(mgr.tr("widget-settings-tooltip").into());
         g.set_widget_resize_tooltip(mgr.tr("widget-resize-tooltip").into());
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
         g.set_recent_files_open_hint(mgr.tr("recent-files-open-hint").into());
@@ -757,9 +769,34 @@ impl MainWindowController {
     }
 
     /// Batches a workspace model update onto the next [`on_ui_tick`] (≈60 Hz).
+    /// Also schedules a visibility ↔ lifecycle sync (debounced).
     fn schedule_rebuild(self: &Arc<Self>) {
         self.rebuild_pending.store(true, Ordering::Release);
+        self.schedule_visibility_sync();
         trace!(target: "orchid_ui::workspace", "rebuild requested");
+    }
+
+    /// Align widget lifecycle with canvas visibility (active workspace + group tab).
+    fn schedule_visibility_sync(self: &Arc<Self>) {
+        if self.visibility_sync_pending.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            if let Some(c) = t.upgrade() {
+                c.visibility_sync_pending.store(false, Ordering::Release);
+                c.sync_widget_visibility().await;
+            }
+        });
+    }
+
+    async fn sync_widget_visibility(&self) {
+        let ids = visible_instance_ids(
+            &self.widget_manager,
+            &self.workspace_manager,
+            &self.group_manager,
+        );
+        self.widget_manager.apply_visibility(&ids).await;
     }
 
     /// `create` stores new instances at a placeholder cell; place them on a free grid cell.
@@ -1079,18 +1116,13 @@ impl MainWindowController {
         g.set_visible(cat.visible);
     }
 
-    /// Update filtered rows while typing without resetting the TextInput binding.
+    /// Update filtered card visibility while typing without resetting the search field.
     fn sync_widget_catalog_items_only(self: &Arc<Self>) {
         let cat = self.catalog.read().clone();
         let items = filter_catalog_items(&self.locale, &cat.search_query);
         let empty = items.is_empty();
         let visible_ids: std::collections::HashSet<&str> =
             items.iter().map(|d| d.type_id.as_str()).collect();
-        tracing::info!(
-            count = items.len(),
-            query = %cat.search_query,
-            "widget catalog filter"
-        );
         let g = self.window.global::<WidgetCatalog>();
         apply_catalog_row_visibility(&g, &visible_ids);
         g.set_is_empty(empty);
@@ -1737,11 +1769,19 @@ impl MainWindowController {
             .get(&pl.instance_id)
             .cloned()
             .unwrap_or_else(empty_close_confirm_dialog);
+        let settings_dialog = self
+            .settings_dialog_overlays
+            .read()
+            .get(&pl.instance_id)
+            .cloned()
+            .unwrap_or_else(empty_widget_settings_dialog);
+        let has_settings = widget_has_settings(iref.type_id.as_str());
         let (group_id, group_tabs) = self.build_group_tab_models(pl.instance_id);
         WidgetFrameModel {
             instance_id: pl.instance_id.to_string().into(),
             type_id: type_s,
             title,
+            has_settings,
             x: bounds.x,
             y: bounds.y,
             width: bounds.width,
@@ -1780,6 +1820,7 @@ impl MainWindowController {
             recent_files: recent_files_model,
             file_manager: file_manager_model,
             close_confirm,
+            settings_dialog,
         }
     }
 
@@ -2408,6 +2449,7 @@ fn is_known_widget_type(type_id: &str) -> bool {
     )
 }
 
+
 fn apply_catalog_row_visibility(
     g: &crate::slint_generated::WidgetCatalog,
     visible_ids: &std::collections::HashSet<&str>,
@@ -2598,6 +2640,15 @@ pub(super) fn empty_close_confirm_dialog() -> WidgetCloseConfirmDialog {
         save_label: SharedString::new(),
         discard_label: SharedString::new(),
         cancel_label: SharedString::new(),
+    }
+}
+
+pub(super) fn empty_widget_settings_dialog() -> WidgetSettingsDialog {
+    WidgetSettingsDialog {
+        visible: false,
+        title: SharedString::new(),
+        close_label: SharedString::new(),
+        fields: ModelRc::new(VecModel::<SettingsFieldRow>::default()),
     }
 }
 

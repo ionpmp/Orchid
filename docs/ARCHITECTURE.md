@@ -8,7 +8,7 @@
 │  Widgets as native Slint components                 │
 ├─────────────────────────────────────────────────────┤
 │  Orchid (Rust workspace)                            │
-│  ├─ orchid-core — event bus, actions, commands      │
+│  ├─ orchid-core — event bus, actions, commands, BackgroundJobQueue │
 │  ├─ orchid-storage — redb state + TOML config       │
 │  ├─ orchid-fs — local + rclone network providers    │
 │  ├─ orchid-crypto — age, KDBX4, BLAKE3 chunks       │
@@ -62,6 +62,13 @@ orchid/
 Network mounts are implemented by spawning the **rclone CLI** (`lsjson`, `cat`, `rcat`, …) per operation. A long-lived `rclone serve` process and Cap'n Proto IPC are **not** in the tree yet; treat older diagrams that mention them as aspirational.
 
 Prefer `rclone-remote` in `config.toml` (credentials in `rclone.conf`) over inline `password` fields — see [SECURITY.md](SECURITY.md).
+
+## Widget visibility and background jobs
+
+- **Visibility owns Active ↔ Sleeping.** A widget is active only when it is on the active workspace and is the active tab of its group (or not in a multi-member group). `visible_instance_ids` + `WidgetManager::apply_visibility` drive this; the UI calls sync after layout-changing actions (and once at bootstrap).
+- **Sleeping → Unloaded** remains an idle memory reclaim (~30 min). Idle Active → Sleeping was removed so visible widgets are not paused by `last_touched`.
+- **UI-only timers** (`PeriodicRefresh`: media, system, password, moon) stop in `on_sleep`.
+- **Always-on work** (RSS/weather network refresh; future AI agents) uses `orchid_core::BackgroundJobQueue` — interval jobs keyed by string, independent of widget visibility until the instance is closed.
 
 ## Detailed Architecture
 

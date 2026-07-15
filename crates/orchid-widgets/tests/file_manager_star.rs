@@ -9,7 +9,10 @@ use orchid_core::{EventBus, EventBusConfig};
 use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider, TagManager};
 use orchid_storage::StateStore;
 use orchid_widgets::builtin::file_manager::{self, FileClipboard, FileManagerDeps};
-use orchid_widgets::{CreateWidgetRequest, RecentFilesStore, WidgetManager, WidgetManagerOptions, WidgetPayload, WidgetRegistry};
+use orchid_widgets::{
+    CreateWidgetRequest, RecentFilesStore, WidgetManager, WidgetManagerOptions, WidgetPayload,
+    WidgetRegistry,
+};
 use parking_lot::RwLock;
 
 use common::test_locale;
@@ -24,9 +27,8 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         .unwrap();
     let tag_manager = Arc::new(TagManager::new(storage.clone(), bus.clone()));
     let cache_dir = tempfile::tempdir().unwrap();
-    let thumbnails = Arc::new(
-        orchid_viewers::ThumbnailService::new(cache_dir.path().join("thumbs")).unwrap(),
-    );
+    let thumbnails =
+        Arc::new(orchid_viewers::ThumbnailService::new(cache_dir.path().join("thumbs")).unwrap());
     let config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
     let fm_deps = FileManagerDeps {
         registry: registry.clone(),
@@ -56,6 +58,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         storage,
         config,
         test_locale(),
+        Arc::new(orchid_core::BackgroundJobQueue::new()),
         WidgetManagerOptions::default(),
     );
     manager.start().await.unwrap();

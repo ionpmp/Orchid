@@ -12,26 +12,31 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use orchid_core::{
-    CommandPalette, CommandRegistry, ConfigUpdated, Event, EventBus, EventBusConfig, EventFilter,
-    HandlerPriority, SubscriptionHandle,
+    BackgroundJobQueue, CommandPalette, CommandRegistry, ConfigUpdated, Event, EventBus,
+    EventBusConfig, EventFilter, HandlerPriority, SubscriptionHandle,
 };
+use orchid_fs::{register_rclone_providers, FsProvider, FsProviderRegistry, LocalProvider};
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
-use orchid_fs::{FsProvider, FsProviderRegistry, LocalProvider, register_rclone_providers};
-use orchid_storage::{ConfigLoader, ConfigWatcher, NetworkMountConfig, OrchidConfig, OrchidPaths, StateStore};
+use orchid_storage::{
+    ConfigLoader, ConfigWatcher, NetworkMountConfig, OrchidConfig, OrchidPaths, StateStore,
+};
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
-    builtin::search::{CommandsSource, FilesSource, SearchAggregator, SearchSource, SettingsSource},
+    builtin::search::{
+        CommandsSource, FilesSource, SearchAggregator, SearchSource, SettingsSource,
+    },
     commands::build_command_set,
-    GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry, WorkspaceManager,
+    GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry,
+    WorkspaceManager,
 };
 
 use crate::commands::build_ui_command_set;
 use crate::error::{Result, UiError};
 use crate::theme::ThemeManager;
-use crate::widgets::terminal::ArboardClipboard;
-use crate::widgets::terminal::{build_terminal_command_set, palette::palette_from_theme};
 use crate::widgets::terminal::terminal_descriptor;
+use crate::widgets::terminal::ArboardClipboard;
 use crate::widgets::terminal::TerminalWidgetDeps;
+use crate::widgets::terminal::{build_terminal_command_set, palette::palette_from_theme};
 use crate::window::main_window::MainWindowController;
 use crate::window::startup::StartupWindowController;
 
@@ -73,6 +78,8 @@ pub struct OrchidApp {
     /// Keeps the Tantivy index scheduler workers alive.
     #[allow(dead_code)]
     _index_scheduler: Arc<orchid_search::IndexScheduler>,
+    /// Always-on interval jobs (RSS/weather fetch; future agents).
+    jobs: Arc<BackgroundJobQueue>,
     /// Keeps the FS→index bus subscriber alive.
     #[allow(dead_code)]
     _index_subscriber: orchid_search::IndexFsSubscriber,
@@ -109,7 +116,9 @@ impl OrchidApp {
     pub async fn bootstrap(paths: OrchidPaths) -> Result<Self> {
         paths.ensure_directories()?;
 
-        let config = Arc::new(RwLock::new(ConfigLoader::load_or_create(&paths.config_file)?));
+        let config = Arc::new(RwLock::new(ConfigLoader::load_or_create(
+            &paths.config_file,
+        )?));
         {
             let mut cfg = config.write();
             match orchid_crypto::protect_network_mount_passwords(
@@ -141,7 +150,10 @@ impl OrchidApp {
             LocaleId::parse(&cfg.locale.language).unwrap_or_else(|_| default_language())
         };
 
-        let locale = Arc::new(LocaleManager::new(initial_lang, Some(paths.locales_dir.clone()))?);
+        let locale = Arc::new(LocaleManager::new(
+            initial_lang,
+            Some(paths.locales_dir.clone()),
+        )?);
 
         let theme_id = crate::system_theme::resolve_theme_id(&config.read().appearance);
         let theme = Arc::new(ThemeManager::new(Some(paths.themes_dir.clone()))?);
@@ -189,9 +201,8 @@ impl OrchidApp {
             Arc::new(CommandPalette::new(command_registry.clone()));
 
         let search_index_dir = paths.data_dir.join("search_index");
-        std::fs::create_dir_all(&search_index_dir).map_err(|e| {
-            UiError::Slint(format!("create search index dir: {e}"))
-        })?;
+        std::fs::create_dir_all(&search_index_dir)
+            .map_err(|e| UiError::Slint(format!("create search index dir: {e}")))?;
         let search_engine: Arc<orchid_search::SearchEngine> = Arc::new(
             orchid_search::SearchEngine::open(&search_index_dir)
                 .map_err(|e| UiError::Slint(format!("open search index: {e}")))?,
@@ -201,7 +212,8 @@ impl OrchidApp {
             Arc::new(CommandsSource::new(command_palette.clone())),
             Arc::new(SettingsSource::new()),
         ];
-        let search_aggregator: Arc<SearchAggregator> = Arc::new(SearchAggregator::new(search_sources));
+        let search_aggregator: Arc<SearchAggregator> =
+            Arc::new(SearchAggregator::new(search_sources));
 
         widget_registry
             .register(orchid_widgets::builtin::weather::descriptor(http.clone()))
@@ -216,7 +228,9 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::rss::descriptor(http))
             .map_err(|e| UiError::Slint(format!("register rss: {e}")))?;
         widget_registry
-            .register(orchid_widgets::builtin::search::descriptor(search_aggregator))
+            .register(orchid_widgets::builtin::search::descriptor(
+                search_aggregator,
+            ))
             .map_err(|e| UiError::Slint(format!("register search: {e}")))?;
 
         widget_registry
@@ -319,10 +333,8 @@ impl OrchidApp {
 
         // Live Tantivy indexing: subscribe to fs.* bus events, watch configured
         // roots, and seed the index with a bounded bootstrap crawl.
-        let index_scheduler = Arc::new(orchid_search::IndexScheduler::new(
-            search_engine.clone(),
-            2,
-        ));
+        let index_scheduler =
+            Arc::new(orchid_search::IndexScheduler::new(search_engine.clone(), 2));
         let mut index_extractor = orchid_search::Extractor::new();
         if config.read().search.extract_pdf {
             index_extractor = index_extractor.with_pdf();
@@ -342,8 +354,10 @@ impl OrchidApp {
             .await
             .map_err(|e| UiError::Slint(format!("search index subscriber: {e}")))?;
 
-        let index_watcher =
-            Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
+        let index_watcher = Arc::new(orchid_fs::FileWatcher::new(
+            bus.clone(),
+            fs_registry.clone(),
+        ));
         let mut index_watch_handles = Vec::new();
         for root in &index_roots {
             match index_watcher.watch(root.clone()).await {
@@ -387,19 +401,22 @@ impl OrchidApp {
             orchid_crypto::ChunkStore::new(paths.chunks_dir.clone(), storage.clone())
                 .map_err(|e| UiError::Slint(format!("chunk store: {e}")))?,
         );
-        let deduplicator = Arc::new(
-            orchid_crypto::Deduplicator::new(
-                chunk_store.clone(),
-                orchid_crypto::ChunkerConfig::default(),
-            ),
-        );
-        let file_watcher_managed =
-            Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
-        let reveal_manager = Arc::new(
-            orchid_crypto::RevealManager::new(paths.cache_dir.join("reveal"), bus.clone()),
-        );
-        let file_watcher_encrypted =
-            Arc::new(orchid_fs::FileWatcher::new(bus.clone(), fs_registry.clone()));
+        let deduplicator = Arc::new(orchid_crypto::Deduplicator::new(
+            chunk_store.clone(),
+            orchid_crypto::ChunkerConfig::default(),
+        ));
+        let file_watcher_managed = Arc::new(orchid_fs::FileWatcher::new(
+            bus.clone(),
+            fs_registry.clone(),
+        ));
+        let reveal_manager = Arc::new(orchid_crypto::RevealManager::new(
+            paths.cache_dir.join("reveal"),
+            bus.clone(),
+        ));
+        let file_watcher_encrypted = Arc::new(orchid_fs::FileWatcher::new(
+            bus.clone(),
+            fs_registry.clone(),
+        ));
         let encrypted_engine = Arc::new(orchid_fs::EncryptedFolderEngine::new(
             storage.clone(),
             fs_registry.clone(),
@@ -499,19 +516,20 @@ impl OrchidApp {
             ))
             .map_err(|e| UiError::Slint(format!("register recent files: {e}")))?;
 
+        let jobs = Arc::new(BackgroundJobQueue::new());
+
         let widget_manager: Arc<WidgetManager> = Arc::new(WidgetManager::new(
             widget_registry,
             bus.clone(),
             storage.clone(),
             config.clone(),
             locale.clone(),
+            jobs.clone(),
             WidgetManagerOptions::default(),
         ));
 
-        let workspace_manager: Arc<WorkspaceManager> = Arc::new(WorkspaceManager::new(
-            bus.clone(),
-            storage.clone(),
-        ));
+        let workspace_manager: Arc<WorkspaceManager> =
+            Arc::new(WorkspaceManager::new(bus.clone(), storage.clone()));
 
         workspace_manager
             .restore_from_storage()
@@ -530,7 +548,8 @@ impl OrchidApp {
             .await
             .map_err(|e| UiError::Slint(format!("prime widget snapshots: {e}")))?;
 
-        let group_manager: Arc<GroupManager> = Arc::new(GroupManager::new(bus.clone(), storage.clone()));
+        let group_manager: Arc<GroupManager> =
+            Arc::new(GroupManager::new(bus.clone(), storage.clone()));
         group_manager
             .restore_from_storage()
             .map_err(|e| UiError::Slint(format!("restore groups: {e}")))?;
@@ -540,6 +559,17 @@ impl OrchidApp {
                     *inst.group_id.write() = Some(group.id);
                 }
             }
+        }
+
+        // Sleep widgets that are not on the active workspace / active group tab
+        // before the UI opens (visibility owns Active ↔ Sleeping).
+        {
+            let visible = orchid_widgets::visible_instance_ids(
+                &widget_manager,
+                &workspace_manager,
+                &group_manager,
+            );
+            widget_manager.apply_visibility(&visible).await;
         }
 
         for (desc, factory) in build_command_set(
@@ -596,10 +626,7 @@ impl OrchidApp {
                         *config_reload.write() = new_cfg.clone();
                         *mounts_reload.write() = new_cfg.file_manager.network_mounts.clone();
                         orchid_widgets::builtin::file_manager::refresh_all_instances().await;
-                        bus_reload.publish(
-                            orchid_core::EventSource::System,
-                            ConfigUpdated,
-                        );
+                        bus_reload.publish(orchid_core::EventSource::System, ConfigUpdated);
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -630,6 +657,7 @@ impl OrchidApp {
             _managed_ingest_failed_sub: Some(managed_ingest_failed_sub),
             network_mounts,
             _index_scheduler: index_scheduler,
+            jobs,
             _index_subscriber: index_subscriber,
             _index_watch_handles: index_watch_handles,
             recent_files,
@@ -745,6 +773,7 @@ impl OrchidApp {
         if let Err(e) = self.widget_manager.shutdown().await {
             warn!(%e, "widget manager shutdown");
         }
+        self.jobs.shutdown().await;
         if let Err(e) = self.session_manager.close_all().await {
             warn!(%e, "close terminal sessions");
         }
@@ -848,7 +877,8 @@ fn build_search_index_scope(
         }
     }
     if roots.is_empty() {
-        if let Some(docs) = directories::UserDirs::new().and_then(|u| u.document_dir().map(PathBuf::from))
+        if let Some(docs) =
+            directories::UserDirs::new().and_then(|u| u.document_dir().map(PathBuf::from))
         {
             match orchid_fs::FsPath::from_local(&docs) {
                 Ok(p) => {
