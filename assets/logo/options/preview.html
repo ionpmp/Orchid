@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Orchid logo options v2</title>
+  <title>Orchid logo options v3 — transparent</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -14,7 +14,7 @@
       padding: 28px;
     }
     h1 { font-size: 1.35rem; margin: 0 0 6px; }
-    p { color: #8b8f9c; margin: 0 0 28px; max-width: 720px; line-height: 1.5; }
+    p { color: #8b8f9c; margin: 0 0 28px; max-width: 780px; line-height: 1.5; }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -28,51 +28,146 @@
     }
     .card h2 { font-size: 1.05rem; margin: 0 0 4px; color: #d4b8f0; }
     .card .desc { font-size: 0.85rem; color: #7a7f8c; margin-bottom: 14px; }
-    .card img {
+    .frames {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .frame {
+      border-radius: 16px;
+      overflow: hidden;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12%;
+    }
+    .frame.dark {
+      background:
+        linear-gradient(45deg, #1a1c24 25%, transparent 25%),
+        linear-gradient(-45deg, #1a1c24 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #1a1c24 75%),
+        linear-gradient(-45deg, transparent 75%, #1a1c24 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      background-color: #0e1016;
+    }
+    .frame.light {
+      background:
+        linear-gradient(45deg, #e8e8ec 25%, transparent 25%),
+        linear-gradient(-45deg, #e8e8ec 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e8e8ec 75%),
+        linear-gradient(-45deg, transparent 75%, #e8e8ec 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      background-color: #f4f4f7;
+    }
+    .frame img, .frame object {
       width: 100%;
       height: auto;
-      border-radius: 16px;
       display: block;
+    }
+    .caption {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: #6d707c;
+      margin-top: 6px;
+      margin-bottom: 2px;
     }
     .links { margin-top: 12px; font-size: 0.82rem; color: #6d707c; }
     .links a { color: #c49be6; text-decoration: none; }
     .links a:hover { text-decoration: underline; }
+    .note {
+      margin-top: 32px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: #161820;
+      border: 1px solid rgba(196,155,230,0.2);
+      color: #a8acb8;
+      font-size: 0.9rem;
+      max-width: 780px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
-  <h1>Orchid — новые варианты логотипа</h1>
-  <p>Без «клипартных» лепестков: орбита, типографика, слои workspace, силуэт labellum, компас. Выберите F–J.</p>
+  <h1>Orchid — логотипы v3 (прозрачный фон)</h1>
+  <p>
+    Все варианты без тёмного квадрата / rounded plate — фон полностью прозрачный.
+    Слева тёмный checkerboard, справа светлый. Выберите букву <strong>K–P</strong>.
+  </p>
   <div class="grid">
     <div class="card">
-      <h2>F — Orbit</h2>
-      <p class="desc">Светящее ядро и орбиты — shell / окружение.</p>
-      <img src="orchid-logo-f-orbit.png" alt="F Orbit" width="512" height="512" />
-      <div class="links"><a href="orchid-logo-f-orbit.svg">SVG</a> · <a href="orchid-logo-f-orbit.png">PNG</a></div>
+      <h2>K — Phalaenopsis</h2>
+      <p class="desc">Реалистичный бутон: пять долей + labellum, мягкий градиент.</p>
+      <div class="caption"><span>тёмный UI</span><span>светлый UI</span></div>
+      <div class="frames">
+        <div class="frame dark"><img src="orchid-logo-k-phalaenopsis.svg" alt="K dark" /></div>
+        <div class="frame light"><img src="orchid-logo-k-phalaenopsis.svg" alt="K light" /></div>
+      </div>
+      <div class="links"><a href="orchid-logo-k-phalaenopsis.svg">SVG</a></div>
     </div>
+
     <div class="card">
-      <h2>G — Mark O</h2>
-      <p class="desc">Кольцо O с акцентным «лепестком» — бренд + буква.</p>
-      <img src="orchid-logo-g-mark.png" alt="G Mark" width="512" height="512" />
-      <div class="links"><a href="orchid-logo-g-mark.svg">SVG</a> · <a href="orchid-logo-g-mark.png">PNG</a></div>
+      <h2>L — Silhouette</h2>
+      <p class="desc">Цельный силуэт орхидеи — сильный mark в одном цвете.</p>
+      <div class="caption"><span>тёмный UI</span><span>светлый UI</span></div>
+      <div class="frames">
+        <div class="frame dark"><img src="orchid-logo-l-silhouette.svg" alt="L dark" /></div>
+        <div class="frame light"><img src="orchid-logo-l-silhouette.svg" alt="L light" /></div>
+      </div>
+      <div class="links"><a href="orchid-logo-l-silhouette.svg">SVG</a></div>
     </div>
+
     <div class="card">
-      <h2>H — Layers</h2>
-      <p class="desc">Слои workspace + плюс — dashboard.</p>
-      <img src="orchid-logo-h-layers.png" alt="H Layers" width="512" height="512" />
-      <div class="links"><a href="orchid-logo-h-layers.svg">SVG</a> · <a href="orchid-logo-h-layers.png">PNG</a></div>
+      <h2>M — Line</h2>
+      <p class="desc">Тонкая ботаническая линия — лёгкий, воздушный стиль.</p>
+      <div class="caption"><span>тёмный UI</span><span>светлый UI</span></div>
+      <div class="frames">
+        <div class="frame dark"><img src="orchid-logo-m-line.svg" alt="M dark" /></div>
+        <div class="frame light"><img src="orchid-logo-m-line.svg" alt="M light" /></div>
+      </div>
+      <div class="links"><a href="orchid-logo-m-line.svg">SVG</a></div>
     </div>
+
     <div class="card">
-      <h2>I — Labellum</h2>
-      <p class="desc">Силуэт губы орхидеи — узнаваемая форма.</p>
-      <img src="orchid-logo-i-labellum.png" alt="I Labellum" width="512" height="512" />
-      <div class="links"><a href="orchid-logo-i-labellum.svg">SVG</a> · <a href="orchid-logo-i-labellum.png">PNG</a></div>
+      <h2>N — Crest</h2>
+      <p class="desc">Вертикальный герб: стебель + крылья + губа.</p>
+      <div class="caption"><span>тёмный UI</span><span>светлый UI</span></div>
+      <div class="frames">
+        <div class="frame dark"><img src="orchid-logo-n-crest.svg" alt="N dark" /></div>
+        <div class="frame light"><img src="orchid-logo-n-crest.svg" alt="N light" /></div>
+      </div>
+      <div class="links"><a href="orchid-logo-n-crest.svg">SVG</a></div>
     </div>
+
     <div class="card">
-      <h2>J — Compass</h2>
-      <p class="desc">Компас / навигация в среде.</p>
-      <img src="orchid-logo-j-compass.png" alt="J Compass" width="512" height="512" />
-      <div class="links"><a href="orchid-logo-j-compass.svg">SVG</a> · <a href="orchid-logo-j-compass.png">PNG</a></div>
+      <h2>O — Quarter</h2>
+      <p class="desc">Четыре четверти угла — близко к духу workspace-orb.</p>
+      <div class="caption"><span>тёмный UI</span><span>светлый UI</span></div>
+      <div class="frames">
+        <div class="frame dark"><img src="orchid-logo-o-quarter.svg" alt="O dark" /></div>
+        <div class="frame light"><img src="orchid-logo-o-quarter.svg" alt="O light" /></div>
+      </div>
+      <div class="links"><a href="orchid-logo-o-quarter.svg">SVG</a></div>
     </div>
+
+    <div class="card">
+      <h2>P — Monogram O</h2>
+      <p class="desc">Буква O с акцентным лепестком — бренд + типографика.</p>
+      <div class="caption"><span>тёмный UI</span><span>светлый UI</span></div>
+      <div class="frames">
+        <div class="frame dark"><img src="orchid-logo-p-monogram.svg" alt="P dark" /></div>
+        <div class="frame light"><img src="orchid-logo-p-monogram.svg" alt="P light" /></div>
+      </div>
+      <div class="links"><a href="orchid-logo-p-monogram.svg">SVG</a></div>
+    </div>
+  </div>
+
+  <div class="note">
+    Выбран <strong>N — Crest</strong> как official mark (прозрачный фон). Используется в
+    <code>assets/logo/orchid-logo.svg</code>, exe/ICO и как цветок выбора workspace слева снизу.
   </div>
 </body>
 </html>

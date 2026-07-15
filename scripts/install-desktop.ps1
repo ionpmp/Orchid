@@ -19,7 +19,17 @@ $iconSource = Join-Path $PSScriptRoot "..\assets\logo\orchid-icon.ico"
 $installIcon = Join-Path $installRoot "orchid-icon.ico"
 
 New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
-Copy-Item -Path $sourceExe -Destination $installExe -Force
+
+# Prefer a staged swap if a previous install couldn't overwrite a running exe.
+$stagedExe = Join-Path $installRoot "orchid.exe.new"
+try {
+    Copy-Item -Path $sourceExe -Destination $installExe -Force
+    if (Test-Path $stagedExe) { Remove-Item $stagedExe -Force }
+} catch {
+    Copy-Item -Path $sourceExe -Destination $stagedExe -Force
+    Write-Warning "orchid.exe is in use. Close Orchid, then re-run this script (or rename orchid.exe.new -> orchid.exe)."
+}
+
 if (Test-Path $iconSource) {
     Copy-Item -Path $iconSource -Destination $installIcon -Force
 }

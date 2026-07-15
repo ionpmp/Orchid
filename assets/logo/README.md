@@ -1,6 +1,6 @@
 # Orchid logo
 
-Official mark: **Compass** (variant J).
+Official mark: **Crest** (variant N) — transparent background.
 
 | File | Use |
 |------|-----|
@@ -8,7 +8,9 @@ Official mark: **Compass** (variant J).
 | `orchid-logo.png` | 512px raster |
 | `orchid-icon.ico` | Windows exe / shortcut |
 
-Regenerate raster assets from SVG (transparent corners outside the rounded icon):
+Also used as the workspace-corner flower control (`crates/orchid-ui/ui/assets/orchid-icon.png`).
+
+Regenerate raster assets from SVG:
 
 ```bash
 python scripts/fix-logo-alpha.py

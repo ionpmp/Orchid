@@ -4,7 +4,7 @@ import { NavigationGlobal } from "../navigation_global.slint";
 import { AppState } from "../app_state_global.slint";
 import { WorkspaceSummary } from "defs.slint";
 
-/// Bottom-corner quarter-orchid control for switching and creating workspaces.
+/// Bottom-corner Crest-orchid control for switching and creating workspaces.
 /// Opens on click (or edge-swipe / command via NavigationGlobal). Non-modal popover.
 export component WorkspaceOrb inherits Rectangle {
     in property <[WorkspaceSummary]> workspaces;
@@ -15,7 +15,7 @@ export component WorkspaceOrb inherits Rectangle {
     callback toggle-requested();
     callback dismiss-requested();
 
-    private property <length> orb-size: 76px;
+    private property <length> orb-size: 88px;
     private property <bool> mirrored: AppState.edge-panels-mirrored;
     private property <bool> menu-visible: NavigationGlobal.workspace-orb-open;
     private property <bool> orb-active: NavigationGlobal.workspace-orb-open || orb-ta.has-hover;
@@ -188,7 +188,7 @@ export component WorkspaceOrb inherits Rectangle {
                     width: root.orb-size;
                     height: root.orb-size;
                     background: transparent;
-                    clip: true;
+                    clip: false;
                     horizontal-stretch: 0;
 
                     orb-ta := TouchArea {
@@ -197,155 +197,22 @@ export component WorkspaceOrb inherits Rectangle {
                         }
                     }
 
-                    // Soft brand glow behind the quarter.
+                    // Soft brand glow behind the Crest flower (circular, not a square plate).
                     Rectangle {
-                        x: root.mirrored ? parent.width - root.orb-size * 1.15 : -root.orb-size * 0.15;
-                        y: parent.height - root.orb-size * 1.15;
-                        width: root.orb-size * 1.3;
-                        height: root.orb-size * 1.3;
+                        x: (parent.width - root.orb-size * 0.9) / 2;
+                        y: (parent.height - root.orb-size * 0.9) / 2;
+                        width: root.orb-size * 0.9;
+                        height: root.orb-size * 0.9;
                         border-radius: root.orb-size;
-                        background: root.mirrored ? #7a4ea833 : #c49be633;
+                        background: root.orb-active ? #c49be655 : #c49be633;
                     }
 
-                    // Outer quarter disc (petal field), center at screen corner.
-                    Path {
+                    Image {
                         width: 100%;
                         height: 100%;
-                        viewbox-x: 0;
-                        viewbox-y: 0;
-                        viewbox-width: 100;
-                        viewbox-height: 100;
-                        fill: Theme.accent-brand;
-                        MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
-                        LineTo { x: root.mirrored ? 100 : 0; y: 0; }
-                        ArcTo {
-                            radius-x: 100;
-                            radius-y: 100;
-                            x: root.mirrored ? 0 : 100;
-                            y: 100;
-                            sweep: !root.mirrored;
-                        }
-                        Close {}
-                    }
-
-                    // Inner petal lobe — labellum-inspired curve toward the arc.
-                    Path {
-                        width: 100%;
-                        height: 100%;
-                        viewbox-x: 0;
-                        viewbox-y: 0;
-                        viewbox-width: 100;
-                        viewbox-height: 100;
-                        fill: #ffffff33;
-                        MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
-                        CubicTo {
-                            control-1-x: root.mirrored ? 100 : 0;
-                            control-1-y: 55;
-                            control-2-x: root.mirrored ? 55 : 45;
-                            control-2-y: 35;
-                            x: root.mirrored ? 28 : 72;
-                            y: 28;
-                        }
-                        CubicTo {
-                            control-1-x: root.mirrored ? 48 : 52;
-                            control-1-y: 58;
-                            control-2-x: root.mirrored ? 70 : 30;
-                            control-2-y: 78;
-                            x: root.mirrored ? 100 : 0;
-                            y: 100;
-                        }
-                        Close {}
-                    }
-
-                    // Secondary petal lobe along the floor.
-                    Path {
-                        width: 100%;
-                        height: 100%;
-                        viewbox-x: 0;
-                        viewbox-y: 0;
-                        viewbox-width: 100;
-                        viewbox-height: 100;
-                        fill: #00000022;
-                        MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
-                        CubicTo {
-                            control-1-x: root.mirrored ? 70 : 30;
-                            control-1-y: 100;
-                            control-2-x: root.mirrored ? 40 : 60;
-                            control-2-y: 88;
-                            x: root.mirrored ? 22 : 78;
-                            y: 72;
-                        }
-                        CubicTo {
-                            control-1-x: root.mirrored ? 50 : 50;
-                            control-1-y: 92;
-                            control-2-x: root.mirrored ? 78 : 22;
-                            control-2-y: 100;
-                            x: root.mirrored ? 100 : 0;
-                            y: 100;
-                        }
-                        Close {}
-                    }
-
-                    // Petal veins (suggesting workspace parts without fixed slots).
-                    Path {
-                        width: 100%;
-                        height: 100%;
-                        viewbox-x: 0;
-                        viewbox-y: 0;
-                        viewbox-width: 100;
-                        viewbox-height: 100;
-                        stroke: #ffffff55;
-                        stroke-width: 1.25px;
-                        fill: transparent;
-                        MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
-                        LineTo {
-                            x: root.mirrored ? 100 - 88 * 0.866 : 88 * 0.866;
-                            y: 100 - 88 * 0.5;
-                        }
-                        MoveTo { x: root.mirrored ? 100 : 0; y: 100; }
-                        LineTo {
-                            x: root.mirrored ? 100 - 88 * 0.5 : 88 * 0.5;
-                            y: 100 - 88 * 0.866;
-                        }
-                    }
-
-                    // Column / stigma core at the corner.
-                    Rectangle {
-                        x: root.mirrored ? parent.width - 16px : 0;
-                        y: parent.height - 16px;
-                        width: 16px;
-                        height: 16px;
-                        border-radius: 16px;
-                        background: #ffffffcc;
-                    }
-                    Rectangle {
-                        x: root.mirrored ? parent.width - 10px : 0;
-                        y: parent.height - 10px;
-                        width: 10px;
-                        height: 10px;
-                        border-radius: 10px;
-                        background: Theme.accent-brand;
-                    }
-
-                    // Hover / open highlight rim.
-                    if root.orb-active: Path {
-                        width: 100%;
-                        height: 100%;
-                        viewbox-x: 0;
-                        viewbox-y: 0;
-                        viewbox-width: 100;
-                        viewbox-height: 100;
-                        stroke: #ffffffaa;
-                        stroke-width: 2px;
-                        fill: transparent;
-                        MoveTo { x: root.mirrored ? 100 : 0; y: 0; }
-                        ArcTo {
-                            radius-x: 100;
-                            radius-y: 100;
-                            x: root.mirrored ? 0 : 100;
-                            y: 100;
-                            sweep: !root.mirrored;
-                        }
+                        source: @image-url("../assets/orchid-icon.png");
+                        image-fit: contain;
+                        opacity: root.orb-active ? 1.0 : 0.92;
                     }
                 }
             }

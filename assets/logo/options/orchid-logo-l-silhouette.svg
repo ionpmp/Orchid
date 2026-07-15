@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!-- L: Single-color orchid silhouette, transparent background -->
+  <defs>
+    <linearGradient id="l-fill" x1="160" y1="100" x2="360" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D4B0F0"/>
+      <stop offset="0.5" stop-color="#C49BE6"/>
+      <stop offset="1" stop-color="#7A4EA8"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#l-fill)" d="M256 72 C228 72 206 104 200 144 C194 184 208 214 232 228 C200 208 148 200 116 224 C84 248 80 300 112 336 C136 364 176 364 208 344 C188 360 176 392 188 420 C200 448 236 456 256 432 C276 456 312 448 324 420 C336 392 324 360 304 344 C336 364 376 364 400 336 C432 300 428 248 396 224 C364 200 312 208 280 228 C304 214 318 184 312 144 C306 104 284 72 256 72 Z"/>
+  <circle cx="256" cy="268" r="22" fill="#EBECF0"/>
+  <circle cx="256" cy="268" r="10" fill="#7A4EA8"/>
+</svg>
