@@ -79,6 +79,9 @@ export component MainWindow inherits Window {
     callback workspace-orb-dismiss();
     callback workspace-orb-toggle();
     callback widget-close-clicked(string);
+    callback widget-settings-clicked(string);
+    callback widget-settings-field-changed(string, string, string);
+    callback widget-settings-dismiss(string);
     callback widget-close-confirm-save(string);
     callback widget-close-confirm-discard(string);
     callback widget-close-confirm-cancel(string);
@@ -106,16 +109,16 @@ export component MainWindow inherits Window {
     callback terminal-split-drag-moved(string, string, string, float, float);
     callback terminal-shortcut(string, string);
     callback rss-item-clicked(string);
+    callback recent-files-item-clicked(string);
+    callback search-query-changed(string, string);
+    callback search-candidate-activated(string, string);
+    callback search-selection-changed(string, int);
     callback weather-open-cities(string);
     callback weather-close-cities(string);
     callback weather-select-city(string, int);
     callback weather-remove-city(string, int);
     callback weather-search-cities(string, string);
     callback weather-add-city(string, string, float, float, string);
-    callback recent-files-item-clicked(string);
-    callback search-query-changed(string, string);
-    callback search-candidate-activated(string, string);
-    callback search-selection-changed(string, int);
     callback media-play-pause();
     callback media-next();
     callback media-previous();
@@ -353,6 +356,11 @@ export component MainWindow inherits Window {
             workspace-orb-dismiss => { root.workspace-orb-dismiss(); }
             workspace-orb-toggle => { root.workspace-orb-toggle(); }
             widget-close-clicked(id) => { root.widget-close-clicked(id); }
+            widget-settings-clicked(id) => { root.widget-settings-clicked(id); }
+            widget-settings-field-changed(id, key, value) => {
+                root.widget-settings-field-changed(id, key, value);
+            }
+            widget-settings-dismiss(id) => { root.widget-settings-dismiss(id); }
             widget-close-confirm-save(id) => { root.widget-close-confirm-save(id); }
             widget-close-confirm-discard(id) => { root.widget-close-confirm-discard(id); }
             widget-close-confirm-cancel(id) => { root.widget-close-confirm-cancel(id); }
@@ -384,6 +392,10 @@ export component MainWindow inherits Window {
             }
             terminal-shortcut(id, action) => { root.terminal-shortcut(id, action); }
             rss-item-clicked(link) => { root.rss-item-clicked(link); }
+            recent-files-item-clicked(path) => { root.recent-files-item-clicked(path); }
+            search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
+            search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }
+            search-selection-changed(inst, idx) => { root.search-selection-changed(inst, idx); }
             weather-open-cities(id) => { root.weather-open-cities(id); }
             weather-close-cities(id) => { root.weather-close-cities(id); }
             weather-select-city(id, idx) => { root.weather-select-city(id, idx); }
@@ -392,10 +404,6 @@ export component MainWindow inherits Window {
             weather-add-city(id, name, lat, lon, tz) => {
                 root.weather-add-city(id, name, lat, lon, tz);
             }
-            recent-files-item-clicked(path) => { root.recent-files-item-clicked(path); }
-            search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
-            search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }
-            search-selection-changed(inst, idx) => { root.search-selection-changed(inst, idx); }
             media-play-pause => { root.media-play-pause(); }
             media-next => { root.media-next(); }
             media-previous => { root.media-previous(); }

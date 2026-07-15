@@ -15,8 +15,8 @@ use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::WidgetPayload;
 
 use crate::error::{Result, UiError};
-use crate::window::spawn;
 use crate::slint_generated::{AppState, WidgetCloseConfirmDialog, WidgetFrameModel};
+use crate::window::spawn;
 
 use super::{empty_close_confirm_dialog, MainWindowController};
 
@@ -142,6 +142,7 @@ impl MainWindowController {
 
     pub(super) fn finish_widget_close(self: &Arc<Self>, u: Uuid) {
         self.close_confirm_overlays.write().remove(&u);
+        self.settings_dialog_overlays.write().remove(&u);
         let wm = self.widget_manager.clone();
         let gm = self.group_manager.clone();
         let t = Arc::downgrade(self);
@@ -163,11 +164,7 @@ impl MainWindowController {
                 warn!(?e, "close");
             }
             if let Some(c) = t.upgrade() {
-                if c
-                    .fm_focus
-                    .lock()
-                    .is_some_and(|(fm_id, _)| fm_id == u)
-                {
+                if c.fm_focus.lock().is_some_and(|(fm_id, _)| fm_id == u) {
                     *c.fm_focus.lock() = None;
                 }
                 c.fm_overlays.write().remove(&u);
@@ -194,7 +191,12 @@ impl MainWindowController {
         self.bring_floating_to_front(u);
     }
 
-    pub(super) fn on_widget_drag_started(self: &Arc<Self>, id: &SharedString, grab_lx: f32, grab_ly: f32) {
+    pub(super) fn on_widget_drag_started(
+        self: &Arc<Self>,
+        id: &SharedString,
+        grab_lx: f32,
+        grab_ly: f32,
+    ) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
@@ -206,7 +208,10 @@ impl MainWindowController {
             }
             return;
         }
-        if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
+        if let (Ok(w), Ok(_)) = (
+            self.workspace_manager.active(),
+            self.widget_manager.get_instance(u),
+        ) {
             let inst = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
             let (vw, vh) = *self.canvas_size.lock();
             self.layout_engine.grow_grid_to_fit_instances(w.id, &inst);
@@ -230,17 +235,19 @@ impl MainWindowController {
         }
     }
 
-    pub(super) fn on_widget_drag_moved(self: &Arc<Self>, id: &SharedString, canvas_x: f32, canvas_y: f32) {
+    pub(super) fn on_widget_drag_moved(
+        self: &Arc<Self>,
+        id: &SharedString,
+        canvas_x: f32,
+        canvas_y: f32,
+    ) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
         self.apply_drag_frame_preview(u, canvas_x, canvas_y);
     }
 
-    fn frame_model_for_instance(
-        &self,
-        instance: Uuid,
-    ) -> Option<&VecModel<WidgetFrameModel>> {
+    fn frame_model_for_instance(&self, instance: Uuid) -> Option<&VecModel<WidgetFrameModel>> {
         let floating = self.is_floating_viewer(instance);
         let model = if floating {
             &self.workspace_floating_widgets
@@ -251,7 +258,12 @@ impl MainWindowController {
     }
 
     /// O(1) update of the dragged widget's `x`/`y` in the Slint model (no full rebuild).
-    pub(super) fn apply_drag_frame_preview(self: &Arc<Self>, instance: Uuid, canvas_x: f32, canvas_y: f32) {
+    pub(super) fn apply_drag_frame_preview(
+        self: &Arc<Self>,
+        instance: Uuid,
+        canvas_x: f32,
+        canvas_y: f32,
+    ) {
         let Some((gx, gy)) = self.drag_grab.lock().get(&instance).copied() else {
             self.schedule_rebuild();
             return;
@@ -453,10 +465,7 @@ impl MainWindowController {
 
             // Drop onto another widget's header → form / join a group.
             if let Some(target_id) = c.find_group_drop_target(u, new_x, new_y, start.width) {
-                if let Err(e) = c
-                    .form_or_join_group(w.id, u, target_id, pos, size)
-                    .await
-                {
+                if let Err(e) = c.form_or_join_group(w.id, u, target_id, pos, size).await {
                     warn!(?e, "group form");
                 }
                 if let Some(c) = t.upgrade() {
@@ -670,10 +679,7 @@ impl MainWindowController {
         if let Some(target_group) = self.group_manager.find_for_instance(target) {
             // Leave previous group if any.
             if let Some(prev) = self.group_manager.find_for_instance(dragged) {
-                let _ = self
-                    .group_manager
-                    .remove_from_group(prev.id, dragged)
-                    .await;
+                let _ = self.group_manager.remove_from_group(prev.id, dragged).await;
                 if let Ok(inst) = self.widget_manager.get_instance(dragged) {
                     *inst.group_id.write() = None;
                 }
@@ -701,10 +707,7 @@ impl MainWindowController {
 
         // Target is ungrouped — create a new group.
         if let Some(prev) = self.group_manager.find_for_instance(dragged) {
-            let _ = self
-                .group_manager
-                .remove_from_group(prev.id, dragged)
-                .await;
+            let _ = self.group_manager.remove_from_group(prev.id, dragged).await;
             if let Ok(inst) = self.widget_manager.get_instance(dragged) {
                 *inst.group_id.write() = None;
             }
@@ -722,12 +725,7 @@ impl MainWindowController {
         let _ = size;
         let gid = self
             .group_manager
-            .create_group(
-                workspace_id,
-                vec![target, dragged],
-                slot_pos,
-                slot_size,
-            )
+            .create_group(workspace_id, vec![target, dragged], slot_pos, slot_size)
             .await
             .map_err(|e| UiError::Slint(format!("create group: {e}")))?;
         for mid in [target, dragged] {
@@ -768,7 +766,11 @@ impl MainWindowController {
         Ok(())
     }
 
-    pub(super) fn on_group_tab_clicked(self: &Arc<Self>, group_id: &SharedString, member_id: &SharedString) {
+    pub(super) fn on_group_tab_clicked(
+        self: &Arc<Self>,
+        group_id: &SharedString,
+        member_id: &SharedString,
+    ) {
         let Ok(gid) = Uuid::parse_str(group_id.as_str()) else {
             return;
         };
@@ -787,7 +789,11 @@ impl MainWindowController {
         });
     }
 
-    pub(super) fn on_group_tab_closed(self: &Arc<Self>, group_id: &SharedString, member_id: &SharedString) {
+    pub(super) fn on_group_tab_closed(
+        self: &Arc<Self>,
+        group_id: &SharedString,
+        member_id: &SharedString,
+    ) {
         let Ok(gid) = Uuid::parse_str(group_id.as_str()) else {
             return;
         };
@@ -915,7 +921,10 @@ impl MainWindowController {
             }
             return;
         }
-        if let (Ok(w), Ok(_)) = (self.workspace_manager.active(), self.widget_manager.get_instance(u)) {
+        if let (Ok(w), Ok(_)) = (
+            self.workspace_manager.active(),
+            self.widget_manager.get_instance(u),
+        ) {
             let (vw, vh) = *self.canvas_size.lock();
             let inst = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
             self.layout_engine.grow_grid_to_fit_instances(w.id, &inst);
@@ -944,7 +953,12 @@ impl MainWindowController {
         }
     }
 
-    pub(super) fn on_widget_resize_moved(self: &Arc<Self>, id: &SharedString, canvas_x: f32, canvas_y: f32) {
+    pub(super) fn on_widget_resize_moved(
+        self: &Arc<Self>,
+        id: &SharedString,
+        canvas_x: f32,
+        canvas_y: f32,
+    ) {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };

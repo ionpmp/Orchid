@@ -93,6 +93,7 @@ export struct SystemIndicatorEntry {
 }
 
 export struct WeatherModel {
+    location: string,
     cities: [WeatherCityEntry],
     active-city-index: int,
     picker-open: bool,
@@ -106,7 +107,6 @@ export struct WeatherModel {
     close-picker-label: string,
     no-results-label: string,
     searching-label: string,
-    location: string,
     current-temp: string,
     condition-label: string,
     condition-icon: string,
@@ -583,10 +583,19 @@ export struct WidgetCloseConfirmDialog {
     cancel-label: string,
 }
 
+export struct WidgetSettingsDialog {
+    visible: bool,
+    title: string,
+    close-label: string,
+    fields: [SettingsFieldRow],
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
     title: string,
+    /// Show the settings gear in the shared header.
+    has-settings: bool,
     x: length,
     y: length,
     width: length,
@@ -632,6 +641,7 @@ export struct WidgetFrameModel {
     viewer: ViewerModel,
     file-manager: FileManagerModel,
     close-confirm: WidgetCloseConfirmDialog,
+    settings-dialog: WidgetSettingsDialog,
 }
 
 export struct DockWidgetType {

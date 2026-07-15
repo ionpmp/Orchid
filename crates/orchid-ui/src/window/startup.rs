@@ -117,8 +117,7 @@ impl StartupWindowController {
             .show()
             .map_err(|e| UiError::Slint(format!("window show failed: {e}")))?;
 
-        slint::run_event_loop()
-            .map_err(|e| UiError::Slint(format!("event loop error: {e}")))?;
+        slint::run_event_loop().map_err(|e| UiError::Slint(format!("event loop error: {e}")))?;
 
         info!("Startup window closed");
         Ok(())
@@ -150,11 +149,7 @@ fn apply_hot_config_to_startup(
     Ok(())
 }
 
-fn apply_theme_to(
-    window: &StartupWindow,
-    theme: &ThemeManager,
-    config: &RwLock<OrchidConfig>,
-) {
+fn apply_theme_to(window: &StartupWindow, theme: &ThemeManager, config: &RwLock<OrchidConfig>) {
     let theme = theme.current();
     let tokens = &theme.tokens;
     let cfg = config.read();
@@ -210,6 +205,7 @@ fn apply_strings_to(window: &StartupWindow, mgr: &LocaleManager) {
     g.set_get_started_label(mgr.tr("startup-get-started").into());
     g.set_workspace_new_label(mgr.tr("workspace-new").into());
     g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
+    g.set_widget_settings_tooltip(mgr.tr("widget-settings-tooltip").into());
 
     g.set_password_locked(mgr.tr("password-locked").into());
     g.set_password_no_entries(mgr.tr("password-no-entries").into());

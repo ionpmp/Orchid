@@ -1,0 +1,123 @@
+import { Theme } from "../theme_global.slint";
+import { CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { WidgetSettingsDialog } from "defs.slint";
+
+export component WidgetSettingsDialog inherits Rectangle {
+    in property <WidgetSettingsDialog> dialog;
+    callback field-changed(string, string);
+    callback dismiss();
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.dismiss(); }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(380px, parent.width - 24px);
+        height: min(lay.preferred-height + 16px, parent.height - 24px);
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
+        drop-shadow-color: #00000080;
+        clip: true;
+
+        // Swallow clicks so they don't dismiss via the backdrop.
+        TouchArea { }
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+
+            Text {
+                text: dialog.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+
+            Flickable {
+                vertical-stretch: 1;
+                viewport-width: parent.width - 32px;
+                viewport-height: field-list.preferred-height;
+                height: min(field-list.preferred-height, 280px);
+
+                field-list := VerticalLayout {
+                    width: parent.viewport-width;
+                    spacing: 8px;
+
+                    for row in dialog.fields: HorizontalLayout {
+                        spacing: 12px;
+                        min-height: 32px;
+
+                        Text {
+                            width: 42%;
+                            text: row.label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: no-wrap;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+
+                        if row.kind == 0 : Text {
+                            horizontal-stretch: 1;
+                            text: row.value;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                            vertical-alignment: center;
+                        }
+
+                        if row.kind == 1 : CheckBox {
+                            horizontal-stretch: 1;
+                            checked: row.bool-value;
+                            toggled => {
+                                root.field-changed(row.key, self.checked ? "true" : "false");
+                            }
+                        }
+
+                        if row.kind == 2 : LineEdit {
+                            horizontal-stretch: 1;
+                            text: row.value;
+                            font-size: Theme.font-size-sm;
+                            accepted(text) => {
+                                root.field-changed(row.key, text);
+                            }
+                        }
+
+                        if row.kind == 3 : ComboBox {
+                            horizontal-stretch: 1;
+                            model: row.combo-options;
+                            current-index: row.combo-index;
+                            selected(_value) => {
+                                root.field-changed(row.key, row.combo-values[self.current-index]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 36px;
+                background: Theme.accent-brand;
+                border-radius: Theme.radius-md;
+                opacity: close-ta.has-hover ? 0.88 : 1.0;
+
+                close-ta := TouchArea {
+                    clicked => { root.dismiss(); }
+                }
+
+                Text {
+                    text: dialog.close-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

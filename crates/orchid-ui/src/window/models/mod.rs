@@ -13,10 +13,11 @@ mod system;
 mod terminal;
 mod viewer;
 mod weather;
+mod widget_settings;
 
 pub(crate) use file_manager::{
-    build_context_menu, build_file_manager_model, build_managed_policy_state,
-    empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
+    build_context_menu, build_file_manager_model, build_managed_policy_state, empty_confirm_dialog,
+    empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_passphrase_state, empty_rename_state, empty_tag_state, fm_passphrase_dialog_labels,
     FileManagerOverlays,
 };
@@ -39,3 +40,6 @@ pub(crate) use terminal::{
 };
 pub(crate) use viewer::{build_viewer_model, empty_viewer_model};
 pub(crate) use weather::{build_weather_model, empty_weather_model};
+pub(crate) use widget_settings::{
+    apply_widget_setting, build_widget_settings_fields, widget_has_settings,
+};

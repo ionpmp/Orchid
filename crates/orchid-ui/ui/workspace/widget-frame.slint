@@ -16,11 +16,15 @@ import { PasswordView } from "../widgets/password.slint";
 import { ViewerView } from "../widgets/viewer/viewer.slint";
 import { FileManagerView } from "../widgets/file-manager/file-manager.slint";
 import { WidgetCloseConfirmDialog } from "widget-close-confirm-dialog.slint";
+import { WidgetSettingsDialog } from "widget-settings-dialog.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
 
     callback close-clicked();
+    callback settings-clicked();
+    callback settings-field-changed(string, string);
+    callback settings-dismiss();
     callback close-confirm-save(string);
     callback close-confirm-discard(string);
     callback close-confirm-cancel(string);
@@ -49,6 +53,11 @@ export component WidgetFrame inherits Rectangle {
     callback terminal-split-drag-moved(string, string, float, float);
     callback terminal-shortcut(string);
     callback rss-item-clicked(string);
+    callback recent-files-item-clicked(string);
+    callback search-query-changed(string, string);
+    callback search-candidate-activated(string, string);
+    callback search-selection-changed(string, int);
+
     // Weather
     callback weather-open-cities(string);
     callback weather-close-cities(string);
@@ -56,11 +65,6 @@ export component WidgetFrame inherits Rectangle {
     callback weather-remove-city(string, int);
     callback weather-search-cities(string, string);
     callback weather-add-city(string, string, float, float, string);
-
-    callback recent-files-item-clicked(string);
-    callback search-query-changed(string, string);
-    callback search-candidate-activated(string, string);
-    callback search-selection-changed(string, int);
 
     // Media
     callback media-play-pause();
@@ -114,9 +118,6 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-text-scroll(string, int);
 
     callback fm-sidebar-clicked(string, string);
-    callback fm-toggle-dual-pane(string);
-    callback fm-toggle-show-hidden(string);
-    callback fm-toggle-click-behavior(string);
     callback fm-pane-clicked(string, int);
     callback fm-tab-clicked(string, int, string);
     callback fm-tab-closed(string, int, string);
@@ -204,7 +205,7 @@ export component WidgetFrame inherits Rectangle {
         }
 
         drag-area := TouchArea {
-            width: parent.width - 40px;
+            width: model.has-settings ? parent.width - 68px : parent.width - 40px;
             height: parent.height;
             x: 0;
             y: 0;
@@ -244,7 +245,7 @@ export component WidgetFrame inherits Rectangle {
 
             HorizontalLayout {
                 padding-left: 12px;
-                padding-right: 36px;
+                padding-right: model.has-settings ? 64px : 36px;
                 alignment: start;
                 spacing: 8px;
 
@@ -257,6 +258,47 @@ export component WidgetFrame inherits Rectangle {
                     wrap: no-wrap;
                     overflow: elide;
                     horizontal-stretch: 1;
+                }
+            }
+        }
+
+        settings-area := TouchArea {
+            visible: model.has-settings;
+            enabled: model.has-settings;
+            x: parent.width - 60px;
+            y: 4px;
+            width: 24px;
+            height: 24px;
+            clicked => { root.settings-clicked(); }
+
+            Rectangle {
+                background: settings-area.has-hover ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+
+                if settings-area.has-hover : Rectangle {
+                    x: parent.x - settings-hint.preferred-width;
+                    y: parent.height + 2px;
+                    width: settings-hint.preferred-width + 12px;
+                    height: settings-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    settings-hint := Text {
+                        x: 6px; y: 3px;
+                        text: Strings.widget-settings-tooltip;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+
+                Text {
+                    text: "⚙";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
         }
@@ -533,9 +575,6 @@ export component WidgetFrame inherits Rectangle {
                     model: root.model.file-manager;
 
                     sidebar-clicked(id) => { root.fm-sidebar-clicked(root.model.instance-id, id); }
-                    toggle-dual-pane => { root.fm-toggle-dual-pane(root.model.instance-id); }
-                    toggle-show-hidden => { root.fm-toggle-show-hidden(root.model.instance-id); }
-                    toggle-click-behavior => { root.fm-toggle-click-behavior(root.model.instance-id); }
                     pane-clicked(p) => { root.fm-pane-clicked(root.model.instance-id, p); }
                     tab-clicked(p, id) => { root.fm-tab-clicked(root.model.instance-id, p, id); }
                     tab-closed(p, id) => { root.fm-tab-closed(root.model.instance-id, p, id); }
@@ -756,5 +795,15 @@ export component WidgetFrame inherits Rectangle {
         save => { root.close-confirm-save(root.model.instance-id); }
         discard => { root.close-confirm-discard(root.model.instance-id); }
         cancel => { root.close-confirm-cancel(root.model.instance-id); }
+    }
+
+    if model.settings-dialog.visible : WidgetSettingsDialog {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        dialog: model.settings-dialog;
+        field-changed(key, value) => { root.settings-field-changed(key, value); }
+        dismiss => { root.settings-dismiss(); }
     }
 }

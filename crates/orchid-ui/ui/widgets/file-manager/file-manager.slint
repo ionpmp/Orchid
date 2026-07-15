@@ -12,9 +12,6 @@ export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
 
     callback sidebar-clicked(string);
-    callback toggle-dual-pane();
-    callback toggle-show-hidden();
-    callback toggle-click-behavior();
     callback pane-clicked(int);
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -72,14 +69,6 @@ export component FileManagerView inherits Rectangle {
 
     background: transparent;
 
-    pure function fm-dual-pane-glyph(dual: bool) -> string {
-        return dual ? "||" : "|";
-    }
-
-    pure function fm-hidden-glyph(show-hidden: bool) -> string {
-        return show-hidden ? "+" : "o";
-    }
-
     HorizontalLayout {
         spacing: 0;
 
@@ -100,111 +89,6 @@ export component FileManagerView inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 spacing: 0;
-
-                Rectangle {
-                    height: 36px;
-                    background: model.dual-pane ? Theme.surface-raised : Theme.surface-base;
-                    border-width: model.dual-pane ? 1px : 0px;
-                    border-color: model.dual-pane ? Theme.accent-brand : transparent;
-                    border-radius: Theme.radius-md;
-
-                    dual-ta := TouchArea {
-                        clicked => { root.toggle-dual-pane(); }
-                    }
-
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        spacing: 6px;
-
-                        Text {
-                            text: fm-dual-pane-glyph(model.dual-pane);
-                            color: model.dual-pane ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                        }
-
-                        Text {
-                            text: model.dual-pane-label;
-                            color: model.dual-pane ? Theme.accent-brand : Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            wrap: no-wrap;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                        }
-                    }
-                }
-
-                Rectangle {
-                    height: 36px;
-                    background: model.show-hidden ? Theme.surface-raised : Theme.surface-base;
-                    border-width: model.show-hidden ? 1px : 0px;
-                    border-color: model.show-hidden ? Theme.accent-brand : transparent;
-                    border-radius: Theme.radius-md;
-
-                    hidden-ta := TouchArea {
-                        clicked => { root.toggle-show-hidden(); }
-                    }
-
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        spacing: 6px;
-
-                        Text {
-                            text: fm-hidden-glyph(model.show-hidden);
-                            color: model.show-hidden ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                        }
-
-                        Text {
-                            text: model.show-hidden-label;
-                            color: model.show-hidden ? Theme.accent-brand : Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            wrap: no-wrap;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                        }
-                    }
-                }
-
-                Rectangle {
-                    height: 36px;
-                    background: model.single-click-open ? Theme.surface-raised : Theme.surface-base;
-                    border-width: model.single-click-open ? 1px : 0px;
-                    border-color: model.single-click-open ? Theme.accent-brand : transparent;
-                    border-radius: Theme.radius-md;
-
-                    click-ta := TouchArea {
-                        clicked => { root.toggle-click-behavior(); }
-                    }
-
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        spacing: 6px;
-
-                        Text {
-                            text: model.single-click-open ? "1×" : "2×";
-                            color: model.single-click-open ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                        }
-
-                        Text {
-                            text: model.single-click-open-label;
-                            color: model.single-click-open ? Theme.accent-brand : Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            wrap: no-wrap;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                        }
-                    }
-                }
 
                 FmSidebar {
                     vertical-stretch: 1;

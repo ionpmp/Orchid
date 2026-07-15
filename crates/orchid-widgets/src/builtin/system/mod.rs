@@ -4,20 +4,25 @@ pub mod config;
 pub mod provider;
 pub mod types;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use uuid::Uuid;
 
 use crate::error::{Result as WidgetResult, WidgetError};
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
+use crate::widget::payloads::{
+    IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload,
+};
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::SystemConfig;
@@ -27,15 +32,53 @@ pub use types::{BatteryStatus, DiskUsage, NetworkRate, SystemSnapshot};
 /// Stable type id.
 pub const TYPE_ID: &str = "system";
 
+static SYSTEM_LIVE: LazyLock<DashMap<Uuid, Arc<SystemHandle>>> = LazyLock::new(DashMap::new);
+
+struct SystemHandle {
+    instance_id: Uuid,
+    config: Arc<RwLock<SystemConfig>>,
+    snapshot: Arc<RwLock<Option<SystemSnapshot>>>,
+    bus: Arc<orchid_core::EventBus>,
+    locale: Arc<orchid_i18n::LocaleManager>,
+}
+
+impl SystemHandle {
+    fn publish(&self) {
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+    }
+}
+
+/// Snapshot the live system config for the settings dialog.
+#[must_use]
+pub fn current_config(instance_id: Uuid) -> Option<SystemConfig> {
+    SYSTEM_LIVE
+        .get(&instance_id)
+        .map(|h| h.config.read().clone())
+}
+
+/// Apply a settings-dialog mutation to the live system config.
+pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut SystemConfig)) {
+    let Some(h) = SYSTEM_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        mutate(&mut cfg);
+    }
+    h.publish();
+}
+
 /// System widget.
 pub struct SystemWidget {
     instance_id: Uuid,
-    config: RwLock<SystemConfig>,
+    handle: Arc<SystemHandle>,
     provider: Arc<SystemProvider>,
-    snapshot: Arc<RwLock<Option<SystemSnapshot>>>,
     refresh: PeriodicRefresh,
-    bus: Arc<orchid_core::EventBus>,
-    locale: Arc<orchid_i18n::LocaleManager>,
 }
 
 impl std::fmt::Debug for SystemWidget {
@@ -55,14 +98,19 @@ impl SystemWidget {
         locale: Arc<orchid_i18n::LocaleManager>,
     ) -> Self {
         let interval = Duration::from_secs(cfg.refresh_interval_seconds.max(1) as u64);
-        Self {
+        let handle = Arc::new(SystemHandle {
             instance_id,
-            config: RwLock::new(cfg),
-            provider: Arc::new(SystemProvider::new()),
+            config: Arc::new(RwLock::new(cfg)),
             snapshot: Arc::new(RwLock::new(None)),
-            refresh: PeriodicRefresh::new(interval),
             bus,
             locale,
+        });
+        SYSTEM_LIVE.insert(instance_id, Arc::clone(&handle));
+        Self {
+            instance_id,
+            handle,
+            provider: Arc::new(SystemProvider::new()),
+            refresh: PeriodicRefresh::new(interval),
         }
     }
 }
@@ -82,18 +130,17 @@ impl Widget for SystemWidget {
             .map_err(|e| {
                 WidgetError::CreationFailed(format!("system metrics initial refresh: {e}"))
             })?;
-        *self.snapshot.write() = Some(snap);
+        *self.handle.snapshot.write() = Some(snap);
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         let provider = self.provider.clone();
-        let snap_slot = self.snapshot.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
+        let snap_slot = self.handle.snapshot.clone();
+        let handle = Arc::clone(&self.handle);
         self.refresh.start(move || {
             let provider = provider.clone();
             let snap_slot = snap_slot.clone();
-            let bus = bus.clone();
+            let handle = Arc::clone(&handle);
             async move {
                 let provider2 = provider.clone();
                 let snap = match tokio::task::spawn_blocking(move || provider2.refresh()).await {
@@ -104,10 +151,7 @@ impl Widget for SystemWidget {
                     }
                 };
                 *snap_slot.write() = Some(snap);
-                bus.publish(
-                    orchid_core::EventSource::Widget(instance_id),
-                    WidgetSnapshotUpdated { instance_id },
-                );
+                handle.publish();
             }
         });
         Ok(())
@@ -122,15 +166,16 @@ impl Widget for SystemWidget {
     }
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.refresh.stop();
+        SYSTEM_LIVE.remove(&self.instance_id);
         Ok(())
     }
     async fn on_resize(&mut self, _ctx: &WidgetContext, _size: WidgetSize) -> WidgetResult<()> {
         Ok(())
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let cfg = self.config.read().clone();
-        let indicators = match self.snapshot.read().clone() {
-            Some(snap) => build_indicators(&cfg, &snap, &self.locale),
+        let cfg = self.handle.config.read().clone();
+        let indicators = match self.handle.snapshot.read().clone() {
+            Some(snap) => build_indicators(&cfg, &snap, &self.handle.locale),
             None => vec![SystemIndicator {
                 kind: SystemIndicatorKind::Cpu,
                 name_suffix: None,
@@ -145,20 +190,20 @@ impl Widget for SystemWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: self.locale.tr("widget-system-name").into(),
+            title: self.handle.locale.tr("widget-system-name").into(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::SystemIndicators(SystemPayload {
                 indicators,
-                is_loading: self.snapshot.read().is_none(),
+                is_loading: self.handle.snapshot.read().is_none(),
             }),
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        state_codec::save_state(&*self.config.read())
+        state_codec::save_state(&*self.handle.config.read())
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let cfg: SystemConfig = state_codec::restore_state(bytes)?;
-        *self.config.write() = cfg;
+        *self.handle.config.write() = cfg;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -391,18 +436,29 @@ mod tests {
         let cfg = SystemConfig::default();
         let locale = test_locale();
         let indicators = build_indicators(&cfg, &snap(20.0), &locale);
-        let cpu = indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap();
+        let cpu = indicators
+            .iter()
+            .find(|i| i.kind == SystemIndicatorKind::Cpu)
+            .unwrap();
         assert_eq!(cpu.status, IndicatorStatus::Normal);
 
         let indicators = build_indicators(&cfg, &snap(80.0), &locale);
         assert_eq!(
-            indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap().status,
+            indicators
+                .iter()
+                .find(|i| i.kind == SystemIndicatorKind::Cpu)
+                .unwrap()
+                .status,
             IndicatorStatus::Warning
         );
 
         let indicators = build_indicators(&cfg, &snap(95.0), &locale);
         assert_eq!(
-            indicators.iter().find(|i| i.kind == SystemIndicatorKind::Cpu).unwrap().status,
+            indicators
+                .iter()
+                .find(|i| i.kind == SystemIndicatorKind::Cpu)
+                .unwrap()
+                .status,
             IndicatorStatus::Critical
         );
     }

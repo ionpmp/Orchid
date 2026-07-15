@@ -3,11 +3,12 @@
 pub mod astro;
 pub mod config;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use uuid::Uuid;
 
@@ -17,7 +18,9 @@ use crate::widget::config as state_codec;
 use crate::widget::payloads::MoonPayload;
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 
 pub use astro::{compute_moon, MoonData, MoonPhase};
@@ -26,14 +29,59 @@ pub use config::MoonConfig;
 /// Stable type id.
 pub const TYPE_ID: &str = "moon";
 
+static MOON_LIVE: LazyLock<DashMap<Uuid, Arc<MoonHandle>>> = LazyLock::new(DashMap::new);
+
+struct MoonHandle {
+    instance_id: Uuid,
+    config: Arc<RwLock<MoonConfig>>,
+    data: Arc<RwLock<Option<MoonData>>>,
+    bus: Arc<orchid_core::EventBus>,
+}
+
+impl MoonHandle {
+    fn publish(&self) {
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+    }
+
+    fn recalculate(&self) {
+        let cfg = self.config.read().clone();
+        let data = compute_moon(cfg.latitude, cfg.longitude, Utc::now());
+        *self.data.write() = Some(data);
+    }
+}
+
+/// Snapshot the live moon config for the settings dialog.
+#[must_use]
+pub fn current_config(instance_id: Uuid) -> Option<MoonConfig> {
+    MOON_LIVE
+        .get(&instance_id)
+        .map(|h| h.config.read().clone())
+}
+
+/// Apply a settings-dialog mutation to the live moon config.
+pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut MoonConfig)) {
+    let Some(h) = MOON_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        mutate(&mut cfg);
+    }
+    h.recalculate();
+    h.publish();
+}
+
 /// Moon widget implementation.
 pub struct MoonWidget {
     instance_id: Uuid,
-    config: RwLock<MoonConfig>,
+    handle: Arc<MoonHandle>,
     orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
-    data: Arc<RwLock<Option<MoonData>>>,
     refresh: PeriodicRefresh,
-    bus: Arc<orchid_core::EventBus>,
 }
 
 impl std::fmt::Debug for MoonWidget {
@@ -52,20 +100,23 @@ impl MoonWidget {
         bus: Arc<orchid_core::EventBus>,
         orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     ) -> Self {
+        let handle = Arc::new(MoonHandle {
+            instance_id,
+            config: Arc::new(RwLock::new(config)),
+            data: Arc::new(RwLock::new(None)),
+            bus,
+        });
+        MOON_LIVE.insert(instance_id, Arc::clone(&handle));
         Self {
             instance_id,
-            config: RwLock::new(config),
+            handle,
             orchid_config,
-            data: Arc::new(RwLock::new(None)),
             refresh: PeriodicRefresh::new(Duration::from_secs(10 * 60)),
-            bus,
         }
     }
 
     fn recalculate(&self) {
-        let cfg = self.config.read().clone();
-        let data = compute_moon(cfg.latitude, cfg.longitude, Utc::now());
-        *self.data.write() = Some(data);
+        self.handle.recalculate();
     }
 }
 
@@ -85,21 +136,12 @@ impl Widget for MoonWidget {
     }
 
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let cfg = self.config.read().clone();
-        let data_slot = self.data.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
+        let handle = Arc::clone(&self.handle);
         self.refresh.start(move || {
-            let lat = cfg.latitude;
-            let lon = cfg.longitude;
-            let data_slot = data_slot.clone();
-            let bus = bus.clone();
+            let handle = Arc::clone(&handle);
             async move {
-                *data_slot.write() = Some(compute_moon(lat, lon, Utc::now()));
-                bus.publish(
-                    orchid_core::EventSource::Widget(instance_id),
-                    WidgetSnapshotUpdated { instance_id },
-                );
+                handle.recalculate();
+                handle.publish();
             }
         });
         Ok(())
@@ -117,6 +159,7 @@ impl Widget for MoonWidget {
 
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.refresh.stop();
+        MOON_LIVE.remove(&self.instance_id);
         Ok(())
     }
 
@@ -125,9 +168,9 @@ impl Widget for MoonWidget {
     }
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let cfg = self.config.read().clone();
+        let cfg = self.handle.config.read().clone();
         let locale = self.orchid_config.read().locale.clone();
-        let payload = match self.data.read().clone() {
+        let payload = match self.handle.data.read().clone() {
             Some(data) => render_payload(&cfg, &data, &locale),
             None => MoonPayload {
                 phase_key: MoonPhase::NewMoon.ftl_key(),
@@ -156,13 +199,13 @@ impl Widget for MoonWidget {
     }
 
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        let cfg = self.config.read().clone();
+        let cfg = self.handle.config.read().clone();
         state_codec::save_state(&cfg)
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let cfg: MoonConfig = state_codec::restore_state(bytes)?;
-        *self.config.write() = cfg;
+        *self.handle.config.write() = cfg;
         Ok(())
     }
 
