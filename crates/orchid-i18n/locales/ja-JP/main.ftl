@@ -80,6 +80,13 @@ weather-updated-just-now = ãŸã£ãŸä»Šæ›´æ–°
 weather-updated-minutes = { $m } åˆ†å‰ã«æ›´æ–°
 weather-updated-hours = { $h } æ™‚é–“å‰ã«æ›´æ–°
 weather-updated-days = { $d } æ—¥å‰ã«æ›´æ–°
+weather-cities-title = Города
+weather-cities-close = Закрыть
+weather-city-search-placeholder = Поиск городов…
+weather-city-add = Добавить город
+weather-city-remove = Удалить город
+weather-city-no-results = Города не найдены
+weather-city-searching = Поиск…
 
 # ---- Relative time (shared) ----
 relative-just-now = ãŸã£ãŸä»Š
@@ -337,8 +344,6 @@ password-totp-remaining = { $s } ç§’
 
 
 # ==== Viewer widget ====
-widget-viewer-name = ãƒ“ãƒ¥ãƒ¼ã‚¢
-widget-viewer-desc = ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã: ç”»åƒã€PDFã€ãƒ†ã‚­ã‚¹ãƒˆã€ã‚¢ãƒ¼ã‚«ã‚¤ãƒ–
 viewer-loading = èª­ã¿è¾¼ã¿ä¸­â€¦
 viewer-error = ã“ã®ãƒ•ã‚¡ã‚¤ãƒ«ã‚’è¡¨ç¤ºã§ãã¾ã›ã‚“
 viewer-unsupported = ã‚µãƒãƒ¼ãƒˆã•ã‚Œã¦ã„ãªã„ãƒ•ã‚¡ã‚¤ãƒ«å½¢å¼

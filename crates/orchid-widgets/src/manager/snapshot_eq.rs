@@ -205,7 +205,8 @@ fn fm_entry_eq(a: &EntryPayload, b: &EntryPayload) -> bool {
         && match (&a.thumbnail_rgba, &b.thumbnail_rgba) {
             (None, None) => true,
             (Some(ra), Some(rb)) => {
-                std::sync::Arc::ptr_eq(ra, rb) || (ra.len() == rb.len() && ra.as_slice() == rb.as_slice())
+                std::sync::Arc::ptr_eq(ra, rb)
+                    || (ra.len() == rb.len() && ra.as_slice() == rb.as_slice())
             }
             _ => false,
         }
@@ -294,6 +295,12 @@ pub(crate) fn terminal_payload_eq(a: &TerminalPayload, b: &TerminalPayload) -> b
 
 fn weather_payload_eq(a: &WeatherPayload, b: &WeatherPayload) -> bool {
     a.location_name == b.location_name
+        && a.cities == b.cities
+        && a.active_city_index == b.active_city_index
+        && a.picker_open == b.picker_open
+        && a.search_query == b.search_query
+        && a.search_results == b.search_results
+        && a.search_busy == b.search_busy
         && a.current_temp_text == b.current_temp_text
         && a.feels_like_temp == b.feels_like_temp
         && a.condition_key == b.condition_key
@@ -489,6 +496,12 @@ mod tests {
     fn weather_payload_detects_temp_change() {
         let a = WidgetPayload::Weather(WeatherPayload {
             location_name: "Home".into(),
+            cities: vec![],
+            active_city_index: 0,
+            picker_open: false,
+            search_query: String::new(),
+            search_results: vec![],
+            search_busy: false,
             current_temp_text: "20°C".into(),
             feels_like_temp: None,
             condition_key: "weather-condition-clear",
@@ -512,6 +525,12 @@ mod tests {
     fn weather_payload_ignores_identical_snapshots() {
         let a = WidgetPayload::Weather(WeatherPayload {
             location_name: "Home".into(),
+            cities: vec![],
+            active_city_index: 0,
+            picker_open: false,
+            search_query: String::new(),
+            search_results: vec![],
+            search_busy: false,
             current_temp_text: "20°C".into(),
             feels_like_temp: None,
             condition_key: "weather-condition-clear",

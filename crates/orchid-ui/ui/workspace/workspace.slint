@@ -41,6 +41,12 @@ export component WorkspaceView inherits Rectangle {
     callback terminal-split-drag-moved(string, string, string, float, float);
     callback terminal-shortcut(string, string);
     callback rss-item-clicked(string);
+    callback weather-open-cities(string);
+    callback weather-close-cities(string);
+    callback weather-select-city(string, int);
+    callback weather-remove-city(string, int);
+    callback weather-search-cities(string, string);
+    callback weather-add-city(string, string, float, float, string);
     callback recent-files-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -279,6 +285,14 @@ export component WorkspaceView inherits Rectangle {
                     }
                     terminal-shortcut(action) => { root.terminal-shortcut(w.instance-id, action); }
                     rss-item-clicked(link) => { root.rss-item-clicked(link); }
+                    weather-open-cities(id) => { root.weather-open-cities(id); }
+                    weather-close-cities(id) => { root.weather-close-cities(id); }
+                    weather-select-city(id, idx) => { root.weather-select-city(id, idx); }
+                    weather-remove-city(id, idx) => { root.weather-remove-city(id, idx); }
+                    weather-search-cities(id, q) => { root.weather-search-cities(id, q); }
+                    weather-add-city(id, name, lat, lon, tz) => {
+                        root.weather-add-city(id, name, lat, lon, tz);
+                    }
                     recent-files-item-clicked(path) => { root.recent-files-item-clicked(path); }
                     search-query-changed(inst, q) => { root.search-query-changed(inst, q); }
                     search-candidate-activated(inst, id) => { root.search-candidate-activated(inst, id); }

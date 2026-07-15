@@ -77,6 +77,7 @@ mod media_search;
 mod password;
 mod shell_ui;
 mod terminal;
+mod weather;
 mod wire;
 
 use canvas::ResizeInteraction;

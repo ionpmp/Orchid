@@ -1,11 +1,26 @@
 use orchid_i18n::LocaleManager;
 use slint::{ModelRc, SharedString, VecModel};
 
-use crate::slint_generated::{WeatherForecastEntry, WeatherModel};
+use crate::slint_generated::{
+    WeatherCityEntry, WeatherForecastEntry, WeatherModel, WeatherSearchHit,
+};
 
 pub(crate) fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
     WeatherModel {
         location: SharedString::new(),
+        cities: ModelRc::new(VecModel::default()),
+        active_city_index: 0,
+        picker_open: false,
+        search_query: SharedString::new(),
+        search_results: ModelRc::new(VecModel::default()),
+        search_busy: false,
+        picker_title: locale.tr("weather-cities-title").into(),
+        search_placeholder: locale.tr("weather-city-search-placeholder").into(),
+        add_city_hint: locale.tr("weather-city-add").into(),
+        remove_city_hint: locale.tr("weather-city-remove").into(),
+        close_picker_label: locale.tr("weather-cities-close").into(),
+        no_results_label: locale.tr("weather-city-no-results").into(),
+        searching_label: locale.tr("weather-city-searching").into(),
         current_temp: SharedString::new(),
         condition_label: locale.tr("weather-loading").into(),
         condition_icon: SharedString::new(),
@@ -19,7 +34,10 @@ pub(crate) fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
     }
 }
 
-pub(crate) fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &LocaleManager) -> WeatherModel {
+pub(crate) fn build_weather_model(
+    p: &orchid_widgets::WeatherPayload,
+    locale: &LocaleManager,
+) -> WeatherModel {
     let condition_label = if p.is_loading {
         locale.tr("weather-loading")
     } else if p.status == orchid_widgets::WeatherStatusTag::Error {
@@ -64,6 +82,27 @@ pub(crate) fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &L
             .collect()
     };
 
+    let cities: Vec<WeatherCityEntry> = p
+        .cities
+        .iter()
+        .map(|c| WeatherCityEntry {
+            name: c.name.clone().into(),
+            active: c.active,
+        })
+        .collect();
+
+    let search_results: Vec<WeatherSearchHit> = p
+        .search_results
+        .iter()
+        .map(|h| WeatherSearchHit {
+            name: h.name.clone().into(),
+            detail: h.detail.clone().into(),
+            latitude: h.latitude as f32,
+            longitude: h.longitude as f32,
+            timezone: h.timezone.clone().into(),
+        })
+        .collect();
+
     let feels_like = if p.is_loading {
         String::new()
     } else {
@@ -101,7 +140,6 @@ pub(crate) fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &L
                 let dir = if dir_key.starts_with("weather-wind-") {
                     locale.tr(dir_key)
                 } else {
-                    // Legacy payloads may still carry English compass abbreviations.
                     dir_key.to_string()
                 };
                 locale.tr_args(
@@ -135,6 +173,19 @@ pub(crate) fn build_weather_model(p: &orchid_widgets::WeatherPayload, locale: &L
     let status = weather_status_to_int(&p.status);
     WeatherModel {
         location: p.location_name.clone().into(),
+        cities: ModelRc::new(VecModel::from(cities)),
+        active_city_index: p.active_city_index as i32,
+        picker_open: p.picker_open,
+        search_query: p.search_query.clone().into(),
+        search_results: ModelRc::new(VecModel::from(search_results)),
+        search_busy: p.search_busy,
+        picker_title: locale.tr("weather-cities-title").into(),
+        search_placeholder: locale.tr("weather-city-search-placeholder").into(),
+        add_city_hint: locale.tr("weather-city-add").into(),
+        remove_city_hint: locale.tr("weather-city-remove").into(),
+        close_picker_label: locale.tr("weather-cities-close").into(),
+        no_results_label: locale.tr("weather-city-no-results").into(),
+        searching_label: locale.tr("weather-city-searching").into(),
         current_temp: if p.is_loading {
             SharedString::new()
         } else {
@@ -200,7 +251,8 @@ fn weather_status_i18n_key(status: i32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use orchid_i18n::{LocaleManager, default_language};
+    use orchid_i18n::{default_language, LocaleManager};
+    use slint::Model;
 
     fn test_locale() -> LocaleManager {
         LocaleManager::new(default_language(), None).expect("locale")
@@ -222,6 +274,15 @@ mod tests {
         let model = build_weather_model(
             &orchid_widgets::WeatherPayload {
                 location_name: "Home".into(),
+                cities: vec![orchid_widgets::WeatherCityEntry {
+                    name: "Home".into(),
+                    active: true,
+                }],
+                active_city_index: 0,
+                picker_open: false,
+                search_query: String::new(),
+                search_results: vec![],
+                search_busy: false,
                 current_temp_text: "20°C".into(),
                 feels_like_temp: None,
                 condition_key: "weather-condition-clear",
@@ -247,5 +308,6 @@ mod tests {
         );
         assert!(model.wind.as_str().contains("NE"));
         assert!(model.wind.as_str().contains("12"));
+        assert_eq!(model.cities.row_count(), 1);
     }
 }

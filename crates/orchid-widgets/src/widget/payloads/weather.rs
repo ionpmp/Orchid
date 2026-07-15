@@ -5,8 +5,20 @@ use chrono::{DateTime, Utc};
 /// Render-ready weather payload.
 #[derive(Debug, Clone)]
 pub struct WeatherPayload {
-    /// Display name of the configured location.
+    /// Display name of the active city.
     pub location_name: String,
+    /// All configured city names (for chips / picker list).
+    pub cities: Vec<WeatherCityEntry>,
+    /// Index of the active city in [`Self::cities`].
+    pub active_city_index: usize,
+    /// City-picker overlay visibility.
+    pub picker_open: bool,
+    /// Current city-search query.
+    pub search_query: String,
+    /// Geocoding hits for the current query.
+    pub search_results: Vec<WeatherSearchHit>,
+    /// True while a geocoding request is in flight.
+    pub search_busy: bool,
     /// Pre-formatted current temperature (e.g. `"24°C"`).
     pub current_temp_text: String,
     /// Optional pre-formatted "feels like" temperature (without prefix).
@@ -19,16 +31,40 @@ pub struct WeatherPayload {
     pub humidity_percent: Option<u8>,
     /// Wind speed in km/h, if known.
     pub wind_speed_kph: Option<f32>,
-    /// Wind compass direction label (e.g. `"NE"`), if known.
+    /// Wind compass direction Fluent key (e.g. `"weather-wind-ne"`), if known.
     pub wind_direction: Option<String>,
-    /// 3-day forecast.
+    /// Multi-day forecast (swipeable in the UI).
     pub forecast: Vec<WeatherForecastDay>,
-    /// When the provider last fetched data.
+    /// When the provider last fetched data for the active city.
     pub fetched_at: Option<DateTime<Utc>>,
     /// `true` until the first fetch attempt completes.
     pub is_loading: bool,
     /// Cache / freshness tag.
     pub status: WeatherStatusTag,
+}
+
+/// One configured city chip / picker row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WeatherCityEntry {
+    /// Display name.
+    pub name: String,
+    /// Whether this is the active city.
+    pub active: bool,
+}
+
+/// One geocoding search result shown in the city picker.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WeatherSearchHit {
+    /// City name.
+    pub name: String,
+    /// Secondary line (region, country).
+    pub detail: String,
+    /// WGS84 latitude.
+    pub latitude: f64,
+    /// WGS84 longitude.
+    pub longitude: f64,
+    /// IANA timezone id when known.
+    pub timezone: String,
 }
 
 /// A single forecast day as shown in the UI.

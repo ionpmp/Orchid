@@ -4,6 +4,13 @@ import { WeatherModel } from "../workspace/defs.slint";
 export component WeatherView inherits Rectangle {
     in property <WeatherModel> model;
 
+    callback open-cities();
+    callback close-cities();
+    callback select-city(int);
+    callback remove-city(int);
+    callback search-cities(string);
+    callback add-city(string, float, float, string);
+
     // ASCII/BMP glyphs — color emoji missing in Slint's default Windows font.
     pure function weather-icon-glyph(name: string) -> string {
         return
@@ -37,23 +44,8 @@ export component WeatherView inherits Rectangle {
                 horizontal-stretch: 1;
                 height: 24px;
 
-                location-ta := TouchArea { }
-                if location-ta.has-hover && model.location != "" : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: location-hint.preferred-width + 12px;
-                    height: location-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    location-hint := Text {
-                        x: 6px; y: 3px;
-                        text: model.location;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
+                location-ta := TouchArea {
+                    clicked => { root.open-cities(); }
                 }
 
                 Text {
@@ -104,6 +96,41 @@ export component WeatherView inherits Rectangle {
                         model.status == 1 ? #eab308 :
                         model.status == 2 ? #6b7280 :
                         #ef4444;
+                }
+            }
+        }
+
+        if model.cities.length > 1 : Flickable {
+            height: 28px;
+            viewport-height: self.height;
+            viewport-width: city-row.preferred-width.max(self.width);
+            interactive: true;
+
+            city-row := HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+
+                for city[i] in model.cities : Rectangle {
+                    height: 24px;
+                    width: max(48px, city-label.preferred-width + 16px);
+                    background: city.active ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+
+                    city-ta := TouchArea {
+                        clicked => { root.select-city(i); }
+                    }
+
+                    city-label := Text {
+                        text: city.name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%;
+                        height: 100%;
+                        wrap: no-wrap;
+                        overflow: elide;
+                    }
                 }
             }
         }
@@ -189,41 +216,49 @@ export component WeatherView inherits Rectangle {
             horizontal-stretch: 1;
         }
 
-        HorizontalLayout {
-            spacing: 8px;
-            alignment: space-around;
+        // Swipe horizontally to see more forecast days (up to 16).
+        Flickable {
+            height: 92px;
+            viewport-height: self.height;
+            viewport-width: forecast-row.preferred-width.max(self.width);
+            interactive: true;
 
-            for day[i] in model.forecast : VerticalLayout {
-                spacing: 4px;
-                alignment: center;
-                horizontal-stretch: 1;
+            forecast-row := HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
 
-                Text {
-                    text: day.day-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                }
+                for day[i] in model.forecast : VerticalLayout {
+                    spacing: 4px;
+                    alignment: center;
+                    width: 72px;
 
-                Text {
-                    text: weather-icon-glyph(day.icon);
-                    color: Theme.accent-brand;
-                    font-size: Theme.font-size-lg;
-                    horizontal-alignment: center;
-                }
+                    Text {
+                        text: day.day-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                    }
 
-                Text {
-                    text: day.range-text;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                }
+                    Text {
+                        text: weather-icon-glyph(day.icon);
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-lg;
+                        horizontal-alignment: center;
+                    }
 
-                if day.precip-text != "" : Text {
-                    text: day.precip-text;
-                    color: Theme.accent-brand;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
+                    Text {
+                        text: day.range-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                    }
+
+                    if day.precip-text != "" : Text {
+                        text: day.precip-text;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                    }
                 }
             }
         }
@@ -235,6 +270,251 @@ export component WeatherView inherits Rectangle {
             color: Theme.text-tertiary;
             font-size: Theme.font-size-sm;
             horizontal-alignment: end;
+        }
+    }
+
+    if model.picker-open : Rectangle {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: #00000088;
+        z: 50;
+
+        TouchArea {
+            clicked => { root.close-cities(); }
+        }
+
+        Rectangle {
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            height: parent.height - 24px;
+            background: Theme.surface-raised;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+
+            // Eat backdrop clicks so the panel stays open while interacting.
+            TouchArea { }
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: space-between;
+
+                    Text {
+                        text: model.picker-title;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        font-weight: Theme.weight-medium;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+
+                    Rectangle {
+                        width: max(56px, close-label.preferred-width + 16px);
+                        height: 28px;
+                        background: close-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                        border-radius: Theme.radius-md;
+
+                        close-ta := TouchArea {
+                            clicked => { root.close-cities(); }
+                        }
+                        close-label := Text {
+                            text: model.close-picker-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 32px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+
+                    search-input := TextInput {
+                        x: 8px; y: 4px;
+                        width: parent.width - 16px;
+                        height: parent.height - 8px;
+                        text: model.search-query;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        single-line: true;
+                        edited => {
+                            root.search-cities(self.text);
+                        }
+                    }
+                    if model.search-query == "" : Text {
+                        x: 8px; y: 4px;
+                        width: parent.width - 16px;
+                        height: parent.height - 8px;
+                        text: model.search-placeholder;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if model.cities.length > 0 : Flickable {
+                    height: min(96px, cities-list.preferred-height);
+                    viewport-width: self.width;
+                    viewport-height: cities-list.preferred-height;
+                    interactive: true;
+
+                    cities-list := VerticalLayout {
+                        spacing: 4px;
+
+                        for city[i] in model.cities : Rectangle {
+                            height: 32px;
+                            background: city.active ? Theme.accent-brand : (saved-ta.has-hover ? Theme.surface-base : transparent);
+                            border-radius: Theme.radius-md;
+
+                            saved-ta := TouchArea {
+                                clicked => { root.select-city(i); }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 4px;
+                                spacing: 4px;
+
+                                Text {
+                                    text: city.name;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+
+                                if model.cities.length > 1 : Rectangle {
+                                    width: 28px;
+                                    height: 28px;
+                                    y: 2px;
+                                    background: remove-ta.has-hover ? Theme.surface-raised : transparent;
+                                    border-radius: Theme.radius-md;
+
+                                    remove-ta := TouchArea {
+                                        clicked => { root.remove-city(i); }
+                                    }
+                                    if remove-ta.has-hover : Rectangle {
+                                        x: parent.x - remove-hint.preferred-width;
+                                        y: parent.height + 2px;
+                                        width: remove-hint.preferred-width + 12px;
+                                        height: remove-hint.preferred-height + 6px;
+                                        background: Theme.surface-raised;
+                                        border-radius: Theme.radius-md;
+                                        border-width: 1px;
+                                        border-color: Theme.border-default;
+                                        z: 100;
+                                        remove-hint := Text {
+                                            x: 6px; y: 3px;
+                                            text: model.remove-city-hint;
+                                            color: Theme.text-secondary;
+                                            font-size: Theme.font-size-sm;
+                                        }
+                                    }
+                                    Text {
+                                        text: "x";
+                                        color: Theme.text-secondary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border-default;
+                    horizontal-stretch: 1;
+                }
+
+                if model.search-busy : Text {
+                    text: model.searching-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                }
+
+                if !model.search-busy && model.search-query != "" && model.search-results.length == 0 : Text {
+                    text: model.no-results-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                }
+
+                Flickable {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    viewport-height: results-list.preferred-height.max(self.height);
+                    interactive: true;
+
+                    results-list := VerticalLayout {
+                        spacing: 4px;
+
+                        for hit[i] in model.search-results : Rectangle {
+                            height: 48px;
+                            background: hit-ta.has-hover ? Theme.surface-base : transparent;
+                            border-radius: Theme.radius-md;
+
+                            hit-ta := TouchArea {
+                                clicked => {
+                                    root.add-city(hit.name, hit.latitude, hit.longitude, hit.timezone);
+                                }
+                            }
+                            if hit-ta.has-hover : Rectangle {
+                                x: parent.x + 8px;
+                                y: parent.height - 2px;
+                                width: add-hint.preferred-width + 12px;
+                                height: add-hint.preferred-height + 6px;
+                                background: Theme.surface-raised;
+                                border-radius: Theme.radius-md;
+                                border-width: 1px;
+                                border-color: Theme.border-default;
+                                z: 100;
+                                add-hint := Text {
+                                    x: 6px; y: 3px;
+                                    text: model.add-city-hint;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                }
+                            }
+
+                            VerticalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                spacing: 2px;
+
+                                Text {
+                                    text: hit.name;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+                                if hit.detail != "" : Text {
+                                    text: hit.detail;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

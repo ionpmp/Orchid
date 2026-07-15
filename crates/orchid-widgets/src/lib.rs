@@ -28,28 +28,27 @@ pub use widget::descriptor::{WidgetCategory, WidgetDescriptor, WidgetFactory};
 pub use widget::instance::{SharedInstance, WidgetInstanceRuntime};
 pub use widget::lifecycle::LifecycleController;
 pub use widget::snapshot::{
-    TerminalPayload, TerminalPayloadCell, TerminalPanePayload, TerminalDividerPayload,
-    TerminalTabPayload, WidgetPayload, WidgetSnapshot,
-    WidgetStatus,
+    TerminalDividerPayload, TerminalPanePayload, TerminalPayload, TerminalPayloadCell,
+    TerminalTabPayload, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 pub use widget::WidgetSnapshotCache;
 pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
-    EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, MediaPlayerPayload,
-    MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView, PasswordEntryView,
-    ManagedFolderSidebarPayload,
-    PasswordManagerPayload, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, SystemIndicator, SystemIndicatorKind,
-    SystemPayload, TabPayload, UniversalSearchPayload, ViewerPayload, WeatherForecastDay,
-    WeatherPayload, WeatherStatusTag,
+    EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, ManagedFolderSidebarPayload,
+    MediaPlayerPayload, MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView,
+    PasswordEntryView, PasswordManagerPayload, RecentFileItemView, RecentFilesPayload, RssItemView,
+    RssPayload, SearchCandidateView, SystemIndicator, SystemIndicatorKind, SystemPayload,
+    TabPayload, UniversalSearchPayload, ViewerPayload, WeatherCityEntry, WeatherForecastDay,
+    WeatherPayload, WeatherSearchHit, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 
 pub use commands::build_command_set;
 pub use manager::operations::CreateWidgetRequest;
-pub use recent_files::{RecentFileEntry, RecentFilesStore, RecentFilesUpdated};
 pub use manager::{WidgetManager, WidgetManagerOptions};
+pub use recent_files::{RecentFileEntry, RecentFilesStore, RecentFilesUpdated};
 
 /// Crate version.
 #[must_use]

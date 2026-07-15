@@ -4,10 +4,12 @@ pub mod config;
 pub mod provider;
 pub mod types;
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock};
 
 use async_trait::async_trait;
 use chrono::Utc;
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use tracing::{debug, warn};
 use uuid::Uuid;
@@ -18,38 +20,284 @@ use crate::widget::config as state_codec;
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
-    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor,
-    WidgetFactory,
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{celsius_to_fahrenheit, TemperatureUnit, WeatherConfig};
+pub use config::{celsius_to_fahrenheit, decode_config, TemperatureUnit, WeatherConfig};
 pub use provider::{
-    map_wmo_code, OpenMeteoProvider, WeatherError, WeatherProvider,
+    map_wmo_code, GeocodingHit, OpenMeteoProvider, WeatherError, WeatherProvider, FORECAST_DAYS,
 };
 pub use types::{CurrentWeather, DailyForecast, Location, WeatherCondition, WeatherData};
 
 /// Stable type id for the weather widget.
 pub const TYPE_ID: &str = "weather";
 
+/// Live weather handles for UI callbacks (city picker / switch).
+static WEATHER_LIVE: LazyLock<DashMap<Uuid, Arc<WeatherHandle>>> = LazyLock::new(DashMap::new);
+
+/// Open / close the city picker overlay.
+pub fn set_picker_open(instance_id: Uuid, open: bool) {
+    if let Some(h) = WEATHER_LIVE.get(&instance_id) {
+        h.set_picker_open(open);
+    }
+}
+
+/// Select which configured city is shown.
+pub fn select_city(instance_id: Uuid, index: usize) {
+    if let Some(h) = WEATHER_LIVE.get(&instance_id) {
+        h.select_city(index);
+    }
+}
+
+/// Remove a configured city (keeps at least one).
+pub fn remove_city(instance_id: Uuid, index: usize) {
+    if let Some(h) = WEATHER_LIVE.get(&instance_id) {
+        h.remove_city(index);
+    }
+}
+
+/// Update the city-search query and kick off geocoding.
+pub fn search_cities(instance_id: Uuid, query: String) {
+    if let Some(h) = WEATHER_LIVE.get(&instance_id) {
+        h.search_cities(query);
+    }
+}
+
+/// Add a city from a geocoding hit and make it active.
+pub fn add_city(
+    instance_id: Uuid,
+    name: String,
+    latitude: f64,
+    longitude: f64,
+    timezone: String,
+) {
+    if let Some(h) = WEATHER_LIVE.get(&instance_id) {
+        h.add_city(Location {
+            name,
+            latitude,
+            longitude,
+            timezone: if timezone.is_empty() {
+                None
+            } else {
+                Some(timezone)
+            },
+        });
+    }
+}
+
+/// Snapshot the live weather config for the settings dialog.
+#[must_use]
+pub fn current_config(instance_id: Uuid) -> Option<WeatherConfig> {
+    WEATHER_LIVE
+        .get(&instance_id)
+        .map(|h| h.config.read().clone())
+}
+
+/// Apply a settings-dialog mutation to the live weather config.
+pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut WeatherConfig)) {
+    let Some(h) = WEATHER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        mutate(&mut cfg);
+        cfg.normalize();
+    }
+    h.publish();
+}
+
+/// Coords cache key (centi-degrees) so float noise does not duplicate entries.
+fn location_key(loc: &Location) -> (i32, i32) {
+    (
+        (loc.latitude * 100.0).round() as i32,
+        (loc.longitude * 100.0).round() as i32,
+    )
+}
+
+#[derive(Clone, Default)]
+struct UiState {
+    picker_open: bool,
+    search_query: String,
+    search_results: Vec<GeocodingHit>,
+    search_busy: bool,
+    search_generation: u64,
+}
+
+struct WeatherHandle {
+    instance_id: Uuid,
+    config: Arc<RwLock<WeatherConfig>>,
+    provider: Arc<dyn WeatherProvider>,
+    cache: Arc<RwLock<HashMap<(i32, i32), WeatherData>>>,
+    last_error: Arc<RwLock<Option<String>>>,
+    is_fetching: Arc<RwLock<bool>>,
+    ui: Arc<RwLock<UiState>>,
+    bus: Arc<orchid_core::EventBus>,
+    orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
+}
+
+impl std::fmt::Debug for WeatherHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WeatherHandle")
+            .field("instance_id", &self.instance_id)
+            .finish_non_exhaustive()
+    }
+}
+
+impl WeatherHandle {
+    fn publish(&self) {
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+    }
+
+    fn set_picker_open(&self, open: bool) {
+        let mut ui = self.ui.write();
+        ui.picker_open = open;
+        if !open {
+            ui.search_query.clear();
+            ui.search_results.clear();
+            ui.search_busy = false;
+        }
+        drop(ui);
+        self.publish();
+    }
+
+    fn select_city(&self, index: usize) {
+        {
+            let mut cfg = self.config.write();
+            if index < cfg.locations.len() {
+                cfg.active_index = index;
+            }
+        }
+        self.publish();
+        self.spawn_fetch_all();
+    }
+
+    fn remove_city(&self, index: usize) {
+        {
+            let mut cfg = self.config.write();
+            if cfg.locations.len() <= 1 || index >= cfg.locations.len() {
+                return;
+            }
+            let removed = cfg.locations.remove(index);
+            self.cache.write().remove(&location_key(&removed));
+            if cfg.active_index > index {
+                cfg.active_index -= 1;
+            } else if cfg.active_index >= cfg.locations.len() {
+                cfg.active_index = cfg.locations.len().saturating_sub(1);
+            }
+            cfg.normalize();
+        }
+        self.publish();
+        self.spawn_fetch_all();
+    }
+
+    fn add_city(&self, location: Location) {
+        {
+            let mut cfg = self.config.write();
+            if let Some(existing) = cfg
+                .locations
+                .iter()
+                .position(|l| location_key(l) == location_key(&location))
+            {
+                cfg.active_index = existing;
+            } else {
+                cfg.locations.push(location);
+                cfg.active_index = cfg.locations.len() - 1;
+            }
+            cfg.normalize();
+        }
+        {
+            let mut ui = self.ui.write();
+            ui.picker_open = false;
+            ui.search_query.clear();
+            ui.search_results.clear();
+            ui.search_busy = false;
+        }
+        self.publish();
+        self.spawn_fetch_all();
+    }
+
+    fn search_cities(&self, query: String) {
+        let generation = {
+            let mut ui = self.ui.write();
+            ui.search_query = query.clone();
+            ui.search_generation = ui.search_generation.wrapping_add(1);
+            ui.search_busy = !query.trim().is_empty();
+            if query.trim().is_empty() {
+                ui.search_results.clear();
+                ui.search_busy = false;
+            }
+            ui.search_generation
+        };
+        self.publish();
+        if query.trim().is_empty() {
+            return;
+        }
+
+        let provider = self.provider.clone();
+        let ui = self.ui.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        tokio::spawn(async move {
+            let result = provider.search_cities(&query).await;
+            let mut slot = ui.write();
+            if slot.search_generation != generation {
+                return;
+            }
+            slot.search_busy = false;
+            match result {
+                Ok(hits) => slot.search_results = hits,
+                Err(e) => {
+                    warn!(%instance_id, error = %e, "weather geocoding failed");
+                    slot.search_results.clear();
+                }
+            }
+            drop(slot);
+            bus.publish(
+                orchid_core::EventSource::Widget(instance_id),
+                WidgetSnapshotUpdated { instance_id },
+            );
+        });
+    }
+
+    fn spawn_fetch_all(&self) {
+        let provider = self.provider.clone();
+        let config = self.config.clone();
+        let cache = self.cache.clone();
+        let last_error = self.last_error.clone();
+        let is_fetching = self.is_fetching.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        tokio::spawn(async move {
+            fetch_all_locations(
+                provider,
+                config,
+                cache,
+                last_error,
+                is_fetching,
+                bus,
+                instance_id,
+            )
+            .await;
+        });
+    }
+}
+
 /// Weather widget implementation.
 pub struct WeatherWidget {
-    instance_id: Uuid,
-    config: RwLock<WeatherConfig>,
-    orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
-    provider: Arc<dyn WeatherProvider>,
-    data: Arc<RwLock<Option<WeatherData>>>,
-    last_error: Arc<RwLock<Option<String>>>,
-    /// True while a network fetch is in flight (initial or periodic refresh).
-    is_fetching: Arc<RwLock<bool>>,
+    handle: Arc<WeatherHandle>,
     refresh: PeriodicRefresh,
-    bus: Arc<orchid_core::EventBus>,
 }
 
 impl std::fmt::Debug for WeatherWidget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WeatherWidget")
-            .field("instance_id", &self.instance_id)
+            .field("instance_id", &self.handle.instance_id)
             .finish_non_exhaustive()
     }
 }
@@ -63,57 +311,73 @@ impl WeatherWidget {
         bus: Arc<orchid_core::EventBus>,
         orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     ) -> Self {
-        let refresh_interval = std::time::Duration::from_secs(
-            (config.refresh_interval_minutes as u64).max(1) * 60,
-        );
-        Self {
+        let mut config = config;
+        config.normalize();
+        let refresh_interval =
+            std::time::Duration::from_secs((config.refresh_interval_minutes as u64).max(1) * 60);
+        let handle = Arc::new(WeatherHandle {
             instance_id,
-            config: RwLock::new(config),
-            orchid_config,
+            config: Arc::new(RwLock::new(config)),
             provider,
-            data: Arc::new(RwLock::new(None)),
+            cache: Arc::new(RwLock::new(HashMap::new())),
             last_error: Arc::new(RwLock::new(None)),
             is_fetching: Arc::new(RwLock::new(false)),
-            refresh: PeriodicRefresh::new(refresh_interval),
+            ui: Arc::new(RwLock::new(UiState::default())),
             bus,
+            orchid_config,
+        });
+        WEATHER_LIVE.insert(instance_id, Arc::clone(&handle));
+        Self {
+            handle,
+            refresh: PeriodicRefresh::new(refresh_interval),
         }
     }
+}
 
-    fn location(&self) -> Location {
-        self.config.read().location.clone()
+impl Drop for WeatherWidget {
+    fn drop(&mut self) {
+        WEATHER_LIVE.remove(&self.handle.instance_id);
     }
+}
 
-    /// Fetch once and update shared state; publishes a snapshot-updated event.
-    async fn fetch_once(
-        provider: Arc<dyn WeatherProvider>,
-        location: Location,
-        data_slot: Arc<RwLock<Option<WeatherData>>>,
-        last_error: Arc<RwLock<Option<String>>>,
-        is_fetching: Arc<RwLock<bool>>,
-        bus: Arc<orchid_core::EventBus>,
-        instance_id: Uuid,
-    ) {
-        *is_fetching.write() = true;
-        bus.publish(
-            orchid_core::EventSource::Widget(instance_id),
-            WidgetSnapshotUpdated { instance_id },
-        );
-        match provider.fetch(&location).await {
+async fn fetch_all_locations(
+    provider: Arc<dyn WeatherProvider>,
+    config: Arc<RwLock<WeatherConfig>>,
+    cache: Arc<RwLock<HashMap<(i32, i32), WeatherData>>>,
+    last_error: Arc<RwLock<Option<String>>>,
+    is_fetching: Arc<RwLock<bool>>,
+    bus: Arc<orchid_core::EventBus>,
+    instance_id: Uuid,
+) {
+    let locations = config.read().locations.clone();
+    *is_fetching.write() = true;
+    bus.publish(
+        orchid_core::EventSource::Widget(instance_id),
+        WidgetSnapshotUpdated { instance_id },
+    );
+
+    let mut first_err: Option<String> = None;
+    let mut any_ok = false;
+    for loc in locations {
+        match provider.fetch(&loc).await {
             Ok(wd) => {
-                *data_slot.write() = Some(wd);
-                *last_error.write() = None;
+                cache.write().insert(location_key(&loc), wd);
+                any_ok = true;
             }
             Err(e) => {
-                warn!(%instance_id, error = %e, "weather fetch failed");
-                *last_error.write() = Some(e.to_string());
+                warn!(%instance_id, city = %loc.name, error = %e, "weather fetch failed");
+                if first_err.is_none() {
+                    first_err = Some(e.to_string());
+                }
             }
         }
-        *is_fetching.write() = false;
-        bus.publish(
-            orchid_core::EventSource::Widget(instance_id),
-            WidgetSnapshotUpdated { instance_id },
-        );
     }
+    *last_error.write() = if any_ok { None } else { first_err };
+    *is_fetching.write() = false;
+    bus.publish(
+        orchid_core::EventSource::Widget(instance_id),
+        WidgetSnapshotUpdated { instance_id },
+    );
 }
 
 #[async_trait]
@@ -123,56 +387,42 @@ impl Widget for WeatherWidget {
     }
 
     fn instance_id(&self) -> Uuid {
-        self.instance_id
+        self.handle.instance_id
     }
 
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let location = self.location();
-        let provider = self.provider.clone();
-        let data_slot = self.data.clone();
-        let last_error = self.last_error.clone();
-        let is_fetching = self.is_fetching.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
-        Self::fetch_once(
-            provider,
-            location,
-            data_slot,
-            last_error,
-            is_fetching,
-            bus,
-            instance_id,
+        fetch_all_locations(
+            self.handle.provider.clone(),
+            self.handle.config.clone(),
+            self.handle.cache.clone(),
+            self.handle.last_error.clone(),
+            self.handle.is_fetching.clone(),
+            self.handle.bus.clone(),
+            self.handle.instance_id,
         )
         .await;
         Ok(())
     }
 
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let location = self.location();
-        let provider = self.provider.clone();
-        let data_slot = self.data.clone();
-        let last_error = self.last_error.clone();
-        let is_fetching = self.is_fetching.clone();
-        let bus = self.bus.clone();
-        let instance_id = self.instance_id;
+        let provider = self.handle.provider.clone();
+        let config = self.handle.config.clone();
+        let cache = self.handle.cache.clone();
+        let last_error = self.handle.last_error.clone();
+        let is_fetching = self.handle.is_fetching.clone();
+        let bus = self.handle.bus.clone();
+        let instance_id = self.handle.instance_id;
 
-        // First tick fires immediately via tokio::interval semantics.
         self.refresh.start(move || {
             let provider = provider.clone();
-            let location = location.clone();
-            let data_slot = data_slot.clone();
+            let config = config.clone();
+            let cache = cache.clone();
             let last_error = last_error.clone();
             let is_fetching = is_fetching.clone();
             let bus = bus.clone();
             async move {
-                Self::fetch_once(
-                    provider,
-                    location,
-                    data_slot,
-                    last_error,
-                    is_fetching,
-                    bus,
-                    instance_id,
+                fetch_all_locations(
+                    provider, config, cache, last_error, is_fetching, bus, instance_id,
                 )
                 .await;
             }
@@ -200,11 +450,40 @@ impl Widget for WeatherWidget {
     }
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let config = self.config.read().clone();
-        let data_opt = self.data.read().clone();
-        let last_err = self.last_error.read().clone();
-        let fetching = *self.is_fetching.read();
+        let config = self.handle.config.read().clone();
+        let ui = self.handle.ui.read().clone();
+        let active = config.active_location().clone();
+        let data_opt = self
+            .handle
+            .cache
+            .read()
+            .get(&location_key(&active))
+            .cloned();
+        let last_err = self.handle.last_error.read().clone();
+        let fetching = *self.handle.is_fetching.read();
         let now = Utc::now();
+
+        let cities: Vec<_> = config
+            .locations
+            .iter()
+            .enumerate()
+            .map(|(i, loc)| crate::widget::payloads::WeatherCityEntry {
+                name: loc.name.clone(),
+                active: i == config.active_index,
+            })
+            .collect();
+
+        let search_results: Vec<_> = ui
+            .search_results
+            .iter()
+            .map(|h| crate::widget::payloads::WeatherSearchHit {
+                name: h.name.clone(),
+                detail: h.detail.clone(),
+                latitude: h.latitude,
+                longitude: h.longitude,
+                timezone: h.timezone.clone().unwrap_or_default(),
+            })
+            .collect();
 
         let (payload, title) = match (data_opt, last_err) {
             (Some(data), err) => {
@@ -215,51 +494,43 @@ impl Widget for WeatherWidget {
                 } else {
                     crate::widget::payloads::WeatherStatusTag::Stale
                 };
-                let locale = self.orchid_config.read().locale.clone();
-                // Keep last-good data visible while a refresh is in flight.
-                let payload = render_payload(&config, &data, status, &locale);
+                let locale = self.handle.orchid_config.read().locale.clone();
+                let mut payload = render_payload(&config, &data, status, &locale);
+                payload.cities = cities;
+                payload.active_city_index = config.active_index;
+                payload.picker_open = ui.picker_open;
+                payload.search_query = ui.search_query.clone();
+                payload.search_results = search_results;
+                payload.search_busy = ui.search_busy;
                 let title = data.location.name.clone();
                 (payload, title)
             }
             (None, Some(_err)) => (
-                crate::widget::payloads::WeatherPayload {
-                    location_name: config.location.name.clone(),
-                    current_temp_text: "—".into(),
-                    feels_like_temp: None,
-                    condition_key: WeatherCondition::Unknown.ftl_key(),
-                    condition_icon: WeatherCondition::Unknown.icon(),
-                    humidity_percent: None,
-                    wind_speed_kph: None,
-                    wind_direction: None,
-                    forecast: Vec::new(),
-                    fetched_at: None,
-                    // Retrying after an error: show loading instead of a stuck error card.
-                    is_loading: fetching,
-                    status: crate::widget::payloads::WeatherStatusTag::Error,
-                },
-                config.location.name.clone(),
+                empty_payload(
+                    &config,
+                    cities,
+                    search_results,
+                    &ui,
+                    fetching,
+                    crate::widget::payloads::WeatherStatusTag::Error,
+                ),
+                active.name.clone(),
             ),
             (None, None) => (
-                crate::widget::payloads::WeatherPayload {
-                    location_name: config.location.name.clone(),
-                    current_temp_text: "—".into(),
-                    feels_like_temp: None,
-                    condition_key: WeatherCondition::Unknown.ftl_key(),
-                    condition_icon: WeatherCondition::Unknown.icon(),
-                    humidity_percent: None,
-                    wind_speed_kph: None,
-                    wind_direction: None,
-                    forecast: Vec::new(),
-                    fetched_at: None,
-                    is_loading: true,
-                    status: crate::widget::payloads::WeatherStatusTag::Offline,
-                },
-                config.location.name.clone(),
+                empty_payload(
+                    &config,
+                    cities,
+                    search_results,
+                    &ui,
+                    true,
+                    crate::widget::payloads::WeatherStatusTag::Offline,
+                ),
+                active.name.clone(),
             ),
         };
 
         Some(WidgetSnapshot {
-            instance_id: self.instance_id,
+            instance_id: self.handle.instance_id,
             widget_type: TYPE_ID,
             title,
             status: WidgetStatus::Ready,
@@ -268,14 +539,14 @@ impl Widget for WeatherWidget {
     }
 
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        let cfg = self.config.read().clone();
+        let cfg = self.handle.config.read().clone();
         state_codec::save_state(&cfg)
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let cfg: WeatherConfig = state_codec::restore_state(bytes)?;
-        debug!(%self.instance_id, "restored weather config");
-        *self.config.write() = cfg;
+        let cfg = decode_config(bytes)?;
+        debug!(%self.handle.instance_id, "restored weather config");
+        *self.handle.config.write() = cfg;
         Ok(())
     }
 
@@ -289,6 +560,36 @@ impl Widget for WeatherWidget {
             keeps_state_when_unloaded: true,
             has_settings_panel: true,
         }
+    }
+}
+
+fn empty_payload(
+    config: &WeatherConfig,
+    cities: Vec<crate::widget::payloads::WeatherCityEntry>,
+    search_results: Vec<crate::widget::payloads::WeatherSearchHit>,
+    ui: &UiState,
+    is_loading: bool,
+    status: crate::widget::payloads::WeatherStatusTag,
+) -> crate::widget::payloads::WeatherPayload {
+    crate::widget::payloads::WeatherPayload {
+        location_name: config.active_location().name.clone(),
+        cities,
+        active_city_index: config.active_index,
+        picker_open: ui.picker_open,
+        search_query: ui.search_query.clone(),
+        search_results,
+        search_busy: ui.search_busy,
+        current_temp_text: "—".into(),
+        feels_like_temp: None,
+        condition_key: WeatherCondition::Unknown.ftl_key(),
+        condition_icon: WeatherCondition::Unknown.icon(),
+        humidity_percent: None,
+        wind_speed_kph: None,
+        wind_direction: None,
+        forecast: Vec::new(),
+        fetched_at: None,
+        is_loading,
+        status,
     }
 }
 
@@ -312,6 +613,12 @@ fn render_payload(
 
     crate::widget::payloads::WeatherPayload {
         location_name: data.location.name.clone(),
+        cities: Vec::new(),
+        active_city_index: config.active_index,
+        picker_open: false,
+        search_query: String::new(),
+        search_results: Vec::new(),
+        search_busy: false,
         current_temp_text: temp_text,
         feels_like_temp,
         condition_key: data.current.condition.ftl_key(),
@@ -357,8 +664,6 @@ fn format_temperature(c: f32, units: TemperatureUnit) -> String {
 }
 
 /// Fluent key for a compass bearing (`weather-wind-n` … `weather-wind-nnw`).
-///
-/// The UI layer resolves the key through [`orchid_i18n::LocaleManager`].
 #[must_use]
 pub fn wind_direction_ftl_key(deg: u16) -> &'static str {
     const KEYS: [&str; 16] = [
@@ -410,8 +715,7 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
     let provider: Arc<dyn WeatherProvider> = Arc::new(OpenMeteoProvider::new(http_client));
     let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
-            Some(bytes) => state_codec::restore_state::<WeatherConfig>(bytes)
-                .unwrap_or_default(),
+            Some(bytes) => decode_config(bytes).unwrap_or_default(),
             None => WeatherConfig::default(),
         };
         let widget = WeatherWidget::new(

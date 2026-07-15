@@ -17,8 +17,8 @@ pub mod viewer;
 pub mod weather;
 
 pub use file_manager::{
-    EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload,
-    NetworkMountPayload, PanePayload, TabPayload,
+    EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
+    PanePayload, TabPayload,
 };
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
@@ -28,4 +28,6 @@ pub use rss::{RssItemView, RssPayload};
 pub use search::{SearchCandidateView, UniversalSearchPayload};
 pub use system::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
 pub use viewer::ViewerPayload;
-pub use weather::{WeatherForecastDay, WeatherPayload, WeatherStatusTag};
+pub use weather::{
+    WeatherCityEntry, WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
+};

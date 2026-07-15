@@ -15,7 +15,7 @@ pub struct Location {
 
 impl Default for Location {
     fn default() -> Self {
-        // Semarang; replaced with geolocation on first run in a later task.
+        // Semarang; users can add/replace cities from the in-widget picker.
         Self {
             name: "Semarang".into(),
             latitude: -6.9667,

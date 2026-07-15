@@ -2,9 +2,8 @@
 //!
 //! The widget talks to the abstract [`WeatherProvider`] trait. An
 //! [`OpenMeteoProvider`] implementation hits
-//! <https://api.open-meteo.com/v1/forecast>. Providers run on the
-//! widget's `tokio` runtime; callers are expected to spawn refresh ticks
-//! on their own schedule.
+//! <https://api.open-meteo.com/v1/forecast> and
+//! <https://geocoding-api.open-meteo.com/v1/search>.
 
 use std::time::Duration;
 
@@ -12,9 +11,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::Deserialize;
 
-use super::types::{
-    CurrentWeather, DailyForecast, Location, WeatherCondition, WeatherData,
-};
+use super::types::{CurrentWeather, DailyForecast, Location, WeatherCondition, WeatherData};
+
+/// Number of daily forecast rows requested from Open-Meteo (max free: 16).
+pub const FORECAST_DAYS: u8 = 16;
 
 /// Error type returned from providers.
 #[derive(thiserror::Error, Debug)]
@@ -33,11 +33,38 @@ pub enum WeatherError {
 /// Result alias used by this module.
 pub type Result<T> = std::result::Result<T, WeatherError>;
 
+/// One row from the geocoding search API.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct GeocodingHit {
+    pub name: String,
+    pub detail: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub timezone: Option<String>,
+}
+
+impl GeocodingHit {
+    /// Convert into a saved [`Location`].
+    #[must_use]
+    pub fn into_location(self) -> Location {
+        Location {
+            name: self.name,
+            latitude: self.latitude,
+            longitude: self.longitude,
+            timezone: self.timezone,
+        }
+    }
+}
+
 /// Abstract weather-data source.
 #[async_trait]
 pub trait WeatherProvider: Send + Sync + std::fmt::Debug {
-    /// Fetch current conditions + 3-day forecast for `location`.
+    /// Fetch current conditions + multi-day forecast for `location`.
     async fn fetch(&self, location: &Location) -> Result<WeatherData>;
+
+    /// Search cities by name (Open-Meteo geocoding).
+    async fn search_cities(&self, query: &str) -> Result<Vec<GeocodingHit>>;
 }
 
 /// `api.open-meteo.com`-backed provider. Uses `rustls`-only HTTPS (no
@@ -73,16 +100,14 @@ impl OpenMeteoProvider {
 impl WeatherProvider for OpenMeteoProvider {
     async fn fetch(&self, location: &Location) -> Result<WeatherData> {
         let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=relativehumidity_2m,apparent_temperature,precipitation&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_mean,sunrise,sunset&forecast_days=3&timezone=auto",
+            "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=relativehumidity_2m,apparent_temperature,precipitation&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_mean,sunrise,sunset&forecast_days={days}&timezone=auto",
             lat = location.latitude,
             lon = location.longitude,
+            days = FORECAST_DAYS,
         );
         let resp = self.client.get(&url).send().await?;
         if !resp.status().is_success() {
-            return Err(WeatherError::Api(format!(
-                "HTTP {}",
-                resp.status()
-            )));
+            return Err(WeatherError::Api(format!("HTTP {}", resp.status())));
         }
         let body: OpenMeteoResponse = resp
             .json()
@@ -91,6 +116,63 @@ impl WeatherProvider for OpenMeteoProvider {
         let data = body.into_weather_data(location.clone())?;
         Ok(data)
     }
+
+    async fn search_cities(&self, query: &str) -> Result<Vec<GeocodingHit>> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(Vec::new());
+        }
+        let url = format!(
+            "https://geocoding-api.open-meteo.com/v1/search?name={name}&count=8&language=en&format=json",
+            name = urlencoding_path(q),
+        );
+        let resp = self.client.get(&url).send().await?;
+        if !resp.status().is_success() {
+            return Err(WeatherError::Api(format!("HTTP {}", resp.status())));
+        }
+        let body: GeocodingResponse = resp
+            .json()
+            .await
+            .map_err(|e| WeatherError::Parse(e.to_string()))?;
+        Ok(body
+            .results
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| {
+                let detail = [r.admin1.as_deref(), r.country.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                GeocodingHit {
+                    name: r.name,
+                    detail,
+                    latitude: r.latitude,
+                    longitude: r.longitude,
+                    timezone: r.timezone,
+                }
+            })
+            .collect())
+    }
+}
+
+/// Minimal path-segment encoding for geocoding queries (spaces → `%20`).
+fn urlencoding_path(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            b' ' => out.push_str("%20"),
+            _ => {
+                out.push('%');
+                out.push(char::from(b"0123456789ABCDEF"[(b >> 4) as usize]));
+                out.push(char::from(b"0123456789ABCDEF"[(b & 0xf) as usize]));
+            }
+        }
+    }
+    out
 }
 
 /// Map a WMO weather code (as returned by Open-Meteo) to our canonical
@@ -161,12 +243,30 @@ struct OmDaily {
     sunset: Vec<Option<String>>,
 }
 
+#[derive(Debug, Deserialize)]
+struct GeocodingResponse {
+    #[serde(default)]
+    results: Option<Vec<GeocodingResult>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeocodingResult {
+    name: String,
+    latitude: f64,
+    longitude: f64,
+    #[serde(default)]
+    country: Option<String>,
+    #[serde(default)]
+    admin1: Option<String>,
+    #[serde(default)]
+    timezone: Option<String>,
+}
+
 impl OpenMeteoResponse {
     fn into_weather_data(self, location: Location) -> Result<WeatherData> {
         let current = self.current_weather.ok_or(WeatherError::NoData)?;
         let observed_at = parse_naive_local_or_utc(&current.time).unwrap_or_else(Utc::now);
 
-        // Best-effort hourly lookup for humidity / apparent temperature / rain.
         let (humidity, feels_like, precip) = match self.hourly {
             Some(h) => closest_hourly(&h, observed_at),
             None => (None, None, None),
@@ -197,11 +297,7 @@ impl OpenMeteoResponse {
     }
 }
 
-fn closest_hourly(
-    h: &OmHourly,
-    at: DateTime<Utc>,
-) -> (Option<u8>, Option<f32>, Option<f32>) {
-    // Find index whose timestamp is closest to `at`.
+fn closest_hourly(h: &OmHourly, at: DateTime<Utc>) -> (Option<u8>, Option<f32>, Option<f32>) {
     let mut best: Option<(usize, i64)> = None;
     for (i, s) in h.time.iter().enumerate() {
         if let Some(ts) = parse_naive_local_or_utc(s) {
@@ -225,14 +321,20 @@ fn days_from_daily(d: OmDaily) -> Result<Vec<DailyForecast>> {
     for (i, day_str) in d.time.iter().enumerate() {
         let date = NaiveDate::parse_from_str(day_str, "%Y-%m-%d")
             .map_err(|e| WeatherError::Parse(format!("invalid daily.time {day_str}: {e}")))?;
-        let high = d.temperature_2m_max.get(i).copied().flatten().unwrap_or(0.0);
-        let low = d.temperature_2m_min.get(i).copied().flatten().unwrap_or(0.0);
-        let code = d.weather_code.get(i).copied().flatten().unwrap_or(0);
-        let probability = d
-            .precipitation_probability_mean
+        let high = d
+            .temperature_2m_max
             .get(i)
             .copied()
-            .flatten();
+            .flatten()
+            .unwrap_or(0.0);
+        let low = d
+            .temperature_2m_min
+            .get(i)
+            .copied()
+            .flatten()
+            .unwrap_or(0.0);
+        let code = d.weather_code.get(i).copied().flatten().unwrap_or(0);
+        let probability = d.precipitation_probability_mean.get(i).copied().flatten();
         let sunrise = d
             .sunrise
             .get(i)
@@ -257,9 +359,6 @@ fn days_from_daily(d: OmDaily) -> Result<Vec<DailyForecast>> {
 }
 
 fn parse_naive_local_or_utc(s: &str) -> Option<DateTime<Utc>> {
-    // Open-Meteo returns `YYYY-MM-DDTHH:MM` in the requested timezone.
-    // Best effort: treat as naive, assume UTC. The caller uses this only
-    // for display; rise/set accuracy is acceptable.
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M") {
         return Utc.from_utc_datetime(&dt).into();
     }
@@ -290,8 +389,21 @@ mod tests {
     #[test]
     fn condition_icon_and_label_exhaustive() {
         use WeatherCondition::*;
-        for c in [Clear, PartlyCloudy, Cloudy, Overcast, Fog, Drizzle, Rain,
-                  Snow, Sleet, Thunderstorm, Hail, Windy, Unknown] {
+        for c in [
+            Clear,
+            PartlyCloudy,
+            Cloudy,
+            Overcast,
+            Fog,
+            Drizzle,
+            Rain,
+            Snow,
+            Sleet,
+            Thunderstorm,
+            Hail,
+            Windy,
+            Unknown,
+        ] {
             assert!(!c.icon().is_empty());
             assert!(!c.default_label().is_empty());
             assert!(!c.ftl_key().is_empty());
@@ -303,5 +415,11 @@ mod tests {
         assert!(parse_naive_local_or_utc("2026-04-22T12:00").is_some());
         assert!(parse_naive_local_or_utc("2026-04-22T12:00:00").is_some());
         assert!(parse_naive_local_or_utc("not-a-date").is_none());
+    }
+
+    #[test]
+    fn encodes_geocoding_query() {
+        assert_eq!(urlencoding_path("New York"), "New%20York");
+        assert_eq!(urlencoding_path("São"), "S%C3%A3o");
     }
 }

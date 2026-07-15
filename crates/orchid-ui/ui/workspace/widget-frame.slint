@@ -49,6 +49,14 @@ export component WidgetFrame inherits Rectangle {
     callback terminal-split-drag-moved(string, string, float, float);
     callback terminal-shortcut(string);
     callback rss-item-clicked(string);
+    // Weather
+    callback weather-open-cities(string);
+    callback weather-close-cities(string);
+    callback weather-select-city(string, int);
+    callback weather-remove-city(string, int);
+    callback weather-search-cities(string, string);
+    callback weather-add-city(string, string, float, float, string);
+
     callback recent-files-item-clicked(string);
     callback search-query-changed(string, string);
     callback search-candidate-activated(string, string);
@@ -401,6 +409,14 @@ export component WidgetFrame inherits Rectangle {
                     width: parent.width;
                     height: parent.height;
                     model: root.model.weather;
+                    open-cities => { root.weather-open-cities(root.model.instance-id); }
+                    close-cities => { root.weather-close-cities(root.model.instance-id); }
+                    select-city(idx) => { root.weather-select-city(root.model.instance-id, idx); }
+                    remove-city(idx) => { root.weather-remove-city(root.model.instance-id, idx); }
+                    search-cities(q) => { root.weather-search-cities(root.model.instance-id, q); }
+                    add-city(name, lat, lon, tz) => {
+                        root.weather-add-city(root.model.instance-id, name, lat, lon, tz);
+                    }
                 }
 
                 if model.type-id == "moon" : MoonView {

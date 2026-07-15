@@ -523,6 +523,56 @@ impl MainWindowController {
                 }
             }
         });
+
+        self.window.on_weather_open_cities({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_open_cities(&id);
+                }
+            }
+        });
+        self.window.on_weather_close_cities({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_close_cities(&id);
+                }
+            }
+        });
+        self.window.on_weather_select_city({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_select_city(&id, idx);
+                }
+            }
+        });
+        self.window.on_weather_remove_city({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_remove_city(&id, idx);
+                }
+            }
+        });
+        self.window.on_weather_search_cities({
+            let t = t.clone();
+            move |id, q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_search_cities(&id, &q);
+                }
+            }
+        });
+        self.window.on_weather_add_city({
+            let t = t.clone();
+            move |id, name, lat, lon, tz| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_add_city(&id, &name, lat, lon, &tz);
+                }
+            }
+        });
+
         self.window.on_recent_files_item_clicked({
             let t = t.clone();
             move |path| {

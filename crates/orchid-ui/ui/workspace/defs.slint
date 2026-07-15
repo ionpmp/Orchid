@@ -65,6 +65,19 @@ export struct WeatherForecastEntry {
     precip-text: string,
 }
 
+export struct WeatherCityEntry {
+    name: string,
+    active: bool,
+}
+
+export struct WeatherSearchHit {
+    name: string,
+    detail: string,
+    latitude: float,
+    longitude: float,
+    timezone: string,
+}
+
 export struct MoonValueEntry {
     label: string,
     value: string,
@@ -80,6 +93,19 @@ export struct SystemIndicatorEntry {
 }
 
 export struct WeatherModel {
+    cities: [WeatherCityEntry],
+    active-city-index: int,
+    picker-open: bool,
+    search-query: string,
+    search-results: [WeatherSearchHit],
+    search-busy: bool,
+    picker-title: string,
+    search-placeholder: string,
+    add-city-hint: string,
+    remove-city-hint: string,
+    close-picker-label: string,
+    no-results-label: string,
+    searching-label: string,
     location: string,
     current-temp: string,
     condition-label: string,

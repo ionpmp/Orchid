@@ -10,7 +10,7 @@ widget-terminal-name = Terminal
 widget-terminal-desc = Local, WSL, or SSH shells with proper PTY, ANSI colours, and scrollback
 
 widget-weather-name = Weather
-widget-weather-desc = Current conditions and 3-day forecast
+widget-weather-desc = Current conditions, multi-city, and swipeable forecast
 
 widget-moon-name = Moon
 widget-moon-desc = Current lunar phase, rise/set times, and celestial data
@@ -82,6 +82,13 @@ weather-updated-just-now = Updated just now
 weather-updated-minutes = Updated { $m }m ago
 weather-updated-hours = Updated { $h }h ago
 weather-updated-days = Updated { $d }d ago
+weather-cities-title = Cities
+weather-cities-close = Close
+weather-city-search-placeholder = Search cities…
+weather-city-add = Add city
+weather-city-remove = Remove city
+weather-city-no-results = No cities found
+weather-city-searching = Searching…
 
 # ---- Relative time (shared) ----
 relative-just-now = just now
