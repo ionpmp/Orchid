@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use chrono::Utc;
 use parking_lot::Mutex;
-use sysinfo::{Disks, Networks, System};
+use sysinfo::{Disks, Networks, System, MINIMUM_CPU_UPDATE_INTERVAL};
 
 use super::types::{DiskUsage, NetworkRate, SystemSnapshot};
 
@@ -23,6 +23,10 @@ pub struct SystemProvider {
     disks: Mutex<Disks>,
     networks: Mutex<Networks>,
     previous: Mutex<NetworkPrev>,
+    /// Last time [`System::refresh_cpu_usage`] ran. CPU % is a delta metric;
+    /// Windows PDH in particular returns garbage (often 0% idle → 100% busy)
+    /// when samples are taken closer than [`MINIMUM_CPU_UPDATE_INTERVAL`].
+    last_cpu_refresh: Mutex<Option<Instant>>,
 }
 
 impl std::fmt::Debug for SystemProvider {
@@ -39,6 +43,10 @@ impl Default for SystemProvider {
 
 impl SystemProvider {
     /// New provider with refreshed disks + networks lists.
+    ///
+    /// Performs a baseline CPU sample only — that reading is not trusted.
+    /// The next [`Self::refresh`] waits for [`MINIMUM_CPU_UPDATE_INTERVAL`]
+    /// so the first published value is meaningful.
     #[must_use]
     pub fn new() -> Self {
         let mut system = System::new();
@@ -50,6 +58,7 @@ impl SystemProvider {
             disks: Mutex::new(disks),
             networks: Mutex::new(networks),
             previous: Mutex::new(NetworkPrev::default()),
+            last_cpu_refresh: Mutex::new(Some(Instant::now())),
         }
     }
 
@@ -58,15 +67,26 @@ impl SystemProvider {
         let captured_at = Utc::now();
         let now = Instant::now();
 
+        // Wait outside the System lock so concurrent callers don't pile up
+        // while holding the mutex during the mandatory CPU sample gap.
+        if let Some(prev) = *self.last_cpu_refresh.lock() {
+            let elapsed = prev.elapsed();
+            if elapsed < MINIMUM_CPU_UPDATE_INTERVAL {
+                std::thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL - elapsed);
+            }
+        }
+
         let mut system = self.system.lock();
         system.refresh_cpu_usage();
+        *self.last_cpu_refresh.lock() = Some(Instant::now());
         system.refresh_memory();
 
-        let cpu_total = system.global_cpu_usage();
+        // Clamp: PDH can theoretically return values slightly outside 0–100.
+        let cpu_total = system.global_cpu_usage().clamp(0.0, 100.0);
         let cpu_per_core = system
             .cpus()
             .iter()
-            .map(|c| c.cpu_usage())
+            .map(|c| c.cpu_usage().clamp(0.0, 100.0))
             .collect::<Vec<_>>();
 
         let memory_total = system.total_memory();
@@ -148,9 +168,31 @@ mod tests {
     #[test]
     fn refresh_returns_non_empty_snapshot() {
         let p = SystemProvider::new();
-        std::thread::sleep(std::time::Duration::from_millis(300));
         let snap = p.refresh();
         assert!(snap.memory_total_bytes > 0);
         assert!(!snap.cpu_per_core.is_empty() || snap.cpu_total_percent.is_finite());
+        assert!(
+            (0.0..=100.0).contains(&snap.cpu_total_percent),
+            "cpu_total_percent out of range: {}",
+            snap.cpu_total_percent
+        );
+    }
+
+    #[test]
+    fn consecutive_refreshes_wait_for_cpu_interval() {
+        let p = SystemProvider::new();
+        let _first = p.refresh();
+        let started = Instant::now();
+        let second = p.refresh();
+        assert!(
+            started.elapsed() >= MINIMUM_CPU_UPDATE_INTERVAL,
+            "second refresh returned too quickly ({:?})",
+            started.elapsed()
+        );
+        assert!(
+            (0.0..=100.0).contains(&second.cpu_total_percent),
+            "cpu_total_percent out of range: {}",
+            second.cpu_total_percent
+        );
     }
 }
