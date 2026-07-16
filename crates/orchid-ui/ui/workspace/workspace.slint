@@ -54,6 +54,7 @@ export component WorkspaceView inherits Rectangle {
     callback weather-remove-city(string, int);
     callback weather-search-cities(string, string);
     callback weather-add-city(string, string, float, float, string);
+    callback weather-select-day(string, int);
     callback media-play-pause();
     callback media-next();
     callback media-previous();
@@ -305,6 +306,7 @@ export component WorkspaceView inherits Rectangle {
                     weather-add-city(id, name, lat, lon, tz) => {
                         root.weather-add-city(id, name, lat, lon, tz);
                     }
+                    weather-select-day(id, idx) => { root.weather-select-day(id, idx); }
                     media-play-pause => { root.media-play-pause(); }
                     media-next => { root.media-next(); }
                     media-previous => { root.media-previous(); }

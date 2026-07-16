@@ -89,6 +89,13 @@ pub fn add_city(
     }
 }
 
+/// Highlight a forecast day in the strip and show its detail line.
+pub fn select_day(instance_id: Uuid, index: usize) {
+    if let Some(h) = WEATHER_LIVE.get(&instance_id) {
+        h.select_day(index);
+    }
+}
+
 /// Snapshot the live weather config for the settings dialog.
 #[must_use]
 pub fn current_config(instance_id: Uuid) -> Option<WeatherConfig> {
@@ -130,6 +137,8 @@ struct UiState {
     search_results: Vec<GeocodingHit>,
     search_busy: bool,
     search_generation: u64,
+    /// Forecast day shown in the detail row (clamped on snapshot).
+    selected_day_index: usize,
 }
 
 struct WeatherHandle {
@@ -213,8 +222,14 @@ impl WeatherHandle {
                 cfg.active_index = index;
             }
         }
+        self.ui.write().selected_day_index = 0;
         self.publish();
         self.spawn_fetch_all();
+    }
+
+    fn select_day(&self, index: usize) {
+        self.ui.write().selected_day_index = index;
+        self.publish();
     }
 
     fn remove_city(&self, index: usize) {
@@ -257,6 +272,7 @@ impl WeatherHandle {
             ui.search_query.clear();
             ui.search_results.clear();
             ui.search_busy = false;
+            ui.selected_day_index = 0;
         }
         self.publish();
         self.spawn_fetch_all();
@@ -284,6 +300,11 @@ impl WeatherHandle {
         let bus = self.bus.clone();
         let instance_id = self.instance_id;
         tokio::spawn(async move {
+            // Debounce keystrokes so we do not hammer the geocoding API.
+            tokio::time::sleep(std::time::Duration::from_millis(280)).await;
+            if ui.read().search_generation != generation {
+                return;
+            }
             let result = provider.search_cities(&query).await;
             let mut slot = ui.write();
             if slot.search_generation != generation {
@@ -500,7 +521,8 @@ impl Widget for WeatherWidget {
                     crate::widget::payloads::WeatherStatusTag::Stale
                 };
                 let locale = self.handle.orchid_config.read().locale.clone();
-                let mut payload = render_payload(&config, &data, status, &locale);
+                let mut payload =
+                    render_payload(&config, &data, status, &locale, ui.selected_day_index);
                 payload.cities = cities;
                 payload.active_city_index = config.active_index;
                 payload.picker_open = ui.picker_open;
@@ -584,6 +606,7 @@ fn empty_payload(
         search_query: ui.search_query.clone(),
         search_results,
         search_busy: ui.search_busy,
+        selected_day_index: ui.selected_day_index,
         current_temp_text: "—".into(),
         feels_like_temp: None,
         condition_key: WeatherCondition::Unknown.ftl_key(),
@@ -603,17 +626,23 @@ fn render_payload(
     data: &WeatherData,
     status: crate::widget::payloads::WeatherStatusTag,
     locale: &orchid_storage::LocaleConfig,
+    selected_day_index: usize,
 ) -> crate::widget::payloads::WeatherPayload {
     let temp_text = format_temperature(data.current.temperature_c, config.units);
     let feels_like_temp = data
         .current
         .feels_like_c
         .map(|t| format_temperature(t, config.units));
+    let selected = if data.forecast.is_empty() {
+        0
+    } else {
+        selected_day_index.min(data.forecast.len() - 1)
+    };
     let forecast = data
         .forecast
         .iter()
         .enumerate()
-        .map(|(i, d)| render_forecast_day(i, d, config, locale))
+        .map(|(i, d)| render_forecast_day(i, d, config, locale, i == selected))
         .collect();
 
     crate::widget::payloads::WeatherPayload {
@@ -624,6 +653,7 @@ fn render_payload(
         search_query: String::new(),
         search_results: Vec::new(),
         search_busy: false,
+        selected_day_index: selected,
         current_temp_text: temp_text,
         feels_like_temp,
         condition_key: data.current.condition.ftl_key(),
@@ -646,6 +676,7 @@ fn render_forecast_day(
     day: &DailyForecast,
     config: &WeatherConfig,
     locale: &orchid_storage::LocaleConfig,
+    selected: bool,
 ) -> crate::widget::payloads::WeatherForecastDay {
     crate::widget::payloads::WeatherForecastDay {
         day_index: idx as u8,
@@ -658,6 +689,9 @@ fn render_forecast_day(
         low_text: format_temperature(day.low_c, config.units),
         condition_icon: day.condition.icon(),
         precipitation_probability: day.precipitation_probability,
+        selected,
+        sunrise_text: day.sunrise.map(|t| locale.format_time(t)),
+        sunset_text: day.sunset.map(|t| locale.format_time(t)),
     }
 }
 

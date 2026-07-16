@@ -98,6 +98,9 @@ weather-wind-line = { $label } { $speed } ÐºÐ¼/Ñ‡ { $dir }
 weather-wind-line-no-dir = { $label } { $speed } ÐºÐ¼/Ñ‡
 weather-forecast-range = { $high } / { $low }
 weather-precip-chance = { $pct }%
+weather-sun-line = ↑{ $rise } ↓{ $set }
+weather-sunrise-line = ↑{ $rise }
+weather-sunset-line = ↓{ $set }
 
 # ---- Wind directions ----
 weather-wind-n = Ð¡

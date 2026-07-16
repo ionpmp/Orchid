@@ -27,6 +27,8 @@ pub(crate) fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
         feels_like: SharedString::new(),
         humidity: SharedString::new(),
         wind: SharedString::new(),
+        selected_day_index: 0,
+        day_detail: SharedString::new(),
         forecast: ModelRc::new(VecModel::default()),
         last_updated: locale.tr("weather-loading").into(),
         status: 2,
@@ -77,9 +79,21 @@ pub(crate) fn build_weather_model(
                     range_text: range_text.into(),
                     icon: d.condition_icon.into(),
                     precip_text: precip_text.into(),
+                    selected: d.selected,
                 }
             })
             .collect()
+    };
+
+    let day_detail = if p.is_loading {
+        String::new()
+    } else {
+        p.forecast
+            .iter()
+            .find(|d| d.selected)
+            .or_else(|| p.forecast.first())
+            .map(|d| format_day_detail(d, locale))
+            .unwrap_or_default()
     };
 
     let cities: Vec<WeatherCityEntry> = p
@@ -200,11 +214,47 @@ pub(crate) fn build_weather_model(
         feels_like: feels_like.into(),
         humidity: humidity.into(),
         wind: wind.into(),
+        selected_day_index: p.selected_day_index as i32,
+        day_detail: day_detail.into(),
         forecast: ModelRc::new(VecModel::from(forecast)),
         last_updated: last_updated.into(),
         status,
         status_label: locale.tr(weather_status_i18n_key(status)).into(),
     }
+}
+
+fn format_day_detail(d: &orchid_widgets::WeatherForecastDay, locale: &LocaleManager) -> String {
+    let range = locale.tr_args(
+        "weather-forecast-range",
+        &orchid_i18n::FluentArgs::new()
+            .with("high", d.high_text.as_str())
+            .with("low", d.low_text.as_str()),
+    );
+    let mut parts = vec![range];
+    if let Some(pct) = d.precipitation_probability {
+        parts.push(locale.tr_args(
+            "weather-precip-chance",
+            &orchid_i18n::FluentArgs::new().with("pct", pct.to_string()),
+        ));
+    }
+    match (d.sunrise_text.as_deref(), d.sunset_text.as_deref()) {
+        (Some(rise), Some(set)) => parts.push(locale.tr_args(
+            "weather-sun-line",
+            &orchid_i18n::FluentArgs::new()
+                .with("rise", rise)
+                .with("set", set),
+        )),
+        (Some(rise), None) => parts.push(locale.tr_args(
+            "weather-sunrise-line",
+            &orchid_i18n::FluentArgs::new().with("rise", rise),
+        )),
+        (None, Some(set)) => parts.push(locale.tr_args(
+            "weather-sunset-line",
+            &orchid_i18n::FluentArgs::new().with("set", set),
+        )),
+        (None, None) => {}
+    }
+    parts.join(" · ")
 }
 
 fn format_weather_updated(at: chrono::DateTime<chrono::Utc>, locale: &LocaleManager) -> String {
@@ -283,6 +333,7 @@ mod tests {
                 search_query: String::new(),
                 search_results: vec![],
                 search_busy: false,
+                selected_day_index: 0,
                 current_temp_text: "20°C".into(),
                 feels_like_temp: None,
                 condition_key: "weather-condition-clear",
@@ -309,5 +360,29 @@ mod tests {
         assert!(model.wind.as_str().contains("NE"));
         assert!(model.wind.as_str().contains("12"));
         assert_eq!(model.cities.row_count(), 1);
+    }
+
+    #[test]
+    fn format_day_detail_joins_range_precip_and_sun() {
+        let locale = test_locale();
+        let detail = format_day_detail(
+            &orchid_widgets::WeatherForecastDay {
+                day_index: 2,
+                weekday_label: Some("Wed".into()),
+                high_text: "28°C".into(),
+                low_text: "22°C".into(),
+                condition_icon: "weather-rain",
+                precipitation_probability: Some(40),
+                selected: true,
+                sunrise_text: Some("06:12".into()),
+                sunset_text: Some("18:04".into()),
+            },
+            &locale,
+        );
+        assert!(detail.contains("28°C"));
+        assert!(detail.contains("22°C"));
+        assert!(detail.contains("40"));
+        assert!(detail.contains("06:12"));
+        assert!(detail.contains("18:04"));
     }
 }

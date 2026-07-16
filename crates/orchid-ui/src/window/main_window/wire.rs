@@ -587,6 +587,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_weather_select_day({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_select_day(&id, idx);
+                }
+            }
+        });
         self.window.on_recent_files_item_clicked({
             let t = t.clone();
             move |path| {

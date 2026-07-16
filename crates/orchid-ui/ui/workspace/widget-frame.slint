@@ -65,6 +65,7 @@ export component WidgetFrame inherits Rectangle {
     callback weather-remove-city(string, int);
     callback weather-search-cities(string, string);
     callback weather-add-city(string, string, float, float, string);
+    callback weather-select-day(string, int);
 
     // Media
     callback media-play-pause();
@@ -459,6 +460,7 @@ export component WidgetFrame inherits Rectangle {
                     add-city(name, lat, lon, tz) => {
                         root.weather-add-city(root.model.instance-id, name, lat, lon, tz);
                     }
+                    select-day(idx) => { root.weather-select-day(root.model.instance-id, idx); }
                 }
 
                 if model.type-id == "moon" : MoonView {

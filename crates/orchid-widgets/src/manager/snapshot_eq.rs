@@ -301,6 +301,7 @@ fn weather_payload_eq(a: &WeatherPayload, b: &WeatherPayload) -> bool {
         && a.search_query == b.search_query
         && a.search_results == b.search_results
         && a.search_busy == b.search_busy
+        && a.selected_day_index == b.selected_day_index
         && a.current_temp_text == b.current_temp_text
         && a.feels_like_temp == b.feels_like_temp
         && a.condition_key == b.condition_key
@@ -321,6 +322,9 @@ fn weather_forecast_day_eq(a: &WeatherForecastDay, b: &WeatherForecastDay) -> bo
         && a.low_text == b.low_text
         && a.condition_icon == b.condition_icon
         && a.precipitation_probability == b.precipitation_probability
+        && a.selected == b.selected
+        && a.sunrise_text == b.sunrise_text
+        && a.sunset_text == b.sunset_text
 }
 
 fn forecast_eq(a: &[WeatherForecastDay], b: &[WeatherForecastDay]) -> bool {
@@ -502,6 +506,7 @@ mod tests {
             search_query: String::new(),
             search_results: vec![],
             search_busy: false,
+            selected_day_index: 0,
             current_temp_text: "20°C".into(),
             feels_like_temp: None,
             condition_key: "weather-condition-clear",
@@ -531,6 +536,7 @@ mod tests {
             search_query: String::new(),
             search_results: vec![],
             search_busy: false,
+            selected_day_index: 0,
             current_temp_text: "20°C".into(),
             feels_like_temp: None,
             condition_key: "weather-condition-clear",

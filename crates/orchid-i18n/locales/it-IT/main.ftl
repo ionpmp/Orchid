@@ -103,6 +103,9 @@ weather-wind-line = { $label } { $speed } km/h { $dir }
 weather-wind-line-no-dir = { $label } { $speed } km/h
 weather-forecast-range = { $high } / { $low }
 weather-precip-chance = { $pct }%
+weather-sun-line = ↑{ $rise } ↓{ $set }
+weather-sunrise-line = ↑{ $rise }
+weather-sunset-line = ↓{ $set }
 
 # ---- Wind directions ----
 weather-wind-n = N

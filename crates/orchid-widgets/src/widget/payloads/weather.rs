@@ -19,6 +19,8 @@ pub struct WeatherPayload {
     pub search_results: Vec<WeatherSearchHit>,
     /// True while a geocoding request is in flight.
     pub search_busy: bool,
+    /// Index of the forecast day highlighted in the strip.
+    pub selected_day_index: usize,
     /// Pre-formatted current temperature (e.g. `"24°C"`).
     pub current_temp_text: String,
     /// Optional pre-formatted "feels like" temperature (without prefix).
@@ -82,6 +84,12 @@ pub struct WeatherForecastDay {
     pub condition_icon: &'static str,
     /// Optional precipitation probability (0–100).
     pub precipitation_probability: Option<u8>,
+    /// True when this day is the strip selection.
+    pub selected: bool,
+    /// Pre-formatted sunrise clock time, if known.
+    pub sunrise_text: Option<String>,
+    /// Pre-formatted sunset clock time, if known.
+    pub sunset_text: Option<String>,
 }
 
 /// Coarse freshness tag used by the view to colour the widget frame.

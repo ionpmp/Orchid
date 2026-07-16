@@ -63,6 +63,7 @@ export struct WeatherForecastEntry {
     range-text: string,
     icon: string,
     precip-text: string,
+    selected: bool,
 }
 
 export struct WeatherCityEntry {
@@ -113,6 +114,8 @@ export struct WeatherModel {
     feels-like: string,
     humidity: string,
     wind: string,
+    selected-day-index: int,
+    day-detail: string,
     forecast: [WeatherForecastEntry],
     last-updated: string,
     status: int,

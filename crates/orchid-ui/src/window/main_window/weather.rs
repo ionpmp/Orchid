@@ -78,6 +78,17 @@ impl MainWindowController {
         self.persist_and_refresh_weather(inst_id);
     }
 
+    pub(super) fn on_weather_select_day(self: &Arc<Self>, id: &SharedString, index: i32) {
+        let Some(inst_id) = parse_uuid(id) else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        orchid_widgets::builtin::weather::select_day(inst_id, index as usize);
+        self.refresh_weather(inst_id);
+    }
+
     fn refresh_weather(self: &Arc<Self>, inst_id: Uuid) {
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
