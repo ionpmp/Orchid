@@ -9,6 +9,7 @@ pub mod state;
 pub mod view_mode;
 pub mod virtual_folders;
 
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -35,7 +36,8 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use clipboard::{ClipboardOperation, FileClipboard};
 pub use config::{
-    ClickBehavior, FileManagerConfig, SortBy, ThumbnailSize as FmThumbnailSize, ViewMode,
+    ClickBehavior, FileManagerConfig, FileManagerPersisted, FileManagerSession, PersistedActivePane,
+    PersistedPane, PersistedTab, SortBy, ThumbnailSize as FmThumbnailSize, ViewMode, decode_persisted,
 };
 pub use context_menu::{build_for_selection, ContextMenuInputs, ContextMenuItem};
 pub use navigation::{BreadcrumbSegment, NavigationResult, Navigator};
@@ -211,6 +213,8 @@ struct FileManagerInner {
     transfer: RwLock<TransferState>,
     /// Last failed transfer message (brief status-bar toast).
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
+    /// Tab ids currently loading a directory listing (navigation in flight).
+    loading_tabs: RwLock<HashSet<Uuid>>,
     /// Last passphrase failure (brief status-bar toast while dialog is open).
     passphrase_error: RwLock<Option<(String, std::time::Instant)>>,
     /// Last managed ingest failure (file name for status-bar toast).
@@ -232,6 +236,13 @@ struct TransferState {
     last_publish: Option<std::time::Instant>,
 }
 
+/// Options for [`FileManagerInner::refresh_all_tabs_with_opts`].
+#[derive(Debug, Clone, Copy)]
+struct RefreshOpts {
+    publish: bool,
+    indicate_loading: bool,
+}
+
 impl FileManagerWidget {
     /// Build a widget rooted at `initial_path`.
     pub fn new(
@@ -240,9 +251,28 @@ impl FileManagerWidget {
         bus: Arc<orchid_core::EventBus>,
         initial_path: orchid_fs::FsPath,
     ) -> Self {
-        let config = FileManagerConfig::default();
-        let state =
-            FileManagerState::single_pane(initial_path, config.default_view_mode, config.sort_by);
+        Self::from_persisted(
+            instance_id,
+            deps,
+            bus,
+            FileManagerPersisted {
+                config: FileManagerConfig::default(),
+                session: None,
+            },
+            initial_path,
+        )
+    }
+
+    /// Build from decoded persisted config/session.
+    pub fn from_persisted(
+        instance_id: Uuid,
+        deps: FileManagerDeps,
+        bus: Arc<orchid_core::EventBus>,
+        persisted: FileManagerPersisted,
+        fallback_path: orchid_fs::FsPath,
+    ) -> Self {
+        let config = persisted.config;
+        let state = state_from_persisted(&config, persisted.session.as_ref(), fallback_path);
         let navigator = Arc::new(Navigator::new(deps.registry.clone()));
         Self {
             inner: Arc::new(FileManagerInner {
@@ -264,6 +294,7 @@ impl FileManagerWidget {
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
+                loading_tabs: RwLock::new(HashSet::new()),
                 passphrase_error: RwLock::new(None),
                 ingest_error: RwLock::new(None),
                 activity_notice_key: RwLock::new(None),
@@ -297,7 +328,12 @@ impl FileManagerWidget {
             let mut state = self.inner.state.lock();
             state.active_tab_mut().navigate_to(path);
         }
-        self.refresh().await
+        self.inner
+            .refresh_all_tabs_with_opts(RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            })
+            .await
     }
 
     /// Back one step in history.
@@ -307,7 +343,12 @@ impl FileManagerWidget {
             state.active_tab_mut().back()
         };
         if changed {
-            self.refresh().await;
+            self.inner
+                .refresh_all_tabs_with_opts(RefreshOpts {
+                    publish: true,
+                    indicate_loading: true,
+                })
+                .await;
         }
     }
 
@@ -318,7 +359,12 @@ impl FileManagerWidget {
             state.active_tab_mut().forward()
         };
         if changed {
-            self.refresh().await;
+            self.inner
+                .refresh_all_tabs_with_opts(RefreshOpts {
+                    publish: true,
+                    indicate_loading: true,
+                })
+                .await;
         }
     }
 
@@ -442,11 +488,20 @@ impl Widget for FileManagerWidget {
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        state_codec::save_state(&*self.inner.config.read())
+        let persisted = FileManagerPersisted {
+            config: self.inner.config.read().clone(),
+            session: Some(session_from_state(&self.inner.state.lock())),
+        };
+        state_codec::save_state(&persisted)
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let cfg: FileManagerConfig = state_codec::restore_state(bytes)?;
-        *self.inner.config.write() = cfg;
+        let persisted = decode_persisted(bytes)?;
+        *self.inner.config.write() = persisted.config.clone();
+        *self.inner.state.lock() = state_from_persisted(
+            &persisted.config,
+            persisted.session.as_ref(),
+            default_initial_path(),
+        );
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -776,10 +831,22 @@ impl FileManagerInner {
     }
 
     async fn refresh_all_tabs(self: &Arc<Self>) {
-        self.refresh_all_tabs_with_publish(true).await;
+        self.refresh_all_tabs_with_opts(RefreshOpts {
+            publish: true,
+            indicate_loading: false,
+        })
+        .await;
     }
 
     async fn refresh_all_tabs_with_publish(self: &Arc<Self>, publish: bool) {
+        self.refresh_all_tabs_with_opts(RefreshOpts {
+            publish,
+            indicate_loading: false,
+        })
+        .await;
+    }
+
+    async fn refresh_all_tabs_with_opts(self: &Arc<Self>, opts: RefreshOpts) {
         self.refresh_managed_roots().await;
         self.refresh_encrypted_paths().await;
         let show_hidden = self.config.read().show_hidden;
@@ -789,11 +856,44 @@ impl FileManagerInner {
             let right = state.right_pane.as_ref().map(|p| p.active_tab().clone());
             (left, right)
         };
+
+        let mut loading_ids = Vec::new();
+        loading_ids.push(left.id);
+        if let Some(ref rt) = right {
+            loading_ids.push(rt.id);
+        }
+
+        if opts.indicate_loading {
+            {
+                let mut loading = self.loading_tabs.write();
+                for id in &loading_ids {
+                    loading.insert(*id);
+                }
+            }
+            {
+                let mut entries = self.entries_by_tab.write();
+                for id in &loading_ids {
+                    entries.remove(id);
+                }
+            }
+            self.publish_refresh();
+        }
+
         self.refresh_tab(&left, show_hidden).await;
         if let Some(rt) = right {
             self.refresh_tab(&rt, show_hidden).await;
         }
-        if publish {
+
+        if opts.indicate_loading {
+            {
+                let mut loading = self.loading_tabs.write();
+                for id in &loading_ids {
+                    loading.remove(&id);
+                }
+            }
+        }
+
+        if opts.publish {
             self.publish_refresh();
         }
     }
@@ -817,7 +917,11 @@ impl FileManagerInner {
 
     async fn delete_paths(&self, paths: &[String]) -> WidgetResult<()> {
         let registry = &self.deps.registry;
-        let opts = orchid_fs::operations::delete::DeleteOptions::default();
+        let to_recycle_bin = self.config.read().delete_to_recycle;
+        let opts = orchid_fs::operations::delete::DeleteOptions {
+            to_recycle_bin,
+            recursive: !to_recycle_bin, // permanent deletes need recurse for folders
+        };
         for p in paths {
             let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
             orchid_fs::operations::delete::delete(registry, &fp, opts)
@@ -1587,10 +1691,20 @@ fn build_pane_payload(
     }
 }
 
+fn entry_display_name(name: &str, is_dir: bool, show_extensions: bool) -> String {
+    if show_extensions || is_dir {
+        return name.to_string();
+    }
+    match name.rfind('.') {
+        Some(0) | None => name.to_string(),
+        Some(i) => name[..i].to_string(),
+    }
+}
+
 fn build_tab_payload(
     tab: &TabState,
     entries: &[orchid_fs::FsEntry],
-    _config: &FileManagerConfig,
+    config: &FileManagerConfig,
     inner: &FileManagerInner,
 ) -> TabPayload {
     let crumbs = inner.navigator.breadcrumbs_for(&tab.path);
@@ -1636,10 +1750,11 @@ fn build_tab_payload(
                 } else {
                     (false, None, 0, 0)
                 };
+            let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
             EntryPayload {
                 path: path_key.to_string(),
-                name: e.name.clone(),
-                is_dir: matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
+                name: entry_display_name(&e.name, is_dir, config.show_extensions),
+                is_dir,
                 size_text: inner.deps.locale.format_byte_size(e.metadata.size),
                 modified_text: e
                     .metadata
@@ -1702,7 +1817,7 @@ fn build_tab_payload(
         managed_files_tracked,
         managed_dedup_bytes,
         quick_filter: tab.quick_filter.clone(),
-        is_loading: false,
+        is_loading: inner.loading_tabs.read().contains(&tab.id),
         error,
         sort_by: sort_by_to_u8(tab.sort_by),
         sort_descending: tab.sort_descending,
@@ -1871,11 +1986,19 @@ fn color_label_from_action_id(action_id: &str) -> Option<orchid_storage::ColorLa
 #[must_use]
 pub fn descriptor(deps: FileManagerDeps) -> WidgetDescriptor {
     let default_path = default_initial_path();
-    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, _bytes| {
-        Ok(Box::new(FileManagerWidget::new(
+    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, bytes| {
+        let persisted = match bytes {
+            Some(b) if !b.is_empty() => decode_persisted(b)?,
+            _ => FileManagerPersisted {
+                config: FileManagerConfig::default(),
+                session: None,
+            },
+        };
+        Ok(Box::new(FileManagerWidget::from_persisted(
             ctx.instance_id,
             deps.clone(),
             ctx.bus.clone(),
+            persisted,
             default_path.clone(),
         )) as Box<dyn Widget>)
     });
@@ -1904,6 +2027,136 @@ fn default_initial_path() -> orchid_fs::FsPath {
         // unreachable in practice; fall back to a known-good absolute path.
         orchid_fs::FsPath::new("local:c:/").expect("constant path parses")
     })
+}
+
+fn parse_persisted_path(path: &str, fallback: &orchid_fs::FsPath) -> orchid_fs::FsPath {
+    orchid_fs::FsPath::new(path).unwrap_or_else(|_| fallback.clone())
+}
+
+fn tab_from_persisted(pt: &PersistedTab, fallback: &orchid_fs::FsPath) -> TabState {
+    let id = Uuid::parse_str(&pt.id).unwrap_or_else(|_| Uuid::new_v4());
+    TabState {
+        id,
+        path: parse_persisted_path(&pt.path, fallback),
+        history_back: pt
+            .history_back
+            .iter()
+            .filter_map(|p| orchid_fs::FsPath::new(p).ok())
+            .collect(),
+        history_forward: pt
+            .history_forward
+            .iter()
+            .filter_map(|p| orchid_fs::FsPath::new(p).ok())
+            .collect(),
+        view_mode: pt.view_mode,
+        selection: SelectionModel::new(),
+        quick_filter: String::new(),
+        scroll_position: 0.0,
+        sort_by: pt.sort_by,
+        sort_descending: pt.sort_descending,
+    }
+}
+
+fn tab_to_persisted(tab: &TabState) -> PersistedTab {
+    PersistedTab {
+        id: tab.id.to_string(),
+        path: tab.path.as_str().to_string(),
+        history_back: tab
+            .history_back
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect(),
+        history_forward: tab
+            .history_forward
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect(),
+        view_mode: tab.view_mode,
+        sort_by: tab.sort_by,
+        sort_descending: tab.sort_descending,
+    }
+}
+
+fn pane_from_persisted(pane: &PersistedPane, fallback: &orchid_fs::FsPath) -> PaneState {
+    let tabs: Vec<TabState> = pane
+        .tabs
+        .iter()
+        .map(|t| tab_from_persisted(t, fallback))
+        .collect();
+    if tabs.is_empty() {
+        return PaneState::with_single_tab(TabState::new(
+            fallback.clone(),
+            ViewMode::Details,
+            SortBy::Name,
+        ));
+    }
+    PaneState {
+        active_tab: pane.active_tab.min(tabs.len().saturating_sub(1)),
+        tabs,
+    }
+}
+
+fn pane_to_persisted(pane: &PaneState) -> PersistedPane {
+    PersistedPane {
+        tabs: pane.tabs.iter().map(tab_to_persisted).collect(),
+        active_tab: pane.active_tab,
+    }
+}
+
+fn state_from_persisted(
+    config: &FileManagerConfig,
+    session: Option<&FileManagerSession>,
+    fallback_path: orchid_fs::FsPath,
+) -> FileManagerState {
+    let Some(session) = session else {
+        return FileManagerState::single_pane(
+            fallback_path,
+            config.default_view_mode,
+            config.sort_by,
+        );
+    };
+
+    let left_pane = pane_from_persisted(&session.left_pane, &fallback_path);
+    let mut right_pane = session
+        .right_pane
+        .as_ref()
+        .map(|p| pane_from_persisted(p, &left_pane.active_tab().path));
+
+    if config.dual_pane && right_pane.is_none() {
+        let path = left_pane.active_tab().path.clone();
+        right_pane = Some(PaneState::with_single_tab(TabState::new(
+            path,
+            config.default_view_mode,
+            config.sort_by,
+        )));
+    } else if !config.dual_pane {
+        right_pane = None;
+    }
+
+    let active_pane = match session.active_pane {
+        PersistedActivePane::Left => ActivePane::Left,
+        PersistedActivePane::Right if config.dual_pane && right_pane.is_some() => {
+            ActivePane::Right
+        }
+        PersistedActivePane::Right => ActivePane::Left,
+    };
+
+    FileManagerState {
+        left_pane,
+        right_pane,
+        active_pane,
+    }
+}
+
+fn session_from_state(state: &FileManagerState) -> FileManagerSession {
+    FileManagerSession {
+        left_pane: pane_to_persisted(&state.left_pane),
+        right_pane: state.right_pane.as_ref().map(pane_to_persisted),
+        active_pane: match state.active_pane {
+            ActivePane::Left => PersistedActivePane::Left,
+            ActivePane::Right => PersistedActivePane::Right,
+        },
+    }
 }
 
 fn dirs_home() -> Option<std::path::PathBuf> {
@@ -2068,7 +2321,12 @@ async fn navigate_inner(
             state.left_pane.active_tab_mut().navigate_to(path);
         }
     }
-    inner.refresh_all_tabs_with_publish(publish).await;
+    inner
+        .refresh_all_tabs_with_opts(RefreshOpts {
+            publish,
+            indicate_loading: true,
+        })
+        .await;
     Ok(())
 }
 
@@ -2088,7 +2346,12 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         }
     };
     if changed {
-        inner.refresh_all_tabs().await;
+        inner
+            .refresh_all_tabs_with_opts(RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            })
+            .await;
     }
     Ok(())
 }
@@ -2109,7 +2372,12 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         }
     };
     if changed {
-        inner.refresh_all_tabs().await;
+        inner
+            .refresh_all_tabs_with_opts(RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            })
+            .await;
     }
     Ok(())
 }
@@ -2692,9 +2960,14 @@ pub async fn run_action_with_opts(
         "fs.delete" => {
             let cfg = inner.config.read().clone();
             if cfg.confirm_delete && !target_paths.is_empty() && !opts.skip_confirm {
+                let message = if cfg.delete_to_recycle {
+                    "fm-confirm-delete"
+                } else {
+                    "fm-confirm-delete-permanent"
+                };
                 return Ok(ActionOutcome::NeedsConfirmation {
                     // Fluent key resolved in the UI with `{ $n }` = paths.len().
-                    message: "fm-confirm-delete".into(),
+                    message: message.into(),
                     action_id: action_id.to_string(),
                     paths: target_paths,
                 });
@@ -3280,4 +3553,34 @@ fn network_mount_display_name(m: &orchid_storage::NetworkMountConfig, uri: &str)
         .and_then(|p| p.file_name().map(String::from))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| uri.to_string())
+}
+
+#[cfg(test)]
+mod display_name_tests {
+    use super::entry_display_name;
+
+    #[test]
+    fn keeps_extension_when_show_extensions() {
+        assert_eq!(entry_display_name("readme.txt", false, true), "readme.txt");
+    }
+
+    #[test]
+    fn strips_extension_when_hidden() {
+        assert_eq!(entry_display_name("readme.txt", false, false), "readme");
+    }
+
+    #[test]
+    fn keeps_dir_names_unchanged() {
+        assert_eq!(entry_display_name("folder.txt", true, false), "folder.txt");
+    }
+
+    #[test]
+    fn keeps_dotfiles_unchanged() {
+        assert_eq!(entry_display_name(".gitignore", false, false), ".gitignore");
+    }
+
+    #[test]
+    fn keeps_extensionless_files() {
+        assert_eq!(entry_display_name("Makefile", false, false), "Makefile");
+    }
 }

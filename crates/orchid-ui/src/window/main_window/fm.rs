@@ -47,7 +47,7 @@ impl MainWindowController {
         pub(super) fn sync_fm_transfer_notifications(self: &Arc<Self>) {
         let mut transfer_error: Option<String> = None;
         for inst in self.widget_manager.list_instances() {
-            if inst.type_id != "file_manager" {
+            if inst.type_id != "file-manager" {
                 continue;
             }
             let Some(snap) = self.widget_manager.snapshot_cache().get(inst.id) else {

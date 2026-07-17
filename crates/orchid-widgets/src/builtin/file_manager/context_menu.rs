@@ -122,7 +122,7 @@ pub fn build_for_selection(
         label_key: "fm-action-add-tag".into(),
         icon: "action-tag",
         swatch_color: None,
-        enabled: has_selection && !inputs.known_tags.is_empty(),
+        enabled: has_selection,
         separator_after: false,
         submenu: inputs
             .known_tags
@@ -354,5 +354,13 @@ mod tests {
         );
         assert!(menu.iter().any(|i| i.id == "fs.decrypt"));
         assert!(!menu.iter().any(|i| i.id == "fs.encrypt"));
+    }
+
+    #[test]
+    fn tag_add_enabled_without_known_tags() {
+        let sel = vec![entry("a", FsEntryKind::File, false)];
+        let menu = build_for_selection(&sel, ContextMenuInputs::default());
+        let tag_add = menu.iter().find(|i| i.id == "fs.tag-add").unwrap();
+        assert!(tag_add.enabled);
     }
 }
