@@ -252,14 +252,18 @@ pub fn remove_city(instance_id: Uuid, index: usize) {
     }
 }
 
+/// Reorder a configured city by `delta` slots (−1 / +1).
 pub fn move_city(instance_id: Uuid, index: usize, delta: i32) {
     if let Some(h) = CLOCK_LIVE.get(&instance_id) {
         h.move_city(index, delta);
     }
 }
 
+/// Take a pending Fluent notice key from the live clock UI, if any.
 pub fn take_notice(instance_id: Uuid) -> Option<&'static str> {
-    CLOCK_LIVE.get(&instance_id).and_then(|h| h.ui.write().pending_notice.take())
+    CLOCK_LIVE
+        .get(&instance_id)
+        .and_then(|h| h.ui.write().pending_notice.take())
 }
 
 /// Update the city-search query and kick off geocoding.

@@ -38,6 +38,32 @@ impl MainWindowController {
         self.persist_and_refresh_clock(inst_id);
     }
 
+    pub(super) fn on_clock_move_city(
+        self: &Arc<Self>,
+        id: &SharedString,
+        index: i32,
+        delta: i32,
+    ) {
+        let Some(inst_id) = parse_uuid(id) else {
+            return;
+        };
+        if index < 0 || delta == 0 {
+            return;
+        }
+        orchid_widgets::builtin::clock::move_city(inst_id, index as usize, delta);
+        self.persist_and_refresh_clock(inst_id);
+    }
+
+    /// Drain transient clock UI notices (e.g. geocoding failures) into toasts.
+    pub(super) fn drain_clock_notice(self: &Arc<Self>, inst_id: Uuid) {
+        let Some(key) = orchid_widgets::builtin::clock::take_notice(inst_id) else {
+            return;
+        };
+        let title = self.locale.tr("widget-clock-name");
+        let body = self.locale.tr(key);
+        self.push_notification(&title, &body, 3);
+    }
+
     pub(super) fn on_clock_search_cities(
         self: &Arc<Self>,
         id: &SharedString,
