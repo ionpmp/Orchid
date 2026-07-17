@@ -817,7 +817,11 @@ impl FileManagerInner {
 
     async fn delete_paths(&self, paths: &[String]) -> WidgetResult<()> {
         let registry = &self.deps.registry;
-        let opts = orchid_fs::operations::delete::DeleteOptions::default();
+        let to_recycle_bin = self.config.read().delete_to_recycle;
+        let opts = orchid_fs::operations::delete::DeleteOptions {
+            to_recycle_bin,
+            recursive: !to_recycle_bin, // permanent deletes need recurse for folders
+        };
         for p in paths {
             let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
             orchid_fs::operations::delete::delete(registry, &fp, opts)
@@ -1587,10 +1591,20 @@ fn build_pane_payload(
     }
 }
 
+fn entry_display_name(name: &str, is_dir: bool, show_extensions: bool) -> String {
+    if show_extensions || is_dir {
+        return name.to_string();
+    }
+    match name.rfind('.') {
+        Some(0) | None => name.to_string(),
+        Some(i) => name[..i].to_string(),
+    }
+}
+
 fn build_tab_payload(
     tab: &TabState,
     entries: &[orchid_fs::FsEntry],
-    _config: &FileManagerConfig,
+    config: &FileManagerConfig,
     inner: &FileManagerInner,
 ) -> TabPayload {
     let crumbs = inner.navigator.breadcrumbs_for(&tab.path);
@@ -1636,10 +1650,11 @@ fn build_tab_payload(
                 } else {
                     (false, None, 0, 0)
                 };
+            let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
             EntryPayload {
                 path: path_key.to_string(),
-                name: e.name.clone(),
-                is_dir: matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
+                name: entry_display_name(&e.name, is_dir, config.show_extensions),
+                is_dir,
                 size_text: inner.deps.locale.format_byte_size(e.metadata.size),
                 modified_text: e
                     .metadata
@@ -2692,9 +2707,14 @@ pub async fn run_action_with_opts(
         "fs.delete" => {
             let cfg = inner.config.read().clone();
             if cfg.confirm_delete && !target_paths.is_empty() && !opts.skip_confirm {
+                let message = if cfg.delete_to_recycle {
+                    "fm-confirm-delete"
+                } else {
+                    "fm-confirm-delete-permanent"
+                };
                 return Ok(ActionOutcome::NeedsConfirmation {
                     // Fluent key resolved in the UI with `{ $n }` = paths.len().
-                    message: "fm-confirm-delete".into(),
+                    message: message.into(),
                     action_id: action_id.to_string(),
                     paths: target_paths,
                 });
@@ -3280,4 +3300,34 @@ fn network_mount_display_name(m: &orchid_storage::NetworkMountConfig, uri: &str)
         .and_then(|p| p.file_name().map(String::from))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| uri.to_string())
+}
+
+#[cfg(test)]
+mod display_name_tests {
+    use super::entry_display_name;
+
+    #[test]
+    fn keeps_extension_when_show_extensions() {
+        assert_eq!(entry_display_name("readme.txt", false, true), "readme.txt");
+    }
+
+    #[test]
+    fn strips_extension_when_hidden() {
+        assert_eq!(entry_display_name("readme.txt", false, false), "readme");
+    }
+
+    #[test]
+    fn keeps_dir_names_unchanged() {
+        assert_eq!(entry_display_name("folder.txt", true, false), "folder.txt");
+    }
+
+    #[test]
+    fn keeps_dotfiles_unchanged() {
+        assert_eq!(entry_display_name(".gitignore", false, false), ".gitignore");
+    }
+
+    #[test]
+    fn keeps_extensionless_files() {
+        assert_eq!(entry_display_name("Makefile", false, false), "Makefile");
+    }
 }
