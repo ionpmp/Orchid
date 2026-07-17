@@ -49,7 +49,7 @@ pub enum ThumbnailSize {
 }
 
 /// Persistent file-manager config.
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 #[allow(missing_docs)]
 pub struct FileManagerConfig {
     pub dual_pane: bool,
@@ -78,5 +78,109 @@ impl Default for FileManagerConfig {
             delete_to_recycle: true,
             click_behavior: ClickBehavior::DoubleToOpen,
         }
+    }
+}
+
+/// One tab saved in workspace state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[allow(missing_docs)]
+pub struct PersistedTab {
+    pub id: String,
+    pub path: String,
+    pub history_back: Vec<String>,
+    pub history_forward: Vec<String>,
+    pub view_mode: ViewMode,
+    pub sort_by: SortBy,
+    pub sort_descending: bool,
+}
+
+/// Saved pane with tabs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[allow(missing_docs)]
+pub struct PersistedPane {
+    pub tabs: Vec<PersistedTab>,
+    pub active_tab: usize,
+}
+
+/// Which pane had focus when state was saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[serde(rename_all = "kebab-case")]
+#[allow(missing_docs)]
+pub enum PersistedActivePane {
+    Left,
+    Right,
+}
+
+/// Saved navigation session (tabs, paths, history).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[allow(missing_docs)]
+pub struct FileManagerSession {
+    pub left_pane: PersistedPane,
+    pub right_pane: Option<PersistedPane>,
+    pub active_pane: PersistedActivePane,
+}
+
+/// Config plus optional live session.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[allow(missing_docs)]
+pub struct FileManagerPersisted {
+    pub config: FileManagerConfig,
+    pub session: Option<FileManagerSession>,
+}
+
+/// Decode widget bytes, falling back to legacy config-only blobs.
+///
+/// # Errors
+///
+/// Returns [`crate::error::WidgetError::CreationFailed`] when neither format parses.
+pub fn decode_persisted(bytes: &[u8]) -> crate::error::Result<FileManagerPersisted> {
+    if let Ok(persisted) = crate::widget::config::restore_state::<FileManagerPersisted>(bytes) {
+        return Ok(persisted);
+    }
+    let config = crate::widget::config::restore_state::<FileManagerConfig>(bytes)?;
+    Ok(FileManagerPersisted {
+        config,
+        session: None,
+    })
+}
+
+#[cfg(test)]
+mod persist_tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn decode_legacy_config_only() {
+        let bytes = crate::widget::config::save_state(&FileManagerConfig::default()).unwrap();
+        let persisted = decode_persisted(&bytes).unwrap();
+        assert!(persisted.session.is_none());
+        assert_eq!(persisted.config, FileManagerConfig::default());
+    }
+
+    #[test]
+    fn session_roundtrip() {
+        let session = FileManagerSession {
+            left_pane: PersistedPane {
+                tabs: vec![PersistedTab {
+                    id: Uuid::new_v4().to_string(),
+                    path: "local:/tmp".into(),
+                    history_back: vec!["local:/".into()],
+                    history_forward: vec![],
+                    view_mode: ViewMode::List,
+                    sort_by: SortBy::Size,
+                    sort_descending: true,
+                }],
+                active_tab: 0,
+            },
+            right_pane: None,
+            active_pane: PersistedActivePane::Left,
+        };
+        let persisted = FileManagerPersisted {
+            config: FileManagerConfig::default(),
+            session: Some(session.clone()),
+        };
+        let bytes = crate::widget::config::save_state(&persisted).unwrap();
+        let decoded = decode_persisted(&bytes).unwrap();
+        assert_eq!(decoded.session, Some(session));
     }
 }

@@ -36,7 +36,8 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use clipboard::{ClipboardOperation, FileClipboard};
 pub use config::{
-    ClickBehavior, FileManagerConfig, SortBy, ThumbnailSize as FmThumbnailSize, ViewMode,
+    ClickBehavior, FileManagerConfig, FileManagerPersisted, FileManagerSession, PersistedActivePane,
+    PersistedPane, PersistedTab, SortBy, ThumbnailSize as FmThumbnailSize, ViewMode, decode_persisted,
 };
 pub use context_menu::{build_for_selection, ContextMenuInputs, ContextMenuItem};
 pub use navigation::{BreadcrumbSegment, NavigationResult, Navigator};
@@ -250,9 +251,28 @@ impl FileManagerWidget {
         bus: Arc<orchid_core::EventBus>,
         initial_path: orchid_fs::FsPath,
     ) -> Self {
-        let config = FileManagerConfig::default();
-        let state =
-            FileManagerState::single_pane(initial_path, config.default_view_mode, config.sort_by);
+        Self::from_persisted(
+            instance_id,
+            deps,
+            bus,
+            FileManagerPersisted {
+                config: FileManagerConfig::default(),
+                session: None,
+            },
+            initial_path,
+        )
+    }
+
+    /// Build from decoded persisted config/session.
+    pub fn from_persisted(
+        instance_id: Uuid,
+        deps: FileManagerDeps,
+        bus: Arc<orchid_core::EventBus>,
+        persisted: FileManagerPersisted,
+        fallback_path: orchid_fs::FsPath,
+    ) -> Self {
+        let config = persisted.config;
+        let state = state_from_persisted(&config, persisted.session.as_ref(), fallback_path);
         let navigator = Arc::new(Navigator::new(deps.registry.clone()));
         Self {
             inner: Arc::new(FileManagerInner {
@@ -468,11 +488,20 @@ impl Widget for FileManagerWidget {
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
-        state_codec::save_state(&*self.inner.config.read())
+        let persisted = FileManagerPersisted {
+            config: self.inner.config.read().clone(),
+            session: Some(session_from_state(&self.inner.state.lock())),
+        };
+        state_codec::save_state(&persisted)
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let cfg: FileManagerConfig = state_codec::restore_state(bytes)?;
-        *self.inner.config.write() = cfg;
+        let persisted = decode_persisted(bytes)?;
+        *self.inner.config.write() = persisted.config.clone();
+        *self.inner.state.lock() = state_from_persisted(
+            &persisted.config,
+            persisted.session.as_ref(),
+            default_initial_path(),
+        );
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -1957,11 +1986,19 @@ fn color_label_from_action_id(action_id: &str) -> Option<orchid_storage::ColorLa
 #[must_use]
 pub fn descriptor(deps: FileManagerDeps) -> WidgetDescriptor {
     let default_path = default_initial_path();
-    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, _bytes| {
-        Ok(Box::new(FileManagerWidget::new(
+    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, bytes| {
+        let persisted = match bytes {
+            Some(b) if !b.is_empty() => decode_persisted(b)?,
+            _ => FileManagerPersisted {
+                config: FileManagerConfig::default(),
+                session: None,
+            },
+        };
+        Ok(Box::new(FileManagerWidget::from_persisted(
             ctx.instance_id,
             deps.clone(),
             ctx.bus.clone(),
+            persisted,
             default_path.clone(),
         )) as Box<dyn Widget>)
     });
@@ -1990,6 +2027,136 @@ fn default_initial_path() -> orchid_fs::FsPath {
         // unreachable in practice; fall back to a known-good absolute path.
         orchid_fs::FsPath::new("local:c:/").expect("constant path parses")
     })
+}
+
+fn parse_persisted_path(path: &str, fallback: &orchid_fs::FsPath) -> orchid_fs::FsPath {
+    orchid_fs::FsPath::new(path).unwrap_or_else(|_| fallback.clone())
+}
+
+fn tab_from_persisted(pt: &PersistedTab, fallback: &orchid_fs::FsPath) -> TabState {
+    let id = Uuid::parse_str(&pt.id).unwrap_or_else(|_| Uuid::new_v4());
+    TabState {
+        id,
+        path: parse_persisted_path(&pt.path, fallback),
+        history_back: pt
+            .history_back
+            .iter()
+            .filter_map(|p| orchid_fs::FsPath::new(p).ok())
+            .collect(),
+        history_forward: pt
+            .history_forward
+            .iter()
+            .filter_map(|p| orchid_fs::FsPath::new(p).ok())
+            .collect(),
+        view_mode: pt.view_mode,
+        selection: SelectionModel::new(),
+        quick_filter: String::new(),
+        scroll_position: 0.0,
+        sort_by: pt.sort_by,
+        sort_descending: pt.sort_descending,
+    }
+}
+
+fn tab_to_persisted(tab: &TabState) -> PersistedTab {
+    PersistedTab {
+        id: tab.id.to_string(),
+        path: tab.path.as_str().to_string(),
+        history_back: tab
+            .history_back
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect(),
+        history_forward: tab
+            .history_forward
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect(),
+        view_mode: tab.view_mode,
+        sort_by: tab.sort_by,
+        sort_descending: tab.sort_descending,
+    }
+}
+
+fn pane_from_persisted(pane: &PersistedPane, fallback: &orchid_fs::FsPath) -> PaneState {
+    let tabs: Vec<TabState> = pane
+        .tabs
+        .iter()
+        .map(|t| tab_from_persisted(t, fallback))
+        .collect();
+    if tabs.is_empty() {
+        return PaneState::with_single_tab(TabState::new(
+            fallback.clone(),
+            ViewMode::Details,
+            SortBy::Name,
+        ));
+    }
+    PaneState {
+        active_tab: pane.active_tab.min(tabs.len().saturating_sub(1)),
+        tabs,
+    }
+}
+
+fn pane_to_persisted(pane: &PaneState) -> PersistedPane {
+    PersistedPane {
+        tabs: pane.tabs.iter().map(tab_to_persisted).collect(),
+        active_tab: pane.active_tab,
+    }
+}
+
+fn state_from_persisted(
+    config: &FileManagerConfig,
+    session: Option<&FileManagerSession>,
+    fallback_path: orchid_fs::FsPath,
+) -> FileManagerState {
+    let Some(session) = session else {
+        return FileManagerState::single_pane(
+            fallback_path,
+            config.default_view_mode,
+            config.sort_by,
+        );
+    };
+
+    let left_pane = pane_from_persisted(&session.left_pane, &fallback_path);
+    let mut right_pane = session
+        .right_pane
+        .as_ref()
+        .map(|p| pane_from_persisted(p, &left_pane.active_tab().path));
+
+    if config.dual_pane && right_pane.is_none() {
+        let path = left_pane.active_tab().path.clone();
+        right_pane = Some(PaneState::with_single_tab(TabState::new(
+            path,
+            config.default_view_mode,
+            config.sort_by,
+        )));
+    } else if !config.dual_pane {
+        right_pane = None;
+    }
+
+    let active_pane = match session.active_pane {
+        PersistedActivePane::Left => ActivePane::Left,
+        PersistedActivePane::Right if config.dual_pane && right_pane.is_some() => {
+            ActivePane::Right
+        }
+        PersistedActivePane::Right => ActivePane::Left,
+    };
+
+    FileManagerState {
+        left_pane,
+        right_pane,
+        active_pane,
+    }
+}
+
+fn session_from_state(state: &FileManagerState) -> FileManagerSession {
+    FileManagerSession {
+        left_pane: pane_to_persisted(&state.left_pane),
+        right_pane: state.right_pane.as_ref().map(pane_to_persisted),
+        active_pane: match state.active_pane {
+            ActivePane::Left => PersistedActivePane::Left,
+            ActivePane::Right => PersistedActivePane::Right,
+        },
+    }
 }
 
 fn dirs_home() -> Option<std::path::PathBuf> {
