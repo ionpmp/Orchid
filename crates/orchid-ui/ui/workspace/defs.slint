@@ -842,7 +842,7 @@ export struct WorkspaceModel {
     dock-add-label: string,
     grid-columns: int,
     grid-rows: int,
-    /// Scrollable canvas width (logical px); usually the viewport width.
+    /// Scrollable canvas width; grows when [`grid-columns`] exceeds the visible column stride.
     canvas-content-width: length,
     /// Scrollable canvas height; grows when [`grid-rows`] exceeds the visible row stride.
     canvas-content-height: length,

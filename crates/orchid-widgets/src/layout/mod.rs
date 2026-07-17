@@ -32,10 +32,13 @@ pub enum LayoutMode {
 pub struct LayoutOptions {
     /// Grid or free-floating placement.
     pub mode: LayoutMode,
-    /// Logical cells per row.
+    /// Logical cells per row (may exceed [`Self::view_columns`] to allow horizontal scrolling).
     pub grid_columns: u16,
     /// Logical cells per column (may exceed [`Self::view_rows`] to allow vertical scrolling).
     pub grid_rows: u16,
+    /// Divides the viewport width to compute **cell width in pixels**; independent of
+    /// [`Self::grid_columns`] so adding columns grows the canvas rightward without shrinking cells.
+    pub view_columns: u16,
     /// Divides the viewport height to compute **cell height in pixels**; independent of
     /// [`Self::grid_rows`] so adding rows grows the canvas downward without shrinking cells.
     pub view_rows: u16,
@@ -51,6 +54,7 @@ impl Default for LayoutOptions {
             mode: LayoutMode::Grid,
             grid_columns: 16,
             grid_rows: 10,
+            view_columns: 16,
             view_rows: 10,
             snap_threshold_cells: 1,
             gutter_px: 8.0,
@@ -361,8 +365,9 @@ impl LayoutEngine {
         viewport: ViewportSize,
     ) -> PixelBounds {
         let opts = self.options.read().clone();
+        let view_columns = opts.view_columns.max(1);
         let view_rows = opts.view_rows.max(1);
-        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_w = viewport.width_px / f32::from(view_columns);
         let cell_h = viewport.height_px / f32::from(view_rows);
         let gutter = opts.gutter_px;
         let (w_cells, h_cells) = size_in_cells(size);
@@ -387,11 +392,12 @@ impl LayoutEngine {
         viewport: ViewportSize,
     ) -> LayoutSnapshot {
         let opts = self.options.read().clone();
+        let view_columns = opts.view_columns.max(1);
         let view_rows = opts.view_rows.max(1);
-        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_w = viewport.width_px / f32::from(view_columns);
         let cell_h = viewport.height_px / f32::from(view_rows);
         let gutter = opts.gutter_px;
-        let mut content_width_px = viewport.width_px;
+        let mut content_width_px = f32::from(opts.grid_columns) * cell_w;
         let mut content_height_px = f32::from(opts.grid_rows) * cell_h;
         let mut insts: Vec<SharedInstance> = instances
             .iter()
@@ -457,8 +463,9 @@ pub fn grid_cell_from_content_top_left(
     top_left_x: f32,
     top_left_y: f32,
 ) -> GridPosition {
+    let view_columns = opts.view_columns.max(1);
     let view_rows = opts.view_rows.max(1);
-    let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+    let cell_w = viewport.width_px / f32::from(view_columns);
     let cell_h = viewport.height_px / f32::from(view_rows);
     let g = opts.gutter_px;
     let col_f = (top_left_x - g * 0.5) / cell_w;
@@ -496,7 +503,7 @@ pub fn position_from_content_top_left(
 /// Resolves live pixel `bounds` (as produced by [`LayoutEngine::snapshot`]) into a
 /// `Free` grid size and a valid top-left [`GridPosition`].
 ///
-/// The stride `cell_w = viewport.width / grid_columns` matches [`LayoutEngine::snapshot`]
+/// The stride `cell_w = viewport.width / view_columns` matches [`LayoutEngine::snapshot`]
 /// (not a «pure inner cell» in px); span width/height in px follow
 /// `W = w_cells * cell_w - gutter`, so the inverse is `w_cells = (W + gutter) / cell_w`.
 /// Top-left is derived via [`position_from_content_top_left`] for that `WidgetSize::Free`
@@ -508,8 +515,9 @@ pub fn free_placement_from_pixel_bounds(
     opts: &LayoutOptions,
 ) -> (GridPosition, WidgetSize) {
     let g = opts.gutter_px;
+    let view_columns = opts.view_columns.max(1);
     let view_rows = opts.view_rows.max(1);
-    let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+    let cell_w = viewport.width_px / f32::from(view_columns);
     let cell_h = viewport.height_px / f32::from(view_rows);
     // Inverse of snapshot: width = w*cell_w - g, height = h*cell_h - g
     let w = (bounds.width + g) / cell_w;
@@ -720,6 +728,14 @@ mod tests {
     }
 
     #[test]
+    fn grow_grid_to_fit_placement_extends_columns() {
+        let engine = LayoutEngine::new(LayoutOptions::default());
+        let pos = GridPosition { col: 18, row: 0 };
+        engine.grow_grid_to_fit_placement(pos, WidgetSize::Small);
+        assert!(engine.options().grid_columns >= 20);
+    }
+
+    #[test]
     fn placement_from_content_top_left_grows_grid_before_snap() {
         let engine = LayoutEngine::new(LayoutOptions::default());
         let viewport = ViewportSize {
@@ -733,6 +749,23 @@ mod tests {
         assert!(engine.options().grid_rows >= 20);
         let snap = engine.snapshot(Uuid::new_v4(), &[], viewport);
         assert!(snap.content_height_px > viewport.height_px);
+    }
+
+    #[test]
+    fn placement_from_content_top_left_grows_columns_before_snap() {
+        let engine = LayoutEngine::new(LayoutOptions::default());
+        let viewport = ViewportSize {
+            width_px: 1600.0,
+            height_px: 1000.0,
+        };
+        let cell_w = viewport.width_px / 16.0;
+        let x = 18.0 * cell_w + 4.0;
+        let pos = engine.placement_from_content_top_left(viewport, x, 4.0, WidgetSize::Small);
+        assert_eq!(pos.col, 18);
+        assert!(engine.options().grid_columns >= 20);
+        let snap = engine.snapshot(Uuid::new_v4(), &[], viewport);
+        assert!(snap.content_width_px > viewport.width_px);
+        assert!((snap.cell_width_px - 100.0).abs() < 0.1);
     }
 
     #[test]
@@ -753,6 +786,23 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_content_grows_with_extra_columns() {
+        let opts = LayoutOptions {
+            grid_columns: 32,
+            view_columns: 16,
+            ..LayoutOptions::default()
+        };
+        let engine = LayoutEngine::new(opts);
+        let ws = Uuid::new_v4();
+        let snap = engine.snapshot(ws, &[], ViewportSize {
+            width_px: 1600.0,
+            height_px: 1000.0,
+        });
+        assert!((snap.cell_width_px - 100.0).abs() < 0.1);
+        assert!((snap.content_width_px - 3200.0).abs() < 0.1);
+    }
+
+    #[test]
     fn position_from_content_top_left_inverts_snapshot_for_exlarge() {
         let opts = LayoutOptions {
             grid_columns: 16,
@@ -768,7 +818,7 @@ mod tests {
         let pos = GridPosition { col: 8, row: 0 };
         let (w, h) = size_in_cells(WidgetSize::ExtraLarge);
         assert_eq!((w, h), (8, 4));
-        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_w = viewport.width_px / f32::from(opts.view_columns.max(1));
         let cell_h = viewport.height_px / f32::from(opts.view_rows.max(1));
         let g = opts.gutter_px;
         let x = pos.col as f32 * cell_w + g * 0.5;
@@ -782,10 +832,10 @@ mod tests {
         );
         assert_eq!(back, pos);
 
-        // Example: vw=1280, 16 cols, g=8 → cell_w=80, 4 cell span: 4*80-8=312, inverse (312+8)/80=4
+        // Example: vw=1280, 16 view cols, g=8 → cell_w=80, 4 cell span: 4*80-8=312, inverse (312+8)/80=4
         {
             let vw = 1280.0_f32;
-            let cell = vw / f32::from(opts.grid_columns);
+            let cell = vw / f32::from(opts.view_columns.max(1));
             let four = 4.0_f32;
             let wpx = four * cell - g;
             assert!((wpx - 312.0).abs() < 0.01);
@@ -816,7 +866,7 @@ mod tests {
             height_px: 1000.0,
         };
         let g = opts.gutter_px;
-        let cell_w = viewport.width_px / f32::from(opts.grid_columns);
+        let cell_w = viewport.width_px / f32::from(opts.view_columns.max(1));
         let cell_h = viewport.height_px / f32::from(opts.view_rows.max(1));
         let wcells: u16 = 4;
         let hcells: u16 = 3;
