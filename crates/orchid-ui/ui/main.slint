@@ -136,6 +136,7 @@ export component MainWindow inherits Window {
     callback clock-open-cities(string);
     callback clock-close-cities(string);
     callback clock-remove-city(string, int);
+    callback clock-move-city(string, int, int);
     callback clock-search-cities(string, string);
     callback clock-add-city(string, string, string);
     callback media-play-pause();
@@ -451,6 +452,7 @@ export component MainWindow inherits Window {
             clock-open-cities(id) => { root.clock-open-cities(id); }
             clock-close-cities(id) => { root.clock-close-cities(id); }
             clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }
+            clock-move-city(id, idx, delta) => { root.clock-move-city(id, idx, delta); }
             clock-search-cities(id, q) => { root.clock-search-cities(id, q); }
             clock-add-city(id, name, tz) => { root.clock-add-city(id, name, tz); }
             media-play-pause => { root.media-play-pause(); }

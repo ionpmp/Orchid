@@ -5378,6 +5378,7 @@ dependencies = [
  "dashmap 6.1.0",
  "feed-rs",
  "futures",
+ "iana-time-zone",
  "opener",
  "orchid-core",
  "orchid-crypto",

@@ -83,6 +83,9 @@ impl MainWindowController {
                 c.settings_dialog_overlays.write().insert(u, dlg);
                 c.patch_frame_settings_dialog(u);
             }
+            if let Err(e) = c.widget_manager.save_widget_state(u).await {
+                tracing::warn!(%u, error = %e, "widget settings: persist failed");
+            }
             let _ = c.widget_manager.refresh_snapshot_cache(u).await;
             c.schedule_rebuild();
         });

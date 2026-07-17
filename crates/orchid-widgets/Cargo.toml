@@ -19,6 +19,7 @@ tracing.workspace = true
 parking_lot.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
+iana-time-zone.workspace = true
 uuid.workspace = true
 dashmap.workspace = true
 smallvec.workspace = true

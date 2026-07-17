@@ -7,6 +7,7 @@ export component ClockView inherits Rectangle {
     callback open-cities();
     callback close-cities();
     callback remove-city(int);
+    callback move-city(int, int);
     callback search-cities(string);
     callback add-city(string, string);
 
@@ -45,8 +46,10 @@ export component ClockView inherits Rectangle {
                 horizontal-alignment: center;
             }
 
-            if model.cities[0].offset-text != "" : Text {
-                text: model.cities[0].offset-text;
+            if model.cities[0].timezone != "" || model.cities[0].offset-text != "" : Text {
+                text: model.cities[0].timezone != "" && model.cities[0].offset-text != ""
+                    ? model.cities[0].timezone + " · " + model.cities[0].offset-text
+                    : (model.cities[0].timezone != "" ? model.cities[0].timezone : model.cities[0].offset-text);
                 color: Theme.text-tertiary;
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
@@ -320,9 +323,26 @@ export component ClockView inherits Rectangle {
                                         width: 28px;
                                         height: 28px;
                                         y: 2px;
+                                        background: up-ta.has-hover ? Theme.surface-raised : transparent;
+                                        border-radius: Theme.radius-md;
+                                        up-ta := TouchArea { clicked => { root.move-city(i, -1); } }
+                                        Text { text: "↑"; color: Theme.text-secondary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                                    }
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        y: 2px;
+                                        background: down-ta.has-hover ? Theme.surface-raised : transparent;
+                                        border-radius: Theme.radius-md;
+                                        down-ta := TouchArea { clicked => { root.move-city(i, 1); } }
+                                        Text { text: "↓"; color: Theme.text-secondary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                                    }
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        y: 2px;
                                         background: remove-ta.has-hover ? Theme.surface-raised : transparent;
                                         border-radius: Theme.radius-md;
-
                                         remove-ta := TouchArea {
                                             clicked => { root.remove-city(i); }
                                         }

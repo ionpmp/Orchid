@@ -627,6 +627,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_clock_move_city({
+            let t = t.clone();
+            move |id, idx, delta| {
+                if let Some(c) = t.upgrade() {
+                    c.on_clock_move_city(&id, idx, delta);
+                }
+            }
+        });
         self.window.on_clock_search_cities({
             let t = t.clone();
             move |id, q| {
