@@ -798,7 +798,7 @@ fn context_menu_item_label(
 fn context_menu_item_enabled(
     a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
 ) -> bool {
-    if a.id == "fs.tag-add" || a.id == "fs.tag-remove" || a.id == "fs.color-label" {
+    if a.id == "fs.tag-remove" || a.id == "fs.color-label" {
         return false;
     }
     a.enabled
