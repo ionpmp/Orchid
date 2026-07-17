@@ -54,10 +54,40 @@ export component WorkspaceView inherits Rectangle {
     callback weather-remove-city(string, int);
     callback weather-search-cities(string, string);
     callback weather-add-city(string, string, float, float, string);
+    callback weather-use-my-location(string);
     callback weather-select-day(string, int);
+    callback clock-open-cities(string);
+    callback clock-close-cities(string);
+    callback clock-remove-city(string, int);
+    callback clock-search-cities(string, string);
+    callback clock-add-city(string, string, string);
     callback media-play-pause();
     callback media-next();
     callback media-previous();
+    callback processes-tab-changed(int);
+    callback processes-search-changed(string);
+    callback processes-sort-column-clicked(int);
+    callback processes-process-clicked(int);
+    callback processes-process-context(int, length, length);
+    callback processes-end-task();
+    callback processes-end-tree();
+    callback processes-open-location();
+    callback processes-copy-pid();
+    callback processes-copy-path();
+    callback processes-service-clicked(string);
+    callback processes-service-start();
+    callback processes-service-stop();
+    callback processes-service-restart();
+    callback processes-startup-clicked(string);
+    callback processes-startup-toggle(string, bool);
+    callback processes-startup-open-location(string);
+    callback processes-user-clicked(int);
+    callback processes-user-disconnect();
+    callback processes-user-sign-out();
+
+    callback calculator-button(string);
+    callback calculator-key(string, bool, bool);
+    callback calculator-history(int);
     callback password-search-changed(string);
     callback password-entry-clicked(string);
     callback password-copy-password(string);
@@ -306,10 +336,39 @@ export component WorkspaceView inherits Rectangle {
                     weather-add-city(id, name, lat, lon, tz) => {
                         root.weather-add-city(id, name, lat, lon, tz);
                     }
+                    weather-use-my-location(id) => { root.weather-use-my-location(id); }
                     weather-select-day(id, idx) => { root.weather-select-day(id, idx); }
+                    clock-open-cities(id) => { root.clock-open-cities(id); }
+                    clock-close-cities(id) => { root.clock-close-cities(id); }
+                    clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }
+                    clock-search-cities(id, q) => { root.clock-search-cities(id, q); }
+                    clock-add-city(id, name, tz) => { root.clock-add-city(id, name, tz); }
                     media-play-pause => { root.media-play-pause(); }
                     media-next => { root.media-next(); }
                     media-previous => { root.media-previous(); }
+                    processes-tab-changed(t) => { root.processes-tab-changed(t); }
+                    processes-search-changed(q) => { root.processes-search-changed(q); }
+                    processes-sort-column-clicked(c) => { root.processes-sort-column-clicked(c); }
+                    processes-process-clicked(pid) => { root.processes-process-clicked(pid); }
+                    processes-process-context(pid, x, y) => { root.processes-process-context(pid, x, y); }
+                    processes-end-task => { root.processes-end-task(); }
+                    processes-end-tree => { root.processes-end-tree(); }
+                    processes-open-location => { root.processes-open-location(); }
+                    processes-copy-pid => { root.processes-copy-pid(); }
+                    processes-copy-path => { root.processes-copy-path(); }
+                    processes-service-clicked(n) => { root.processes-service-clicked(n); }
+                    processes-service-start => { root.processes-service-start(); }
+                    processes-service-stop => { root.processes-service-stop(); }
+                    processes-service-restart => { root.processes-service-restart(); }
+                    processes-startup-clicked(id) => { root.processes-startup-clicked(id); }
+                    processes-startup-toggle(id, en) => { root.processes-startup-toggle(id, en); }
+                    processes-startup-open-location(id) => { root.processes-startup-open-location(id); }
+                    processes-user-clicked(sid) => { root.processes-user-clicked(sid); }
+                    processes-user-disconnect => { root.processes-user-disconnect(); }
+                    processes-user-sign-out => { root.processes-user-sign-out(); }
+                    calculator-button(id) => { root.calculator-button(id); }
+                    calculator-key(t, ctrl, shift) => { root.calculator-key(t, ctrl, shift); }
+                    calculator-history(i) => { root.calculator-history(i); }
                     password-search-changed(q) => { root.password-search-changed(q); }
                     password-entry-clicked(id) => { root.password-entry-clicked(id); }
                     password-copy-password(id) => { root.password-copy-password(id); }

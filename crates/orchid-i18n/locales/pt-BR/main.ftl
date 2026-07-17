@@ -15,6 +15,9 @@ widget-weather-desc = CondiÃ§Ãµes atuais e previsÃ£o de 3 dias
 widget-moon-name = Lua
 widget-moon-desc = Fase lunar atual, horÃ¡rios de nascer/pÃ´r e dados celestes
 
+widget-clock-name = Relógio
+widget-clock-desc = Hora local e relógios mundiais configuráveis
+
 widget-system-name = Sistema
 widget-system-desc = Indicadores de CPU, memÃ³ria, disco, rede e bateria
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = Atualizado hÃ¡ { $h } h
 weather-updated-days = Atualizado hÃ¡ { $d } d
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = Não foi possível detectar a localização
+weather-error-fetch = Não foi possível carregar o clima
+weather-error-geocoding = Falha na busca de cidades
+weather-locating = Detectando localização…
+weather-my-location = Minha localização
+weather-cities-hint = Escolher cidades
+weather-city-search-placeholder = Buscar cidades…
+weather-city-add = Adicionar cidade
+weather-city-remove = Remover cidade
+weather-city-no-results = Nenhuma cidade encontrada
+weather-city-searching = Buscando…
 
 # ---- Relative time (shared) ----
 relative-just-now = agora
@@ -146,6 +155,21 @@ moon-sunset = PÃ´r do sol: { $time }
 moon-libration = Libration: { $lat }Â°, { $lon }Â°
 moon-loading = Calculando dados lunaresâ€¦
 
+
+# ---- Clock ----
+clock-local-label = Local
+clock-add-cities = Adicionar cidades
+clock-cities-hint = Gerenciar relógios mundiais
+clock-picker-title = Relógios mundiais
+clock-search-placeholder = Pesquisar cidade…
+clock-add-city-hint = Adicionar relógio
+clock-remove-city-hint = Remover
+clock-close-picker = Fechar
+clock-no-results = Nenhuma cidade encontrada
+clock-searching = Pesquisando…
+clock-day-yesterday = Ontem
+clock-day-tomorrow = Amanhã
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = MemÃ³ria
@@ -157,6 +181,8 @@ system-battery-charging = Carregando
 system-battery-time-remaining = { $time } restantes
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = Carregando mÃ©tricas do sistemaâ€¦
+system-empty = Nenhum indicador ativado
+system-swap-suffix = swap { $used } / { $total }
 system-status-warning = { $label } â€” elevado ({ $value })
 system-status-critical = { $label } â€” crÃ­tico ({ $value })
 
@@ -675,6 +701,7 @@ catalog-no-results = Nenhum widget correspondente
 dock-widget-terminal = Terminal
 dock-widget-weather = Clima
 dock-widget-moon = Lua
+dock-widget-clock = Relógio
 dock-widget-system = Sistema
 dock-widget-rss = NotÃ­cias
 dock-widget-recent-files = Recentes
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = Latitude
 widget-settings.moon.longitude = Longitude
 widget-settings.moon.show-sunrise-sunset = Mostrar nascer / pôr do sol
 widget-settings.moon.show-libration = Mostrar libração
+widget-settings.clock.show-seconds = Mostrar segundos
+widget-settings.clock.show-dates = Mostrar datas
+widget-settings.clock.show-offsets = Mostrar offsets UTC
 widget-settings.system.show-cpu = Mostrar CPU
 widget-settings.system.show-memory = Mostrar memória
 widget-settings.system.show-disks = Mostrar discos
@@ -793,3 +823,71 @@ widget-settings.fm.thumbnail-size = Tamanho das miniaturas
 widget-settings.fm.thumbnail-size.small = Pequeno
 widget-settings.fm.thumbnail-size.medium = Médio
 widget-settings.fm.thumbnail-size.large = Grande
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = Calculadora
+widget-calculator-desc = Calculadora rápida com modos padrão e científico, histórico e memória
+calc-mode-standard = Padrão
+calc-mode-scientific = Científica
+calc-history-title = Histórico
+calc-history-clear = Limpar
+calc-history-empty = Sem histórico
+calc-error-divide-by-zero = Não é possível dividir por zero
+calc-error-invalid = Entrada inválida
+calc-error-overflow = Estouro
+calc-error-domain = Entrada inválida
+calc-copied = Copiado para a área de transferência
+calc-settings-show-history = Mostrar histórico
+calc-settings-mode = Modo
+calc-settings-mode-standard = Padrão
+calc-settings-mode-scientific = Científica
+calc-settings-angle = Unidade de ângulo
+calc-settings-angle-deg = Graus
+calc-settings-angle-rad = Radianos
+calc-settings-angle-grad = Grados
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = Calculadora

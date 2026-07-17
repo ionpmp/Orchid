@@ -45,26 +45,27 @@ use orchid_widgets::{
 use parking_lot::RwLock;
 
 use super::models::{
-    blank_terminal, build_file_manager_model, build_media_model, build_moon_model,
-    build_password_model, build_recent_files_model, build_rss_model, build_search_model,
-    build_system_model, build_terminal_divider_models, build_terminal_model,
+    blank_terminal, build_clock_model, build_file_manager_model, build_media_model, build_moon_model,
+    build_calculator_model, build_password_model, build_processes_model, build_recent_files_model, build_rss_model,
+    build_search_model, build_system_model, build_terminal_divider_models, build_terminal_model,
     build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
-    empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
-    empty_recent_files_model, empty_rename_state, empty_rss_model, empty_search_model,
-    empty_system_model, empty_tag_state, empty_viewer_model, empty_weather_model,
+    empty_clock_model, empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
+    empty_calculator_model, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
+    empty_search_model, empty_system_model, empty_tag_state, empty_viewer_model,
+    empty_weather_model,
     locale_display_name, theme_display_name, widget_has_settings, FileManagerOverlays,
     PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
-    AppState, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel, MoonModel,
-    NotificationItem, PasswordModel, RecentFilesModel, RssModel, SearchCandidateEntry, SearchModel,
-    SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel, TerminalCellModel, Theme,
-    ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog, WidgetFrameModel,
-    WidgetSettingsDialog, WorkspaceModel, WorkspaceSummary,
+    AppState, ClockModel, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel,
+    CalculatorModel, MoonModel, NotificationItem, PasswordModel, ProcessesModel, RecentFilesModel, RssModel,
+    SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel,
+    TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
+    WidgetFrameModel, WidgetSettingsDialog, WorkspaceModel, WorkspaceSummary,
 };
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
@@ -76,9 +77,12 @@ mod fm;
 mod input;
 mod media_search;
 mod password;
+mod calculator;
+mod processes;
 mod shell_ui;
 mod terminal;
 mod weather;
+mod clock;
 mod widget_settings;
 mod wire;
 
@@ -156,6 +160,8 @@ pub struct MainWindowController {
     password_autofocus_pending: Arc<RwLock<HashMap<Uuid, bool>>>,
     /// Per password-manager instance: add-entry dialog overlay state.
     password_add_dialogs: Arc<RwLock<HashMap<Uuid, PasswordAddDialogOverlay>>>,
+    /// Per processes widget: context menu visibility and position.
+    processes_context: Arc<RwLock<HashMap<Uuid, (bool, f32, f32)>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
     /// Unsaved text close-confirm overlays for viewer widgets.
@@ -440,6 +446,7 @@ impl MainWindowController {
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
             password_add_dialogs: Arc::new(RwLock::new(HashMap::new())),
+            processes_context: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
             close_confirm_overlays: Arc::new(RwLock::new(HashMap::new())),
             settings_dialog_overlays: Arc::new(RwLock::new(HashMap::new())),
@@ -561,7 +568,10 @@ impl MainWindowController {
         g.set_dock_widget_terminal(mgr.tr("dock-widget-terminal").into());
         g.set_dock_widget_weather(mgr.tr("dock-widget-weather").into());
         g.set_dock_widget_moon(mgr.tr("dock-widget-moon").into());
+        g.set_dock_widget_clock(mgr.tr("dock-widget-clock").into());
         g.set_dock_widget_system(mgr.tr("dock-widget-system").into());
+        g.set_dock_widget_processes(mgr.tr("dock-widget-processes").into());
+        g.set_dock_widget_calculator(mgr.tr("dock-widget-calculator").into());
         g.set_dock_widget_rss(mgr.tr("dock-widget-rss").into());
         g.set_dock_widget_recent_files(mgr.tr("dock-widget-recent-files").into());
         g.set_dock_widget_search(mgr.tr("dock-widget-search").into());
@@ -572,7 +582,10 @@ impl MainWindowController {
         g.set_widget_terminal_desc(mgr.tr("widget-terminal-desc").into());
         g.set_widget_weather_desc(mgr.tr("widget-weather-desc").into());
         g.set_widget_moon_desc(mgr.tr("widget-moon-desc").into());
+        g.set_widget_clock_desc(mgr.tr("widget-clock-desc").into());
         g.set_widget_system_desc(mgr.tr("widget-system-desc").into());
+        g.set_widget_processes_desc(mgr.tr("widget-processes-desc").into());
+        g.set_widget_calculator_desc(mgr.tr("widget-calculator-desc").into());
         g.set_widget_rss_desc(mgr.tr("widget-rss-desc").into());
         g.set_widget_recent_files_desc(mgr.tr("widget-recent-files-desc").into());
         g.set_widget_search_desc(mgr.tr("widget-search-desc").into());
@@ -1220,6 +1233,9 @@ impl MainWindowController {
         if ids.is_empty() {
             return Ok(());
         }
+        for id in ids {
+            self.drain_weather_notice(*id);
+        }
         let unique: HashSet<Uuid> = ids.iter().copied().collect();
         let w = self
             .workspace_manager
@@ -1384,7 +1400,10 @@ impl MainWindowController {
             tcvis,
             weather_model,
             moon_model,
+            clock_model,
             system_model,
+            processes_model,
+            calculator_model,
             rss_model,
             search_model,
             media_model,
@@ -1422,7 +1441,11 @@ impl MainWindowController {
                         t.cursor_visible,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
+
+                        empty_processes_model(&self.locale),
+                        empty_calculator_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1443,7 +1466,10 @@ impl MainWindowController {
                     true,
                     build_weather_model(w, &self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1463,7 +1489,34 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     build_moon_model(m, &self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(&self.locale),
+                    empty_password_model(&self.locale),
+                    empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                ),
+                WidgetPayload::Clock(c) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    build_clock_model(c, &self.locale),
+                    empty_system_model(&self.locale),
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1483,7 +1536,65 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     build_system_model(s, &self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(&self.locale),
+                    empty_password_model(&self.locale),
+                    empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                ),
+                WidgetPayload::Processes(p) => {
+                    let (ctx_vis, ctx_x, ctx_y) = self
+                        .processes_context
+                        .read()
+                        .get(&pl.instance_id)
+                        .copied()
+                        .unwrap_or((false, 0.0, 0.0));
+                    (
+                        tstr,
+                        80,
+                        24,
+                        blank_terminal(80, 24),
+                        Image::default(),
+                        0,
+                        0,
+                        true,
+                        empty_weather_model(&self.locale),
+                        empty_moon_model(&self.locale),
+                        empty_clock_model(&self.locale),
+                        empty_system_model(&self.locale),
+                        build_processes_model(p, &self.locale, ctx_vis, ctx_x, ctx_y),
+                        empty_calculator_model(&self.locale),
+                        empty_rss_model(&self.locale),
+                        empty_search_model(&self.locale),
+                        empty_media_model(&self.locale),
+                        empty_password_model(&self.locale),
+                        empty_viewer_model(&self.locale),
+                        empty_recent_files_model(&self.locale),
+                        empty_file_manager_model(&self.locale),
+                    )
+                }
+                WidgetPayload::Calculator(p) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
+                    empty_system_model(&self.locale),
+                    empty_processes_model(&self.locale),
+                    build_calculator_model(p, &self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1503,7 +1614,11 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1534,7 +1649,11 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
+
+                        empty_processes_model(&self.locale),
+                        empty_calculator_model(&self.locale),
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
                         empty_media_model(&self.locale),
@@ -1555,7 +1674,11 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     build_media_model(m, &self.locale),
@@ -1603,7 +1726,11 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
+
+                        empty_processes_model(&self.locale),
+                        empty_calculator_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1624,7 +1751,11 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1644,7 +1775,11 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1686,7 +1821,11 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
+
+                        empty_processes_model(&self.locale),
+                        empty_calculator_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1707,7 +1846,11 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
+
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1811,7 +1954,10 @@ impl MainWindowController {
             terminal_dividers,
             weather: weather_model,
             moon: moon_model,
+            clock: clock_model,
             system: system_model,
+            processes: processes_model,
+            calculator: calculator_model,
             rss: rss_model,
             search: search_model,
             media: media_model,
@@ -2438,7 +2584,10 @@ fn is_known_widget_type(type_id: &str) -> bool {
         "terminal"
             | "weather"
             | "moon"
+            | "clock"
             | "system"
+            | "processes"
+            | "calculator"
             | "rss"
             | "recent-files"
             | "universal-search"
@@ -2457,7 +2606,10 @@ fn apply_catalog_row_visibility(
     g.set_show_terminal(visible_ids.contains("terminal"));
     g.set_show_weather(visible_ids.contains("weather"));
     g.set_show_moon(visible_ids.contains("moon"));
+    g.set_show_clock(visible_ids.contains("clock"));
     g.set_show_system(visible_ids.contains("system"));
+    g.set_show_processes(visible_ids.contains("processes"));
+    g.set_show_calculator(visible_ids.contains("calculator"));
     g.set_show_rss(visible_ids.contains("rss"));
     g.set_show_recent_files(visible_ids.contains("recent-files"));
     g.set_show_search(visible_ids.contains("search"));
@@ -2486,7 +2638,10 @@ fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> SharedStrin
         "terminal" => "widget-terminal-desc",
         "weather" => "widget-weather-desc",
         "moon" => "widget-moon-desc",
+        "clock" => "widget-clock-desc",
         "system" => "widget-system-desc",
+        "processes" => "widget-processes-desc",
+        "calculator" => "widget-calculator-desc",
         "rss" => "widget-rss-desc",
         "recent-files" => "widget-recent-files-desc",
         "search" | "universal-search" => "widget-search-desc",
@@ -2520,10 +2675,28 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             icon: "moon".into(),
         },
         DockWidgetType {
+            type_id: "clock".into(),
+            label: locale.tr("dock-widget-clock").into(),
+            description: dock_widget_description(locale, "clock"),
+            icon: "clock".into(),
+        },
+        DockWidgetType {
             type_id: "system".into(),
             label: locale.tr("dock-widget-system").into(),
             description: dock_widget_description(locale, "system"),
             icon: "system".into(),
+        },
+        DockWidgetType {
+            type_id: "processes".into(),
+            label: locale.tr("dock-widget-processes").into(),
+            description: dock_widget_description(locale, "processes"),
+            icon: "processes".into(),
+        },
+        DockWidgetType {
+            type_id: "calculator".into(),
+            label: locale.tr("dock-widget-calculator").into(),
+            description: dock_widget_description(locale, "calculator"),
+            icon: "calculator".into(),
         },
         DockWidgetType {
             type_id: "rss".into(),
@@ -2574,7 +2747,10 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
     match type_id {
         "weather" => locale.tr("dock-widget-weather").into(),
         "moon" => locale.tr("dock-widget-moon").into(),
+        "clock" => locale.tr("dock-widget-clock").into(),
         "system" => locale.tr("dock-widget-system").into(),
+        "processes" => locale.tr("dock-widget-processes").into(),
+        "calculator" => locale.tr("dock-widget-calculator").into(),
         "rss" => locale.tr("dock-widget-rss").into(),
         "recent-files" => locale.tr("dock-widget-recent-files").into(),
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
@@ -2601,7 +2777,10 @@ fn default_frame_data_extended(
     bool,
     WeatherModel,
     MoonModel,
+    ClockModel,
     SystemModel,
+    ProcessesModel,
+    CalculatorModel,
     RssModel,
     SearchModel,
     MediaModel,
@@ -2621,7 +2800,10 @@ fn default_frame_data_extended(
         true,
         empty_weather_model(locale),
         empty_moon_model(locale),
+        empty_clock_model(locale),
         empty_system_model(locale),
+        empty_processes_model(locale),
+        empty_calculator_model(locale),
         empty_rss_model(locale),
         empty_search_model(locale),
         empty_media_model(locale),

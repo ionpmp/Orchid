@@ -4,11 +4,13 @@ export global WidgetCatalog {
     in property <length> screen-y;
     in property <string> search-query;
     in property <bool> is-empty: false;
-    // Defaults true so the hardcoded list paints even before the first Rust sync.
     in property <bool> show-terminal: true;
     in property <bool> show-weather: true;
     in property <bool> show-moon: true;
+    in property <bool> show-clock: true;
     in property <bool> show-system: true;
+    in property <bool> show-processes: true;
+    in property <bool> show-calculator: true;
     in property <bool> show-rss: true;
     in property <bool> show-recent-files: true;
     in property <bool> show-search: true;

@@ -1,0 +1,443 @@
+import { Theme } from "../theme_global.slint";
+import { ClockModel } from "../workspace/defs.slint";
+
+export component ClockView inherits Rectangle {
+    in property <ClockModel> model;
+
+    callback open-cities();
+    callback close-cities();
+    callback remove-city(int);
+    callback search-cities(string);
+    callback add-city(string, string);
+
+    background: transparent;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+        alignment: start;
+
+        // Local time hero
+        if model.cities.length > 0 : VerticalLayout {
+            spacing: 2px;
+            alignment: center;
+
+            Text {
+                text: model.cities[0].is-local ? model.local-label : model.cities[0].name;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: model.cities[0].time-text;
+                color: Theme.text-primary;
+                font-size: 40px;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+                font-family: Theme.font-family-mono;
+            }
+
+            if model.cities[0].date-text != "" : Text {
+                text: model.cities[0].date-text;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+
+            if model.cities[0].offset-text != "" : Text {
+                text: model.cities[0].offset-text;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: space-between;
+
+            Text {
+                text: model.add-cities-label;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Rectangle {
+                width: max(28px, manage-label.preferred-width + 12px);
+                height: 24px;
+                background: manage-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                border-radius: Theme.radius-md;
+
+                manage-ta := TouchArea {
+                    clicked => { root.open-cities(); }
+                }
+                if manage-ta.has-hover : Rectangle {
+                    x: parent.x - cities-hint.preferred-width;
+                    y: parent.height + 2px;
+                    width: cities-hint.preferred-width + 12px;
+                    height: cities-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    cities-hint := Text {
+                        x: 6px; y: 3px;
+                        text: model.cities-hint;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+                manage-label := Text {
+                    text: "+";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.border-default;
+            horizontal-stretch: 1;
+        }
+
+        Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: city-list.preferred-height.max(self.height);
+            interactive: true;
+
+            city-list := VerticalLayout {
+                spacing: 6px;
+
+                for city[i] in model.cities : Rectangle {
+                    height: city.is-local ? 0px : 52px;
+                    visible: !city.is-local;
+                    background: row-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+
+                    row-ta := TouchArea { }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 8px;
+
+                        VerticalLayout {
+                            spacing: 1px;
+                            vertical-stretch: 1;
+                            alignment: center;
+
+                            Text {
+                                text: city.name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.weight-medium;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 6px;
+                                if city.date-text != "" : Text {
+                                    text: city.date-text;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                }
+                                if city.day-label != "" : Text {
+                                    text: city.day-label;
+                                    color: Theme.accent-brand;
+                                    font-size: Theme.font-size-sm;
+                                }
+                                if city.offset-text != "" : Text {
+                                    text: city.offset-text;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: city.time-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-lg;
+                            font-weight: Theme.weight-semibold;
+                            font-family: Theme.font-family-mono;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if model.picker-open : Rectangle {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: #00000088;
+        z: 50;
+
+        FocusScope {
+            width: 100%;
+            height: 100%;
+            forward-focus: search-input;
+
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.close-cities();
+                    return accept;
+                }
+                return reject;
+            }
+
+            TouchArea {
+                clicked => { root.close-cities(); }
+            }
+
+            Rectangle {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                height: parent.height - 24px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+
+                TouchArea { }
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: space-between;
+
+                        Text {
+                            text: model.picker-title;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-medium;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        Rectangle {
+                            width: max(56px, close-label.preferred-width + 16px);
+                            height: 28px;
+                            background: close-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                            border-radius: Theme.radius-md;
+
+                            close-ta := TouchArea {
+                                clicked => { root.close-cities(); }
+                            }
+                            close-label := Text {
+                                text: model.close-picker-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 32px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+
+                        search-input := TextInput {
+                            x: 8px; y: 4px;
+                            width: parent.width - 16px;
+                            height: parent.height - 8px;
+                            text: model.search-query;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            edited => {
+                                root.search-cities(self.text);
+                            }
+                            key-pressed(event) => {
+                                if (event.text == Key.Escape) {
+                                    root.close-cities();
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                        if model.search-query == "" : Text {
+                            x: 8px; y: 4px;
+                            width: parent.width - 16px;
+                            height: parent.height - 8px;
+                            text: model.search-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if model.cities.length > 1 : Flickable {
+                        height: min(96px, saved-list.preferred-height);
+                        viewport-width: self.width;
+                        viewport-height: saved-list.preferred-height;
+                        interactive: true;
+
+                        saved-list := VerticalLayout {
+                            spacing: 4px;
+
+                            for city[i] in model.cities : Rectangle {
+                                height: city.is-local ? 0px : 32px;
+                                visible: !city.is-local;
+                                background: saved-ta.has-hover ? Theme.surface-base : transparent;
+                                border-radius: Theme.radius-md;
+
+                                saved-ta := TouchArea { }
+
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 4px;
+                                    spacing: 4px;
+
+                                    Text {
+                                        text: city.name;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
+
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        y: 2px;
+                                        background: remove-ta.has-hover ? Theme.surface-raised : transparent;
+                                        border-radius: Theme.radius-md;
+
+                                        remove-ta := TouchArea {
+                                            clicked => { root.remove-city(i); }
+                                        }
+                                        if remove-ta.has-hover : Rectangle {
+                                            x: parent.x - remove-hint.preferred-width;
+                                            y: parent.height + 2px;
+                                            width: remove-hint.preferred-width + 12px;
+                                            height: remove-hint.preferred-height + 6px;
+                                            background: Theme.surface-raised;
+                                            border-radius: Theme.radius-md;
+                                            border-width: 1px;
+                                            border-color: Theme.border-default;
+                                            z: 100;
+                                            remove-hint := Text {
+                                                x: 6px; y: 3px;
+                                                text: model.remove-city-hint;
+                                                color: Theme.text-secondary;
+                                                font-size: Theme.font-size-sm;
+                                            }
+                                        }
+                                        Text {
+                                            text: "×";
+                                            color: Theme.text-secondary;
+                                            font-size: Theme.font-size-md;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: Theme.border-default;
+                        horizontal-stretch: 1;
+                    }
+
+                    if model.search-busy : Text {
+                        text: model.searching-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+
+                    if !model.search-busy && model.search-query != "" && model.search-results.length == 0 : Text {
+                        text: model.no-results-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+
+                    Flickable {
+                        vertical-stretch: 1;
+                        viewport-width: self.width;
+                        viewport-height: results-list.preferred-height.max(self.height);
+                        interactive: true;
+
+                        results-list := VerticalLayout {
+                            spacing: 4px;
+
+                            for hit[i] in model.search-results : Rectangle {
+                                height: 48px;
+                                background: hit-ta.has-hover ? Theme.surface-base : transparent;
+                                border-radius: Theme.radius-md;
+
+                                hit-ta := TouchArea {
+                                    clicked => {
+                                        root.add-city(hit.name, hit.timezone);
+                                    }
+                                }
+                                if hit-ta.has-hover : Rectangle {
+                                    x: parent.x + 8px;
+                                    y: parent.height - 2px;
+                                    width: add-hint.preferred-width + 12px;
+                                    height: add-hint.preferred-height + 6px;
+                                    background: Theme.surface-raised;
+                                    border-radius: Theme.radius-md;
+                                    border-width: 1px;
+                                    border-color: Theme.border-default;
+                                    z: 100;
+                                    add-hint := Text {
+                                        x: 6px; y: 3px;
+                                        text: model.add-city-hint;
+                                        color: Theme.text-secondary;
+                                        font-size: Theme.font-size-sm;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    spacing: 2px;
+                                    alignment: center;
+
+                                    Text {
+                                        text: hit.name;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: Theme.weight-medium;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: hit.detail != "" ? hit.detail : hit.timezone;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

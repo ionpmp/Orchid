@@ -49,8 +49,14 @@ pub enum WidgetPayload {
     Weather(crate::widget::payloads::WeatherPayload),
     /// Moon widget.
     Moon(crate::widget::payloads::MoonPayload),
+    /// Clock / world-clocks widget.
+    Clock(crate::widget::payloads::ClockPayload),
     /// System indicators widget.
     SystemIndicators(crate::widget::payloads::SystemPayload),
+    /// Processes (Task Manager) widget.
+    Processes(crate::widget::payloads::ProcessesPayload),
+    /// Quick calculator widget.
+    Calculator(crate::widget::payloads::CalculatorPayload),
     /// RSS feed widget.
     RssFeed(crate::widget::payloads::RssPayload),
     /// Universal search widget.

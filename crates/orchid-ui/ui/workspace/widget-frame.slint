@@ -7,7 +7,10 @@ import { TerminalSplitView } from "../widgets/terminal/terminal-split-view.slint
 import { GroupTabs } from "group-tabs.slint";
 import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
+import { ClockView } from "../widgets/clock.slint";
 import { SystemView } from "../widgets/system.slint";
+import { ProcessesView } from "../widgets/processes.slint";
+import { CalculatorView } from "../widgets/calculator.slint";
 import { RssView } from "../widgets/rss.slint";
 import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
@@ -65,12 +68,47 @@ export component WidgetFrame inherits Rectangle {
     callback weather-remove-city(string, int);
     callback weather-search-cities(string, string);
     callback weather-add-city(string, string, float, float, string);
+    callback weather-use-my-location(string);
     callback weather-select-day(string, int);
+
+    // Clock
+    callback clock-open-cities(string);
+    callback clock-close-cities(string);
+    callback clock-remove-city(string, int);
+    callback clock-search-cities(string, string);
+    callback clock-add-city(string, string, string);
 
     // Media
     callback media-play-pause();
     callback media-next();
     callback media-previous();
+
+    // Processes
+    callback processes-tab-changed(int);
+    callback processes-search-changed(string);
+    callback processes-sort-column-clicked(int);
+    callback processes-process-clicked(int);
+    callback processes-process-context(int, length, length);
+    callback processes-end-task();
+    callback processes-end-tree();
+    callback processes-open-location();
+    callback processes-copy-pid();
+    callback processes-copy-path();
+    callback processes-service-clicked(string);
+    callback processes-service-start();
+    callback processes-service-stop();
+    callback processes-service-restart();
+    callback processes-startup-clicked(string);
+    callback processes-startup-toggle(string, bool);
+    callback processes-startup-open-location(string);
+    callback processes-user-clicked(int);
+    callback processes-user-disconnect();
+    callback processes-user-sign-out();
+
+    // Calculator
+    callback calculator-button(string);
+    callback calculator-key(string, bool, bool);
+    callback calculator-history(int);
 
     // Password
     callback password-search-changed(string);
@@ -460,6 +498,7 @@ export component WidgetFrame inherits Rectangle {
                     add-city(name, lat, lon, tz) => {
                         root.weather-add-city(root.model.instance-id, name, lat, lon, tz);
                     }
+                    use-my-location => { root.weather-use-my-location(root.model.instance-id); }
                     select-day(idx) => { root.weather-select-day(root.model.instance-id, idx); }
                 }
 
@@ -469,10 +508,58 @@ export component WidgetFrame inherits Rectangle {
                     model: root.model.moon;
                 }
 
+                if model.type-id == "clock" : ClockView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.clock;
+                    open-cities => { root.clock-open-cities(root.model.instance-id); }
+                    close-cities => { root.clock-close-cities(root.model.instance-id); }
+                    remove-city(idx) => { root.clock-remove-city(root.model.instance-id, idx); }
+                    search-cities(q) => { root.clock-search-cities(root.model.instance-id, q); }
+                    add-city(name, tz) => {
+                        root.clock-add-city(root.model.instance-id, name, tz);
+                    }
+                }
+
                 if model.type-id == "system" : SystemView {
                     width: parent.width;
                     height: parent.height;
                     model: root.model.system;
+                }
+
+                if model.type-id == "processes" : ProcessesView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.processes;
+                    tab-changed(t) => { root.processes-tab-changed(t); }
+                    search-changed(q) => { root.processes-search-changed(q); }
+                    sort-column-clicked(c) => { root.processes-sort-column-clicked(c); }
+                    process-clicked(pid) => { root.processes-process-clicked(pid); }
+                    process-context(pid, x, y) => { root.processes-process-context(pid, x, y); }
+                    end-task => { root.processes-end-task(); }
+                    end-tree => { root.processes-end-tree(); }
+                    open-location => { root.processes-open-location(); }
+                    copy-pid => { root.processes-copy-pid(); }
+                    copy-path => { root.processes-copy-path(); }
+                    service-clicked(n) => { root.processes-service-clicked(n); }
+                    service-start => { root.processes-service-start(); }
+                    service-stop => { root.processes-service-stop(); }
+                    service-restart => { root.processes-service-restart(); }
+                    startup-clicked(id) => { root.processes-startup-clicked(id); }
+                    startup-toggle(id, en) => { root.processes-startup-toggle(id, en); }
+                    startup-open-location(id) => { root.processes-startup-open-location(id); }
+                    user-clicked(sid) => { root.processes-user-clicked(sid); }
+                    user-disconnect => { root.processes-user-disconnect(); }
+                    user-sign-out => { root.processes-user-sign-out(); }
+                }
+
+                if model.type-id == "calculator" : CalculatorView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.calculator;
+                    button-pressed(id) => { root.calculator-button(id); }
+                    key-input(t, ctrl, shift) => { root.calculator-key(t, ctrl, shift); }
+                    history-clicked(i) => { root.calculator-history(i); }
                 }
 
                 if model.type-id == "rss" : RssView {

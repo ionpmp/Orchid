@@ -66,6 +66,12 @@ export struct WeatherForecastEntry {
     selected: bool,
 }
 
+export struct WeatherHourlyEntry {
+    hour-text: string,
+    temp-text: string,
+    icon: string,
+}
+
 export struct WeatherCityEntry {
     name: string,
     active: bool,
@@ -101,13 +107,17 @@ export struct WeatherModel {
     search-query: string,
     search-results: [WeatherSearchHit],
     search-busy: bool,
+    locating: bool,
     picker-title: string,
     search-placeholder: string,
     add-city-hint: string,
     remove-city-hint: string,
     close-picker-label: string,
+    my-location-label: string,
+    cities-hint: string,
     no-results-label: string,
     searching-label: string,
+    locating-label: string,
     current-temp: string,
     condition-label: string,
     condition-icon: string,
@@ -117,6 +127,7 @@ export struct WeatherModel {
     selected-day-index: int,
     day-detail: string,
     forecast: [WeatherForecastEntry],
+    hourly: [WeatherHourlyEntry],
     last-updated: string,
     status: int,
     status-label: string,
@@ -129,8 +140,146 @@ export struct MoonModel {
     values: [MoonValueEntry],
 }
 
+export struct ClockCityEntry {
+    name: string,
+    timezone: string,
+    time-text: string,
+    date-text: string,
+    offset-text: string,
+    day-label: string,
+    is-local: bool,
+}
+
+export struct ClockSearchHit {
+    name: string,
+    detail: string,
+    timezone: string,
+}
+
+export struct ClockModel {
+    cities: [ClockCityEntry],
+    picker-open: bool,
+    search-query: string,
+    search-results: [ClockSearchHit],
+    search-busy: bool,
+    local-label: string,
+    add-cities-label: string,
+    cities-hint: string,
+    picker-title: string,
+    search-placeholder: string,
+    add-city-hint: string,
+    remove-city-hint: string,
+    close-picker-label: string,
+    no-results-label: string,
+    searching-label: string,
+}
+
 export struct SystemModel {
     indicators: [SystemIndicatorEntry],
+}
+
+export struct ProcessRowEntry {
+    pid: int,
+    pid-text: string,
+    name: string,
+    status: string,
+    cpu-text: string,
+    memory-text: string,
+    io-text: string,
+    user: string,
+    path: string,
+    is-group-header: bool,
+    group-label: string,
+}
+
+export struct ServiceRowEntry {
+    name: string,
+    display-name: string,
+    status: string,
+    start-type: string,
+    pid-text: string,
+}
+
+export struct StartupRowEntry {
+    id: string,
+    name: string,
+    command: string,
+    location: string,
+    enabled: bool,
+    can-toggle: bool,
+}
+
+export struct UserRowEntry {
+    session-id: int,
+    session-text: string,
+    user-name: string,
+    state: string,
+    process-count-text: string,
+    memory-text: string,
+}
+
+export struct ProcessesModel {
+    tab: int,
+    search-query: string,
+    search-placeholder: string,
+    sort-column: int,
+    sort-descending: bool,
+    selected-pid: int,
+    selected-service: string,
+    selected-startup: string,
+    selected-session: int,
+    processes: [ProcessRowEntry],
+    services: [ServiceRowEntry],
+    startups: [StartupRowEntry],
+    users: [UserRowEntry],
+    status-message: string,
+    is-loading: bool,
+    tab-processes-label: string,
+    tab-services-label: string,
+    tab-startup-label: string,
+    tab-users-label: string,
+    col-name-label: string,
+    col-pid-label: string,
+    col-cpu-label: string,
+    col-memory-label: string,
+    col-io-label: string,
+    col-user-label: string,
+    end-task-label: string,
+    end-tree-label: string,
+    open-location-label: string,
+    copy-pid-label: string,
+    copy-path-label: string,
+    service-start-label: string,
+    service-stop-label: string,
+    service-restart-label: string,
+    user-disconnect-label: string,
+    user-sign-out-label: string,
+    context-visible: bool,
+    context-x: length,
+    context-y: length,
+}
+
+export struct CalcHistoryEntry {
+    expression: string,
+    result: string,
+}
+
+export struct CalculatorModel {
+    mode: int,
+    angle: int,
+    second: bool,
+    display-text: string,
+    expression: string,
+    memory-set: bool,
+    has-error: bool,
+    show-history: bool,
+    history: [CalcHistoryEntry],
+    mode-standard-label: string,
+    mode-scientific-label: string,
+    angle-label: string,
+    history-title: string,
+    history-clear-label: string,
+    history-empty-label: string,
 }
 
 export struct RssItemEntry {
@@ -635,7 +784,10 @@ export struct WidgetFrameModel {
 
     weather: WeatherModel,
     moon: MoonModel,
+    clock: ClockModel,
     system: SystemModel,
+    processes: ProcessesModel,
+    calculator: CalculatorModel,
     rss: RssModel,
     recent-files: RecentFilesModel,
     search: SearchModel,

@@ -1,10 +1,13 @@
 //! Slint model builders for workspace widget frames.
 
+mod clock;
+mod calculator;
 mod file_manager;
 mod media;
 mod moon;
 mod palette;
 mod password;
+mod processes;
 mod recent;
 mod rss;
 mod search;
@@ -21,10 +24,13 @@ pub(crate) use file_manager::{
     empty_passphrase_state, empty_rename_state, empty_tag_state, fm_passphrase_dialog_labels,
     FileManagerOverlays,
 };
+pub(crate) use calculator::{build_calculator_model, empty_calculator_model};
+pub(crate) use clock::{build_clock_model, empty_clock_model};
 pub(crate) use media::{build_media_model, empty_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model};
 pub(crate) use palette::build_palette_candidates;
 pub(crate) use password::{build_password_model, empty_password_model, PasswordAddDialogOverlay};
+pub(crate) use processes::{build_processes_model, empty_processes_model};
 pub(crate) use recent::{build_recent_files_model, empty_recent_files_model};
 pub(crate) use rss::{build_rss_model, empty_rss_model};
 pub(crate) use search::{build_search_model, empty_search_model};

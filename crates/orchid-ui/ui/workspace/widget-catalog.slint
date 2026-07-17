@@ -2,64 +2,88 @@ import { Theme } from "../theme_global.slint";
 import { Strings } from "../strings_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
 
-/// One catalog row — hardcoded type-id, labels from Strings.
-component CatalogRow inherits Rectangle {
+/// Wide catalog tile: icon on the left, title + wrapped description on the right.
+component CatalogCard inherits Rectangle {
     in property <string> type-id;
     in property <string> label;
     in property <string> description;
-    in property <bool> row-visible: true;
+    in property <string> glyph;
+    in property <bool> card-visible: true;
     callback pick(string);
 
-    height: root.row-visible ? (root.description != "" ? 56px : 40px) : 0px;
-    visible: root.row-visible;
-    background: item-touch.has-hover ? Theme.surface-base : transparent;
+    horizontal-stretch: 1;
+    min-width: 220px;
+    height: root.card-visible ? 88px : 0px;
+    visible: root.card-visible;
+    background: card-ta.has-hover ? Theme.surface-base : transparent;
     border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: card-ta.has-hover ? Theme.accent-brand : Theme.border-default;
     clip: true;
 
-    item-touch := TouchArea {
+    card-ta := TouchArea {
         clicked => { root.pick(root.type-id); }
     }
 
-    VerticalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        padding-top: 8px;
-        padding-bottom: 8px;
-        spacing: 2px;
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        padding: 12px;
+        spacing: 12px;
         alignment: center;
 
-        Text {
-            text: root.label;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-sm;
-            font-weight: Theme.weight-semibold;
-            vertical-alignment: center;
-            wrap: no-wrap;
-            overflow: elide;
+        Rectangle {
+            width: 40px;
+            height: 40px;
+            background: Theme.accent-brand;
+            border-radius: 8px;
+            opacity: 0.92;
+
+            Text {
+                width: 100%;
+                height: 100%;
+                text: root.glyph;
+                color: #ffffff;
+                font-size: 15px;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
 
-        if root.description != "" : Text {
-            text: root.description;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            wrap: no-wrap;
-            overflow: elide;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 4px;
+            alignment: center;
+
+            Text {
+                text: root.label;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-semibold;
+                wrap: no-wrap;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.description;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                overflow: elide;
+            }
         }
     }
 }
 
-/// Widget picker catalog panel.
-///
-/// Rows are hardcoded (labels from Strings) because Slint `for` over a model
-/// passed into this overlay has repeatedly painted an empty list. Visibility
-/// of each row is driven by `WidgetCatalog.show-*` flags from Rust filtering.
+/// Widget picker: 2-column card grid with room for descriptions.
 export component WidgetCatalogPanel inherits Rectangle {
     callback pick(string);
     callback dismiss();
     callback search-changed(string);
 
-    width: 300px;
-    height: 380px;
+    width: 640px;
+    height: 520px;
     background: Theme.surface-raised;
     border-radius: Theme.radius-md;
     border-width: 1px;
@@ -69,10 +93,13 @@ export component WidgetCatalogPanel inherits Rectangle {
     clip: true;
 
     property <string> draft-query: "";
-    property <string> mirrored-query: WidgetCatalog.search-query;
+    /// 0 = default (logical), 1 = A–Z, 2 = Z–A
+    property <int> sort-mode: 0;
 
-    changed mirrored-query => {
-        root.draft-query = root.mirrored-query;
+    pure function sort-label() -> string {
+        return root.sort-mode == 1 ? Strings.catalog-sort-name-asc
+            : root.sort-mode == 2 ? Strings.catalog-sort-name-desc
+            : Strings.catalog-sort-default;
     }
 
     VerticalLayout {
@@ -82,6 +109,7 @@ export component WidgetCatalogPanel inherits Rectangle {
         spacing: 8px;
 
         HorizontalLayout {
+            height: 28px;
             spacing: Theme.spacing-unit;
 
             Text {
@@ -91,6 +119,31 @@ export component WidgetCatalogPanel inherits Rectangle {
                 font-weight: Theme.weight-semibold;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
+            }
+
+            Rectangle {
+                width: sort-label-text.preferred-width + 20px;
+                height: 28px;
+                background: sort-ta.has-hover ? Theme.surface-base : transparent;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+
+                sort-ta := TouchArea {
+                    clicked => {
+                        root.sort-mode = root.sort-mode >= 2 ? 0 : root.sort-mode + 1;
+                    }
+                }
+
+                sort-label-text := Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.sort-label();
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
 
             Rectangle {
@@ -104,6 +157,8 @@ export component WidgetCatalogPanel inherits Rectangle {
                 }
 
                 Text {
+                    width: 100%;
+                    height: 100%;
                     text: "×";
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-lg;
@@ -121,41 +176,32 @@ export component WidgetCatalogPanel inherits Rectangle {
             border-color: catalog-input.has-focus ? Theme.accent-brand : Theme.border-default;
             clip: true;
 
-            HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 10px;
+            if root.draft-query == "" : Text {
+                x: 10px;
+                width: parent.width - 20px;
+                height: 100%;
+                text: Strings.catalog-search-placeholder;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+            }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 100%;
-
-                    if root.draft-query == "" : Text {
-                        width: parent.width;
-                        height: parent.height;
-                        text: Strings.catalog-search-placeholder;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-
-                    catalog-input := TextInput {
-                        width: parent.width;
-                        height: parent.height;
-                        text <=> root.draft-query;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        single-line: true;
-                        edited => {
-                            root.search-changed(self.text);
-                        }
-                    }
+            catalog-input := TextInput {
+                x: 10px;
+                width: parent.width - 20px;
+                height: 100%;
+                text <=> root.draft-query;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                single-line: true;
+                edited => {
+                    root.search-changed(self.text);
                 }
             }
         }
 
         if WidgetCatalog.is-empty : Text {
-            horizontal-stretch: 1;
             vertical-stretch: 1;
             text: Strings.catalog-no-results;
             color: Theme.text-tertiary;
@@ -165,92 +211,360 @@ export component WidgetCatalogPanel inherits Rectangle {
         }
 
         if !WidgetCatalog.is-empty : Flickable {
-            horizontal-stretch: 1;
             vertical-stretch: 1;
-            height: 300px;
+            height: 420px;
+            width: 100%;
             viewport-width: self.width;
-            viewport-height: max(300px, catalog-list.preferred-height);
+            viewport-height: 580px;
 
-            catalog-list := VerticalLayout {
-                spacing: 2px;
-                width: parent.width;
+            VerticalLayout {
+                width: parent.viewport-width;
+                spacing: 8px;
+                padding-right: 2px;
 
-                CatalogRow {
-                    type-id: "terminal";
-                    label: Strings.dock-widget-terminal;
-                    description: Strings.widget-terminal-desc;
-                    row-visible: WidgetCatalog.show-terminal;
-                    pick(id) => { root.pick(id); }
+                // ---- Default (logical) order ----
+                if root.sort-mode == 0 : VerticalLayout {
+                    width: 100%;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "terminal"; glyph: ">_"; label: Strings.dock-widget-terminal;
+                            description: Strings.widget-terminal-desc;
+                            card-visible: WidgetCatalog.show-terminal;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "weather"; glyph: "W"; label: Strings.dock-widget-weather;
+                            description: Strings.widget-weather-desc;
+                            card-visible: WidgetCatalog.show-weather;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
+                            description: Strings.widget-moon-desc;
+                            card-visible: WidgetCatalog.show-moon;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "clock"; glyph: "C"; label: Strings.dock-widget-clock;
+                            description: Strings.widget-clock-desc;
+                            card-visible: WidgetCatalog.show-clock;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "system"; glyph: "S"; label: Strings.dock-widget-system;
+                            description: Strings.widget-system-desc;
+                            card-visible: WidgetCatalog.show-system;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "rss"; glyph: "N"; label: Strings.dock-widget-rss;
+                            description: Strings.widget-rss-desc;
+                            card-visible: WidgetCatalog.show-rss;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "recent-files"; glyph: "R"; label: Strings.dock-widget-recent-files;
+                            description: Strings.widget-recent-files-desc;
+                            card-visible: WidgetCatalog.show-recent-files;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "search"; glyph: "/"; label: Strings.dock-widget-search;
+                            description: Strings.widget-search-desc;
+                            card-visible: WidgetCatalog.show-search;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media"; glyph: "M"; label: Strings.dock-widget-media;
+                            description: Strings.widget-media-desc;
+                            card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "password"; glyph: "*"; label: Strings.dock-widget-password;
+                            description: Strings.widget-password-desc;
+                            card-visible: WidgetCatalog.show-password;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "viewer"; glyph: "V"; label: Strings.dock-widget-viewer;
+                            description: Strings.widget-viewer-desc;
+                            card-visible: WidgetCatalog.show-viewer;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "file-manager"; glyph: "#"; label: Strings.dock-widget-fm;
+                            description: Strings.widget-fm-desc;
+                            card-visible: WidgetCatalog.show-file-manager;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "processes"; glyph: "P"; label: Strings.dock-widget-processes;
+                            description: Strings.widget-processes-desc;
+                            card-visible: WidgetCatalog.show-processes;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "calculator"; glyph: "="; label: Strings.dock-widget-calculator;
+                            description: Strings.widget-calculator-desc;
+                            card-visible: WidgetCatalog.show-calculator;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
                 }
-                CatalogRow {
-                    type-id: "weather";
-                    label: Strings.dock-widget-weather;
-                    description: Strings.widget-weather-desc;
-                    row-visible: WidgetCatalog.show-weather;
-                    pick(id) => { root.pick(id); }
+
+                // ---- A–Z ----
+                if root.sort-mode == 1 : VerticalLayout {
+                    width: 100%;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "file-manager"; glyph: "#"; label: Strings.dock-widget-fm;
+                            description: Strings.widget-fm-desc;
+                            card-visible: WidgetCatalog.show-file-manager;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media"; glyph: "M"; label: Strings.dock-widget-media;
+                            description: Strings.widget-media-desc;
+                            card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
+                            description: Strings.widget-moon-desc;
+                            card-visible: WidgetCatalog.show-moon;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "clock"; glyph: "C"; label: Strings.dock-widget-clock;
+                            description: Strings.widget-clock-desc;
+                            card-visible: WidgetCatalog.show-clock;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "rss"; glyph: "N"; label: Strings.dock-widget-rss;
+                            description: Strings.widget-rss-desc;
+                            card-visible: WidgetCatalog.show-rss;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "password"; glyph: "*"; label: Strings.dock-widget-password;
+                            description: Strings.widget-password-desc;
+                            card-visible: WidgetCatalog.show-password;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "recent-files"; glyph: "R"; label: Strings.dock-widget-recent-files;
+                            description: Strings.widget-recent-files-desc;
+                            card-visible: WidgetCatalog.show-recent-files;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "search"; glyph: "/"; label: Strings.dock-widget-search;
+                            description: Strings.widget-search-desc;
+                            card-visible: WidgetCatalog.show-search;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "system"; glyph: "S"; label: Strings.dock-widget-system;
+                            description: Strings.widget-system-desc;
+                            card-visible: WidgetCatalog.show-system;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "terminal"; glyph: ">_"; label: Strings.dock-widget-terminal;
+                            description: Strings.widget-terminal-desc;
+                            card-visible: WidgetCatalog.show-terminal;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "viewer"; glyph: "V"; label: Strings.dock-widget-viewer;
+                            description: Strings.widget-viewer-desc;
+                            card-visible: WidgetCatalog.show-viewer;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "weather"; glyph: "W"; label: Strings.dock-widget-weather;
+                            description: Strings.widget-weather-desc;
+                            card-visible: WidgetCatalog.show-weather;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "processes"; glyph: "P"; label: Strings.dock-widget-processes;
+                            description: Strings.widget-processes-desc;
+                            card-visible: WidgetCatalog.show-processes;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "calculator"; glyph: "="; label: Strings.dock-widget-calculator;
+                            description: Strings.widget-calculator-desc;
+                            card-visible: WidgetCatalog.show-calculator;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
                 }
-                CatalogRow {
-                    type-id: "moon";
-                    label: Strings.dock-widget-moon;
-                    description: Strings.widget-moon-desc;
-                    row-visible: WidgetCatalog.show-moon;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "system";
-                    label: Strings.dock-widget-system;
-                    description: Strings.widget-system-desc;
-                    row-visible: WidgetCatalog.show-system;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "rss";
-                    label: Strings.dock-widget-rss;
-                    description: Strings.widget-rss-desc;
-                    row-visible: WidgetCatalog.show-rss;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "recent-files";
-                    label: Strings.dock-widget-recent-files;
-                    description: Strings.widget-recent-files-desc;
-                    row-visible: WidgetCatalog.show-recent-files;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "search";
-                    label: Strings.dock-widget-search;
-                    description: Strings.widget-search-desc;
-                    row-visible: WidgetCatalog.show-search;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "media";
-                    label: Strings.dock-widget-media;
-                    description: Strings.widget-media-desc;
-                    row-visible: WidgetCatalog.show-media;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "password";
-                    label: Strings.dock-widget-password;
-                    description: Strings.widget-password-desc;
-                    row-visible: WidgetCatalog.show-password;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "viewer";
-                    label: Strings.dock-widget-viewer;
-                    description: Strings.widget-viewer-desc;
-                    row-visible: WidgetCatalog.show-viewer;
-                    pick(id) => { root.pick(id); }
-                }
-                CatalogRow {
-                    type-id: "file-manager";
-                    label: Strings.dock-widget-fm;
-                    description: Strings.widget-fm-desc;
-                    row-visible: WidgetCatalog.show-file-manager;
-                    pick(id) => { root.pick(id); }
+
+                // ---- Z–A ----
+                if root.sort-mode == 2 : VerticalLayout {
+                    width: 100%;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "weather"; glyph: "W"; label: Strings.dock-widget-weather;
+                            description: Strings.widget-weather-desc;
+                            card-visible: WidgetCatalog.show-weather;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "viewer"; glyph: "V"; label: Strings.dock-widget-viewer;
+                            description: Strings.widget-viewer-desc;
+                            card-visible: WidgetCatalog.show-viewer;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "terminal"; glyph: ">_"; label: Strings.dock-widget-terminal;
+                            description: Strings.widget-terminal-desc;
+                            card-visible: WidgetCatalog.show-terminal;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "system"; glyph: "S"; label: Strings.dock-widget-system;
+                            description: Strings.widget-system-desc;
+                            card-visible: WidgetCatalog.show-system;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "search"; glyph: "/"; label: Strings.dock-widget-search;
+                            description: Strings.widget-search-desc;
+                            card-visible: WidgetCatalog.show-search;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "recent-files"; glyph: "R"; label: Strings.dock-widget-recent-files;
+                            description: Strings.widget-recent-files-desc;
+                            card-visible: WidgetCatalog.show-recent-files;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "password"; glyph: "*"; label: Strings.dock-widget-password;
+                            description: Strings.widget-password-desc;
+                            card-visible: WidgetCatalog.show-password;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "rss"; glyph: "N"; label: Strings.dock-widget-rss;
+                            description: Strings.widget-rss-desc;
+                            card-visible: WidgetCatalog.show-rss;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
+                            description: Strings.widget-moon-desc;
+                            card-visible: WidgetCatalog.show-moon;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "clock"; glyph: "C"; label: Strings.dock-widget-clock;
+                            description: Strings.widget-clock-desc;
+                            card-visible: WidgetCatalog.show-clock;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media"; glyph: "M"; label: Strings.dock-widget-media;
+                            description: Strings.widget-media-desc;
+                            card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        height: 88px;
+                        CatalogCard {
+                            type-id: "file-manager"; glyph: "#"; label: Strings.dock-widget-fm;
+                            description: Strings.widget-fm-desc;
+                            card-visible: WidgetCatalog.show-file-manager;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "processes"; glyph: "P"; label: Strings.dock-widget-processes;
+                            description: Strings.widget-processes-desc;
+                            card-visible: WidgetCatalog.show-processes;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "calculator"; glyph: "="; label: Strings.dock-widget-calculator;
+                            description: Strings.widget-calculator-desc;
+                            card-visible: WidgetCatalog.show-calculator;
+                            pick(id) => { root.pick(id); }
+                        }
+                    }
                 }
             }
         }

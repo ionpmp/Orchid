@@ -37,12 +37,14 @@ pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
-    EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, ManagedFolderSidebarPayload,
+    CalcHistoryRow, CalculatorPayload, ClockCityView, ClockPayload, ClockSearchHit, EntryPayload,
+    FileManagerPayload, FmViewMode, IndicatorStatus, ManagedFolderSidebarPayload,
     MediaPlayerPayload, MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView,
-    PasswordEntryView, PasswordManagerPayload, RecentFileItemView, RecentFilesPayload, RssItemView,
-    RssPayload, SearchCandidateView, SystemIndicator, SystemIndicatorKind, SystemPayload,
-    TabPayload, UniversalSearchPayload, ViewerPayload, WeatherCityEntry, WeatherForecastDay,
-    WeatherPayload, WeatherSearchHit, WeatherStatusTag,
+    PasswordEntryView, PasswordManagerPayload, ProcessGroup, ProcessRowView, ProcessSortColumn,
+    ProcessesPayload, ProcessesTab, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload,
+    SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemIndicatorKind,
+    SystemPayload, TabPayload, UniversalSearchPayload, UserRowView, ViewerPayload, WeatherCityEntry,
+    WeatherForecastDay, WeatherHourlyEntry, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 

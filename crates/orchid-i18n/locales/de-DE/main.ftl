@@ -15,6 +15,9 @@ widget-weather-desc = Aktuelle Bedingungen und 3-Tage-Vorhersage
 widget-moon-name = Mond
 widget-moon-desc = Aktuelle Mondphase, Auf-/Untergangszeiten und Himmelsdaten
 
+widget-clock-name = Uhr
+widget-clock-desc = Ortszeit und konfigurierbare Weltuhren
+
 widget-system-name = System
 widget-system-desc = CPU-, Speicher-, Festplatten-, Netzwerk- und Akku-Anzeigen
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = Vor { $h } Std. aktualisiert
 weather-updated-days = Vor { $d } Tg. aktualisiert
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = Standort konnte nicht ermittelt werden
+weather-error-fetch = Wetter konnte nicht geladen werden
+weather-error-geocoding = Städtesuche fehlgeschlagen
+weather-locating = Standort wird ermittelt…
+weather-my-location = Mein Standort
+weather-cities-hint = Städte wählen
+weather-city-search-placeholder = Städte suchen…
+weather-city-add = Stadt hinzufügen
+weather-city-remove = Stadt entfernen
+weather-city-no-results = Keine Städte gefunden
+weather-city-searching = Suche…
 
 # ---- Relative time (shared) ----
 relative-just-now = gerade eben
@@ -146,6 +155,21 @@ moon-sunset = Sonnenuntergang: { $time }
 moon-libration = Libration: { $lat }Â°, { $lon }Â°
 moon-loading = Monddaten werden berechnetâ€¦
 
+
+# ---- Clock ----
+clock-local-label = Lokal
+clock-add-cities = Städte hinzufügen
+clock-cities-hint = Weltuhren verwalten
+clock-picker-title = Weltuhren
+clock-search-placeholder = Stadt suchen…
+clock-add-city-hint = Uhr hinzufügen
+clock-remove-city-hint = Entfernen
+clock-close-picker = Schließen
+clock-no-results = Keine Städte gefunden
+clock-searching = Suche…
+clock-day-yesterday = Gestern
+clock-day-tomorrow = Morgen
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = Speicher
@@ -157,6 +181,8 @@ system-battery-charging = Wird geladen
 system-battery-time-remaining = { $time } verbleibend
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = Systemmetriken werden geladenâ€¦
+system-empty = Keine Indikatoren aktiviert
+system-swap-suffix = Swap { $used } / { $total }
 system-status-warning = { $label } â€” erhÃ¶ht ({ $value })
 system-status-critical = { $label } â€” kritisch ({ $value })
 
@@ -675,6 +701,7 @@ catalog-no-results = Keine passenden Widgets
 dock-widget-terminal = Terminal
 dock-widget-weather = Wetter
 dock-widget-moon = Mond
+dock-widget-clock = Uhr
 dock-widget-system = System
 dock-widget-rss = Nachrichten
 dock-widget-recent-files = Zuletzt
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = Breitengrad
 widget-settings.moon.longitude = Längengrad
 widget-settings.moon.show-sunrise-sunset = Sonnenauf-/-untergang anzeigen
 widget-settings.moon.show-libration = Libration anzeigen
+widget-settings.clock.show-seconds = Sekunden anzeigen
+widget-settings.clock.show-dates = Daten anzeigen
+widget-settings.clock.show-offsets = UTC-Offsets anzeigen
 widget-settings.system.show-cpu = CPU anzeigen
 widget-settings.system.show-memory = Speicher anzeigen
 widget-settings.system.show-disks = Festplatten anzeigen
@@ -793,3 +823,72 @@ widget-settings.fm.thumbnail-size = Miniaturbildgröße
 widget-settings.fm.thumbnail-size.small = Klein
 widget-settings.fm.thumbnail-size.medium = Mittel
 widget-settings.fm.thumbnail-size.large = Groß
+
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = Rechner
+widget-calculator-desc = Schnellrechner mit Standard- und Wissenschaftsmodus, Verlauf und Speicher
+calc-mode-standard = Standard
+calc-mode-scientific = Wissenschaftlich
+calc-history-title = Verlauf
+calc-history-clear = Löschen
+calc-history-empty = Noch kein Verlauf
+calc-error-divide-by-zero = Division durch Null nicht möglich
+calc-error-invalid = Ungültige Eingabe
+calc-error-overflow = Überlauf
+calc-error-domain = Ungültige Eingabe
+calc-copied = In Zwischenablage kopiert
+calc-settings-show-history = Verlauf anzeigen
+calc-settings-mode = Modus
+calc-settings-mode-standard = Standard
+calc-settings-mode-scientific = Wissenschaftlich
+calc-settings-angle = Winkeleinheit
+calc-settings-angle-deg = Grad
+calc-settings-angle-rad = Radiant
+calc-settings-angle-grad = Gon
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = Rechner

@@ -15,8 +15,80 @@ widget-weather-desc = Current conditions, multi-city, and swipeable forecast
 widget-moon-name = Moon
 widget-moon-desc = Current lunar phase, rise/set times, and celestial data
 
+widget-clock-name = Clock
+widget-clock-desc = Local time and configurable world clocks
+
+
 widget-system-name = System
 widget-system-desc = CPU, memory, disk, network, and battery indicators
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = Calculator
+widget-calculator-desc = Quick calculator with standard and scientific modes, history, and memory
+
+# ---- Calculator widget ----
+calc-mode-standard = Standard
+calc-mode-scientific = Scientific
+calc-history-title = History
+calc-history-clear = Clear
+calc-history-empty = No history yet
+calc-error-divide-by-zero = Cannot divide by zero
+calc-error-invalid = Invalid input
+calc-error-overflow = Overflow
+calc-error-domain = Invalid input
+calc-copied = Copied to clipboard
+calc-settings-show-history = Show history
+calc-settings-mode = Mode
+calc-settings-mode-standard = Standard
+calc-settings-mode-scientific = Scientific
+calc-settings-angle = Angle unit
+calc-settings-angle-deg = Degrees
+calc-settings-angle-rad = Radians
+calc-settings-angle-grad = Gradians
+
+
+# ---- Processes widget ----
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+
 # ---- Shared size / duration formatting ----
 byte-size-b = { $value } B
 byte-size-kb = { $value } KB
@@ -84,11 +156,17 @@ weather-updated-hours = Updated { $h }h ago
 weather-updated-days = Updated { $d }d ago
 weather-cities-title = Cities
 weather-cities-close = Close
+weather-cities-hint = Choose cities
 weather-city-search-placeholder = Search cities…
 weather-city-add = Add city
 weather-city-remove = Remove city
 weather-city-no-results = No cities found
 weather-city-searching = Searching…
+weather-my-location = My location
+weather-locating = Detecting location…
+weather-error-geocoding = City search failed
+weather-error-fetch = Could not load weather
+weather-error-locate = Could not detect location
 
 # ---- Relative time (shared) ----
 relative-just-now = just now
@@ -148,6 +226,21 @@ moon-sunset = Sunset: { $time }
 moon-libration = Libration: { $lat }°, { $lon }°
 moon-loading = Calculating moon data…
 
+
+# ---- Clock ----
+clock-local-label = Local
+clock-add-cities = Add cities
+clock-cities-hint = Manage world clocks
+clock-picker-title = World clocks
+clock-search-placeholder = Search city…
+clock-add-city-hint = Add clock
+clock-remove-city-hint = Remove
+clock-close-picker = Close
+clock-no-results = No cities found
+clock-searching = Searching…
+clock-day-yesterday = Yesterday
+clock-day-tomorrow = Tomorrow
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = Memory
@@ -159,6 +252,8 @@ system-battery-charging = Charging
 system-battery-time-remaining = { $time } remaining
 system-network-rate = ↑ { $up }/s  ↓ { $down }/s
 system-loading = Loading system metrics…
+system-empty = No indicators enabled
+system-swap-suffix = swap { $used } / { $total }
 system-status-warning = { $label } — elevated ({ $value })
 system-status-critical = { $label } — critical ({ $value })
 
@@ -694,7 +789,10 @@ catalog-no-results = No matching widgets
 dock-widget-terminal = Terminal
 dock-widget-weather = Weather
 dock-widget-moon = Moon
+dock-widget-clock = Clock
 dock-widget-system = System
+dock-widget-processes = Processes
+dock-widget-calculator = Calculator
 dock-widget-rss = News
 dock-widget-recent-files = Recent
 dock-widget-search = Search
@@ -783,6 +881,9 @@ widget-settings.moon.latitude = Latitude
 widget-settings.moon.longitude = Longitude
 widget-settings.moon.show-sunrise-sunset = Show sunrise / sunset
 widget-settings.moon.show-libration = Show libration
+widget-settings.clock.show-seconds = Show seconds
+widget-settings.clock.show-dates = Show dates
+widget-settings.clock.show-offsets = Show UTC offsets
 widget-settings.system.show-cpu = Show CPU
 widget-settings.system.show-memory = Show memory
 widget-settings.system.show-disks = Show disks

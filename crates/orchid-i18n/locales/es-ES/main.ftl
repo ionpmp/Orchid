@@ -15,6 +15,9 @@ widget-weather-desc = Condiciones actuales y previsiÃ³n de 3 dÃ­as
 widget-moon-name = Luna
 widget-moon-desc = Fase lunar actual, horas de salida/puesta y datos celestes
 
+widget-clock-name = Reloj
+widget-clock-desc = Hora local y relojes mundiales configurables
+
 widget-system-name = Sistema
 widget-system-desc = Indicadores de CPU, memoria, disco, red y baterÃ­a
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = Actualizado hace { $h } h
 weather-updated-days = Actualizado hace { $d } d
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = No se pudo detectar la ubicación
+weather-error-fetch = No se pudo cargar el tiempo
+weather-error-geocoding = Error al buscar ciudades
+weather-locating = Detectando ubicación…
+weather-my-location = Mi ubicación
+weather-cities-hint = Elegir ciudades
+weather-city-search-placeholder = Buscar ciudades…
+weather-city-add = Añadir ciudad
+weather-city-remove = Quitar ciudad
+weather-city-no-results = No se encontraron ciudades
+weather-city-searching = Buscando…
 
 # ---- Relative time (shared) ----
 relative-just-now = ahora mismo
@@ -146,6 +155,21 @@ moon-sunset = Atardecer: { $time }
 moon-libration = Libration: { $lat }Â°, { $lon }Â°
 moon-loading = Calculando datos lunaresâ€¦
 
+
+# ---- Clock ----
+clock-local-label = Local
+clock-add-cities = Añadir ciudades
+clock-cities-hint = Administrar relojes mundiales
+clock-picker-title = Relojes mundiales
+clock-search-placeholder = Buscar ciudad…
+clock-add-city-hint = Añadir reloj
+clock-remove-city-hint = Quitar
+clock-close-picker = Cerrar
+clock-no-results = No se encontraron ciudades
+clock-searching = Buscando…
+clock-day-yesterday = Ayer
+clock-day-tomorrow = Mañana
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = Memoria
@@ -157,6 +181,8 @@ system-battery-charging = Cargando
 system-battery-time-remaining = { $time } restantes
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = Cargando mÃ©tricas del sistemaâ€¦
+system-empty = No hay indicadores activados
+system-swap-suffix = swap { $used } / { $total }
 system-status-warning = { $label } â€” elevado ({ $value })
 system-status-critical = { $label } â€” crÃ­tico ({ $value })
 
@@ -675,6 +701,7 @@ catalog-no-results = No hay widgets coincidentes
 dock-widget-terminal = Terminal
 dock-widget-weather = Tiempo
 dock-widget-moon = Luna
+dock-widget-clock = Reloj
 dock-widget-system = Sistema
 dock-widget-rss = Noticias
 dock-widget-recent-files = Recientes
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = Latitud
 widget-settings.moon.longitude = Longitud
 widget-settings.moon.show-sunrise-sunset = Mostrar amanecer / atardecer
 widget-settings.moon.show-libration = Mostrar libración
+widget-settings.clock.show-seconds = Mostrar segundos
+widget-settings.clock.show-dates = Mostrar fechas
+widget-settings.clock.show-offsets = Mostrar desfases UTC
 widget-settings.system.show-cpu = Mostrar CPU
 widget-settings.system.show-memory = Mostrar memoria
 widget-settings.system.show-disks = Mostrar discos
@@ -793,3 +823,71 @@ widget-settings.fm.thumbnail-size = Tamaño de miniaturas
 widget-settings.fm.thumbnail-size.small = Pequeño
 widget-settings.fm.thumbnail-size.medium = Mediano
 widget-settings.fm.thumbnail-size.large = Grande
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = Calculadora
+widget-calculator-desc = Calculadora rápida con modos estándar y científico, historial y memoria
+calc-mode-standard = Estándar
+calc-mode-scientific = Científica
+calc-history-title = Historial
+calc-history-clear = Borrar
+calc-history-empty = Sin historial
+calc-error-divide-by-zero = No se puede dividir entre cero
+calc-error-invalid = Entrada no válida
+calc-error-overflow = Desbordamiento
+calc-error-domain = Entrada no válida
+calc-copied = Copiado al portapapeles
+calc-settings-show-history = Mostrar historial
+calc-settings-mode = Modo
+calc-settings-mode-standard = Estándar
+calc-settings-mode-scientific = Científica
+calc-settings-angle = Unidad de ángulo
+calc-settings-angle-deg = Grados
+calc-settings-angle-rad = Radianes
+calc-settings-angle-grad = Gradianes
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = Calculadora

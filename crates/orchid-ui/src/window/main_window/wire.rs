@@ -587,11 +587,59 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_weather_use_my_location({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_weather_use_my_location(&id);
+                }
+            }
+        });
         self.window.on_weather_select_day({
             let t = t.clone();
             move |id, idx| {
                 if let Some(c) = t.upgrade() {
                     c.on_weather_select_day(&id, idx);
+                }
+            }
+        });
+        self.window.on_clock_open_cities({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_clock_open_cities(&id);
+                }
+            }
+        });
+        self.window.on_clock_close_cities({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_clock_close_cities(&id);
+                }
+            }
+        });
+        self.window.on_clock_remove_city({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_clock_remove_city(&id, idx);
+                }
+            }
+        });
+        self.window.on_clock_search_cities({
+            let t = t.clone();
+            move |id, q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_clock_search_cities(&id, &q);
+                }
+            }
+        });
+        self.window.on_clock_add_city({
+            let t = t.clone();
+            move |id, name, tz| {
+                if let Some(c) = t.upgrade() {
+                    c.on_clock_add_city(&id, &name, &tz);
                 }
             }
         });
@@ -649,6 +697,193 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_media_command("previous");
+                }
+            }
+        });
+
+
+        self.window.on_calculator_button({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calculator_button(&id);
+                }
+            }
+        });
+        self.window.on_calculator_key({
+            let t = t.clone();
+            move |text, ctrl, shift| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calculator_key(&text, ctrl, shift);
+                }
+            }
+        });
+        self.window.on_calculator_history({
+            let t = t.clone();
+            move |index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calculator_history(index);
+                }
+            }
+        });
+
+        self.window.on_processes_tab_changed({
+            let t = t.clone();
+            move |tab| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_tab_changed(tab);
+                }
+            }
+        });
+        self.window.on_processes_search_changed({
+            let t = t.clone();
+            move |q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_search_changed(&q);
+                }
+            }
+        });
+        self.window.on_processes_sort_column_clicked({
+            let t = t.clone();
+            move |col| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_sort_column_clicked(col);
+                }
+            }
+        });
+        self.window.on_processes_process_clicked({
+            let t = t.clone();
+            move |pid| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_process_clicked(pid);
+                }
+            }
+        });
+        self.window.on_processes_process_context({
+            let t = t.clone();
+            move |pid, x, y| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_process_context(pid, x, y);
+                }
+            }
+        });
+        self.window.on_processes_end_task({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_end_task();
+                }
+            }
+        });
+        self.window.on_processes_end_tree({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_end_tree();
+                }
+            }
+        });
+        self.window.on_processes_open_location({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_open_location();
+                }
+            }
+        });
+        self.window.on_processes_copy_pid({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_copy_pid();
+                }
+            }
+        });
+        self.window.on_processes_copy_path({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_copy_path();
+                }
+            }
+        });
+        self.window.on_processes_service_clicked({
+            let t = t.clone();
+            move |name| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_service_clicked(&name);
+                }
+            }
+        });
+        self.window.on_processes_service_start({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_service_start();
+                }
+            }
+        });
+        self.window.on_processes_service_stop({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_service_stop();
+                }
+            }
+        });
+        self.window.on_processes_service_restart({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_service_restart();
+                }
+            }
+        });
+        self.window.on_processes_startup_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_startup_clicked(&id);
+                }
+            }
+        });
+        self.window.on_processes_startup_toggle({
+            let t = t.clone();
+            move |id, enabled| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_startup_toggle(&id, enabled);
+                }
+            }
+        });
+        self.window.on_processes_startup_open_location({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_startup_open_location(&id);
+                }
+            }
+        });
+        self.window.on_processes_user_clicked({
+            let t = t.clone();
+            move |sid| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_user_clicked(sid);
+                }
+            }
+        });
+        self.window.on_processes_user_disconnect({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_user_disconnect();
+                }
+            }
+        });
+        self.window.on_processes_user_sign_out({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_user_sign_out();
                 }
             }
         });

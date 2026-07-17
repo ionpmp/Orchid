@@ -15,6 +15,9 @@ widget-weather-desc = Condizioni attuali e previsioni a 3 giorni
 widget-moon-name = Luna
 widget-moon-desc = Fase lunare attuale, orari di sorgere/tramonto e dati celesti
 
+widget-clock-name = Orologio
+widget-clock-desc = Ora locale e orologi mondiali configurabili
+
 widget-system-name = Sistema
 widget-system-desc = Indicatori CPU, memoria, disco, rete e batteria
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = Aggiornato { $h } h fa
 weather-updated-days = Aggiornato { $d } g fa
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = Impossibile rilevare la posizione
+weather-error-fetch = Impossibile caricare il meteo
+weather-error-geocoding = Ricerca città non riuscita
+weather-locating = Rilevamento posizione…
+weather-my-location = La mia posizione
+weather-cities-hint = Scegli città
+weather-city-search-placeholder = Cerca città…
+weather-city-add = Aggiungi città
+weather-city-remove = Rimuovi città
+weather-city-no-results = Nessuna città trovata
+weather-city-searching = Ricerca…
 
 # ---- Relative time (shared) ----
 relative-just-now = adesso
@@ -146,6 +155,21 @@ moon-sunset = Tramonto: { $time }
 moon-libration = Libration: { $lat }Â°, { $lon }Â°
 moon-loading = Calcolo dati lunariâ€¦
 
+
+# ---- Clock ----
+clock-local-label = Locale
+clock-add-cities = Aggiungi città
+clock-cities-hint = Gestisci orologi mondiali
+clock-picker-title = Orologi mondiali
+clock-search-placeholder = Cerca città…
+clock-add-city-hint = Aggiungi orologio
+clock-remove-city-hint = Rimuovi
+clock-close-picker = Chiudi
+clock-no-results = Nessuna città trovata
+clock-searching = Ricerca…
+clock-day-yesterday = Ieri
+clock-day-tomorrow = Domani
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = Memoria
@@ -157,6 +181,8 @@ system-battery-charging = In carica
 system-battery-time-remaining = { $time } rimanenti
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = Caricamento metriche di sistemaâ€¦
+system-empty = Nessun indicatore abilitato
+system-swap-suffix = swap { $used } / { $total }
 system-status-warning = { $label } â€” elevato ({ $value })
 system-status-critical = { $label } â€” critico ({ $value })
 
@@ -675,6 +701,7 @@ catalog-no-results = Nessun widget corrispondente
 dock-widget-terminal = Terminale
 dock-widget-weather = Meteo
 dock-widget-moon = Luna
+dock-widget-clock = Orologio
 dock-widget-system = Sistema
 dock-widget-rss = Notizie
 dock-widget-recent-files = Recenti
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = Latitudine
 widget-settings.moon.longitude = Longitudine
 widget-settings.moon.show-sunrise-sunset = Mostra alba / tramonto
 widget-settings.moon.show-libration = Mostra liberazione
+widget-settings.clock.show-seconds = Mostra secondi
+widget-settings.clock.show-dates = Mostra date
+widget-settings.clock.show-offsets = Mostra offset UTC
 widget-settings.system.show-cpu = Mostra CPU
 widget-settings.system.show-memory = Mostra memoria
 widget-settings.system.show-disks = Mostra dischi
@@ -793,3 +823,71 @@ widget-settings.fm.thumbnail-size = Dimensione miniature
 widget-settings.fm.thumbnail-size.small = Piccola
 widget-settings.fm.thumbnail-size.medium = Media
 widget-settings.fm.thumbnail-size.large = Grande
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = Calcolatrice
+widget-calculator-desc = Calcolatrice rapida con modalità standard e scientifica, cronologia e memoria
+calc-mode-standard = Standard
+calc-mode-scientific = Scientifica
+calc-history-title = Cronologia
+calc-history-clear = Cancella
+calc-history-empty = Nessuna cronologia
+calc-error-divide-by-zero = Impossibile dividere per zero
+calc-error-invalid = Input non valido
+calc-error-overflow = Overflow
+calc-error-domain = Input non valido
+calc-copied = Copiato negli appunti
+calc-settings-show-history = Mostra cronologia
+calc-settings-mode = Modalità
+calc-settings-mode-standard = Standard
+calc-settings-mode-scientific = Scientifica
+calc-settings-angle = Unità di angolo
+calc-settings-angle-deg = Gradi
+calc-settings-angle-rad = Radianti
+calc-settings-angle-grad = Gradienti
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = Calcolatrice

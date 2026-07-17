@@ -15,6 +15,9 @@ widget-weather-desc = å½“å‰çŠ¶å†µå’Œ 3 å¤©é¢„æŠ¥
 widget-moon-name = æœˆäº®
 widget-moon-desc = å½“å‰æœˆç›¸ã€æœˆå‡º/æœˆè½æ—¶é—´å’Œå¤©ä½“æ•°æ®
 
+widget-clock-name = 时钟
+widget-clock-desc = 本地时间与可配置的世界时钟
+
 widget-system-name = ç³»ç»Ÿ
 widget-system-desc = CPUã€å†…å­˜ã€ç£ç›˜ã€ç½‘ç»œå’Œç”µæ± æŒ‡ç¤ºå™¨
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = { $h } å°æ—¶å‰æ›´æ–°
 weather-updated-days = { $d } å¤©å‰æ›´æ–°
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = 无法检测位置
+weather-error-fetch = 无法加载天气
+weather-error-geocoding = 城市搜索失败
+weather-locating = 正在定位…
+weather-my-location = 我的位置
+weather-cities-hint = 选择城市
+weather-city-search-placeholder = 搜索城市…
+weather-city-add = 添加城市
+weather-city-remove = 删除城市
+weather-city-no-results = 未找到城市
+weather-city-searching = 搜索中…
 
 # ---- Relative time (shared) ----
 relative-just-now = åˆšåˆš
@@ -146,6 +155,21 @@ moon-sunset = æ—¥è½ï¼š{ $time }
 moon-libration = Librationï¼š{ $lat }Â°ï¼Œ{ $lon }Â°
 moon-loading = æ­£åœ¨è®¡ç®—æœˆç›¸æ•°æ®â€¦
 
+
+# ---- Clock ----
+clock-local-label = 本地
+clock-add-cities = 添加城市
+clock-cities-hint = 管理世界时钟
+clock-picker-title = 世界时钟
+clock-search-placeholder = 搜索城市…
+clock-add-city-hint = 添加时钟
+clock-remove-city-hint = 移除
+clock-close-picker = 关闭
+clock-no-results = 未找到城市
+clock-searching = 正在搜索…
+clock-day-yesterday = 昨天
+clock-day-tomorrow = 明天
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = å†…å­˜
@@ -157,6 +181,8 @@ system-battery-charging = å……ç”µä¸­
 system-battery-time-remaining = å‰©ä½™ { $time }
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = æ­£åœ¨åŠ è½½ç³»ç»ŸæŒ‡æ ‡â€¦
+system-empty = 未启用任何指标
+system-swap-suffix = 交换 { $used } / { $total }
 system-status-warning = { $label } â€” åé«˜ï¼ˆ{ $value }ï¼‰
 system-status-critical = { $label } â€” ä¸¥é‡ï¼ˆ{ $value }ï¼‰
 
@@ -675,6 +701,7 @@ catalog-no-results = 没有匹配的小组件
 dock-widget-terminal = ç»ˆç«¯
 dock-widget-weather = å¤©æ°”
 dock-widget-moon = æœˆäº®
+dock-widget-clock = 时钟
 dock-widget-system = ç³»ç»Ÿ
 dock-widget-rss = æ–°é—»
 dock-widget-recent-files = æœ€è¿‘
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = 纬度
 widget-settings.moon.longitude = 经度
 widget-settings.moon.show-sunrise-sunset = 显示日出 / 日落
 widget-settings.moon.show-libration = 显示天平动
+widget-settings.clock.show-seconds = 显示秒
+widget-settings.clock.show-dates = 显示日期
+widget-settings.clock.show-offsets = 显示 UTC 偏移
 widget-settings.system.show-cpu = 显示 CPU
 widget-settings.system.show-memory = 显示内存
 widget-settings.system.show-disks = 显示磁盘
@@ -793,3 +823,71 @@ widget-settings.fm.thumbnail-size = 缩略图大小
 widget-settings.fm.thumbnail-size.small = 小
 widget-settings.fm.thumbnail-size.medium = 中
 widget-settings.fm.thumbnail-size.large = 大
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = 计算器
+widget-calculator-desc = 支持标准/科学模式、历史记录和内存的快捷计算器
+calc-mode-standard = 标准
+calc-mode-scientific = 科学
+calc-history-title = 历史记录
+calc-history-clear = 清除
+calc-history-empty = 暂无历史记录
+calc-error-divide-by-zero = 无法除以零
+calc-error-invalid = 输入无效
+calc-error-overflow = 溢出
+calc-error-domain = 输入无效
+calc-copied = 已复制到剪贴板
+calc-settings-show-history = 显示历史记录
+calc-settings-mode = 模式
+calc-settings-mode-standard = 标准
+calc-settings-mode-scientific = 科学
+calc-settings-angle = 角度单位
+calc-settings-angle-deg = 度
+calc-settings-angle-rad = 弧度
+calc-settings-angle-grad = 百分度
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = 计算器

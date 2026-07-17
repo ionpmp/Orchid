@@ -15,6 +15,9 @@ widget-weather-desc = ç¾åœ¨ã®å¤©å€™ã¨ 3 æ—¥é–“ã
 widget-moon-name = æœˆ
 widget-moon-desc = ç¾åœ¨ã®æœˆç›¸ã€æœˆã®å‡º/æœˆã®å…¥ã‚Šã€å¤©ä½“ãƒ‡ãƒ¼ã‚¿
 
+widget-clock-name = 時計
+widget-clock-desc = 現地時刻と設定可能な世界時計
+
 widget-system-name = ã‚·ã‚¹ãƒ†ãƒ 
 widget-system-desc = CPUã€ãƒ¡ãƒ¢ãƒªã€ãƒ‡ã‚£ã‚¹ã‚¯ã€ãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯ã€ãƒãƒƒãƒ†ãƒªãƒ¼ã®è¡¨ç¤º
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = { $h } æ™‚é–“å‰ã«æ›´æ–°
 weather-updated-days = { $d } æ—¥å‰ã«æ›´æ–°
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = 位置情報を取得できませんでした
+weather-error-fetch = 天気を読み込めませんでした
+weather-error-geocoding = 都市の検索に失敗しました
+weather-locating = 位置情報を取得中…
+weather-my-location = 現在地
+weather-cities-hint = 都市を選択
+weather-city-search-placeholder = 都市を検索…
+weather-city-add = 都市を追加
+weather-city-remove = 都市を削除
+weather-city-no-results = 都市が見つかりません
+weather-city-searching = 検索中…
 
 # ---- Relative time (shared) ----
 relative-just-now = ãŸã£ãŸä»Š
@@ -146,6 +155,21 @@ moon-sunset = æ—¥ã®å…¥ã‚Š: { $time }
 moon-libration = Libration: { $lat }Â°, { $lon }Â°
 moon-loading = æœˆã®ãƒ‡ãƒ¼ã‚¿ã‚’è¨ˆç®—ä¸­â€¦
 
+
+# ---- Clock ----
+clock-local-label = ローカル
+clock-add-cities = 都市を追加
+clock-cities-hint = 世界時計を管理
+clock-picker-title = 世界時計
+clock-search-placeholder = 都市を検索…
+clock-add-city-hint = 時計を追加
+clock-remove-city-hint = 削除
+clock-close-picker = 閉じる
+clock-no-results = 都市が見つかりません
+clock-searching = 検索中…
+clock-day-yesterday = 昨日
+clock-day-tomorrow = 明日
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = ãƒ¡ãƒ¢ãƒª
@@ -157,6 +181,8 @@ system-battery-charging = å……é›»ä¸­
 system-battery-time-remaining = æ®‹ã‚Š { $time }
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = ã‚·ã‚¹ãƒ†ãƒ ãƒ¡ãƒˆãƒªã‚¯ã‚¹ã‚’èª­ã¿è¾¼ã¿ä¸­â€¦
+system-empty = インジケーターが有効になっていません
+system-swap-suffix = スワップ { $used } / { $total }
 system-status-warning = { $label } â€” é«˜ã‚ ({ $value })
 system-status-critical = { $label } â€” å±é™º ({ $value })
 
@@ -675,6 +701,7 @@ catalog-no-results = 一致するウィジェットがありません
 dock-widget-terminal = ã‚¿ãƒ¼ãƒŸãƒŠãƒ«
 dock-widget-weather = å¤©æ°—
 dock-widget-moon = æœˆ
+dock-widget-clock = 時計
 dock-widget-system = ã‚·ã‚¹ãƒ†ãƒ 
 dock-widget-rss = ãƒ‹ãƒ¥ãƒ¼ã‚¹
 dock-widget-recent-files = æœ€è¿‘
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = 緯度
 widget-settings.moon.longitude = 経度
 widget-settings.moon.show-sunrise-sunset = 日の出 / 日の入りを表示
 widget-settings.moon.show-libration = 秤動を表示
+widget-settings.clock.show-seconds = 秒を表示
+widget-settings.clock.show-dates = 日付を表示
+widget-settings.clock.show-offsets = UTC オフセットを表示
 widget-settings.system.show-cpu = CPU を表示
 widget-settings.system.show-memory = メモリを表示
 widget-settings.system.show-disks = ディスクを表示
@@ -793,3 +823,71 @@ widget-settings.fm.thumbnail-size = サムネイルサイズ
 widget-settings.fm.thumbnail-size.small = 小
 widget-settings.fm.thumbnail-size.medium = 中
 widget-settings.fm.thumbnail-size.large = 大
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = 電卓
+widget-calculator-desc = 標準・関数モード、履歴、メモリ付きクイック電卓
+calc-mode-standard = 標準
+calc-mode-scientific = 関数
+calc-history-title = 履歴
+calc-history-clear = 消去
+calc-history-empty = 履歴はありません
+calc-error-divide-by-zero = ゼロで割れません
+calc-error-invalid = 無効な入力
+calc-error-overflow = オーバーフロー
+calc-error-domain = 無効な入力
+calc-copied = クリップボードにコピーしました
+calc-settings-show-history = 履歴を表示
+calc-settings-mode = モード
+calc-settings-mode-standard = 標準
+calc-settings-mode-scientific = 関数
+calc-settings-angle = 角度の単位
+calc-settings-angle-deg = 度
+calc-settings-angle-rad = ラジアン
+calc-settings-angle-grad = グラード
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = 電卓

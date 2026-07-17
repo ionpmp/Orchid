@@ -90,7 +90,8 @@ fn push_combo(
 pub(crate) fn widget_has_settings(type_id: &str) -> bool {
     matches!(
         type_id,
-        "weather" | "moon" | "system" | "rss" | "file-manager"
+        "weather" | "moon" | "clock" | "system" | "processes" | "calculator" | "rss"
+            | "file-manager"
     )
 }
 
@@ -108,8 +109,17 @@ pub(crate) fn build_widget_settings_fields(
         "moon" => orchid_widgets::builtin::moon::current_config(instance_id)
             .map(|cfg| moon_fields(&cfg, locale))
             .unwrap_or_default(),
+        "clock" => orchid_widgets::builtin::clock::current_config(instance_id)
+            .map(|cfg| clock_fields(&cfg, locale))
+            .unwrap_or_default(),
         "system" => orchid_widgets::builtin::system::current_config(instance_id)
             .map(|cfg| system_fields(&cfg, locale))
+            .unwrap_or_default(),
+        "processes" => orchid_widgets::builtin::processes::current_config(instance_id)
+            .map(|cfg| processes_fields(&cfg, locale))
+            .unwrap_or_default(),
+        "calculator" => orchid_widgets::builtin::calculator::current_config(instance_id)
+            .map(|cfg| calculator_fields(&cfg, locale))
             .unwrap_or_default(),
         "rss" => orchid_widgets::builtin::rss::current_config(instance_id)
             .map(|cfg| rss_fields(&cfg, locale))
@@ -194,6 +204,102 @@ fn moon_fields(cfg: &MoonConfig, locale: &LocaleManager) -> Vec<SettingsFieldRow
         "show_libration",
         "widget-settings.moon.show-libration",
         cfg.show_libration,
+    );
+    rows
+}
+
+fn clock_fields(
+    cfg: &orchid_widgets::builtin::clock::ClockConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_bool(
+        &mut rows,
+        locale,
+        "show_seconds",
+        "widget-settings.clock.show-seconds",
+        cfg.show_seconds,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_dates",
+        "widget-settings.clock.show-dates",
+        cfg.show_dates,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_offsets",
+        "widget-settings.clock.show-offsets",
+        cfg.show_offsets,
+    );
+    rows
+}
+
+
+fn calculator_fields(
+    cfg: &orchid_widgets::builtin::calculator::CalculatorConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_combo(
+        &mut rows,
+        locale,
+        "mode",
+        "calc-settings-mode",
+        &[
+            (
+                "0".into(),
+                locale.tr("calc-settings-mode-standard").into(),
+            ),
+            (
+                "1".into(),
+                locale.tr("calc-settings-mode-scientific").into(),
+            ),
+        ],
+        &cfg.mode.to_string(),
+    );
+    push_combo(
+        &mut rows,
+        locale,
+        "angle_mode",
+        "calc-settings-angle",
+        &[
+            ("0".into(), locale.tr("calc-settings-angle-deg").into()),
+            ("1".into(), locale.tr("calc-settings-angle-rad").into()),
+            ("2".into(), locale.tr("calc-settings-angle-grad").into()),
+        ],
+        &cfg.angle_mode.to_string(),
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_history",
+        "calc-settings-show-history",
+        cfg.show_history,
+    );
+    rows
+}
+
+fn processes_fields(
+    cfg: &orchid_widgets::builtin::processes::ProcessesConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_text(
+        &mut rows,
+        locale,
+        "refresh_seconds",
+        "processes-settings-refresh",
+        cfg.refresh_interval_seconds.to_string(),
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_grouping",
+        "processes-settings-grouping",
+        cfg.show_grouping,
     );
     rows
 }
@@ -389,7 +495,10 @@ pub(crate) async fn apply_widget_setting(type_id: &str, instance_id: Uuid, key: 
     match type_id {
         "weather" => apply_weather(instance_id, key, value),
         "moon" => apply_moon(instance_id, key, value),
+        "clock" => apply_clock(instance_id, key, value),
         "system" => apply_system(instance_id, key, value),
+        "processes" => apply_processes(instance_id, key, value),
+        "calculator" => apply_calculator(instance_id, key, value),
         "rss" => apply_rss(instance_id, key, value),
         "file-manager" => {
             let _ = apply_fm(instance_id, key, value).await;
@@ -409,6 +518,27 @@ fn apply_weather(instance_id: Uuid, key: &str, value: &str) {
         "refresh_minutes" => {
             if let Ok(n) = value.parse::<u32>() {
                 cfg.refresh_interval_minutes = n.max(1);
+            }
+        }
+        _ => {}
+    });
+}
+
+fn apply_clock(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::clock::update_config(instance_id, |cfg| match key {
+        "show_seconds" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_seconds = b;
+            }
+        }
+        "show_dates" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_dates = b;
+            }
+        }
+        "show_offsets" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_offsets = b;
             }
         }
         _ => {}
@@ -477,6 +607,43 @@ fn apply_system(instance_id: Uuid, key: &str, value: &str) {
         "refresh_seconds" => {
             if let Ok(n) = value.parse::<u32>() {
                 cfg.refresh_interval_seconds = n.max(1);
+            }
+        }
+        _ => {}
+    });
+}
+
+fn apply_processes(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::processes::update_config(instance_id, |cfg| match key {
+        "refresh_seconds" => {
+            if let Ok(n) = value.parse::<u32>() {
+                cfg.refresh_interval_seconds = n.max(1);
+            }
+        }
+        "show_grouping" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_grouping = b;
+            }
+        }
+        _ => {}
+    });
+}
+
+fn apply_calculator(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::calculator::update_config(instance_id, |cfg| match key {
+        "mode" => {
+            if let Ok(n) = value.parse::<u8>() {
+                cfg.mode = n;
+            }
+        }
+        "angle_mode" => {
+            if let Ok(n) = value.parse::<u8>() {
+                cfg.angle_mode = n;
+            }
+        }
+        "show_history" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_history = b;
             }
         }
         _ => {}

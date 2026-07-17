@@ -15,6 +15,9 @@ widget-weather-desc = í˜„ìž¬ ìƒíƒœ ë° 3ì¼ ì˜ˆë³´
 widget-moon-name = ë‹¬
 widget-moon-desc = í˜„ìž¬ ì›”ìƒ, ì›”ì¶œ/ì›”ëª° ì‹œê°„ ë° ì²œì²´ ë°ì´í„°
 
+widget-clock-name = 시계
+widget-clock-desc = 현지 시간과 설정 가능한 세계 시계
+
 widget-system-name = ì‹œìŠ¤í…œ
 widget-system-desc = CPU, ë©”ëª¨ë¦¬, ë””ìŠ¤í¬, ë„¤íŠ¸ì›Œí¬ ë° ë°°í„°ë¦¬ í‘œì‹œ
 # ---- Shared size / duration formatting ----
@@ -82,11 +85,17 @@ weather-updated-hours = { $h }ì‹œê°„ ì „ ì—…ë°ì´íŠ¸
 weather-updated-days = { $d }ì¼ ì „ ì—…ë°ì´íŠ¸
 weather-cities-title = Города
 weather-cities-close = Закрыть
-weather-city-search-placeholder = Поиск городов…
-weather-city-add = Добавить город
-weather-city-remove = Удалить город
-weather-city-no-results = Города не найдены
-weather-city-searching = Поиск…
+weather-error-locate = 위치를 확인할 수 없습니다
+weather-error-fetch = 날씨를 불러오지 못했습니다
+weather-error-geocoding = 도시 검색 실패
+weather-locating = 위치 확인 중…
+weather-my-location = 내 위치
+weather-cities-hint = 도시 선택
+weather-city-search-placeholder = 도시 검색…
+weather-city-add = 도시 추가
+weather-city-remove = 도시 삭제
+weather-city-no-results = 도시를 찾을 수 없음
+weather-city-searching = 검색 중…
 
 # ---- Relative time (shared) ----
 relative-just-now = ë°©ê¸ˆ
@@ -146,6 +155,21 @@ moon-sunset = ì¼ëª°: { $time }
 moon-libration = Libration: { $lat }Â°, { $lon }Â°
 moon-loading = ë‹¬ ë°ì´í„° ê³„ì‚° ì¤‘â€¦
 
+
+# ---- Clock ----
+clock-local-label = 로컬
+clock-add-cities = 도시 추가
+clock-cities-hint = 세계 시계 관리
+clock-picker-title = 세계 시계
+clock-search-placeholder = 도시 검색…
+clock-add-city-hint = 시계 추가
+clock-remove-city-hint = 제거
+clock-close-picker = 닫기
+clock-no-results = 도시를 찾을 수 없음
+clock-searching = 검색 중…
+clock-day-yesterday = 어제
+clock-day-tomorrow = 내일
+
 # ---- System ----
 system-cpu-label = CPU
 system-memory-label = ë©”ëª¨ë¦¬
@@ -157,6 +181,8 @@ system-battery-charging = ì¶©ì „ ì¤‘
 system-battery-time-remaining = { $time } ë‚¨ìŒ
 system-network-rate = â†‘ { $up }/s  â†“ { $down }/s
 system-loading = ì‹œìŠ¤í…œ ë©”íŠ¸ë¦­ ë¡œë“œ ì¤‘â€¦
+system-empty = 표시된 지표 없음
+system-swap-suffix = 스왑 { $used } / { $total }
 system-status-warning = { $label } â€” ë†’ìŒ ({ $value })
 system-status-critical = { $label } â€” ìœ„í—˜ ({ $value })
 
@@ -675,6 +701,7 @@ catalog-no-results = 일치하는 위젯 없음
 dock-widget-terminal = í„°ë¯¸ë„
 dock-widget-weather = ë‚ ì”¨
 dock-widget-moon = ë‹¬
+dock-widget-clock = 시계
 dock-widget-system = ì‹œìŠ¤í…œ
 dock-widget-rss = ë‰´ìŠ¤
 dock-widget-recent-files = ìµœê·¼
@@ -771,6 +798,9 @@ widget-settings.moon.latitude = 위도
 widget-settings.moon.longitude = 경도
 widget-settings.moon.show-sunrise-sunset = 일출 / 일몰 표시
 widget-settings.moon.show-libration = 진동 표시
+widget-settings.clock.show-seconds = 초 표시
+widget-settings.clock.show-dates = 날짜 표시
+widget-settings.clock.show-offsets = UTC 오프셋 표시
 widget-settings.system.show-cpu = CPU 표시
 widget-settings.system.show-memory = 메모리 표시
 widget-settings.system.show-disks = 디스크 표시
@@ -793,3 +823,71 @@ widget-settings.fm.thumbnail-size = 미리보기 크기
 widget-settings.fm.thumbnail-size.small = 작게
 widget-settings.fm.thumbnail-size.medium = 보통
 widget-settings.fm.thumbnail-size.large = 크게
+
+# ---- Processes widget (en fallback until translated) ----
+
+widget-processes-name = Processes
+widget-processes-desc = Task Manager–style process, service, startup, and user session manager
+
+widget-calculator-name = 계산기
+widget-calculator-desc = 일반/공학 모드, 기록, 메모리가 있는 빠른 계산기
+calc-mode-standard = 일반
+calc-mode-scientific = 공학용
+calc-history-title = 기록
+calc-history-clear = 지우기
+calc-history-empty = 기록이 없습니다
+calc-error-divide-by-zero = 0으로 나눌 수 없습니다
+calc-error-invalid = 잘못된 입력
+calc-error-overflow = 오버플로
+calc-error-domain = 잘못된 입력
+calc-copied = 클립보드에 복사됨
+calc-settings-show-history = 기록 표시
+calc-settings-mode = 모드
+calc-settings-mode-standard = 일반
+calc-settings-mode-scientific = 공학용
+calc-settings-angle = 각도 단위
+calc-settings-angle-deg = 도
+calc-settings-angle-rad = 라디안
+calc-settings-angle-grad = 그라디안
+
+
+processes-tab-processes = Processes
+processes-tab-services = Services
+processes-tab-startup = Startup
+processes-tab-users = Users
+processes-search-placeholder = Search processes
+processes-col-name = Name
+processes-col-pid = PID
+processes-col-cpu = CPU
+processes-col-memory = Memory
+processes-col-io = Disk
+processes-col-user = User
+processes-end-task = End task
+processes-end-tree = End process tree
+processes-open-location = Open file location
+processes-copy-pid = Copy PID
+processes-copy-path = Copy path
+processes-copied = Copied to clipboard
+processes-access-denied = Access denied
+processes-kill-ok = Process ended
+processes-kill-tree-ok = Ended { $ok } of { $total } processes
+processes-no-path = No executable path available
+processes-group-apps = Apps
+processes-group-background = Background processes
+processes-group-windows = Windows processes
+processes-service-start = Start
+processes-service-stop = Stop
+processes-service-restart = Restart
+processes-service-started = Service started
+processes-service-stopped = Service stopped
+processes-service-restarted = Service restarted
+processes-startup-updated = Startup entry updated
+processes-user-disconnect = Disconnect
+processes-user-sign-out = Sign out
+processes-user-disconnected = Session disconnected
+processes-user-signed-out = Session signed out
+processes-settings-refresh = Refresh interval (seconds)
+processes-settings-grouping = Group processes
+processes-loading = Loading processes…
+dock-widget-processes = Processes
+dock-widget-calculator = 계산기

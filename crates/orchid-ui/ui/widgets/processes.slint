@@ -1,0 +1,635 @@
+import { Theme } from "../theme_global.slint";
+import { ProcessesModel, ProcessRowEntry, ServiceRowEntry, StartupRowEntry, UserRowEntry } from "../workspace/defs.slint";
+
+export component ProcessesView inherits Rectangle {
+    in property <ProcessesModel> model;
+
+    callback tab-changed(int);
+    callback search-changed(string);
+    callback sort-column-clicked(int);
+    callback process-clicked(int);
+    callback process-context(int, length, length);
+    callback end-task();
+    callback end-tree();
+    callback open-location();
+    callback copy-pid();
+    callback copy-path();
+    callback service-clicked(string);
+    callback service-start();
+    callback service-stop();
+    callback service-restart();
+    callback startup-clicked(string);
+    callback startup-toggle(string, bool);
+    callback startup-open-location(string);
+    callback user-clicked(int);
+    callback user-disconnect();
+    callback user-sign-out();
+    callback context-dismiss();
+
+    background: transparent;
+    property <string> draft-search: model.search-query;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+
+        // Tabs
+        HorizontalLayout {
+            spacing: 4px;
+            height: 28px;
+
+            tab-btn := Rectangle {
+                width: 88px;
+                height: 28px;
+                background: model.tab == 0 ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                TouchArea { clicked => { root.tab-changed(0); } }
+                Text {
+                    width: 100%; height: 100%;
+                    text: model.tab-processes-label;
+                    color: model.tab == 0 ? Theme.accent-brand : Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                width: 88px; height: 28px;
+                background: model.tab == 1 ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                TouchArea { clicked => { root.tab-changed(1); } }
+                Text {
+                    width: 100%; height: 100%;
+                    text: model.tab-services-label;
+                    color: model.tab == 1 ? Theme.accent-brand : Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                width: 88px; height: 28px;
+                background: model.tab == 2 ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                TouchArea { clicked => { root.tab-changed(2); } }
+                Text {
+                    width: 100%; height: 100%;
+                    text: model.tab-startup-label;
+                    color: model.tab == 2 ? Theme.accent-brand : Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                width: 88px; height: 28px;
+                background: model.tab == 3 ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                TouchArea { clicked => { root.tab-changed(3); } }
+                Text {
+                    width: 100%; height: 100%;
+                    text: model.tab-users-label;
+                    color: model.tab == 3 ? Theme.accent-brand : Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Search
+            Rectangle {
+                width: 200px;
+                height: 28px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+
+                if draft-search == "" : Text {
+                    x: 8px; width: parent.width - 16px; height: 100%;
+                    text: model.search-placeholder;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+                TextInput {
+                    x: 8px; width: parent.width - 16px; height: 100%;
+                    text: root.draft-search;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    single-line: true;
+                    edited => {
+                        root.draft-search = self.text;
+                        root.search-changed(self.text);
+                    }
+                }
+            }
+        }
+
+        // Toolbar
+        HorizontalLayout {
+            spacing: 6px;
+            height: 28px;
+
+            if model.tab == 0 : Rectangle {
+                width: 96px; height: 28px;
+                background: Theme.accent-brand;
+                border-radius: Theme.radius-md;
+                opacity: model.selected-pid > 0 ? 1.0 : 0.4;
+                TouchArea {
+                    enabled: model.selected-pid > 0;
+                    clicked => { root.end-task(); }
+                }
+                Text {
+                    width: 100%; height: 100%;
+                    text: model.end-task-label;
+                    color: #ffffff;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            if model.tab == 1 : HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    width: 72px; height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    TouchArea { clicked => { root.service-start(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: model.service-start-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    width: 72px; height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    TouchArea { clicked => { root.service-stop(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: model.service-stop-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    width: 80px; height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    TouchArea { clicked => { root.service-restart(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: model.service-restart-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            if model.tab == 3 : HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    width: 96px; height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    TouchArea { clicked => { root.user-disconnect(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: model.user-disconnect-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    width: 96px; height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    TouchArea { clicked => { root.user-sign-out(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: model.user-sign-out-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            if model.status-message != "" : Text {
+                text: model.status-message;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+            }
+        }
+
+        // Processes table
+        if model.tab == 0 : Rectangle {
+            vertical-stretch: 1;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            clip: true;
+
+            VerticalLayout {
+                // Header
+                Rectangle {
+                    height: 28px;
+                    background: Theme.surface-raised;
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 8px;
+                        Rectangle {
+                            min-width: 160px; horizontal-stretch: 2; height: 28px;
+                            TouchArea { clicked => { root.sort-column-clicked(0); } }
+                            Text {
+                                text: model.col-name-label + (model.sort-column == 0 ? (model.sort-descending ? " ↓" : " ↑") : "");
+                                color: model.sort-column == 0 ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            width: 64px; height: 28px;
+                            TouchArea { clicked => { root.sort-column-clicked(1); } }
+                            Text {
+                                text: model.col-pid-label + (model.sort-column == 1 ? (model.sort-descending ? " ↓" : " ↑") : "");
+                                color: model.sort-column == 1 ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            width: 56px; height: 28px;
+                            TouchArea { clicked => { root.sort-column-clicked(2); } }
+                            Text {
+                                text: model.col-cpu-label + (model.sort-column == 2 ? (model.sort-descending ? " ↓" : " ↑") : "");
+                                color: model.sort-column == 2 ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                            }
+                        }
+                        Rectangle {
+                            width: 80px; height: 28px;
+                            TouchArea { clicked => { root.sort-column-clicked(3); } }
+                            Text {
+                                text: model.col-memory-label + (model.sort-column == 3 ? (model.sort-descending ? " ↓" : " ↑") : "");
+                                color: model.sort-column == 3 ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                            }
+                        }
+                        Rectangle {
+                            width: 120px; height: 28px;
+                            TouchArea { clicked => { root.sort-column-clicked(4); } }
+                            Text {
+                                text: model.col-io-label + (model.sort-column == 4 ? (model.sort-descending ? " ↓" : " ↑") : "");
+                                color: model.sort-column == 4 ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            width: 100px; height: 28px;
+                            TouchArea { clicked => { root.sort-column-clicked(5); } }
+                            Text {
+                                text: model.col-user-label + (model.sort-column == 5 ? (model.sort-descending ? " ↓" : " ↑") : "");
+                                color: model.sort-column == 5 ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                Flickable {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    viewport-height: proc-list.preferred-height;
+
+                    proc-list := VerticalLayout {
+                        spacing: 0;
+                        for row[i] in model.processes : Rectangle {
+                            height: 26px;
+                            background: row.is-group-header ? Theme.surface-raised
+                                : (row.pid == model.selected-pid ? Theme.surface-raised
+                                : transparent);
+
+                            TouchArea {
+                                clicked => {
+                                    if (!row.is-group-header) {
+                                        root.process-clicked(row.pid);
+                                    }
+                                }
+                                pointer-event(e) => {
+                                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right && !row.is-group-header) {
+                                        root.process-context(row.pid, self.mouse-x, self.mouse-y);
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+
+                                Text {
+                                    min-width: 160px; horizontal-stretch: 2;
+                                    text: row.is-group-header ? row.group-label : row.name;
+                                    color: row.is-group-header ? Theme.text-secondary : Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: row.is-group-header ? Theme.weight-semibold : Theme.weight-regular;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                if !row.is-group-header : Text {
+                                    width: 64px;
+                                    text: row.pid-text;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                                if !row.is-group-header : Text {
+                                    width: 56px;
+                                    text: row.cpu-text;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                }
+                                if !row.is-group-header : Text {
+                                    width: 80px;
+                                    text: row.memory-text;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                }
+                                if !row.is-group-header : Text {
+                                    width: 120px;
+                                    text: row.io-text;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                if !row.is-group-header : Text {
+                                    width: 100px;
+                                    text: row.user;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Services
+        if model.tab == 1 : Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: svc-list.preferred-height;
+            svc-list := VerticalLayout {
+                spacing: 0;
+                for row[i] in model.services : Rectangle {
+                    height: 28px;
+                    background: row.name == model.selected-service ? Theme.surface-raised : transparent;
+                    TouchArea { clicked => { root.service-clicked(row.name); } }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px; spacing: 8px;
+                        Text {
+                            horizontal-stretch: 2;
+                            text: row.display-name;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Text {
+                            width: 100px;
+                            text: row.status;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            width: 90px;
+                            text: row.start-type;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            width: 64px;
+                            text: row.pid-text;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Startup
+        if model.tab == 2 : Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: start-list.preferred-height;
+            start-list := VerticalLayout {
+                spacing: 0;
+                for row[i] in model.startups : Rectangle {
+                    height: 32px;
+                    background: row.id == model.selected-startup ? Theme.surface-raised : transparent;
+                    TouchArea {
+                        clicked => { root.startup-clicked(row.id); }
+                        double-clicked => { root.startup-open-location(row.id); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px; spacing: 8px;
+                        Text {
+                            width: 28px;
+                            text: row.enabled ? "●" : "○";
+                            color: row.enabled ? Theme.accent-brand : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            TouchArea {
+                                enabled: row.can-toggle;
+                                clicked => { root.startup-toggle(row.id, !row.enabled); }
+                            }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: row.name;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Text {
+                            width: 140px;
+                            text: row.location;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Users
+        if model.tab == 3 : Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: user-list.preferred-height;
+            user-list := VerticalLayout {
+                spacing: 0;
+                for row[i] in model.users : Rectangle {
+                    height: 28px;
+                    background: row.session-id == model.selected-session ? Theme.surface-raised : transparent;
+                    TouchArea { clicked => { root.user-clicked(row.session-id); } }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px; spacing: 8px;
+                        Text {
+                            horizontal-stretch: 1;
+                            text: row.user-name;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Text {
+                            width: 72px;
+                            text: row.session-text;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            width: 100px;
+                            text: row.state;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            width: 64px;
+                            text: row.process-count-text;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            width: 80px;
+                            text: row.memory-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Context menu overlay
+    if model.context-visible : Rectangle {
+        x: model.context-x;
+        y: model.context-y;
+        width: 180px;
+        height: 140px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 100;
+
+        TouchArea {
+            // absorb clicks
+        }
+
+        VerticalLayout {
+            padding: 4px;
+            spacing: 2px;
+            Rectangle {
+                height: 28px;
+                TouchArea { clicked => { root.end-task(); } }
+                Text {
+                    x: 8px; height: 100%;
+                    text: model.end-task-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                height: 28px;
+                TouchArea { clicked => { root.end-tree(); } }
+                Text {
+                    x: 8px; height: 100%;
+                    text: model.end-tree-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                height: 28px;
+                TouchArea { clicked => { root.open-location(); } }
+                Text {
+                    x: 8px; height: 100%;
+                    text: model.open-location-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                height: 28px;
+                TouchArea { clicked => { root.copy-pid(); } }
+                Text {
+                    x: 8px; height: 100%;
+                    text: model.copy-pid-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                height: 28px;
+                TouchArea { clicked => { root.copy-path(); } }
+                Text {
+                    x: 8px; height: 100%;
+                    text: model.copy-path-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

@@ -29,7 +29,10 @@ async fn catalog_widgets_can_be_created() {
     for type_id in [
         "weather",
         "moon",
+        "clock",
         "system",
+        "processes",
+        "calculator",
         "terminal",
         "rss",
         "search",
@@ -52,5 +55,5 @@ async fn catalog_widgets_can_be_created() {
             .unwrap_or_else(|e| panic!("failed to create {type_id}: {e}"));
     }
 
-    assert_eq!(app.widget_manager().list_instances().len(), 10);
+    assert_eq!(app.widget_manager().list_instances().len(), 13);
 }

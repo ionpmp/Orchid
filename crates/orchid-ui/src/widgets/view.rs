@@ -73,9 +73,7 @@ impl SlintPayload {
         match payload {
             WidgetPayload::Empty => Self::Empty,
             WidgetPayload::Text { lines } => Self::Text(lines.clone()),
-            WidgetPayload::KeyValueList { entries } => {
-                Self::KeyValueList(entries.clone())
-            }
+            WidgetPayload::KeyValueList { entries } => Self::KeyValueList(entries.clone()),
             WidgetPayload::Terminal(payload) => Self::Terminal {
                 cols: payload.cols as i32,
                 rows: payload.rows as i32,
@@ -97,7 +95,12 @@ impl SlintPayload {
             },
             WidgetPayload::Weather(p) => Self::Text(weather_to_text_lines(p)),
             WidgetPayload::Moon(p) => Self::Text(moon_to_text_lines(p)),
+            WidgetPayload::Clock(p) => Self::Text(clock_to_text_lines(p)),
             WidgetPayload::SystemIndicators(p) => Self::Text(system_to_text_lines(p)),
+            WidgetPayload::Processes(p) => Self::Text(processes_to_text_lines(p)),
+            WidgetPayload::Calculator(p) => {
+                Self::Text(vec![p.expression.clone(), p.display.clone()])
+            }
             WidgetPayload::RssFeed(p) => Self::Text(rss_to_text_lines(p)),
             WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
             WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),
@@ -139,7 +142,10 @@ fn weather_to_text_lines(w: &WeatherPayload) -> Vec<String> {
         }
     }
     for day in &w.forecast {
-        let mut s = format!("Day {}: {} / {}", day.day_index, day.high_text, day.low_text);
+        let mut s = format!(
+            "Day {}: {} / {}",
+            day.day_index, day.high_text, day.low_text
+        );
         if let Some(p) = day.precipitation_probability {
             s.push_str(" · ");
             s.push_str(&format!("{p}%"));
@@ -148,6 +154,14 @@ fn weather_to_text_lines(w: &WeatherPayload) -> Vec<String> {
     }
     if let Some(at) = w.fetched_at {
         lines.push(format!("Fetched at {at}"));
+    }
+    lines
+}
+
+fn clock_to_text_lines(p: &orchid_widgets::ClockPayload) -> Vec<String> {
+    let mut lines = vec![format!("{} {}", p.local_time, p.local_date)];
+    for city in p.cities.iter().filter(|c| !c.is_local) {
+        lines.push(format!("{}  {}", city.name, city.time_text));
     }
     lines
 }
@@ -185,6 +199,23 @@ fn moon_to_text_lines(m: &MoonPayload) -> Vec<String> {
         lines.push(format!("Libration: {lat:.1}°, {lon:.1}°"));
     }
     lines
+}
+
+fn processes_to_text_lines(p: &orchid_widgets::ProcessesPayload) -> Vec<String> {
+    if p.is_loading {
+        return vec!["Loading processes…".into()];
+    }
+    p.processes
+        .iter()
+        .filter(|r| !r.is_group_header)
+        .take(40)
+        .map(|r| {
+            format!(
+                "{} [{}] {:.1}% {}",
+                r.name, r.pid, r.cpu_percent, r.memory_text
+            )
+        })
+        .collect()
 }
 
 fn system_to_text_lines(s: &SystemPayload) -> Vec<String> {
@@ -344,8 +375,7 @@ fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
                 ),
             ];
             for line in &t.visible_lines {
-                let text: String =
-                    line.segments.iter().map(|s| s.text.as_str()).collect();
+                let text: String = line.segments.iter().map(|s| s.text.as_str()).collect();
                 lines.push(format!("{:>5}│ {}", line.line_number + 1, text));
             }
             lines
@@ -408,16 +438,12 @@ fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
                     .unwrap_or_default();
                 lines.push(format!(
                     "{} items, {} selected · {} ingested, {} deduped",
-                    tab.item_count,
-                    tab.selection_count,
-                    tracked,
-                    dedup
+                    tab.item_count, tab.selection_count, tracked, dedup
                 ));
             } else {
                 lines.push(format!(
                     "{} items, {} selected",
-                    tab.item_count,
-                    tab.selection_count
+                    tab.item_count, tab.selection_count
                 ));
             }
             for entry in tab.entries.iter().take(20) {
@@ -433,7 +459,10 @@ fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
     }
     if p.clipboard_count > 0 {
         let op = if p.clipboard_is_cut { "cut" } else { "copy" };
-        lines.push(format!("{} entries ({op}) ready to paste", p.clipboard_count));
+        lines.push(format!(
+            "{} entries ({op}) ready to paste",
+            p.clipboard_count
+        ));
     }
     lines
 }

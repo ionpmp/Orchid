@@ -54,6 +54,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Weather
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators
+- [x] Widget: Processes — Task Manager–style processes / services / startup / users (no Performance graphs)
+- [x] Widget: Calculator — standard + scientific modes, history, memory, DEG/RAD/GRAD, keyboard input
 - [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [x] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [x] Widget: Media player (audio/video)
