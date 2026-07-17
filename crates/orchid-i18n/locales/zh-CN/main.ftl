@@ -212,6 +212,8 @@ search-searching = æœç´¢ä¸­â€¦
 search-source-files = æ–‡ä»¶
 search-source-commands = å‘½ä»¤
 search-source-settings = è®¾ç½®
+search-source-calculator = 计算器
+search-calc-copy-hint = 复制结果
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -853,6 +855,22 @@ calc-settings-angle = 角度单位
 calc-settings-angle-deg = 度
 calc-settings-angle-rad = 弧度
 calc-settings-angle-grad = 百分度
+calc-angle-short-deg = 度
+calc-angle-short-rad = 弧度
+calc-angle-short-grad = 百分度
+calc-tip-mc = 清除内存
+calc-tip-mr = 读取内存
+calc-tip-mplus = 内存加
+calc-tip-mminus = 内存减
+calc-tip-ms = 存入内存
+calc-tip-ce = 清除输入
+calc-tip-c = 全部清除
+calc-tip-bs = 退格
+calc-tip-neg = 正负号
+calc-tip-eq = 计算
+calc-tip-2nd = 第二功能
+calc-tip-angle = 切换角度单位
+calc-tip-copy = 复制结果 (Ctrl+C)
 
 
 processes-tab-processes = Processes

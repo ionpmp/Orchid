@@ -212,6 +212,8 @@ search-searching = Buscandoâ€¦
 search-source-files = Archivos
 search-source-commands = Comandos
 search-source-settings = Ajustes
+search-source-calculator = Calculadora
+search-calc-copy-hint = Copiar resultado
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -853,6 +855,22 @@ calc-settings-angle = Unidad de ángulo
 calc-settings-angle-deg = Grados
 calc-settings-angle-rad = Radianes
 calc-settings-angle-grad = Gradianes
+calc-angle-short-deg = DEG
+calc-angle-short-rad = RAD
+calc-angle-short-grad = GRAD
+calc-tip-mc = Borrar memoria
+calc-tip-mr = Recuperar memoria
+calc-tip-mplus = Sumar a la memoria
+calc-tip-mminus = Restar de la memoria
+calc-tip-ms = Guardar en memoria
+calc-tip-ce = Borrar entrada
+calc-tip-c = Borrar todo
+calc-tip-bs = Retroceso
+calc-tip-neg = Cambiar signo
+calc-tip-eq = Calcular
+calc-tip-2nd = Segundas funciones
+calc-tip-angle = Cambiar unidad de ángulo
+calc-tip-copy = Copiar resultado (Ctrl+C)
 
 
 processes-tab-processes = Processes

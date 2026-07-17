@@ -212,6 +212,8 @@ search-searching = æ¤œç´¢ä¸­â€¦
 search-source-files = ãƒ•ã‚¡ã‚¤ãƒ«
 search-source-commands = ã‚³ãƒžãƒ³ãƒ‰
 search-source-settings = è¨­å®š
+search-source-calculator = 電卓
+search-calc-copy-hint = 結果をコピー
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -853,6 +855,22 @@ calc-settings-angle = 角度の単位
 calc-settings-angle-deg = 度
 calc-settings-angle-rad = ラジアン
 calc-settings-angle-grad = グラード
+calc-angle-short-deg = 度
+calc-angle-short-rad = ラジアン
+calc-angle-short-grad = グラード
+calc-tip-mc = メモリをクリア
+calc-tip-mr = メモリ呼び出し
+calc-tip-mplus = メモリに加算
+calc-tip-mminus = メモリから減算
+calc-tip-ms = メモリに格納
+calc-tip-ce = 入力をクリア
+calc-tip-c = すべてクリア
+calc-tip-bs = バックスペース
+calc-tip-neg = 符号反転
+calc-tip-eq = 計算
+calc-tip-2nd = 第2機能
+calc-tip-angle = 角度の単位を切り替え
+calc-tip-copy = 結果をコピー (Ctrl+C)
 
 
 processes-tab-processes = Processes

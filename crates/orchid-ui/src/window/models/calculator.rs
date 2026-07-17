@@ -35,9 +35,9 @@ fn base_model(locale: &LocaleManager, p: &CalculatorPayload) -> CalculatorModel 
         p.display.clone()
     };
     let angle_label = match p.angle {
-        1 => "RAD",
-        2 => "GRAD",
-        _ => "DEG",
+        1 => locale.tr("calc-angle-short-rad"),
+        2 => locale.tr("calc-angle-short-grad"),
+        _ => locale.tr("calc-angle-short-deg"),
     };
     let history: Vec<CalcHistoryEntry> = p
         .history
@@ -63,5 +63,17 @@ fn base_model(locale: &LocaleManager, p: &CalculatorPayload) -> CalculatorModel 
         history_title: locale.tr("calc-history-title").into(),
         history_clear_label: locale.tr("calc-history-clear").into(),
         history_empty_label: locale.tr("calc-history-empty").into(),
+        tip_mc: locale.tr("calc-tip-mc").into(),
+        tip_mr: locale.tr("calc-tip-mr").into(),
+        tip_mplus: locale.tr("calc-tip-mplus").into(),
+        tip_mminus: locale.tr("calc-tip-mminus").into(),
+        tip_ms: locale.tr("calc-tip-ms").into(),
+        tip_ce: locale.tr("calc-tip-ce").into(),
+        tip_c: locale.tr("calc-tip-c").into(),
+        tip_bs: locale.tr("calc-tip-bs").into(),
+        tip_neg: locale.tr("calc-tip-neg").into(),
+        tip_eq: locale.tr("calc-tip-eq").into(),
+        tip_2nd: locale.tr("calc-tip-2nd").into(),
+        tip_angle: locale.tr("calc-tip-angle").into(),
     }
 }

@@ -37,6 +37,7 @@ pub(crate) fn build_search_model(
                 "files" => locale.tr("search-source-files"),
                 "commands" => locale.tr("search-source-commands"),
                 "settings" => locale.tr("search-source-settings"),
+                "calculator" => locale.tr("search-source-calculator"),
                 _ => c.source_name.clone(),
             };
             let subtitle: SharedString = match &c.subtitle {

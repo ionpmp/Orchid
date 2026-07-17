@@ -47,6 +47,22 @@ calc-settings-angle = Angle unit
 calc-settings-angle-deg = Degrees
 calc-settings-angle-rad = Radians
 calc-settings-angle-grad = Gradians
+calc-angle-short-deg = DEG
+calc-angle-short-rad = RAD
+calc-angle-short-grad = GRAD
+calc-tip-mc = Clear memory
+calc-tip-mr = Memory recall
+calc-tip-mplus = Add to memory
+calc-tip-mminus = Subtract from memory
+calc-tip-ms = Store in memory
+calc-tip-ce = Clear entry
+calc-tip-c = Clear all
+calc-tip-bs = Backspace
+calc-tip-neg = Change sign
+calc-tip-eq = Calculate
+calc-tip-2nd = Second functions
+calc-tip-angle = Cycle angle unit
+calc-tip-copy = Copy result (Ctrl+C)
 
 
 # ---- Processes widget ----
@@ -284,6 +300,8 @@ search-searching = Searching...
 search-source-files = Files
 search-source-commands = Commands
 search-source-settings = Settings
+search-source-calculator = Calculator
+search-calc-copy-hint = Copy result
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
