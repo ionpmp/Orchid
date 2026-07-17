@@ -80,6 +80,9 @@ impl ClockHandle {
         refresh.start(move || {
             let handle = Arc::clone(&handle);
             async move {
+                if handle.ui.read().picker_open {
+                    return;
+                }
                 handle.publish();
             }
         });
@@ -210,7 +213,13 @@ impl ClockHandle {
 /// Open / close the city picker overlay.
 pub fn set_picker_open(instance_id: Uuid, open: bool) {
     if let Some(h) = CLOCK_LIVE.get(&instance_id) {
+        if open {
+            h.stop_refresh();
+        }
         h.set_picker_open(open);
+        if !open {
+            Arc::clone(&h).schedule_refresh();
+        }
     }
 }
 
