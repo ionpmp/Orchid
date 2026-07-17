@@ -49,6 +49,7 @@ struct UiState {
     search_results: Vec<GeocodingHit>,
     search_busy: bool,
     search_generation: u64,
+    pending_notice: Option<&'static str>,
 }
 
 struct ClockHandle {
@@ -115,6 +116,26 @@ impl ClockHandle {
             if cfg_index < cfg.cities.len() {
                 cfg.cities.remove(cfg_index);
             }
+        }
+        self.publish();
+    }
+
+    fn move_city(&self, index: usize, delta: i32) {
+        if index == 0 || delta == 0 {
+            return;
+        }
+        let cfg_index = index - 1;
+        {
+            let mut cfg = self.config.write();
+            let len = cfg.cities.len();
+            if cfg_index >= len {
+                return;
+            }
+            let dest = cfg_index as i32 + delta;
+            if dest < 0 || dest as usize >= len {
+                return;
+            }
+            cfg.cities.swap(cfg_index, dest as usize);
         }
         self.publish();
     }
@@ -199,6 +220,7 @@ impl ClockHandle {
                 Err(e) => {
                     warn!(%instance_id, error = %e, "clock geocoding failed");
                     slot.search_results.clear();
+                    slot.pending_notice = Some("clock-error-geocoding");
                 }
             }
             drop(slot);
@@ -228,6 +250,16 @@ pub fn remove_city(instance_id: Uuid, index: usize) {
     if let Some(h) = CLOCK_LIVE.get(&instance_id) {
         h.remove_city(index);
     }
+}
+
+pub fn move_city(instance_id: Uuid, index: usize, delta: i32) {
+    if let Some(h) = CLOCK_LIVE.get(&instance_id) {
+        h.move_city(index, delta);
+    }
+}
+
+pub fn take_notice(instance_id: Uuid) -> Option<&'static str> {
+    CLOCK_LIVE.get(&instance_id).and_then(|h| h.ui.write().pending_notice.take())
 }
 
 /// Update the city-search query and kick off geocoding.
@@ -408,7 +440,8 @@ fn render_payload(cfg: &ClockConfig, ui: &UiState, locale: &LocaleConfig) -> Clo
         String::new()
     };
     let local_timezone = local_tz_name();
-    let local_offset = format_offset(offset_secs_local(&local_now));
+    let local_offset_secs = offset_secs_local(&local_now);
+    let local_offset = format_utc_offset(local_offset_secs);
 
     let mut cities = Vec::with_capacity(cfg.cities.len() + 1);
     cities.push(ClockCityView {
@@ -441,7 +474,7 @@ fn render_payload(cfg: &ClockConfig, ui: &UiState, locale: &LocaleConfig) -> Clo
                         String::new()
                     },
                     offset_text: if cfg.show_offsets {
-                        format_offset(offset_secs_zoned(&zoned))
+                        format_relative_offset(local_offset_secs, offset_secs_zoned(&zoned))
                     } else {
                         String::new()
                     },
@@ -520,7 +553,7 @@ fn time_format(locale: &LocaleConfig, show_seconds: bool) -> String {
     format!("{base}:%S")
 }
 
-fn format_offset(secs: i32) -> String {
+fn format_utc_offset(secs: i32) -> String {
     let hours = secs / 3600;
     let mins = (secs.abs() % 3600) / 60;
     if mins == 0 {
@@ -528,6 +561,15 @@ fn format_offset(secs: i32) -> String {
     } else {
         format!("UTC{hours:+}:{mins:02}")
     }
+}
+
+fn format_relative_offset(local_secs: i32, zone_secs: i32) -> String {
+    let diff = zone_secs - local_secs;
+    if diff == 0 { return "\u{00b1}0".into(); }
+    let hours = diff / 3600;
+    let mins = (diff.abs() % 3600) / 60;
+    if mins == 0 { return format!("{hours:+}h"); }
+    format!("{hours:+}:{mins:02}")
 }
 
 fn offset_secs_local(dt: &chrono::DateTime<Local>) -> i32 {
@@ -539,9 +581,7 @@ fn offset_secs_zoned(dt: &chrono::DateTime<Tz>) -> i32 {
 }
 
 fn local_tz_name() -> String {
-    // Best-effort: chrono-tz cannot resolve the host zone without iana-time-zone.
-    // UI shows a localized "Local" label for the first row regardless.
-    String::new()
+    iana_time_zone::get_timezone().unwrap_or_default()
 }
 
 /// Descriptor ready to register on a widget registry.
@@ -603,9 +643,16 @@ mod tests {
     }
 
     #[test]
-    fn format_offset_hours_and_minutes() {
-        assert_eq!(format_offset(7 * 3600), "UTC+7");
-        assert_eq!(format_offset(-5 * 3600), "UTC-5");
-        assert_eq!(format_offset(5 * 3600 + 30 * 60), "UTC+5:30");
+    fn format_relative_offset_same_zone() {
+        assert_eq!(format_relative_offset(7 * 3600, 7 * 3600), "\u{00b1}0");
+        assert_eq!(format_relative_offset(0, 5 * 3600), "+5h");
+        assert_eq!(format_relative_offset(0, -2 * 3600 - 30 * 60), "-2:30");
+    }
+
+    #[test]
+    fn format_utc_offset_hours_and_minutes() {
+        assert_eq!(format_utc_offset(7 * 3600), "UTC+7");
+        assert_eq!(format_utc_offset(-5 * 3600), "UTC-5");
+        assert_eq!(format_utc_offset(5 * 3600 + 30 * 60), "UTC+5:30");
     }
 }

@@ -94,6 +94,7 @@ bincode = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 chrono-tz = "0.10"
+iana-time-zone = "0.1"
 
 # Runtime utilities
 async-trait = "0.1"

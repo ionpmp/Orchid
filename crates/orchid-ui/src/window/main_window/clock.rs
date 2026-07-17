@@ -1,4 +1,4 @@
-//! Clock-widget handlers for [`MainWindowController`].
+﻿//! Clock-widget handlers for [`MainWindowController`].
 
 use std::sync::Arc;
 

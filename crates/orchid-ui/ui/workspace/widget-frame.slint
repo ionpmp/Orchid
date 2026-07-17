@@ -75,6 +75,7 @@ export component WidgetFrame inherits Rectangle {
     callback clock-open-cities(string);
     callback clock-close-cities(string);
     callback clock-remove-city(string, int);
+    callback clock-move-city(string, int, int);
     callback clock-search-cities(string, string);
     callback clock-add-city(string, string, string);
 
@@ -515,6 +516,7 @@ export component WidgetFrame inherits Rectangle {
                     open-cities => { root.clock-open-cities(root.model.instance-id); }
                     close-cities => { root.clock-close-cities(root.model.instance-id); }
                     remove-city(idx) => { root.clock-remove-city(root.model.instance-id, idx); }
+                    move-city(idx, delta) => { root.clock-move-city(root.model.instance-id, idx, delta); }
                     search-cities(q) => { root.clock-search-cities(root.model.instance-id, q); }
                     add-city(name, tz) => {
                         root.clock-add-city(root.model.instance-id, name, tz);

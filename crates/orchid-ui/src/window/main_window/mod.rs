@@ -1235,6 +1235,7 @@ impl MainWindowController {
         }
         for id in ids {
             self.drain_weather_notice(*id);
+            self.drain_clock_notice(*id);
         }
         let unique: HashSet<Uuid> = ids.iter().copied().collect();
         let w = self
