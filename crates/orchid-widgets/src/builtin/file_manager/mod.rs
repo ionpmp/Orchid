@@ -9,6 +9,7 @@ pub mod state;
 pub mod view_mode;
 pub mod virtual_folders;
 
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -211,6 +212,8 @@ struct FileManagerInner {
     transfer: RwLock<TransferState>,
     /// Last failed transfer message (brief status-bar toast).
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
+    /// Tab ids currently loading a directory listing (navigation in flight).
+    loading_tabs: RwLock<HashSet<Uuid>>,
     /// Last passphrase failure (brief status-bar toast while dialog is open).
     passphrase_error: RwLock<Option<(String, std::time::Instant)>>,
     /// Last managed ingest failure (file name for status-bar toast).
@@ -230,6 +233,13 @@ struct TransferState {
     processed_bytes: u64,
     total_bytes: u64,
     last_publish: Option<std::time::Instant>,
+}
+
+/// Options for [`FileManagerInner::refresh_all_tabs_with_opts`].
+#[derive(Debug, Clone, Copy)]
+struct RefreshOpts {
+    publish: bool,
+    indicate_loading: bool,
 }
 
 impl FileManagerWidget {
@@ -264,6 +274,7 @@ impl FileManagerWidget {
                 tab_errors: RwLock::new(std::collections::HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
+                loading_tabs: RwLock::new(HashSet::new()),
                 passphrase_error: RwLock::new(None),
                 ingest_error: RwLock::new(None),
                 activity_notice_key: RwLock::new(None),
@@ -297,7 +308,12 @@ impl FileManagerWidget {
             let mut state = self.inner.state.lock();
             state.active_tab_mut().navigate_to(path);
         }
-        self.refresh().await
+        self.inner
+            .refresh_all_tabs_with_opts(RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            })
+            .await
     }
 
     /// Back one step in history.
@@ -307,7 +323,12 @@ impl FileManagerWidget {
             state.active_tab_mut().back()
         };
         if changed {
-            self.refresh().await;
+            self.inner
+                .refresh_all_tabs_with_opts(RefreshOpts {
+                    publish: true,
+                    indicate_loading: true,
+                })
+                .await;
         }
     }
 
@@ -318,7 +339,12 @@ impl FileManagerWidget {
             state.active_tab_mut().forward()
         };
         if changed {
-            self.refresh().await;
+            self.inner
+                .refresh_all_tabs_with_opts(RefreshOpts {
+                    publish: true,
+                    indicate_loading: true,
+                })
+                .await;
         }
     }
 
@@ -776,10 +802,22 @@ impl FileManagerInner {
     }
 
     async fn refresh_all_tabs(self: &Arc<Self>) {
-        self.refresh_all_tabs_with_publish(true).await;
+        self.refresh_all_tabs_with_opts(RefreshOpts {
+            publish: true,
+            indicate_loading: false,
+        })
+        .await;
     }
 
     async fn refresh_all_tabs_with_publish(self: &Arc<Self>, publish: bool) {
+        self.refresh_all_tabs_with_opts(RefreshOpts {
+            publish,
+            indicate_loading: false,
+        })
+        .await;
+    }
+
+    async fn refresh_all_tabs_with_opts(self: &Arc<Self>, opts: RefreshOpts) {
         self.refresh_managed_roots().await;
         self.refresh_encrypted_paths().await;
         let show_hidden = self.config.read().show_hidden;
@@ -789,11 +827,44 @@ impl FileManagerInner {
             let right = state.right_pane.as_ref().map(|p| p.active_tab().clone());
             (left, right)
         };
+
+        let mut loading_ids = Vec::new();
+        loading_ids.push(left.id);
+        if let Some(ref rt) = right {
+            loading_ids.push(rt.id);
+        }
+
+        if opts.indicate_loading {
+            {
+                let mut loading = self.loading_tabs.write();
+                for id in &loading_ids {
+                    loading.insert(*id);
+                }
+            }
+            {
+                let mut entries = self.entries_by_tab.write();
+                for id in &loading_ids {
+                    entries.remove(id);
+                }
+            }
+            self.publish_refresh();
+        }
+
         self.refresh_tab(&left, show_hidden).await;
         if let Some(rt) = right {
             self.refresh_tab(&rt, show_hidden).await;
         }
-        if publish {
+
+        if opts.indicate_loading {
+            {
+                let mut loading = self.loading_tabs.write();
+                for id in &loading_ids {
+                    loading.remove(&id);
+                }
+            }
+        }
+
+        if opts.publish {
             self.publish_refresh();
         }
     }
@@ -1717,7 +1788,7 @@ fn build_tab_payload(
         managed_files_tracked,
         managed_dedup_bytes,
         quick_filter: tab.quick_filter.clone(),
-        is_loading: false,
+        is_loading: inner.loading_tabs.read().contains(&tab.id),
         error,
         sort_by: sort_by_to_u8(tab.sort_by),
         sort_descending: tab.sort_descending,
@@ -2083,7 +2154,12 @@ async fn navigate_inner(
             state.left_pane.active_tab_mut().navigate_to(path);
         }
     }
-    inner.refresh_all_tabs_with_publish(publish).await;
+    inner
+        .refresh_all_tabs_with_opts(RefreshOpts {
+            publish,
+            indicate_loading: true,
+        })
+        .await;
     Ok(())
 }
 
@@ -2103,7 +2179,12 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         }
     };
     if changed {
-        inner.refresh_all_tabs().await;
+        inner
+            .refresh_all_tabs_with_opts(RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            })
+            .await;
     }
     Ok(())
 }
@@ -2124,7 +2205,12 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         }
     };
     if changed {
-        inner.refresh_all_tabs().await;
+        inner
+            .refresh_all_tabs_with_opts(RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            })
+            .await;
     }
     Ok(())
 }
