@@ -44,7 +44,7 @@ pub use widget::payloads::{
     ProcessesPayload, ProcessesTab, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload,
     SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemIndicatorKind,
     SystemPayload, TabPayload, UniversalSearchPayload, UserRowView, ViewerPayload, WeatherCityEntry,
-    WeatherForecastDay, WeatherHourlyEntry, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
+    WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 

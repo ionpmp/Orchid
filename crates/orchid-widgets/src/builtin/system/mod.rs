@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::error::{Result as WidgetResult, WidgetError};
@@ -38,6 +38,8 @@ struct SystemHandle {
     instance_id: Uuid,
     config: Arc<RwLock<SystemConfig>>,
     snapshot: Arc<RwLock<Option<SystemSnapshot>>>,
+    provider: Arc<SystemProvider>,
+    refresh: Mutex<PeriodicRefresh>,
     bus: Arc<orchid_core::EventBus>,
     locale: Arc<orchid_i18n::LocaleManager>,
 }
@@ -50,6 +52,41 @@ impl SystemHandle {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    fn refresh_interval(&self) -> Duration {
+        Duration::from_secs(self.config.read().refresh_interval_seconds.max(1) as u64)
+    }
+
+    /// Start (or restart) the periodic sample loop with the current interval.
+    fn schedule_refresh(self: &Arc<Self>) {
+        let interval = self.refresh_interval();
+        let mut refresh = self.refresh.lock();
+        refresh.set_interval(interval);
+        let provider = self.provider.clone();
+        let snap_slot = self.snapshot.clone();
+        let handle = Arc::clone(self);
+        refresh.start(move || {
+            let provider = provider.clone();
+            let snap_slot = snap_slot.clone();
+            let handle = Arc::clone(&handle);
+            async move {
+                let provider2 = provider.clone();
+                let snap = match tokio::task::spawn_blocking(move || provider2.refresh()).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "system periodic refresh join failed");
+                        return;
+                    }
+                };
+                *snap_slot.write() = Some(snap);
+                handle.publish();
+            }
+        });
+    }
+
+    fn stop_refresh(&self) {
+        self.refresh.lock().stop();
     }
 }
 
@@ -66,19 +103,23 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut SystemConfig)) 
     let Some(h) = SYSTEM_LIVE.get(&instance_id) else {
         return;
     };
+    let before_interval = h.config.read().refresh_interval_seconds;
     {
         let mut cfg = h.config.write();
         mutate(&mut cfg);
+        cfg.normalize();
     }
+    let after_interval = h.config.read().refresh_interval_seconds;
     h.publish();
+    if before_interval != after_interval && h.refresh.lock().is_running() {
+        h.schedule_refresh();
+    }
 }
 
 /// System widget.
 pub struct SystemWidget {
     instance_id: Uuid,
     handle: Arc<SystemHandle>,
-    provider: Arc<SystemProvider>,
-    refresh: PeriodicRefresh,
 }
 
 impl std::fmt::Debug for SystemWidget {
@@ -102,6 +143,8 @@ impl SystemWidget {
             instance_id,
             config: Arc::new(RwLock::new(cfg)),
             snapshot: Arc::new(RwLock::new(None)),
+            provider: Arc::new(SystemProvider::new()),
+            refresh: Mutex::new(PeriodicRefresh::new(interval)),
             bus,
             locale,
         });
@@ -109,8 +152,6 @@ impl SystemWidget {
         Self {
             instance_id,
             handle,
-            provider: Arc::new(SystemProvider::new()),
-            refresh: PeriodicRefresh::new(interval),
         }
     }
 }
@@ -124,7 +165,7 @@ impl Widget for SystemWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let provider = self.provider.clone();
+        let provider = self.handle.provider.clone();
         let snap = tokio::task::spawn_blocking(move || provider.refresh())
             .await
             .map_err(|e| {
@@ -134,38 +175,19 @@ impl Widget for SystemWidget {
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let provider = self.provider.clone();
-        let snap_slot = self.handle.snapshot.clone();
-        let handle = Arc::clone(&self.handle);
-        self.refresh.start(move || {
-            let provider = provider.clone();
-            let snap_slot = snap_slot.clone();
-            let handle = Arc::clone(&handle);
-            async move {
-                let provider2 = provider.clone();
-                let snap = match tokio::task::spawn_blocking(move || provider2.refresh()).await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "system periodic refresh join failed");
-                        return;
-                    }
-                };
-                *snap_slot.write() = Some(snap);
-                handle.publish();
-            }
-        });
+        self.handle.schedule_refresh();
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
+        self.handle.stop_refresh();
         Ok(())
     }
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
+        self.handle.stop_refresh();
         Ok(())
     }
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        self.refresh.stop();
+        self.handle.stop_refresh();
         SYSTEM_LIVE.remove(&self.instance_id);
         Ok(())
     }
@@ -183,6 +205,7 @@ impl Widget for SystemWidget {
                 network_up: None,
                 network_down: None,
                 percent: None,
+                segments: Vec::new(),
                 icon: "system-cpu",
                 status: IndicatorStatus::Normal,
             }],
@@ -202,8 +225,15 @@ impl Widget for SystemWidget {
         state_codec::save_state(&*self.handle.config.read())
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let cfg: SystemConfig = state_codec::restore_state(bytes)?;
+        let mut cfg: SystemConfig = state_codec::restore_state(bytes)?;
+        cfg.normalize();
+        let was_running = self.handle.refresh.lock().is_running();
+        let before = self.handle.config.read().refresh_interval_seconds;
         *self.handle.config.write() = cfg;
+        let after = self.handle.config.read().refresh_interval_seconds;
+        if was_running && before != after {
+            self.handle.schedule_refresh();
+        }
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -247,6 +277,11 @@ fn build_indicators(
     let mut out = Vec::new();
 
     if cfg.show_cpu {
+        let segments = if cfg.show_cpu_cores {
+            snap.cpu_per_core.clone()
+        } else {
+            Vec::new()
+        };
         out.push(SystemIndicator {
             kind: SystemIndicatorKind::Cpu,
             name_suffix: None,
@@ -254,6 +289,7 @@ fn build_indicators(
             network_up: None,
             network_down: None,
             percent: Some(snap.cpu_total_percent),
+            segments,
             icon: "system-cpu",
             status: bucket_pct(snap.cpu_total_percent, 75.0, 90.0),
         });
@@ -261,17 +297,29 @@ fn build_indicators(
 
     if cfg.show_memory && snap.memory_total_bytes > 0 {
         let pct = (snap.memory_used_bytes as f32 / snap.memory_total_bytes as f32) * 100.0;
+        let mut value_text = format!(
+            "{} / {}",
+            locale.format_byte_size(snap.memory_used_bytes),
+            locale.format_byte_size(snap.memory_total_bytes)
+        );
+        if snap.swap_total_bytes > 0 {
+            let swap = locale.tr_args(
+                "system-swap-suffix",
+                &orchid_i18n::FluentArgs::new()
+                    .with("used", locale.format_byte_size(snap.swap_used_bytes))
+                    .with("total", locale.format_byte_size(snap.swap_total_bytes)),
+            );
+            value_text.push_str(" · ");
+            value_text.push_str(&swap);
+        }
         out.push(SystemIndicator {
             kind: SystemIndicatorKind::Memory,
             name_suffix: None,
-            value_text: format!(
-                "{} / {}",
-                locale.format_byte_size(snap.memory_used_bytes),
-                locale.format_byte_size(snap.memory_total_bytes)
-            ),
+            value_text,
             network_up: None,
             network_down: None,
             percent: Some(pct),
+            segments: Vec::new(),
             icon: "system-memory",
             status: bucket_pct(pct, 80.0, 95.0),
         });
@@ -280,10 +328,12 @@ fn build_indicators(
     if cfg.show_disks {
         let selector = &cfg.disks;
         for d in &snap.disks {
-            if !selector.is_empty() && !selector.iter().any(|m| m == &d.mount) {
-                continue;
-            }
-            if d.total_bytes == 0 {
+            let include = if selector.is_empty() {
+                provider::is_default_disk(d, cfg.show_removable_disks)
+            } else {
+                selector.iter().any(|m| m == &d.mount)
+            };
+            if !include {
                 continue;
             }
             let pct = (d.used_bytes as f32 / d.total_bytes as f32) * 100.0;
@@ -298,6 +348,7 @@ fn build_indicators(
                 network_up: None,
                 network_down: None,
                 percent: Some(pct),
+                segments: Vec::new(),
                 icon: "system-disk",
                 status: bucket_pct(pct, 85.0, 95.0),
             });
@@ -306,20 +357,49 @@ fn build_indicators(
 
     if cfg.show_network {
         let selector = &cfg.network_interfaces;
-        for n in &snap.networks {
-            if !selector.is_empty() && !selector.iter().any(|name| name == &n.interface) {
-                continue;
+        let mut nets: Vec<&NetworkRate> = snap
+            .networks
+            .iter()
+            .filter(|n| {
+                if !selector.is_empty() {
+                    return selector.iter().any(|name| name == &n.interface);
+                }
+                !provider::is_noisy_nic(&n.interface)
+                    && (n.total_uploaded_bytes > 0 || n.total_downloaded_bytes > 0)
+            })
+            .collect();
+        nets.sort_by(|a, b| a.interface.cmp(&b.interface));
+
+        if cfg.aggregate_network {
+            if !nets.is_empty() {
+                let upload: f64 = nets.iter().map(|n| n.upload_bps).sum();
+                let download: f64 = nets.iter().map(|n| n.download_bps).sum();
+                out.push(SystemIndicator {
+                    kind: SystemIndicatorKind::Network,
+                    name_suffix: None,
+                    value_text: String::new(),
+                    network_up: Some(locale.format_byte_size(upload.max(0.0) as u64)),
+                    network_down: Some(locale.format_byte_size(download.max(0.0) as u64)),
+                    percent: None,
+                    segments: Vec::new(),
+                    icon: "system-network",
+                    status: IndicatorStatus::Normal,
+                });
             }
-            out.push(SystemIndicator {
-                kind: SystemIndicatorKind::Network,
-                name_suffix: Some(n.interface.clone()),
-                value_text: String::new(),
-                network_up: Some(locale.format_byte_size(n.upload_bps as u64)),
-                network_down: Some(locale.format_byte_size(n.download_bps as u64)),
-                percent: None,
-                icon: "system-network",
-                status: IndicatorStatus::Normal,
-            });
+        } else {
+            for n in nets {
+                out.push(SystemIndicator {
+                    kind: SystemIndicatorKind::Network,
+                    name_suffix: Some(n.interface.clone()),
+                    value_text: String::new(),
+                    network_up: Some(locale.format_byte_size(n.upload_bps.max(0.0) as u64)),
+                    network_down: Some(locale.format_byte_size(n.download_bps.max(0.0) as u64)),
+                    percent: None,
+                    segments: Vec::new(),
+                    icon: "system-network",
+                    status: IndicatorStatus::Normal,
+                });
+            }
         }
     }
 
@@ -349,6 +429,7 @@ fn build_indicators(
                 network_up: None,
                 network_down: None,
                 percent: Some(pct),
+                segments: Vec::new(),
                 icon: if b.charging {
                     "system-battery-charging"
                 } else {
@@ -367,6 +448,7 @@ fn build_indicators(
             network_up: None,
             network_down: None,
             percent: None,
+            segments: Vec::new(),
             icon: "system-uptime",
             status: IndicatorStatus::Normal,
         });
@@ -380,7 +462,12 @@ fn build_indicators(
 pub fn descriptor() -> WidgetDescriptor {
     let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
-            Some(bytes) => state_codec::restore_state::<SystemConfig>(bytes).unwrap_or_default(),
+            Some(bytes) => {
+                let mut cfg =
+                    state_codec::restore_state::<SystemConfig>(bytes).unwrap_or_default();
+                cfg.normalize();
+                cfg
+            }
             None => SystemConfig::default(),
         };
         Ok(Box::new(SystemWidget::new(
@@ -413,7 +500,7 @@ mod tests {
     fn snap(cpu: f32) -> SystemSnapshot {
         SystemSnapshot {
             cpu_total_percent: cpu,
-            cpu_per_core: Vec::new(),
+            cpu_per_core: vec![10.0, 20.0, 30.0, 40.0],
             cpu_temp_c: None,
             memory_total_bytes: 16 * 1024 * 1024 * 1024,
             memory_used_bytes: 8 * 1024 * 1024 * 1024,
@@ -441,6 +528,7 @@ mod tests {
             .find(|i| i.kind == SystemIndicatorKind::Cpu)
             .unwrap();
         assert_eq!(cpu.status, IndicatorStatus::Normal);
+        assert_eq!(cpu.segments.len(), 4);
 
         let indicators = build_indicators(&cfg, &snap(80.0), &locale);
         assert_eq!(
@@ -461,5 +549,108 @@ mod tests {
                 .status,
             IndicatorStatus::Critical
         );
+    }
+
+    #[test]
+    fn cpu_cores_respect_toggle() {
+        let mut cfg = SystemConfig::default();
+        cfg.show_cpu_cores = false;
+        cfg.show_memory = false;
+        cfg.show_disks = false;
+        cfg.show_network = false;
+        cfg.show_battery = false;
+        cfg.show_uptime = false;
+        let locale = test_locale();
+        let indicators = build_indicators(&cfg, &snap(50.0), &locale);
+        assert!(indicators[0].segments.is_empty());
+    }
+
+    #[test]
+    fn network_aggregates_by_default() {
+        let mut cfg = SystemConfig::default();
+        cfg.show_cpu = false;
+        cfg.show_memory = false;
+        cfg.show_disks = false;
+        cfg.show_battery = false;
+        cfg.show_uptime = false;
+        let mut s = snap(0.0);
+        s.networks = vec![
+            NetworkRate {
+                interface: "Ethernet".into(),
+                upload_bps: 1000.0,
+                download_bps: 2000.0,
+                total_uploaded_bytes: 10,
+                total_downloaded_bytes: 20,
+            },
+            NetworkRate {
+                interface: "Wi-Fi".into(),
+                upload_bps: 500.0,
+                download_bps: 1500.0,
+                total_uploaded_bytes: 5,
+                total_downloaded_bytes: 15,
+            },
+            NetworkRate {
+                interface: "Loopback Pseudo-Interface 1".into(),
+                upload_bps: 1.0,
+                download_bps: 1.0,
+                total_uploaded_bytes: 1,
+                total_downloaded_bytes: 1,
+            },
+        ];
+        let locale = test_locale();
+        let indicators = build_indicators(&cfg, &s, &locale);
+        assert_eq!(indicators.len(), 1);
+        assert!(indicators[0].name_suffix.is_none());
+    }
+
+    #[test]
+    fn memory_includes_swap_suffix_when_present() {
+        let cfg = SystemConfig {
+            show_cpu: false,
+            show_disks: false,
+            show_network: false,
+            show_battery: false,
+            show_uptime: false,
+            ..SystemConfig::default()
+        };
+        let mut s = snap(0.0);
+        s.swap_total_bytes = 4 * 1024 * 1024 * 1024;
+        s.swap_used_bytes = 1024 * 1024 * 1024;
+        let locale = test_locale();
+        let indicators = build_indicators(&cfg, &s, &locale);
+        let mem = indicators
+            .iter()
+            .find(|i| i.kind == SystemIndicatorKind::Memory)
+            .unwrap();
+        assert!(
+            mem.value_text.to_ascii_lowercase().contains("swap"),
+            "expected swap in {:?}",
+            mem.value_text
+        );
+    }
+
+    #[test]
+    fn battery_indicator_when_present() {
+        let cfg = SystemConfig {
+            show_cpu: false,
+            show_memory: false,
+            show_disks: false,
+            show_network: false,
+            show_uptime: false,
+            ..SystemConfig::default()
+        };
+        let mut s = snap(0.0);
+        s.battery = Some(BatteryStatus {
+            percent: 42,
+            charging: true,
+            time_to_empty_seconds: None,
+            time_to_full_seconds: Some(3600),
+        });
+        let locale = test_locale();
+        let indicators = build_indicators(&cfg, &s, &locale);
+        assert_eq!(indicators.len(), 1);
+        assert_eq!(indicators[0].kind, SystemIndicatorKind::Battery);
+        assert_eq!(indicators[0].icon, "system-battery-charging");
+        assert!(indicators[0].value_text.contains("42%"));
     }
 }

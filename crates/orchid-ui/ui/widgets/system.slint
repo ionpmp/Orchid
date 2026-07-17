@@ -4,77 +4,131 @@ import { SystemModel } from "../workspace/defs.slint";
 export component SystemView inherits Rectangle {
     in property <SystemModel> model;
 
+    // ASCII/BMP glyphs — color emoji missing in Slint's default Windows font.
+    pure function system-icon-glyph(name: string) -> string {
+        return
+            name == "system-cpu" ? "#" :
+            name == "system-memory" ? "=" :
+            name == "system-disk" ? "%" :
+            name == "system-network" ? "~" :
+            name == "system-battery" ? "|" :
+            name == "system-battery-charging" ? "+" :
+            name == "system-uptime" ? "*" :
+            ".";
+    }
+
+    pure function status-bar-color(status: int) -> color {
+        return
+            status == 2 ? #ef4444 :
+            status == 1 ? #eab308 :
+            Theme.accent-brand;
+    }
+
     background: transparent;
 
-    VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+    Flickable {
+        viewport-width: parent.width;
+        width: 100%;
+        height: 100%;
 
-        for ind[i] in model.indicators : Rectangle {
-            VerticalLayout {
-                spacing: 4px;
-                width: 100%;
+        VerticalLayout {
+            padding: 12px;
+            spacing: 10px;
+            width: parent.width;
 
-                HorizontalLayout {
-                    alignment: space-between;
-                    spacing: 8px;
+            for ind[i] in model.indicators : Rectangle {
+                VerticalLayout {
+                    spacing: 4px;
+                    width: 100%;
 
-                    Text {
-                        text: ind.label;
+                    HorizontalLayout {
+                        spacing: 8px;
+
+                        if ind.icon != "" : Text {
+                            text: system-icon-glyph(ind.icon);
+                            color: status-bar-color(ind.status);
+                            font-size: Theme.font-size-sm;
+                            font-weight: Theme.weight-semibold;
+                            vertical-alignment: center;
+                            min-width: 14px;
+                        }
+
+                        Text {
+                            text: ind.label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        Text {
+                            text: ind.value-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: Theme.weight-medium;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if ind.percent >= 0 : Rectangle {
+                        height: 4px;
+                        background: Theme.surface-base;
+                        border-radius: 2px;
+                        horizontal-stretch: 1;
+
+                        Rectangle {
+                            x: 0;
+                            y: 0;
+                            width: parent.width * ind.percent;
+                            height: parent.height;
+                            border-radius: 2px;
+                            background: status-bar-color(ind.status);
+                        }
+                    }
+
+                    if ind.segments.length > 0 : HorizontalLayout {
+                        spacing: 2px;
+                        height: 10px;
+
+                        for seg[si] in ind.segments : Rectangle {
+                            horizontal-stretch: 1;
+                            background: Theme.surface-base;
+                            border-radius: 1px;
+
+                            Rectangle {
+                                x: 0;
+                                y: parent.height * (1.0 - seg);
+                                width: parent.width;
+                                height: parent.height * seg;
+                                border-radius: 1px;
+                                background:
+                                    seg >= 0.9 ? #ef4444 :
+                                    seg >= 0.75 ? #eab308 :
+                                    Theme.accent-brand;
+                            }
+                        }
+                    }
+                }
+
+                ind-ta := TouchArea { }
+                if ind-ta.has-hover && ind.status-hint != "" : Rectangle {
+                    x: parent.x;
+                    y: parent.height + 2px;
+                    width: ind-hint.preferred-width + 12px;
+                    height: ind-hint.preferred-height + 6px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 100;
+                    ind-hint := Text {
+                        x: 6px; y: 3px;
+                        text: ind.status-hint;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
                     }
-
-                    Text {
-                        text: ind.value-text;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        font-weight: Theme.weight-medium;
-                        vertical-alignment: center;
-                    }
-                }
-
-                if ind.percent >= 0 : Rectangle {
-                    height: 4px;
-                    background: Theme.surface-base;
-                    border-radius: 2px;
-                    horizontal-stretch: 1;
-
-                    Rectangle {
-                        x: 0;
-                        y: 0;
-                        width: parent.width * ind.percent;
-                        height: parent.height;
-                        border-radius: 2px;
-                        background:
-                            ind.status == 2 ? #ef4444 :
-                            ind.status == 1 ? #eab308 :
-                            Theme.accent-brand;
-                    }
-                }
-            }
-
-            ind-ta := TouchArea { }
-            if ind-ta.has-hover && ind.status-hint != "" : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: ind-hint.preferred-width + 12px;
-                height: ind-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                ind-hint := Text {
-                    x: 6px; y: 3px;
-                    text: ind.status-hint;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
                 }
             }
         }
-
-        Rectangle { vertical-stretch: 1; }
     }
 }

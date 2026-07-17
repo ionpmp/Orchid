@@ -43,6 +43,11 @@ impl PeriodicRefresh {
         self.interval
     }
 
+    /// Update the tick period. Takes effect on the next [`Self::start`].
+    pub fn set_interval(&mut self, interval: Duration) {
+        self.interval = interval.max(Duration::from_millis(1));
+    }
+
     /// Whether a task is currently running.
     #[must_use]
     pub fn is_running(&self) -> bool {

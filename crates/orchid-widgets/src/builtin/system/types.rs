@@ -42,8 +42,7 @@ pub struct NetworkRate {
     pub total_downloaded_bytes: u64,
 }
 
-/// Battery status. Always `None` today — sysinfo does not ship battery
-/// support on any target; a follow-up task may add a dedicated crate.
+/// Battery status from [`starship_battery`], when a battery is present.
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct BatteryStatus {

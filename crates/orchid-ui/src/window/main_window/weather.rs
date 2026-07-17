@@ -89,6 +89,17 @@ impl MainWindowController {
         self.refresh_weather(inst_id);
     }
 
+    /// Geolocation picker action — not wired to a provider yet.
+    pub(super) fn on_weather_use_my_location(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst_id) = parse_uuid(id) else {
+            return;
+        };
+        warn!(%inst_id, "weather: use-my-location is not implemented yet");
+    }
+
+    /// Drain transient weather UI notices after a snapshot patch (no-op for now).
+    pub(super) fn drain_weather_notice(self: &Arc<Self>, _inst_id: Uuid) {}
+
     fn refresh_weather(self: &Arc<Self>, inst_id: Uuid) {
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);

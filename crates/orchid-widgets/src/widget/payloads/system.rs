@@ -42,6 +42,8 @@ pub struct SystemIndicator {
     /// Progress-bar fraction in `0..=100`, or `None` when a bar is not
     /// appropriate for this indicator.
     pub percent: Option<f32>,
+    /// Optional sub-bars (e.g. per-core CPU), each in `0..=100`.
+    pub segments: Vec<f32>,
     /// Icon name.
     pub icon: &'static str,
     /// Threshold-based status.

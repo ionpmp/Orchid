@@ -2,7 +2,7 @@ use orchid_i18n::LocaleManager;
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
-    WeatherCityEntry, WeatherForecastEntry, WeatherModel, WeatherSearchHit,
+    WeatherCityEntry, WeatherForecastEntry, WeatherHourlyEntry, WeatherModel, WeatherSearchHit,
 };
 
 pub(crate) fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
@@ -14,13 +14,17 @@ pub(crate) fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
         search_query: SharedString::new(),
         search_results: ModelRc::new(VecModel::default()),
         search_busy: false,
+        locating: false,
         picker_title: locale.tr("weather-cities-title").into(),
         search_placeholder: locale.tr("weather-city-search-placeholder").into(),
         add_city_hint: locale.tr("weather-city-add").into(),
         remove_city_hint: locale.tr("weather-city-remove").into(),
         close_picker_label: locale.tr("weather-cities-close").into(),
+        my_location_label: locale.tr("weather-my-location").into(),
+        cities_hint: locale.tr("weather-cities-hint").into(),
         no_results_label: locale.tr("weather-city-no-results").into(),
         searching_label: locale.tr("weather-city-searching").into(),
+        locating_label: locale.tr("weather-locating").into(),
         current_temp: SharedString::new(),
         condition_label: locale.tr("weather-loading").into(),
         condition_icon: SharedString::new(),
@@ -30,6 +34,7 @@ pub(crate) fn empty_weather_model(locale: &LocaleManager) -> WeatherModel {
         selected_day_index: 0,
         day_detail: SharedString::new(),
         forecast: ModelRc::new(VecModel::default()),
+        hourly: ModelRc::new(VecModel::<WeatherHourlyEntry>::default()),
         last_updated: locale.tr("weather-loading").into(),
         status: 2,
         status_label: locale.tr("weather-status-offline").into(),
@@ -193,13 +198,17 @@ pub(crate) fn build_weather_model(
         search_query: p.search_query.clone().into(),
         search_results: ModelRc::new(VecModel::from(search_results)),
         search_busy: p.search_busy,
+        locating: false,
         picker_title: locale.tr("weather-cities-title").into(),
         search_placeholder: locale.tr("weather-city-search-placeholder").into(),
         add_city_hint: locale.tr("weather-city-add").into(),
         remove_city_hint: locale.tr("weather-city-remove").into(),
         close_picker_label: locale.tr("weather-cities-close").into(),
+        my_location_label: locale.tr("weather-my-location").into(),
+        cities_hint: locale.tr("weather-cities-hint").into(),
         no_results_label: locale.tr("weather-city-no-results").into(),
         searching_label: locale.tr("weather-city-searching").into(),
+        locating_label: locale.tr("weather-locating").into(),
         current_temp: if p.is_loading {
             SharedString::new()
         } else {
@@ -217,6 +226,7 @@ pub(crate) fn build_weather_model(
         selected_day_index: p.selected_day_index as i32,
         day_detail: day_detail.into(),
         forecast: ModelRc::new(VecModel::from(forecast)),
+        hourly: ModelRc::new(VecModel::<WeatherHourlyEntry>::default()),
         last_updated: last_updated.into(),
         status,
         status_label: locale.tr(weather_status_i18n_key(status)).into(),

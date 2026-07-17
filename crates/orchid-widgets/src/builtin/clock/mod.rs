@@ -150,7 +150,6 @@ impl ClockHandle {
     }
 
     fn search_cities(&self, query: String) {
-        let language = self.orchid_config.read().locale.language.clone();
         let generation = {
             let mut ui = self.ui.write();
             ui.search_query = query.clone();
@@ -176,7 +175,7 @@ impl ClockHandle {
             if ui.read().search_generation != generation {
                 return;
             }
-            let result = provider.search_cities(&query, &language).await;
+            let result = provider.search_cities(&query).await;
             let mut slot = ui.write();
             if slot.search_generation != generation {
                 return;

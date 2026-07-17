@@ -12,13 +12,30 @@ pub(crate) fn empty_system_model(locale: &LocaleManager) -> SystemModel {
             icon: SharedString::new(),
             status: 0,
             status_hint: SharedString::new(),
+            segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
         }])),
     }
 }
 
-pub(crate) fn build_system_model(p: &orchid_widgets::SystemPayload, locale: &LocaleManager) -> SystemModel {
+pub(crate) fn build_system_model(
+    p: &orchid_widgets::SystemPayload,
+    locale: &LocaleManager,
+) -> SystemModel {
     if p.is_loading {
         return empty_system_model(locale);
+    }
+    if p.indicators.is_empty() {
+        return SystemModel {
+            indicators: ModelRc::new(VecModel::from(vec![SystemIndicatorEntry {
+                label: locale.tr("system-empty").into(),
+                value_text: SharedString::new(),
+                percent: -1.0,
+                icon: SharedString::new(),
+                status: 0,
+                status_hint: SharedString::new(),
+                segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
+            }])),
+        };
     }
     let indicators: Vec<SystemIndicatorEntry> = p
         .indicators
@@ -28,6 +45,11 @@ pub(crate) fn build_system_model(p: &orchid_widgets::SystemPayload, locale: &Loc
             let value_text = system_indicator_value(i, locale);
             let status = indicator_status_to_int(&i.status);
             let status_hint = system_indicator_status_hint(locale, &label, &value_text, status);
+            let segments: Vec<f32> = i
+                .segments
+                .iter()
+                .map(|pct| (*pct / 100.0).clamp(0.0, 1.0))
+                .collect();
             SystemIndicatorEntry {
                 label,
                 value_text,
@@ -38,6 +60,7 @@ pub(crate) fn build_system_model(p: &orchid_widgets::SystemPayload, locale: &Loc
                 icon: i.icon.into(),
                 status,
                 status_hint,
+                segments: ModelRc::new(VecModel::from(segments)),
             }
         })
         .collect();
@@ -79,21 +102,19 @@ fn system_indicator_label(
         SystemIndicatorKind::Disk => locale
             .tr_args(
                 "system-disk-label",
-                &orchid_i18n::FluentArgs::new().with(
-                    "mount",
-                    i.name_suffix.clone().unwrap_or_default(),
-                ),
+                &orchid_i18n::FluentArgs::new()
+                    .with("mount", i.name_suffix.clone().unwrap_or_default()),
             )
             .into(),
-        SystemIndicatorKind::Network => locale
-            .tr_args(
-                "system-network-label",
-                &orchid_i18n::FluentArgs::new().with(
-                    "name",
-                    i.name_suffix.clone().unwrap_or_default(),
-                ),
-            )
-            .into(),
+        SystemIndicatorKind::Network => match &i.name_suffix {
+            Some(name) if !name.is_empty() => locale
+                .tr_args(
+                    "system-network-label",
+                    &orchid_i18n::FluentArgs::new().with("name", name.clone()),
+                )
+                .into(),
+            _ => locale.tr("system-network-total-label").into(),
+        },
         SystemIndicatorKind::Battery => locale.tr("system-battery-label").into(),
         SystemIndicatorKind::Uptime => locale.tr("system-uptime-label").into(),
     }

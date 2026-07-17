@@ -97,6 +97,8 @@ export struct SystemIndicatorEntry {
     icon: string,
     status: int,
     status-hint: string,
+    /// Per-core (or similar) bars in 0..=1. Empty when unused.
+    segments: [float],
 }
 
 export struct WeatherModel {

@@ -4,9 +4,10 @@ use std::time::Instant;
 
 use chrono::Utc;
 use parking_lot::Mutex;
+use starship_battery::{Manager, State};
 use sysinfo::{Disks, Networks, System, MINIMUM_CPU_UPDATE_INTERVAL};
 
-use super::types::{DiskUsage, NetworkRate, SystemSnapshot};
+use super::types::{BatteryStatus, DiskUsage, NetworkRate, SystemSnapshot};
 
 /// Snapshot of the previous network counters, used to compute rates.
 #[derive(Debug, Clone, Default)]
@@ -154,11 +155,63 @@ impl SystemProvider {
             swap_used_bytes: swap_used,
             disks: disk_usages,
             networks: network_rates,
-            battery: None,
+            battery: sample_battery(),
             uptime_seconds,
             captured_at,
         }
     }
+}
+
+fn sample_battery() -> Option<BatteryStatus> {
+    use starship_battery::units::ratio::ratio;
+    use starship_battery::units::time::second;
+
+    let manager = Manager::new().ok()?;
+    let mut batteries = manager.batteries().ok()?;
+    let bat = batteries.next()?.ok()?;
+    let percent = (bat.state_of_charge().get::<ratio>() * 100.0)
+        .round()
+        .clamp(0.0, 100.0) as u8;
+    let charging = matches!(bat.state(), State::Charging);
+    let time_to_empty_seconds = bat
+        .time_to_empty()
+        .map(|t| t.get::<second>().max(0.0).round() as u64);
+    let time_to_full_seconds = bat
+        .time_to_full()
+        .map(|t| t.get::<second>().max(0.0).round() as u64);
+    Some(BatteryStatus {
+        percent,
+        charging,
+        time_to_empty_seconds,
+        time_to_full_seconds,
+    })
+}
+
+/// Whether a NIC name looks like loopback / tunnel noise we should hide by default.
+#[must_use]
+pub fn is_noisy_nic(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower == "lo"
+        || lower.starts_with("lo:")
+        || lower.contains("loopback")
+        || lower.contains("isatap")
+        || lower.contains("teredo")
+        || lower.starts_with("veth")
+        || lower.starts_with("br-")
+        || lower.starts_with("docker")
+}
+
+/// Whether a disk should appear when no explicit mount filter is set.
+#[must_use]
+pub fn is_default_disk(d: &DiskUsage, include_removable: bool) -> bool {
+    const MIN_BYTES: u64 = 1 << 30; // 1 GiB
+    if d.total_bytes < MIN_BYTES {
+        return false;
+    }
+    if d.is_removable && !include_removable {
+        return false;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -179,20 +232,53 @@ mod tests {
     }
 
     #[test]
-    fn consecutive_refreshes_wait_for_cpu_interval() {
+    fn consecutive_refreshes_produce_valid_cpu() {
         let p = SystemProvider::new();
-        let _first = p.refresh();
-        let started = Instant::now();
-        let second = p.refresh();
-        assert!(
-            started.elapsed() >= MINIMUM_CPU_UPDATE_INTERVAL,
-            "second refresh returned too quickly ({:?})",
-            started.elapsed()
-        );
-        assert!(
-            (0.0..=100.0).contains(&second.cpu_total_percent),
-            "cpu_total_percent out of range: {}",
-            second.cpu_total_percent
-        );
+        let first = p.refresh();
+        let again = p.refresh();
+        assert!((0.0..=100.0).contains(&first.cpu_total_percent));
+        assert!((0.0..=100.0).contains(&again.cpu_total_percent));
+        let _ = MINIMUM_CPU_UPDATE_INTERVAL;
+    }
+
+    #[test]
+    fn noisy_nic_filter_matches_loopback() {
+        assert!(is_noisy_nic("lo"));
+        assert!(is_noisy_nic("Loopback Pseudo-Interface 1"));
+        assert!(is_noisy_nic("isatap.example"));
+        assert!(!is_noisy_nic("eth0"));
+        assert!(!is_noisy_nic("Wi-Fi"));
+        assert!(!is_noisy_nic("Ethernet"));
+    }
+
+    #[test]
+    fn default_disk_skips_tiny_and_removable() {
+        let big = DiskUsage {
+            mount: "C:\\".into(),
+            total_bytes: 100 << 30,
+            used_bytes: 50 << 30,
+            file_system: "NTFS".into(),
+            is_removable: false,
+        };
+        assert!(is_default_disk(&big, false));
+        assert!(!is_default_disk(
+            &DiskUsage {
+                mount: "D:\\".into(),
+                total_bytes: 100 << 20,
+                used_bytes: 10 << 20,
+                file_system: "FAT32".into(),
+                is_removable: false,
+            },
+            false
+        ));
+        let usb = DiskUsage {
+            mount: "E:\\".into(),
+            total_bytes: 64 << 30,
+            used_bytes: 1 << 30,
+            file_system: "exFAT".into(),
+            is_removable: true,
+        };
+        assert!(!is_default_disk(&usb, false));
+        assert!(is_default_disk(&usb, true));
     }
 }

@@ -358,6 +358,11 @@ fn system_indicator_eq(a: &SystemIndicator, b: &SystemIndicator) -> bool {
         && a.network_up == b.network_up
         && a.network_down == b.network_down
         && opt_f32_eq(a.percent, b.percent)
+        && a.segments.len() == b.segments.len()
+        && a.segments
+            .iter()
+            .zip(b.segments.iter())
+            .all(|(x, y)| x.to_bits() == y.to_bits())
         && a.icon == b.icon
         && a.status == b.status
 }

@@ -38,6 +38,5 @@ pub use search::{SearchCandidateView, UniversalSearchPayload};
 pub use system::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
 pub use viewer::ViewerPayload;
 pub use weather::{
-    WeatherCityEntry, WeatherForecastDay, WeatherHourlyEntry, WeatherPayload, WeatherSearchHit,
-    WeatherStatusTag,
+    WeatherCityEntry, WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
 };

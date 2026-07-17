@@ -19,9 +19,12 @@ fn moon_config_defaults_to_semarang() {
 fn system_config_defaults_enable_core_indicators() {
     let cfg = SystemConfig::default();
     assert!(cfg.show_cpu);
+    assert!(cfg.show_cpu_cores);
     assert!(cfg.show_memory);
     assert!(cfg.show_disks);
+    assert!(!cfg.show_removable_disks);
     assert!(cfg.show_network);
+    assert!(cfg.aggregate_network);
     assert!(cfg.show_battery);
     assert!(cfg.show_uptime);
     assert_eq!(cfg.refresh_interval_seconds, 2);

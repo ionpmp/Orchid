@@ -316,6 +316,13 @@ fn system_fields(cfg: &SystemConfig, locale: &LocaleManager) -> Vec<SettingsFiel
     push_bool(
         &mut rows,
         locale,
+        "show_cpu_cores",
+        "widget-settings.system.show-cpu-cores",
+        cfg.show_cpu_cores,
+    );
+    push_bool(
+        &mut rows,
+        locale,
         "show_memory",
         "widget-settings.system.show-memory",
         cfg.show_memory,
@@ -330,9 +337,23 @@ fn system_fields(cfg: &SystemConfig, locale: &LocaleManager) -> Vec<SettingsFiel
     push_bool(
         &mut rows,
         locale,
+        "show_removable_disks",
+        "widget-settings.system.show-removable-disks",
+        cfg.show_removable_disks,
+    );
+    push_bool(
+        &mut rows,
+        locale,
         "show_network",
         "widget-settings.system.show-network",
         cfg.show_network,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "aggregate_network",
+        "widget-settings.system.aggregate-network",
+        cfg.aggregate_network,
     );
     push_bool(
         &mut rows,
@@ -579,6 +600,11 @@ fn apply_system(instance_id: Uuid, key: &str, value: &str) {
                 cfg.show_cpu = b;
             }
         }
+        "show_cpu_cores" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_cpu_cores = b;
+            }
+        }
         "show_memory" => {
             if let Some(b) = parse_bool(value) {
                 cfg.show_memory = b;
@@ -589,9 +615,19 @@ fn apply_system(instance_id: Uuid, key: &str, value: &str) {
                 cfg.show_disks = b;
             }
         }
+        "show_removable_disks" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_removable_disks = b;
+            }
+        }
         "show_network" => {
             if let Some(b) = parse_bool(value) {
                 cfg.show_network = b;
+            }
+        }
+        "aggregate_network" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.aggregate_network = b;
             }
         }
         "show_battery" => {

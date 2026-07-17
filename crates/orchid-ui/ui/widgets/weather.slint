@@ -11,6 +11,7 @@ export component WeatherView inherits Rectangle {
     callback search-cities(string);
     callback add-city(string, float, float, string);
     callback select-day(int);
+    callback use-my-location();
 
     // ASCII/BMP glyphs — color emoji missing in Slint's default Windows font.
     pure function weather-icon-glyph(name: string) -> string {
