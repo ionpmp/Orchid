@@ -212,6 +212,8 @@ search-searching = Ø¬Ø§Ø±Ù Ø§Ù„Ø¨Ø­Ø«â€¦
 search-source-files = Ø§Ù„Ù…Ù„ÙØ§Øª
 search-source-commands = Ø§Ù„Ø£ÙˆØ§Ù…Ø±
 search-source-settings = Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª
+search-source-calculator = الآلة الحاسبة
+search-calc-copy-hint = نسخ النتيجة
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -855,6 +857,22 @@ calc-settings-angle = وحدة الزاوية
 calc-settings-angle-deg = درجات
 calc-settings-angle-rad = راديان
 calc-settings-angle-grad = غراد
+calc-angle-short-deg = درجة
+calc-angle-short-rad = راديان
+calc-angle-short-grad = غراد
+calc-tip-mc = مسح الذاكرة
+calc-tip-mr = استدعاء الذاكرة
+calc-tip-mplus = إضافة إلى الذاكرة
+calc-tip-mminus = طرح من الذاكرة
+calc-tip-ms = تخزين في الذاكرة
+calc-tip-ce = مسح الإدخال
+calc-tip-c = مسح الكل
+calc-tip-bs = مسافة للخلف
+calc-tip-neg = تبديل الإشارة
+calc-tip-eq = احسب
+calc-tip-2nd = الدوال الثانية
+calc-tip-angle = تبديل وحدة الزاوية
+calc-tip-copy = نسخ النتيجة (Ctrl+C)
 
 
 processes-tab-processes = Processes

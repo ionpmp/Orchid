@@ -170,6 +170,22 @@ impl MainWindowController {
             ActionTarget::OpenSettings(section) => {
                 self.open_settings(&section);
             }
+            ActionTarget::CopyText(text) => {
+                match crate::widgets::terminal::ArboardClipboard::new() {
+                    Ok(cb) => {
+                        if let Err(e) = cb.copy(&text) {
+                            warn!(?e, "copy search calc result");
+                        } else {
+                            self.push_notification(
+                                &self.locale.tr("widget-calculator-name"),
+                                &self.locale.tr("calc-copied"),
+                                0,
+                            );
+                        }
+                    }
+                    Err(e) => warn!(?e, "open clipboard for search calc copy"),
+                }
+            }
         }
     }
 

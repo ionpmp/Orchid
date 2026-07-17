@@ -207,6 +207,8 @@ search-searching = Ð˜Ð´Ñ‘Ñ‚ Ð¿Ð¾Ð¸ÑÐºâ€¦
 search-source-files = Ð¤Ð°Ð¹Ð»Ñ‹
 search-source-commands = ÐšÐ¾Ð¼Ð°Ð½Ð´Ñ‹
 search-source-settings = ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸
+search-source-calculator = Калькулятор
+search-calc-copy-hint = Копировать результат
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -857,6 +859,22 @@ calc-settings-angle = Единицы угла
 calc-settings-angle-deg = Градусы
 calc-settings-angle-rad = Радианы
 calc-settings-angle-grad = Грады
+calc-angle-short-deg = ГРАД
+calc-angle-short-rad = РАД
+calc-angle-short-grad = ГОН
+calc-tip-mc = Очистить память
+calc-tip-mr = Вызвать из памяти
+calc-tip-mplus = Прибавить к памяти
+calc-tip-mminus = Вычесть из памяти
+calc-tip-ms = Записать в память
+calc-tip-ce = Очистить ввод
+calc-tip-c = Очистить всё
+calc-tip-bs = Удалить символ
+calc-tip-neg = Сменить знак
+calc-tip-eq = Вычислить
+calc-tip-2nd = Вторые функции
+calc-tip-angle = Сменить единицы угла
+calc-tip-copy = Копировать результат (Ctrl+C)
 
 
 processes-tab-processes = Processes

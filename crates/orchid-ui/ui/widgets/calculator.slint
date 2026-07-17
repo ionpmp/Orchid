@@ -4,6 +4,7 @@ import { CalculatorModel, CalcHistoryEntry } from "../workspace/defs.slint";
 component CalcBtn inherits Rectangle {
     in property <string> label;
     in property <string> id;
+    in property <string> tip;
     in property <int> kind: 0; // 0 digit, 1 fn, 2 op, 3 equals, 4 accent
     in property <bool> active: false;
     callback pressed(string);
@@ -42,6 +43,24 @@ component CalcBtn inherits Rectangle {
         height: 100%;
         border-radius: Theme.radius-md;
         background: #ffffff18;
+    }
+
+    if ta.has-hover && tip != "" : Rectangle {
+        x: (parent.width - tip-box.preferred-width - 12px) / 2;
+        y: -tip-box.preferred-height - 10px;
+        width: tip-box.preferred-width + 12px;
+        height: tip-box.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 50;
+        tip-box := Text {
+            x: 6px; y: 3px;
+            text: root.tip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
     }
 }
 
@@ -192,11 +211,11 @@ export component CalculatorView inherits Rectangle {
                 HorizontalLayout {
                     spacing: 4px;
                     height: 32px;
-                    CalcBtn { label: "MC"; id: "mc"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "MR"; id: "mr"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "M+"; id: "mplus"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "M-"; id: "mminus"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "MS"; id: "ms"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "MC"; id: "mc"; tip: model.tip-mc; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "MR"; id: "mr"; tip: model.tip-mr; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "M+"; id: "mplus"; tip: model.tip-mplus; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "M-"; id: "mminus"; tip: model.tip-mminus; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "MS"; id: "ms"; tip: model.tip-ms; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                 }
 
                 // Scientific pad
@@ -205,11 +224,11 @@ export component CalculatorView inherits Rectangle {
 
                     HorizontalLayout {
                         spacing: 4px; height: 34px;
-                        CalcBtn { label: "2nd"; id: "2nd"; kind: 4; active: model.second; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                        CalcBtn { label: "2nd"; id: "2nd"; tip: model.tip-2nd; kind: 4; active: model.second; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                         CalcBtn { label: "π"; id: "pi"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                         CalcBtn { label: "e"; id: "e"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                        CalcBtn { label: "C"; id: "c"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                        CalcBtn { label: "⌫"; id: "bs"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                        CalcBtn { label: "C"; id: "c"; tip: model.tip-c; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                        CalcBtn { label: "⌫"; id: "bs"; tip: model.tip-bs; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     }
                     HorizontalLayout {
                         spacing: 4px; height: 34px;
@@ -269,9 +288,9 @@ export component CalculatorView inherits Rectangle {
                 if model.mode == 0 : HorizontalLayout {
                     spacing: 4px; height: 36px;
                     CalcBtn { label: "%"; id: "pct"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "CE"; id: "ce"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "C"; id: "c"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "⌫"; id: "bs"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "CE"; id: "ce"; tip: model.tip-ce; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "C"; id: "c"; tip: model.tip-c; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "⌫"; id: "bs"; tip: model.tip-bs; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                 }
 
                 if model.mode == 0 : HorizontalLayout {
@@ -287,7 +306,7 @@ export component CalculatorView inherits Rectangle {
                     spacing: 4px; height: model.mode == 1 ? 34px : 36px;
                     if model.mode == 1 : CalcBtn { label: "√"; id: "sqrt"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     if model.mode == 1 : CalcBtn { label: "%"; id: "pct"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    if model.mode == 1 : CalcBtn { label: "CE"; id: "ce"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    if model.mode == 1 : CalcBtn { label: "CE"; id: "ce"; tip: model.tip-ce; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     if model.mode == 1 : CalcBtn { label: "÷"; id: "div"; kind: 2; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     if model.mode == 0 : CalcBtn { label: "7"; id: "7"; kind: 0; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     if model.mode == 0 : CalcBtn { label: "8"; id: "8"; kind: 0; pressed(id) => { root.button-pressed(id); keys.focus(); } }
@@ -319,10 +338,10 @@ export component CalculatorView inherits Rectangle {
                 }
                 HorizontalLayout {
                     spacing: 4px; height: model.mode == 1 ? 34px : 36px;
-                    CalcBtn { label: "±"; id: "neg"; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "±"; id: "neg"; tip: model.tip-neg; kind: 1; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     CalcBtn { label: "0"; id: "0"; kind: 0; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                     CalcBtn { label: "."; id: "dec"; kind: 0; pressed(id) => { root.button-pressed(id); keys.focus(); } }
-                    CalcBtn { label: "="; id: "eq"; kind: 3; pressed(id) => { root.button-pressed(id); keys.focus(); } }
+                    CalcBtn { label: "="; id: "eq"; tip: model.tip-eq; kind: 3; pressed(id) => { root.button-pressed(id); keys.focus(); } }
                 }
             }
 

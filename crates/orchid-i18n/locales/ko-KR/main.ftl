@@ -212,6 +212,8 @@ search-searching = ê²€ìƒ‰ ì¤‘â€¦
 search-source-files = íŒŒì¼
 search-source-commands = ëª…ë ¹
 search-source-settings = ì„¤ì •
+search-source-calculator = 계산기
+search-calc-copy-hint = 결과 복사
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -853,6 +855,22 @@ calc-settings-angle = 각도 단위
 calc-settings-angle-deg = 도
 calc-settings-angle-rad = 라디안
 calc-settings-angle-grad = 그라디안
+calc-angle-short-deg = 도
+calc-angle-short-rad = 라디안
+calc-angle-short-grad = 그라디안
+calc-tip-mc = 메모리 지우기
+calc-tip-mr = 메모리 호출
+calc-tip-mplus = 메모리에 더하기
+calc-tip-mminus = 메모리에서 빼기
+calc-tip-ms = 메모리에 저장
+calc-tip-ce = 입력 지우기
+calc-tip-c = 모두 지우기
+calc-tip-bs = 백스페이스
+calc-tip-neg = 부호 바꾸기
+calc-tip-eq = 계산
+calc-tip-2nd = 보조 기능
+calc-tip-angle = 각도 단위 전환
+calc-tip-copy = 결과 복사 (Ctrl+C)
 
 
 processes-tab-processes = Processes

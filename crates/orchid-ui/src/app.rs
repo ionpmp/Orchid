@@ -23,7 +23,8 @@ use orchid_storage::{
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
     builtin::search::{
-        CommandsSource, FilesSource, SearchAggregator, SearchSource, SettingsSource,
+        CalculatorSource, CommandsSource, FilesSource, SearchAggregator, SearchSource,
+        SettingsSource,
     },
     commands::build_command_set,
     GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry,
@@ -211,6 +212,7 @@ impl OrchidApp {
             Arc::new(FilesSource::new(search_engine.clone())),
             Arc::new(CommandsSource::new(command_palette.clone())),
             Arc::new(SettingsSource::new()),
+            Arc::new(CalculatorSource::new()),
         ];
         let search_aggregator: Arc<SearchAggregator> =
             Arc::new(SearchAggregator::new(search_sources));
@@ -222,8 +224,17 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::moon::descriptor())
             .map_err(|e| UiError::Slint(format!("register moon: {e}")))?;
         widget_registry
+            .register(orchid_widgets::builtin::clock::descriptor(http.clone()))
+            .map_err(|e| UiError::Slint(format!("register clock: {e}")))?;
+        widget_registry
             .register(orchid_widgets::builtin::system::descriptor())
             .map_err(|e| UiError::Slint(format!("register system: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::processes::descriptor())
+            .map_err(|e| UiError::Slint(format!("register processes: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::calculator::descriptor())
+            .map_err(|e| UiError::Slint(format!("register calculator: {e}")))?;
         widget_registry
             .register(orchid_widgets::builtin::rss::descriptor(http))
             .map_err(|e| UiError::Slint(format!("register rss: {e}")))?;

@@ -66,7 +66,7 @@ impl AngleMode {
         }
     }
 
-    fn to_radians(self, x: f64) -> f64 {
+    pub(crate) fn to_radians(self, x: f64) -> f64 {
         match self {
             Self::Degrees => x.to_radians(),
             Self::Radians => x,
@@ -74,7 +74,7 @@ impl AngleMode {
         }
     }
 
-    fn from_radians(self, x: f64) -> f64 {
+    pub(crate) fn from_radians(self, x: f64) -> f64 {
         match self {
             Self::Degrees => x.to_degrees(),
             Self::Radians => x,
@@ -361,71 +361,71 @@ impl Calculator {
             CalcKey::Multiply => self.binary(BinOp::Mul),
             CalcKey::Divide => self.binary(BinOp::Div),
             CalcKey::Equals => self.equals(),
-            CalcKey::Sqrt => self.unary(|x| {
+            CalcKey::Sqrt => self.unary("√", |x| {
                 if x < 0.0 {
                     Err(CalcError::Domain)
                 } else {
                     Ok(x.sqrt())
                 }
             }),
-            CalcKey::Square => self.unary(|x| Ok(x * x)),
-            CalcKey::Reciprocal => self.unary(|x| {
+            CalcKey::Square => self.unary("sqr", |x| Ok(x * x)),
+            CalcKey::Reciprocal => self.unary("1/", |x| {
                 if x == 0.0 {
                     Err(CalcError::DivideByZero)
                 } else {
                     Ok(1.0 / x)
                 }
             }),
-            CalcKey::Cube => self.unary(|x| Ok(x * x * x)),
-            CalcKey::CubeRoot => self.unary(|x| Ok(x.cbrt())),
+            CalcKey::Cube => self.unary("cube", |x| Ok(x * x * x)),
+            CalcKey::CubeRoot => self.unary("∛", |x| Ok(x.cbrt())),
             CalcKey::Sin => {
                 let angle = self.angle;
                 if self.second {
                     self.second = false;
-                    self.unary(|x| finite(angle.from_radians(x.asin())));
+                    self.unary("sin⁻¹", |x| finite(angle.from_radians(x.asin())));
                 } else {
-                    self.unary(|x| finite(angle.to_radians(x).sin()));
+                    self.unary("sin", |x| finite(angle.to_radians(x).sin()));
                 }
             }
             CalcKey::Cos => {
                 let angle = self.angle;
                 if self.second {
                     self.second = false;
-                    self.unary(|x| finite(angle.from_radians(x.acos())));
+                    self.unary("cos⁻¹", |x| finite(angle.from_radians(x.acos())));
                 } else {
-                    self.unary(|x| finite(angle.to_radians(x).cos()));
+                    self.unary("cos", |x| finite(angle.to_radians(x).cos()));
                 }
             }
             CalcKey::Tan => {
                 let angle = self.angle;
                 if self.second {
                     self.second = false;
-                    self.unary(|x| finite(angle.from_radians(x.atan())));
+                    self.unary("tan⁻¹", |x| finite(angle.from_radians(x.atan())));
                 } else {
-                    self.unary(|x| finite(angle.to_radians(x).tan()));
+                    self.unary("tan", |x| finite(angle.to_radians(x).tan()));
                 }
             }
             CalcKey::Asin => {
                 let angle = self.angle;
-                self.unary(|x| finite(angle.from_radians(x.asin())));
+                self.unary("sin⁻¹", |x| finite(angle.from_radians(x.asin())));
             }
             CalcKey::Acos => {
                 let angle = self.angle;
-                self.unary(|x| finite(angle.from_radians(x.acos())));
+                self.unary("cos⁻¹", |x| finite(angle.from_radians(x.acos())));
             }
             CalcKey::Atan => {
                 let angle = self.angle;
-                self.unary(|x| finite(angle.from_radians(x.atan())));
+                self.unary("tan⁻¹", |x| finite(angle.from_radians(x.atan())));
             }
-            CalcKey::Sinh => self.unary(|x| finite(x.sinh())),
-            CalcKey::Cosh => self.unary(|x| finite(x.cosh())),
-            CalcKey::Tanh => self.unary(|x| finite(x.tanh())),
+            CalcKey::Sinh => self.unary("sinh", |x| finite(x.sinh())),
+            CalcKey::Cosh => self.unary("cosh", |x| finite(x.cosh())),
+            CalcKey::Tanh => self.unary("tanh", |x| finite(x.tanh())),
             CalcKey::Log10 => {
                 if self.second {
                     self.second = false;
-                    self.unary(|x| finite(10f64.powf(x)));
+                    self.unary("10^", |x| finite(10f64.powf(x)));
                 } else {
-                    self.unary(|x| {
+                    self.unary("log", |x| {
                         if x <= 0.0 {
                             Err(CalcError::Domain)
                         } else {
@@ -437,9 +437,9 @@ impl Calculator {
             CalcKey::Ln => {
                 if self.second {
                     self.second = false;
-                    self.unary(|x| finite(x.exp()));
+                    self.unary("e^", |x| finite(x.exp()));
                 } else {
-                    self.unary(|x| {
+                    self.unary("ln", |x| {
                         if x <= 0.0 {
                             Err(CalcError::Domain)
                         } else {
@@ -448,12 +448,12 @@ impl Calculator {
                     });
                 }
             }
-            CalcKey::Exp10 => self.unary(|x| finite(10f64.powf(x))),
-            CalcKey::ExpE => self.unary(|x| finite(x.exp())),
+            CalcKey::Exp10 => self.unary("10^", |x| finite(10f64.powf(x))),
+            CalcKey::ExpE => self.unary("e^", |x| finite(x.exp())),
             CalcKey::Power => self.binary(BinOp::Pow),
             CalcKey::YRoot => self.binary(BinOp::YRoot),
-            CalcKey::Factorial => self.unary(factorial),
-            CalcKey::Abs => self.unary(|x| Ok(x.abs())),
+            CalcKey::Factorial => self.unary("fact", factorial),
+            CalcKey::Abs => self.unary("abs", |x| Ok(x.abs())),
             CalcKey::Mod => self.binary(BinOp::Mod),
             CalcKey::Pi => self.insert_constant(std::f64::consts::PI),
             CalcKey::EConst => self.insert_constant(std::f64::consts::E),
@@ -560,6 +560,21 @@ impl Calculator {
             "\u{8}" => Some(CalcKey::Backspace),
             "\u{7f}" => Some(CalcKey::ClearEntry),
             "\u{1b}" => Some(CalcKey::Clear),
+            "s" | "S" => Some(CalcKey::Sin),
+            "c" | "C" => Some(CalcKey::Cos),
+            "t" | "T" => Some(CalcKey::Tan),
+            "l" | "L" => Some(CalcKey::Log10),
+            "n" | "N" => Some(CalcKey::Ln),
+            "p" | "P" => Some(CalcKey::Pi),
+            "e" | "E" => Some(CalcKey::EConst),
+            "r" | "R" => Some(CalcKey::Sqrt),
+            "q" | "Q" => Some(CalcKey::Square),
+            "i" | "I" => Some(CalcKey::Reciprocal),
+            "a" | "A" => Some(CalcKey::Abs),
+            "m" | "M" => Some(CalcKey::Mod),
+            "f" | "F" => Some(CalcKey::Factorial),
+            "g" | "G" => Some(CalcKey::CycleAngle),
+            "d" | "D" => Some(CalcKey::ToggleSecond),
             _ => None,
         }
     }
@@ -889,12 +904,13 @@ impl Calculator {
         self.entry.clear();
     }
 
-    fn unary(&mut self, f: impl FnOnce(f64) -> Result<f64, CalcError>) {
+    fn unary(&mut self, label: &str, f: impl FnOnce(f64) -> Result<f64, CalcError>) {
         let Ok(x) = self.current_value() else {
             return;
         };
         match f(x).and_then(finite) {
             Ok(v) => {
+                self.expression = format!("{label}({})", format_number(x));
                 self.set_value(v);
                 self.overwrite = true;
                 self.entering = false;
@@ -1239,8 +1255,22 @@ mod tests {
         let mut c = calc();
         press_seq(&mut c, &[CalcKey::Digit(9), CalcKey::Sqrt]);
         assert_eq!(c.display, "3");
+        assert_eq!(c.expression, "√(9)");
         press_seq(&mut c, &[CalcKey::Square]);
         assert_eq!(c.display, "9");
+        assert_eq!(c.expression, "sqr(3)");
+    }
+
+    #[test]
+    fn letter_shortcuts() {
+        assert_eq!(
+            Calculator::key_from_text("s", false, false),
+            Some(CalcKey::Sin)
+        );
+        assert_eq!(
+            Calculator::key_from_text("r", false, false),
+            Some(CalcKey::Sqrt)
+        );
     }
 
     #[test]

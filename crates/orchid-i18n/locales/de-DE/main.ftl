@@ -212,6 +212,8 @@ search-searching = Sucheâ€¦
 search-source-files = Dateien
 search-source-commands = Befehle
 search-source-settings = Einstellungen
+search-source-calculator = Rechner
+search-calc-copy-hint = Ergebnis kopieren
 command-terminal-invocation = orc { $verb }
 
 # ---- Command palette ----
@@ -854,6 +856,22 @@ calc-settings-angle = Winkeleinheit
 calc-settings-angle-deg = Grad
 calc-settings-angle-rad = Radiant
 calc-settings-angle-grad = Gon
+calc-angle-short-deg = GRAD
+calc-angle-short-rad = RAD
+calc-angle-short-grad = GON
+calc-tip-mc = Speicher löschen
+calc-tip-mr = Speicher abrufen
+calc-tip-mplus = Zum Speicher addieren
+calc-tip-mminus = Vom Speicher subtrahieren
+calc-tip-ms = Im Speicher speichern
+calc-tip-ce = Eingabe löschen
+calc-tip-c = Alles löschen
+calc-tip-bs = Rücktaste
+calc-tip-neg = Vorzeichen wechseln
+calc-tip-eq = Berechnen
+calc-tip-2nd = Zweite Funktionen
+calc-tip-angle = Winkeleinheit wechseln
+calc-tip-copy = Ergebnis kopieren (Strg+C)
 
 
 processes-tab-processes = Processes

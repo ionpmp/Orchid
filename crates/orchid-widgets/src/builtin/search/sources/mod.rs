@@ -1,11 +1,13 @@
 //! Search-source trait + shared candidate types.
 
+pub mod calculator;
 pub mod commands;
 pub mod files;
 pub mod settings;
 
 use async_trait::async_trait;
 
+pub use calculator::CalculatorSource;
 pub use commands::CommandsSource;
 pub use files::FilesSource;
 pub use settings::SettingsSource;
@@ -17,6 +19,8 @@ pub enum ActionTarget {
     OpenFile(String),
     RunCommand(String),
     OpenSettings(String),
+    /// Copy plain text to the system clipboard.
+    CopyText(String),
 }
 
 /// A single search candidate produced by a source.

@@ -28,7 +28,8 @@ use tracing::warn;
 
 pub use aggregator::SearchAggregator;
 pub use sources::{
-    ActionTarget, CommandsSource, FilesSource, SearchCandidate, SearchSource, SettingsSource,
+    ActionTarget, CalculatorSource, CommandsSource, FilesSource, SearchCandidate, SearchSource,
+    SettingsSource,
 };
 
 /// Persisted universal-search UI state.

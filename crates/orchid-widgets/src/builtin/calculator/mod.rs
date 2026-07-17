@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod engine;
+pub mod expr;
 
 use std::sync::{Arc, LazyLock};
 
@@ -22,6 +23,7 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::CalculatorConfig;
 pub use engine::{AngleMode, CalcError, CalcKey, CalcMode, Calculator, HistoryEntry};
+pub use expr::{evaluate_expression, format_result};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "calculator";
@@ -50,6 +52,9 @@ impl CalcHandle {
         let mut cfg = self.config.write();
         cfg.mode = eng.mode as u8;
         cfg.angle_mode = eng.angle as u8;
+        cfg.memory = eng.memory;
+        cfg.memory_set = eng.memory_set;
+        cfg.history = eng.history.iter().map(Into::into).collect();
     }
 }
 
@@ -113,6 +118,7 @@ pub fn recall_history(instance_id: Uuid, index: i32) {
     h.engine
         .write()
         .press(CalcKey::HistoryRecall(index as usize));
+    h.sync_config_from_engine();
     h.publish();
 }
 
@@ -153,6 +159,9 @@ impl CalculatorWidget {
         let mut engine = Calculator::new();
         engine.mode = config.calc_mode();
         engine.angle = config.angle();
+        engine.memory = config.memory;
+        engine.memory_set = config.memory_set;
+        engine.history = config.history.iter().cloned().map(Into::into).collect();
         let handle = Arc::new(CalcHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
@@ -235,13 +244,16 @@ impl Widget for CalculatorWidget {
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let cfg: CalculatorConfig = state_codec::restore_state(bytes)?;
+        let cfg: CalculatorConfig = state_codec::restore_state(bytes).unwrap_or_default();
         {
             let mut slot = self.handle.config.write();
             *slot = cfg.clone();
             let mut eng = self.handle.engine.write();
             eng.mode = cfg.calc_mode();
             eng.angle = cfg.angle();
+            eng.memory = cfg.memory;
+            eng.memory_set = cfg.memory_set;
+            eng.history = cfg.history.into_iter().map(Into::into).collect();
         }
         Ok(())
     }
