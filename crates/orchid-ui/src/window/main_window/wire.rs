@@ -729,161 +729,177 @@ impl MainWindowController {
 
         self.window.on_processes_tab_changed({
             let t = t.clone();
-            move |tab| {
+            move |id, tab| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_tab_changed(tab);
+                    c.on_processes_tab_changed(&id, tab);
                 }
             }
         });
         self.window.on_processes_search_changed({
             let t = t.clone();
-            move |q| {
+            move |id, q| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_search_changed(&q);
+                    c.on_processes_search_changed(&id, &q);
                 }
             }
         });
         self.window.on_processes_sort_column_clicked({
             let t = t.clone();
-            move |col| {
+            move |id, col| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_sort_column_clicked(col);
+                    c.on_processes_sort_column_clicked(&id, col);
                 }
             }
         });
         self.window.on_processes_process_clicked({
             let t = t.clone();
-            move |pid| {
+            move |id, pid| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_process_clicked(pid);
+                    c.on_processes_process_clicked(&id, pid);
                 }
             }
         });
         self.window.on_processes_process_context({
             let t = t.clone();
-            move |pid, x, y| {
+            move |id, pid, x, y| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_process_context(pid, x, y);
+                    c.on_processes_process_context(&id, pid, x, y);
                 }
             }
         });
         self.window.on_processes_end_task({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_end_task();
+                    c.on_processes_end_task(&id);
                 }
             }
         });
         self.window.on_processes_end_tree({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_end_tree();
+                    c.on_processes_end_tree(&id);
                 }
             }
         });
         self.window.on_processes_open_location({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_open_location();
+                    c.on_processes_open_location(&id);
                 }
             }
         });
         self.window.on_processes_copy_pid({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_copy_pid();
+                    c.on_processes_copy_pid(&id);
                 }
             }
         });
         self.window.on_processes_copy_path({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_copy_path();
+                    c.on_processes_copy_path(&id);
                 }
             }
         });
         self.window.on_processes_service_clicked({
             let t = t.clone();
-            move |name| {
+            move |id, name| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_service_clicked(&name);
+                    c.on_processes_service_clicked(&id, &name);
                 }
             }
         });
         self.window.on_processes_service_start({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_service_start();
+                    c.on_processes_service_start(&id);
                 }
             }
         });
         self.window.on_processes_service_stop({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_service_stop();
+                    c.on_processes_service_stop(&id);
                 }
             }
         });
         self.window.on_processes_service_restart({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_service_restart();
+                    c.on_processes_service_restart(&id);
                 }
             }
         });
         self.window.on_processes_startup_clicked({
             let t = t.clone();
-            move |id| {
+            move |id, entry| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_startup_clicked(&id);
+                    c.on_processes_startup_clicked(&id, &entry);
                 }
             }
         });
         self.window.on_processes_startup_toggle({
             let t = t.clone();
-            move |id, enabled| {
+            move |id, entry, enabled| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_startup_toggle(&id, enabled);
+                    c.on_processes_startup_toggle(&id, &entry, enabled);
                 }
             }
         });
         self.window.on_processes_startup_open_location({
             let t = t.clone();
-            move |id| {
+            move |id, entry| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_startup_open_location(&id);
+                    c.on_processes_startup_open_location(&id, &entry);
                 }
             }
         });
         self.window.on_processes_user_clicked({
             let t = t.clone();
-            move |sid| {
+            move |id, sid| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_user_clicked(sid);
+                    c.on_processes_user_clicked(&id, sid);
                 }
             }
         });
         self.window.on_processes_user_disconnect({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_user_disconnect();
+                    c.on_processes_user_disconnect(&id);
                 }
             }
         });
         self.window.on_processes_user_sign_out({
             let t = t.clone();
-            move || {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_processes_user_sign_out();
+                    c.on_processes_user_sign_out(&id);
+                }
+            }
+        });
+        self.window.on_processes_confirm_yes({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_confirm_yes(&id);
+                }
+            }
+        });
+        self.window.on_processes_confirm_no({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_processes_confirm_no(&id);
                 }
             }
         });

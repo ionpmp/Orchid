@@ -1,0 +1,79 @@
+import { Theme } from "../theme_global.slint";
+import { ProcessesConfirmDialog } from "../workspace/defs.slint";
+
+export component ProcessesConfirmDialog inherits Rectangle {
+    in property <ProcessesConfirmDialog> dialog;
+    callback yes();
+    callback no();
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.no(); }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 360px;
+        height: lay.preferred-height + 16px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
+        drop-shadow-color: #00000080;
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+
+            Text {
+                text: dialog.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+
+            Text {
+                text: dialog.message;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-md;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: no-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    no-ta := TouchArea { clicked => { root.no(); } }
+                    Text {
+                        text: dialog.cancel-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: yes-ta.has-hover ? #ef4444 : #ef444488;
+                    border-radius: Theme.radius-md;
+                    yes-ta := TouchArea { clicked => { root.yes(); } }
+                    Text {
+                        text: dialog.confirm-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

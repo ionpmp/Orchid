@@ -180,6 +180,15 @@ export struct SystemModel {
     indicators: [SystemIndicatorEntry],
 }
 
+export struct ProcessesConfirmDialog {
+    visible: bool,
+    title: string,
+    message: string,
+    confirm-label: string,
+    cancel-label: string,
+    pending-action: string,
+}
+
 export struct ProcessRowEntry {
     pid: int,
     pid-text: string,
@@ -192,6 +201,8 @@ export struct ProcessRowEntry {
     path: string,
     is-group-header: bool,
     group-label: string,
+    icon: image,
+    has-icon: bool,
 }
 
 export struct ServiceRowEntry {
@@ -259,6 +270,7 @@ export struct ProcessesModel {
     context-visible: bool,
     context-x: length,
     context-y: length,
+    confirm-dialog: ProcessesConfirmDialog,
 }
 
 export struct CalcHistoryEntry {

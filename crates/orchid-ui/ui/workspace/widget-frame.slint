@@ -83,27 +83,29 @@ export component WidgetFrame inherits Rectangle {
     callback media-next();
     callback media-previous();
 
-    // Processes
-    callback processes-tab-changed(int);
-    callback processes-search-changed(string);
-    callback processes-sort-column-clicked(int);
-    callback processes-process-clicked(int);
-    callback processes-process-context(int, length, length);
-    callback processes-end-task();
-    callback processes-end-tree();
-    callback processes-open-location();
-    callback processes-copy-pid();
-    callback processes-copy-path();
-    callback processes-service-clicked(string);
-    callback processes-service-start();
-    callback processes-service-stop();
-    callback processes-service-restart();
-    callback processes-startup-clicked(string);
-    callback processes-startup-toggle(string, bool);
-    callback processes-startup-open-location(string);
-    callback processes-user-clicked(int);
-    callback processes-user-disconnect();
-    callback processes-user-sign-out();
+    // Processes (`string` args are always `model.instance-id` first)
+    callback processes-tab-changed(string, int);
+    callback processes-search-changed(string, string);
+    callback processes-sort-column-clicked(string, int);
+    callback processes-process-clicked(string, int);
+    callback processes-process-context(string, int, length, length);
+    callback processes-end-task(string);
+    callback processes-end-tree(string);
+    callback processes-open-location(string);
+    callback processes-copy-pid(string);
+    callback processes-copy-path(string);
+    callback processes-service-clicked(string, string);
+    callback processes-service-start(string);
+    callback processes-service-stop(string);
+    callback processes-service-restart(string);
+    callback processes-startup-clicked(string, string);
+    callback processes-startup-toggle(string, string, bool);
+    callback processes-startup-open-location(string, string);
+    callback processes-user-clicked(string, int);
+    callback processes-user-disconnect(string);
+    callback processes-user-sign-out(string);
+    callback processes-confirm-yes(string);
+    callback processes-confirm-no(string);
 
     // Calculator
     callback calculator-button(string);
@@ -531,26 +533,28 @@ export component WidgetFrame inherits Rectangle {
                     width: parent.width;
                     height: parent.height;
                     model: root.model.processes;
-                    tab-changed(t) => { root.processes-tab-changed(t); }
-                    search-changed(q) => { root.processes-search-changed(q); }
-                    sort-column-clicked(c) => { root.processes-sort-column-clicked(c); }
-                    process-clicked(pid) => { root.processes-process-clicked(pid); }
-                    process-context(pid, x, y) => { root.processes-process-context(pid, x, y); }
-                    end-task => { root.processes-end-task(); }
-                    end-tree => { root.processes-end-tree(); }
-                    open-location => { root.processes-open-location(); }
-                    copy-pid => { root.processes-copy-pid(); }
-                    copy-path => { root.processes-copy-path(); }
-                    service-clicked(n) => { root.processes-service-clicked(n); }
-                    service-start => { root.processes-service-start(); }
-                    service-stop => { root.processes-service-stop(); }
-                    service-restart => { root.processes-service-restart(); }
-                    startup-clicked(id) => { root.processes-startup-clicked(id); }
-                    startup-toggle(id, en) => { root.processes-startup-toggle(id, en); }
-                    startup-open-location(id) => { root.processes-startup-open-location(id); }
-                    user-clicked(sid) => { root.processes-user-clicked(sid); }
-                    user-disconnect => { root.processes-user-disconnect(); }
-                    user-sign-out => { root.processes-user-sign-out(); }
+                    tab-changed(t) => { root.processes-tab-changed(root.model.instance-id, t); }
+                    search-changed(q) => { root.processes-search-changed(root.model.instance-id, q); }
+                    sort-column-clicked(c) => { root.processes-sort-column-clicked(root.model.instance-id, c); }
+                    process-clicked(pid) => { root.processes-process-clicked(root.model.instance-id, pid); }
+                    process-context(pid, x, y) => { root.processes-process-context(root.model.instance-id, pid, x, y); }
+                    end-task => { root.processes-end-task(root.model.instance-id); }
+                    end-tree => { root.processes-end-tree(root.model.instance-id); }
+                    open-location => { root.processes-open-location(root.model.instance-id); }
+                    copy-pid => { root.processes-copy-pid(root.model.instance-id); }
+                    copy-path => { root.processes-copy-path(root.model.instance-id); }
+                    service-clicked(n) => { root.processes-service-clicked(root.model.instance-id, n); }
+                    service-start => { root.processes-service-start(root.model.instance-id); }
+                    service-stop => { root.processes-service-stop(root.model.instance-id); }
+                    service-restart => { root.processes-service-restart(root.model.instance-id); }
+                    startup-clicked(id) => { root.processes-startup-clicked(root.model.instance-id, id); }
+                    startup-toggle(id, en) => { root.processes-startup-toggle(root.model.instance-id, id, en); }
+                    startup-open-location(id) => { root.processes-startup-open-location(root.model.instance-id, id); }
+                    user-clicked(sid) => { root.processes-user-clicked(root.model.instance-id, sid); }
+                    user-disconnect => { root.processes-user-disconnect(root.model.instance-id); }
+                    user-sign-out => { root.processes-user-sign-out(root.model.instance-id); }
+                    confirm-yes => { root.processes-confirm-yes(root.model.instance-id); }
+                    confirm-no => { root.processes-confirm-no(root.model.instance-id); }
                 }
 
                 if model.type-id == "calculator" : CalculatorView {
