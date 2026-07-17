@@ -7,6 +7,7 @@ pub mod services;
 pub mod startup;
 pub mod types;
 pub mod users;
+pub mod windows;
 
 use std::path::Path;
 use std::sync::{Arc, LazyLock};

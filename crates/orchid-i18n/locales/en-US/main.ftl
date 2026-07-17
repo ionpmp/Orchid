@@ -104,6 +104,10 @@ processes-user-signed-out = Session signed out
 processes-settings-refresh = Refresh interval (seconds)
 processes-settings-grouping = Group processes
 processes-loading = Loading processes…
+processes-confirm-title = Confirm
+processes-confirm-end-task = End "{ $name }" (PID { $pid })?
+processes-confirm-end-tree = End "{ $name }" (PID { $pid }) and all child processes?
+processes-confirm-sign-out = Sign out session for { $user }?
 
 # ---- Shared size / duration formatting ----
 byte-size-b = { $value } B

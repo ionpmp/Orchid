@@ -1,29 +1,49 @@
+use orchid_fs::{shell_icon, FsPath, ShellIconSize};
 use orchid_i18n::LocaleManager;
 use orchid_widgets::ProcessesPayload;
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{Image, ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
-    ProcessRowEntry, ProcessesModel, ServiceRowEntry, StartupRowEntry, UserRowEntry,
+    ProcessRowEntry, ProcessesConfirmDialog, ProcessesModel, ServiceRowEntry, StartupRowEntry,
+    UserRowEntry,
 };
 
+pub(crate) fn empty_processes_confirm() -> ProcessesConfirmDialog {
+    ProcessesConfirmDialog {
+        visible: false,
+        title: SharedString::new(),
+        message: SharedString::new(),
+        confirm_label: SharedString::new(),
+        cancel_label: SharedString::new(),
+        pending_action: SharedString::new(),
+    }
+}
+
 pub(crate) fn empty_processes_model(locale: &LocaleManager) -> ProcessesModel {
-    base_model(locale, &ProcessesPayload {
-        tab: orchid_widgets::ProcessesTab::Processes,
-        search_query: String::new(),
-        sort_column: orchid_widgets::ProcessSortColumn::Cpu,
-        sort_descending: true,
-        selected_pid: 0,
-        selected_service: String::new(),
-        selected_startup: String::new(),
-        selected_session: u32::MAX,
-        processes: Vec::new(),
-        services: Vec::new(),
-        startups: Vec::new(),
-        users: Vec::new(),
-        is_loading: true,
-        status_message: String::new(),
-        show_grouping: true,
-    }, false, 0.0, 0.0)
+    base_model(
+        locale,
+        &ProcessesPayload {
+            tab: orchid_widgets::ProcessesTab::Processes,
+            search_query: String::new(),
+            sort_column: orchid_widgets::ProcessSortColumn::Cpu,
+            sort_descending: true,
+            selected_pid: 0,
+            selected_service: String::new(),
+            selected_startup: String::new(),
+            selected_session: u32::MAX,
+            processes: Vec::new(),
+            services: Vec::new(),
+            startups: Vec::new(),
+            users: Vec::new(),
+            is_loading: true,
+            status_message: String::new(),
+            show_grouping: true,
+        },
+        false,
+        0.0,
+        0.0,
+        empty_processes_confirm(),
+    )
 }
 
 pub(crate) fn build_processes_model(
@@ -32,8 +52,16 @@ pub(crate) fn build_processes_model(
     context_visible: bool,
     context_x: f32,
     context_y: f32,
+    confirm_dialog: ProcessesConfirmDialog,
 ) -> ProcessesModel {
-    base_model(locale, p, context_visible, context_x, context_y)
+    base_model(
+        locale,
+        p,
+        context_visible,
+        context_x,
+        context_y,
+        confirm_dialog,
+    )
 }
 
 fn base_model(
@@ -42,22 +70,32 @@ fn base_model(
     context_visible: bool,
     context_x: f32,
     context_y: f32,
+    confirm_dialog: ProcessesConfirmDialog,
 ) -> ProcessesModel {
     let processes: Vec<ProcessRowEntry> = p
         .processes
         .iter()
-        .map(|r| ProcessRowEntry {
-            pid: r.pid as i32,
-            pid_text: r.pid.to_string().into(),
-            name: r.name.clone().into(),
-            status: r.status.clone().into(),
-            cpu_text: format!("{:.1}", r.cpu_percent).into(),
-            memory_text: r.memory_text.clone().into(),
-            io_text: r.io_text.clone().into(),
-            user: r.user.clone().into(),
-            path: r.path.clone().into(),
-            is_group_header: r.is_group_header,
-            group_label: r.group_label.clone().into(),
+        .map(|r| {
+            let (icon, has_icon) = if r.is_group_header || r.path.is_empty() {
+                (Image::default(), false)
+            } else {
+                process_icon(&r.path)
+            };
+            ProcessRowEntry {
+                pid: r.pid as i32,
+                pid_text: r.pid.to_string().into(),
+                name: r.name.clone().into(),
+                status: r.status.clone().into(),
+                cpu_text: format!("{:.1}", r.cpu_percent).into(),
+                memory_text: r.memory_text.clone().into(),
+                io_text: r.io_text.clone().into(),
+                user: r.user.clone().into(),
+                path: r.path.clone().into(),
+                is_group_header: r.is_group_header,
+                group_label: r.group_label.clone().into(),
+                icon,
+                has_icon,
+            }
         })
         .collect();
     let services: Vec<ServiceRowEntry> = p
@@ -143,5 +181,24 @@ fn base_model(
         context_visible,
         context_x,
         context_y,
+        confirm_dialog,
     }
+}
+
+fn process_icon(path: &str) -> (Image, bool) {
+    let Ok(fs_path) = FsPath::from_local(std::path::Path::new(path)) else {
+        return (Image::default(), false);
+    };
+    let Some(icon) = shell_icon(&fs_path, false, ShellIconSize::Small) else {
+        return (Image::default(), false);
+    };
+    if icon.width == 0 || icon.height == 0 || icon.rgba.is_empty() {
+        return (Image::default(), false);
+    }
+    let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+        icon.rgba.as_slice(),
+        icon.width,
+        icon.height,
+    );
+    (Image::from_rgba8(buf), true)
 }

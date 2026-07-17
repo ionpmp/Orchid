@@ -30,7 +30,7 @@ pub(crate) use media::{build_media_model, empty_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model};
 pub(crate) use palette::build_palette_candidates;
 pub(crate) use password::{build_password_model, empty_password_model, PasswordAddDialogOverlay};
-pub(crate) use processes::{build_processes_model, empty_processes_model};
+pub(crate) use processes::{build_processes_model, empty_processes_confirm, empty_processes_model};
 pub(crate) use recent::{build_recent_files_model, empty_recent_files_model};
 pub(crate) use rss::{build_rss_model, empty_rss_model};
 pub(crate) use search::{build_search_model, empty_search_model};

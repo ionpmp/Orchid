@@ -107,21 +107,27 @@ mod win {
 
     pub fn start_service(name: &str) -> Result<(), String> {
         with_service(name, SERVICE_START | SERVICE_QUERY_STATUS, |svc| unsafe {
-            StartServiceW(svc, None).map_err(|e| format!("StartService: {e}"))
+            StartServiceW(svc, None).map_err(|e| format!("StartService: {e}"))?;
+            wait_for_state(svc, SERVICE_RUNNING, std::time::Duration::from_secs(15))
         })
     }
 
     pub fn stop_service(name: &str) -> Result<(), String> {
         with_service(name, SERVICE_STOP | SERVICE_QUERY_STATUS, |svc| unsafe {
             let mut status = SERVICE_STATUS::default();
+            let state = query_state(svc)?;
+            if state == SERVICE_STOPPED {
+                return Ok(());
+            }
             ControlService(svc, SERVICE_CONTROL_STOP, &mut status)
-                .map_err(|e| format!("ControlService stop: {e}"))
+                .map_err(|e| format!("ControlService stop: {e}"))?;
+            wait_for_state(svc, SERVICE_STOPPED, std::time::Duration::from_secs(15))
         })
     }
 
     pub fn restart_service(name: &str) -> Result<(), String> {
+        // Best-effort stop (already-stopped is fine), then start and wait.
         let _ = stop_service(name);
-        std::thread::sleep(std::time::Duration::from_millis(400));
         start_service(name)
     }
 
@@ -138,6 +144,34 @@ mod win {
                 .map_err(|e| format!("OpenService({name}): {e}"))?;
             let svc = ScHandle(svc);
             f(svc.0)
+        }
+    }
+
+    unsafe fn query_state(svc: SC_HANDLE) -> Result<SERVICE_STATUS_CURRENT_STATE, String> {
+        use windows::Win32::System::Services::QueryServiceStatus;
+        let mut status = SERVICE_STATUS::default();
+        QueryServiceStatus(svc, &mut status).map_err(|e| format!("QueryServiceStatus: {e}"))?;
+        Ok(status.dwCurrentState)
+    }
+
+    unsafe fn wait_for_state(
+        svc: SC_HANDLE,
+        wanted: SERVICE_STATUS_CURRENT_STATE,
+        timeout: std::time::Duration,
+    ) -> Result<(), String> {
+        let start = std::time::Instant::now();
+        loop {
+            let state = query_state(svc)?;
+            if state == wanted {
+                return Ok(());
+            }
+            if start.elapsed() >= timeout {
+                return Err(format!(
+                    "timed out waiting for service state {} (last {})",
+                    wanted.0, state.0
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
         }
     }
 

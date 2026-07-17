@@ -12,6 +12,7 @@ use sysinfo::{
 
 use super::classify::classify_process;
 use super::types::{ProcessSample, ProcessesSnapshot};
+use super::windows::collect_app_pids;
 
 /// Owns a long-lived [`System`] handle for process sampling.
 pub struct ProcessesProvider {
@@ -75,6 +76,7 @@ impl ProcessesProvider {
         let mut prev_io = self.prev_io.lock();
         let mut alive = HashSet::new();
         let mut processes = Vec::with_capacity(system.processes().len());
+        let app_pids = collect_app_pids();
 
         for (pid, proc_) in system.processes() {
             let pid_u = pid.as_u32();
@@ -108,7 +110,7 @@ impl ProcessesProvider {
                 .unwrap_or_default();
             let parent_pid = proc_.parent().map(|p| p.as_u32());
             let session_id = proc_.session_id().map(|s| s.as_u32());
-            let group = classify_process(&name, &path, session_id, parent_pid);
+            let group = classify_process(&name, &path, session_id, app_pids.contains(&pid_u));
 
             processes.push(ProcessSample {
                 pid: pid_u,

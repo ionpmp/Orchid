@@ -52,7 +52,7 @@ use super::models::{
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_clock_model, empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
-    empty_calculator_model, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
+    empty_calculator_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
     empty_search_model, empty_system_model, empty_tag_state, empty_viewer_model,
     empty_weather_model,
     locale_display_name, theme_display_name, widget_has_settings, FileManagerOverlays,
@@ -62,7 +62,8 @@ use super::spawn;
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
     AppState, ClockModel, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel,
-    CalculatorModel, MoonModel, NotificationItem, PasswordModel, ProcessesModel, RecentFilesModel, RssModel,
+    CalculatorModel, MoonModel, NotificationItem, PasswordModel, ProcessesConfirmDialog, ProcessesModel,
+    RecentFilesModel, RssModel,
     SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel,
     TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
     WidgetFrameModel, WidgetSettingsDialog, WorkspaceModel, WorkspaceSummary,
@@ -162,6 +163,8 @@ pub struct MainWindowController {
     password_add_dialogs: Arc<RwLock<HashMap<Uuid, PasswordAddDialogOverlay>>>,
     /// Per processes widget: context menu visibility and position.
     processes_context: Arc<RwLock<HashMap<Uuid, (bool, f32, f32)>>>,
+    /// Per processes widget: End task / End tree / Sign out confirm dialog.
+    processes_confirm: Arc<RwLock<HashMap<Uuid, ProcessesConfirmDialog>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
     fm_overlays: Arc<RwLock<HashMap<Uuid, FileManagerOverlays>>>,
     /// Unsaved text close-confirm overlays for viewer widgets.
@@ -447,6 +450,7 @@ impl MainWindowController {
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),
             password_add_dialogs: Arc::new(RwLock::new(HashMap::new())),
             processes_context: Arc::new(RwLock::new(HashMap::new())),
+            processes_confirm: Arc::new(RwLock::new(HashMap::new())),
             fm_overlays: Arc::new(RwLock::new(HashMap::new())),
             close_confirm_overlays: Arc::new(RwLock::new(HashMap::new())),
             settings_dialog_overlays: Arc::new(RwLock::new(HashMap::new())),
@@ -1557,6 +1561,12 @@ impl MainWindowController {
                         .get(&pl.instance_id)
                         .copied()
                         .unwrap_or((false, 0.0, 0.0));
+                    let confirm = self
+                        .processes_confirm
+                        .read()
+                        .get(&pl.instance_id)
+                        .cloned()
+                        .unwrap_or_else(empty_processes_confirm);
                     (
                         tstr,
                         80,
@@ -1570,7 +1580,7 @@ impl MainWindowController {
                         empty_moon_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
-                        build_processes_model(p, &self.locale, ctx_vis, ctx_x, ctx_y),
+                        build_processes_model(p, &self.locale, ctx_vis, ctx_x, ctx_y, confirm),
                         empty_calculator_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),

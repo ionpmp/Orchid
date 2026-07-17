@@ -65,26 +65,28 @@ export component WorkspaceView inherits Rectangle {
     callback media-play-pause();
     callback media-next();
     callback media-previous();
-    callback processes-tab-changed(int);
-    callback processes-search-changed(string);
-    callback processes-sort-column-clicked(int);
-    callback processes-process-clicked(int);
-    callback processes-process-context(int, length, length);
-    callback processes-end-task();
-    callback processes-end-tree();
-    callback processes-open-location();
-    callback processes-copy-pid();
-    callback processes-copy-path();
-    callback processes-service-clicked(string);
-    callback processes-service-start();
-    callback processes-service-stop();
-    callback processes-service-restart();
-    callback processes-startup-clicked(string);
-    callback processes-startup-toggle(string, bool);
-    callback processes-startup-open-location(string);
-    callback processes-user-clicked(int);
-    callback processes-user-disconnect();
-    callback processes-user-sign-out();
+    callback processes-tab-changed(string, int);
+    callback processes-search-changed(string, string);
+    callback processes-sort-column-clicked(string, int);
+    callback processes-process-clicked(string, int);
+    callback processes-process-context(string, int, length, length);
+    callback processes-end-task(string);
+    callback processes-end-tree(string);
+    callback processes-open-location(string);
+    callback processes-copy-pid(string);
+    callback processes-copy-path(string);
+    callback processes-service-clicked(string, string);
+    callback processes-service-start(string);
+    callback processes-service-stop(string);
+    callback processes-service-restart(string);
+    callback processes-startup-clicked(string, string);
+    callback processes-startup-toggle(string, string, bool);
+    callback processes-startup-open-location(string, string);
+    callback processes-user-clicked(string, int);
+    callback processes-user-disconnect(string);
+    callback processes-user-sign-out(string);
+    callback processes-confirm-yes(string);
+    callback processes-confirm-no(string);
 
     callback calculator-button(string);
     callback calculator-key(string, bool, bool);
@@ -349,26 +351,28 @@ export component WorkspaceView inherits Rectangle {
                     media-play-pause => { root.media-play-pause(); }
                     media-next => { root.media-next(); }
                     media-previous => { root.media-previous(); }
-                    processes-tab-changed(t) => { root.processes-tab-changed(t); }
-                    processes-search-changed(q) => { root.processes-search-changed(q); }
-                    processes-sort-column-clicked(c) => { root.processes-sort-column-clicked(c); }
-                    processes-process-clicked(pid) => { root.processes-process-clicked(pid); }
-                    processes-process-context(pid, x, y) => { root.processes-process-context(pid, x, y); }
-                    processes-end-task => { root.processes-end-task(); }
-                    processes-end-tree => { root.processes-end-tree(); }
-                    processes-open-location => { root.processes-open-location(); }
-                    processes-copy-pid => { root.processes-copy-pid(); }
-                    processes-copy-path => { root.processes-copy-path(); }
-                    processes-service-clicked(n) => { root.processes-service-clicked(n); }
-                    processes-service-start => { root.processes-service-start(); }
-                    processes-service-stop => { root.processes-service-stop(); }
-                    processes-service-restart => { root.processes-service-restart(); }
-                    processes-startup-clicked(id) => { root.processes-startup-clicked(id); }
-                    processes-startup-toggle(id, en) => { root.processes-startup-toggle(id, en); }
-                    processes-startup-open-location(id) => { root.processes-startup-open-location(id); }
-                    processes-user-clicked(sid) => { root.processes-user-clicked(sid); }
-                    processes-user-disconnect => { root.processes-user-disconnect(); }
-                    processes-user-sign-out => { root.processes-user-sign-out(); }
+                    processes-tab-changed(id, t) => { root.processes-tab-changed(id, t); }
+                    processes-search-changed(id, q) => { root.processes-search-changed(id, q); }
+                    processes-sort-column-clicked(id, c) => { root.processes-sort-column-clicked(id, c); }
+                    processes-process-clicked(id, pid) => { root.processes-process-clicked(id, pid); }
+                    processes-process-context(id, pid, x, y) => { root.processes-process-context(id, pid, x, y); }
+                    processes-end-task(id) => { root.processes-end-task(id); }
+                    processes-end-tree(id) => { root.processes-end-tree(id); }
+                    processes-open-location(id) => { root.processes-open-location(id); }
+                    processes-copy-pid(id) => { root.processes-copy-pid(id); }
+                    processes-copy-path(id) => { root.processes-copy-path(id); }
+                    processes-service-clicked(id, n) => { root.processes-service-clicked(id, n); }
+                    processes-service-start(id) => { root.processes-service-start(id); }
+                    processes-service-stop(id) => { root.processes-service-stop(id); }
+                    processes-service-restart(id) => { root.processes-service-restart(id); }
+                    processes-startup-clicked(id, sid) => { root.processes-startup-clicked(id, sid); }
+                    processes-startup-toggle(id, sid, en) => { root.processes-startup-toggle(id, sid, en); }
+                    processes-startup-open-location(id, sid) => { root.processes-startup-open-location(id, sid); }
+                    processes-user-clicked(id, sid) => { root.processes-user-clicked(id, sid); }
+                    processes-user-disconnect(id) => { root.processes-user-disconnect(id); }
+                    processes-user-sign-out(id) => { root.processes-user-sign-out(id); }
+                    processes-confirm-yes(id) => { root.processes-confirm-yes(id); }
+                    processes-confirm-no(id) => { root.processes-confirm-no(id); }
                     calculator-button(id) => { root.calculator-button(id); }
                     calculator-key(t, ctrl, shift) => { root.calculator-key(t, ctrl, shift); }
                     calculator-history(i) => { root.calculator-history(i); }
