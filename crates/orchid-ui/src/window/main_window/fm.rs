@@ -1128,12 +1128,25 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let query = q.to_string();
+        let seq = {
+            let mut map = self.fm_filter_seq.lock();
+            let entry = map.entry((inst, p)).or_insert(0);
+            *entry = entry.wrapping_add(1);
+            *entry
+        };
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            let _ = orchid_widgets::builtin::file_manager::set_quick_filter(inst, p, query).await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
+            // Coalesce keystrokes so each character does not rebuild the full
+            // Slint entry model for large directories.
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let Some(c) = tw.upgrade() else {
+                return;
+            };
+            if c.fm_filter_seq.lock().get(&(inst, p)).copied() != Some(seq) {
+                return;
             }
+            let _ = orchid_widgets::builtin::file_manager::set_quick_filter(inst, p, query).await;
+            c.fm_refresh_ui(inst).await;
         });
     }
         pub(super) fn on_fm_entry_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, ctrl: bool) {

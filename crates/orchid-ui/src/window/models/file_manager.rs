@@ -2,7 +2,7 @@
 
 use orchid_i18n::LocaleManager;
 use slint::{Image, ModelRc, SharedString, VecModel};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -27,11 +27,45 @@ struct FmThumbCacheEntry {
     image: Image,
 }
 
-thread_local! {
-    static FM_THUMB_CACHE: std::cell::RefCell<HashMap<FmThumbCacheKey, FmThumbCacheEntry>> =
-        std::cell::RefCell::new(HashMap::new());
+struct FmThumbCache {
+    map: HashMap<FmThumbCacheKey, FmThumbCacheEntry>,
+    order: VecDeque<FmThumbCacheKey>,
 }
-const FM_THUMB_CACHE_CAP: usize = 64;
+
+impl FmThumbCache {
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn get(&self, key: &FmThumbCacheKey) -> Option<Image> {
+        self.map.get(key).map(|c| c.image.clone())
+    }
+
+    fn insert(&mut self, key: FmThumbCacheKey, image: Image) {
+        if self.map.contains_key(&key) {
+            self.map.insert(key, FmThumbCacheEntry { image });
+            return;
+        }
+        while self.map.len() >= FM_THUMB_CACHE_CAP {
+            if let Some(old) = self.order.pop_front() {
+                self.map.remove(&old);
+            } else {
+                break;
+            }
+        }
+        self.order.push_back(key);
+        self.map.insert(key, FmThumbCacheEntry { image });
+    }
+}
+
+thread_local! {
+    static FM_THUMB_CACHE: std::cell::RefCell<FmThumbCache> =
+        std::cell::RefCell::new(FmThumbCache::new());
+}
+const FM_THUMB_CACHE_CAP: usize = 256;
 
 fn fm_thumb_tip(bytes: &[u8]) -> u64 {
     let mut tip = 0u64;
@@ -59,7 +93,7 @@ fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
         height,
         tip: fm_thumb_tip(rgba.as_slice()),
     };
-    let cached = FM_THUMB_CACHE.with(|cache| cache.borrow().get(&key).map(|c| c.image.clone()));
+    let cached = FM_THUMB_CACHE.with(|cache| cache.borrow().get(&key));
     if let Some(image) = cached {
         return image;
     }
@@ -67,13 +101,7 @@ fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
         slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_slice(), width, height);
     let image = Image::from_rgba8(buf);
     FM_THUMB_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
-        if cache.len() >= FM_THUMB_CACHE_CAP {
-            if let Some(old) = cache.keys().next().copied() {
-                cache.remove(&old);
-            }
-        }
-        cache.insert(key, FmThumbCacheEntry { image: image.clone() });
+        cache.borrow_mut().insert(key, image.clone());
     });
     image
 }

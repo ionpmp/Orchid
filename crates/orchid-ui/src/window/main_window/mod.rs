@@ -180,6 +180,8 @@ pub struct MainWindowController {
     fm_last_click: Arc<Mutex<Option<(Uuid, u8, String, Instant)>>>,
     /// Debounce duplicate open from Slint double-click + Rust double-click.
     fm_last_open: Arc<Mutex<Option<(Uuid, String, Instant)>>>,
+    /// Monotonic sequence per (instance, pane) for quick-filter debounce.
+    fm_filter_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
     last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
     /// Canvas flickable scroll offset (content coordinates).
@@ -459,6 +461,7 @@ impl MainWindowController {
             fm_focus: Arc::new(Mutex::new(None)),
             fm_last_click: Arc::new(Mutex::new(None)),
             fm_last_open: Arc::new(Mutex::new(None)),
+            fm_filter_seq: Arc::new(Mutex::new(HashMap::new())),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
             keyboard_modifiers: Arc::new(Mutex::new(
