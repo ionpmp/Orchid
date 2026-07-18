@@ -136,6 +136,49 @@ impl ThumbnailService {
         Ok(thumb)
     }
 
+    /// Generate a thumbnail by memory-mapping a local image file.
+    ///
+    /// Avoids copying the whole file into a [`Vec`] before decode. Files larger
+    /// than 16 MiB are rejected.
+    ///
+    /// # Errors
+    ///
+    /// Propagates IO / decode / cache errors.
+    pub async fn generate_from_local_path(
+        &self,
+        key: [u8; 32],
+        size: ThumbnailSize,
+        path: std::path::PathBuf,
+    ) -> Result<Thumbnail> {
+        let notify = self
+            .in_flight
+            .entry(key)
+            .or_insert_with(|| Arc::new(Notify::new()))
+            .clone();
+
+        let target = size.to_pixels();
+        let thumb = tokio::task::spawn_blocking(move || -> Result<Thumbnail> {
+            const MAX_BYTES: u64 = 16 * 1024 * 1024;
+            let file = std::fs::File::open(&path)?;
+            let meta = file.metadata()?;
+            if meta.len() > MAX_BYTES {
+                return Err(crate::error::ViewerError::ThumbnailFailed(
+                    "image too large for thumbnail".into(),
+                ));
+            }
+            // SAFETY: the file is opened read-only and not truncated by us while mapped.
+            let map = unsafe { memmap2::Mmap::map(&file) }?;
+            generator::image_thumbnail(&map, target)
+        })
+        .await
+        .map_err(|e| crate::error::ViewerError::ThumbnailFailed(e.to_string()))??;
+
+        self.cache.put(&key, size, &thumb).await?;
+        self.in_flight.remove(&key);
+        notify.notify_waiters();
+        Ok(thumb)
+    }
+
     /// Drop every cached size for the given key.
     ///
     /// # Errors
