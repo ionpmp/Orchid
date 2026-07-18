@@ -46,7 +46,8 @@ use parking_lot::RwLock;
 
 use super::models::{
     blank_terminal, build_clock_model, build_file_manager_model, build_media_model, build_moon_model,
-    build_calculator_model, build_password_model, build_processes_model, build_recent_files_model, build_rss_model,
+    build_calculator_model, build_password_model, build_processes_model, build_recent_files_model,
+    build_rss_model, patch_processes_model,
     build_search_model, build_system_model, build_terminal_divider_models, build_terminal_model,
     build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
@@ -808,12 +809,65 @@ impl MainWindowController {
     }
 
     async fn sync_widget_visibility(&self) {
-        let ids = visible_instance_ids(
+        let Ok(ws) = self.workspace_manager.active() else {
+            self.widget_manager.apply_visibility(&[]).await;
+            return;
+        };
+        let mut ids = visible_instance_ids(
             &self.widget_manager,
             &self.workspace_manager,
             &self.group_manager,
         );
+        let (sx, sy) = *self.canvas_scroll.lock();
+        let (vw, vh) = *self.canvas_size.lock();
+        // Sleep widgets scrolled fully outside the canvas viewport (e.g. Processes
+        // stops its expensive refresh while off-screen).
+        ids.retain(|id| {
+            self.is_floating_viewer(*id)
+                || self.widget_intersects_canvas_viewport(ws.id, *id, sx, sy, vw, vh)
+        });
         self.widget_manager.apply_visibility(&ids).await;
+    }
+
+    /// `true` when the widget's layout bounds intersect the scrolled canvas viewport.
+    fn widget_intersects_canvas_viewport(
+        &self,
+        workspace_id: Uuid,
+        instance_id: Uuid,
+        scroll_x: f32,
+        scroll_y: f32,
+        viewport_w: f32,
+        viewport_h: f32,
+    ) -> bool {
+        let all = self.widget_manager.instances_for_workspace(workspace_id);
+        let docked = Self::docked_instances(&all);
+        let view = ViewportSize {
+            width_px: viewport_w.max(1.0),
+            height_px: viewport_h.max(1.0),
+        };
+        let snap = self.layout_engine.snapshot(workspace_id, &docked, view);
+        let Some(pl) = snap.cells.iter().find(|c| c.instance_id == instance_id) else {
+            // Unknown placement — keep active rather than sleep incorrectly.
+            return true;
+        };
+        let mut bounds = pl.bounds;
+        if let Some(group) = self
+            .group_manager
+            .find_for_instance(instance_id)
+            .filter(|g| g.members.len() >= 2)
+        {
+            bounds = self
+                .layout_engine
+                .pixel_bounds_for(group.position, group.size, view);
+        }
+        let vx0 = scroll_x;
+        let vy0 = scroll_y;
+        let vx1 = scroll_x + viewport_w;
+        let vy1 = scroll_y + viewport_h;
+        bounds.x < vx1
+            && bounds.x + bounds.width > vx0
+            && bounds.y < vy1
+            && bounds.y + bounds.height > vy0
     }
 
     /// `create` stores new instances at a placeholder cell; place them on a free grid cell.
@@ -972,8 +1026,9 @@ impl MainWindowController {
         self.sync_widget_catalog_global();
     }
 
-    fn on_canvas_scrolled(&self, viewport_x: f32, viewport_y: f32) {
+    fn on_canvas_scrolled(self: &Arc<Self>, viewport_x: f32, viewport_y: f32) {
         *self.canvas_scroll.lock() = (viewport_x, viewport_y);
+        self.schedule_visibility_sync();
     }
 
     fn on_catalog_dismiss(self: &Arc<Self>) {
@@ -1316,6 +1371,18 @@ impl MainWindowController {
             {
                 continue;
             }
+            // Processes: avoid rebuilding every sibling model + all Slint rows
+            // from scratch on each sample.
+            if iref.type_id == orchid_widgets::builtin::processes::TYPE_ID
+                && self.try_patch_processes_row(
+                    &self.workspace_widgets,
+                    *id,
+                    Some(bounds),
+                    Some(idx as i32),
+                )
+            {
+                continue;
+            }
             let new_row = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
             let needle = id.to_string();
             for r in 0..v.row_count() {
@@ -1332,6 +1399,93 @@ impl MainWindowController {
             self.sync_floating_widgets_model();
         }
         Ok(())
+    }
+
+    /// Patch an existing processes frame row without rebuilding sibling models.
+    fn try_patch_processes_row(
+        &self,
+        model: &ModelRc<WidgetFrameModel>,
+        id: Uuid,
+        bounds: Option<PixelBounds>,
+        z_order: Option<i32>,
+    ) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let orchid_widgets::WidgetPayload::Processes(p) = &ws.payload else {
+            return false;
+        };
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+            return false;
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            let (ctx_vis, ctx_x, ctx_y) = self
+                .processes_context
+                .read()
+                .get(&id)
+                .copied()
+                .unwrap_or((false, 0.0, 0.0));
+            let confirm = self
+                .processes_confirm
+                .read()
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(empty_processes_confirm);
+            // Keep the same ModelRc list handles — list cells notify Slint directly.
+            // Avoid set_row_data on the frame unless scalars/geometry actually changed;
+            // rewriting the whole ProcessesModel forced a heavy view pass every sample.
+            let patch = patch_processes_model(
+                &mut row.processes,
+                p,
+                &self.locale,
+                ctx_vis,
+                ctx_x,
+                ctx_y,
+                confirm,
+            );
+            let mut need_frame = patch.needs_frame_write;
+            if let Some(b) = bounds {
+                if row.x != b.x
+                    || row.y != b.y
+                    || row.width != b.width
+                    || row.height != b.height
+                {
+                    row.x = b.x;
+                    row.y = b.y;
+                    row.width = b.width;
+                    row.height = b.height;
+                    need_frame = true;
+                }
+            }
+            if let Some(z) = z_order {
+                if row.z_order != z {
+                    row.z_order = z;
+                    need_frame = true;
+                }
+            }
+            let title: slint::SharedString = ws.title.clone().into();
+            if row.title != title {
+                row.title = title;
+                need_frame = true;
+            }
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            // Group tabs are ModelRcs; always refresh handles when writing the frame.
+            if need_frame {
+                row.group_id = group_id;
+                row.group_tabs = group_tabs;
+                v.set_row_data(r, row);
+            }
+            return true;
+        }
+        false
     }
 
     /// Patch an existing viewer frame row without rebuilding empty sibling models.
@@ -2553,7 +2707,7 @@ impl MainWindowController {
 
 /// Replace all rows in a `VecModel` wrapped by `ModelRc` without creating a new `ModelRc`, so
 /// `for` loops in Slint keep the same item instances and retain focus/scroll state.
-pub(super) fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+pub(crate) fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     let v = model
         .as_any()
         .downcast_ref::<VecModel<T>>()

@@ -65,10 +65,14 @@ struct ProcessesHandle {
     refresh: Mutex<PeriodicRefresh>,
     bus: Arc<orchid_core::EventBus>,
     locale: Arc<orchid_i18n::LocaleManager>,
+    /// Built UI snapshot; invalidated on every [`Self::publish`] so the ~30 Hz
+    /// snapshot pump does not rebuild process rows between samples.
+    cached_ui_snapshot: RwLock<Option<WidgetSnapshot>>,
 }
 
 impl ProcessesHandle {
     fn publish(&self) {
+        *self.cached_ui_snapshot.write() = None;
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
             WidgetSnapshotUpdated {
@@ -470,6 +474,7 @@ impl ProcessesWidget {
             refresh: Mutex::new(PeriodicRefresh::new(interval)),
             bus,
             locale,
+            cached_ui_snapshot: RwLock::new(None),
         });
         PROCESSES_LIVE.insert(instance_id, Arc::clone(&handle));
         Self {
@@ -520,6 +525,9 @@ impl Widget for ProcessesWidget {
         Ok(())
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
+        if let Some(cached) = self.handle.cached_ui_snapshot.read().clone() {
+            return Some(cached);
+        }
         let cfg = self.handle.config.read().clone();
         let ui = self.handle.ui.read().clone_view();
         let is_loading = self.handle.snapshot.read().is_none();
@@ -530,11 +538,12 @@ impl Widget for ProcessesWidget {
                 ui.sort_column,
                 ui.sort_descending,
                 cfg.show_grouping,
+                ui.selected_pid,
                 &self.handle.locale,
             ),
             None => Vec::new(),
         };
-        Some(WidgetSnapshot {
+        let built = WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
             title: self.handle.locale.tr("widget-processes-name").into(),
@@ -560,7 +569,9 @@ impl Widget for ProcessesWidget {
                 status_message: ui.status_message,
                 show_grouping: cfg.show_grouping,
             }),
-        })
+        };
+        *self.handle.cached_ui_snapshot.write() = Some(built.clone());
+        Some(built)
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
         let mut cfg = self.handle.config.read().clone();
@@ -582,6 +593,7 @@ impl Widget for ProcessesWidget {
             ui.sort_column = cfg.sort();
             ui.sort_descending = cfg.sort_descending;
         }
+        *self.handle.cached_ui_snapshot.write() = None;
         *self.handle.config.write() = cfg;
         let after = self.handle.config.read().refresh_interval_seconds;
         if was_running && before != after {
@@ -645,12 +657,17 @@ fn matches_query(hay: &str, query: &str) -> bool {
         .contains(&query.to_ascii_lowercase())
 }
 
+/// Cap rows sent to Slint. ListView virtualizes paint, but building/sorting the
+/// full system process table is still bounded for the sample worker.
+const MAX_PROCESS_ROWS: usize = 80;
+
 fn build_process_rows(
     snap: &ProcessesSnapshot,
     query: &str,
     sort: ProcessSortColumn,
     descending: bool,
     show_grouping: bool,
+    selected_pid: u32,
     locale: &orchid_i18n::LocaleManager,
 ) -> Vec<ProcessRowView> {
     let mut rows: Vec<ProcessRowView> = snap
@@ -683,6 +700,7 @@ fn build_process_rows(
         .collect();
 
     sort_processes(&mut rows, sort, descending);
+    truncate_process_rows(&mut rows, selected_pid);
 
     if !show_grouping || !query.is_empty() {
         return rows;
@@ -724,6 +742,23 @@ fn build_process_rows(
         grouped.extend(members);
     }
     grouped
+}
+
+fn truncate_process_rows(rows: &mut Vec<ProcessRowView>, selected_pid: u32) {
+    if rows.len() <= MAX_PROCESS_ROWS {
+        return;
+    }
+    let selected = (selected_pid != 0)
+        .then(|| rows.iter().find(|r| r.pid == selected_pid).cloned())
+        .flatten();
+    rows.truncate(MAX_PROCESS_ROWS);
+    if let Some(sel) = selected {
+        if !rows.iter().any(|r| r.pid == sel.pid) {
+            if let Some(last) = rows.last_mut() {
+                *last = sel;
+            }
+        }
+    }
 }
 
 fn format_io(locale: &orchid_i18n::LocaleManager, read_bps: u64, write_bps: u64) -> String {
@@ -905,6 +940,7 @@ mod tests {
             ProcessSortColumn::Name,
             false,
             false,
+            0,
             &locale,
         );
         assert_eq!(rows.len(), 1);

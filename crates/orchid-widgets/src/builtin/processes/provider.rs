@@ -1,13 +1,13 @@
 //! `sysinfo`-backed process list provider.
 
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use parking_lot::Mutex;
 use sysinfo::{
     Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users,
-    MINIMUM_CPU_UPDATE_INTERVAL,
 };
 
 use super::classify::classify_process;
@@ -21,6 +21,10 @@ pub struct ProcessesProvider {
     last_refresh: Mutex<Option<Instant>>,
     /// Previous total I/O counters per pid for rate calculation.
     prev_io: Mutex<HashMap<u32, (u64, u64, Instant)>>,
+    /// Cached Task Manager "Apps" PID set (EnumWindows is relatively expensive).
+    app_pids: Mutex<(Instant, HashSet<u32>)>,
+    /// Sample counter for cheap vs full refreshes.
+    sample_n: AtomicU32,
 }
 
 impl std::fmt::Debug for ProcessesProvider {
@@ -40,14 +44,19 @@ impl ProcessesProvider {
     #[must_use]
     pub fn new() -> Self {
         let mut system = System::new();
-        let kind = process_refresh_kind();
-        system.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            process_refresh_kind(true),
+        );
         let users = Users::new_with_refreshed_list();
         Self {
             system: Mutex::new(system),
             users: Mutex::new(users),
             last_refresh: Mutex::new(Some(Instant::now())),
             prev_io: Mutex::new(HashMap::new()),
+            app_pids: Mutex::new((Instant::now(), HashSet::new())),
+            sample_n: AtomicU32::new(0),
         }
     }
 
@@ -55,28 +64,34 @@ impl ProcessesProvider {
     pub fn refresh(&self) -> ProcessesSnapshot {
         let captured_at = Utc::now();
         let now = Instant::now();
+        let n = self.sample_n.fetch_add(1, Ordering::Relaxed);
+        // Disk/IO + user list every 3rd sample keeps the hot path lighter.
+        let full = n.is_multiple_of(3);
 
-        if let Some(prev) = *self.last_refresh.lock() {
-            let elapsed = prev.elapsed();
-            if elapsed < MINIMUM_CPU_UPDATE_INTERVAL {
-                std::thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL - elapsed);
-            }
-        }
+        // Do not sleep here: the widget interval already spaces samples.
+        // A blocking sleep on the worker made every tick feel like a hitch.
+        *self.last_refresh.lock() = Some(now);
 
-        {
+        if full {
             let mut users = self.users.lock();
             users.refresh_list();
         }
 
-        let mut system = self.system.lock();
-        system.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh_kind());
-        *self.last_refresh.lock() = Some(Instant::now());
+        {
+            let mut system = self.system.lock();
+            system.refresh_processes_specifics(
+                ProcessesToUpdate::All,
+                true,
+                process_refresh_kind(full),
+            );
+        }
 
+        let app_pids = self.app_pids_cached();
+        let system = self.system.lock();
         let users = self.users.lock();
         let mut prev_io = self.prev_io.lock();
         let mut alive = HashSet::new();
         let mut processes = Vec::with_capacity(system.processes().len());
-        let app_pids = collect_app_pids();
 
         for (pid, proc_) in system.processes() {
             let pid_u = pid.as_u32();
@@ -141,6 +156,17 @@ impl ProcessesProvider {
         }
     }
 
+    fn app_pids_cached(&self) -> HashSet<u32> {
+        const TTL: Duration = Duration::from_secs(8);
+        let mut guard = self.app_pids.lock();
+        if guard.0.elapsed() < TTL && !guard.1.is_empty() {
+            return guard.1.clone();
+        }
+        let pids = collect_app_pids();
+        *guard = (Instant::now(), pids.clone());
+        pids
+    }
+
     /// Kill a single process by PID. Returns `true` on success.
     pub fn kill(&self, pid: u32) -> bool {
         let system = self.system.lock();
@@ -193,14 +219,16 @@ impl ProcessesProvider {
     }
 }
 
-fn process_refresh_kind() -> ProcessRefreshKind {
-    ProcessRefreshKind::new()
+fn process_refresh_kind(with_disk: bool) -> ProcessRefreshKind {
+    let mut kind = ProcessRefreshKind::new()
         .with_cpu()
         .with_memory()
-        .with_disk_usage()
         .with_exe(UpdateKind::OnlyIfNotSet)
-        .with_cmd(UpdateKind::OnlyIfNotSet)
-        .with_user(UpdateKind::OnlyIfNotSet)
+        .with_user(UpdateKind::OnlyIfNotSet);
+    if with_disk {
+        kind = kind.with_disk_usage();
+    }
+    kind
 }
 
 #[cfg(test)]

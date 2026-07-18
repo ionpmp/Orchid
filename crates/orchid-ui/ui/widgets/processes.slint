@@ -1,3 +1,4 @@
+import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme_global.slint";
 import { ProcessesModel, ProcessRowEntry, ServiceRowEntry, StartupRowEntry, UserRowEntry } from "../workspace/defs.slint";
 import { ProcessesConfirmDialog } from "./processes-confirm-dialog.slint";
@@ -322,103 +323,100 @@ export component ProcessesView inherits Rectangle {
                     }
                 }
 
-                Flickable {
+                // ListView only instantiates visible rows — Flickable+for rebuilt
+                // every process row on each sample and spiked CPU every few seconds.
+                ListView {
                     vertical-stretch: 1;
-                    viewport-width: self.width;
-                    viewport-height: proc-list.preferred-height;
+                    for row[i] in model.processes : Rectangle {
+                        height: 26px;
+                        width: parent.width;
+                        background: row.is-group-header ? Theme.surface-raised
+                            : (row.pid == model.selected-pid ? Theme.surface-raised
+                            : transparent);
 
-                    proc-list := VerticalLayout {
-                        spacing: 0;
-                        for row[i] in model.processes : Rectangle {
-                            height: 26px;
-                            background: row.is-group-header ? Theme.surface-raised
-                                : (row.pid == model.selected-pid ? Theme.surface-raised
-                                : transparent);
-
-                            TouchArea {
-                                clicked => {
-                                    if (!row.is-group-header) {
-                                        root.process-clicked(row.pid);
-                                    }
-                                }
-                                pointer-event(e) => {
-                                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right && !row.is-group-header) {
-                                        root.process-context(row.pid, self.mouse-x, self.mouse-y);
-                                    }
+                        TouchArea {
+                            clicked => {
+                                if (!row.is-group-header) {
+                                    root.process-clicked(row.pid);
                                 }
                             }
+                            pointer-event(e) => {
+                                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right && !row.is-group-header) {
+                                    root.process-context(row.pid, self.mouse-x, self.mouse-y);
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 8px;
 
                             HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 8px;
-
-                                HorizontalLayout {
-                                    min-width: 160px; horizontal-stretch: 2;
-                                    spacing: 6px;
-                                    if !row.is-group-header && row.has-icon : Image {
-                                        width: 16px;
-                                        height: 16px;
-                                        source: row.icon;
-                                        image-fit: contain;
-                                        y: (parent.height - self.height) / 2;
-                                    }
-                                    if !row.is-group-header && !row.has-icon : Rectangle {
-                                        width: 16px;
-                                        height: 16px;
-                                        y: (parent.height - self.height) / 2;
-                                        background: Theme.surface-raised;
-                                        border-radius: 3px;
-                                    }
-                                    Text {
-                                        horizontal-stretch: 1;
-                                        text: row.is-group-header ? row.group-label : row.name;
-                                        color: row.is-group-header ? Theme.text-secondary : Theme.text-primary;
-                                        font-size: Theme.font-size-sm;
-                                        font-weight: row.is-group-header ? Theme.weight-semibold : Theme.weight-regular;
-                                        vertical-alignment: center;
-                                        overflow: elide;
-                                    }
+                                min-width: 160px; horizontal-stretch: 2;
+                                spacing: 6px;
+                                if !row.is-group-header && row.has-icon : Image {
+                                    width: 16px;
+                                    height: 16px;
+                                    source: row.icon;
+                                    image-fit: contain;
+                                    y: (parent.height - self.height) / 2;
                                 }
-                                if !row.is-group-header : Text {
-                                    width: 64px;
-                                    text: row.pid-text;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
+                                if !row.is-group-header && !row.has-icon : Rectangle {
+                                    width: 16px;
+                                    height: 16px;
+                                    y: (parent.height - self.height) / 2;
+                                    background: Theme.surface-raised;
+                                    border-radius: 3px;
                                 }
-                                if !row.is-group-header : Text {
-                                    width: 56px;
-                                    text: row.cpu-text;
-                                    color: Theme.text-primary;
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: row.is-group-header ? row.group-label : row.name;
+                                    color: row.is-group-header ? Theme.text-secondary : Theme.text-primary;
                                     font-size: Theme.font-size-sm;
-                                    horizontal-alignment: right;
-                                    vertical-alignment: center;
-                                }
-                                if !row.is-group-header : Text {
-                                    width: 80px;
-                                    text: row.memory-text;
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-sm;
-                                    horizontal-alignment: right;
-                                    vertical-alignment: center;
-                                }
-                                if !row.is-group-header : Text {
-                                    width: 120px;
-                                    text: row.io-text;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
+                                    font-weight: row.is-group-header ? Theme.weight-semibold : Theme.weight-regular;
                                     vertical-alignment: center;
                                     overflow: elide;
                                 }
-                                if !row.is-group-header : Text {
-                                    width: 100px;
-                                    text: row.user;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
+                            }
+                            if !row.is-group-header : Text {
+                                width: 64px;
+                                text: row.pid-text;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                            if !row.is-group-header : Text {
+                                width: 56px;
+                                text: row.cpu-text;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                            }
+                            if !row.is-group-header : Text {
+                                width: 80px;
+                                text: row.memory-text;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                            }
+                            if !row.is-group-header : Text {
+                                width: 120px;
+                                text: row.io-text;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                            if !row.is-group-header : Text {
+                                width: 100px;
+                                text: row.user;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                overflow: elide;
                             }
                         }
                     }

@@ -27,7 +27,8 @@ pub struct ProcessesConfig {
 impl Default for ProcessesConfig {
     fn default() -> Self {
         Self {
-            refresh_interval_seconds: 2,
+            // Keep UI cost down: each refresh updates a large Slint row list.
+            refresh_interval_seconds: 5,
             default_tab: ProcessesTab::Processes as u8,
             show_grouping: true,
             search_query: String::new(),

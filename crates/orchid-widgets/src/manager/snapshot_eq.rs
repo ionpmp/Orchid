@@ -1,10 +1,11 @@
 //! Render-equality helpers for [`super::snapshot_renders_unchanged`].
 
 use crate::widget::payloads::{
-    EntryPayload, FileManagerPayload, MediaPlayerPayload, MoonPayload, PasswordEntryDetailView,
-    PasswordEntryView, PasswordManagerPayload, RecentFilesPayload, RssItemView, RssPayload,
-    SearchCandidateView, SystemIndicator, SystemPayload, UniversalSearchPayload, ViewerPayload,
-    WeatherForecastDay, WeatherPayload,
+    CalculatorPayload, ClockPayload, EntryPayload, FileManagerPayload, MediaPlayerPayload,
+    MoonPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
+    ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
+    SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
+    UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -20,8 +21,13 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::Terminal(a), WidgetPayload::Terminal(b)) => terminal_payload_eq(a, b),
         (WidgetPayload::Weather(a), WidgetPayload::Weather(b)) => weather_payload_eq(a, b),
         (WidgetPayload::Moon(a), WidgetPayload::Moon(b)) => moon_payload_eq(a, b),
+        (WidgetPayload::Clock(a), WidgetPayload::Clock(b)) => clock_payload_eq(a, b),
         (WidgetPayload::SystemIndicators(a), WidgetPayload::SystemIndicators(b)) => {
             system_payload_eq(a, b)
+        }
+        (WidgetPayload::Processes(a), WidgetPayload::Processes(b)) => processes_payload_eq(a, b),
+        (WidgetPayload::Calculator(a), WidgetPayload::Calculator(b)) => {
+            calculator_payload_eq(a, b)
         }
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
         (WidgetPayload::UniversalSearch(a), WidgetPayload::UniversalSearch(b)) => {
@@ -39,6 +45,7 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::FileManager(a), WidgetPayload::FileManager(b)) => {
             file_manager_payload_eq(a, b)
         }
+        // Different payload kinds never render the same.
         _ => false,
     }
 }
@@ -376,6 +383,124 @@ fn system_payload_eq(a: &SystemPayload, b: &SystemPayload) -> bool {
             .all(|(x, y)| system_indicator_eq(x, y))
 }
 
+fn clock_payload_eq(a: &ClockPayload, b: &ClockPayload) -> bool {
+    a.local_time == b.local_time
+        && a.local_date == b.local_date
+        && a.local_timezone == b.local_timezone
+        && a.picker_open == b.picker_open
+        && a.search_query == b.search_query
+        && a.search_busy == b.search_busy
+        && a.cities.len() == b.cities.len()
+        && a.cities.iter().zip(b.cities.iter()).all(|(x, y)| {
+            x.name == y.name
+                && x.timezone == y.timezone
+                && x.time_text == y.time_text
+                && x.date_text == y.date_text
+                && x.offset_text == y.offset_text
+                && x.day_offset == y.day_offset
+                && x.is_local == y.is_local
+        })
+        && a.search_results.len() == b.search_results.len()
+        && a.search_results
+            .iter()
+            .zip(b.search_results.iter())
+            .all(|(x, y)| x.name == y.name && x.detail == y.detail && x.timezone == y.timezone)
+}
+
+fn process_row_eq(a: &ProcessRowView, b: &ProcessRowView) -> bool {
+    a.pid == b.pid
+        && a.name == b.name
+        && a.status == b.status
+        && a.cpu_percent.to_bits() == b.cpu_percent.to_bits()
+        && a.memory_bytes == b.memory_bytes
+        && a.memory_text == b.memory_text
+        && a.io_read_bps == b.io_read_bps
+        && a.io_write_bps == b.io_write_bps
+        && a.io_text == b.io_text
+        && a.user == b.user
+        && a.path == b.path
+        && a.group == b.group
+        && a.parent_pid == b.parent_pid
+        && a.session_id == b.session_id
+        && a.is_group_header == b.is_group_header
+        && a.group_label == b.group_label
+}
+
+fn service_row_eq(a: &ServiceRowView, b: &ServiceRowView) -> bool {
+    a.name == b.name
+        && a.display_name == b.display_name
+        && a.status == b.status
+        && a.status_code == b.status_code
+        && a.start_type == b.start_type
+        && a.pid == b.pid
+        && a.can_start == b.can_start
+        && a.can_stop == b.can_stop
+}
+
+fn startup_row_eq(a: &StartupRowView, b: &StartupRowView) -> bool {
+    a.id == b.id
+        && a.name == b.name
+        && a.command == b.command
+        && a.location == b.location
+        && a.enabled == b.enabled
+        && a.can_toggle == b.can_toggle
+}
+
+fn user_row_eq(a: &UserRowView, b: &UserRowView) -> bool {
+    a.session_id == b.session_id
+        && a.user_name == b.user_name
+        && a.state == b.state
+        && a.process_count == b.process_count
+        && a.memory_bytes == b.memory_bytes
+        && a.memory_text == b.memory_text
+}
+
+fn processes_payload_eq(a: &ProcessesPayload, b: &ProcessesPayload) -> bool {
+    a.tab == b.tab
+        && a.search_query == b.search_query
+        && a.sort_column == b.sort_column
+        && a.sort_descending == b.sort_descending
+        && a.selected_pid == b.selected_pid
+        && a.selected_service == b.selected_service
+        && a.selected_startup == b.selected_startup
+        && a.selected_session == b.selected_session
+        && a.is_loading == b.is_loading
+        && a.status_message == b.status_message
+        && a.show_grouping == b.show_grouping
+        && a.processes.len() == b.processes.len()
+        && a.processes
+            .iter()
+            .zip(b.processes.iter())
+            .all(|(x, y)| process_row_eq(x, y))
+        && a.services.len() == b.services.len()
+        && a.services
+            .iter()
+            .zip(b.services.iter())
+            .all(|(x, y)| service_row_eq(x, y))
+        && a.startups.len() == b.startups.len()
+        && a.startups
+            .iter()
+            .zip(b.startups.iter())
+            .all(|(x, y)| startup_row_eq(x, y))
+        && a.users.len() == b.users.len()
+        && a.users
+            .iter()
+            .zip(b.users.iter())
+            .all(|(x, y)| user_row_eq(x, y))
+}
+
+fn calculator_payload_eq(a: &CalculatorPayload, b: &CalculatorPayload) -> bool {
+    a.mode == b.mode
+        && a.angle == b.angle
+        && a.second == b.second
+        && a.display == b.display
+        && a.expression == b.expression
+        && a.memory_set == b.memory_set
+        && a.error_key == b.error_key
+        && a.show_history == b.show_history
+        && a.history == b.history
+}
+
 fn opt_f32_eq(a: Option<f32>, b: Option<f32>) -> bool {
     match (a, b) {
         (Some(x), Some(y)) => x.to_bits() == y.to_bits(),
@@ -556,6 +681,56 @@ mod tests {
         });
         let b = a.clone();
         assert!(payload_renders_equal(&a, &b));
+    }
+
+    #[test]
+    fn processes_payload_identical_snapshots_compare_equal() {
+        use crate::widget::payloads::{ProcessGroup, ProcessSortColumn, ProcessesTab};
+        let row = ProcessRowView {
+            pid: 1,
+            name: "orchid.exe".into(),
+            status: "Run".into(),
+            cpu_percent: 1.5,
+            memory_bytes: 1024,
+            memory_text: "1 KB".into(),
+            io_read_bps: 0,
+            io_write_bps: 0,
+            io_text: String::new(),
+            user: "me".into(),
+            path: String::new(),
+            group: ProcessGroup::Apps,
+            parent_pid: None,
+            session_id: None,
+            is_group_header: false,
+            group_label: String::new(),
+        };
+        let make = || {
+            WidgetPayload::Processes(ProcessesPayload {
+                tab: ProcessesTab::Processes,
+                search_query: String::new(),
+                sort_column: ProcessSortColumn::Cpu,
+                sort_descending: true,
+                selected_pid: 1,
+                selected_service: String::new(),
+                selected_startup: String::new(),
+                selected_session: u32::MAX,
+                processes: vec![row.clone()],
+                services: Vec::new(),
+                startups: Vec::new(),
+                users: Vec::new(),
+                is_loading: false,
+                status_message: String::new(),
+                show_grouping: true,
+            })
+        };
+        let a = make();
+        let b = make();
+        assert!(payload_renders_equal(&a, &b));
+        let mut c = make();
+        if let WidgetPayload::Processes(ref mut p) = c {
+            p.processes[0].cpu_percent = 2.0;
+        }
+        assert!(!payload_renders_equal(&a, &c));
     }
 
     #[test]
