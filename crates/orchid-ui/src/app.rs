@@ -504,6 +504,10 @@ impl OrchidApp {
             )
             .map_err(|e| UiError::Slint(format!("managed ingest failed sub: {e}")))?;
         let recent_files = orchid_widgets::RecentFilesStore::new(50);
+        let fm_file_watcher = Arc::new(orchid_fs::FileWatcher::new(
+            bus.clone(),
+            fs_registry.clone(),
+        ));
         let fm_deps = orchid_widgets::builtin::file_manager::FileManagerDeps {
             registry: fs_registry.clone(),
             clipboard: Arc::new(orchid_widgets::builtin::file_manager::FileClipboard::new()),
@@ -517,6 +521,7 @@ impl OrchidApp {
             fm_passphrase_vault: fm_passphrase_vault.clone(),
             orchid_config: config.clone(),
             locale: locale.clone(),
+            file_watcher: Some(fm_file_watcher),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

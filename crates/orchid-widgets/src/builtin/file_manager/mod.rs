@@ -10,7 +10,8 @@ pub mod view_mode;
 pub mod virtual_folders;
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::time::Duration;
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -158,6 +159,8 @@ pub struct FileManagerDeps {
     pub orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     /// Fluent locale for UI strings built inside the widget (e.g. Properties).
     pub locale: Arc<orchid_i18n::LocaleManager>,
+    /// Optional directory watcher used to auto-refresh open folders.
+    pub file_watcher: Option<Arc<orchid_fs::FileWatcher>>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {
@@ -187,7 +190,10 @@ struct FileManagerInner {
     state: parking_lot::Mutex<FileManagerState>,
     config: RwLock<FileManagerConfig>,
     /// Entries per tab id. Keeps dual-pane tabs independent.
-    entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
+    ///
+    /// Stored behind [`Arc`] so selection/filter snapshots clone the map of
+    /// arcs instead of deep-cloning every [`orchid_fs::FsEntry`].
+    entries_by_tab: RwLock<HashMap<Uuid, Arc<Vec<orchid_fs::FsEntry>>>>,
     /// Decoded image thumbnails keyed by entry path (icon / gallery modes).
     thumbnail_rgba: RwLock<HashMap<String, orchid_viewers::Thumbnail>>,
     /// Insertion order for thumbnail cache eviction.
@@ -227,6 +233,14 @@ struct FileManagerInner {
     activity_notice_key: RwLock<Option<String>>,
     activity_notice_name: RwLock<Option<String>>,
     activity_notice_at: RwLock<Option<std::time::Instant>>,
+    /// Active directory watches keyed by tab id (drop handle to unsubscribe).
+    watch_handles: parking_lot::Mutex<HashMap<Uuid, orchid_fs::WatchHandle>>,
+    /// Watched directory path per tab (for filtering bus FS events).
+    watch_paths: RwLock<HashMap<Uuid, String>>,
+    /// Bus subscriptions that drive external directory refresh.
+    dir_watch_subs: parking_lot::Mutex<Vec<orchid_core::SubscriptionHandle>>,
+    /// Generation counter for coalescing external refresh tasks.
+    external_refresh_gen: AtomicU64,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -329,6 +343,10 @@ impl FileManagerWidget {
                 activity_notice_key: RwLock::new(None),
                 activity_notice_name: RwLock::new(None),
                 activity_notice_at: RwLock::new(None),
+                watch_handles: parking_lot::Mutex::new(HashMap::new()),
+                watch_paths: RwLock::new(HashMap::new()),
+                dir_watch_subs: parking_lot::Mutex::new(Vec::new()),
+                external_refresh_gen: AtomicU64::new(0),
                 bus,
             }),
         }
@@ -441,6 +459,7 @@ impl Widget for FileManagerWidget {
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         FM_LIVE.insert(self.inner.instance_id, Arc::clone(&self.inner));
+        self.inner.install_dir_watch_handlers();
         self.refresh().await;
         Ok(())
     }
@@ -454,6 +473,7 @@ impl Widget for FileManagerWidget {
         Ok(())
     }
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.inner.clear_dir_watches();
         FM_LIVE.remove(&self.inner.instance_id);
         Ok(())
     }
@@ -566,6 +586,120 @@ impl FileManagerInner {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    fn install_dir_watch_handlers(self: &Arc<Self>) {
+        if self.deps.file_watcher.is_none() {
+            return;
+        }
+        use orchid_core::{Event, EventFilter, HandlerPriority};
+        use orchid_fs::{FsCreatedEvent, FsDeletedEvent, FsModifiedEvent, FsRenamedEvent};
+
+        let filter = EventFilter::default()
+            .add_type(FsCreatedEvent::event_type())
+            .add_type(FsModifiedEvent::event_type())
+            .add_type(FsDeletedEvent::event_type())
+            .add_type(FsRenamedEvent::event_type());
+        let this = Arc::downgrade(self);
+        match self.bus.subscribe_async(filter, HandlerPriority::Normal, move |env| {
+            let this = this.clone();
+            async move {
+                let Some(inner) = this.upgrade() else {
+                    return;
+                };
+                for path in fs_event_paths(&env) {
+                    inner.schedule_external_refresh(&path);
+                }
+            }
+        }) {
+            Ok(handle) => {
+                self.dir_watch_subs.lock().push(handle);
+            }
+            Err(e) => {
+                warn!(error = %e, "fm: failed to subscribe to directory watch events");
+            }
+        }
+    }
+
+    fn clear_dir_watches(&self) {
+        self.watch_handles.lock().clear();
+        self.watch_paths.write().clear();
+        self.dir_watch_subs.lock().clear();
+    }
+
+    fn drop_tab_watch(&self, tab_id: Uuid) {
+        self.watch_handles.lock().remove(&tab_id);
+        self.watch_paths.write().remove(&tab_id);
+    }
+
+    async fn rewatch_tab(self: &Arc<Self>, tab: &TabState) {
+        self.drop_tab_watch(tab.id);
+        if is_virtual(&tab.path) {
+            return;
+        }
+        let Some(watcher) = self.deps.file_watcher.as_ref() else {
+            return;
+        };
+        match watcher.watch(tab.path.clone()).await {
+            Ok(handle) => {
+                self.watch_paths
+                    .write()
+                    .insert(tab.id, tab.path.as_str().to_string());
+                self.watch_handles.lock().insert(tab.id, handle);
+            }
+            Err(e) => {
+                debug!(
+                    error = %e,
+                    path = %tab.path.as_str(),
+                    "fm: directory watch unavailable"
+                );
+            }
+        }
+    }
+
+    fn schedule_external_refresh(self: &Arc<Self>, path: &orchid_fs::FsPath) {
+        let path_str = path.as_str();
+        let affected: Vec<TabState> = {
+            let watch_paths = self.watch_paths.read();
+            let state = self.state.lock();
+            let mut out = Vec::new();
+            for (tab_id, root) in watch_paths.iter() {
+                if !fs_event_affects_listing(path_str, root) {
+                    continue;
+                }
+                if let Some(tab) = find_tab_by_id(&state, *tab_id) {
+                    out.push(tab.clone());
+                }
+            }
+            out
+        };
+        if affected.is_empty() {
+            return;
+        }
+        let gen = self.external_refresh_gen.fetch_add(1, Ordering::Relaxed) + 1;
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            if this.external_refresh_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            let show_hidden = this.config.read().show_hidden;
+            for tab in affected {
+                // Prefer the live tab state in case the user navigated away.
+                let live = {
+                    let state = this.state.lock();
+                    find_tab_by_id(&state, tab.id).cloned()
+                };
+                let Some(live) = live else {
+                    continue;
+                };
+                if live.path != tab.path {
+                    continue;
+                }
+                this.refresh_tab(&live, show_hidden).await;
+            }
+            this.publish_refresh();
+        });
     }
 
     fn enabled_network_mounts(&self) -> Vec<orchid_storage::NetworkMountConfig> {
@@ -938,7 +1072,7 @@ impl FileManagerInner {
     fn resort_tab_in_memory(&self, tab_id: Uuid, sort_by: SortBy, descending: bool) {
         let mut entries = self.entries_by_tab.write();
         if let Some(list) = entries.get_mut(&tab_id) {
-            sort_entries(list, sort_by, descending);
+            sort_entries(Arc::make_mut(list), sort_by, descending);
         }
     }
 
@@ -984,7 +1118,10 @@ impl FileManagerInner {
             self.tab_errors.write().insert(tab.id, None);
             let mut entries = self.list_virtual(&path).await;
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
-            self.entries_by_tab.write().insert(tab.id, entries.clone());
+            let entries = Arc::new(entries);
+            self.entries_by_tab
+                .write()
+                .insert(tab.id, Arc::clone(&entries));
             entries
         } else {
             let result = self.navigator.navigate(&path, show_hidden).await;
@@ -992,7 +1129,10 @@ impl FileManagerInner {
             let mut entries = result.entries;
             self.apply_entry_metadata(&mut entries);
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
-            self.entries_by_tab.write().insert(tab.id, entries.clone());
+            let entries = Arc::new(entries);
+            self.entries_by_tab
+                .write()
+                .insert(tab.id, Arc::clone(&entries));
             entries
         };
 
@@ -1003,15 +1143,17 @@ impl FileManagerInner {
             "fm refresh_tab listed"
         );
 
+        self.rewatch_tab(tab).await;
+
         // Shell icons + image thumbnails are off the critical navigation path
         // so the listing paints immediately with geometric fallbacks.
         let this = Arc::clone(self);
         let tab = tab.clone();
         tokio::spawn(async move {
-            this.ensure_shell_icons(&tab, &entries).await;
+            this.ensure_shell_icons(&tab, entries.as_slice()).await;
             let mode_cfg = config_for_mode(tab.view_mode, 1.0);
             if mode_cfg.show_thumbnails {
-                this.ensure_thumbnails(&tab, &entries).await;
+                this.ensure_thumbnails(&tab, entries.as_slice()).await;
             }
         });
     }
@@ -1334,6 +1476,18 @@ impl FileManagerInner {
                 async move {
                     if let Ok(Some(thumb)) = thumbs.get_cached(&key, thumb_size).await {
                         return Some((path_key, thumb));
+                    }
+                    // Local files: mmap decode avoids a full Vec copy.
+                    if path.scheme() == "local" {
+                        if let Ok(os_path) = path.to_local() {
+                            match thumbs
+                                .generate_from_local_path(key, thumb_size, os_path)
+                                .await
+                            {
+                                Ok(thumb) => return Some((path_key, thumb)),
+                                Err(_) => return None,
+                            }
+                        }
                     }
                     let Some(provider) = registry.for_path(&path) else {
                         return None;
@@ -1781,7 +1935,7 @@ impl FileManagerInner {
 
 fn build_pane_payload(
     pane: &PaneState,
-    entries_map: &std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>,
+    entries_map: &HashMap<Uuid, Arc<Vec<orchid_fs::FsEntry>>>,
     config: &FileManagerConfig,
     inner: &FileManagerInner,
 ) -> PanePayload {
@@ -1789,7 +1943,10 @@ fn build_pane_payload(
         .tabs
         .iter()
         .map(|tab| {
-            let entries = entries_map.get(&tab.id).map(Vec::as_slice).unwrap_or(&[]);
+            let entries = entries_map
+                .get(&tab.id)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
             build_tab_payload(tab, entries, config, inner)
         })
         .collect();
@@ -1957,6 +2114,68 @@ fn next_sort_by(current: SortBy) -> SortBy {
         SortBy::Size => SortBy::Modified,
         SortBy::Modified => SortBy::Type,
         SortBy::Type => SortBy::Name,
+    }
+}
+
+fn find_tab_by_id<'a>(state: &'a FileManagerState, tab_id: Uuid) -> Option<&'a TabState> {
+    state
+        .left_pane
+        .tabs
+        .iter()
+        .find(|t| t.id == tab_id)
+        .or_else(|| {
+            state
+                .right_pane
+                .as_ref()
+                .and_then(|p| p.tabs.iter().find(|t| t.id == tab_id))
+        })
+}
+
+fn fs_event_paths(env: &orchid_core::EventEnvelope) -> Vec<orchid_fs::FsPath> {
+    use orchid_fs::{FsCreatedEvent, FsDeletedEvent, FsModifiedEvent, FsRenamedEvent};
+    if let Some(e) = env.downcast::<FsCreatedEvent>() {
+        return vec![e.path.clone()];
+    }
+    if let Some(e) = env.downcast::<FsModifiedEvent>() {
+        return vec![e.path.clone()];
+    }
+    if let Some(e) = env.downcast::<FsDeletedEvent>() {
+        return vec![e.path.clone()];
+    }
+    if let Some(e) = env.downcast::<FsRenamedEvent>() {
+        return vec![e.from.clone(), e.to.clone()];
+    }
+    Vec::new()
+}
+
+/// True when a filesystem event should refresh the listing of `dir`.
+fn fs_event_affects_listing(event_path: &str, dir: &str) -> bool {
+    if event_path == dir {
+        return true;
+    }
+    match event_path.rsplit_once('/') {
+        Some((parent, _)) => parent == dir,
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod dir_watch_tests {
+    use super::fs_event_affects_listing;
+
+    #[test]
+    fn listing_refresh_for_direct_children_only() {
+        let dir = "local:c:/Users/me/Docs";
+        assert!(fs_event_affects_listing(dir, dir));
+        assert!(fs_event_affects_listing(
+            "local:c:/Users/me/Docs/a.txt",
+            dir
+        ));
+        assert!(!fs_event_affects_listing(
+            "local:c:/Users/me/Docs/sub/a.txt",
+            dir
+        ));
+        assert!(!fs_event_affects_listing("local:c:/Users/me/Other", dir));
     }
 }
 
@@ -2326,7 +2545,7 @@ pub fn context_menu_for(
             .read()
             .get(&tab_id)
             .cloned()
-            .unwrap_or_default();
+            .unwrap_or_else(|| Arc::new(Vec::new()));
         let entry_count = inner.filtered_paths_for_tab(tab).len();
         let selection_count = tab.selection.count();
         let target_paths = if context_path.is_empty() {
@@ -2561,6 +2780,7 @@ pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResul
     let inner = live_inner(instance_id)?;
     let want = Uuid::parse_str(tab_id)
         .map_err(|_| WidgetError::InvalidStateForOperation("invalid tab id".into()))?;
+    let mut closed = false;
     {
         let mut state = inner.state.lock();
         let target = if pane == 1 {
@@ -2575,6 +2795,7 @@ pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResul
             if let Some(idx) = r.tabs.iter().position(|t| t.id == want) {
                 r.tabs.remove(idx);
                 r.active_tab = r.active_tab.min(r.tabs.len().saturating_sub(1));
+                closed = true;
             }
         } else {
             if state.left_pane.tabs.len() <= 1 {
@@ -2586,8 +2807,12 @@ pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResul
                     .left_pane
                     .active_tab
                     .min(state.left_pane.tabs.len().saturating_sub(1));
+                closed = true;
             }
         }
+    }
+    if closed {
+        inner.drop_tab_watch(want);
     }
     inner.publish_refresh();
     Ok(())
