@@ -9,7 +9,7 @@ pub mod state;
 pub mod view_mode;
 pub mod virtual_folders;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -189,9 +189,13 @@ struct FileManagerInner {
     /// Entries per tab id. Keeps dual-pane tabs independent.
     entries_by_tab: RwLock<std::collections::HashMap<Uuid, Vec<orchid_fs::FsEntry>>>,
     /// Decoded image thumbnails keyed by entry path (icon / gallery modes).
-    thumbnail_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
+    thumbnail_rgba: RwLock<HashMap<String, orchid_viewers::Thumbnail>>,
+    /// Insertion order for thumbnail cache eviction.
+    thumbnail_order: RwLock<VecDeque<String>>,
     /// OS shell icons keyed by entry path (list / details / icons when no image preview).
-    shell_icon_rgba: RwLock<std::collections::HashMap<String, orchid_viewers::Thumbnail>>,
+    shell_icon_rgba: RwLock<HashMap<String, orchid_viewers::Thumbnail>>,
+    /// Insertion order for shell-icon cache eviction.
+    shell_icon_order: RwLock<VecDeque<String>>,
     /// Cached managed-folder root paths for [`apply_entry_metadata`].
     managed_roots: RwLock<Vec<String>>,
     /// Cached ingest stats per managed root path.
@@ -243,6 +247,29 @@ struct RefreshOpts {
     indicate_loading: bool,
 }
 
+const SHELL_ICON_CACHE_CAP: usize = 1024;
+const THUMBNAIL_CACHE_CAP: usize = 256;
+
+fn insert_capped_thumbnail(
+    map: &mut HashMap<String, orchid_viewers::Thumbnail>,
+    order: &mut VecDeque<String>,
+    key: String,
+    value: orchid_viewers::Thumbnail,
+    cap: usize,
+) {
+    if !map.contains_key(&key) {
+        while map.len() >= cap {
+            if let Some(old) = order.pop_front() {
+                map.remove(&old);
+            } else {
+                break;
+            }
+        }
+        order.push_back(key.clone());
+    }
+    map.insert(key, value);
+}
+
 impl FileManagerWidget {
     /// Build a widget rooted at `initial_path`.
     pub fn new(
@@ -281,17 +308,19 @@ impl FileManagerWidget {
                 navigator,
                 state: parking_lot::Mutex::new(state),
                 config: RwLock::new(config),
-                entries_by_tab: RwLock::new(std::collections::HashMap::new()),
-                thumbnail_rgba: RwLock::new(std::collections::HashMap::new()),
-                shell_icon_rgba: RwLock::new(std::collections::HashMap::new()),
+                entries_by_tab: RwLock::new(HashMap::new()),
+                thumbnail_rgba: RwLock::new(HashMap::new()),
+                thumbnail_order: RwLock::new(VecDeque::new()),
+                shell_icon_rgba: RwLock::new(HashMap::new()),
+                shell_icon_order: RwLock::new(VecDeque::new()),
                 managed_roots: RwLock::new(Vec::new()),
-                managed_stats: RwLock::new(std::collections::HashMap::new()),
-                managed_policies: RwLock::new(std::collections::HashMap::new()),
+                managed_stats: RwLock::new(HashMap::new()),
+                managed_policies: RwLock::new(HashMap::new()),
                 ingest_notice: RwLock::new(None),
                 ingest_in_flight: AtomicU32::new(0),
                 ingest_current: RwLock::new(None),
                 encrypted_paths: RwLock::new(Vec::new()),
-                tab_errors: RwLock::new(std::collections::HashMap::new()),
+                tab_errors: RwLock::new(HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
                 loading_tabs: RwLock::new(HashSet::new()),
@@ -324,48 +353,60 @@ impl FileManagerWidget {
 
     /// Navigate the active pane's tab to `path`.
     pub async fn navigate(&self, path: orchid_fs::FsPath) {
-        {
+        let tab = {
             let mut state = self.inner.state.lock();
             state.active_tab_mut().navigate_to(path);
-        }
+            state.active_tab().clone()
+        };
         self.inner
-            .refresh_all_tabs_with_opts(RefreshOpts {
-                publish: true,
-                indicate_loading: true,
-            })
+            .refresh_tabs_with_opts(
+                &[tab],
+                RefreshOpts {
+                    publish: true,
+                    indicate_loading: true,
+                },
+            )
             .await
     }
 
     /// Back one step in history.
     pub async fn go_back(&self) {
-        let changed = {
+        let tab = {
             let mut state = self.inner.state.lock();
-            state.active_tab_mut().back()
+            if !state.active_tab_mut().back() {
+                return;
+            }
+            state.active_tab().clone()
         };
-        if changed {
-            self.inner
-                .refresh_all_tabs_with_opts(RefreshOpts {
+        self.inner
+            .refresh_tabs_with_opts(
+                &[tab],
+                RefreshOpts {
                     publish: true,
                     indicate_loading: true,
-                })
-                .await;
-        }
+                },
+            )
+            .await;
     }
 
     /// Forward one step in history.
     pub async fn go_forward(&self) {
-        let changed = {
+        let tab = {
             let mut state = self.inner.state.lock();
-            state.active_tab_mut().forward()
+            if !state.active_tab_mut().forward() {
+                return;
+            }
+            state.active_tab().clone()
         };
-        if changed {
-            self.inner
-                .refresh_all_tabs_with_opts(RefreshOpts {
+        self.inner
+            .refresh_tabs_with_opts(
+                &[tab],
+                RefreshOpts {
                     publish: true,
                     indicate_loading: true,
-                })
-                .await;
-        }
+                },
+            )
+            .await;
     }
 
     /// Change the current tab's view mode.
@@ -838,30 +879,28 @@ impl FileManagerInner {
         .await;
     }
 
-    async fn refresh_all_tabs_with_publish(self: &Arc<Self>, publish: bool) {
-        self.refresh_all_tabs_with_opts(RefreshOpts {
-            publish,
-            indicate_loading: false,
-        })
-        .await;
+    async fn refresh_all_tabs_with_opts(self: &Arc<Self>, opts: RefreshOpts) {
+        let tabs = {
+            let state = self.state.lock();
+            let mut tabs = vec![state.left_pane.active_tab().clone()];
+            if let Some(right) = state.right_pane.as_ref() {
+                tabs.push(right.active_tab().clone());
+            }
+            tabs
+        };
+        self.refresh_tabs_with_opts(&tabs, opts).await;
     }
 
-    async fn refresh_all_tabs_with_opts(self: &Arc<Self>, opts: RefreshOpts) {
+    /// Re-list only the given tabs (e.g. the pane that just navigated).
+    async fn refresh_tabs_with_opts(self: &Arc<Self>, tabs: &[TabState], opts: RefreshOpts) {
+        if tabs.is_empty() {
+            return;
+        }
         self.refresh_managed_roots().await;
         self.refresh_encrypted_paths().await;
         let show_hidden = self.config.read().show_hidden;
-        let (left, right) = {
-            let state = self.state.lock().clone();
-            let left = state.left_pane.active_tab().clone();
-            let right = state.right_pane.as_ref().map(|p| p.active_tab().clone());
-            (left, right)
-        };
 
-        let mut loading_ids = Vec::new();
-        loading_ids.push(left.id);
-        if let Some(ref rt) = right {
-            loading_ids.push(rt.id);
-        }
+        let loading_ids: Vec<Uuid> = tabs.iter().map(|t| t.id).collect();
 
         if opts.indicate_loading {
             {
@@ -879,22 +918,27 @@ impl FileManagerInner {
             self.publish_refresh();
         }
 
-        self.refresh_tab(&left, show_hidden).await;
-        if let Some(rt) = right {
-            self.refresh_tab(&rt, show_hidden).await;
+        for tab in tabs {
+            self.refresh_tab(tab, show_hidden).await;
         }
 
         if opts.indicate_loading {
-            {
-                let mut loading = self.loading_tabs.write();
-                for id in &loading_ids {
-                    loading.remove(&id);
-                }
+            let mut loading = self.loading_tabs.write();
+            for id in &loading_ids {
+                loading.remove(id);
             }
         }
 
         if opts.publish {
             self.publish_refresh();
+        }
+    }
+
+    /// Re-sort a tab's already-loaded entries without touching the filesystem.
+    fn resort_tab_in_memory(&self, tab_id: Uuid, sort_by: SortBy, descending: bool) {
+        let mut entries = self.entries_by_tab.write();
+        if let Some(list) = entries.get_mut(&tab_id) {
+            sort_entries(list, sort_by, descending);
         }
     }
 
@@ -1078,22 +1122,20 @@ impl FileManagerInner {
     }
 
     fn filtered_paths_for_tab(&self, tab: &TabState) -> Vec<String> {
-        let entries = self
-            .entries_by_tab
-            .read()
-            .get(&tab.id)
-            .cloned()
-            .unwrap_or_default();
+        let guard = self.entries_by_tab.read();
+        let Some(entries) = guard.get(&tab.id) else {
+            return Vec::new();
+        };
         let quick = tab.quick_filter.trim();
         if quick.is_empty() {
             return entries
-                .into_iter()
+                .iter()
                 .map(|e| e.path.as_str().to_string())
                 .collect();
         }
         let q = quick.to_lowercase();
         entries
-            .into_iter()
+            .iter()
             .filter(|e| e.name.to_lowercase().contains(&q))
             .map(|e| e.path.as_str().to_string())
             .collect()
@@ -1184,38 +1226,69 @@ impl FileManagerInner {
             ViewMode::Icons | ViewMode::Gallery => orchid_fs::ShellIconSize::Large,
             ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::Small,
         };
-        let mut generated = false;
-        // Shell icons are cheap (especially once the extension cache is warm).
-        for e in entries.iter().take(256) {
-            let path_key = e.path.as_str().to_string();
-            if self.shell_icon_rgba.read().contains_key(&path_key) {
-                continue;
+
+        let mut pending = Vec::new();
+        {
+            let cache = self.shell_icon_rgba.read();
+            for e in entries.iter().take(256) {
+                let path_key = e.path.as_str().to_string();
+                if cache.contains_key(&path_key) {
+                    continue;
+                }
+                let path = e.path.clone();
+                let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
+                pending.push((path_key, path, is_dir));
             }
-            let path = e.path.clone();
-            let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
-            let icon = match tokio::task::spawn_blocking(move || {
-                orchid_fs::shell_icon(&path, is_dir, size)
-            })
-            .await
-            {
-                Ok(icon) => icon,
-                Err(_) => continue,
-            };
-            let Some(icon) = icon else {
-                continue;
-            };
-            self.shell_icon_rgba.write().insert(
-                path_key,
-                orchid_viewers::Thumbnail {
-                    rgba: icon.rgba,
-                    width: icon.width,
-                    height: icon.height,
-                },
-            );
-            generated = true;
         }
-        if generated {
-            self.publish_refresh();
+        if pending.is_empty() {
+            return;
+        }
+
+        // Shell extraction serializes on a process-wide lock, but scheduling
+        // many spawn_blocking tasks still overlaps with cache hits / scheduling.
+        // Publish once per batch so the UI is not rebuilt once per icon.
+        const BATCH: usize = 24;
+        for chunk in pending.chunks(BATCH) {
+            let futs = chunk.iter().map(|(path_key, path, is_dir)| {
+                let path_key = path_key.clone();
+                let path = path.clone();
+                let is_dir = *is_dir;
+                async move {
+                    let icon = tokio::task::spawn_blocking(move || {
+                        orchid_fs::shell_icon(&path, is_dir, size)
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+                    (path_key, icon)
+                }
+            });
+            let results = futures::future::join_all(futs).await;
+            let mut batch_hit = false;
+            {
+                let mut cache = self.shell_icon_rgba.write();
+                let mut order = self.shell_icon_order.write();
+                for (path_key, icon) in results {
+                    let Some(icon) = icon else {
+                        continue;
+                    };
+                    insert_capped_thumbnail(
+                        &mut cache,
+                        &mut order,
+                        path_key,
+                        orchid_viewers::Thumbnail {
+                            rgba: icon.rgba,
+                            width: icon.width,
+                            height: icon.height,
+                        },
+                        SHELL_ICON_CACHE_CAP,
+                    );
+                    batch_hit = true;
+                }
+            }
+            if batch_hit {
+                self.publish_refresh();
+            }
         }
     }
 
@@ -1225,45 +1298,78 @@ impl FileManagerInner {
             return;
         }
         let thumb_size = viewer_thumb_size(self.config.read().thumbnail_size);
-        let mut generated = false;
-        for e in entries.iter().take(64) {
-            if !is_image_entry(e) {
-                continue;
-            }
-            let path_key = e.path.as_str().to_string();
-            if self.thumbnail_rgba.read().contains_key(&path_key) {
-                continue;
-            }
-            let modified_ms = e
-                .metadata
-                .modified
-                .map(|t| t.timestamp_millis())
-                .unwrap_or(0);
-            let key = orchid_viewers::ThumbnailService::cache_key(&e.path, modified_ms);
-            if let Ok(Some(thumb)) = self.deps.thumbnails.get_cached(&key, thumb_size).await {
-                self.thumbnail_rgba.write().insert(path_key, thumb);
-                generated = true;
-                continue;
-            }
-            let Some(provider) = self.deps.registry.for_path(&e.path) else {
-                continue;
-            };
-            let bytes = match provider.read(&e.path).await {
-                Ok(b) if b.len() <= 16 * 1024 * 1024 => b,
-                _ => continue,
-            };
-            if let Ok(thumb) = self
-                .deps
-                .thumbnails
-                .generate_from_image_bytes(key, thumb_size, bytes)
-                .await
-            {
-                self.thumbnail_rgba.write().insert(path_key, thumb);
-                generated = true;
+
+        let mut pending = Vec::new();
+        {
+            let cache = self.thumbnail_rgba.read();
+            for e in entries.iter().take(64) {
+                if !is_image_entry(e) {
+                    continue;
+                }
+                let path_key = e.path.as_str().to_string();
+                if cache.contains_key(&path_key) {
+                    continue;
+                }
+                let modified_ms = e
+                    .metadata
+                    .modified
+                    .map(|t| t.timestamp_millis())
+                    .unwrap_or(0);
+                let key = orchid_viewers::ThumbnailService::cache_key(&e.path, modified_ms);
+                pending.push((path_key, e.path.clone(), key));
             }
         }
-        if generated {
-            self.publish_refresh();
+        if pending.is_empty() {
+            return;
+        }
+
+        const CONCURRENCY: usize = 4;
+        for chunk in pending.chunks(CONCURRENCY) {
+            let futs = chunk.iter().map(|(path_key, path, key)| {
+                let path_key = path_key.clone();
+                let path = path.clone();
+                let key = *key;
+                let thumbs = Arc::clone(&self.deps.thumbnails);
+                let registry = Arc::clone(&self.deps.registry);
+                async move {
+                    if let Ok(Some(thumb)) = thumbs.get_cached(&key, thumb_size).await {
+                        return Some((path_key, thumb));
+                    }
+                    let Some(provider) = registry.for_path(&path) else {
+                        return None;
+                    };
+                    let bytes = match provider.read(&path).await {
+                        Ok(b) if b.len() <= 16 * 1024 * 1024 => b,
+                        _ => return None,
+                    };
+                    match thumbs
+                        .generate_from_image_bytes(key, thumb_size, bytes)
+                        .await
+                    {
+                        Ok(thumb) => Some((path_key, thumb)),
+                        Err(_) => None,
+                    }
+                }
+            });
+            let results = futures::future::join_all(futs).await;
+            let mut batch_hit = false;
+            {
+                let mut cache = self.thumbnail_rgba.write();
+                let mut order = self.thumbnail_order.write();
+                for (path_key, thumb) in results.into_iter().flatten() {
+                    insert_capped_thumbnail(
+                        &mut cache,
+                        &mut order,
+                        path_key,
+                        thumb,
+                        THUMBNAIL_CACHE_CAP,
+                    );
+                    batch_hit = true;
+                }
+            }
+            if batch_hit {
+                self.publish_refresh();
+            }
         }
     }
 
@@ -1410,24 +1516,26 @@ impl FileManagerInner {
     }
 
     fn apply_entry_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
+        if entries.is_empty() {
+            return;
+        }
         let encrypted_paths = self.encrypted_paths.read().clone();
         let managed_roots = self.managed_roots.read().clone();
-        let tag_manager = &self.deps.tag_manager;
+        let paths: Vec<orchid_fs::FsPath> = entries.iter().map(|e| e.path.clone()).collect();
+        let tags = self.deps.tag_manager.get_many(&paths).unwrap_or_default();
         for e in entries.iter_mut() {
-            if let Ok(Some(tag)) = tag_manager.get(&e.path) {
+            if let Some(tag) = tags.get(e.path.as_str()) {
                 e.metadata.extended.starred = tag.starred;
                 e.metadata.extended.tags = tag.tags.clone();
                 e.metadata.extended.color_label = tag.color_label;
             }
-            if managed_roots
-                .iter()
-                .any(|root| e.path.as_str().starts_with(root))
-            {
+            let path_str = e.path.as_str();
+            if managed_roots.iter().any(|root| path_str.starts_with(root)) {
                 e.metadata.extended.is_managed = true;
             }
             if encrypted_paths
                 .iter()
-                .any(|p| e.path.as_str() == p || e.path.as_str().starts_with(p))
+                .any(|p| path_str == p || path_str.starts_with(p))
                 || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
                 || orchid_fs::encrypted::marker::looks_encrypted_directory(&e.path)
             {
@@ -1852,12 +1960,29 @@ fn next_sort_by(current: SortBy) -> SortBy {
     }
 }
 
-fn sort_entries(entries: &mut [orchid_fs::FsEntry], sort_by: SortBy, descending: bool) {
+fn sort_entries(entries: &mut Vec<orchid_fs::FsEntry>, sort_by: SortBy, descending: bool) {
     use std::cmp::Ordering;
-    entries.sort_by(|a, b| {
-        let ad = matches!(a.metadata.kind, orchid_fs::FsEntryKind::Directory);
-        let bd = matches!(b.metadata.kind, orchid_fs::FsEntryKind::Directory);
-        let dir_ord = match (ad, bd) {
+
+    // Precompute sort keys once — the previous comparator allocated lowercase
+    // strings on every comparison (≈ O(n log n) allocs).
+    let mut keyed: Vec<_> = std::mem::take(entries)
+        .into_iter()
+        .map(|e| {
+            let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
+            let name_key = e.name.to_lowercase();
+            let size = e.metadata.size;
+            let modified = e.metadata.modified.map(|t| t.timestamp()).unwrap_or(0);
+            let ext_key = e
+                .path
+                .extension()
+                .map(|ext| ext.to_lowercase())
+                .unwrap_or_default();
+            (e, is_dir, name_key, size, modified, ext_key)
+        })
+        .collect();
+
+    keyed.sort_by(|a, b| {
+        let dir_ord = match (a.1, b.1) {
             (true, false) => Ordering::Less,
             (false, true) => Ordering::Greater,
             _ => Ordering::Equal,
@@ -1870,27 +1995,10 @@ fn sort_entries(entries: &mut [orchid_fs::FsEntry], sort_by: SortBy, descending:
             };
         }
         let field = match sort_by {
-            SortBy::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-            SortBy::Size => a.metadata.size.cmp(&b.metadata.size),
-            SortBy::Modified => {
-                let am = a.metadata.modified.map(|t| t.timestamp()).unwrap_or(0);
-                let bm = b.metadata.modified.map(|t| t.timestamp()).unwrap_or(0);
-                am.cmp(&bm)
-            }
-            SortBy::Type => {
-                let ae = a
-                    .path
-                    .extension()
-                    .map(|e| e.to_lowercase())
-                    .unwrap_or_default();
-                let be = b
-                    .path
-                    .extension()
-                    .map(|e| e.to_lowercase())
-                    .unwrap_or_default();
-                ae.cmp(&be)
-                    .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-            }
+            SortBy::Name => a.2.cmp(&b.2),
+            SortBy::Size => a.3.cmp(&b.3),
+            SortBy::Modified => a.4.cmp(&b.4),
+            SortBy::Type => a.5.cmp(&b.5).then_with(|| a.2.cmp(&b.2)),
         };
         if descending {
             field.reverse()
@@ -1898,6 +2006,8 @@ fn sort_entries(entries: &mut [orchid_fs::FsEntry], sort_by: SortBy, descending:
             field
         }
     });
+
+    *entries = keyed.into_iter().map(|(e, ..)| e).collect();
 }
 
 fn to_payload_mode(mode: ViewMode) -> FmViewMode {
@@ -2309,7 +2419,7 @@ async fn navigate_inner(
     publish: bool,
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    {
+    let tab = {
         let mut state = inner.state.lock();
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
@@ -2320,12 +2430,16 @@ async fn navigate_inner(
         } else {
             state.left_pane.active_tab_mut().navigate_to(path);
         }
-    }
+        active_tab_ref(&state, pane)?.clone()
+    };
     inner
-        .refresh_all_tabs_with_opts(RefreshOpts {
-            publish,
-            indicate_loading: true,
-        })
+        .refresh_tabs_with_opts(
+            &[tab],
+            RefreshOpts {
+                publish,
+                indicate_loading: true,
+            },
+        )
         .await;
     Ok(())
 }
@@ -2333,9 +2447,9 @@ async fn navigate_inner(
 /// Back in history for `pane`.
 pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    let changed = {
+    let tab = {
         let mut state = inner.state.lock();
-        if pane == 1 {
+        let changed = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut().back()
             } else {
@@ -2343,25 +2457,30 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
             }
         } else {
             state.left_pane.active_tab_mut().back()
+        };
+        if !changed {
+            return Ok(());
         }
+        active_tab_ref(&state, pane)?.clone()
     };
-    if changed {
-        inner
-            .refresh_all_tabs_with_opts(RefreshOpts {
+    inner
+        .refresh_tabs_with_opts(
+            &[tab],
+            RefreshOpts {
                 publish: true,
                 indicate_loading: true,
-            })
-            .await;
-    }
+            },
+        )
+        .await;
     Ok(())
 }
 
 /// Forward in history for `pane`.
 pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    let changed = {
+    let tab = {
         let mut state = inner.state.lock();
-        if pane == 1 {
+        let changed = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 r.active_tab_mut().forward()
             } else {
@@ -2369,16 +2488,21 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
             }
         } else {
             state.left_pane.active_tab_mut().forward()
+        };
+        if !changed {
+            return Ok(());
         }
+        active_tab_ref(&state, pane)?.clone()
     };
-    if changed {
-        inner
-            .refresh_all_tabs_with_opts(RefreshOpts {
+    inner
+        .refresh_tabs_with_opts(
+            &[tab],
+            RefreshOpts {
                 publish: true,
                 indicate_loading: true,
-            })
-            .await;
-    }
+            },
+        )
+        .await;
     Ok(())
 }
 
@@ -2650,7 +2774,7 @@ pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 /// Cycle the sort column for the active tab in `pane` (folders stay grouped first).
 pub async fn cycle_sort(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    {
+    let (tab_id, sort_by, descending) = {
         let mut state = inner.state.lock();
         let tab = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
@@ -2663,8 +2787,10 @@ pub async fn cycle_sort(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         };
         tab.sort_by = next_sort_by(tab.sort_by);
         tab.sort_descending = false;
-    }
-    inner.refresh_all_tabs().await;
+        (tab.id, tab.sort_by, tab.sort_descending)
+    };
+    inner.resort_tab_in_memory(tab_id, sort_by, descending);
+    inner.publish_refresh();
     Ok(())
 }
 
@@ -2673,7 +2799,7 @@ pub async fn set_sort_column(instance_id: Uuid, pane: u8, column: u8) -> WidgetR
     let sort_by = sort_by_from_u8(column)
         .ok_or_else(|| WidgetError::InvalidStateForOperation("invalid sort column".into()))?;
     let inner = live_inner(instance_id)?;
-    {
+    let (tab_id, sort_by, descending) = {
         let mut state = inner.state.lock();
         let tab = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
@@ -2690,8 +2816,10 @@ pub async fn set_sort_column(instance_id: Uuid, pane: u8, column: u8) -> WidgetR
             tab.sort_by = sort_by;
             tab.sort_descending = false;
         }
-    }
-    inner.refresh_all_tabs().await;
+        (tab.id, tab.sort_by, tab.sort_descending)
+    };
+    inner.resort_tab_in_memory(tab_id, sort_by, descending);
+    inner.publish_refresh();
     Ok(())
 }
 
@@ -2734,19 +2862,8 @@ pub async fn select_entry(
         } else {
             state.left_pane.active_tab()
         };
-        let entries = inner
-            .entries_by_tab
-            .read()
-            .get(&tab.id)
-            .cloned()
-            .unwrap_or_default();
-        (
-            tab.id,
-            entries
-                .into_iter()
-                .map(|e| e.path.as_str().to_string())
-                .collect(),
-        )
+        // Honor the active quick filter so range selection matches the visible list.
+        (tab.id, inner.filtered_paths_for_tab(tab))
     };
     {
         let mut state = inner.state.lock();

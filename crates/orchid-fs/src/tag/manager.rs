@@ -1,6 +1,6 @@
 //! CRUD facade over the file-tag table.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -41,6 +41,27 @@ impl TagManager {
     pub fn get(&self, path: &FsPath) -> Result<Option<FileTag>> {
         let r = self.storage.read()?;
         Ok(r.get_file_tag(path.as_str())?)
+    }
+
+    /// Fetch tags for many paths in a single read transaction.
+    ///
+    /// Only paths that have a stored record are present in the returned map.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors.
+    pub fn get_many(&self, paths: &[FsPath]) -> Result<HashMap<String, FileTag>> {
+        if paths.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let r = self.storage.read()?;
+        let mut out = HashMap::with_capacity(paths.len());
+        for path in paths {
+            if let Some(tag) = r.get_file_tag(path.as_str())? {
+                out.insert(path.as_str().to_string(), tag);
+            }
+        }
+        Ok(out)
     }
 
     /// Replace the tag set entirely.
