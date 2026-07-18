@@ -65,6 +65,7 @@ export component FileManagerView inherits Rectangle {
     callback pane-drag-hover(int);
     callback drop-on-current-dir(int);
     callback entry-drag-scroll(int, length, length, length, length);
+    callback viewport-changed(int, length, length, length);
     callback error-action(int);
 
     background: transparent;
@@ -151,6 +152,7 @@ export component FileManagerView inherits Rectangle {
                 pane-drag-hover => { root.pane-drag-hover(0); }
                 drop-on-current-dir => { root.drop-on-current-dir(0); }
                 entry-drag-scroll(mx, my, vy, w) => { root.entry-drag-scroll(0, mx, my, vy, w); }
+                viewport-changed(y, h, w) => { root.viewport-changed(0, y, h, w); }
                 error-action => { root.error-action(0); }
                 crumb-drag-hover(p) => { root.entry-drag-hover(0, p); }
                 crumb-drag-drop(p) => { root.entry-drag-drop(0, p); }
@@ -215,6 +217,7 @@ export component FileManagerView inherits Rectangle {
                         pane-drag-hover => { root.pane-drag-hover(0); }
                         drop-on-current-dir => { root.drop-on-current-dir(0); }
                         entry-drag-scroll(mx, my, vy, w) => { root.entry-drag-scroll(0, mx, my, vy, w); }
+                        viewport-changed(y, h, w) => { root.viewport-changed(0, y, h, w); }
                         error-action => { root.error-action(0); }
                         crumb-drag-hover(p) => { root.entry-drag-hover(0, p); }
                         crumb-drag-drop(p) => { root.entry-drag-drop(0, p); }
@@ -277,6 +280,7 @@ export component FileManagerView inherits Rectangle {
                         pane-drag-hover => { root.pane-drag-hover(1); }
                         drop-on-current-dir => { root.drop-on-current-dir(1); }
                         entry-drag-scroll(mx, my, vy, w) => { root.entry-drag-scroll(1, mx, my, vy, w); }
+                        viewport-changed(y, h, w) => { root.viewport-changed(1, y, h, w); }
                         error-action => { root.error-action(1); }
                         crumb-drag-hover(p) => { root.entry-drag-hover(1, p); }
                         crumb-drag-drop(p) => { root.entry-drag-drop(1, p); }

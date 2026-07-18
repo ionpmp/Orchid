@@ -590,6 +590,12 @@ export struct FmTab {
     can-forward: bool,
     view-mode: int,
     entries: [FmEntry],
+    /// Full filtered entry count (may exceed `entries.length` when virtualized).
+    entry-total-count: int,
+    /// Top spacer height when the entry model is a visible window.
+    virtual-pad-top: length,
+    /// Full scrollable content height when virtualized; `0` means natural layout.
+    virtual-content-height: length,
     selection-count: int,
     status-text: string,
     quick-filter: string,

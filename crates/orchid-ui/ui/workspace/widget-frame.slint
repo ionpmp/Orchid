@@ -174,6 +174,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-sort-cycle(string, int);
     callback fm-sort-column-clicked(string, int, int);
     callback fm-quick-filter-changed(string, int, string);
+    callback fm-viewport-changed(string, int, length, length, length);
     callback fm-entry-clicked(string, int, string, bool);
     callback fm-entry-shift-clicked(string, int, string);
     callback fm-entry-double-clicked(string, int, string, bool);
@@ -684,6 +685,7 @@ export component WidgetFrame inherits Rectangle {
                     sort-cycle(p) => { root.fm-sort-cycle(root.model.instance-id, p); }
                     sort-column-clicked(p, col) => { root.fm-sort-column-clicked(root.model.instance-id, p, col); }
                     quick-filter-changed(p, q) => { root.fm-quick-filter-changed(root.model.instance-id, p, q); }
+                    viewport-changed(p, y, h, w) => { root.fm-viewport-changed(root.model.instance-id, p, y, h, w); }
                     entry-clicked(p, path, ctrl) => { root.fm-entry-clicked(root.model.instance-id, p, path, ctrl); }
                     entry-shift-clicked(p, path) => { root.fm-entry-shift-clicked(root.model.instance-id, p, path); }
                     entry-double-clicked(p, path, is_dir) => { root.fm-entry-double-clicked(root.model.instance-id, p, path, is_dir); }

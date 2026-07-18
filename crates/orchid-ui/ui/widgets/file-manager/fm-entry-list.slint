@@ -4,6 +4,9 @@ import { FmEntryIcon } from "fm-icons.slint";
 
 export component FmEntryList inherits Rectangle {
     in property <[FmEntry]> entries;
+    in property <int> entry-total-count;
+    in property <length> virtual-pad-top;
+    in property <length> virtual-content-height;
     in property <bool> details;
     in property <int> sort-by;
     in property <bool> sort-descending;
@@ -29,6 +32,7 @@ export component FmEntryList inherits Rectangle {
     callback pane-drag-hover();
     callback drop-on-current-dir();
     callback drag-scroll-changed(length, length, length, length);
+    callback viewport-changed(length, length, length);
 
     background: transparent;
 
@@ -37,16 +41,34 @@ export component FmEntryList inherits Rectangle {
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
 
+    property <length> row-height: 28px;
+    property <length> header-height: details ? 28px : 0px;
+    property <bool> virtualized: virtual-content-height > 0px;
+    property <length> bottom-pad: virtualized
+        ? max(0px, virtual-content-height - virtual-pad-top - header-height - entries.length * row-height)
+        : 0px;
+
     list-flick := Flickable {
         width: parent.width;
         height: parent.height;
         viewport-width: self.width;
-        viewport-height: max(self.height, list-stack.preferred-height);
+        viewport-height: virtualized
+            ? max(self.height, virtual-content-height)
+            : max(self.height, list-stack.preferred-height);
 
         changed viewport-y => {
+            root.viewport-changed(self.viewport-y, self.height, self.width);
             if (drag-active) {
                 root.drag-scroll-changed(bg-ta.mouse-x, bg-ta.mouse-y, self.viewport-y, self.width);
             }
+        }
+
+        changed width => {
+            root.viewport-changed(self.viewport-y, self.height, self.width);
+        }
+
+        changed height => {
+            root.viewport-changed(self.viewport-y, self.height, self.width);
         }
 
         bg-ta := TouchArea {
@@ -157,8 +179,12 @@ export component FmEntryList inherits Rectangle {
                 }
             }
 
+            if virtual-pad-top > 0px : Rectangle {
+                height: virtual-pad-top;
+            }
+
             for entry[i] in entries : Rectangle {
-                height: 28px;
+                height: row-height;
                 background: entry.is-selected
                     ? Theme.accent-brand
                     : (row-ta.has-hover ? Theme.surface-raised : transparent);
@@ -327,6 +353,10 @@ export component FmEntryList inherits Rectangle {
                         }
                     }
                 }
+            }
+
+            if bottom-pad > 0px : Rectangle {
+                height: bottom-pad;
             }
         }
     }

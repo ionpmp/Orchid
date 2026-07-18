@@ -4,6 +4,9 @@ import { FmEntryIcon } from "fm-icons.slint";
 
 export component FmEntryGrid inherits Rectangle {
     in property <[FmEntry]> entries;
+    in property <int> entry-total-count;
+    in property <length> virtual-pad-top;
+    in property <length> virtual-content-height;
     in property <bool> large;
     in property <FmRenameState> rename;
     in property <bool> drag-active;
@@ -27,11 +30,17 @@ export component FmEntryGrid inherits Rectangle {
     callback pane-drag-hover();
     callback drop-on-current-dir();
     callback drag-scroll-changed(length, length, length, length);
+    callback viewport-changed(length, length, length);
 
     property <length> tile-size: large ? 220px : 100px;
     property <length> tile-height: large ? 240px : 120px;
     property <length> tile-spacing: 8px;
     property <int> columns: max(1, floor((root.width - tile-spacing) / (tile-size + tile-spacing)));
+    property <bool> virtualized: virtual-content-height > 0px;
+    property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
+    property <int> first-index: virtualized
+        ? max(0, floor(virtual-pad-top / (tile-height + tile-spacing)) * columns)
+        : 0;
 
     background: transparent;
 
@@ -39,12 +48,23 @@ export component FmEntryGrid inherits Rectangle {
         width: parent.width;
         height: parent.height;
         viewport-width: self.width;
-        viewport-height: max(self.height, ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing);
+        viewport-height: virtualized
+            ? max(self.height, virtual-content-height)
+            : max(self.height, ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing);
 
         changed viewport-y => {
+            root.viewport-changed(self.viewport-y, self.height, self.width);
             if (drag-active) {
                 root.drag-scroll-changed(bg-ta.mouse-x, bg-ta.mouse-y, self.viewport-y, self.width);
             }
+        }
+
+        changed width => {
+            root.viewport-changed(self.viewport-y, self.height, self.width);
+        }
+
+        changed height => {
+            root.viewport-changed(self.viewport-y, self.height, self.width);
         }
 
         bg-ta := TouchArea {
@@ -66,8 +86,8 @@ export component FmEntryGrid inherits Rectangle {
         }
 
         for entry[i] in entries : Rectangle {
-            x: tile-spacing + (mod(i, columns) * (tile-size + tile-spacing));
-            y: tile-spacing + (floor(i / columns) * (tile-height + tile-spacing));
+            x: tile-spacing + (mod(first-index + i, columns) * (tile-size + tile-spacing));
+            y: tile-spacing + (floor((first-index + i) / columns) * (tile-height + tile-spacing));
             width: tile-size;
             height: tile-height;
             background: entry.is-selected

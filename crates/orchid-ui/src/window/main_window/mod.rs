@@ -182,6 +182,10 @@ pub struct MainWindowController {
     fm_last_open: Arc<Mutex<Option<(Uuid, String, Instant)>>>,
     /// Monotonic sequence per (instance, pane) for quick-filter debounce.
     fm_filter_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
+    /// Per-pane scroll/viewport size for entry-list virtualization.
+    fm_viewport: Arc<Mutex<HashMap<(Uuid, u8), crate::window::models::FmViewport>>>,
+    /// Last virtualized window start index; skip rebuild when unchanged.
+    fm_viewport_window: Arc<Mutex<HashMap<(Uuid, u8), usize>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
     last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
     /// Canvas flickable scroll offset (content coordinates).
@@ -462,6 +466,8 @@ impl MainWindowController {
             fm_last_click: Arc::new(Mutex::new(None)),
             fm_last_open: Arc::new(Mutex::new(None)),
             fm_filter_seq: Arc::new(Mutex::new(HashMap::new())),
+            fm_viewport: Arc::new(Mutex::new(HashMap::new())),
+            fm_viewport_window: Arc::new(Mutex::new(HashMap::new())),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
             keyboard_modifiers: Arc::new(Mutex::new(
@@ -2000,7 +2006,14 @@ impl MainWindowController {
                         empty_password_model(&self.locale),
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
-                        build_file_manager_model(fm, overlays, pl.instance_id, &self.locale, false),
+                        build_file_manager_model(
+                            fm,
+                            overlays,
+                            pl.instance_id,
+                            &self.locale,
+                            false,
+                            &self.fm_viewport.lock(),
+                        ),
                     )
                 }
                 _ => (

@@ -1637,6 +1637,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_viewport_changed({
+            let t = t.clone();
+            move |fm_id, pane, y, h, w| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_viewport_changed(&fm_id, pane, y, h, w);
+                }
+            }
+        });
         self.window.on_fm_entry_clicked({
             let t = t.clone();
             move |fm_id, pane, path, ctrl| {

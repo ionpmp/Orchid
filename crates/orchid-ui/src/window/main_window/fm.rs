@@ -21,9 +21,9 @@ use crate::window::errors::{
 };
 use crate::window::spawn;
 use crate::window::models::{
-    build_context_menu, build_managed_policy_state,
-    empty_confirm_dialog, empty_context_menu, empty_managed_policy_state, empty_passphrase_state, empty_rename_state, empty_tag_state,
-    fm_passphrase_dialog_labels, FileManagerOverlays,
+    build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_context_menu,
+    empty_managed_policy_state, empty_passphrase_state, empty_rename_state, empty_tag_state,
+    fm_grid_window, fm_list_window, fm_passphrase_dialog_labels, FileManagerOverlays, FmViewport,
 };
 use crate::slint_generated::{
     FmConfirmDialog,
@@ -1121,6 +1121,81 @@ impl MainWindowController {
             }
         });
     }
+        pub(super) fn on_fm_viewport_changed(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        y: f32,
+        h: f32,
+        w: f32,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let scroll_y = y.max(0.0);
+        let view_h = h.max(1.0);
+        let view_w = w.max(1.0);
+
+        let (view_mode, total) = {
+            let Some(snap) = self.widget_manager.snapshot_cache().get(inst) else {
+                return;
+            };
+            let WidgetPayload::FileManager(fm) = &snap.payload else {
+                return;
+            };
+            let Some(pane) = fm.panes.get(p as usize) else {
+                return;
+            };
+            let Some(tab) = pane.tabs.get(pane.active_tab as usize) else {
+                return;
+            };
+            (tab.view_mode, tab.entries.len())
+        };
+
+        let (first, _, _, content_h) = match view_mode {
+            orchid_widgets::FmViewMode::Icons | orchid_widgets::FmViewMode::Gallery => {
+                let large = matches!(view_mode, orchid_widgets::FmViewMode::Gallery);
+                fm_grid_window(total, scroll_y, view_h, view_w, large)
+            }
+            orchid_widgets::FmViewMode::Details => {
+                fm_list_window(total, scroll_y, view_h, true)
+            }
+            orchid_widgets::FmViewMode::List => fm_list_window(total, scroll_y, view_h, false),
+        };
+
+        self.fm_viewport.lock().insert(
+            (inst, p),
+            FmViewport {
+                scroll_y,
+                view_h,
+                view_w,
+            },
+        );
+
+        // Natural layout — no window slice to maintain.
+        if content_h <= 0.0 {
+            return;
+        }
+
+        {
+            let mut windows = self.fm_viewport_window.lock();
+            if windows.get(&(inst, p)).copied() == Some(first) {
+                return;
+            }
+            windows.insert((inst, p), first);
+        }
+
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            if let Some(c) = tw.upgrade() {
+                if let Err(e) = c.patch_workspace_frames(&[inst]) {
+                    warn!(?e, "fm viewport patch");
+                }
+            }
+        });
+    }
+
         pub(super) fn on_fm_quick_filter_changed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, q: &SharedString) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {

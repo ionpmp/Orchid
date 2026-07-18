@@ -226,6 +226,7 @@ export component MainWindow inherits Window {
     callback fm-sort-cycle(string, int);
     callback fm-sort-column-clicked(string, int, int);
     callback fm-quick-filter-changed(string, int, string);
+    callback fm-viewport-changed(string, int, length, length, length);
     callback fm-entry-clicked(string, int, string, bool);
     callback fm-entry-shift-clicked(string, int, string);
     callback fm-entry-double-clicked(string, int, string, bool);
@@ -548,6 +549,7 @@ export component MainWindow inherits Window {
             fm-sort-cycle(fm_id, p) => { root.fm-sort-cycle(fm_id, p); }
             fm-sort-column-clicked(fm_id, p, col) => { root.fm-sort-column-clicked(fm_id, p, col); }
             fm-quick-filter-changed(fm_id, p, q) => { root.fm-quick-filter-changed(fm_id, p, q); }
+            fm-viewport-changed(fm_id, p, y, h, w) => { root.fm-viewport-changed(fm_id, p, y, h, w); }
             fm-entry-clicked(fm_id, p, path, ctrl) => { root.fm-entry-clicked(fm_id, p, path, ctrl); }
             fm-entry-shift-clicked(fm_id, p, path) => { root.fm-entry-shift-clicked(fm_id, p, path); }
             fm-entry-double-clicked(fm_id, p, path, is_dir) => { root.fm-entry-double-clicked(fm_id, p, path, is_dir); }

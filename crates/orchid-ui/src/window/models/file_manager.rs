@@ -557,12 +557,108 @@ pub(crate) fn build_sidebar_items(
     ModelRc::new(VecModel::from(items))
 }
 
+/// Visible-window parameters for a file-manager pane.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FmViewport {
+    pub scroll_y: f32,
+    pub view_h: f32,
+    pub view_w: f32,
+}
+
+const FM_VIRTUALIZE_THRESHOLD: usize = 80;
+const FM_LIST_ROW_H: f32 = 28.0;
+const FM_LIST_OVERSCAN: usize = 12;
+
+/// Compute a visible window into `total` list rows.
+#[must_use]
+pub(crate) fn fm_list_window(
+    total: usize,
+    scroll_y: f32,
+    view_h: f32,
+    details: bool,
+) -> (usize, usize, f32, f32) {
+    let header_h = if details { FM_LIST_ROW_H } else { 0.0 };
+    let content_h = header_h + total as f32 * FM_LIST_ROW_H;
+    if total <= FM_VIRTUALIZE_THRESHOLD {
+        return (0, total, 0.0, 0.0);
+    }
+    let view_h = view_h.max(FM_LIST_ROW_H);
+    let first = (((scroll_y.max(0.0) - header_h) / FM_LIST_ROW_H).floor() as isize
+        - FM_LIST_OVERSCAN as isize)
+        .max(0) as usize;
+    let visible = ((view_h / FM_LIST_ROW_H).ceil() as usize) + FM_LIST_OVERSCAN * 2;
+    let end = (first + visible).min(total);
+    let pad_top = first as f32 * FM_LIST_ROW_H;
+    (first, end, pad_top, content_h)
+}
+
+/// Compute a visible window into a grid of `total` tiles.
+#[must_use]
+pub(crate) fn fm_grid_window(
+    total: usize,
+    scroll_y: f32,
+    view_h: f32,
+    view_w: f32,
+    large: bool,
+) -> (usize, usize, f32, f32) {
+    let tile_size = if large { 220.0 } else { 100.0 };
+    let tile_height = if large { 240.0 } else { 120.0 };
+    let spacing = 8.0;
+    let cols = ((view_w - spacing) / (tile_size + spacing)).floor().max(1.0) as usize;
+    let row_h = tile_height + spacing;
+    let rows = total.div_ceil(cols);
+    let content_h = rows as f32 * row_h + spacing;
+    if total <= FM_VIRTUALIZE_THRESHOLD {
+        return (0, total, 0.0, 0.0);
+    }
+    let view_h = view_h.max(row_h);
+    let first_row = ((scroll_y.max(0.0) / row_h).floor() as isize - 2).max(0) as usize;
+    let visible_rows = ((view_h / row_h).ceil() as usize) + 4;
+    let first = first_row * cols;
+    let end = (first + visible_rows * cols).min(total);
+    let pad_top = first_row as f32 * row_h;
+    (first, end, pad_top, content_h)
+}
+
+#[cfg(test)]
+mod virtualization_tests {
+    use super::{fm_grid_window, fm_list_window, FM_VIRTUALIZE_THRESHOLD};
+
+    #[test]
+    fn list_below_threshold_is_not_virtualized() {
+        let (first, end, pad, content) = fm_list_window(40, 0.0, 400.0, false);
+        assert_eq!((first, end, pad, content), (0, 40, 0.0, 0.0));
+    }
+
+    #[test]
+    fn list_window_moves_with_scroll() {
+        let total = FM_VIRTUALIZE_THRESHOLD + 200;
+        let (first, end, pad, content) = fm_list_window(total, 28.0 * 50.0, 280.0, false);
+        assert!(first > 0);
+        assert!(end > first);
+        assert!(end - first < total);
+        assert!(pad > 0.0);
+        assert!(content > 0.0);
+    }
+
+    #[test]
+    fn grid_window_respects_columns() {
+        let total = FM_VIRTUALIZE_THRESHOLD + 100;
+        let (first, end, pad, content) = fm_grid_window(total, 0.0, 400.0, 440.0, false);
+        assert_eq!(first, 0);
+        assert!(end < total);
+        assert_eq!(pad, 0.0);
+        assert!(content > 0.0);
+    }
+}
+
 pub(crate) fn build_file_manager_model(
     p: &orchid_widgets::FileManagerPayload,
     overlays: FileManagerOverlays,
     instance_id: Uuid,
     locale: &LocaleManager,
     request_autofocus: bool,
+    viewports: &HashMap<(Uuid, u8), FmViewport>,
 ) -> FileManagerModel {
     let active_path = p
         .panes
@@ -579,14 +675,41 @@ pub(crate) fn build_file_manager_model(
     let panes: Vec<FmPane> = p
         .panes
         .iter()
-        .map(|pp| {
+        .enumerate()
+        .map(|(pane_idx, pp)| {
+            let vp = viewports
+                .get(&(instance_id, pane_idx as u8))
+                .copied()
+                .unwrap_or(FmViewport {
+                    scroll_y: 0.0,
+                    view_h: 480.0,
+                    view_w: 640.0,
+                });
             let tabs: Vec<FmTab> = pp
                 .tabs
                 .iter()
-                .map(|t| {
+                .enumerate()
+                .map(|(tab_idx, t)| {
+                    let view_mode = view_mode_to_int(t.view_mode);
+                    let total = t.entries.len();
+                    let (first, end, pad_top, content_h) = {
+                        let (sy, vh, vw) = if tab_idx == pp.active_tab as usize {
+                            (vp.scroll_y, vp.view_h, vp.view_w)
+                        } else {
+                            (0.0, 480.0, 640.0)
+                        };
+                        match view_mode {
+                            0 | 3 => fm_grid_window(total, sy, vh, vw, view_mode == 3),
+                            2 => fm_list_window(total, sy, vh, true),
+                            _ => fm_list_window(total, sy, vh, false),
+                        }
+                    };
+
                     let entries: Vec<FmEntry> = t
                         .entries
                         .iter()
+                        .skip(first)
+                        .take(end.saturating_sub(first))
                         .map(|e| {
                             let tags: Vec<FmTagChip> = e
                                 .tags
@@ -599,7 +722,9 @@ pub(crate) fn build_file_manager_model(
                             let thumb_img = if e.has_thumbnail {
                                 e.thumbnail_rgba
                                     .as_ref()
-                                    .map(|rgba| fm_rgba_to_image(rgba, e.thumbnail_width, e.thumbnail_height))
+                                    .map(|rgba| {
+                                        fm_rgba_to_image(rgba, e.thumbnail_width, e.thumbnail_height)
+                                    })
                                     .unwrap_or_default()
                             } else {
                                 Image::default()
@@ -641,8 +766,11 @@ pub(crate) fn build_file_manager_model(
                         breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
                         can_back: t.can_go_back,
                         can_forward: t.can_go_forward,
-                        view_mode: view_mode_to_int(t.view_mode),
+                        view_mode,
                         entries: ModelRc::new(VecModel::from(entries)),
+                        entry_total_count: total as i32,
+                        virtual_pad_top: pad_top,
+                        virtual_content_height: content_h,
                         selection_count: t.selection_count as i32,
                         status_text: fm_build_tab_status_text(locale, t).into(),
                         quick_filter: t.quick_filter.clone().into(),
