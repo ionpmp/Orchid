@@ -1,6 +1,6 @@
 //! Rope-backed text buffer with encoding detection.
 
-use chardetng::EncodingDetector;
+use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::{Encoding, UTF_8};
 use ropey::Rope;
 
@@ -454,10 +454,10 @@ fn strip_bom(bytes: &[u8]) -> (&[u8], Option<&'static Encoding>) {
 }
 
 fn detect_encoding(sample: &[u8]) -> &'static Encoding {
-    let mut det = EncodingDetector::new();
+    let mut det = EncodingDetector::new(Iso2022JpDetection::Allow);
     let head_len = sample.len().min(4 * 1024);
     det.feed(&sample[..head_len], true);
-    det.guess(None, true)
+    det.guess(None, Utf8Detection::Allow)
 }
 
 fn detect_line_ending(sample: &str) -> LineEnding {

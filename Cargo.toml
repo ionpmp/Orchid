@@ -83,7 +83,7 @@ windows = "0.58"
 notify = "7"
 notify-debouncer-full = "0.4"
 walkdir = "2"
-directories = "5"
+directories = "6"
 tempfile = "3"
 
 # Concurrency
@@ -140,21 +140,21 @@ sevenz-rust = "0.6"
 zip = "2"
 flate2 = "1"
 mime_guess = "2"
-infer = "0.16"
+infer = "0.22"
 filetime = "0.2"
 trash = "5"
 encoding_rs = "0.8"
-chardetng = "0.1"
+chardetng = "1"
 
 # HTTP client / feeds
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
 feed-rs = "2.4"
 futures = "0.3"
-opener = "0.7"
+opener = "0.8"
 
 # System info
 sysinfo = { version = "0.32", default-features = false, features = ["disk", "system", "network", "user"] }
-starship-battery = "0.10"
+starship-battery = "0.11"
 
 # Text editor primitives
 ropey = "1"
@@ -162,8 +162,8 @@ memmap2 = "0.9"
 
 # i18n
 icu = "1"
-fluent = "0.16"
-fluent-bundle = "0.15"
+fluent = "0.17"
+fluent-bundle = "0.16"
 intl-memoizer = "0.5"
 unic-langid = { version = "0.9", features = ["macros"] }
 

@@ -1,7 +1,7 @@
 //! Plain-text extractor with encoding detection.
 
 use async_trait::async_trait;
-use chardetng::EncodingDetector;
+use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 
 use crate::error::Result;
 use crate::extractors::ContentExtractor;
@@ -53,14 +53,14 @@ fn decode_best_effort(bytes: &[u8]) -> String {
         return s;
     }
     // Let chardetng decide based on the prefix.
-    let mut det = EncodingDetector::new();
+    let mut det = EncodingDetector::new(Iso2022JpDetection::Allow);
     let head = if bytes.len() > 4 * 1024 {
         &bytes[..4 * 1024]
     } else {
         bytes
     };
     det.feed(head, head.len() == bytes.len());
-    let encoding = det.guess(None, true);
+    let encoding = det.guess(None, Utf8Detection::Allow);
     let (decoded, _, _) = encoding.decode(bytes);
     decoded.into_owned()
 }
