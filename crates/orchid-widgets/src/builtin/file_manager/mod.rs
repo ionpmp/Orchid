@@ -3069,6 +3069,9 @@ pub async fn set_quick_filter(instance_id: Uuid, pane: u8, q: String) -> WidgetR
 }
 
 /// Select entry inside the active tab for `pane`.
+///
+/// Does **not** publish a snapshot refresh — the UI patches selection flags in
+/// place. Callers that need a full rebuild must refresh explicitly.
 pub async fn select_entry(
     instance_id: Uuid,
     pane: u8,
@@ -3116,8 +3119,49 @@ pub async fn select_entry(
             }
         }
     }
-    inner.publish_refresh();
     Ok(())
+}
+
+/// Selected entries `(path, is_dir)` for the active tab in `pane` (live state).
+#[must_use]
+pub fn selected_entries(instance_id: Uuid, pane: u8) -> Vec<(String, bool)> {
+    let Ok(inner) = live_inner(instance_id) else {
+        return Vec::new();
+    };
+    let state = inner.state.lock();
+    let Ok(tab) = active_tab_ref(&state, pane) else {
+        return Vec::new();
+    };
+    let selected = tab.selection.selected_paths();
+    if selected.is_empty() {
+        return Vec::new();
+    };
+    let guard = inner.entries_by_tab.read();
+    let Some(entries) = guard.get(&tab.id) else {
+        return selected.into_iter().map(|p| (p, false)).collect();
+    };
+    selected
+        .into_iter()
+        .map(|path| {
+            let is_dir = entries
+                .iter()
+                .find(|e| e.path.as_str() == path)
+                .map(|e| matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory))
+                .unwrap_or(false);
+            (path, is_dir)
+        })
+        .collect()
+}
+
+/// `(selection_count, item_count)` for the active tab in `pane`.
+#[must_use]
+pub fn selection_counts(instance_id: Uuid, pane: u8) -> Option<(u32, u32)> {
+    let inner = live_inner(instance_id).ok()?;
+    let state = inner.state.lock();
+    let tab = active_tab_ref(&state, pane).ok()?;
+    let selection_count = tab.selection.count() as u32;
+    let item_count = inner.filtered_paths_for_tab(tab).len() as u32;
+    Some((selection_count, item_count))
 }
 
 /// Run a context-menu action against `target_paths`.
@@ -3356,7 +3400,6 @@ pub async fn run_action_with_opts(
                 ActivePane::Right => 1,
             };
             inner.select_all_in_pane(pane);
-            inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
         "fs.deselect-all" => {
@@ -3365,7 +3408,6 @@ pub async fn run_action_with_opts(
                 ActivePane::Right => 1,
             };
             inner.deselect_all_in_pane(pane);
-            inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
         "fs.new-folder" => {
@@ -3590,23 +3632,27 @@ pub async fn add_tag_to_paths(
 }
 
 /// Select every visible entry in `pane`'s active tab.
+///
+/// Selection-only — does not re-list the directory or publish a snapshot.
 pub async fn select_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     inner.select_all_in_pane(pane);
-    inner.refresh_all_tabs().await;
     Ok(())
 }
 
 /// Clear selection in `pane`'s active tab.
+///
+/// Selection-only — does not re-list the directory or publish a snapshot.
 pub async fn deselect_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     inner.deselect_all_in_pane(pane);
-    inner.refresh_all_tabs().await;
     Ok(())
 }
 
 /// Move selection by `delta` entries in `pane`'s active tab (filtered order).
 /// With `extend`, grows a range from the anchor (Shift+arrows).
+///
+/// Selection-only — does not publish a snapshot refresh.
 pub async fn select_relative(
     instance_id: Uuid,
     pane: u8,
@@ -3615,7 +3661,6 @@ pub async fn select_relative(
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     inner.move_selection_in_pane(pane, delta, extend);
-    inner.publish_refresh();
     Ok(())
 }
 

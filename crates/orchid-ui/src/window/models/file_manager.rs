@@ -1,8 +1,8 @@
 //! File manager widget Slint model builders.
 
 use orchid_i18n::LocaleManager;
-use slint::{Image, ModelRc, SharedString, VecModel};
-use std::collections::{HashMap, VecDeque};
+use slint::{Image, Model, ModelRc, SharedString, VecModel};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -371,14 +371,29 @@ fn active_network_sidebar_index(
 }
 
 fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPayload) -> String {
-    if let (Some(tracked), Some(dedup_bytes)) =
-        (t.managed_files_tracked, t.managed_dedup_bytes)
-    {
+    fm_status_text(
+        locale,
+        t.item_count,
+        t.selection_count,
+        t.managed_files_tracked,
+        t.managed_dedup_bytes,
+    )
+}
+
+/// Status-bar text for a tab given live selection/item counts.
+pub(crate) fn fm_status_text(
+    locale: &LocaleManager,
+    item_count: u32,
+    selection_count: u32,
+    managed_tracked: Option<u32>,
+    managed_dedup_bytes: Option<u64>,
+) -> String {
+    if let (Some(tracked), Some(dedup_bytes)) = (managed_tracked, managed_dedup_bytes) {
         locale.tr_args(
             "fm-status-managed",
             &orchid_i18n::FluentArgs::new()
-                .with("items", t.item_count.to_string())
-                .with("selected", t.selection_count.to_string())
+                .with("items", item_count.to_string())
+                .with("selected", selection_count.to_string())
                 .with("tracked", tracked.to_string())
                 .with("dedup", locale.format_byte_size(dedup_bytes)),
         )
@@ -386,10 +401,54 @@ fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPaylo
         locale.tr_args(
             "fm-status-bar",
             &orchid_i18n::FluentArgs::new()
-                .with("items", t.item_count.to_string())
-                .with("selected", t.selection_count.to_string()),
+                .with("items", item_count.to_string())
+                .with("selected", selection_count.to_string()),
         )
     }
+}
+
+/// Flip `is_selected` / status on an existing FM model without replacing entry rows.
+///
+/// Returns `false` when the model structure cannot be patched in place.
+pub(crate) fn patch_fm_selection(
+    model: &mut FileManagerModel,
+    pane: u8,
+    selected: &HashSet<String>,
+    selection_count: u32,
+    item_count: u32,
+    locale: &LocaleManager,
+) -> bool {
+    let pane_idx = pane.min(1) as usize;
+    let Some(panes) = model.panes.as_any().downcast_ref::<VecModel<FmPane>>() else {
+        return false;
+    };
+    let Some(pane_model) = panes.row_data(pane_idx) else {
+        return false;
+    };
+    let Some(tabs) = pane_model.tabs.as_any().downcast_ref::<VecModel<FmTab>>() else {
+        return false;
+    };
+    let active = pane_model.active_tab.max(0) as usize;
+    let Some(mut tab) = tabs.row_data(active) else {
+        return false;
+    };
+    let Some(entries) = tab.entries.as_any().downcast_ref::<VecModel<FmEntry>>() else {
+        return false;
+    };
+    for i in 0..entries.row_count() {
+        let Some(mut entry) = entries.row_data(i) else {
+            continue;
+        };
+        let want = selected.contains(entry.path.as_str());
+        if entry.is_selected != want {
+            entry.is_selected = want;
+            entries.set_row_data(i, entry);
+        }
+    }
+    tab.selection_count = selection_count as i32;
+    tab.status_text = fm_status_text(locale, item_count, selection_count, None, None).into();
+    tabs.set_row_data(active, tab);
+    true
 }
 
 fn fm_virtual_path_display(locale: &LocaleManager, path: &str) -> String {

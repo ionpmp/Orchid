@@ -23,7 +23,8 @@ use crate::window::spawn;
 use crate::window::models::{
     build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_context_menu,
     empty_managed_policy_state, empty_passphrase_state, empty_rename_state, empty_tag_state,
-    fm_grid_window, fm_list_window, fm_passphrase_dialog_labels, FileManagerOverlays, FmViewport,
+    fm_grid_window, fm_list_window, fm_passphrase_dialog_labels, patch_fm_selection,
+    FileManagerOverlays, FmViewport,
 };
 use crate::slint_generated::{
     FmConfirmDialog,
@@ -154,6 +155,61 @@ impl MainWindowController {
             warn!(?e, "fm_refresh_ui patch");
             self.schedule_rebuild();
         }
+    }
+
+    /// Update selection highlighting without rebuilding the entry model / snapshot.
+    pub(super) fn fm_refresh_selection_ui(self: &Arc<Self>, inst: Uuid, pane: u8) {
+        if self.try_patch_fm_selection(inst, pane) {
+            return;
+        }
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            if let Some(c) = tw.upgrade() {
+                c.fm_refresh_ui(inst).await;
+            }
+        });
+    }
+
+    fn try_patch_fm_selection(&self, inst: Uuid, pane: u8) -> bool {
+        use std::collections::HashSet;
+        let selected: HashSet<String> = orchid_widgets::builtin::file_manager::selected_entries(
+            inst, pane,
+        )
+        .into_iter()
+        .map(|(p, _)| p)
+        .collect();
+        let Some((selection_count, item_count)) =
+            orchid_widgets::builtin::file_manager::selection_counts(inst, pane)
+        else {
+            return false;
+        };
+        let Some(v) = self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<crate::slint_generated::WidgetFrameModel>>()
+        else {
+            return false;
+        };
+        let needle = inst.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            // Patch nested VecModels in place — do not set_row_data on the
+            // workspace frame (that remounts FileManagerView).
+            return patch_fm_selection(
+                &mut row.file_manager,
+                pane,
+                &selected,
+                selection_count,
+                item_count,
+                &self.locale,
+            );
+        }
+        false
     }
         pub(super) fn widget_bounds_at_canvas_point(
         &self,
@@ -568,25 +624,7 @@ impl MainWindowController {
     }
 
         pub(super) fn fm_selected_entries(&self, inst: Uuid, pane: u8) -> Vec<(String, bool)> {
-        let cache = self.widget_manager.snapshot_cache();
-        let Some(snap) = cache.get(inst).map(|s| (*s).clone()) else {
-            return Vec::new();
-        };
-        let WidgetPayload::FileManager(fm) = &snap.payload else {
-            return Vec::new();
-        };
-        let pane_idx = usize::from(pane.min(1));
-        let Some(pane) = fm.panes.get(pane_idx) else {
-            return Vec::new();
-        };
-        let Some(tab) = pane.tabs.get(pane.active_tab as usize) else {
-            return Vec::new();
-        };
-        tab.entries
-            .iter()
-            .filter(|e| e.is_selected)
-            .map(|e| (e.path.clone(), e.is_dir))
-            .collect()
+        orchid_widgets::builtin::file_manager::selected_entries(inst, pane)
     }
 
         pub(super) fn fm_entry_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> bool {
@@ -717,7 +755,7 @@ impl MainWindowController {
                 return;
             }
             if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
+                c.fm_refresh_selection_ui(inst, p);
             }
         });
     }
@@ -1278,7 +1316,7 @@ impl MainWindowController {
                 orchid_widgets::builtin::file_manager::select_entry(inst, p, &ps_for_select, mode)
                     .await;
             if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
+                c.fm_refresh_selection_ui(inst, p);
             }
         });
 
@@ -1305,7 +1343,7 @@ impl MainWindowController {
             )
             .await;
             if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
+                c.fm_refresh_selection_ui(inst, p);
             }
         });
     }
@@ -2091,7 +2129,7 @@ impl MainWindowController {
                 return;
             }
             if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
+                c.fm_refresh_selection_ui(inst, p);
             }
         });
     }
@@ -2110,7 +2148,7 @@ impl MainWindowController {
                 return;
             }
             if let Some(c) = tw.upgrade() {
-                c.fm_refresh_ui(inst).await;
+                c.fm_refresh_selection_ui(inst, p);
             }
         });
     }

@@ -22,7 +22,7 @@ pub(crate) use file_manager::{
     build_context_menu, build_file_manager_model, build_managed_policy_state, empty_confirm_dialog,
     empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
-    fm_passphrase_dialog_labels, FileManagerOverlays, FmViewport,
+    fm_passphrase_dialog_labels, patch_fm_selection, FileManagerOverlays, FmViewport,
 };
 pub(crate) use calculator::{build_calculator_model, empty_calculator_model};
 pub(crate) use clock::{build_clock_model, empty_clock_model};
