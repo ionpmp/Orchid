@@ -108,8 +108,8 @@ bitflags = { version = "2", features = ["serde"] }
 tantivy = "0.26"
 
 # Terminal
-portable-pty = "0.8"
-vte = "0.13"
+portable-pty = "0.9"
+vte = "0.15"
 bytes = "1"
 arboard = "3"
 

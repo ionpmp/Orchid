@@ -80,9 +80,7 @@ impl TerminalEmulator {
             bus: &self.bus,
             session_id: self.session_id,
         };
-        for b in bytes {
-            parser.advance(&mut handler, *b);
-        }
+        parser.advance(&mut handler, bytes);
         let responses = handler.responses;
         state.parser = Some(parser);
         responses
