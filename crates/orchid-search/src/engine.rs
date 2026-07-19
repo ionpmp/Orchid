@@ -361,28 +361,38 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
         }
     }
     if q.min_size.is_some() || q.max_size.is_some() {
-        let lo = q.min_size.unwrap_or(0);
-        let hi = q.max_size.unwrap_or(u64::MAX);
-        clauses.push((
-            Occur::Must,
-            Box::new(RangeQuery::new_u64_bounds(
-                "size".to_string(),
-                std::ops::Bound::Included(lo),
-                std::ops::Bound::Included(hi),
+        let lo = match q.min_size {
+            Some(v) => std::ops::Bound::Included(Term::from_field_u64(
+                inner.schema.field_size,
+                v,
             )),
-        ));
+            None => std::ops::Bound::Unbounded,
+        };
+        let hi = match q.max_size {
+            Some(v) => std::ops::Bound::Included(Term::from_field_u64(
+                inner.schema.field_size,
+                v,
+            )),
+            None => std::ops::Bound::Unbounded,
+        };
+        clauses.push((Occur::Must, Box::new(RangeQuery::new(lo, hi))));
     }
     if q.modified_after.is_some() || q.modified_before.is_some() {
-        let lo = q.modified_after.unwrap_or(i64::MIN);
-        let hi = q.modified_before.unwrap_or(i64::MAX);
-        clauses.push((
-            Occur::Must,
-            Box::new(RangeQuery::new_i64_bounds(
-                "modified".to_string(),
-                std::ops::Bound::Included(lo),
-                std::ops::Bound::Included(hi),
+        let lo = match q.modified_after {
+            Some(v) => std::ops::Bound::Included(Term::from_field_i64(
+                inner.schema.field_modified,
+                v,
             )),
-        ));
+            None => std::ops::Bound::Unbounded,
+        };
+        let hi = match q.modified_before {
+            Some(v) => std::ops::Bound::Included(Term::from_field_i64(
+                inner.schema.field_modified,
+                v,
+            )),
+            None => std::ops::Bound::Unbounded,
+        };
+        clauses.push((Occur::Must, Box::new(RangeQuery::new(lo, hi))));
     }
     if q.only_files {
         let term = Term::from_field_text(inner.schema.field_kind, "file");
@@ -408,7 +418,9 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
 
     let start = std::time::Instant::now();
     let limit = q.limit.max(1);
-    let collector = TopDocs::with_limit(limit).and_offset(q.offset);
+    let collector = TopDocs::with_limit(limit)
+        .and_offset(q.offset)
+        .order_by_score();
     let top = searcher.search(&combined, &collector)?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
 

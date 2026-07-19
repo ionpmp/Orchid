@@ -105,7 +105,7 @@ nucleo-matcher = "0.3"
 bitflags = { version = "2", features = ["serde"] }
 
 # Search
-tantivy = "0.22"
+tantivy = "0.26"
 
 # Terminal
 portable-pty = "0.8"
