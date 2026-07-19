@@ -56,7 +56,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Storage
-redb = "2"
+redb = "4"
 
 # Crypto / content addressing
 age = "0.12"

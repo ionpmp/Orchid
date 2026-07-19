@@ -8,7 +8,7 @@ use bincode::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use orchid_storage::{GridPosition, WidgetSize};
-use redb::{ReadableTable, TableDefinition};
+use redb::{ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use uuid::Uuid;

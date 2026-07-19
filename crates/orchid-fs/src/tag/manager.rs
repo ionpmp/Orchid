@@ -216,7 +216,7 @@ impl TagManager {
     /// `StateStore` does not expose an iterator helper yet.
     fn all_file_tags(&self) -> Result<Vec<FileTag>> {
         use orchid_storage::state::tables::FILE_TAGS_TABLE;
-        use redb::ReadableTable;
+        use redb::{ReadableDatabase, ReadableTable};
 
         let db = self.storage.raw_database();
         let txn = db

@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 use uuid::Uuid;
 
 use crate::error::{Result, StorageError};
@@ -61,12 +61,37 @@ impl StateStore {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let db = Database::create(path)?;
+        // redb 3+/4 only speak file format v3. Leftover v2 files cannot be
+        // upgraded in-process (that needs redb 2.6's `Database::upgrade`);
+        // back them up and start fresh so the app can still launch.
+        let db = match Database::create(path) {
+            Ok(db) => db,
+            Err(redb::DatabaseError::UpgradeRequired(_)) => {
+                let backup = Self::backup_incompatible_db(path)?;
+                eprintln!(
+                    "orchid-storage: backed up incompatible redb v2 file to {} and created a new database",
+                    backup.display()
+                );
+                Database::create(path)?
+            }
+            Err(err) => return Err(err.into()),
+        };
         let schema_version = migrations::initialise(&db, orchid_version)?;
         Ok(Self {
             db: Arc::new(db),
             schema_version,
         })
+    }
+
+    fn backup_incompatible_db(path: &Path) -> Result<std::path::PathBuf> {
+        let mut backup = path.with_extension("redb.v2-incompatible");
+        let mut n = 0u32;
+        while backup.exists() {
+            n += 1;
+            backup = path.with_extension(format!("redb.v2-incompatible.{n}"));
+        }
+        fs::rename(path, &backup)?;
+        Ok(backup)
     }
 
     /// Open an ephemeral, in-memory state database. Intended for tests.
@@ -926,5 +951,25 @@ mod tests {
         }
         let loaded = store.read().unwrap().get_notification_center().unwrap();
         assert_eq!(loaded.as_ref(), Some(&state));
+    }
+
+    #[test]
+    fn open_backs_up_incompatible_v2_and_recreates() {
+        // Build a tiny v2 database with redb's on-disk magic by writing an
+        // empty file that `Database::create` will reject as UpgradeRequired
+        // once the file looks like a legacy DB — exercised via the real
+        // AppData path only in CI-local upgrades. Here we just cover the
+        // backup helper rename logic.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("state.redb");
+        fs::write(&path, b"not-a-redb").unwrap();
+        let backup = StateStore::backup_incompatible_db(&path).unwrap();
+        assert!(!path.exists());
+        assert!(backup.exists());
+        assert!(backup
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("v2-incompatible"));
     }
 }

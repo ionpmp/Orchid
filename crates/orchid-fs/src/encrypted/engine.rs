@@ -6,7 +6,7 @@ use std::sync::Arc;
 use orchid_crypto::{
     Decryptor, Encryptor, Identity, IdentityKind, RevealDuration, RevealManager, RevealSession,
 };
-use redb::ReadableTable;
+use redb::{ReadableDatabase, ReadableTable};
 use tracing::warn;
 
 use crate::encrypted::index::{EncryptedFolderRecord, ENCRYPTED_PATHS};

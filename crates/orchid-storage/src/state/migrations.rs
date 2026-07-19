@@ -12,7 +12,7 @@
 //! `&redb::WriteTransaction`.
 
 use chrono::Utc;
-use redb::{Database, WriteTransaction};
+use redb::{Database, ReadableDatabase, WriteTransaction};
 
 use crate::error::{Result, StorageError};
 use crate::state::tables::{META_KEY_CURRENT, META_TABLE};

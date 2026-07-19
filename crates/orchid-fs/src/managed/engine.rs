@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use orchid_crypto::{ChunkStore, Deduplicator, FileManifest};
-use redb::ReadableTable;
+use redb::{ReadableDatabase, ReadableTable};
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 
