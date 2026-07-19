@@ -6,7 +6,6 @@ use crate::widget::payloads::UserRowView;
 #[allow(missing_docs)]
 mod win {
     use windows::core::PWSTR;
-    use windows::Win32::Foundation::{FALSE, HANDLE};
     use windows::Win32::System::RemoteDesktop::{
         WTSDisconnectSession, WTSEnumerateSessionsW, WTSFreeMemory, WTSLogoffSession,
         WTSQuerySessionInformationW, WTSUserName, WTS_CONNECTSTATE_CLASS,
@@ -20,7 +19,7 @@ mod win {
         unsafe {
             let mut info: *mut WTS_SESSION_INFOW = std::ptr::null_mut();
             let mut count = 0u32;
-            WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &mut info, &mut count)
+            WTSEnumerateSessionsW(Some(WTS_CURRENT_SERVER_HANDLE), 0, 1, &mut info, &mut count)
                 .map_err(|e| format!("WTSEnumerateSessions: {e}"))?;
             if info.is_null() {
                 return Ok(Vec::new());
@@ -57,14 +56,14 @@ mod win {
 
     pub fn disconnect_session(session_id: u32) -> Result<(), String> {
         unsafe {
-            WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, session_id, FALSE)
+            WTSDisconnectSession(Some(WTS_CURRENT_SERVER_HANDLE), session_id, false)
                 .map_err(|e| format!("WTSDisconnectSession: {e}"))
         }
     }
 
     pub fn sign_out_session(session_id: u32) -> Result<(), String> {
         unsafe {
-            WTSLogoffSession(WTS_CURRENT_SERVER_HANDLE, session_id, FALSE)
+            WTSLogoffSession(Some(WTS_CURRENT_SERVER_HANDLE), session_id, false)
                 .map_err(|e| format!("WTSLogoffSession: {e}"))
         }
     }
@@ -73,7 +72,7 @@ mod win {
         let mut buf = PWSTR::null();
         let mut bytes = 0u32;
         WTSQuerySessionInformationW(
-            WTS_CURRENT_SERVER_HANDLE,
+            Some(WTS_CURRENT_SERVER_HANDLE),
             session_id,
             WTSUserName,
             &mut buf,
@@ -103,11 +102,6 @@ mod win {
             9 => "Init".into(),
             other => format!("Unknown ({other})"),
         }
-    }
-
-    #[allow(dead_code)]
-    fn _handle() -> HANDLE {
-        HANDLE::default()
     }
 }
 

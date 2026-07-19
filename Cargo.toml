@@ -77,7 +77,8 @@ url = "2"
 tar = "0.4"
 xz2 = "0.1"
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
-windows = "0.58"
+windows = "0.62"
+windows-future = "0.3"
 
 # Filesystem / watching
 notify = "7"
@@ -147,13 +148,13 @@ encoding_rs = "0.8"
 chardetng = "1"
 
 # HTTP client / feeds
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "gzip"] }
 feed-rs = "2.4"
 futures = "0.3"
 opener = "0.8"
 
 # System info
-sysinfo = { version = "0.32", default-features = false, features = ["disk", "system", "network", "user"] }
+sysinfo = { version = "0.39", default-features = false, features = ["disk", "system", "network", "user"] }
 starship-battery = "0.11"
 
 # Text editor primitives

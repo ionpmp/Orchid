@@ -14,6 +14,7 @@ use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
 use windows::Storage::Streams::DataReader;
+use windows_future::IAsyncOperation;
 
 use super::{MediaError, MediaProvider, MediaSession};
 
@@ -40,7 +41,7 @@ fn manager() -> Result<&'static GlobalSystemMediaTransportControlsSessionManager
     MANAGER
         .get_or_init(|| {
             GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
-                .and_then(|op| op.get())
+                .and_then(|op| op.join())
                 .map_err(|e| e.to_string())
         })
         .as_ref()
@@ -88,7 +89,7 @@ fn session_snapshot() -> Option<MediaSession> {
     let props = session
         .TryGetMediaPropertiesAsync()
         .ok()?
-        .get()
+        .join()
         .ok()?;
     let timeline = session.GetTimelineProperties().ok()?;
     let info = session.GetPlaybackInfo().ok()?;
@@ -149,13 +150,13 @@ fn read_thumbnail(
     props: &GlobalSystemMediaTransportControlsSessionMediaProperties,
 ) -> Option<Vec<u8>> {
     let thumb_ref = props.Thumbnail().ok()?;
-    let stream = thumb_ref.OpenReadAsync().ok()?.get().ok()?;
+    let stream = thumb_ref.OpenReadAsync().ok()?.join().ok()?;
     let size = stream.Size().ok()?.min(MAX_THUMBNAIL_BYTES);
     if size == 0 || size > u32::MAX as u64 {
         return None;
     }
     let reader = DataReader::CreateDataReader(&stream).ok()?;
-    reader.LoadAsync(size as u32).ok()?.get().ok()?;
+    reader.LoadAsync(size as u32).ok()?.join().ok()?;
     let mut buf = vec![0u8; size as usize];
     reader.ReadBytes(&mut buf).ok()?;
     Some(buf)
@@ -173,9 +174,9 @@ where
     f(&session)
 }
 
-fn run_bool_async(op: windows::Foundation::IAsyncOperation<bool>) -> Result<(), MediaError> {
+fn run_bool_async(op: IAsyncOperation<bool>) -> Result<(), MediaError> {
     let ok = op
-        .get()
+        .join()
         .map_err(|e| MediaError::ControlFailed(e.to_string()))?;
     if ok {
         Ok(())

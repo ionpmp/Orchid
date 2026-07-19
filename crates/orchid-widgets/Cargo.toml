@@ -42,6 +42,9 @@ orchid-search.workspace = true
 orchid-fs.workspace = true
 orchid-viewers.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-future.workspace = true
+
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
 features = [

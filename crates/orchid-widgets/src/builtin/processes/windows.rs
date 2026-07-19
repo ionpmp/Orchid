@@ -22,7 +22,8 @@ pub fn collect_app_pids() -> HashSet<u32> {
 mod win {
     use std::collections::HashSet;
 
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{HWND, LPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowThreadProcessId,
         IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WINDOW_EX_STYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,

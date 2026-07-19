@@ -10,7 +10,7 @@ mod win {
     use std::path::{Path, PathBuf};
 
     use windows::core::{w, GUID, PCWSTR, PWSTR};
-    use windows::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS, HANDLE};
+    use windows::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
     use windows::Win32::System::Com::CoTaskMemFree;
     use windows::Win32::System::Registry::{
         RegCloseKey, RegEnumValueW, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
@@ -92,10 +92,11 @@ mod win {
             .collect();
         unsafe {
             let mut key = HKEY::default();
-            RegOpenKeyExW(root, approved_path, 0, KEY_SET_VALUE, &mut key)
+            RegOpenKeyExW(root, approved_path, Some(0), KEY_SET_VALUE, &mut key)
                 .ok()
                 .map_err(|e| format!("open StartupApproved: {e}"))?;
-            let status = RegSetValueExW(key, PCWSTR(name_wide.as_ptr()), 0, REG_BINARY, Some(&data));
+            let status =
+                RegSetValueExW(key, PCWSTR(name_wide.as_ptr()), Some(0), REG_BINARY, Some(&data));
             let _ = RegCloseKey(key);
             status
                 .ok()
@@ -127,7 +128,9 @@ mod win {
         let mut out = Vec::new();
         unsafe {
             let mut key = HKEY::default();
-            if RegOpenKeyExW(root, PCWSTR(path_wide.as_ptr()), 0, KEY_READ, &mut key).is_err() {
+            if RegOpenKeyExW(root, PCWSTR(path_wide.as_ptr()), Some(0), KEY_READ, &mut key)
+                .is_err()
+            {
                 return out;
             }
             let approved = read_approved_map(root);
@@ -141,7 +144,7 @@ mod win {
                 let status = RegEnumValueW(
                     key,
                     index,
-                    PWSTR(name_buf.as_mut_ptr()),
+                    Some(PWSTR(name_buf.as_mut_ptr())),
                     &mut name_len,
                     None,
                     Some(&mut ty),
@@ -185,7 +188,7 @@ mod win {
         let path = w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run");
         unsafe {
             let mut key = HKEY::default();
-            if RegOpenKeyExW(root, path, 0, KEY_READ, &mut key).is_err() {
+            if RegOpenKeyExW(root, path, Some(0), KEY_READ, &mut key).is_err() {
                 return map;
             }
             let mut index = 0u32;
@@ -198,7 +201,7 @@ mod win {
                 let status = RegEnumValueW(
                     key,
                     index,
-                    PWSTR(name_buf.as_mut_ptr()),
+                    Some(PWSTR(name_buf.as_mut_ptr())),
                     &mut name_len,
                     None,
                     Some(&mut ty),
@@ -256,7 +259,7 @@ mod win {
 
     fn known_folder(id: &GUID) -> Option<PathBuf> {
         unsafe {
-            let pwstr = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, HANDLE::default()).ok()?;
+            let pwstr = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None).ok()?;
             if pwstr.is_null() {
                 return None;
             }

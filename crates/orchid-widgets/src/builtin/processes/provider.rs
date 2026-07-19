@@ -74,7 +74,7 @@ impl ProcessesProvider {
 
         if full {
             let mut users = self.users.lock();
-            users.refresh_list();
+            users.refresh();
         }
 
         {
@@ -220,7 +220,7 @@ impl ProcessesProvider {
 }
 
 fn process_refresh_kind(with_disk: bool) -> ProcessRefreshKind {
-    let mut kind = ProcessRefreshKind::new()
+    let mut kind = ProcessRefreshKind::nothing()
         .with_cpu()
         .with_memory()
         .with_exe(UpdateKind::OnlyIfNotSet)

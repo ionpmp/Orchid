@@ -46,11 +46,11 @@ pub fn verify_user(message: &str) -> Result<BiometricVerification> {
 #[cfg(windows)]
 mod imp {
     use windows::core::HSTRING;
-    use windows::Foundation::IAsyncOperation;
     use windows::Security::Credentials::UI::{
         UserConsentVerificationResult, UserConsentVerifier,
         UserConsentVerifierAvailability,
     };
+    use windows_future::IAsyncOperation;
 
     use super::{BiometricAvailability, BiometricVerification};
     use crate::error::{CryptoError, Result};
@@ -74,7 +74,7 @@ mod imp {
     fn map_availability(
         op: IAsyncOperation<UserConsentVerifierAvailability>,
     ) -> BiometricAvailability {
-        match op.get() {
+        match op.join() {
             Ok(UserConsentVerifierAvailability::Available) => BiometricAvailability::Available,
             Ok(UserConsentVerifierAvailability::DeviceNotPresent) => {
                 BiometricAvailability::NotConfigured
@@ -91,7 +91,7 @@ mod imp {
     fn map_verification(
         op: IAsyncOperation<UserConsentVerificationResult>,
     ) -> Result<BiometricVerification> {
-        match op.get() {
+        match op.join() {
             Ok(UserConsentVerificationResult::Verified) => Ok(BiometricVerification::Verified),
             Ok(UserConsentVerificationResult::Canceled) => Ok(BiometricVerification::Cancelled),
             Ok(UserConsentVerificationResult::DeviceBusy) => Ok(BiometricVerification::DeviceBusy),

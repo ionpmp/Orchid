@@ -72,7 +72,7 @@ mod windows_impl {
     use windows::core::PCWSTR;
     use windows::Win32::Graphics::Gdi::{
         CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, ReleaseDC,
-        SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBRUSH,
+        SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
     };
     use windows::Win32::Storage::FileSystem::{
         FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_FLAGS_AND_ATTRIBUTES,
@@ -207,7 +207,7 @@ mod windows_impl {
         if screen_dc.is_invalid() {
             return None;
         }
-        let mem_dc = CreateCompatibleDC(screen_dc);
+        let mem_dc = CreateCompatibleDC(Some(screen_dc));
         if mem_dc.is_invalid() {
             let _ = ReleaseDC(None, screen_dc);
             return None;
@@ -227,7 +227,8 @@ mod windows_impl {
         };
 
         let mut bits: *mut c_void = std::ptr::null_mut();
-        let dib = match CreateDIBSection(mem_dc, &bmi, DIB_RGB_COLORS, &mut bits, None, 0) {
+        let dib = match CreateDIBSection(Some(mem_dc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
+        {
             Ok(h) => h,
             Err(_) => {
                 let _ = DeleteDC(mem_dc);
@@ -236,13 +237,13 @@ mod windows_impl {
             }
         };
         if bits.is_null() {
-            let _ = DeleteObject(dib);
+            let _ = DeleteObject(dib.into());
             let _ = DeleteDC(mem_dc);
             let _ = ReleaseDC(None, screen_dc);
             return None;
         }
 
-        let prev = SelectObject(mem_dc, dib);
+        let prev = SelectObject(mem_dc, dib.into());
         // Clear to transparent before drawing (some icons lack full alpha).
         {
             let n = (px * px * 4) as usize;
@@ -257,7 +258,7 @@ mod windows_impl {
             size,
             size,
             0,
-            HBRUSH::default(),
+            None,
             DI_NORMAL,
         )
         .is_ok();
@@ -275,7 +276,7 @@ mod windows_impl {
         };
 
         let _ = SelectObject(mem_dc, prev);
-        let _ = DeleteObject(dib);
+        let _ = DeleteObject(dib.into());
         let _ = DeleteDC(mem_dc);
         let _ = ReleaseDC(None, screen_dc);
         icon

@@ -88,7 +88,7 @@ mod imp {
         // SAFETY: Win32 allocated `out_blob.pbData` via LocalAlloc; freeing
         // with LocalFree is the matching operation.
         unsafe {
-            let _ = LocalFree(HLOCAL(out_blob.pbData.cast()));
+            let _ = LocalFree(Some(HLOCAL(out_blob.pbData.cast())));
         }
         Ok(out)
     }
@@ -120,7 +120,7 @@ mod imp {
         // and then release it.
         unsafe {
             std::ptr::write_bytes(out_blob.pbData, 0u8, len);
-            let _ = LocalFree(HLOCAL(out_blob.pbData.cast()));
+            let _ = LocalFree(Some(HLOCAL(out_blob.pbData.cast())));
         }
         Ok(ZeroizingBytes::new(plain))
     }

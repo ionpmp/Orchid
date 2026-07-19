@@ -98,7 +98,8 @@ impl SystemProvider {
         drop(system);
 
         let mut disks = self.disks.lock();
-        disks.refresh();
+        // Drop disks that disappeared since the last sample.
+        disks.refresh(false);
         let disk_usages = disks
             .iter()
             .map(|d| DiskUsage {
@@ -112,7 +113,7 @@ impl SystemProvider {
         drop(disks);
 
         let mut networks = self.networks.lock();
-        networks.refresh();
+        networks.refresh(false);
         let mut prev = self.previous.lock();
         let elapsed = prev
             .at
