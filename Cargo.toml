@@ -62,7 +62,7 @@ redb = "4"
 age = "0.12"
 keepass = { version = "0.13", features = ["save_kdbx4"] }
 blake3 = { version = "1", features = ["mmap"] }
-fastcdc = "3"
+fastcdc = "4"
 rand = "0.10"
 rand_core = "0.10"
 getrandom = "0.4"
@@ -162,7 +162,7 @@ ropey = "1"
 memmap2 = "0.9"
 
 # i18n
-icu = "1"
+icu = "2.2"
 fluent = "0.17"
 fluent-bundle = "0.16"
 intl-memoizer = "0.5"

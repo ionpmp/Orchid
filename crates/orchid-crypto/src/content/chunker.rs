@@ -70,9 +70,9 @@ impl Chunker {
     pub fn chunk_bytes<'a>(&self, data: &'a [u8]) -> Vec<(Chunk, &'a [u8])> {
         let cdc = FastCDC::new(
             data,
-            self.config.min_size,
-            self.config.avg_size,
-            self.config.max_size,
+            self.config.min_size as usize,
+            self.config.avg_size as usize,
+            self.config.max_size as usize,
         );
         cdc.into_iter()
             .map(|c| {
@@ -114,9 +114,9 @@ impl Chunker {
         let file = File::open(path).await?.into_std().await;
         let cdc = StreamCDC::new(
             file,
-            self.config.min_size,
-            self.config.avg_size,
-            self.config.max_size,
+            self.config.min_size as usize,
+            self.config.avg_size as usize,
+            self.config.max_size as usize,
         );
 
         let mut out = Vec::new();
