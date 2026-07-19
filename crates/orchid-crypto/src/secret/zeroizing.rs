@@ -99,11 +99,11 @@ impl From<Vec<u8>> for ZeroizingBytes {
 
 /// Typed alias for passing in-memory byte secrets through APIs.
 ///
-/// Wraps [`ZeroizingBytes`] in [`secrecy::Secret`] so that `Debug` never
+/// Wraps [`ZeroizingBytes`] in [`secrecy::SecretBox`] so that `Debug` never
 /// prints the contents and access is always explicit via `ExposeSecret`.
-pub type SecretBytes = secrecy::Secret<ZeroizingBytes>;
+pub type SecretBytes = secrecy::SecretBox<ZeroizingBytes>;
 
-// `secrecy::Secret<T>` requires `T: Zeroize`. Our derives satisfy that.
+// `secrecy::SecretBox<T>` requires `T: Zeroize`. Our derives satisfy that.
 
 #[cfg(test)]
 mod tests {

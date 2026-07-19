@@ -152,7 +152,7 @@ mod tests {
     fn sample_db() -> (tempfile::TempDir, PasswordDatabase, Uuid) {
         let td = tempfile::tempdir().unwrap();
         let db =
-            PasswordDatabase::create(&td.path().join("db.kdbx"), SecretString::new("pw".into()))
+            PasswordDatabase::create(&td.path().join("db.kdbx"), SecretString::from("pw"))
                 .unwrap();
         let root = db.root_group().unwrap().id;
         for (title, tag) in [
@@ -164,7 +164,7 @@ mod tests {
                 id: Uuid::new_v4(),
                 title: title.into(),
                 username: "alice".into(),
-                password: SecretString::new(String::new()),
+                password: SecretString::from(String::new()),
                 url: None,
                 notes: None,
                 tags: vec![tag.into()],

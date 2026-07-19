@@ -69,7 +69,7 @@ pub enum TotpAlgorithm {
 impl Default for TotpConfig {
     fn default() -> Self {
         Self {
-            secret: SecretString::new(String::new()),
+            secret: SecretString::from(String::new()),
             algorithm: TotpAlgorithm::Sha1,
             digits: 6,
             period_seconds: 30,

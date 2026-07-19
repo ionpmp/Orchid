@@ -1,10 +1,11 @@
 //! Secure randomness helpers.
 //!
-//! Every function here is backed by [`rand::rngs::OsRng`] — never the thread
-//! RNG — so they are appropriate for key material, nonces, and identifiers.
+//! Every function here is backed by [`rand::rngs::SysRng`] — never a
+//! userspace PRNG — so they are appropriate for key material, nonces, and
+//! identifiers.
 
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::rngs::SysRng;
+use rand::TryRng;
 
 use crate::error::{CryptoError, Result};
 use crate::secret::zeroizing::ZeroizingBytes;
@@ -17,8 +18,8 @@ use crate::secret::zeroizing::ZeroizingBytes;
 /// (extremely unlikely on a desktop target — we still surface it rather
 /// than panic).
 pub fn fill_secure(buf: &mut [u8]) -> Result<()> {
-    let mut rng = OsRng;
-    rng.try_fill_bytes(buf)
+    SysRng
+        .try_fill_bytes(buf)
         .map_err(|e| CryptoError::Encoding(format!("OS RNG failure: {e}")))
 }
 
@@ -54,9 +55,9 @@ pub fn random_bytes(n: usize) -> Result<ZeroizingBytes> {
 #[must_use]
 pub fn random_uuid() -> uuid::Uuid {
     let mut bytes = [0u8; 16];
-    // OsRng doesn't fail on desktop targets; an `ok()` dance here would
-    // swallow the extremely unlikely error. We fall back to thread-RNG in
-    // that path — still a cryptographic RNG for UUIDs on stable Rust.
+    // SysRng doesn't fail on desktop targets; an `ok()` dance here would
+    // swallow the extremely unlikely error. We fall back to uuid's thread
+    // RNG in that path — still a cryptographic RNG for UUIDs on stable Rust.
     if fill_secure(&mut bytes).is_err() {
         uuid::Uuid::new_v4()
     } else {

@@ -115,7 +115,7 @@ pub fn unlock_with_passphrase(
 ) -> Result<(), String> {
     use secrecy::SecretString;
     vault
-        .unlock_with_passphrase(SecretString::new(passphrase.to_string()))
+        .unlock_with_passphrase(SecretString::from(passphrase.to_string()))
         .map_err(|e| e.to_string())?;
     notify_vault_unlocked(&vault, &bus);
     Ok(())
@@ -362,7 +362,7 @@ impl PasswordHandle {
         self.deps
             .clipboard
             .copy_with_auto_clear(
-                secrecy::SecretString::new(entry.username),
+                secrecy::SecretString::from(entry.username),
                 Duration::from_secs(60 * 60 * 24 * 365),
             )
             .await
@@ -385,7 +385,7 @@ impl PasswordHandle {
         self.deps
             .clipboard
             .copy_with_auto_clear(
-                secrecy::SecretString::new(code.code),
+                secrecy::SecretString::from(code.code),
                 clipboard_clear_duration(clear_after_secs),
             )
             .await
@@ -413,7 +413,7 @@ impl PasswordHandle {
             id,
             title,
             username,
-            password: secrecy::SecretString::new(password),
+            password: secrecy::SecretString::from(password),
             url: url.filter(|s| !s.trim().is_empty()),
             notes: None,
             tags: Vec::new(),

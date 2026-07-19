@@ -166,5 +166,5 @@ pub(crate) fn load_dpapi_blob(path: &Path) -> Result<SecretString> {
     let blob = std::fs::read(path)?;
     let plain = dpapi::unprotect(&blob)?;
     let s = String::from_utf8(plain.into_inner()).map_err(|e| CryptoError::Dpapi(e.to_string()))?;
-    Ok(SecretString::new(s))
+    Ok(SecretString::from(s))
 }

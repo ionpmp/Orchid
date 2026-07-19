@@ -44,7 +44,7 @@ impl Identity {
     /// ```
     #[must_use]
     pub fn passphrase(pw: impl Into<String>) -> Self {
-        Self::Passphrase(SecretString::new(pw.into()))
+        Self::Passphrase(SecretString::from(pw.into()))
     }
 
     /// Generate a fresh X25519 identity from the OS RNG.
@@ -63,22 +63,6 @@ impl Identity {
         let ident = x25519::Identity::from_str(s)
             .map_err(|e| CryptoError::Encoding(format!("invalid AGE-SECRET-KEY: {e}")))?;
         Ok(Self::X25519(Arc::new(ident)))
-    }
-
-    /// Borrow the underlying X25519 identity, if this is an X25519 variant.
-    pub(crate) fn as_age_identity(&self) -> Option<Arc<x25519::Identity>> {
-        match self {
-            Self::X25519(id) => Some(Arc::clone(id)),
-            Self::Passphrase(_) => None,
-        }
-    }
-
-    /// Clone the passphrase, if this is a passphrase variant.
-    pub(crate) fn as_passphrase(&self) -> Option<SecretString> {
-        match self {
-            Self::Passphrase(pw) => Some(pw.clone()),
-            Self::X25519(_) => None,
-        }
     }
 
     /// Tag describing the underlying kind, for inclusion in metadata.

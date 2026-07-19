@@ -310,7 +310,7 @@ impl OrchidApp {
         if !password_vault.db_exists() {
             use secrecy::SecretString;
             password_vault
-                .unlock_with_passphrase(SecretString::new("orchid-dev".to_string()))
+                .unlock_with_passphrase(SecretString::from("orchid-dev".to_string()))
                 .map_err(|e| UiError::Slint(format!("dev password vault: {e}")))?;
         }
 

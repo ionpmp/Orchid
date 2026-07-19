@@ -1,7 +1,7 @@
 //! Secret-handling primitives.
 //!
 //! * [`zeroizing::ZeroizingBytes`] — byte buffer wiped on drop.
-//! * [`zeroizing::SecretBytes`] — opaque wrapper using [`secrecy`] for
+//! * [`zeroizing::SecretBytes`] — opaque [`secrecy::SecretBox`] wrapper for
 //!   debug / access discipline.
 //! * [`dpapi`] — Windows DPAPI wrapper (no-op on non-Windows).
 //! * [`stored`] — DPAPI-encoded strings for config / disk (`dpapi:<hex>`).

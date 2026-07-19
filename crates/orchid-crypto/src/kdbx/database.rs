@@ -410,7 +410,7 @@ fn set_field(entry: &mut Entry, name: &str, value: &str, protected: bool) {
 fn entry_from_keepass(kp: &Entry, group_id: Uuid) -> PasswordEntry {
     let title = kp.get_title().unwrap_or_default().to_string();
     let username = kp.get_username().unwrap_or_default().to_string();
-    let password = SecretString::new(kp.get_password().unwrap_or_default().to_string());
+    let password = SecretString::from(kp.get_password().unwrap_or_default().to_string());
     let url = kp.get(FIELD_URL).map(ToOwned::to_owned);
     let notes = kp.get(FIELD_NOTES).map(ToOwned::to_owned);
     let totp = kp
@@ -427,7 +427,7 @@ fn entry_from_keepass(kp: &Entry, group_id: Uuid) -> PasswordEntry {
             Value::Protected(s) => std::str::from_utf8(s.unsecure()).unwrap_or("").to_string(),
             Value::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
         };
-        custom_fields.insert(k.clone(), SecretString::new(plain));
+        custom_fields.insert(k.clone(), SecretString::from(plain));
     }
 
     let created_at = kp
@@ -606,7 +606,7 @@ mod tests {
     use super::*;
 
     fn db_at(path: &Path) -> PasswordDatabase {
-        PasswordDatabase::create(path, SecretString::new("pw".into())).unwrap()
+        PasswordDatabase::create(path, SecretString::from("pw")).unwrap()
     }
 
     #[test]
@@ -618,7 +618,7 @@ mod tests {
         // create() already wrote the file on disk.
         drop(db);
         let _opened =
-            PasswordDatabase::open(&path, SecretString::new("pw".into())).unwrap();
+            PasswordDatabase::open(&path, SecretString::from("pw")).unwrap();
     }
 
     #[test]
@@ -627,7 +627,7 @@ mod tests {
         let path = td.path().join("db.kdbx");
         let _ = db_at(&path);
         let err =
-            PasswordDatabase::open(&path, SecretString::new("nope".into())).unwrap_err();
+            PasswordDatabase::open(&path, SecretString::from("nope")).unwrap_err();
         assert!(matches!(
             err,
             CryptoError::InvalidMasterPassword | CryptoError::KdbxOpen(_)
@@ -645,7 +645,7 @@ mod tests {
             id: Uuid::new_v4(),
             title: "GitHub".into(),
             username: "alice".into(),
-            password: SecretString::new("hunter2".into()),
+            password: SecretString::from("hunter2"),
             url: Some("https://github.com".into()),
             notes: None,
             tags: vec!["dev".into()],

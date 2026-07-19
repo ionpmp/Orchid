@@ -13,7 +13,7 @@ fn populate_save_reopen_preserves_entries_and_groups() {
     let td = tempfile::tempdir().unwrap();
     let path = td.path().join("vault.kdbx");
 
-    let db = PasswordDatabase::create(&path, SecretString::new("master".into())).unwrap();
+    let db = PasswordDatabase::create(&path, SecretString::from("master")).unwrap();
     let root = db.root_group().unwrap().id;
 
     // Ten groups with ten entries each.
@@ -27,7 +27,7 @@ fn populate_save_reopen_preserves_entries_and_groups() {
                 id: Uuid::new_v4(),
                 title,
                 username: format!("user-{g}-{i}"),
-                password: SecretString::new(format!("pw-{g}-{i}")),
+                password: SecretString::from(format!("pw-{g}-{i}")),
                 url: Some(format!("https://example.com/{g}/{i}")),
                 notes: None,
                 tags: vec![format!("g{g}")],
@@ -42,11 +42,11 @@ fn populate_save_reopen_preserves_entries_and_groups() {
     }
 
     // Persist and reopen.
-    db.change_master(SecretString::new("master".into())).unwrap();
+    db.change_master(SecretString::from("master")).unwrap();
     drop(db);
 
     let reopened =
-        PasswordDatabase::open(&path, SecretString::new("master".into())).unwrap();
+        PasswordDatabase::open(&path, SecretString::from("master")).unwrap();
     let entries = reopened.list_entries(None).unwrap();
     assert_eq!(entries.len(), 100, "all 100 entries survived");
 

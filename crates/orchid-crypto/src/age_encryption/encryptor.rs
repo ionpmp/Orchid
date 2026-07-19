@@ -144,27 +144,26 @@ impl Encryptor {
 // ---------------------------------------------------------------------------
 
 fn encrypt_bytes_sync(identity: &Identity, plaintext: &[u8]) -> Result<Vec<u8>> {
-    let encryptor = match identity {
-        Identity::Passphrase(pw) => age::Encryptor::with_user_passphrase(pw.clone()),
-        Identity::X25519(id) => {
-            let recipient: Box<dyn age::Recipient + Send> = Box::new(id.to_public());
-            age::Encryptor::with_recipients(vec![recipient])
-                .ok_or_else(|| CryptoError::AgeEncrypt("no recipients".into()))?
+    match identity {
+        Identity::Passphrase(pw) => {
+            let encryptor = age::Encryptor::with_user_passphrase(pw.clone());
+            let mut out = Vec::with_capacity(plaintext.len() + 256);
+            {
+                let mut writer = encryptor
+                    .wrap_output(&mut out)
+                    .map_err(|e| CryptoError::AgeEncrypt(format!("wrap_output: {e}")))?;
+                writer
+                    .write_all(plaintext)
+                    .map_err(|e| CryptoError::AgeEncrypt(format!("write: {e}")))?;
+                writer
+                    .finish()
+                    .map_err(|e| CryptoError::AgeEncrypt(format!("finish: {e}")))?;
+            }
+            Ok(out)
         }
-    };
-    let mut out = Vec::with_capacity(plaintext.len() + 256);
-    {
-        let mut writer = encryptor
-            .wrap_output(&mut out)
-            .map_err(|e| CryptoError::AgeEncrypt(format!("wrap_output: {e}")))?;
-        writer
-            .write_all(plaintext)
-            .map_err(|e| CryptoError::AgeEncrypt(format!("write: {e}")))?;
-        writer
-            .finish()
-            .map_err(|e| CryptoError::AgeEncrypt(format!("finish: {e}")))?;
+        Identity::X25519(id) => age::encrypt(&id.to_public(), plaintext)
+            .map_err(|e| CryptoError::AgeEncrypt(e.to_string())),
     }
-    Ok(out)
 }
 
 fn encrypt_file_blocking(

@@ -1,6 +1,5 @@
 //! age-based decryption front-end.
 
-use std::io::Read;
 use std::path::Path;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -156,37 +155,15 @@ impl Decryptor {
 // ---------------------------------------------------------------------------
 
 fn decrypt_bytes_sync(identity: &Identity, ciphertext: &[u8]) -> Result<ZeroizingBytes> {
-    let decryptor = age::Decryptor::new(ciphertext)
-        .map_err(|e| CryptoError::AgeDecrypt(format!("decryptor init: {e}")))?;
-
-    let mut plaintext = Vec::new();
-    match decryptor {
-        age::Decryptor::Passphrase(d) => {
-            let pw = identity.as_passphrase().ok_or_else(|| {
-                CryptoError::AgeDecrypt("passphrase-encrypted file requires a passphrase identity".into())
-            })?;
-            let mut reader = d
-                .decrypt(&pw, None)
-                .map_err(|e| map_decrypt_error(e, identity))?;
-            reader
-                .read_to_end(&mut plaintext)
-                .map_err(|e| CryptoError::AgeDecrypt(format!("read: {e}")))?;
+    let plaintext = match identity {
+        Identity::Passphrase(pw) => {
+            let scrypt = age::scrypt::Identity::new(pw.clone());
+            age::decrypt(&scrypt, ciphertext).map_err(|e| map_decrypt_error(e, identity))?
         }
-        age::Decryptor::Recipients(d) => {
-            let x25519 = identity.as_age_identity().ok_or_else(|| {
-                CryptoError::AgeDecrypt(
-                    "recipient-encrypted file requires an X25519 identity".into(),
-                )
-            })?;
-            let ident_ref: &age::x25519::Identity = &x25519;
-            let mut reader = d
-                .decrypt(std::iter::once(ident_ref as &dyn age::Identity))
-                .map_err(|e| map_decrypt_error(e, identity))?;
-            reader
-                .read_to_end(&mut plaintext)
-                .map_err(|e| CryptoError::AgeDecrypt(format!("read: {e}")))?;
+        Identity::X25519(id) => {
+            age::decrypt(id.as_ref(), ciphertext).map_err(|e| map_decrypt_error(e, identity))?
         }
-    }
+    };
 
     Ok(ZeroizingBytes::new(plaintext))
 }

@@ -89,7 +89,7 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<TotpConfig> {
     let secret = secret.ok_or_else(|| CryptoError::TotpSetup("missing `secret` query parameter".into()))?;
 
     Ok(TotpConfig {
-        secret: SecretString::new(secret),
+        secret: SecretString::from(secret),
         algorithm,
         digits,
         period_seconds: period,
@@ -241,7 +241,7 @@ mod tests {
         let ascii_secret = b"12345678901234567890";
         let b32 = base32::encode(base32::Alphabet::Rfc4648 { padding: false }, ascii_secret);
         let cfg = TotpConfig {
-            secret: SecretString::new(b32),
+            secret: SecretString::from(b32),
             algorithm: TotpAlgorithm::Sha1,
             digits: 6,
             period_seconds: 30,

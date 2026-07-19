@@ -3699,7 +3699,7 @@ pub async fn apply_passphrase(
     let _ = inner
         .deps
         .fm_passphrase_vault
-        .save_passphrase(secrecy::SecretString::new(passphrase));
+        .save_passphrase(secrecy::SecretString::from(passphrase));
     Ok(outcome)
 }
 
