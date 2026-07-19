@@ -2,18 +2,17 @@
 //!
 //! # Argon2id parameters
 //!
-//! Creation defaults come from `keepass::Database::new(Default::default())`,
-//! which follows KeePassXC's "Interactive" profile (≈ 64 MiB memory, 10
-//! iterations, 2 lanes on KDBX4). These are appropriate for desktop unlock
-//! times on mid-range hardware; heavier profiles are left to a later
-//! configuration pass.
+//! Creation defaults come from [`keepass::Database::new`], which follows
+//! KeePassXC's "Interactive" profile (≈ 64 MiB memory, 10 iterations, 2 lanes
+//! on KDBX4). These are appropriate for desktop unlock times on mid-range
+//! hardware; heavier profiles are left to a later configuration pass.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use keepass::db::{Entry, Group, Node, NodeRef, Value};
+use keepass::db::{fields, EntryId, EntryMut, EntryRef, GroupId, GroupMut, GroupRef, Value};
 use keepass::{Database, DatabaseKey};
 use parking_lot::Mutex;
 use secrecy::{ExposeSecret, SecretString};
@@ -24,17 +23,17 @@ use crate::kdbx::entry::PasswordEntry;
 use crate::kdbx::group::PasswordGroup;
 
 /// Standard KDBX field name for the title.
-pub(crate) const FIELD_TITLE: &str = "Title";
+pub(crate) const FIELD_TITLE: &str = fields::TITLE;
 /// Standard KDBX field name for the username.
-pub(crate) const FIELD_USERNAME: &str = "UserName";
+pub(crate) const FIELD_USERNAME: &str = fields::USERNAME;
 /// Standard KDBX field name for the password.
-pub(crate) const FIELD_PASSWORD: &str = "Password";
+pub(crate) const FIELD_PASSWORD: &str = fields::PASSWORD;
 /// Standard KDBX field name for the URL.
-pub(crate) const FIELD_URL: &str = "URL";
+pub(crate) const FIELD_URL: &str = fields::URL;
 /// Standard KDBX field name for the notes.
-pub(crate) const FIELD_NOTES: &str = "Notes";
+pub(crate) const FIELD_NOTES: &str = fields::NOTES;
 /// Custom-field convention (shared with KeePassXC) for an `otpauth://` URI.
-pub(crate) const FIELD_OTP: &str = "otp";
+pub(crate) const FIELD_OTP: &str = fields::OTP;
 
 const STANDARD_FIELDS: &[&str] = &[
     FIELD_TITLE,
@@ -69,11 +68,11 @@ impl PasswordDatabase {
     ///
     /// Propagates I/O and `keepass` errors.
     pub fn create(path: &Path, master: SecretString) -> Result<Self> {
-        let db = Database::new(Default::default());
+        let db = Database::new();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let key = DatabaseKey::new().with_password(master.expose_secret());
+        let key = master_key(&master);
         let tmp = path.with_extension("kdbx.tmp");
         {
             let mut out = std::fs::File::create(&tmp)?;
@@ -108,7 +107,7 @@ impl PasswordDatabase {
     /// failure, and [`CryptoError::Io`] for I/O problems.
     pub fn open(path: &Path, master: SecretString) -> Result<Self> {
         let mut file = std::fs::File::open(path)?;
-        let key = DatabaseKey::new().with_password(master.expose_secret());
+        let key = master_key(&master);
         let db = match Database::open(&mut file, key) {
             Ok(db) => db,
             Err(e) => {
@@ -142,16 +141,12 @@ impl PasswordDatabase {
         // reuse one the caller has already passed us. For MVP we require it
         // to be supplied explicitly via `change_master`; otherwise the save
         // path uses the database's internal key from the last open/create.
-        // In keepass 0.7, save() still needs the key, so we stash the
-        // password outside the struct via `change_master`. Here we require
-        // an override or the caller to have just called `create` /
-        // `change_master` already.
         let Some(master) = override_master else {
             return Err(CryptoError::KdbxOpen(
                 "save requires a master password (use change_master or save via create)".into(),
             ));
         };
-        let key = DatabaseKey::new().with_password(master.expose_secret());
+        let key = master_key(&master);
         let tmp = self.path.with_extension("kdbx.tmp");
         {
             let mut out = std::fs::File::create(&tmp)?;
@@ -197,13 +192,15 @@ impl PasswordDatabase {
     /// exist.
     pub fn add_entry(&self, entry: PasswordEntry) -> Result<Uuid> {
         let entry_id = entry.id;
-        let kp = entry_to_keepass(&entry);
         let mut guard = self.inner.lock();
-        let placed = insert_into_group(&mut guard.root, entry.group_id, Node::Entry(kp));
+        let mut group = group_mut(&mut guard, entry.group_id)?;
+        let mut kp = group
+            .add_entry_with_id(EntryId::from(entry_id))
+            .map_err(|e| CryptoError::KdbxOpen(format!("add entry: {e}")))?;
+        apply_password_entry(&mut kp, &entry);
+        drop(kp);
+        drop(group);
         drop(guard);
-        if !placed {
-            return Err(CryptoError::GroupNotFound(entry.group_id));
-        }
         self.dirty.store(true, Ordering::Relaxed);
         Ok(entry_id)
     }
@@ -219,16 +216,18 @@ impl PasswordDatabase {
     pub fn update_entry(&self, entry: PasswordEntry) -> Result<()> {
         let id = entry.id;
         let target_group = entry.group_id;
-        let kp = entry_to_keepass(&entry);
         let mut guard = self.inner.lock();
-        let existed = remove_entry_by_id(&mut guard.root, id);
-        if !existed {
-            return Err(CryptoError::EntryNotFound(id));
+        {
+            let mut kp = entry_mut(&mut guard, id)?;
+            let current_group = kp.parent_mut().id().uuid();
+            if current_group != target_group {
+                kp.move_to(GroupId::from(target_group))
+                    .map_err(|_| CryptoError::GroupNotFound(target_group))?;
+            }
         }
-        let placed = insert_into_group(&mut guard.root, target_group, Node::Entry(kp));
-        if !placed {
-            return Err(CryptoError::GroupNotFound(target_group));
-        }
+        let mut kp = entry_mut(&mut guard, id)?;
+        apply_password_entry(&mut kp, &entry);
+        drop(kp);
         drop(guard);
         self.dirty.store(true, Ordering::Relaxed);
         Ok(())
@@ -241,13 +240,11 @@ impl PasswordDatabase {
     /// Returns [`CryptoError::EntryNotFound`] if the id is unknown.
     pub fn delete_entry(&self, id: Uuid) -> Result<()> {
         let mut guard = self.inner.lock();
-        if remove_entry_by_id(&mut guard.root, id) {
-            drop(guard);
-            self.dirty.store(true, Ordering::Relaxed);
-            Ok(())
-        } else {
-            Err(CryptoError::EntryNotFound(id))
-        }
+        let kp = entry_mut(&mut guard, id)?;
+        kp.remove();
+        drop(guard);
+        self.dirty.store(true, Ordering::Relaxed);
+        Ok(())
     }
 
     /// Fetch an entry by id.
@@ -257,8 +254,9 @@ impl PasswordDatabase {
     /// Returns [`CryptoError::EntryNotFound`] if the id is unknown.
     pub fn get_entry(&self, id: Uuid) -> Result<PasswordEntry> {
         let guard = self.inner.lock();
-        find_entry_by_id(&guard.root, id, guard.root.uuid)
-            .ok_or(CryptoError::EntryNotFound(id))
+        let kp = entry_ref(&guard, id)?;
+        let group_id = kp.parent().id().uuid();
+        Ok(entry_from_keepass(kp, group_id))
     }
 
     /// List entries in the given group, or every entry if `group_id` is
@@ -270,7 +268,12 @@ impl PasswordDatabase {
     pub fn list_entries(&self, group_id: Option<Uuid>) -> Result<Vec<PasswordEntry>> {
         let guard = self.inner.lock();
         let mut out = Vec::new();
-        collect_entries(&guard.root, guard.root.uuid, group_id, &mut out);
+        for kp in guard.iter_all_entries() {
+            let gid = kp.parent().id().uuid();
+            if group_id.is_none_or(|f| f == gid) {
+                out.push(entry_from_keepass(kp, gid));
+            }
+        }
         Ok(out)
     }
 
@@ -281,9 +284,14 @@ impl PasswordDatabase {
     /// Returns [`CryptoError::EntryNotFound`] /
     /// [`CryptoError::GroupNotFound`] as appropriate.
     pub fn move_entry(&self, id: Uuid, target_group: Uuid) -> Result<()> {
-        let mut current = self.get_entry(id)?;
-        current.group_id = target_group;
-        self.update_entry(current)
+        let mut guard = self.inner.lock();
+        let mut kp = entry_mut(&mut guard, id)?;
+        kp.move_to(GroupId::from(target_group))
+            .map_err(|_| CryptoError::GroupNotFound(target_group))?;
+        drop(kp);
+        drop(guard);
+        self.dirty.store(true, Ordering::Relaxed);
+        Ok(())
     }
 
     // ---------------- Groups ----------------
@@ -295,7 +303,7 @@ impl PasswordDatabase {
     /// Never errors in the current implementation.
     pub fn root_group(&self) -> Result<PasswordGroup> {
         let guard = self.inner.lock();
-        Ok(snapshot_group(&guard.root, None))
+        Ok(snapshot_group(guard.root()))
     }
 
     /// Add a subgroup with `name` under `parent_id`.
@@ -304,14 +312,14 @@ impl PasswordDatabase {
     ///
     /// Returns [`CryptoError::GroupNotFound`] if the parent is unknown.
     pub fn add_group(&self, parent_id: Uuid, name: &str) -> Result<Uuid> {
-        let new = Group::new(name);
-        let new_id = new.uuid;
         let mut guard = self.inner.lock();
-        let placed = insert_into_group(&mut guard.root, parent_id, Node::Group(new));
+        let mut parent = group_mut(&mut guard, parent_id)?;
+        let mut new = parent.add_group();
+        new.name = name.to_string();
+        let new_id = new.id().uuid();
+        drop(new);
+        drop(parent);
         drop(guard);
-        if !placed {
-            return Err(CryptoError::GroupNotFound(parent_id));
-        }
         self.dirty.store(true, Ordering::Relaxed);
         Ok(new_id)
     }
@@ -323,13 +331,12 @@ impl PasswordDatabase {
     /// Returns [`CryptoError::GroupNotFound`] if the id is unknown.
     pub fn rename_group(&self, id: Uuid, name: &str) -> Result<()> {
         let mut guard = self.inner.lock();
-        if rename_group_rec(&mut guard.root, id, name) {
-            drop(guard);
-            self.dirty.store(true, Ordering::Relaxed);
-            Ok(())
-        } else {
-            Err(CryptoError::GroupNotFound(id))
-        }
+        let mut group = group_mut(&mut guard, id)?;
+        group.name = name.to_string();
+        drop(group);
+        drop(guard);
+        self.dirty.store(true, Ordering::Relaxed);
+        Ok(())
     }
 
     /// Remove a group and everything inside it.
@@ -340,16 +347,14 @@ impl PasswordDatabase {
     /// to the root.
     pub fn delete_group(&self, id: Uuid) -> Result<()> {
         let mut guard = self.inner.lock();
-        if guard.root.uuid == id {
+        if guard.root().id().uuid() == id {
             return Err(CryptoError::GroupNotFound(id));
         }
-        if remove_group_by_id(&mut guard.root, id) {
-            drop(guard);
-            self.dirty.store(true, Ordering::Relaxed);
-            Ok(())
-        } else {
-            Err(CryptoError::GroupNotFound(id))
-        }
+        let group = group_mut(&mut guard, id)?;
+        group.remove();
+        drop(guard);
+        self.dirty.store(true, Ordering::Relaxed);
+        Ok(())
     }
 
     /// List every group (root + descendants) in arbitrary order.
@@ -359,9 +364,7 @@ impl PasswordDatabase {
     /// Never errors in the current implementation.
     pub fn list_groups(&self) -> Result<Vec<PasswordGroup>> {
         let guard = self.inner.lock();
-        let mut out = Vec::new();
-        walk_groups(&guard.root, None, &mut out);
-        Ok(out)
+        Ok(guard.iter_all_groups().map(snapshot_group).collect())
     }
 }
 
@@ -369,45 +372,52 @@ impl PasswordDatabase {
 // Conversion helpers
 // ---------------------------------------------------------------------------
 
+fn master_key(master: &SecretString) -> DatabaseKey {
+    DatabaseKey::new().with_password(master.expose_secret())
+}
+
 fn naive_to_utc(n: NaiveDateTime) -> DateTime<Utc> {
     DateTime::<Utc>::from_naive_utc_and_offset(n, Utc)
 }
 
-fn entry_to_keepass(e: &PasswordEntry) -> Entry {
-    let mut kp = Entry::new();
-    kp.uuid = e.id;
-    kp.tags = e.tags.clone();
-    set_field(&mut kp, FIELD_TITLE, &e.title, false);
-    set_field(&mut kp, FIELD_USERNAME, &e.username, false);
-    set_field(&mut kp, FIELD_PASSWORD, e.password.expose_secret(), true);
+fn group_mut(db: &mut Database, id: Uuid) -> Result<GroupMut<'_>> {
+    db.group_mut(GroupId::from(id))
+        .ok_or(CryptoError::GroupNotFound(id))
+}
+
+fn entry_mut(db: &mut Database, id: Uuid) -> Result<EntryMut<'_>> {
+    db.entry_mut(EntryId::from(id))
+        .ok_or(CryptoError::EntryNotFound(id))
+}
+
+fn entry_ref(db: &Database, id: Uuid) -> Result<EntryRef<'_>> {
+    db.entry(EntryId::from(id))
+        .ok_or(CryptoError::EntryNotFound(id))
+}
+
+fn apply_password_entry(kp: &mut EntryMut<'_>, e: &PasswordEntry) {
+    kp.set_unprotected(FIELD_TITLE, &e.title);
+    kp.set_unprotected(FIELD_USERNAME, &e.username);
+    kp.set_protected(FIELD_PASSWORD, e.password.expose_secret());
     if let Some(url) = &e.url {
-        set_field(&mut kp, FIELD_URL, url, false);
+        kp.set_unprotected(FIELD_URL, url);
     }
     if let Some(notes) = &e.notes {
-        set_field(&mut kp, FIELD_NOTES, notes, false);
+        kp.set_unprotected(FIELD_NOTES, notes);
     }
     if let Some(totp) = &e.totp {
         let uri = crate::kdbx::totp::to_otpauth_uri(totp);
-        set_field(&mut kp, FIELD_OTP, &uri, true);
+        kp.set_protected(FIELD_OTP, uri);
     }
     for (k, v) in &e.custom_fields {
         if !STANDARD_FIELDS.contains(&k.as_str()) {
-            set_field(&mut kp, k, v.expose_secret(), true);
+            kp.set_protected(k, v.expose_secret());
         }
     }
-    kp
+    kp.tags = e.tags.clone();
 }
 
-fn set_field(entry: &mut Entry, name: &str, value: &str, protected: bool) {
-    let v = if protected {
-        Value::Protected(value.as_bytes().into())
-    } else {
-        Value::Unprotected(value.to_string())
-    };
-    entry.fields.insert(name.to_string(), v);
-}
-
-fn entry_from_keepass(kp: &Entry, group_id: Uuid) -> PasswordEntry {
+fn entry_from_keepass(kp: EntryRef<'_>, group_id: Uuid) -> PasswordEntry {
     let title = kp.get_title().unwrap_or_default().to_string();
     let username = kp.get_username().unwrap_or_default().to_string();
     let password = SecretString::from(kp.get_password().unwrap_or_default().to_string());
@@ -424,27 +434,24 @@ fn entry_from_keepass(kp: &Entry, group_id: Uuid) -> PasswordEntry {
         }
         let plain = match v {
             Value::Unprotected(s) => s.clone(),
-            Value::Protected(s) => std::str::from_utf8(s.unsecure()).unwrap_or("").to_string(),
-            Value::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
+            Value::Protected(s) => s.expose_secret().clone(),
         };
         custom_fields.insert(k.clone(), SecretString::from(plain));
     }
 
     let created_at = kp
         .times
-        .get_creation()
-        .copied()
+        .creation
         .map(naive_to_utc)
         .unwrap_or_else(Utc::now);
     let modified_at = kp
         .times
-        .get_last_modification()
-        .copied()
+        .last_modification
         .map(naive_to_utc)
         .unwrap_or_else(Utc::now);
 
     PasswordEntry {
-        id: kp.uuid,
+        id: kp.id().uuid(),
         title,
         username,
         password,
@@ -459,147 +466,17 @@ fn entry_from_keepass(kp: &Entry, group_id: Uuid) -> PasswordEntry {
     }
 }
 
-fn snapshot_group(g: &Group, parent_id: Option<Uuid>) -> PasswordGroup {
-    let mut children = Vec::new();
-    let mut entries = Vec::new();
-    for node in &g.children {
-        match node {
-            Node::Group(sub) => children.push(sub.uuid),
-            Node::Entry(e) => entries.push(e.uuid),
-        }
-    }
+fn snapshot_group(g: GroupRef<'_>) -> PasswordGroup {
     PasswordGroup {
-        id: g.uuid,
+        id: g.id().uuid(),
         name: g.name.clone(),
-        parent_id,
+        parent_id: g.parent().map(|p| p.id().uuid()),
         icon: None,
-        notes: None,
-        children,
-        entries,
+        notes: g.notes.clone(),
+        children: g.group_ids().map(|id| id.uuid()).collect(),
+        entries: g.entry_ids().map(|id| id.uuid()).collect(),
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tree walkers
-// ---------------------------------------------------------------------------
-
-fn insert_into_group(root: &mut Group, target_id: Uuid, node: Node) -> bool {
-    if root.uuid == target_id {
-        root.children.push(node);
-        return true;
-    }
-    for child in &mut root.children {
-        if let Node::Group(g) = child {
-            if insert_into_group(g, target_id, node.clone()) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn remove_entry_by_id(g: &mut Group, id: Uuid) -> bool {
-    if let Some(pos) = g.children.iter().position(|n| match n {
-        Node::Entry(e) => e.uuid == id,
-        _ => false,
-    }) {
-        g.children.remove(pos);
-        return true;
-    }
-    for child in &mut g.children {
-        if let Node::Group(sub) = child {
-            if remove_entry_by_id(sub, id) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn remove_group_by_id(g: &mut Group, id: Uuid) -> bool {
-    if let Some(pos) = g.children.iter().position(|n| match n {
-        Node::Group(sub) => sub.uuid == id,
-        _ => false,
-    }) {
-        g.children.remove(pos);
-        return true;
-    }
-    for child in &mut g.children {
-        if let Node::Group(sub) = child {
-            if remove_group_by_id(sub, id) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn rename_group_rec(g: &mut Group, id: Uuid, name: &str) -> bool {
-    if g.uuid == id {
-        g.name = name.to_string();
-        return true;
-    }
-    for child in &mut g.children {
-        if let Node::Group(sub) = child {
-            if rename_group_rec(sub, id, name) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn find_entry_by_id(g: &Group, id: Uuid, group_id: Uuid) -> Option<PasswordEntry> {
-    for node in &g.children {
-        match node {
-            Node::Entry(e) if e.uuid == id => {
-                return Some(entry_from_keepass(e, group_id));
-            }
-            Node::Group(sub) => {
-                if let Some(found) = find_entry_by_id(sub, id, sub.uuid) {
-                    return Some(found);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-pub(crate) fn collect_entries(
-    g: &Group,
-    group_id: Uuid,
-    filter_group: Option<Uuid>,
-    out: &mut Vec<PasswordEntry>,
-) {
-    for node in &g.children {
-        match node {
-            Node::Entry(e) => {
-                if filter_group.is_none_or(|f| f == group_id) {
-                    out.push(entry_from_keepass(e, group_id));
-                }
-            }
-            Node::Group(sub) => {
-                collect_entries(sub, sub.uuid, filter_group, out);
-            }
-        }
-    }
-}
-
-fn walk_groups(g: &Group, parent_id: Option<Uuid>, out: &mut Vec<PasswordGroup>) {
-    out.push(snapshot_group(g, parent_id));
-    for node in &g.children {
-        if let Node::Group(sub) = node {
-            walk_groups(sub, Some(g.uuid), out);
-        }
-    }
-}
-
-// We only iterate via `&db.root`; NodeRef use is via the walkers above. This
-// unused import reference stops the compiler from complaining about the
-// `NodeRef` import if future refactors drop some of its references.
-#[allow(dead_code)]
-fn _nodref_touch(_: Option<NodeRef<'_>>) {}
 
 #[cfg(test)]
 mod tests {
@@ -617,8 +494,7 @@ mod tests {
         // keepass save_kdbx4 requires save() to be called before reopen; our
         // create() already wrote the file on disk.
         drop(db);
-        let _opened =
-            PasswordDatabase::open(&path, SecretString::from("pw")).unwrap();
+        let _opened = PasswordDatabase::open(&path, SecretString::from("pw")).unwrap();
     }
 
     #[test]
@@ -626,8 +502,7 @@ mod tests {
         let td = tempfile::tempdir().unwrap();
         let path = td.path().join("db.kdbx");
         let _ = db_at(&path);
-        let err =
-            PasswordDatabase::open(&path, SecretString::from("nope")).unwrap_err();
+        let err = PasswordDatabase::open(&path, SecretString::from("nope")).unwrap_err();
         assert!(matches!(
             err,
             CryptoError::InvalidMasterPassword | CryptoError::KdbxOpen(_)
@@ -655,17 +530,12 @@ mod tests {
             modified_at: Utc::now(),
             group_id: root_id,
         };
-        let id = db.add_entry(entry.clone()).unwrap();
-        assert_eq!(id, entry.id);
-
-        let back = db.get_entry(id).unwrap();
-        assert_eq!(back.title, "GitHub");
-        assert_eq!(back.password.expose_secret(), "hunter2");
-
-        let mut updated = back.clone();
-        updated.title = "GitHub Enterprise".into();
-        db.update_entry(updated).unwrap();
-        assert_eq!(db.get_entry(id).unwrap().title, "GitHub Enterprise");
+        let id = db.add_entry(entry).unwrap();
+        let got = db.get_entry(id).unwrap();
+        assert_eq!(got.title, "GitHub");
+        assert_eq!(got.username, "alice");
+        assert_eq!(got.password.expose_secret(), "hunter2");
+        assert_eq!(got.tags, vec!["dev".to_string()]);
 
         db.delete_entry(id).unwrap();
         assert!(matches!(
@@ -677,14 +547,14 @@ mod tests {
     #[test]
     fn group_crud() {
         let td = tempfile::tempdir().unwrap();
-        let db = db_at(&td.path().join("db.kdbx"));
-        let root = db.root_group().unwrap();
-        let sub = db.add_group(root.id, "Work").unwrap();
-        db.rename_group(sub, "Personal").unwrap();
-        let all = db.list_groups().unwrap();
-        assert!(all.iter().any(|g| g.name == "Personal"));
-        db.delete_group(sub).unwrap();
-        let all = db.list_groups().unwrap();
-        assert!(!all.iter().any(|g| g.name == "Personal"));
+        let path = td.path().join("db.kdbx");
+        let db = db_at(&path);
+        let root = db.root_group().unwrap().id;
+        let child = db.add_group(root, "Work").unwrap();
+        db.rename_group(child, "Personal").unwrap();
+        let groups = db.list_groups().unwrap();
+        assert!(groups.iter().any(|g| g.id == child && g.name == "Personal"));
+        db.delete_group(child).unwrap();
+        assert!(!db.list_groups().unwrap().iter().any(|g| g.id == child));
     }
 }

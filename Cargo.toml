@@ -60,7 +60,7 @@ redb = "2"
 
 # Crypto / content addressing
 age = "0.12"
-keepass = { version = "0.7", features = ["save_kdbx4"] }
+keepass = { version = "0.13", features = ["save_kdbx4"] }
 blake3 = { version = "1", features = ["mmap"] }
 fastcdc = "3"
 rand = "0.10"
