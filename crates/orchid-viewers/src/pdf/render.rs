@@ -101,7 +101,7 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                             page: 1,
                             reason: format!("load document: {e}"),
                         })?;
-                    let count = u32::from(document.pages().len());
+                    let count = page_count_u32(document.pages().len());
                     if count == 0 {
                         return Err(ViewerError::PdfEmpty);
                     }
@@ -350,14 +350,14 @@ pub fn render_page_from_bytes(
 }
 
 fn extract_text_from_document(document: &PdfDocument<'_>, page: u32) -> Result<String> {
-    let page_count = u32::from(document.pages().len());
+    let page_count = page_count_u32(document.pages().len());
     if page_count == 0 {
         return Err(ViewerError::PdfEmpty);
     }
     let current_page = page.clamp(1, page_count);
     let pdf_page = document
         .pages()
-        .get(u16::try_from(current_page - 1).unwrap_or(0))
+        .get(page_index(current_page))
         .map_err(|e| ViewerError::PdfRender {
             page: current_page,
             reason: format!("open page: {e}"),
@@ -379,7 +379,7 @@ fn render_from_document(
     fit_mode: FitMode,
     zoom: f32,
 ) -> Result<RenderedPage> {
-    let page_count = u32::from(document.pages().len());
+    let page_count = page_count_u32(document.pages().len());
     if page_count == 0 {
         return Err(ViewerError::PdfEmpty);
     }
@@ -387,7 +387,7 @@ fn render_from_document(
     let current_page = page.clamp(1, page_count);
     let pdf_page = document
         .pages()
-        .get(u16::try_from(current_page - 1).unwrap_or(0))
+        .get(page_index(current_page))
         .map_err(|e| ViewerError::PdfRender {
             page: current_page,
             reason: format!("open page: {e}"),
@@ -410,7 +410,13 @@ fn render_from_document(
             reason: format!("render: {e}"),
         })?;
 
-    let image = bitmap.as_image().into_rgba8();
+    let image = bitmap
+        .as_image()
+        .map_err(|e| ViewerError::PdfRender {
+            page: current_page,
+            reason: format!("image: {e}"),
+        })?
+        .into_rgba8();
     let (width_px, height_px) = image.dimensions();
     let rgba = Arc::new(image.into_raw());
 
@@ -422,6 +428,16 @@ fn render_from_document(
         current_page,
         zoom,
     })
+}
+
+/// Convert pdfium's signed page count (`PdfPageIndex` / `c_int`) to `u32`.
+fn page_count_u32(len: impl Into<i32>) -> u32 {
+    len.into().max(0) as u32
+}
+
+/// 1-based UI page number → 0-based pdfium page index.
+fn page_index(current_page: u32) -> i32 {
+    current_page.saturating_sub(1) as i32
 }
 
 fn target_width_px(
