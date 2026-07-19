@@ -81,8 +81,8 @@ windows = "0.62"
 windows-future = "0.3"
 
 # Filesystem / watching
-notify = "7"
-notify-debouncer-full = "0.4"
+notify = "8"
+notify-debouncer-full = "0.7"
 walkdir = "2"
 directories = "6"
 tempfile = "3"
