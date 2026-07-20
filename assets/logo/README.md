@@ -15,5 +15,3 @@ Regenerate raster assets from SVG:
 ```bash
 python scripts/fix-logo-alpha.py
 ```
-
-Exploration drafts live in `options/`.
