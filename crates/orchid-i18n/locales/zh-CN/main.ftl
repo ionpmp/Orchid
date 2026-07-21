@@ -844,6 +844,35 @@ widget-processes-desc = Task Manager–style process, service, startup, and user
 
 widget-calculator-name = 计算器
 widget-calculator-desc = 支持标准/科学模式、历史记录和内存的快捷计算器
+
+widget-notes-name = Notes
+widget-notes-desc = Scratchpad with tabs, autosave, find, and word wrap
+
+# ---- Notes / scratchpad ----
+notes-untitled = Untitled
+notes-title-placeholder = Note title
+notes-wrap = Wrap
+notes-mono = Mono
+notes-find = Find
+notes-find-placeholder = Find in note…
+notes-clear = Clear
+notes-autosave = Autosaved
+notes-stats = { $chars } chars · { $words } words · { $lines } lines
+notes-font-size = { $size } pt
+notes-tip-new-tab = New tab (Ctrl+T)
+notes-tip-wrap = Toggle word wrap
+notes-tip-mono = Toggle monospace font
+notes-tip-zoom-in = Increase font size (Ctrl+=)
+notes-tip-zoom-out = Decrease font size (Ctrl+-)
+notes-tip-find = Find (Ctrl+F)
+notes-tip-find-next = Find next
+notes-tip-find-prev = Find previous
+notes-tip-find-close = Close find
+notes-tip-clear = Clear this note
+notes-settings-wrap = Word wrap
+notes-settings-mono = Monospace font
+notes-settings-status-bar = Show status bar
+notes-settings-font-size = Font size (10–32)
 calc-mode-standard = 标准
 calc-mode-scientific = 科学
 calc-history-title = 历史记录
@@ -924,3 +953,4 @@ processes-confirm-end-tree = End "{ $name }" (PID { $pid }) and all child proces
 processes-confirm-sign-out = Sign out session for { $user }?
 dock-widget-processes = Processes
 dock-widget-calculator = 计算器
+dock-widget-notes = Notes

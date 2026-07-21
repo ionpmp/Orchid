@@ -7,6 +7,7 @@
 
 pub mod calculator;
 pub mod clock;
+pub mod notes;
 pub mod file_manager;
 pub mod media;
 pub mod moon;
@@ -21,6 +22,7 @@ pub mod weather;
 
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
+pub use notes::{NotesPayload, NotesTabRow};
 pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
     PanePayload, TabPayload,

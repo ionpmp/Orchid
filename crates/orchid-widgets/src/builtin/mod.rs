@@ -11,6 +11,7 @@
 
 pub mod clock;
 pub mod calculator;
+pub mod notes;
 pub mod file_manager;
 pub mod media;
 pub mod moon;
@@ -43,6 +44,7 @@ pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
     registry.register(calculator::descriptor())?;
+    registry.register(notes::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor_stub())?;
     registry.register(media::descriptor())?;
@@ -69,6 +71,7 @@ pub fn register_all(
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
     registry.register(calculator::descriptor())?;
+    registry.register(notes::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor(search_aggregator))?;
     registry.register(media::descriptor())?;

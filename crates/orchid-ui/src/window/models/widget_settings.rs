@@ -90,7 +90,7 @@ fn push_combo(
 pub(crate) fn widget_has_settings(type_id: &str) -> bool {
     matches!(
         type_id,
-        "weather" | "moon" | "clock" | "system" | "processes" | "calculator" | "rss"
+        "weather" | "moon" | "clock" | "system" | "processes" | "calculator" | "notes" | "rss"
             | "file-manager"
     )
 }
@@ -120,6 +120,9 @@ pub(crate) fn build_widget_settings_fields(
             .unwrap_or_default(),
         "calculator" => orchid_widgets::builtin::calculator::current_config(instance_id)
             .map(|cfg| calculator_fields(&cfg, locale))
+            .unwrap_or_default(),
+        "notes" => orchid_widgets::builtin::notes::current_config(instance_id)
+            .map(|cfg| notes_fields(&cfg, locale))
             .unwrap_or_default(),
         "rss" => orchid_widgets::builtin::rss::current_config(instance_id)
             .map(|cfg| rss_fields(&cfg, locale))
@@ -278,6 +281,42 @@ fn calculator_fields(
         "show_history",
         "calc-settings-show-history",
         cfg.show_history,
+    );
+    rows
+}
+
+fn notes_fields(
+    cfg: &orchid_widgets::builtin::notes::NotesConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_bool(
+        &mut rows,
+        locale,
+        "word_wrap",
+        "notes-settings-wrap",
+        cfg.word_wrap,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "mono_font",
+        "notes-settings-mono",
+        cfg.mono_font,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_status_bar",
+        "notes-settings-status-bar",
+        cfg.show_status_bar,
+    );
+    push_text(
+        &mut rows,
+        locale,
+        "font_size",
+        "notes-settings-font-size",
+        cfg.font_size.to_string(),
     );
     rows
 }
@@ -520,6 +559,7 @@ pub(crate) async fn apply_widget_setting(type_id: &str, instance_id: Uuid, key: 
         "system" => apply_system(instance_id, key, value),
         "processes" => apply_processes(instance_id, key, value),
         "calculator" => apply_calculator(instance_id, key, value),
+        "notes" => apply_notes(instance_id, key, value),
         "rss" => apply_rss(instance_id, key, value),
         "file-manager" => {
             let _ = apply_fm(instance_id, key, value).await;
@@ -680,6 +720,32 @@ fn apply_calculator(instance_id: Uuid, key: &str, value: &str) {
         "show_history" => {
             if let Some(b) = parse_bool(value) {
                 cfg.show_history = b;
+            }
+        }
+        _ => {}
+    });
+}
+
+fn apply_notes(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::notes::update_config(instance_id, |cfg| match key {
+        "word_wrap" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.word_wrap = b;
+            }
+        }
+        "mono_font" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.mono_font = b;
+            }
+        }
+        "show_status_bar" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_status_bar = b;
+            }
+        }
+        "font_size" => {
+            if let Ok(n) = value.parse::<u8>() {
+                cfg.font_size = orchid_widgets::builtin::notes::NotesConfig::clamp_font_size(n);
             }
         }
         _ => {}

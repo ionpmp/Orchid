@@ -101,6 +101,7 @@ impl SlintPayload {
             WidgetPayload::Calculator(p) => {
                 Self::Text(vec![p.expression.clone(), p.display.clone()])
             }
+            WidgetPayload::Notes(p) => Self::Text(vec![p.title.clone(), p.body.clone()]),
             WidgetPayload::RssFeed(p) => Self::Text(rss_to_text_lines(p)),
             WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
             WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),

@@ -46,14 +46,14 @@ use parking_lot::RwLock;
 
 use super::models::{
     blank_terminal, build_clock_model, build_file_manager_model, build_media_model, build_moon_model,
-    build_calculator_model, build_password_model, build_processes_model, build_recent_files_model,
+    build_calculator_model, build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
     build_rss_model, patch_processes_model,
     build_search_model, build_system_model, build_terminal_divider_models, build_terminal_model,
     build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_clock_model, empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
-    empty_calculator_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
+    empty_calculator_model, empty_notes_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
     empty_search_model, empty_system_model, empty_tag_state, empty_viewer_model,
     empty_weather_model,
     locale_display_name, theme_display_name, widget_has_settings, FileManagerOverlays,
@@ -63,7 +63,7 @@ use super::spawn;
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
     AppState, ClockModel, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel,
-    CalculatorModel, MoonModel, NotificationItem, PasswordModel, ProcessesConfirmDialog, ProcessesModel,
+    CalculatorModel, MoonModel, NotesModel, NotificationItem, PasswordModel, ProcessesConfirmDialog, ProcessesModel,
     RecentFilesModel, RssModel,
     SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel,
     TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
@@ -80,6 +80,7 @@ mod input;
 mod media_search;
 mod password;
 mod calculator;
+mod notes;
 mod processes;
 mod shell_ui;
 mod terminal;
@@ -586,6 +587,7 @@ impl MainWindowController {
         g.set_dock_widget_system(mgr.tr("dock-widget-system").into());
         g.set_dock_widget_processes(mgr.tr("dock-widget-processes").into());
         g.set_dock_widget_calculator(mgr.tr("dock-widget-calculator").into());
+        g.set_dock_widget_notes(mgr.tr("dock-widget-notes").into());
         g.set_dock_widget_rss(mgr.tr("dock-widget-rss").into());
         g.set_dock_widget_recent_files(mgr.tr("dock-widget-recent-files").into());
         g.set_dock_widget_search(mgr.tr("dock-widget-search").into());
@@ -600,6 +602,7 @@ impl MainWindowController {
         g.set_widget_system_desc(mgr.tr("widget-system-desc").into());
         g.set_widget_processes_desc(mgr.tr("widget-processes-desc").into());
         g.set_widget_calculator_desc(mgr.tr("widget-calculator-desc").into());
+        g.set_widget_notes_desc(mgr.tr("widget-notes-desc").into());
         g.set_widget_rss_desc(mgr.tr("widget-rss-desc").into());
         g.set_widget_recent_files_desc(mgr.tr("widget-recent-files-desc").into());
         g.set_widget_search_desc(mgr.tr("widget-search-desc").into());
@@ -1572,6 +1575,7 @@ impl MainWindowController {
             system_model,
             processes_model,
             calculator_model,
+            notes_model,
             rss_model,
             search_model,
             media_model,
@@ -1614,6 +1618,7 @@ impl MainWindowController {
 
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
+                        empty_notes_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1638,6 +1643,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1662,6 +1668,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1685,6 +1692,7 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1709,6 +1717,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1745,6 +1754,7 @@ impl MainWindowController {
                         empty_system_model(&self.locale),
                         build_processes_model(p, &self.locale, ctx_vis, ctx_x, ctx_y, confirm),
                         empty_calculator_model(&self.locale),
+                        empty_notes_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1769,6 +1779,31 @@ impl MainWindowController {
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
                     build_calculator_model(p, &self.locale),
+                    empty_notes_model(&self.locale),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(&self.locale),
+                    empty_password_model(&self.locale),
+                    empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                ),
+                WidgetPayload::Notes(p) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_clock_model(&self.locale),
+                    empty_system_model(&self.locale),
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
+                    build_notes_model(p, &self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1793,6 +1828,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1828,6 +1864,7 @@ impl MainWindowController {
 
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
+                        empty_notes_model(&self.locale),
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
                         empty_media_model(&self.locale),
@@ -1853,6 +1890,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     build_media_model(m, &self.locale),
@@ -1905,6 +1943,7 @@ impl MainWindowController {
 
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
+                        empty_notes_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1930,6 +1969,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1954,6 +1994,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -2000,6 +2041,7 @@ impl MainWindowController {
 
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
+                        empty_notes_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -2032,6 +2074,7 @@ impl MainWindowController {
 
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -2139,6 +2182,7 @@ impl MainWindowController {
             system: system_model,
             processes: processes_model,
             calculator: calculator_model,
+            notes: notes_model,
             rss: rss_model,
             search: search_model,
             media: media_model,
@@ -2769,6 +2813,7 @@ fn is_known_widget_type(type_id: &str) -> bool {
             | "system"
             | "processes"
             | "calculator"
+            | "notes"
             | "rss"
             | "recent-files"
             | "universal-search"
@@ -2791,6 +2836,7 @@ fn apply_catalog_row_visibility(
     g.set_show_system(visible_ids.contains("system"));
     g.set_show_processes(visible_ids.contains("processes"));
     g.set_show_calculator(visible_ids.contains("calculator"));
+    g.set_show_notes(visible_ids.contains("notes"));
     g.set_show_rss(visible_ids.contains("rss"));
     g.set_show_recent_files(visible_ids.contains("recent-files"));
     g.set_show_search(visible_ids.contains("search"));
@@ -2823,6 +2869,7 @@ fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> SharedStrin
         "system" => "widget-system-desc",
         "processes" => "widget-processes-desc",
         "calculator" => "widget-calculator-desc",
+        "notes" => "widget-notes-desc",
         "rss" => "widget-rss-desc",
         "recent-files" => "widget-recent-files-desc",
         "search" | "universal-search" => "widget-search-desc",
@@ -2880,6 +2927,12 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             icon: "calculator".into(),
         },
         DockWidgetType {
+            type_id: "notes".into(),
+            label: locale.tr("dock-widget-notes").into(),
+            description: dock_widget_description(locale, "notes"),
+            icon: "notes".into(),
+        },
+        DockWidgetType {
             type_id: "rss".into(),
             label: locale.tr("dock-widget-rss").into(),
             description: dock_widget_description(locale, "rss"),
@@ -2932,6 +2985,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "system" => locale.tr("dock-widget-system").into(),
         "processes" => locale.tr("dock-widget-processes").into(),
         "calculator" => locale.tr("dock-widget-calculator").into(),
+        "notes" => locale.tr("dock-widget-notes").into(),
         "rss" => locale.tr("dock-widget-rss").into(),
         "recent-files" => locale.tr("dock-widget-recent-files").into(),
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
@@ -2962,6 +3016,7 @@ fn default_frame_data_extended(
     SystemModel,
     ProcessesModel,
     CalculatorModel,
+    NotesModel,
     RssModel,
     SearchModel,
     MediaModel,
@@ -2985,6 +3040,7 @@ fn default_frame_data_extended(
         empty_system_model(locale),
         empty_processes_model(locale),
         empty_calculator_model(locale),
+        empty_notes_model(locale),
         empty_rss_model(locale),
         empty_search_model(locale),
         empty_media_model(locale),

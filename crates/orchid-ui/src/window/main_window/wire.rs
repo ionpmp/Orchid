@@ -735,6 +735,87 @@ impl MainWindowController {
             }
         });
 
+        self.window.on_notes_body_changed({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_body_changed(&id, &text);
+                }
+            }
+        });
+        self.window.on_notes_title_changed({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_title_changed(&id, &text);
+                }
+            }
+        });
+        self.window.on_notes_select_tab({
+            let t = t.clone();
+            move |id, index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_select_tab(&id, index);
+                }
+            }
+        });
+        self.window.on_notes_new_tab({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_new_tab(&id);
+                }
+            }
+        });
+        self.window.on_notes_close_tab({
+            let t = t.clone();
+            move |id, index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_close_tab(&id, index);
+                }
+            }
+        });
+        self.window.on_notes_toggle_wrap({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_toggle_wrap(&id);
+                }
+            }
+        });
+        self.window.on_notes_toggle_mono({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_toggle_mono(&id);
+                }
+            }
+        });
+        self.window.on_notes_zoom({
+            let t = t.clone();
+            move |id, delta| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_zoom(&id, delta);
+                }
+            }
+        });
+        self.window.on_notes_clear({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_clear(&id);
+                }
+            }
+        });
+        self.window.on_notes_find({
+            let t = t.clone();
+            move |id, query, forward| {
+                if let Some(c) = t.upgrade() {
+                    c.on_notes_find(&id, &query, forward);
+                }
+            }
+        });
+
         self.window.on_processes_tab_changed({
             let t = t.clone();
             move |id, tab| {

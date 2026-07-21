@@ -28,6 +28,35 @@ widget-processes-desc = Task Manager–style process, service, startup, and user
 widget-calculator-name = Calculator
 widget-calculator-desc = Quick calculator with standard and scientific modes, history, and memory
 
+widget-notes-name = Notes
+widget-notes-desc = Scratchpad with tabs, autosave, find, and word wrap
+
+# ---- Notes / scratchpad ----
+notes-untitled = Untitled
+notes-title-placeholder = Note title
+notes-wrap = Wrap
+notes-mono = Mono
+notes-find = Find
+notes-find-placeholder = Find in note…
+notes-clear = Clear
+notes-autosave = Autosaved
+notes-stats = { $chars } chars · { $words } words · { $lines } lines
+notes-font-size = { $size } pt
+notes-tip-new-tab = New tab (Ctrl+T)
+notes-tip-wrap = Toggle word wrap
+notes-tip-mono = Toggle monospace font
+notes-tip-zoom-in = Increase font size (Ctrl+=)
+notes-tip-zoom-out = Decrease font size (Ctrl+-)
+notes-tip-find = Find (Ctrl+F)
+notes-tip-find-next = Find next
+notes-tip-find-prev = Find previous
+notes-tip-find-close = Close find
+notes-tip-clear = Clear this note
+notes-settings-wrap = Word wrap
+notes-settings-mono = Monospace font
+notes-settings-status-bar = Show status bar
+notes-settings-font-size = Font size (10–32)
+
 # ---- Calculator widget ----
 calc-mode-standard = Standard
 calc-mode-scientific = Scientific
@@ -819,6 +848,7 @@ dock-widget-clock = Clock
 dock-widget-system = System
 dock-widget-processes = Processes
 dock-widget-calculator = Calculator
+dock-widget-notes = Notes
 dock-widget-rss = News
 dock-widget-recent-files = Recent
 dock-widget-search = Search

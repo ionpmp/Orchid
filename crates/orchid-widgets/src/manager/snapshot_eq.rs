@@ -2,7 +2,7 @@
 
 use crate::widget::payloads::{
     CalculatorPayload, ClockPayload, EntryPayload, FileManagerPayload, MediaPlayerPayload,
-    MoonPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
+    MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
     ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
     SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
     UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
@@ -29,6 +29,7 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::Calculator(a), WidgetPayload::Calculator(b)) => {
             calculator_payload_eq(a, b)
         }
+        (WidgetPayload::Notes(a), WidgetPayload::Notes(b)) => notes_payload_eq(a, b),
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
         (WidgetPayload::UniversalSearch(a), WidgetPayload::UniversalSearch(b)) => {
             search_payload_eq(a, b)
@@ -499,6 +500,26 @@ fn calculator_payload_eq(a: &CalculatorPayload, b: &CalculatorPayload) -> bool {
         && a.error_key == b.error_key
         && a.show_history == b.show_history
         && a.history == b.history
+}
+
+fn notes_payload_eq(a: &NotesPayload, b: &NotesPayload) -> bool {
+    a.active_index == b.active_index
+        && a.title == b.title
+        && a.body == b.body
+        && a.font_size == b.font_size
+        && a.word_wrap == b.word_wrap
+        && a.mono_font == b.mono_font
+        && a.show_status_bar == b.show_status_bar
+        && a.char_count == b.char_count
+        && a.word_count == b.word_count
+        && a.line_count == b.line_count
+        && a.tabs.len() == b.tabs.len()
+        && a.tabs.iter().zip(b.tabs.iter()).all(|(x, y)| {
+            x.id == y.id && x.title == y.title && x.is_active == y.is_active
+        })
+        && a.find_gen == b.find_gen
+        && a.find_cursor == b.find_cursor
+        && a.find_anchor == b.find_anchor
 }
 
 fn opt_f32_eq(a: Option<f32>, b: Option<f32>) -> bool {

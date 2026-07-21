@@ -1,0 +1,466 @@
+import { Theme } from "../theme_global.slint";
+import { NotesModel } from "../workspace/defs.slint";
+
+component NotesToolBtn inherits Rectangle {
+    in property <string> label;
+    in property <string> tip;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: max(28px, label-txt.preferred-width + 12px);
+    height: 26px;
+    border-radius: Theme.radius-md;
+    background: !root.enabled ? transparent :
+        root.active ? Theme.surface-raised :
+        ta.has-hover ? Theme.surface-raised : transparent;
+    border-width: root.active ? 1px : 0;
+    border-color: Theme.border-default;
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    label-txt := Text {
+        width: 100%;
+        height: 100%;
+        text: root.label;
+        color: !root.enabled ? Theme.text-tertiary :
+            root.active ? Theme.accent-brand : Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        font-weight: root.active ? Theme.weight-semibold : Theme.weight-medium;
+        font-family: Theme.font-family-sans;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if ta.has-hover && tip != "" : Rectangle {
+        x: (parent.width - tip-box.preferred-width - 12px) / 2;
+        y: -tip-box.preferred-height - 8px;
+        width: tip-box.preferred-width + 12px;
+        height: tip-box.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 50;
+        tip-box := Text {
+            x: 6px; y: 3px;
+            text: root.tip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
+    }
+}
+
+export component NotesView inherits Rectangle {
+    in property <NotesModel> model;
+
+    callback body-changed(string);
+    callback title-changed(string);
+    callback select-tab(int);
+    callback new-tab();
+    callback close-tab(int);
+    callback toggle-wrap();
+    callback toggle-mono();
+    callback zoom(int);
+    callback clear-note();
+    callback find-request(string, bool);
+
+    background: transparent;
+
+    // Local draft so caret survives snapshot patches while typing.
+    property <string> draft-text: model.body;
+    property <string> draft-title: model.title;
+    property <int> synced-active: model.active-index;
+    property <string> synced-body: model.body;
+    property <bool> find-open: false;
+    property <string> find-query: "";
+    property <int> last-find-gen: -1;
+
+    changed model => {
+        if model.active-index != root.synced-active {
+            root.draft-text = model.body;
+            root.draft-title = model.title;
+            root.synced-active = model.active-index;
+            root.synced-body = model.body;
+        } else if model.body != root.synced-body && root.draft-text == root.synced-body {
+            // External update while not mid-edit.
+            root.draft-text = model.body;
+            root.synced-body = model.body;
+        } else if root.draft-text == model.body {
+            root.synced-body = model.body;
+        }
+        if model.find-gen != root.last-find-gen {
+            root.last-find-gen = model.find-gen;
+            edit-input.set-selection-offsets(model.find-anchor, model.find-cursor);
+            edit-input.focus();
+        }
+    }
+
+    VerticalLayout {
+        spacing: 0;
+
+        // Tab strip
+        Rectangle {
+            height: 32px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                spacing: 2px;
+                alignment: start;
+
+                Flickable {
+                    vertical-stretch: 0;
+                    viewport-height: self.height;
+                    horizontal-stretch: 1;
+
+                    HorizontalLayout {
+                        spacing: 2px;
+                        alignment: start;
+
+                        for tab[i] in model.tabs : Rectangle {
+                            width: max(72px, min(160px, tab-label.preferred-width + (tab.is-active ? 36px : 20px)));
+                            height: 26px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: Theme.radius-md;
+                            background: tab.is-active ? Theme.surface-raised
+                                : tab-ta.has-hover ? Theme.surface-raised : transparent;
+                            border-width: tab.is-active ? 1px : 0;
+                            border-color: Theme.border-default;
+
+                            tab-ta := TouchArea {
+                                clicked => { root.select-tab(i); }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 4px;
+                                spacing: 2px;
+
+                                tab-label := Text {
+                                    text: tab.title == "" ? model.untitled-label : tab.title;
+                                    color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                                    font-family: Theme.font-family-sans;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
+
+                                if tab.is-active || tab-ta.has-hover : Rectangle {
+                                    width: 18px;
+                                    height: 18px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: Theme.radius-md;
+                                    background: close-ta.has-hover ? Theme.surface-base : transparent;
+                                    close-ta := TouchArea {
+                                        clicked => { root.close-tab(i); }
+                                    }
+                                    Text {
+                                        width: 100%; height: 100%;
+                                        text: "×";
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                NotesToolBtn {
+                    label: "+";
+                    tip: model.tip-new-tab;
+                    clicked => { root.new-tab(); }
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border-default; }
+
+        // Toolbar
+        Rectangle {
+            height: 34px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 4px;
+                alignment: center;
+
+                NotesToolBtn {
+                    label: model.wrap-label;
+                    tip: model.tip-wrap;
+                    active: model.word-wrap;
+                    clicked => { root.toggle-wrap(); }
+                }
+                NotesToolBtn {
+                    label: model.mono-label;
+                    tip: model.tip-mono;
+                    active: model.mono-font;
+                    clicked => { root.toggle-mono(); }
+                }
+                NotesToolBtn {
+                    label: "A−";
+                    tip: model.tip-zoom-out;
+                    clicked => { root.zoom(-1); }
+                }
+                NotesToolBtn {
+                    label: "A+";
+                    tip: model.tip-zoom-in;
+                    clicked => { root.zoom(1); }
+                }
+                NotesToolBtn {
+                    label: model.find-label;
+                    tip: model.tip-find;
+                    active: root.find-open;
+                    clicked => {
+                        root.find-open = !root.find-open;
+                        if (root.find-open) {
+                            find-input.focus();
+                        }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                NotesToolBtn {
+                    label: model.clear-label;
+                    tip: model.tip-clear;
+                    clicked => { root.clear-note(); }
+                }
+            }
+        }
+
+        // Find bar (always present so Ctrl+F can focus the input)
+        Rectangle {
+            height: root.find-open ? 34px : 0px;
+            clip: true;
+            background: Theme.surface-raised;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: center;
+
+                Text {
+                    text: model.find-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 26px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    if find-input.text == "" : Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text: model.find-placeholder;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    find-input := TextInput {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text <=> root.find-query;
+                        single-line: true;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-sans;
+                        vertical-alignment: center;
+                        key-pressed(event) => {
+                            if (event.text == Key.Return) {
+                                root.find-request(root.find-query, true);
+                                return accept;
+                            }
+                            if (event.text == Key.Escape) {
+                                root.find-open = false;
+                                edit-input.focus();
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+                }
+
+                NotesToolBtn {
+                    label: "↑";
+                    tip: model.tip-find-prev;
+                    clicked => { root.find-request(root.find-query, false); }
+                }
+                NotesToolBtn {
+                    label: "↓";
+                    tip: model.tip-find-next;
+                    clicked => { root.find-request(root.find-query, true); }
+                }
+                NotesToolBtn {
+                    label: "×";
+                    tip: model.tip-find-close;
+                    clicked => {
+                        root.find-open = false;
+                        edit-input.focus();
+                    }
+                }
+            }
+        }
+
+        if root.find-open : Rectangle { height: 1px; background: Theme.border-default; }
+
+        // Title
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+
+            if title-input.text == "" : Text {
+                x: 12px;
+                width: parent.width - 24px;
+                height: 100%;
+                text: model.title-placeholder;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-semibold;
+                font-family: Theme.font-family-sans;
+                vertical-alignment: center;
+            }
+
+            title-input := TextInput {
+                x: 12px;
+                width: parent.width - 24px;
+                height: 100%;
+                text: root.draft-title;
+                single-line: true;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-semibold;
+                font-family: Theme.font-family-sans;
+                vertical-alignment: center;
+                edited => {
+                    root.draft-title = self.text;
+                    root.title-changed(self.text);
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border-default; }
+
+        // Editor
+        Rectangle {
+            background: Theme.surface-base;
+            vertical-stretch: 1;
+            clip: true;
+
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: max(self.height, edit-pad.preferred-height);
+
+                edit-pad := HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+
+                    edit-input := TextInput {
+                        width: parent.width - 24px;
+                        text: root.draft-text;
+                        single-line: false;
+                        wrap: model.word-wrap ? word-wrap : no-wrap;
+                        color: Theme.text-primary;
+                        font-family: model.mono-font ? Theme.font-family-mono : Theme.font-family-sans;
+                        font-size: model.font-size * 1px;
+                        key-pressed(event) => {
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt)
+                            {
+                                if (event.text == "f" || event.text == "F") {
+                                    root.find-open = true;
+                                    find-input.focus();
+                                    return accept;
+                                }
+                                if (event.text == "=" || event.text == "+") {
+                                    root.zoom(1);
+                                    return accept;
+                                }
+                                if (event.text == "-") {
+                                    root.zoom(-1);
+                                    return accept;
+                                }
+                                if (event.text == "t" || event.text == "T") {
+                                    root.new-tab();
+                                    return accept;
+                                }
+                                if (event.text == "w" || event.text == "W") {
+                                    root.close-tab(model.active-index);
+                                    return accept;
+                                }
+                            }
+                            return reject;
+                        }
+                        edited => {
+                            root.draft-text = self.text;
+                            root.synced-body = self.text;
+                            root.body-changed(self.text);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Status bar
+        if model.show-status-bar : Rectangle { height: 1px; background: Theme.border-default; }
+        if model.show-status-bar : Rectangle {
+            height: 24px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 12px;
+
+                Text {
+                    text: model.autosave-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                Text {
+                    text: model.stats-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: model.font-size-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

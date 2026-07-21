@@ -848,6 +848,35 @@ widget-processes-desc = Task Manager–style process, service, startup, and user
 
 widget-calculator-name = Калькулятор
 widget-calculator-desc = Быстрый калькулятор: обычный и научный режимы, история и память
+
+widget-notes-name = Заметки
+widget-notes-desc = Блокнот со вкладками, автосохранением, поиском и переносом строк
+
+# ---- Notes / scratchpad ----
+notes-untitled = Без названия
+notes-title-placeholder = Название заметки
+notes-wrap = Перенос
+notes-mono = Моно
+notes-find = Найти
+notes-find-placeholder = Найти в заметке…
+notes-clear = Очистить
+notes-autosave = Сохранено
+notes-stats = { $chars } симв. · { $words } слов · { $lines } строк
+notes-font-size = { $size } pt
+notes-tip-new-tab = Новая вкладка (Ctrl+T)
+notes-tip-wrap = Перенос строк
+notes-tip-mono = Моноширинный шрифт
+notes-tip-zoom-in = Увеличить шрифт (Ctrl+=)
+notes-tip-zoom-out = Уменьшить шрифт (Ctrl+-)
+notes-tip-find = Поиск (Ctrl+F)
+notes-tip-find-next = Следующее
+notes-tip-find-prev = Предыдущее
+notes-tip-find-close = Закрыть поиск
+notes-tip-clear = Очистить заметку
+notes-settings-wrap = Перенос строк
+notes-settings-mono = Моноширинный шрифт
+notes-settings-status-bar = Показывать строку состояния
+notes-settings-font-size = Размер шрифта (10–32)
 calc-mode-standard = Обычный
 calc-mode-scientific = Инженерный
 calc-history-title = История
@@ -928,3 +957,4 @@ processes-confirm-end-tree = End "{ $name }" (PID { $pid }) and all child proces
 processes-confirm-sign-out = Sign out session for { $user }?
 dock-widget-processes = Processes
 dock-widget-calculator = Калькулятор
+dock-widget-notes = Заметки

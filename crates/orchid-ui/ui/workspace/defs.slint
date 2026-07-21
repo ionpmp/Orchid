@@ -308,6 +308,49 @@ export struct CalculatorModel {
     tip-angle: string,
 }
 
+export struct NotesTabEntry {
+    id: string,
+    title: string,
+    is-active: bool,
+}
+
+export struct NotesModel {
+    tabs: [NotesTabEntry],
+    active-index: int,
+    title: string,
+    body: string,
+    font-size: int,
+    word-wrap: bool,
+    mono-font: bool,
+    show-status-bar: bool,
+    char-count: int,
+    word-count: int,
+    line-count: int,
+    find-gen: int,
+    find-cursor: int,
+    find-anchor: int,
+    stats-label: string,
+    font-size-label: string,
+    untitled-label: string,
+    title-placeholder: string,
+    wrap-label: string,
+    mono-label: string,
+    find-label: string,
+    find-placeholder: string,
+    clear-label: string,
+    autosave-label: string,
+    tip-new-tab: string,
+    tip-wrap: string,
+    tip-mono: string,
+    tip-zoom-in: string,
+    tip-zoom-out: string,
+    tip-find: string,
+    tip-find-next: string,
+    tip-find-prev: string,
+    tip-find-close: string,
+    tip-clear: string,
+}
+
 export struct RssItemEntry {
     id: string,
     title: string,
@@ -820,6 +863,7 @@ export struct WidgetFrameModel {
     system: SystemModel,
     processes: ProcessesModel,
     calculator: CalculatorModel,
+    notes: NotesModel,
     rss: RssModel,
     recent-files: RecentFilesModel,
     search: SearchModel,

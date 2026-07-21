@@ -91,6 +91,16 @@ export component WorkspaceView inherits Rectangle {
     callback calculator-button(string);
     callback calculator-key(string, bool, bool);
     callback calculator-history(int);
+    callback notes-body-changed(string, string);
+    callback notes-title-changed(string, string);
+    callback notes-select-tab(string, int);
+    callback notes-new-tab(string);
+    callback notes-close-tab(string, int);
+    callback notes-toggle-wrap(string);
+    callback notes-toggle-mono(string);
+    callback notes-zoom(string, int);
+    callback notes-clear(string);
+    callback notes-find(string, string, bool);
     callback password-search-changed(string);
     callback password-entry-clicked(string);
     callback password-copy-password(string);
@@ -376,6 +386,16 @@ export component WorkspaceView inherits Rectangle {
                     calculator-button(id) => { root.calculator-button(id); }
                     calculator-key(t, ctrl, shift) => { root.calculator-key(t, ctrl, shift); }
                     calculator-history(i) => { root.calculator-history(i); }
+                    notes-body-changed(id, t) => { root.notes-body-changed(id, t); }
+                    notes-title-changed(id, t) => { root.notes-title-changed(id, t); }
+                    notes-select-tab(id, i) => { root.notes-select-tab(id, i); }
+                    notes-new-tab(id) => { root.notes-new-tab(id); }
+                    notes-close-tab(id, i) => { root.notes-close-tab(id, i); }
+                    notes-toggle-wrap(id) => { root.notes-toggle-wrap(id); }
+                    notes-toggle-mono(id) => { root.notes-toggle-mono(id); }
+                    notes-zoom(id, d) => { root.notes-zoom(id, d); }
+                    notes-clear(id) => { root.notes-clear(id); }
+                    notes-find(id, q, fwd) => { root.notes-find(id, q, fwd); }
                     password-search-changed(q) => { root.password-search-changed(q); }
                     password-entry-clicked(id) => { root.password-entry-clicked(id); }
                     password-copy-password(id) => { root.password-copy-password(id); }

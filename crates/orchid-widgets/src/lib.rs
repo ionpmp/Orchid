@@ -38,6 +38,7 @@ pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
     CalcHistoryRow, CalculatorPayload, ClockCityView, ClockPayload, ClockSearchHit, EntryPayload,
+    NotesPayload, NotesTabRow,
     FileManagerPayload, FmViewMode, IndicatorStatus, ManagedFolderSidebarPayload,
     MediaPlayerPayload, MoonPayload, NetworkMountPayload, PanePayload, PasswordEntryDetailView,
     PasswordEntryView, PasswordManagerPayload, ProcessGroup, ProcessRowView, ProcessSortColumn,

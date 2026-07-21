@@ -334,6 +334,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             card-visible: WidgetCatalog.show-calculator;
                             pick(id) => { root.pick(id); }
                         }
+                        CatalogCard {
+                            type-id: "notes"; glyph: "≡"; label: Strings.dock-widget-notes;
+                            description: Strings.widget-notes-desc;
+                            card-visible: WidgetCatalog.show-notes;
+                            pick(id) => { root.pick(id); }
+                        }
                     }
                 }
 
@@ -449,6 +455,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             card-visible: WidgetCatalog.show-calculator;
                             pick(id) => { root.pick(id); }
                         }
+                        CatalogCard {
+                            type-id: "notes"; glyph: "≡"; label: Strings.dock-widget-notes;
+                            description: Strings.widget-notes-desc;
+                            card-visible: WidgetCatalog.show-notes;
+                            pick(id) => { root.pick(id); }
+                        }
                     }
                 }
 
@@ -562,6 +574,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "calculator"; glyph: "="; label: Strings.dock-widget-calculator;
                             description: Strings.widget-calculator-desc;
                             card-visible: WidgetCatalog.show-calculator;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "notes"; glyph: "≡"; label: Strings.dock-widget-notes;
+                            description: Strings.widget-notes-desc;
+                            card-visible: WidgetCatalog.show-notes;
                             pick(id) => { root.pick(id); }
                         }
                     }

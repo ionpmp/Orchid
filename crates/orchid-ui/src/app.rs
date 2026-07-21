@@ -236,6 +236,9 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::calculator::descriptor())
             .map_err(|e| UiError::Slint(format!("register calculator: {e}")))?;
         widget_registry
+            .register(orchid_widgets::builtin::notes::descriptor())
+            .map_err(|e| UiError::Slint(format!("register notes: {e}")))?;
+        widget_registry
             .register(orchid_widgets::builtin::rss::descriptor(http))
             .map_err(|e| UiError::Slint(format!("register rss: {e}")))?;
         widget_registry

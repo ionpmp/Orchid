@@ -11,6 +11,7 @@ import { ClockView } from "../widgets/clock.slint";
 import { SystemView } from "../widgets/system.slint";
 import { ProcessesView } from "../widgets/processes.slint";
 import { CalculatorView } from "../widgets/calculator.slint";
+import { NotesView } from "../widgets/notes.slint";
 import { RssView } from "../widgets/rss.slint";
 import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
@@ -112,6 +113,18 @@ export component WidgetFrame inherits Rectangle {
     callback calculator-button(string);
     callback calculator-key(string, bool, bool);
     callback calculator-history(int);
+
+    // Notes
+    callback notes-body-changed(string, string);
+    callback notes-title-changed(string, string);
+    callback notes-select-tab(string, int);
+    callback notes-new-tab(string);
+    callback notes-close-tab(string, int);
+    callback notes-toggle-wrap(string);
+    callback notes-toggle-mono(string);
+    callback notes-zoom(string, int);
+    callback notes-clear(string);
+    callback notes-find(string, string, bool);
 
     // Password
     callback password-search-changed(string);
@@ -567,6 +580,22 @@ export component WidgetFrame inherits Rectangle {
                     button-pressed(id) => { root.calculator-button(id); }
                     key-input(t, ctrl, shift) => { root.calculator-key(t, ctrl, shift); }
                     history-clicked(i) => { root.calculator-history(i); }
+                }
+
+                if model.type-id == "notes" : NotesView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.notes;
+                    body-changed(t) => { root.notes-body-changed(root.model.instance-id, t); }
+                    title-changed(t) => { root.notes-title-changed(root.model.instance-id, t); }
+                    select-tab(i) => { root.notes-select-tab(root.model.instance-id, i); }
+                    new-tab => { root.notes-new-tab(root.model.instance-id); }
+                    close-tab(i) => { root.notes-close-tab(root.model.instance-id, i); }
+                    toggle-wrap => { root.notes-toggle-wrap(root.model.instance-id); }
+                    toggle-mono => { root.notes-toggle-mono(root.model.instance-id); }
+                    zoom(d) => { root.notes-zoom(root.model.instance-id, d); }
+                    clear-note => { root.notes-clear(root.model.instance-id); }
+                    find-request(q, fwd) => { root.notes-find(root.model.instance-id, q, fwd); }
                 }
 
                 if model.type-id == "rss" : RssView {

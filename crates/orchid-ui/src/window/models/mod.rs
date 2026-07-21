@@ -2,6 +2,7 @@
 
 mod clock;
 mod calculator;
+mod notes;
 mod file_manager;
 mod media;
 mod moon;
@@ -25,6 +26,7 @@ pub(crate) use file_manager::{
     fm_passphrase_dialog_labels, patch_fm_selection, FileManagerOverlays, FmViewport,
 };
 pub(crate) use calculator::{build_calculator_model, empty_calculator_model};
+pub(crate) use notes::{build_notes_model, empty_notes_model};
 pub(crate) use clock::{build_clock_model, empty_clock_model};
 pub(crate) use media::{build_media_model, empty_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model};

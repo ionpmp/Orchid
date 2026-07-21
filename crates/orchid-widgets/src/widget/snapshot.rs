@@ -57,6 +57,8 @@ pub enum WidgetPayload {
     Processes(crate::widget::payloads::ProcessesPayload),
     /// Quick calculator widget.
     Calculator(crate::widget::payloads::CalculatorPayload),
+    /// Tabbed notes / scratchpad.
+    Notes(crate::widget::payloads::NotesPayload),
     /// RSS feed widget.
     RssFeed(crate::widget::payloads::RssPayload),
     /// Universal search widget.

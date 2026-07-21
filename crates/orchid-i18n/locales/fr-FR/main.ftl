@@ -844,6 +844,35 @@ widget-processes-desc = Task Manager–style process, service, startup, and user
 
 widget-calculator-name = Calculatrice
 widget-calculator-desc = Calculatrice rapide avec modes standard et scientifique, historique et mémoire
+
+widget-notes-name = Notes
+widget-notes-desc = Bloc-notes avec onglets, enregistrement auto, recherche et retour à la ligne
+
+# ---- Notes / scratchpad ----
+notes-untitled = Sans titre
+notes-title-placeholder = Titre de la note
+notes-wrap = Retour
+notes-mono = Mono
+notes-find = Rechercher
+notes-find-placeholder = Rechercher dans la note…
+notes-clear = Effacer
+notes-autosave = Enregistré automatiquement
+notes-stats = { $chars } car. · { $words } mots · { $lines } lignes
+notes-font-size = { $size } pt
+notes-tip-new-tab = New tab (Ctrl+T)
+notes-tip-wrap = Toggle word wrap
+notes-tip-mono = Toggle monospace font
+notes-tip-zoom-in = Increase font size (Ctrl+=)
+notes-tip-zoom-out = Decrease font size (Ctrl+-)
+notes-tip-find = Find (Ctrl+F)
+notes-tip-find-next = Find next
+notes-tip-find-prev = Find previous
+notes-tip-find-close = Close find
+notes-tip-clear = Clear this note
+notes-settings-wrap = Retour à la ligne
+notes-settings-mono = Police monospace
+notes-settings-status-bar = Afficher la barre d’état
+notes-settings-font-size = Taille de police (10–32)
 calc-mode-standard = Standard
 calc-mode-scientific = Scientifique
 calc-history-title = Historique
@@ -924,3 +953,4 @@ processes-confirm-end-tree = End "{ $name }" (PID { $pid }) and all child proces
 processes-confirm-sign-out = Sign out session for { $user }?
 dock-widget-processes = Processes
 dock-widget-calculator = Calculatrice
+dock-widget-notes = Notes
