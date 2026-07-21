@@ -1,0 +1,178 @@
+//! Calendar / agenda widget handlers for [`MainWindowController`].
+
+use std::sync::Arc;
+
+use slint::SharedString;
+use uuid::Uuid;
+
+use crate::window::spawn;
+
+use super::MainWindowController;
+
+impl MainWindowController {
+    fn parse_calendar_id(id: &SharedString) -> Option<Uuid> {
+        Uuid::parse_str(id.as_str()).ok()
+    }
+
+    pub(super) fn on_calendar_select_date(
+        self: &Arc<Self>,
+        id: &SharedString,
+        date: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::select_date(inst, date.as_str());
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_shift_month(self: &Arc<Self>, id: &SharedString, delta: i32) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::shift_month(inst, delta);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_goto_today(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::goto_today(inst);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_open_new(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::open_new_editor(inst);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_open_edit(
+        self: &Arc<Self>,
+        id: &SharedString,
+        event_id: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::open_edit_editor(inst, event_id.as_str());
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_close_editor(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::close_editor(inst);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_save_editor(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::save_editor(inst);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_delete_event(
+        self: &Arc<Self>,
+        id: &SharedString,
+        event_id: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::delete_event(inst, event_id.as_str());
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_editor_title(
+        self: &Arc<Self>,
+        id: &SharedString,
+        text: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_title(inst, text.to_string());
+    }
+
+    pub(super) fn on_calendar_editor_date(
+        self: &Arc<Self>,
+        id: &SharedString,
+        date: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_date(inst, date.to_string());
+    }
+
+    pub(super) fn on_calendar_editor_all_day(self: &Arc<Self>, id: &SharedString, all_day: bool) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_all_day(inst, all_day);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_editor_start(
+        self: &Arc<Self>,
+        id: &SharedString,
+        hour: i32,
+        minute: i32,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_start(inst, hour, minute);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_editor_end(
+        self: &Arc<Self>,
+        id: &SharedString,
+        hour: i32,
+        minute: i32,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_end(inst, hour, minute);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_editor_notes(
+        self: &Arc<Self>,
+        id: &SharedString,
+        text: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_notes(inst, text.to_string());
+    }
+
+    pub(super) fn on_calendar_editor_color(self: &Arc<Self>, id: &SharedString, color: i32) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_editor_color(inst, color);
+        self.refresh_calendar(inst);
+    }
+
+    fn refresh_calendar(self: &Arc<Self>, inst_id: Uuid) {
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            let _ = wm.refresh_snapshot_cache(inst_id).await;
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
+    }
+}

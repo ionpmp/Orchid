@@ -1,12 +1,12 @@
 //! Render-equality helpers for [`super::snapshot_renders_unchanged`].
 
 use crate::widget::payloads::{
-    CalculatorPayload, ClockPayload, EntryPayload, FileManagerPayload, MediaPlayerPayload,
-    JyotishPayload, MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView,
-    PasswordManagerPayload,
-    ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
-    SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
-    UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
+    CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload, FileManagerPayload,
+    JyotishPayload, MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView,
+    PasswordEntryView, PasswordManagerPayload, ProcessRowView, ProcessesPayload,
+    RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
+    StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload, UserRowView,
+    ViewerPayload, WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -28,10 +28,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
             system_payload_eq(a, b)
         }
         (WidgetPayload::Processes(a), WidgetPayload::Processes(b)) => processes_payload_eq(a, b),
-        (WidgetPayload::Calculator(a), WidgetPayload::Calculator(b)) => {
-            calculator_payload_eq(a, b)
-        }
+        (WidgetPayload::Calculator(a), WidgetPayload::Calculator(b)) => calculator_payload_eq(a, b),
         (WidgetPayload::Notes(a), WidgetPayload::Notes(b)) => notes_payload_eq(a, b),
+        (WidgetPayload::Calendar(a), WidgetPayload::Calendar(b)) => calendar_payload_eq(a, b),
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
         (WidgetPayload::UniversalSearch(a), WidgetPayload::UniversalSearch(b)) => {
             search_payload_eq(a, b)
@@ -545,12 +544,35 @@ fn notes_payload_eq(a: &NotesPayload, b: &NotesPayload) -> bool {
         && a.word_count == b.word_count
         && a.line_count == b.line_count
         && a.tabs.len() == b.tabs.len()
-        && a.tabs.iter().zip(b.tabs.iter()).all(|(x, y)| {
-            x.id == y.id && x.title == y.title && x.is_active == y.is_active
-        })
+        && a.tabs
+            .iter()
+            .zip(b.tabs.iter())
+            .all(|(x, y)| x.id == y.id && x.title == y.title && x.is_active == y.is_active)
         && a.find_gen == b.find_gen
         && a.find_cursor == b.find_cursor
         && a.find_anchor == b.find_anchor
+}
+
+fn calendar_payload_eq(a: &CalendarPayload, b: &CalendarPayload) -> bool {
+    a.year == b.year
+        && a.month == b.month
+        && a.selected_date == b.selected_date
+        && a.today_date == b.today_date
+        && a.first_day_of_week == b.first_day_of_week
+        && a.days == b.days
+        && a.events == b.events
+        && a.editor_open == b.editor_open
+        && a.editor_event_id == b.editor_event_id
+        && a.editor_is_new == b.editor_is_new
+        && a.editor_title == b.editor_title
+        && a.editor_date == b.editor_date
+        && a.editor_all_day == b.editor_all_day
+        && a.editor_start_hour == b.editor_start_hour
+        && a.editor_start_min == b.editor_start_min
+        && a.editor_end_hour == b.editor_end_hour
+        && a.editor_end_min == b.editor_end_min
+        && a.editor_notes == b.editor_notes
+        && a.editor_color == b.editor_color
 }
 
 fn opt_f32_eq(a: Option<f32>, b: Option<f32>) -> bool {

@@ -382,6 +382,76 @@ export struct NotesModel {
     tip-clear: string,
 }
 
+export struct CalendarDayEntry {
+    date-key: string,
+    day: int,
+    in-month: bool,
+    is-today: bool,
+    is-selected: bool,
+    dot-colors: [int],
+    event-count: int,
+}
+
+export struct CalendarEventEntry {
+    id: string,
+    title: string,
+    time-label: string,
+    notes-preview: string,
+    all-day: bool,
+    color: int,
+}
+
+export struct CalendarWeekdayEntry {
+    label: string,
+}
+
+export struct CalendarModel {
+    year: int,
+    month: int,
+    selected-date: string,
+    today-date: string,
+    first-day-of-week: int,
+    month-title: string,
+    selected-label: string,
+    weekdays: [CalendarWeekdayEntry],
+    days: [CalendarDayEntry],
+    events: [CalendarEventEntry],
+    color-options: [int],
+    editor-open: bool,
+    editor-event-id: string,
+    editor-is-new: bool,
+    editor-title: string,
+    editor-date: string,
+    editor-all-day: bool,
+    editor-start-hour: int,
+    editor-start-min: int,
+    editor-end-hour: int,
+    editor-end-min: int,
+    editor-start-text: string,
+    editor-end-text: string,
+    editor-notes: string,
+    editor-color: int,
+    today-label: string,
+    all-day-label: string,
+    empty-label: string,
+    untitled-label: string,
+    add-label: string,
+    edit-label: string,
+    save-label: string,
+    delete-label: string,
+    cancel-label: string,
+    title-field-label: string,
+    date-field-label: string,
+    notes-field-label: string,
+    start-label: string,
+    end-label: string,
+    color-label: string,
+    tip-prev: string,
+    tip-next: string,
+    tip-today: string,
+    tip-add: string,
+}
+
 export struct RssItemEntry {
     id: string,
     title: string,
@@ -896,6 +966,7 @@ export struct WidgetFrameModel {
     processes: ProcessesModel,
     calculator: CalculatorModel,
     notes: NotesModel,
+    calendar: CalendarModel,
     rss: RssModel,
     recent-files: RecentFilesModel,
     search: SearchModel,

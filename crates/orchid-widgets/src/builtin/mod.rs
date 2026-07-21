@@ -9,13 +9,14 @@
 //! need additional wiring (search sources, custom media providers) call
 //! the per-widget descriptor builders directly.
 
-pub mod clock;
 pub mod calculator;
-pub mod notes;
+pub mod calendar;
+pub mod clock;
 pub mod file_manager;
 pub mod jyotish;
 pub mod media;
 pub mod moon;
+pub mod notes;
 pub mod password;
 pub mod processes;
 pub mod recent_files;
@@ -47,6 +48,7 @@ pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result
     registry.register(processes::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
+    registry.register(calendar::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor_stub())?;
     registry.register(media::descriptor())?;
@@ -75,6 +77,7 @@ pub fn register_all(
     registry.register(processes::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
+    registry.register(calendar::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor(search_aggregator))?;
     registry.register(media::descriptor())?;

@@ -734,7 +734,6 @@ impl MainWindowController {
             }
         });
 
-
         self.window.on_calculator_button({
             let t = t.clone();
             move |id| {
@@ -837,6 +836,127 @@ impl MainWindowController {
             move |id, query, forward| {
                 if let Some(c) = t.upgrade() {
                     c.on_notes_find(&id, &query, forward);
+                }
+            }
+        });
+
+        self.window.on_calendar_select_date({
+            let t = t.clone();
+            move |id, date| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_select_date(&id, &date);
+                }
+            }
+        });
+        self.window.on_calendar_shift_month({
+            let t = t.clone();
+            move |id, delta| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_shift_month(&id, delta);
+                }
+            }
+        });
+        self.window.on_calendar_goto_today({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_goto_today(&id);
+                }
+            }
+        });
+        self.window.on_calendar_open_new({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_open_new(&id);
+                }
+            }
+        });
+        self.window.on_calendar_open_edit({
+            let t = t.clone();
+            move |id, event_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_open_edit(&id, &event_id);
+                }
+            }
+        });
+        self.window.on_calendar_close_editor({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_close_editor(&id);
+                }
+            }
+        });
+        self.window.on_calendar_save_editor({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_save_editor(&id);
+                }
+            }
+        });
+        self.window.on_calendar_delete_event({
+            let t = t.clone();
+            move |id, event_id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_delete_event(&id, &event_id);
+                }
+            }
+        });
+        self.window.on_calendar_editor_title({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_title(&id, &text);
+                }
+            }
+        });
+        self.window.on_calendar_editor_date({
+            let t = t.clone();
+            move |id, date| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_date(&id, &date);
+                }
+            }
+        });
+        self.window.on_calendar_editor_all_day({
+            let t = t.clone();
+            move |id, all_day| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_all_day(&id, all_day);
+                }
+            }
+        });
+        self.window.on_calendar_editor_start({
+            let t = t.clone();
+            move |id, hour, minute| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_start(&id, hour, minute);
+                }
+            }
+        });
+        self.window.on_calendar_editor_end({
+            let t = t.clone();
+            move |id, hour, minute| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_end(&id, hour, minute);
+                }
+            }
+        });
+        self.window.on_calendar_editor_notes({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_notes(&id, &text);
+                }
+            }
+        });
+        self.window.on_calendar_editor_color({
+            let t = t.clone();
+            move |id, color| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_editor_color(&id, color);
                 }
             }
         });

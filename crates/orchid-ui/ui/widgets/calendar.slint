@@ -1,0 +1,602 @@
+import { Theme } from "../theme_global.slint";
+import {
+    CalendarModel, CalendarDayEntry, CalendarEventEntry, CalendarWeekdayEntry
+} from "../workspace/defs.slint";
+
+component CalToolBtn inherits Rectangle {
+    in property <string> label;
+    in property <string> tip;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: max(28px, label-txt.preferred-width + 14px);
+    height: 26px;
+    border-radius: Theme.radius-md;
+    background: !root.enabled ? transparent :
+        root.primary ? Theme.accent-brand :
+        ta.has-hover ? Theme.surface-raised : transparent;
+    border-width: root.primary ? 0 : (ta.has-hover ? 1px : 0);
+    border-color: Theme.border-default;
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    label-txt := Text {
+        width: 100%;
+        height: 100%;
+        text: root.label;
+        color: !root.enabled ? Theme.text-tertiary :
+            root.primary ? Theme.surface-base : Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        font-weight: Theme.weight-medium;
+        font-family: Theme.font-family-sans;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if ta.has-hover && tip != "" : Rectangle {
+        x: (parent.width - tip-box.preferred-width - 12px) / 2;
+        y: -tip-box.preferred-height - 8px;
+        width: tip-box.preferred-width + 12px;
+        height: tip-box.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 50;
+        tip-box := Text {
+            x: 6px; y: 3px;
+            text: root.tip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
+    }
+}
+
+component ColorDot inherits Rectangle {
+    in property <int> color-index;
+    width: 5px;
+    height: 5px;
+    border-radius: 2.5px;
+    background: color-index == 0 ? #5B8DEF :
+        color-index == 1 ? #34C759 :
+        color-index == 2 ? #FF9F0A :
+        color-index == 3 ? #FF453A :
+        color-index == 4 ? #BF5AF2 :
+        #64D2FF;
+}
+
+component DayCell inherits Rectangle {
+    in property <CalendarDayEntry> day;
+    callback clicked();
+
+    border-radius: Theme.radius-md;
+    background: day.is-selected ? Theme.accent-brand :
+        day.is-today ? Theme.surface-raised :
+        ta.has-hover ? Theme.surface-raised : transparent;
+    border-width: day.is-today && !day.is-selected ? 1px : 0;
+    border-color: Theme.accent-brand;
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        padding-top: 3px;
+        padding-bottom: 2px;
+        spacing: 2px;
+        alignment: center;
+
+        Text {
+            text: day.day;
+            color: !day.in-month ? Theme.text-tertiary :
+                day.is-selected ? Theme.surface-base : Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            font-weight: day.is-today || day.is-selected ? Theme.weight-semibold : Theme.weight-regular;
+            horizontal-alignment: center;
+        }
+
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: center;
+            height: 6px;
+            for c[idx] in day.dot-colors : ColorDot {
+                color-index: c;
+            }
+        }
+    }
+}
+
+component EventRow inherits Rectangle {
+    in property <CalendarEventEntry> event;
+    in property <string> all-day-label;
+    in property <string> untitled-label;
+    callback clicked();
+
+    height: 44px;
+    border-radius: Theme.radius-md;
+    background: ta.has-hover ? Theme.surface-raised : transparent;
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 10px;
+        alignment: center;
+
+        Rectangle {
+            width: 4px;
+            height: 28px;
+            border-radius: 2px;
+            background: event.color == 0 ? #5B8DEF :
+                event.color == 1 ? #34C759 :
+                event.color == 2 ? #FF9F0A :
+                event.color == 3 ? #FF453A :
+                event.color == 4 ? #BF5AF2 :
+                #64D2FF;
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+            alignment: center;
+            Text {
+                text: event.title == "" ? untitled-label : event.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-medium;
+                overflow: elide;
+            }
+            Text {
+                text: event.all-day ? all-day-label : event.time-label;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+component ColorSwatch inherits Rectangle {
+    in property <int> color-index;
+    in property <bool> selected;
+    callback clicked();
+
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    background: color-index == 0 ? #5B8DEF :
+        color-index == 1 ? #34C759 :
+        color-index == 2 ? #FF9F0A :
+        color-index == 3 ? #FF453A :
+        color-index == 4 ? #BF5AF2 :
+        #64D2FF;
+    border-width: selected ? 2px : 0;
+    border-color: Theme.text-primary;
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component CalendarView inherits Rectangle {
+    in property <CalendarModel> model;
+
+    callback select-date(string);
+    callback shift-month(int);
+    callback goto-today();
+    callback open-new();
+    callback open-edit(string);
+    callback close-editor();
+    callback save-editor();
+    callback delete-event(string);
+    callback editor-title-changed(string);
+    callback editor-date-changed(string);
+    callback editor-all-day-changed(bool);
+    callback editor-start-changed(int, int);
+    callback editor-end-changed(int, int);
+    callback editor-notes-changed(string);
+    callback editor-color-changed(int);
+
+    background: transparent;
+
+    property <string> draft-title: model.editor-title;
+    property <string> draft-date: model.editor-date;
+    property <string> draft-notes: model.editor-notes;
+    property <string> synced-editor-id: model.editor-event-id;
+    property <bool> synced-editor-open: model.editor-open;
+
+    changed model => {
+        if model.editor-open != synced-editor-open
+            || model.editor-event-id != synced-editor-id
+            || (!model.editor-open) {
+            draft-title = model.editor-title;
+            draft-date = model.editor-date;
+            draft-notes = model.editor-notes;
+            synced-editor-id = model.editor-event-id;
+            synced-editor-open = model.editor-open;
+        }
+    }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        // Toolbar
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: center;
+
+            CalToolBtn {
+                label: "◀";
+                tip: model.tip-prev;
+                clicked => { root.shift-month(-1); }
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: model.month-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            CalToolBtn {
+                label: "▶";
+                tip: model.tip-next;
+                clicked => { root.shift-month(1); }
+            }
+            CalToolBtn {
+                label: model.today-label;
+                tip: model.tip-today;
+                clicked => { root.goto-today(); }
+            }
+            CalToolBtn {
+                label: "+";
+                tip: model.tip-add;
+                primary: true;
+                clicked => { root.open-new(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+
+            // Month grid
+            VerticalLayout {
+                spacing: 4px;
+                horizontal-stretch: 3;
+                min-width: 180px;
+
+                HorizontalLayout {
+                    spacing: 2px;
+                    height: 20px;
+                    for wd[i] in model.weekdays : Text {
+                        horizontal-stretch: 1;
+                        text: wd.label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-medium;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                GridLayout {
+                    spacing: 2px;
+                    vertical-stretch: 1;
+                    for day[i] in model.days : DayCell {
+                        row: i / 7;
+                        col: mod(i, 7);
+                        day: day;
+                        clicked => { root.select-date(day.date-key); }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 1px;
+                background: Theme.border-default;
+            }
+
+            // Agenda
+            VerticalLayout {
+                spacing: 6px;
+                horizontal-stretch: 2;
+                min-width: 140px;
+
+                Text {
+                    text: model.selected-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-semibold;
+                }
+
+                if model.events.length == 0 : Text {
+                    vertical-stretch: 1;
+                    text: model.empty-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                if model.events.length > 0 : Flickable {
+                    vertical-stretch: 1;
+                    viewport-width: parent.width;
+                    viewport-height: agenda-col.preferred-height;
+
+                    agenda-col := VerticalLayout {
+                        spacing: 2px;
+                        width: parent.width;
+                        for ev[i] in model.events : EventRow {
+                            event: ev;
+                            all-day-label: model.all-day-label;
+                            untitled-label: model.untitled-label;
+                            clicked => { root.open-edit(ev.id); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Editor overlay
+    if model.editor-open : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #00000088;
+        z: 40;
+
+        TouchArea {
+            clicked => { root.close-editor(); }
+        }
+
+        Rectangle {
+            width: min(parent.width - 24px, 340px);
+            height: min(parent.height - 24px, 420px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+
+            TouchArea { } // swallow clicks
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 10px;
+
+                Text {
+                    text: model.editor-is-new ? model.add-label : model.edit-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-lg;
+                    font-weight: Theme.weight-semibold;
+                }
+
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: model.title-field-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 32px;
+                        border-radius: Theme.radius-md;
+                        background: Theme.surface-raised;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        title-edit := TextInput {
+                            x: 8px; y: 0;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: root.draft-title;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            single-line: true;
+                            edited => {
+                                root.draft-title = self.text;
+                                root.editor-title-changed(self.text);
+                            }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: model.date-field-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 32px;
+                        border-radius: Theme.radius-md;
+                        background: Theme.surface-raised;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        date-edit := TextInput {
+                            x: 8px; y: 0;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: root.draft-date;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-family: Theme.font-family-mono;
+                            single-line: true;
+                            edited => {
+                                root.draft-date = self.text;
+                                root.editor-date-changed(self.text);
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        background: model.editor-all-day ? Theme.accent-brand : Theme.surface-raised;
+                        TouchArea {
+                            clicked => {
+                                root.editor-all-day-changed(!model.editor-all-day);
+                            }
+                        }
+                        if model.editor-all-day : Text {
+                            width: 100%; height: 100%;
+                            text: "✓";
+                            color: Theme.surface-base;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Text {
+                        text: model.all-day-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if !model.editor-all-day : HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    Text {
+                        text: model.start-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    CalToolBtn {
+                        label: "-";
+                        clicked => {
+                            root.editor-start-changed(model.editor-start-hour, model.editor-start-min - 15);
+                        }
+                    }
+                    Text {
+                        text: model.editor-start-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        font-family: Theme.font-family-mono;
+                        vertical-alignment: center;
+                        min-width: 48px;
+                        horizontal-alignment: center;
+                    }
+                    CalToolBtn {
+                        label: "+";
+                        clicked => {
+                            root.editor-start-changed(model.editor-start-hour, model.editor-start-min + 15);
+                        }
+                    }
+                    Text {
+                        text: model.end-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    CalToolBtn {
+                        label: "-";
+                        clicked => {
+                            root.editor-end-changed(model.editor-end-hour, model.editor-end-min - 15);
+                        }
+                    }
+                    Text {
+                        text: model.editor-end-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        font-family: Theme.font-family-mono;
+                        vertical-alignment: center;
+                        min-width: 48px;
+                        horizontal-alignment: center;
+                    }
+                    CalToolBtn {
+                        label: "+";
+                        clicked => {
+                            root.editor-end-changed(model.editor-end-hour, model.editor-end-min + 15);
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 4px;
+                    vertical-stretch: 1;
+                    Text {
+                        text: model.notes-field-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        min-height: 60px;
+                        border-radius: Theme.radius-md;
+                        background: Theme.surface-raised;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        notes-edit := TextInput {
+                            x: 8px; y: 6px;
+                            width: parent.width - 16px;
+                            height: parent.height - 12px;
+                            text: root.draft-notes;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                            edited => {
+                                root.draft-notes = self.text;
+                                root.editor-notes-changed(self.text);
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    Text {
+                        text: model.color-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    for c[ci] in model.color-options : ColorSwatch {
+                        color-index: c;
+                        selected: model.editor-color == c;
+                        clicked => { root.editor-color-changed(c); }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+
+                    if !model.editor-is-new : CalToolBtn {
+                        label: model.delete-label;
+                        clicked => { root.delete-event(model.editor-event-id); }
+                    }
+                    CalToolBtn {
+                        label: model.cancel-label;
+                        clicked => { root.close-editor(); }
+                    }
+                    CalToolBtn {
+                        label: model.save-label;
+                        primary: true;
+                        clicked => { root.save-editor(); }
+                    }
+                }
+            }
+        }
+    }
+}

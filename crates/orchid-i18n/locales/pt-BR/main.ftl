@@ -848,6 +848,9 @@ widget-calculator-desc = Calculadora rápida com modos padrão e científico, hi
 widget-notes-name = Notas
 widget-notes-desc = Bloco de notas com abas, salvamento automático, busca e quebra de linha
 
+widget-calendar-name = Calendar
+widget-calendar-desc = Local month calendar and day agenda with events
+
 # ---- Notes / scratchpad ----
 notes-untitled = Sem título
 notes-title-placeholder = Título da nota
@@ -873,6 +876,55 @@ notes-settings-wrap = Quebra de linha
 notes-settings-mono = Fonte monoespaçada
 notes-settings-status-bar = Mostrar barra de status
 notes-settings-font-size = Tamanho da fonte (10–32)
+
+# ---- Calendar / agenda ----
+calendar-month-title = { $month } { $year }
+calendar-selected-day = { $weekday }, { $month } { $day }
+calendar-today = Today
+calendar-all-day = All day
+calendar-empty-day = No events
+calendar-untitled = Untitled event
+calendar-add = New event
+calendar-edit = Edit event
+calendar-save = Save
+calendar-delete = Delete
+calendar-cancel = Cancel
+calendar-field-title = Title
+calendar-field-date = Date (YYYY-MM-DD)
+calendar-field-notes = Notes
+calendar-start = Start
+calendar-end = End
+calendar-color = Color
+calendar-tip-prev = Previous month
+calendar-tip-next = Next month
+calendar-tip-today = Jump to today
+calendar-tip-add = Add event
+calendar-weekday-sun = Su
+calendar-weekday-mon = Mo
+calendar-weekday-tue = Tu
+calendar-weekday-wed = We
+calendar-weekday-thu = Th
+calendar-weekday-fri = Fr
+calendar-weekday-sat = Sa
+calendar-weekday-long-sun = Sunday
+calendar-weekday-long-mon = Monday
+calendar-weekday-long-tue = Tuesday
+calendar-weekday-long-wed = Wednesday
+calendar-weekday-long-thu = Thursday
+calendar-weekday-long-fri = Friday
+calendar-weekday-long-sat = Saturday
+calendar-month-jan = January
+calendar-month-feb = February
+calendar-month-mar = March
+calendar-month-apr = April
+calendar-month-may = May
+calendar-month-jun = June
+calendar-month-jul = July
+calendar-month-aug = August
+calendar-month-sep = September
+calendar-month-oct = October
+calendar-month-nov = November
+calendar-month-dec = December
 calc-mode-standard = Padrão
 calc-mode-scientific = Científica
 calc-history-title = Histórico
@@ -954,6 +1006,7 @@ processes-confirm-sign-out = Sign out session for { $user }?
 dock-widget-processes = Processes
 dock-widget-calculator = Calculadora
 dock-widget-notes = Notas
+dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
 dock-widget-jyotish = Jyotish

@@ -13,6 +13,7 @@ import { SystemView } from "../widgets/system.slint";
 import { ProcessesView } from "../widgets/processes.slint";
 import { CalculatorView } from "../widgets/calculator.slint";
 import { NotesView } from "../widgets/notes.slint";
+import { CalendarView } from "../widgets/calendar.slint";
 import { RssView } from "../widgets/rss.slint";
 import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
@@ -131,6 +132,23 @@ export component WidgetFrame inherits Rectangle {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+
+    // Calendar
+    callback calendar-select-date(string, string);
+    callback calendar-shift-month(string, int);
+    callback calendar-goto-today(string);
+    callback calendar-open-new(string);
+    callback calendar-open-edit(string, string);
+    callback calendar-close-editor(string);
+    callback calendar-save-editor(string);
+    callback calendar-delete-event(string, string);
+    callback calendar-editor-title(string, string);
+    callback calendar-editor-date(string, string);
+    callback calendar-editor-all-day(string, bool);
+    callback calendar-editor-start(string, int, int);
+    callback calendar-editor-end(string, int, int);
+    callback calendar-editor-notes(string, string);
+    callback calendar-editor-color(string, int);
 
     // Password
     callback password-search-changed(string);
@@ -611,6 +629,27 @@ export component WidgetFrame inherits Rectangle {
                     zoom(d) => { root.notes-zoom(root.model.instance-id, d); }
                     clear-note => { root.notes-clear(root.model.instance-id); }
                     find-request(q, fwd) => { root.notes-find(root.model.instance-id, q, fwd); }
+                }
+
+                if model.type-id == "calendar" : CalendarView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.calendar;
+                    select-date(d) => { root.calendar-select-date(root.model.instance-id, d); }
+                    shift-month(delta) => { root.calendar-shift-month(root.model.instance-id, delta); }
+                    goto-today => { root.calendar-goto-today(root.model.instance-id); }
+                    open-new => { root.calendar-open-new(root.model.instance-id); }
+                    open-edit(eid) => { root.calendar-open-edit(root.model.instance-id, eid); }
+                    close-editor => { root.calendar-close-editor(root.model.instance-id); }
+                    save-editor => { root.calendar-save-editor(root.model.instance-id); }
+                    delete-event(eid) => { root.calendar-delete-event(root.model.instance-id, eid); }
+                    editor-title-changed(t) => { root.calendar-editor-title(root.model.instance-id, t); }
+                    editor-date-changed(d) => { root.calendar-editor-date(root.model.instance-id, d); }
+                    editor-all-day-changed(v) => { root.calendar-editor-all-day(root.model.instance-id, v); }
+                    editor-start-changed(h, m) => { root.calendar-editor-start(root.model.instance-id, h, m); }
+                    editor-end-changed(h, m) => { root.calendar-editor-end(root.model.instance-id, h, m); }
+                    editor-notes-changed(t) => { root.calendar-editor-notes(root.model.instance-id, t); }
+                    editor-color-changed(c) => { root.calendar-editor-color(root.model.instance-id, c); }
                 }
 
                 if model.type-id == "rss" : RssView {

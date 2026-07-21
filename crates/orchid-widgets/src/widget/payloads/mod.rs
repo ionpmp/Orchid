@@ -6,12 +6,13 @@
 //! the UI renderer.
 
 pub mod calculator;
+pub mod calendar;
 pub mod clock;
-pub mod notes;
 pub mod file_manager;
 pub mod jyotish;
 pub mod media;
 pub mod moon;
+pub mod notes;
 pub mod password;
 pub mod processes;
 pub mod recent_files;
@@ -22,8 +23,8 @@ pub mod viewer;
 pub mod weather;
 
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
+pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
-pub use notes::{NotesPayload, NotesTabRow};
 pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
     PanePayload, TabPayload,
@@ -31,10 +32,11 @@ pub use file_manager::{
 pub use jyotish::{JyotishPayload, JyotishPlanetRow};
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
+pub use notes::{NotesPayload, NotesTabRow};
 pub use password::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload};
 pub use processes::{
-    ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab, ServiceRowView,
-    StartupRowView, UserRowView,
+    ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab,
+    ServiceRowView, StartupRowView, UserRowView,
 };
 pub use recent_files::{RecentFileItemView, RecentFilesPayload};
 pub use rss::{RssItemView, RssPayload};

@@ -184,6 +184,21 @@ export component MainWindow inherits Window {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+    callback calendar-select-date(string, string);
+    callback calendar-shift-month(string, int);
+    callback calendar-goto-today(string);
+    callback calendar-open-new(string);
+    callback calendar-open-edit(string, string);
+    callback calendar-close-editor(string);
+    callback calendar-save-editor(string);
+    callback calendar-delete-event(string, string);
+    callback calendar-editor-title(string, string);
+    callback calendar-editor-date(string, string);
+    callback calendar-editor-all-day(string, bool);
+    callback calendar-editor-start(string, int, int);
+    callback calendar-editor-end(string, int, int);
+    callback calendar-editor-notes(string, string);
+    callback calendar-editor-color(string, int);
     callback password-search-changed(string);
     callback password-entry-clicked(string);
     callback password-copy-password(string);
@@ -516,6 +531,21 @@ export component MainWindow inherits Window {
             notes-zoom(id, d) => { root.notes-zoom(id, d); }
             notes-clear(id) => { root.notes-clear(id); }
             notes-find(id, q, fwd) => { root.notes-find(id, q, fwd); }
+            calendar-select-date(id, d) => { root.calendar-select-date(id, d); }
+            calendar-shift-month(id, delta) => { root.calendar-shift-month(id, delta); }
+            calendar-goto-today(id) => { root.calendar-goto-today(id); }
+            calendar-open-new(id) => { root.calendar-open-new(id); }
+            calendar-open-edit(id, eid) => { root.calendar-open-edit(id, eid); }
+            calendar-close-editor(id) => { root.calendar-close-editor(id); }
+            calendar-save-editor(id) => { root.calendar-save-editor(id); }
+            calendar-delete-event(id, eid) => { root.calendar-delete-event(id, eid); }
+            calendar-editor-title(id, t) => { root.calendar-editor-title(id, t); }
+            calendar-editor-date(id, d) => { root.calendar-editor-date(id, d); }
+            calendar-editor-all-day(id, v) => { root.calendar-editor-all-day(id, v); }
+            calendar-editor-start(id, h, m) => { root.calendar-editor-start(id, h, m); }
+            calendar-editor-end(id, h, m) => { root.calendar-editor-end(id, h, m); }
+            calendar-editor-notes(id, t) => { root.calendar-editor-notes(id, t); }
+            calendar-editor-color(id, c) => { root.calendar-editor-color(id, c); }
             password-search-changed(q) => { root.password-search-changed(q); }
             password-entry-clicked(id) => { root.password-entry-clicked(id); }
             password-copy-password(id) => { root.password-copy-password(id); }

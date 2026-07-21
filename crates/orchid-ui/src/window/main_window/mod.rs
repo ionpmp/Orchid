@@ -45,48 +45,50 @@ use orchid_widgets::{
 use parking_lot::RwLock;
 
 use super::models::{
-    blank_terminal, build_clock_model, build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
-    build_calculator_model, build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
-    build_rss_model, patch_processes_model,
-    build_search_model, build_system_model, build_terminal_divider_models, build_terminal_model,
-    build_terminal_tab_models, build_viewer_model, build_weather_model,
+    blank_terminal, build_calculator_model, build_calendar_model, build_clock_model,
+    build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
+    build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
+    build_rss_model, build_search_model, build_system_model, build_terminal_divider_models,
+    build_terminal_model, build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
-    empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
-    empty_clock_model, empty_jyotish_model, empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
-    empty_calculator_model, empty_notes_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
-    empty_search_model, empty_system_model, empty_tag_state, empty_viewer_model,
-    empty_weather_model,
-    locale_display_name, theme_display_name, widget_has_settings, FileManagerOverlays,
-    PasswordAddDialogOverlay,
+    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_confirm_dialog,
+    empty_context_menu, empty_file_manager_model, empty_jyotish_model, empty_managed_policy_state,
+    empty_media_model, empty_moon_model, empty_notes_model, empty_passphrase_state,
+    empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
+    empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
+    empty_viewer_model, empty_weather_model, locale_display_name, patch_processes_model,
+    theme_display_name, widget_has_settings, FileManagerOverlays, PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
-    AppState, ClockModel, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel,
-    CalculatorModel, JyotishModel, MoonModel, NotesModel, NotificationItem, PasswordModel, ProcessesConfirmDialog, ProcessesModel,
-    RecentFilesModel, RssModel,
-    SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel,
-    TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
-    WidgetFrameModel, WidgetSettingsDialog, WorkspaceModel, WorkspaceSummary,
+    AppState, CalculatorModel, CalendarModel, ClockModel, DockWidgetType, FileManagerModel,
+    GroupTabModel, JyotishModel, MainWindow, MediaModel, MoonModel, NotesModel, NotificationItem,
+    PasswordModel, ProcessesConfirmDialog, ProcessesModel, RecentFilesModel, RssModel,
+    SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings,
+    SystemModel, TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog,
+    WidgetCloseConfirmDialog, WidgetFrameModel, WidgetSettingsDialog, WorkspaceModel,
+    WorkspaceSummary,
 };
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
 use crate::theme::ThemeManager;
 use crate::widgets::terminal::TerminalWidgetDeps;
 
+mod calculator;
+mod calendar;
 mod canvas;
+mod clock;
 mod fm;
 mod input;
-mod media_search;
-mod password;
-mod calculator;
 mod jyotish;
+mod media_search;
 mod notes;
+mod password;
 mod processes;
 mod shell_ui;
 mod terminal;
 mod weather;
-mod clock;
 mod widget_settings;
 mod wire;
 
@@ -590,6 +592,7 @@ impl MainWindowController {
         g.set_dock_widget_processes(mgr.tr("dock-widget-processes").into());
         g.set_dock_widget_calculator(mgr.tr("dock-widget-calculator").into());
         g.set_dock_widget_notes(mgr.tr("dock-widget-notes").into());
+        g.set_dock_widget_calendar(mgr.tr("dock-widget-calendar").into());
         g.set_dock_widget_rss(mgr.tr("dock-widget-rss").into());
         g.set_dock_widget_recent_files(mgr.tr("dock-widget-recent-files").into());
         g.set_dock_widget_search(mgr.tr("dock-widget-search").into());
@@ -606,6 +609,7 @@ impl MainWindowController {
         g.set_widget_processes_desc(mgr.tr("widget-processes-desc").into());
         g.set_widget_calculator_desc(mgr.tr("widget-calculator-desc").into());
         g.set_widget_notes_desc(mgr.tr("widget-notes-desc").into());
+        g.set_widget_calendar_desc(mgr.tr("widget-calendar-desc").into());
         g.set_widget_rss_desc(mgr.tr("widget-rss-desc").into());
         g.set_widget_recent_files_desc(mgr.tr("widget-recent-files-desc").into());
         g.set_widget_search_desc(mgr.tr("widget-search-desc").into());
@@ -1468,11 +1472,7 @@ impl MainWindowController {
             );
             let mut need_frame = patch.needs_frame_write;
             if let Some(b) = bounds {
-                if row.x != b.x
-                    || row.y != b.y
-                    || row.width != b.width
-                    || row.height != b.height
-                {
+                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
                     row.x = b.x;
                     row.y = b.y;
                     row.width = b.width;
@@ -1580,6 +1580,7 @@ impl MainWindowController {
             processes_model,
             calculator_model,
             notes_model,
+            calendar_model,
             rss_model,
             search_model,
             media_model,
@@ -1620,10 +1621,10 @@ impl MainWindowController {
                         empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
-
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
                         empty_notes_model(&self.locale),
+                        empty_calendar_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1650,6 +1651,7 @@ impl MainWindowController {
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1672,10 +1674,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1701,6 +1703,7 @@ impl MainWindowController {
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1726,6 +1729,7 @@ impl MainWindowController {
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1748,10 +1752,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     build_system_model(s, &self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1790,6 +1794,7 @@ impl MainWindowController {
                         build_processes_model(p, &self.locale, ctx_vis, ctx_x, ctx_y, confirm),
                         empty_calculator_model(&self.locale),
                         empty_notes_model(&self.locale),
+                        empty_calendar_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -1816,6 +1821,7 @@ impl MainWindowController {
                     empty_processes_model(&self.locale),
                     build_calculator_model(p, &self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1841,6 +1847,33 @@ impl MainWindowController {
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     build_notes_model(p, &self.locale),
+                    empty_calendar_model(&self.locale),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(&self.locale),
+                    empty_password_model(&self.locale),
+                    empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                ),
+                WidgetPayload::Calendar(p) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
+                    empty_clock_model(&self.locale),
+                    empty_system_model(&self.locale),
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
+                    build_calendar_model(p, &self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1863,10 +1896,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     build_rss_model(r, &self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -1900,10 +1933,10 @@ impl MainWindowController {
                         empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
-
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
                         empty_notes_model(&self.locale),
+                        empty_calendar_model(&self.locale),
                         empty_rss_model(&self.locale),
                         build_search_model(s, &self.locale, selected, request_autofocus),
                         empty_media_model(&self.locale),
@@ -1927,10 +1960,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     build_media_model(m, &self.locale),
@@ -1981,10 +2014,10 @@ impl MainWindowController {
                         empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
-
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
                         empty_notes_model(&self.locale),
+                        empty_calendar_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -2008,10 +2041,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -2034,10 +2067,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -2082,10 +2115,10 @@ impl MainWindowController {
                         empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
-
                         empty_processes_model(&self.locale),
                         empty_calculator_model(&self.locale),
                         empty_notes_model(&self.locale),
+                        empty_calendar_model(&self.locale),
                         empty_rss_model(&self.locale),
                         empty_search_model(&self.locale),
                         empty_media_model(&self.locale),
@@ -2116,10 +2149,10 @@ impl MainWindowController {
                     empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
-
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
                     empty_rss_model(&self.locale),
                     empty_search_model(&self.locale),
                     empty_media_model(&self.locale),
@@ -2229,6 +2262,7 @@ impl MainWindowController {
             processes: processes_model,
             calculator: calculator_model,
             notes: notes_model,
+            calendar: calendar_model,
             rss: rss_model,
             search: search_model,
             media: media_model,
@@ -2861,6 +2895,7 @@ fn is_known_widget_type(type_id: &str) -> bool {
             | "processes"
             | "calculator"
             | "notes"
+            | "calendar"
             | "rss"
             | "recent-files"
             | "universal-search"
@@ -2870,7 +2905,6 @@ fn is_known_widget_type(type_id: &str) -> bool {
             | "file-manager"
     )
 }
-
 
 fn apply_catalog_row_visibility(
     g: &crate::slint_generated::WidgetCatalog,
@@ -2885,6 +2919,7 @@ fn apply_catalog_row_visibility(
     g.set_show_processes(visible_ids.contains("processes"));
     g.set_show_calculator(visible_ids.contains("calculator"));
     g.set_show_notes(visible_ids.contains("notes"));
+    g.set_show_calendar(visible_ids.contains("calendar"));
     g.set_show_rss(visible_ids.contains("rss"));
     g.set_show_recent_files(visible_ids.contains("recent-files"));
     g.set_show_search(visible_ids.contains("search"));
@@ -2919,6 +2954,7 @@ fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> SharedStrin
         "processes" => "widget-processes-desc",
         "calculator" => "widget-calculator-desc",
         "notes" => "widget-notes-desc",
+        "calendar" => "widget-calendar-desc",
         "rss" => "widget-rss-desc",
         "recent-files" => "widget-recent-files-desc",
         "search" | "universal-search" => "widget-search-desc",
@@ -2988,6 +3024,12 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             icon: "notes".into(),
         },
         DockWidgetType {
+            type_id: "calendar".into(),
+            label: locale.tr("dock-widget-calendar").into(),
+            description: dock_widget_description(locale, "calendar"),
+            icon: "calendar".into(),
+        },
+        DockWidgetType {
             type_id: "rss".into(),
             label: locale.tr("dock-widget-rss").into(),
             description: dock_widget_description(locale, "rss"),
@@ -3042,6 +3084,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "processes" => locale.tr("dock-widget-processes").into(),
         "calculator" => locale.tr("dock-widget-calculator").into(),
         "notes" => locale.tr("dock-widget-notes").into(),
+        "calendar" => locale.tr("dock-widget-calendar").into(),
         "rss" => locale.tr("dock-widget-rss").into(),
         "recent-files" => locale.tr("dock-widget-recent-files").into(),
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
@@ -3074,6 +3117,7 @@ fn default_frame_data_extended(
     ProcessesModel,
     CalculatorModel,
     NotesModel,
+    CalendarModel,
     RssModel,
     SearchModel,
     MediaModel,
@@ -3099,6 +3143,7 @@ fn default_frame_data_extended(
         empty_processes_model(locale),
         empty_calculator_model(locale),
         empty_notes_model(locale),
+        empty_calendar_model(locale),
         empty_rss_model(locale),
         empty_search_model(locale),
         empty_media_model(locale),

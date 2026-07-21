@@ -16,9 +16,8 @@ use std::collections::HashMap;
 
 use orchid_widgets::{
     FileManagerPayload, JyotishPayload, MediaPlayerPayload, MoonPayload, PasswordManagerPayload,
-    RssPayload,
-    SystemPayload, UniversalSearchPayload, ViewerPayload, WeatherPayload, WidgetPayload,
-    WidgetSnapshot,
+    RssPayload, SystemPayload, UniversalSearchPayload, ViewerPayload, WeatherPayload,
+    WidgetPayload, WidgetSnapshot,
 };
 use parking_lot::RwLock;
 
@@ -104,6 +103,12 @@ impl SlintPayload {
                 Self::Text(vec![p.expression.clone(), p.display.clone()])
             }
             WidgetPayload::Notes(p) => Self::Text(vec![p.title.clone(), p.body.clone()]),
+            WidgetPayload::Calendar(p) => Self::Text(
+                p.events
+                    .iter()
+                    .flat_map(|e| [e.title.clone(), e.notes_preview.clone()])
+                    .collect(),
+            ),
             WidgetPayload::RssFeed(p) => Self::Text(rss_to_text_lines(p)),
             WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
             WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),
@@ -190,7 +195,10 @@ fn jyotish_to_text_lines(p: &JyotishPayload) -> Vec<String> {
     }
     for g in &p.planets {
         let r = if g.is_retrograde { " R" } else { "" };
-        lines.push(format!("{} {} {}{r}", g.graha_key, g.rashi_key, g.degree_text));
+        lines.push(format!(
+            "{} {} {}{r}",
+            g.graha_key, g.rashi_key, g.degree_text
+        ));
     }
     lines
 }

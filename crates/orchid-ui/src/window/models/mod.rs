@@ -1,12 +1,13 @@
 //! Slint model builders for workspace widget frames.
 
-mod clock;
 mod calculator;
-mod notes;
+mod calendar;
+mod clock;
 mod file_manager;
-mod media;
 mod jyotish;
+mod media;
 mod moon;
+mod notes;
 mod palette;
 mod password;
 mod processes;
@@ -20,18 +21,19 @@ mod viewer;
 mod weather;
 mod widget_settings;
 
+pub(crate) use calculator::{build_calculator_model, empty_calculator_model};
+pub(crate) use calendar::{build_calendar_model, empty_calendar_model};
+pub(crate) use clock::{build_clock_model, empty_clock_model};
 pub(crate) use file_manager::{
     build_context_menu, build_file_manager_model, build_managed_policy_state, empty_confirm_dialog,
     empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
     fm_passphrase_dialog_labels, patch_fm_selection, FileManagerOverlays, FmViewport,
 };
-pub(crate) use calculator::{build_calculator_model, empty_calculator_model};
-pub(crate) use notes::{build_notes_model, empty_notes_model};
-pub(crate) use clock::{build_clock_model, empty_clock_model};
-pub(crate) use media::{build_media_model, empty_media_model};
 pub(crate) use jyotish::{build_jyotish_model, empty_jyotish_model};
+pub(crate) use media::{build_media_model, empty_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model};
+pub(crate) use notes::{build_notes_model, empty_notes_model};
 pub(crate) use palette::build_palette_candidates;
 pub(crate) use password::{build_password_model, empty_password_model, PasswordAddDialogOverlay};
 pub(crate) use processes::{
