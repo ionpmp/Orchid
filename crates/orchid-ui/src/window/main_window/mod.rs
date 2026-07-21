@@ -45,14 +45,14 @@ use orchid_widgets::{
 use parking_lot::RwLock;
 
 use super::models::{
-    blank_terminal, build_clock_model, build_file_manager_model, build_media_model, build_moon_model,
+    blank_terminal, build_clock_model, build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
     build_calculator_model, build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
     build_rss_model, patch_processes_model,
     build_search_model, build_system_model, build_terminal_divider_models, build_terminal_model,
     build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_confirm_dialog, empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
-    empty_clock_model, empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
+    empty_clock_model, empty_jyotish_model, empty_media_model, empty_moon_model, empty_passphrase_state, empty_password_model,
     empty_calculator_model, empty_notes_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model, empty_rename_state, empty_rss_model,
     empty_search_model, empty_system_model, empty_tag_state, empty_viewer_model,
     empty_weather_model,
@@ -63,7 +63,7 @@ use super::spawn;
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
     AppState, ClockModel, DockWidgetType, FileManagerModel, GroupTabModel, MainWindow, MediaModel,
-    CalculatorModel, MoonModel, NotesModel, NotificationItem, PasswordModel, ProcessesConfirmDialog, ProcessesModel,
+    CalculatorModel, JyotishModel, MoonModel, NotesModel, NotificationItem, PasswordModel, ProcessesConfirmDialog, ProcessesModel,
     RecentFilesModel, RssModel,
     SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings, SystemModel,
     TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog, WidgetCloseConfirmDialog,
@@ -80,6 +80,7 @@ mod input;
 mod media_search;
 mod password;
 mod calculator;
+mod jyotish;
 mod notes;
 mod processes;
 mod shell_ui;
@@ -583,6 +584,7 @@ impl MainWindowController {
         g.set_dock_widget_terminal(mgr.tr("dock-widget-terminal").into());
         g.set_dock_widget_weather(mgr.tr("dock-widget-weather").into());
         g.set_dock_widget_moon(mgr.tr("dock-widget-moon").into());
+        g.set_dock_widget_jyotish(mgr.tr("dock-widget-jyotish").into());
         g.set_dock_widget_clock(mgr.tr("dock-widget-clock").into());
         g.set_dock_widget_system(mgr.tr("dock-widget-system").into());
         g.set_dock_widget_processes(mgr.tr("dock-widget-processes").into());
@@ -598,6 +600,7 @@ impl MainWindowController {
         g.set_widget_terminal_desc(mgr.tr("widget-terminal-desc").into());
         g.set_widget_weather_desc(mgr.tr("widget-weather-desc").into());
         g.set_widget_moon_desc(mgr.tr("widget-moon-desc").into());
+        g.set_widget_jyotish_desc(mgr.tr("widget-jyotish-desc").into());
         g.set_widget_clock_desc(mgr.tr("widget-clock-desc").into());
         g.set_widget_system_desc(mgr.tr("widget-system-desc").into());
         g.set_widget_processes_desc(mgr.tr("widget-processes-desc").into());
@@ -1571,6 +1574,7 @@ impl MainWindowController {
             tcvis,
             weather_model,
             moon_model,
+            jyotish_model,
             clock_model,
             system_model,
             processes_model,
@@ -1613,6 +1617,7 @@ impl MainWindowController {
                         t.cursor_visible,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
 
@@ -1639,6 +1644,7 @@ impl MainWindowController {
                     true,
                     build_weather_model(w, &self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
@@ -1663,9 +1669,35 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     build_moon_model(m, &self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
 
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(&self.locale),
+                    empty_password_model(&self.locale),
+                    empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                ),
+                WidgetPayload::Jyotish(j) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    build_jyotish_model(j, &self.locale),
+                    empty_clock_model(&self.locale),
+                    empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
                     empty_calculator_model(&self.locale),
                     empty_notes_model(&self.locale),
@@ -1688,6 +1720,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     build_clock_model(c, &self.locale),
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
@@ -1712,6 +1745,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     build_system_model(s, &self.locale),
 
@@ -1750,6 +1784,7 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
                         build_processes_model(p, &self.locale, ctx_vis, ctx_x, ctx_y, confirm),
@@ -1775,6 +1810,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
@@ -1799,6 +1835,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),
@@ -1823,6 +1860,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
 
@@ -1859,6 +1897,7 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
 
@@ -1885,6 +1924,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
 
@@ -1938,6 +1978,7 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
 
@@ -1964,6 +2005,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
 
@@ -1989,6 +2031,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
 
@@ -2036,6 +2079,7 @@ impl MainWindowController {
                         true,
                         empty_weather_model(&self.locale),
                         empty_moon_model(&self.locale),
+                        empty_jyotish_model(&self.locale),
                         empty_clock_model(&self.locale),
                         empty_system_model(&self.locale),
 
@@ -2069,6 +2113,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
 
@@ -2178,6 +2223,7 @@ impl MainWindowController {
             terminal_dividers,
             weather: weather_model,
             moon: moon_model,
+            jyotish: jyotish_model,
             clock: clock_model,
             system: system_model,
             processes: processes_model,
@@ -2809,6 +2855,7 @@ fn is_known_widget_type(type_id: &str) -> bool {
         "terminal"
             | "weather"
             | "moon"
+            | "jyotish"
             | "clock"
             | "system"
             | "processes"
@@ -2832,6 +2879,7 @@ fn apply_catalog_row_visibility(
     g.set_show_terminal(visible_ids.contains("terminal"));
     g.set_show_weather(visible_ids.contains("weather"));
     g.set_show_moon(visible_ids.contains("moon"));
+    g.set_show_jyotish(visible_ids.contains("jyotish"));
     g.set_show_clock(visible_ids.contains("clock"));
     g.set_show_system(visible_ids.contains("system"));
     g.set_show_processes(visible_ids.contains("processes"));
@@ -2865,6 +2913,7 @@ fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> SharedStrin
         "terminal" => "widget-terminal-desc",
         "weather" => "widget-weather-desc",
         "moon" => "widget-moon-desc",
+        "jyotish" => "widget-jyotish-desc",
         "clock" => "widget-clock-desc",
         "system" => "widget-system-desc",
         "processes" => "widget-processes-desc",
@@ -2901,6 +2950,12 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-moon").into(),
             description: dock_widget_description(locale, "moon"),
             icon: "moon".into(),
+        },
+        DockWidgetType {
+            type_id: "jyotish".into(),
+            label: locale.tr("dock-widget-jyotish").into(),
+            description: dock_widget_description(locale, "jyotish"),
+            icon: "jyotish".into(),
         },
         DockWidgetType {
             type_id: "clock".into(),
@@ -2981,6 +3036,7 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
     match type_id {
         "weather" => locale.tr("dock-widget-weather").into(),
         "moon" => locale.tr("dock-widget-moon").into(),
+        "jyotish" => locale.tr("dock-widget-jyotish").into(),
         "clock" => locale.tr("dock-widget-clock").into(),
         "system" => locale.tr("dock-widget-system").into(),
         "processes" => locale.tr("dock-widget-processes").into(),
@@ -3012,6 +3068,7 @@ fn default_frame_data_extended(
     bool,
     WeatherModel,
     MoonModel,
+    JyotishModel,
     ClockModel,
     SystemModel,
     ProcessesModel,
@@ -3036,6 +3093,7 @@ fn default_frame_data_extended(
         true,
         empty_weather_model(locale),
         empty_moon_model(locale),
+        empty_jyotish_model(locale),
         empty_clock_model(locale),
         empty_system_model(locale),
         empty_processes_model(locale),

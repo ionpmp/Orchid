@@ -2,7 +2,8 @@
 
 use crate::widget::payloads::{
     CalculatorPayload, ClockPayload, EntryPayload, FileManagerPayload, MediaPlayerPayload,
-    MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
+    JyotishPayload, MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView,
+    PasswordManagerPayload,
     ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
     SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
     UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
@@ -21,6 +22,7 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::Terminal(a), WidgetPayload::Terminal(b)) => terminal_payload_eq(a, b),
         (WidgetPayload::Weather(a), WidgetPayload::Weather(b)) => weather_payload_eq(a, b),
         (WidgetPayload::Moon(a), WidgetPayload::Moon(b)) => moon_payload_eq(a, b),
+        (WidgetPayload::Jyotish(a), WidgetPayload::Jyotish(b)) => jyotish_payload_eq(a, b),
         (WidgetPayload::Clock(a), WidgetPayload::Clock(b)) => clock_payload_eq(a, b),
         (WidgetPayload::SystemIndicators(a), WidgetPayload::SystemIndicators(b)) => {
             system_payload_eq(a, b)
@@ -357,6 +359,35 @@ fn moon_payload_eq(a: &MoonPayload, b: &MoonPayload) -> bool {
         && opt_f64_eq(a.libration_lat_deg, b.libration_lat_deg)
         && opt_f64_eq(a.libration_lon_deg, b.libration_lon_deg)
         && a.is_loading == b.is_loading
+}
+
+fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
+    a.date_text == b.date_text
+        && a.location_name == b.location_name
+        && a.ayanamsa_key == b.ayanamsa_key
+        && a.ayanamsa_deg_text == b.ayanamsa_deg_text
+        && a.day_offset == b.day_offset
+        && a.is_today == b.is_today
+        && a.tithi_key == b.tithi_key
+        && a.paksha_key == b.paksha_key
+        && a.tithi_end_text == b.tithi_end_text
+        && a.nakshatra_key == b.nakshatra_key
+        && a.pada == b.pada
+        && a.nakshatra_end_text == b.nakshatra_end_text
+        && a.yoga_key == b.yoga_key
+        && a.karana_key == b.karana_key
+        && a.vara_key == b.vara_key
+        && a.sunrise_time == b.sunrise_time
+        && a.sunset_time == b.sunset_time
+        && a.show_planets == b.show_planets
+        && a.is_loading == b.is_loading
+        && a.planets.len() == b.planets.len()
+        && a.planets.iter().zip(b.planets.iter()).all(|(x, y)| {
+            x.graha_key == y.graha_key
+                && x.rashi_key == y.rashi_key
+                && x.degree_text == y.degree_text
+                && x.is_retrograde == y.is_retrograde
+        })
 }
 
 fn system_indicator_eq(a: &SystemIndicator, b: &SystemIndicator) -> bool {

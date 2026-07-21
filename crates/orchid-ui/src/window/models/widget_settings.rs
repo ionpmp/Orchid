@@ -4,6 +4,7 @@ use orchid_i18n::LocaleManager;
 use orchid_widgets::builtin::file_manager::{
     ClickBehavior, FileManagerConfig, FmThumbnailSize as ThumbnailSize,
 };
+use orchid_widgets::builtin::jyotish::{AyanamsaSystem, JyotishConfig};
 use orchid_widgets::builtin::moon::MoonConfig;
 use orchid_widgets::builtin::rss::RssConfig;
 use orchid_widgets::builtin::system::SystemConfig;
@@ -90,8 +91,8 @@ fn push_combo(
 pub(crate) fn widget_has_settings(type_id: &str) -> bool {
     matches!(
         type_id,
-        "weather" | "moon" | "clock" | "system" | "processes" | "calculator" | "notes" | "rss"
-            | "file-manager"
+        "weather" | "moon" | "jyotish" | "clock" | "system" | "processes" | "calculator" | "notes"
+            | "rss" | "file-manager"
     )
 }
 
@@ -108,6 +109,9 @@ pub(crate) fn build_widget_settings_fields(
             .unwrap_or_default(),
         "moon" => orchid_widgets::builtin::moon::current_config(instance_id)
             .map(|cfg| moon_fields(&cfg, locale))
+            .unwrap_or_default(),
+        "jyotish" => orchid_widgets::builtin::jyotish::current_config(instance_id)
+            .map(|cfg| jyotish_fields(&cfg, locale))
             .unwrap_or_default(),
         "clock" => orchid_widgets::builtin::clock::current_config(instance_id)
             .map(|cfg| clock_fields(&cfg, locale))
@@ -555,6 +559,7 @@ pub(crate) async fn apply_widget_setting(type_id: &str, instance_id: Uuid, key: 
     match type_id {
         "weather" => apply_weather(instance_id, key, value),
         "moon" => apply_moon(instance_id, key, value),
+        "jyotish" => apply_jyotish(instance_id, key, value),
         "clock" => apply_clock(instance_id, key, value),
         "system" => apply_system(instance_id, key, value),
         "processes" => apply_processes(instance_id, key, value),
@@ -627,6 +632,92 @@ fn apply_moon(instance_id: Uuid, key: &str, value: &str) {
         "show_libration" => {
             if let Some(b) = parse_bool(value) {
                 cfg.show_libration = b;
+            }
+        }
+        _ => {}
+    });
+}
+
+fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_text(
+        &mut rows,
+        locale,
+        "location_name",
+        "widget-settings.jyotish.location-name",
+        cfg.location_name.clone(),
+    );
+    push_text(
+        &mut rows,
+        locale,
+        "latitude",
+        "widget-settings.jyotish.latitude",
+        format!("{:.4}", cfg.latitude),
+    );
+    push_text(
+        &mut rows,
+        locale,
+        "longitude",
+        "widget-settings.jyotish.longitude",
+        format!("{:.4}", cfg.longitude),
+    );
+    push_combo(
+        &mut rows,
+        locale,
+        "ayanamsa",
+        "widget-settings.jyotish.ayanamsa",
+        &[
+            (
+                "lahiri".into(),
+                locale.tr("jyotish-ayanamsa-lahiri").into(),
+            ),
+            (
+                "krishnamurti".into(),
+                locale.tr("jyotish-ayanamsa-krishnamurti").into(),
+            ),
+            ("raman".into(), locale.tr("jyotish-ayanamsa-raman").into()),
+        ],
+        cfg.ayanamsa.as_str(),
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_planets",
+        "widget-settings.jyotish.show-planets",
+        cfg.show_planets,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_sunrise_sunset",
+        "widget-settings.jyotish.show-sunrise-sunset",
+        cfg.show_sunrise_sunset,
+    );
+    rows
+}
+
+fn apply_jyotish(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::jyotish::update_config(instance_id, |cfg| match key {
+        "location_name" => cfg.location_name = value.to_string(),
+        "latitude" => {
+            if let Ok(n) = value.parse::<f64>() {
+                cfg.latitude = n.clamp(-90.0, 90.0);
+            }
+        }
+        "longitude" => {
+            if let Ok(n) = value.parse::<f64>() {
+                cfg.longitude = n.clamp(-180.0, 180.0);
+            }
+        }
+        "ayanamsa" => cfg.ayanamsa = AyanamsaSystem::from_str_value(value),
+        "show_planets" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_planets = b;
+            }
+        }
+        "show_sunrise_sunset" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_sunrise_sunset = b;
             }
         }
         _ => {}

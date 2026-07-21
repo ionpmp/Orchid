@@ -56,6 +56,9 @@ export component WorkspaceView inherits Rectangle {
     callback weather-add-city(string, string, float, float, string);
     callback weather-use-my-location(string);
     callback weather-select-day(string, int);
+    callback jyotish-prev-day(string);
+    callback jyotish-next-day(string);
+    callback jyotish-go-today(string);
     callback clock-open-cities(string);
     callback clock-close-cities(string);
     callback clock-remove-city(string, int);
@@ -352,6 +355,9 @@ export component WorkspaceView inherits Rectangle {
                     }
                     weather-use-my-location(id) => { root.weather-use-my-location(id); }
                     weather-select-day(id, idx) => { root.weather-select-day(id, idx); }
+                    jyotish-prev-day(id) => { root.jyotish-prev-day(id); }
+                    jyotish-next-day(id) => { root.jyotish-next-day(id); }
+                    jyotish-go-today(id) => { root.jyotish-go-today(id); }
                     clock-open-cities(id) => { root.clock-open-cities(id); }
                     clock-close-cities(id) => { root.clock-close-cities(id); }
                     clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }

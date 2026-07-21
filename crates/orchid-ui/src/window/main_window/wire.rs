@@ -603,6 +603,31 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_jyotish_prev_day({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_prev_day(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_next_day({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_next_day(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_go_today({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_go_today(&id);
+                }
+            }
+        });
+
         self.window.on_clock_open_cities({
             let t = t.clone();
             move |id| {

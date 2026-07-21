@@ -13,6 +13,7 @@ pub mod clock;
 pub mod calculator;
 pub mod notes;
 pub mod file_manager;
+pub mod jyotish;
 pub mod media;
 pub mod moon;
 pub mod password;
@@ -40,6 +41,7 @@ use crate::registry::WidgetRegistry;
 pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result<()> {
     registry.register(weather::descriptor(http.clone()))?;
     registry.register(moon::descriptor())?;
+    registry.register(jyotish::descriptor())?;
     registry.register(clock::descriptor(http.clone()))?;
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
@@ -67,6 +69,7 @@ pub fn register_all(
 ) -> Result<()> {
     registry.register(weather::descriptor(http.clone()))?;
     registry.register(moon::descriptor())?;
+    registry.register(jyotish::descriptor())?;
     registry.register(clock::descriptor(http.clone()))?;
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;

@@ -253,6 +253,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
+                            type-id: "jyotish"; glyph: "*"; label: Strings.dock-widget-jyotish;
+                            description: Strings.widget-jyotish-desc;
+                            card-visible: WidgetCatalog.show-jyotish;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
                             type-id: "clock"; glyph: "C"; label: Strings.dock-widget-clock;
                             description: Strings.widget-clock-desc;
                             card-visible: WidgetCatalog.show-clock;
@@ -371,6 +377,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
                             description: Strings.widget-moon-desc;
                             card-visible: WidgetCatalog.show-moon;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "jyotish"; glyph: "*"; label: Strings.dock-widget-jyotish;
+                            description: Strings.widget-jyotish-desc;
+                            card-visible: WidgetCatalog.show-jyotish;
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
@@ -540,6 +552,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
                             description: Strings.widget-moon-desc;
                             card-visible: WidgetCatalog.show-moon;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "jyotish"; glyph: "*"; label: Strings.dock-widget-jyotish;
+                            description: Strings.widget-jyotish-desc;
+                            card-visible: WidgetCatalog.show-jyotish;
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {

@@ -7,6 +7,7 @@ import { TerminalSplitView } from "../widgets/terminal/terminal-split-view.slint
 import { GroupTabs } from "group-tabs.slint";
 import { WeatherView } from "../widgets/weather.slint";
 import { MoonView } from "../widgets/moon.slint";
+import { JyotishView } from "../widgets/jyotish.slint";
 import { ClockView } from "../widgets/clock.slint";
 import { SystemView } from "../widgets/system.slint";
 import { ProcessesView } from "../widgets/processes.slint";
@@ -71,6 +72,11 @@ export component WidgetFrame inherits Rectangle {
     callback weather-add-city(string, string, float, float, string);
     callback weather-use-my-location(string);
     callback weather-select-day(string, int);
+
+    // Jyotish
+    callback jyotish-prev-day(string);
+    callback jyotish-next-day(string);
+    callback jyotish-go-today(string);
 
     // Clock
     callback clock-open-cities(string);
@@ -523,6 +529,15 @@ export component WidgetFrame inherits Rectangle {
                     width: parent.width;
                     height: parent.height;
                     model: root.model.moon;
+                }
+
+                if model.type-id == "jyotish" : JyotishView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.jyotish;
+                    prev-day => { root.jyotish-prev-day(root.model.instance-id); }
+                    next-day => { root.jyotish-next-day(root.model.instance-id); }
+                    go-today => { root.jyotish-go-today(root.model.instance-id); }
                 }
 
                 if model.type-id == "clock" : ClockView {

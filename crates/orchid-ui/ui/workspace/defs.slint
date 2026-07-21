@@ -142,6 +142,37 @@ export struct MoonModel {
     values: [MoonValueEntry],
 }
 
+export struct JyotishPanchangaRow {
+    label: string,
+    value: string,
+}
+
+export struct JyotishPlanetEntry {
+    graha: string,
+    rashi: string,
+    degree-text: string,
+    is-retrograde: bool,
+}
+
+export struct JyotishModel {
+    date-text: string,
+    location-name: string,
+    vara-label: string,
+    ayanamsa-label: string,
+    loading-label: string,
+    today-label: string,
+    planets-title: string,
+    sunrise-label: string,
+    sunset-label: string,
+    sunrise-text: string,
+    sunset-text: string,
+    is-today: bool,
+    is-loading: bool,
+    show-planets: bool,
+    panchanga: [JyotishPanchangaRow],
+    planets: [JyotishPlanetEntry],
+}
+
 export struct ClockCityEntry {
     name: string,
     timezone: string,
@@ -859,6 +890,7 @@ export struct WidgetFrameModel {
 
     weather: WeatherModel,
     moon: MoonModel,
+    jyotish: JyotishModel,
     clock: ClockModel,
     system: SystemModel,
     processes: ProcessesModel,

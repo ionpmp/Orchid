@@ -9,6 +9,7 @@ pub mod calculator;
 pub mod clock;
 pub mod notes;
 pub mod file_manager;
+pub mod jyotish;
 pub mod media;
 pub mod moon;
 pub mod password;
@@ -27,6 +28,7 @@ pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
     PanePayload, TabPayload,
 };
+pub use jyotish::{JyotishPayload, JyotishPlanetRow};
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
 pub use password::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload};

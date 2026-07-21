@@ -98,7 +98,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Onboarding tour, hint mode — four-step first-run overlay; `Win+?` hint overlays; persisted `[onboarding]` config
 
 ### Additional
-- [ ] Jyotish module (optional, not in default widgets)
+- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog)
 
 ## v1.x — 9–18 months
 

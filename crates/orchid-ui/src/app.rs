@@ -224,6 +224,9 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::moon::descriptor())
             .map_err(|e| UiError::Slint(format!("register moon: {e}")))?;
         widget_registry
+            .register(orchid_widgets::builtin::jyotish::descriptor())
+            .map_err(|e| UiError::Slint(format!("register jyotish: {e}")))?;
+        widget_registry
             .register(orchid_widgets::builtin::clock::descriptor(http.clone()))
             .map_err(|e| UiError::Slint(format!("register clock: {e}")))?;
         widget_registry

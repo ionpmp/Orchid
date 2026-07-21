@@ -15,7 +15,8 @@
 use std::collections::HashMap;
 
 use orchid_widgets::{
-    FileManagerPayload, MediaPlayerPayload, MoonPayload, PasswordManagerPayload, RssPayload,
+    FileManagerPayload, JyotishPayload, MediaPlayerPayload, MoonPayload, PasswordManagerPayload,
+    RssPayload,
     SystemPayload, UniversalSearchPayload, ViewerPayload, WeatherPayload, WidgetPayload,
     WidgetSnapshot,
 };
@@ -95,6 +96,7 @@ impl SlintPayload {
             },
             WidgetPayload::Weather(p) => Self::Text(weather_to_text_lines(p)),
             WidgetPayload::Moon(p) => Self::Text(moon_to_text_lines(p)),
+            WidgetPayload::Jyotish(p) => Self::Text(jyotish_to_text_lines(p)),
             WidgetPayload::Clock(p) => Self::Text(clock_to_text_lines(p)),
             WidgetPayload::SystemIndicators(p) => Self::Text(system_to_text_lines(p)),
             WidgetPayload::Processes(p) => Self::Text(processes_to_text_lines(p)),
@@ -163,6 +165,32 @@ fn clock_to_text_lines(p: &orchid_widgets::ClockPayload) -> Vec<String> {
     let mut lines = vec![format!("{} {}", p.local_time, p.local_date)];
     for city in p.cities.iter().filter(|c| !c.is_local) {
         lines.push(format!("{}  {}", city.name, city.time_text));
+    }
+    lines
+}
+
+fn jyotish_to_text_lines(p: &JyotishPayload) -> Vec<String> {
+    if p.is_loading {
+        return vec!["Loading…".into()];
+    }
+    let mut lines = vec![
+        p.date_text.clone(),
+        p.location_name.clone(),
+        p.vara_key.to_string(),
+        format!("{} ({})", p.tithi_key, p.paksha_key),
+        format!("{} pada {}", p.nakshatra_key, p.pada),
+        p.yoga_key.to_string(),
+        p.karana_key.to_string(),
+    ];
+    if let Some(ref t) = p.sunrise_time {
+        lines.push(format!("Sunrise {t}"));
+    }
+    if let Some(ref t) = p.sunset_time {
+        lines.push(format!("Sunset {t}"));
+    }
+    for g in &p.planets {
+        let r = if g.is_retrograde { " R" } else { "" };
+        lines.push(format!("{} {} {}{r}", g.graha_key, g.rashi_key, g.degree_text));
     }
     lines
 }
