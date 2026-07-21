@@ -860,16 +860,16 @@ notes-clear = Leeren
 notes-autosave = Automatisch gespeichert
 notes-stats = { $chars } Zeichen · { $words } Wörter · { $lines } Zeilen
 notes-font-size = { $size } pt
-notes-tip-new-tab = New tab (Ctrl+T)
-notes-tip-wrap = Toggle word wrap
-notes-tip-mono = Toggle monospace font
-notes-tip-zoom-in = Increase font size (Ctrl+=)
-notes-tip-zoom-out = Decrease font size (Ctrl+-)
-notes-tip-find = Find (Ctrl+F)
-notes-tip-find-next = Find next
-notes-tip-find-prev = Find previous
-notes-tip-find-close = Close find
-notes-tip-clear = Clear this note
+notes-tip-new-tab = Neuer Tab (Ctrl+T)
+notes-tip-wrap = Zeilenumbruch umschalten
+notes-tip-mono = Festbreitenschrift umschalten
+notes-tip-zoom-in = Schrift vergrößern (Ctrl+=)
+notes-tip-zoom-out = Schrift verkleinern (Ctrl+-)
+notes-tip-find = Suchen (Ctrl+F)
+notes-tip-find-next = Weitersuchen
+notes-tip-find-prev = Rückwärts suchen
+notes-tip-find-close = Suche schließen
+notes-tip-clear = Diese Notiz leeren
 notes-settings-wrap = Zeilenumbruch
 notes-settings-mono = Festbreitenschrift
 notes-settings-status-bar = Statusleiste anzeigen

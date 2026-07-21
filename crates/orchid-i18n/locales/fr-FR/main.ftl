@@ -859,16 +859,16 @@ notes-clear = Effacer
 notes-autosave = Enregistré automatiquement
 notes-stats = { $chars } car. · { $words } mots · { $lines } lignes
 notes-font-size = { $size } pt
-notes-tip-new-tab = New tab (Ctrl+T)
-notes-tip-wrap = Toggle word wrap
-notes-tip-mono = Toggle monospace font
-notes-tip-zoom-in = Increase font size (Ctrl+=)
-notes-tip-zoom-out = Decrease font size (Ctrl+-)
-notes-tip-find = Find (Ctrl+F)
-notes-tip-find-next = Find next
-notes-tip-find-prev = Find previous
-notes-tip-find-close = Close find
-notes-tip-clear = Clear this note
+notes-tip-new-tab = Nouvel onglet (Ctrl+T)
+notes-tip-wrap = Activer/désactiver le retour à la ligne
+notes-tip-mono = Activer/désactiver la police monospace
+notes-tip-zoom-in = Augmenter la taille de police (Ctrl+=)
+notes-tip-zoom-out = Diminuer la taille de police (Ctrl+-)
+notes-tip-find = Rechercher (Ctrl+F)
+notes-tip-find-next = Occurrence suivante
+notes-tip-find-prev = Occurrence précédente
+notes-tip-find-close = Fermer la recherche
+notes-tip-clear = Effacer cette note
 notes-settings-wrap = Retour à la ligne
 notes-settings-mono = Police monospace
 notes-settings-status-bar = Afficher la barre d’état
