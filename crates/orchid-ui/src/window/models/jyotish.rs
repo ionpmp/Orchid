@@ -5,7 +5,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use crate::slint_generated::{
     JyotishAntarRowModel, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
-    JyotishRectifyModel, JyotishYearRowModel,
+    JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishYearRowModel,
 };
 
 const WEEKDAY_KEYS: [&str; 7] = [
@@ -341,13 +341,23 @@ pub(crate) fn build_jyotish_model(
         dasha_pratyantar_text: dasha_line(p.dasha_now.pratyantar_key, &p.dasha_now.pratyantar_range),
         has_birth_data: p.has_birth_data,
         birth_prompt: locale.tr("jyotish-birth-prompt").into(),
-        rectify_button_label: locale.tr("jyotish-rectify-button").into(),
+        rectify_button_label: rectify_button_label(locale, p.rectify.has_draft),
         legend_green: locale.tr("jyotish-legend-green").into(),
         legend_yellow: locale.tr("jyotish-legend-yellow").into(),
         legend_red: locale.tr("jyotish-legend-red").into(),
         weekday_headers: ModelRc::new(VecModel::from(weekday_headers(locale))),
         rectify: build_rectify_model(&p.rectify, locale),
     }
+}
+
+fn rectify_button_label(locale: &LocaleManager, has_draft: bool) -> SharedString {
+    locale
+        .tr(if has_draft {
+            "jyotish-rectify-resume"
+        } else {
+            "jyotish-rectify-button"
+        })
+        .into()
 }
 
 fn tab_labels(locale: &LocaleManager) -> Vec<SharedString> {
@@ -393,17 +403,56 @@ fn build_rectify_model(
         .iter()
         .map(|k| SharedString::from(locale.tr(k)))
         .collect();
-    let candidates: Vec<SharedString> = rectify
+    let candidates: Vec<JyotishRectifyCandidateModel> = rectify
         .candidates
         .iter()
-        .map(|(range, rashi_key, pct)| {
-            SharedString::from(format!("{}  {}  {}%", range, locale.tr(rashi_key), pct))
+        .map(|c| {
+            let breakdown = locale.tr_args(
+                "jyotish-rectify-breakdown",
+                &orchid_i18n::FluentArgs::new()
+                    .with("quiz", c.quiz_score.to_string())
+                    .with("events", c.event_score.to_string())
+                    .with("total", c.total_score.to_string()),
+            );
+            JyotishRectifyCandidateModel {
+                range: c.range.clone().into(),
+                rashi: locale.tr(c.rashi_key).into(),
+                confidence: i32::from(c.confidence_pct),
+                quiz_score: i32::from(c.quiz_score),
+                event_score: i32::from(c.event_score),
+                total_score: i32::from(c.total_score),
+                breakdown: breakdown.into(),
+                is_top: c.is_top,
+            }
         })
         .collect();
     let window_labels: Vec<SharedString> = WINDOW_KEYS
         .iter()
         .map(|k| SharedString::from(locale.tr(k)))
         .collect();
+
+    let step_title_key = match rectify.step {
+        1 => "jyotish-rectify-step-window",
+        2 => "jyotish-rectify-step-quiz",
+        3 => "jyotish-rectify-step-events",
+        4 => "jyotish-rectify-step-results",
+        _ => "",
+    };
+    let progress_text = if rectify.step == 0 {
+        String::new()
+    } else {
+        locale.tr_args(
+            "jyotish-rectify-progress",
+            &orchid_i18n::FluentArgs::new()
+                .with("n", rectify.step.to_string())
+                .with("total", "4"),
+        )
+    };
+    let error_text = if rectify.error_key.is_empty() {
+        String::new()
+    } else {
+        locale.tr(rectify.error_key)
+    };
 
     JyotishRectifyModel {
         step: i32::from(rectify.step),
@@ -418,8 +467,22 @@ fn build_rectify_model(
         next_label: locale.tr("jyotish-rectify-next").into(),
         cancel_label: locale.tr("jyotish-rectify-cancel").into(),
         accept_label: locale.tr("jyotish-rectify-accept").into(),
+        back_label: locale.tr("jyotish-rectify-back").into(),
+        refine_label: locale.tr("jyotish-rectify-refine").into(),
         window_labels: ModelRc::new(VecModel::from(window_labels)),
         add_event_label: locale.tr("jyotish-rectify-add-event").into(),
         year_placeholder: locale.tr("jyotish-rectify-year").into(),
+        progress_text: progress_text.into(),
+        step_title: if step_title_key.is_empty() {
+            SharedString::new()
+        } else {
+            locale.tr(step_title_key).into()
+        },
+        error_text: error_text.into(),
+        can_go_back: rectify.can_go_back || rectify.step > 1,
+        can_refine: rectify.can_refine,
+        has_draft: rectify.has_draft,
+        event_year_min: rectify.event_year_min,
+        event_year_max: rectify.event_year_max,
     }
 }

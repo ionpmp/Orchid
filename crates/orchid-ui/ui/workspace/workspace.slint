@@ -72,6 +72,8 @@ export component WorkspaceView inherits Rectangle {
     callback jyotish-rectify-add-event(string, int, int);
     callback jyotish-rectify-remove-event(string, int);
     callback jyotish-rectify-next(string);
+    callback jyotish-rectify-back(string);
+    callback jyotish-rectify-refine(string);
     callback jyotish-rectify-accept(string);
     callback jyotish-rectify-cancel(string);
     callback clock-open-cities(string);
@@ -405,6 +407,8 @@ export component WorkspaceView inherits Rectangle {
                     jyotish-rectify-add-event(id, k, y) => { root.jyotish-rectify-add-event(id, k, y); }
                     jyotish-rectify-remove-event(id, i) => { root.jyotish-rectify-remove-event(id, i); }
                     jyotish-rectify-next(id) => { root.jyotish-rectify-next(id); }
+                    jyotish-rectify-back(id) => { root.jyotish-rectify-back(id); }
+                    jyotish-rectify-refine(id) => { root.jyotish-rectify-refine(id); }
                     jyotish-rectify-accept(id) => { root.jyotish-rectify-accept(id); }
                     jyotish-rectify-cancel(id) => { root.jyotish-rectify-cancel(id); }
                     clock-open-cities(id) => { root.clock-open-cities(id); }

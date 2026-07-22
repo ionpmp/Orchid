@@ -201,6 +201,17 @@ export struct JyotishAntarRowModel {
     is-current: bool,
 }
 
+export struct JyotishRectifyCandidateModel {
+    range: string,
+    rashi: string,
+    confidence: int,
+    quiz-score: int,
+    event-score: int,
+    total-score: int,
+    breakdown: string,
+    is-top: bool,
+}
+
 export struct JyotishRectifyModel {
     step: int,
     question-idx: int,
@@ -209,14 +220,24 @@ export struct JyotishRectifyModel {
     options: [string],
     events: [string],
     event-kinds: [string],
-    candidates: [string],
+    candidates: [JyotishRectifyCandidateModel],
     title: string,
     next-label: string,
     cancel-label: string,
     accept-label: string,
+    back-label: string,
+    refine-label: string,
     window-labels: [string],
     add-event-label: string,
     year-placeholder: string,
+    progress-text: string,
+    step-title: string,
+    error-text: string,
+    can-go-back: bool,
+    can-refine: bool,
+    has-draft: bool,
+    event-year-min: int,
+    event-year-max: int,
 }
 
 export struct JyotishModel {

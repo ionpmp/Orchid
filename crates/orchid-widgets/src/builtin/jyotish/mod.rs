@@ -26,7 +26,8 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
     JyotishAntarRow, JyotishDashaNow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
-    JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishRectifyView, JyotishYearSummary,
+    JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishRectifyCandidate,
+    JyotishRectifyView, JyotishYearSummary,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -551,8 +552,12 @@ impl JyotishHandle {
     }
 
     fn rectify_start(&self) {
-        *self.rectify.write() = None;
-        *self.rectify_wizard_step.write() = 1;
+        // Resume a draft session when present; otherwise open the window picker.
+        if let Some(session) = self.rectify.read().as_ref() {
+            *self.rectify_wizard_step.write() = session.step.max(1);
+        } else {
+            *self.rectify_wizard_step.write() = 1;
+        }
         self.publish();
     }
 
@@ -590,6 +595,7 @@ impl JyotishHandle {
     fn rectify_answer(&self, question_idx: usize, option_idx: usize) {
         if let Some(session) = self.rectify.write().as_mut() {
             session.answer(question_idx, option_idx);
+            *self.rectify_wizard_step.write() = session.step;
         }
         self.publish();
     }
@@ -597,7 +603,7 @@ impl JyotishHandle {
     fn rectify_add_event(&self, kind_idx: usize, year: i32) {
         if let Some(kind) = EventKind::all().get(kind_idx).copied() {
             if let Some(session) = self.rectify.write().as_mut() {
-                session.add_event(LifeEvent { kind, year });
+                let _ = session.add_event(LifeEvent { kind, year });
             }
         }
         self.publish();
@@ -623,6 +629,37 @@ impl JyotishHandle {
         self.publish();
     }
 
+    fn rectify_back(&self) {
+        let wizard = *self.rectify_wizard_step.read();
+        if wizard <= 1 {
+            // Close UI but keep draft (does not touch birth fields).
+            *self.rectify_wizard_step.write() = 0;
+            self.publish();
+            return;
+        }
+        let leave_to_window = self
+            .rectify
+            .write()
+            .as_mut()
+            .map(RectifySession::back)
+            .unwrap_or(false);
+        if leave_to_window {
+            *self.rectify_wizard_step.write() = 1;
+        } else if let Some(session) = self.rectify.read().as_ref() {
+            *self.rectify_wizard_step.write() = session.step;
+        }
+        self.publish();
+    }
+
+    fn rectify_refine(&self) {
+        if let Some(session) = self.rectify.write().as_mut() {
+            if session.refine_around_best(30) {
+                *self.rectify_wizard_step.write() = 4;
+            }
+        }
+        self.publish();
+    }
+
     fn rectify_accept(&self) {
         let best = self
             .rectify
@@ -641,6 +678,12 @@ impl JyotishHandle {
     }
 
     fn rectify_cancel(&self) {
+        // Close the overlay; keep the session as a draft. Birth fields untouched.
+        *self.rectify_wizard_step.write() = 0;
+        self.publish();
+    }
+
+    fn rectify_discard_draft(&self) {
         *self.rectify.write() = None;
         *self.rectify_wizard_step.write() = 0;
         self.publish();
@@ -772,13 +815,16 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 
 fn build_rectify_view(wizard_step: u8, session: Option<&RectifySession>) -> JyotishRectifyView {
     let mut view = JyotishRectifyView::default();
+    view.has_draft = session.is_some() && wizard_step == 0;
     if wizard_step == 0 {
         return view;
     }
     view.event_kind_keys = EventKind::all().iter().map(|k| k.ftl_key()).collect();
+    let max_year = Utc::now().date_naive().year() + 1;
     match session {
         Some(session) => {
-            view.step = session.step;
+            // Window picker can be revisited while a session draft exists.
+            view.step = if wizard_step == 1 { 1 } else { session.step };
             view.question_idx = session.question_idx;
             view.question_total = RectifySession::question_count() as u8;
             let qi = usize::from(session.question_idx);
@@ -791,22 +837,40 @@ fn build_rectify_view(wizard_step: u8, session: Option<&RectifySession>) -> Jyot
                 .iter()
                 .map(|e| (e.kind.ftl_key(), e.year))
                 .collect();
-            if session.step >= 4 {
-                view.candidates = session
-                    .results()
+            view.error_key = session.last_error_key.unwrap_or("");
+            view.event_year_min = session.birth_year();
+            view.event_year_max = max_year;
+            view.can_go_back = wizard_step > 1
+                || session.step > 2
+                || (session.step == 2 && session.question_idx > 0);
+            if view.step >= 4 {
+                let ranked = session.top_results();
+                view.can_refine = ranked.len() > 1
+                    || ranked
+                        .first()
+                        .is_some_and(|c| c.to_minute.saturating_sub(c.from_minute) > 20);
+                view.candidates = ranked
                     .into_iter()
-                    .map(|c| {
-                        (
-                            RectifySession::format_range(c.from_minute, c.to_minute),
-                            RectifySession::candidate_rashi_key(c.lagna_rashi),
-                            c.confidence_pct,
-                        )
+                    .enumerate()
+                    .map(|(i, c)| {
+                        let total = c.quiz_score * 2 + c.event_score * 3;
+                        JyotishRectifyCandidate {
+                            range: RectifySession::format_range(c.from_minute, c.to_minute),
+                            rashi_key: RectifySession::candidate_rashi_key(c.lagna_rashi),
+                            confidence_pct: c.confidence_pct,
+                            quiz_score: c.quiz_score,
+                            event_score: c.event_score,
+                            total_score: total,
+                            is_top: i == 0,
+                        }
                     })
                     .collect();
             }
         }
         None => {
             view.step = 1;
+            view.can_go_back = false;
+            view.event_year_max = max_year;
         }
     }
     view
@@ -829,6 +893,18 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut JyotishConfig))
         let mut cfg = h.config.write();
         mutate(&mut cfg);
         cfg.normalize();
+    }
+    // Keep an open rectify draft aligned with the current place / ayanamsa.
+    {
+        let cfg = h.config.read().clone();
+        if let Some(session) = h.rectify.write().as_mut() {
+            session.resync_place(
+                cfg.latitude,
+                cfg.longitude,
+                cfg.birth_utc_offset_minutes,
+                cfg.ayanamsa,
+            );
+        }
     }
     h.recalculate();
     h.publish();
@@ -947,6 +1023,20 @@ pub fn rectify_next_step(instance_id: Uuid) {
     }
 }
 
+/// Step backward in the rectification wizard.
+pub fn rectify_back(instance_id: Uuid) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.rectify_back();
+    }
+}
+
+/// Narrow the candidate window around the current top result.
+pub fn rectify_refine(instance_id: Uuid) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.rectify_refine();
+    }
+}
+
 /// Accept the top-ranked candidate as the rectified birth time.
 pub fn rectify_accept(instance_id: Uuid) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
@@ -954,10 +1044,17 @@ pub fn rectify_accept(instance_id: Uuid) {
     }
 }
 
-/// Cancel the rectification wizard without changing the birth time.
+/// Close the rectification overlay, keeping a draft session.
 pub fn rectify_cancel(instance_id: Uuid) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
         h.rectify_cancel();
+    }
+}
+
+/// Discard a draft rectification session entirely.
+pub fn rectify_discard_draft(instance_id: Uuid) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.rectify_discard_draft();
     }
 }
 

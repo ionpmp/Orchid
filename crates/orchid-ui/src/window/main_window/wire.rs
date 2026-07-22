@@ -732,6 +732,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_jyotish_rectify_back({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_back(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_refine({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_refine(&id);
+                }
+            }
+        });
         self.window.on_jyotish_rectify_accept({
             let t = t.clone();
             move |id| {

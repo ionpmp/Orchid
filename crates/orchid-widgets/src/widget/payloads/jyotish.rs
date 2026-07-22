@@ -99,6 +99,19 @@ pub struct JyotishAntarRow {
     pub is_current: bool,
 }
 
+/// One ranked birth-time candidate for the rectify results step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishRectifyCandidate {
+    pub range: String,
+    pub rashi_key: &'static str,
+    pub confidence_pct: u8,
+    pub quiz_score: i32,
+    pub event_score: i32,
+    pub total_score: i32,
+    pub is_top: bool,
+}
+
 /// Rectification wizard state for the UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -112,8 +125,17 @@ pub struct JyotishRectifyView {
     /// (kind ftl key, year).
     pub events: Vec<(&'static str, i32)>,
     pub event_kind_keys: Vec<&'static str>,
-    /// (time range, rashi key, confidence pct).
-    pub candidates: Vec<(String, &'static str, u8)>,
+    pub candidates: Vec<JyotishRectifyCandidate>,
+    /// Wizard can navigate backward.
+    pub can_go_back: bool,
+    /// Closed UI still has a resumable draft session.
+    pub has_draft: bool,
+    /// Fluent key for the last event validation error (empty if none).
+    pub error_key: &'static str,
+    /// Show “narrow around best” on results.
+    pub can_refine: bool,
+    pub event_year_min: i32,
+    pub event_year_max: i32,
 }
 
 impl Default for JyotishRectifyView {
@@ -127,6 +149,12 @@ impl Default for JyotishRectifyView {
             events: Vec::new(),
             event_kind_keys: Vec::new(),
             candidates: Vec::new(),
+            can_go_back: false,
+            has_draft: false,
+            error_key: "",
+            can_refine: false,
+            event_year_min: 1900,
+            event_year_max: 2100,
         }
     }
 }

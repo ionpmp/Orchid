@@ -56,6 +56,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: System indicators
 - [x] Widget: Processes — Task Manager–style processes / services / startup / users (no Performance graphs)
 - [x] Widget: Calculator — standard + scientific modes, history, memory, DEG/RAD/GRAD, keyboard input
+- [x] Widget: Notes — tabbed local scratchpad with wrap/mono/font settings and find
+- [x] Widget: Calendar — local month grid + day agenda CRUD, upcoming strip, settings, universal search
 - [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [x] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [x] Widget: Media player (audio/video)
@@ -98,7 +100,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Onboarding tour, hint mode — four-step first-run overlay; `Win+?` hint overlays; persisted `[onboarding]` config
 
 ### Additional
-- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog) + personal day scores, monthly/yearly forecast, life retrospective, birth-time rectification; Phase A trust layer (limb end-times, now/day scores, Rahu/Yama/Gulika, golden fixtures, disclaimer); Phase B score transparency (factor deltas/strength, narrative modes, anti-repeat advice); Phase C dashas/life (pratyantar + now strip, year→antar expand, gochara soft tint, rectify maha/antar/pratyantar scoring)
+- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog) + personal day scores, monthly/yearly forecast, life retrospective, birth-time rectification; Phase A trust layer (limb end-times, now/day scores, Rahu/Yama/Gulika, golden fixtures, disclaimer); Phase B score transparency (factor deltas/strength, narrative modes, anti-repeat advice); Phase C dashas/life (pratyantar + now strip, year→antar expand, gochara soft tint, rectify maha/antar/pratyantar scoring); Phase D usable rectify wizard (progress/back/draft, event validation, top-N score breakdown, refine pass, place resync)
 
 ## v1.x — 9–18 months
 

@@ -1,6 +1,6 @@
 //! Birth-time rectification: lagna quiz + life-event Vimshottari scoring.
 
-use chrono::{Duration, NaiveDate, NaiveTime};
+use chrono::{Datelike, Duration, NaiveDate, NaiveTime, Utc};
 
 use super::astro::{ascendant_sidereal, julian_day, rashi_ftl_key};
 use super::config::AyanamsaSystem;
@@ -92,26 +92,30 @@ pub struct Candidate {
     pub confidence_pct: u8,
 }
 
+/// Maximum candidates surfaced in the results step.
+pub const TOP_CANDIDATES: usize = 5;
+
 /// Interactive rectification session.
 #[derive(Debug, Clone)]
 pub struct RectifySession {
     birth_date: NaiveDate,
-    /// Birth latitude (kept for session identity / future re-scan).
-    #[allow(dead_code)]
     lat: f64,
-    /// Birth longitude (kept for session identity / future re-scan).
-    #[allow(dead_code)]
     lon: f64,
     utc_offset_minutes: i32,
     ayanamsa: AyanamsaSystem,
+    /// Uncertainty window used to clip lagna intervals (`None` = full day).
+    approx_minute: Option<u16>,
+    window_half: Option<u16>,
     /// Candidate lagna intervals intersecting the uncertainty window.
     base_candidates: Vec<(u16, u16, u8)>,
     answers: [Option<usize>; 8],
     events: Vec<LifeEvent>,
-    /// Wizard step: 1=window chosen, 2=quiz, 3=events, 4=results.
+    /// Wizard step: 2=quiz, 3=events, 4=results (step 1 lives on the handle).
     pub step: u8,
     /// Current quiz question index (0..=7).
     pub question_idx: u8,
+    /// Last event-add validation error (Fluent key), if any.
+    pub last_error_key: Option<&'static str>,
 }
 
 /// Quiz option weights: (rashi, points).
@@ -264,24 +268,65 @@ impl RectifySession {
             }
             _ => (0u16, 24 * 60),
         };
-        let base_candidates: Vec<(u16, u16, u8)> = intervals
-            .into_iter()
-            .filter(|(from, to, _)| *to > win_lo && *from < win_hi)
-            .map(|(from, to, r)| (from.max(win_lo), to.min(win_hi), r))
-            .filter(|(from, to, _)| from < to)
-            .collect();
+        let base_candidates =
+            clip_intervals(&intervals, win_lo, win_hi);
         Self {
             birth_date,
             lat,
             lon,
             utc_offset_minutes,
             ayanamsa,
+            approx_minute,
+            window_half: window_minutes,
             base_candidates,
             answers: [None; 8],
             events: Vec::new(),
             step: 2,
             question_idx: 0,
+            last_error_key: None,
         }
+    }
+
+    fn rebuild_candidates(&mut self) {
+        let intervals =
+            lagna_intervals(self.birth_date, self.lat, self.lon, self.utc_offset_minutes, self.ayanamsa);
+        let (win_lo, win_hi) = match (self.approx_minute, self.window_half) {
+            (Some(mid), Some(half)) => {
+                let lo = mid.saturating_sub(half);
+                let hi = mid.saturating_add(half).min(24 * 60);
+                (lo, hi)
+            }
+            _ => (0u16, 24 * 60),
+        };
+        self.base_candidates = clip_intervals(&intervals, win_lo, win_hi);
+    }
+
+    /// Rebuild lagna intervals after birth place / ayanamsa changes.
+    pub fn resync_place(
+        &mut self,
+        lat: f64,
+        lon: f64,
+        utc_offset_minutes: i32,
+        ayanamsa: AyanamsaSystem,
+    ) {
+        self.lat = lat;
+        self.lon = lon;
+        self.utc_offset_minutes = utc_offset_minutes;
+        self.ayanamsa = ayanamsa;
+        self.rebuild_candidates();
+    }
+
+    /// Narrow the uncertainty window around the current best candidate.
+    pub fn refine_around_best(&mut self, half_minutes: u16) -> bool {
+        let Some(best) = self.results().into_iter().next() else {
+            return false;
+        };
+        let mid = (u32::from(best.from_minute) + u32::from(best.to_minute)) / 2;
+        self.approx_minute = Some(mid as u16);
+        self.window_half = Some(half_minutes.max(15).min(180));
+        self.rebuild_candidates();
+        self.step = 4;
+        true
     }
 
     /// Number of quiz questions.
@@ -316,9 +361,25 @@ impl RectifySession {
         }
     }
 
-    /// Add a life event.
-    pub fn add_event(&mut self, e: LifeEvent) {
+    /// Validate and add a life event. On failure sets [`Self::last_error_key`].
+    pub fn add_event(&mut self, e: LifeEvent) -> bool {
+        self.last_error_key = None;
+        let birth_year = self.birth_date.year();
+        let max_year = Utc::now().date_naive().year() + 1;
+        if e.year < birth_year || e.year > max_year {
+            self.last_error_key = Some("jyotish-rectify-err-year");
+            return false;
+        }
+        if self
+            .events
+            .iter()
+            .any(|x| x.kind == e.kind && x.year == e.year)
+        {
+            self.last_error_key = Some("jyotish-rectify-err-duplicate");
+            return false;
+        }
         self.events.push(e);
+        true
     }
 
     /// Remove a life event by index.
@@ -326,6 +387,7 @@ impl RectifySession {
         if idx < self.events.len() {
             self.events.remove(idx);
         }
+        self.last_error_key = None;
     }
 
     /// Events recorded so far.
@@ -334,12 +396,44 @@ impl RectifySession {
         &self.events
     }
 
+    /// Birth year for UI clamps.
+    #[must_use]
+    pub fn birth_year(&self) -> i32 {
+        self.birth_date.year()
+    }
+
     /// Advance from events step to results.
     pub fn next_step(&mut self) {
         if self.step == 3 {
             self.step = 4;
+            self.last_error_key = None;
         } else if self.step == 2 && self.question_idx >= 7 {
             self.step = 3;
+        }
+    }
+
+    /// Step backward through quiz / events / results.
+    ///
+    /// Returns `true` when the UI should leave the session and show the
+    /// window picker (step 1) again.
+    pub fn back(&mut self) -> bool {
+        self.last_error_key = None;
+        match self.step {
+            4 => {
+                self.step = 3;
+                false
+            }
+            3 => {
+                self.step = 2;
+                self.question_idx = 7;
+                false
+            }
+            2 if self.question_idx > 0 => {
+                self.question_idx -= 1;
+                false
+            }
+            2 => true,
+            _ => false,
         }
     }
 
@@ -386,6 +480,12 @@ impl RectifySession {
         scored.into_iter().map(|(_, c)| c).collect()
     }
 
+    /// Top-N ranked candidates for the results UI.
+    #[must_use]
+    pub fn top_results(&self) -> Vec<Candidate> {
+        self.results().into_iter().take(TOP_CANDIDATES).collect()
+    }
+
     /// Midpoint of the best interval as `"HH:MM"`.
     #[must_use]
     pub fn best_time_string(&self) -> Option<String> {
@@ -413,6 +513,20 @@ impl RectifySession {
     pub fn candidate_rashi_key(rashi: u8) -> &'static str {
         rashi_ftl_key(rashi)
     }
+}
+
+fn clip_intervals(
+    intervals: &[(u16, u16, u8)],
+    win_lo: u16,
+    win_hi: u16,
+) -> Vec<(u16, u16, u8)> {
+    intervals
+        .iter()
+        .copied()
+        .filter(|(from, to, _)| *to > win_lo && *from < win_hi)
+        .map(|(from, to, r)| (from.max(win_lo), to.min(win_hi), r))
+        .filter(|(from, to, _)| from < to)
+        .collect()
 }
 
 fn quiz_score_for(rashi: u8, answers: &[Option<usize>; 8]) -> i32 {
@@ -565,10 +679,10 @@ mod tests {
             dasha_at(0.0, birth, NaiveDate::from_ymd_opt(2005, 7, 1).unwrap()).expect("dasha");
         assert_eq!(maha, DashaLord::Venus);
         let mut s = RectifySession::new(birth, 0.0, 0.0, 0, AyanamsaSystem::Lahiri, None, None);
-        s.add_event(LifeEvent {
+        assert!(s.add_event(LifeEvent {
             kind: EventKind::Marriage,
             year: 2005,
-        });
+        }));
         // At least one candidate should get a non-zero event score if their
         // natal moon lands near Ashwini — not guaranteed for every lat/lon,
         // so just ensure the API runs and returns confidences summing ~100.
@@ -600,5 +714,55 @@ mod tests {
         assert_eq!(RectifySession::question_count(), 8);
         assert_eq!(RectifySession::question_key(0), "jyotish-rq-1");
         assert_eq!(RectifySession::option_keys(0).len(), 4);
+    }
+
+    #[test]
+    fn event_validation_rejects_bad_year_and_duplicates() {
+        let birth = NaiveDate::from_ymd_opt(1990, 1, 1).unwrap();
+        let mut s = RectifySession::new(birth, 0.0, 0.0, 0, AyanamsaSystem::Lahiri, None, None);
+        assert!(!s.add_event(LifeEvent {
+            kind: EventKind::Marriage,
+            year: 1980,
+        }));
+        assert_eq!(s.last_error_key, Some("jyotish-rectify-err-year"));
+        assert!(s.add_event(LifeEvent {
+            kind: EventKind::Marriage,
+            year: 2005,
+        }));
+        assert!(!s.add_event(LifeEvent {
+            kind: EventKind::Marriage,
+            year: 2005,
+        }));
+        assert_eq!(s.last_error_key, Some("jyotish-rectify-err-duplicate"));
+    }
+
+    #[test]
+    fn back_from_first_quiz_returns_to_window() {
+        let birth = NaiveDate::from_ymd_opt(1990, 6, 15).unwrap();
+        let mut s = RectifySession::new(
+            birth,
+            25.0,
+            83.0,
+            330,
+            AyanamsaSystem::Lahiri,
+            Some(720),
+            Some(120),
+        );
+        assert!(s.back(), "first quiz question should leave to window");
+        s.answer(0, 0);
+        assert!(!s.back());
+        assert_eq!(s.question_idx, 0);
+    }
+
+    #[test]
+    fn refine_around_best_narrows_window() {
+        let birth = NaiveDate::from_ymd_opt(1990, 6, 15).unwrap();
+        let mut s = RectifySession::new(birth, 25.0, 83.0, 330, AyanamsaSystem::Lahiri, None, None);
+        let before = s.base_candidates.len();
+        assert!(before > 1);
+        assert!(s.refine_around_best(30));
+        assert!(s.base_candidates.len() <= before);
+        assert_eq!(s.step, 4);
+        assert!(s.top_results().len() <= TOP_CANDIDATES);
     }
 }

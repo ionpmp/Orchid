@@ -152,6 +152,20 @@ impl MainWindowController {
         orchid_widgets::builtin::jyotish::rectify_next_step(inst);
     }
 
+    pub(super) fn on_jyotish_rectify_back(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::rectify_back(inst);
+    }
+
+    pub(super) fn on_jyotish_rectify_refine(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::rectify_refine(inst);
+    }
+
     pub(super) fn on_jyotish_rectify_accept(self: &Arc<Self>, id: &SharedString) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;

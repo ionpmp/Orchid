@@ -91,6 +91,8 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-rectify-add-event(string, int, int);
     callback jyotish-rectify-remove-event(string, int);
     callback jyotish-rectify-next(string);
+    callback jyotish-rectify-back(string);
+    callback jyotish-rectify-refine(string);
     callback jyotish-rectify-accept(string);
     callback jyotish-rectify-cancel(string);
 
@@ -588,6 +590,8 @@ export component WidgetFrame inherits Rectangle {
                     rectify-add-event(k, y) => { root.jyotish-rectify-add-event(root.model.instance-id, k, y); }
                     rectify-remove-event(i) => { root.jyotish-rectify-remove-event(root.model.instance-id, i); }
                     rectify-next => { root.jyotish-rectify-next(root.model.instance-id); }
+                    rectify-back => { root.jyotish-rectify-back(root.model.instance-id); }
+                    rectify-refine => { root.jyotish-rectify-refine(root.model.instance-id); }
                     rectify-accept => { root.jyotish-rectify-accept(root.model.instance-id); }
                     rectify-cancel => { root.jyotish-rectify-cancel(root.model.instance-id); }
                 }

@@ -105,6 +105,8 @@ export component JyotishView inherits Rectangle {
     callback rectify-add-event(int, int);
     callback rectify-remove-event(int);
     callback rectify-next();
+    callback rectify-back();
+    callback rectify-refine();
     callback rectify-accept();
     callback rectify-cancel();
 
@@ -888,10 +890,21 @@ export component JyotishView inherits Rectangle {
                         font-weight: Theme.weight-semibold;
                         horizontal-stretch: 1;
                     }
+                    if model.rectify.can-go-back : PillBtn {
+                        label: model.rectify.back-label;
+                        clicked => { root.rectify-back(); }
+                    }
                     PillBtn {
                         label: model.rectify.cancel-label;
                         clicked => { root.rectify-cancel(); }
                     }
+                }
+
+                if model.rectify.progress-text != "" : Text {
+                    text: model.rectify.progress-text + " · " + model.rectify.step-title;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
                 }
 
                 // Step 1: uncertainty window
@@ -971,6 +984,15 @@ export component JyotishView inherits Rectangle {
                         }
                     }
 
+
+                    if model.rectify.error-text != "" : Text {
+                        text: model.rectify.error-text;
+                        color: #ff3b30;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                    }
+
                     Rectangle {
                         height: 1px;
                         background: Theme.border-default;
@@ -990,7 +1012,7 @@ export component JyotishView inherits Rectangle {
                         alignment: center;
                         PillBtn {
                             label: "−";
-                            clicked => { root.draft-event-year = max(1, root.draft-event-year - 1); }
+                            clicked => { root.draft-event-year = max(model.rectify.event-year-min, root.draft-event-year - 1); }
                         }
                         Text {
                             text: model.rectify.year-placeholder + ": " + root.draft-event-year;
@@ -1000,7 +1022,7 @@ export component JyotishView inherits Rectangle {
                         }
                         PillBtn {
                             label: "+";
-                            clicked => { root.draft-event-year = root.draft-event-year + 1; }
+                            clicked => { root.draft-event-year = min(model.rectify.event-year-max, root.draft-event-year + 1); }
                         }
                         PillBtn {
                             label: model.rectify.add-event-label;
@@ -1029,16 +1051,30 @@ export component JyotishView inherits Rectangle {
 
                         cand-col := VerticalLayout {
                             width: parent.width;
-                            spacing: 2px;
-                            for c[ci] in model.rectify.candidates : Text {
-                                text: c;
-                                color: ci == 0 ? Theme.accent-brand : Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                font-weight: ci == 0 ? Theme.weight-semibold : Theme.weight-regular;
+                            spacing: 4px;
+                            for c[ci] in model.rectify.candidates : VerticalLayout {
+                                spacing: 1px;
+                                Text {
+                                    text: c.range + "  " + c.rashi + "  " + c.confidence + "%";
+                                    color: c.is-top ? Theme.accent-brand : Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: c.is-top ? Theme.weight-semibold : Theme.weight-regular;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: c.breakdown;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    wrap: word-wrap;
+                                }
                             }
                         }
                     }
 
+                    if model.rectify.can-refine : PillBtn {
+                        label: model.rectify.refine-label;
+                        clicked => { root.rectify-refine(); }
+                    }
                     PillBtn {
                         label: model.rectify.accept-label;
                         active: true;
