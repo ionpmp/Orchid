@@ -173,6 +173,7 @@ export struct JyotishMonthCellModel {
     day: int,
     color: int,
     is-today: bool,
+    is-selected: bool,
     offset: int,
 }
 
@@ -303,6 +304,8 @@ export struct JyotishModel {
     dasha-pratyantar-text: string,
     has-birth-data: bool,
     birth-prompt: string,
+    empty-location: string,
+    month-selected-hint: string,
     rectify-button-label: string,
     legend-green: string,
     legend-yellow: string,

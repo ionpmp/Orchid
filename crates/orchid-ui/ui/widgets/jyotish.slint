@@ -60,9 +60,9 @@ component PillBtn inherits Rectangle {
 
 component ColorDot inherits Rectangle {
     in property <int> color-code;
-    width: 6px;
-    height: 6px;
-    border-radius: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
     background: root.color-code == 0 ? #34c759 : root.color-code == 1 ? #ffcc00 : #ff3b30;
 }
 
@@ -171,6 +171,13 @@ export component JyotishView inherits Rectangle {
                             horizontal-alignment: center;
                             wrap: no-wrap;
                             overflow: elide;
+                        }
+                        if model.location-name == "" : Text {
+                            text: model.empty-location;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
                         }
                     }
 
@@ -605,12 +612,29 @@ export component JyotishView inherits Rectangle {
                     col: mod(j + model.month-first-weekday, 7);
                     height: 30px;
                     border-radius: Theme.radius-md;
-                    background: cell.is-today ? Theme.surface-raised : (cell-ta.has-hover ? Theme.surface-raised : transparent);
-                    border-width: cell.is-today ? 1px : 0;
-                    border-color: Theme.accent-brand;
+                    background: cell.is-selected ? Theme.surface-raised : (cell-ta.has-hover ? Theme.surface-raised : transparent);
+                    border-width: cell.is-selected || cell.is-today ? 1px : 0;
+                    border-color: cell.is-selected ? Theme.accent-brand : Theme.border-default;
 
                     cell-ta := TouchArea {
                         clicked => { root.select-offset(cell.offset); }
+                    }
+                    if cell-ta.has-hover : Rectangle {
+                        y: parent.height + 2px;
+                        x: 0;
+                        width: tip.preferred-width + 10px;
+                        height: tip.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 50;
+                        tip := Text {
+                            x: 5px; y: 3px;
+                            text: cell.color == 0 ? model.legend-green : (cell.color == 1 ? model.legend-yellow : model.legend-red);
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
                     }
 
                     VerticalLayout {
@@ -653,6 +677,14 @@ export component JyotishView inherits Rectangle {
                 }
             }
         }
+
+            Text {
+                text: model.month-selected-hint;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
 
         if model.active-tab == 2 : VerticalLayout {
             vertical-stretch: 1;

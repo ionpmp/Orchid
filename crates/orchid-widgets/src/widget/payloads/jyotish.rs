@@ -47,6 +47,8 @@ pub struct JyotishMonthCell {
     pub day: u8,
     pub color: u8,
     pub is_today: bool,
+    /// Matches the Day-tab selected offset.
+    pub is_selected: bool,
     pub offset: i32,
 }
 

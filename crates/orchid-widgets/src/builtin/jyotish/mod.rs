@@ -69,6 +69,8 @@ struct JyotishHandle {
     natal: Arc<RwLock<Option<NatalInfo>>>,
     natal_fingerprint: RwLock<Option<NatalFingerprint>>,
     color_cache: DashMap<NaiveDate, u8>,
+    /// Cached year-tab aggregates: (natal fingerprint, year, months, gochara key).
+    year_cache: RwLock<Option<(NatalFingerprint, i32, Vec<JyotishMonthSummary>, &'static str)>>,
     rectify: RwLock<Option<RectifySession>>,
     rectify_wizard_step: RwLock<u8>,
     /// Absolute civil year expanded on the Life tab (`None` = collapsed).
@@ -114,6 +116,7 @@ impl JyotishHandle {
         };
         if fingerprint_changed {
             self.color_cache.clear();
+            *self.year_cache.write() = None;
         }
 
         let natal = birth_datetime_utc(&cfg).map(|dt| compute_natal(dt, cfg.ayanamsa));
@@ -173,11 +176,13 @@ impl JyotishHandle {
                     1 => yellow += 1,
                     _ => red += 1,
                 }
+                let offset = (date - today).num_days() as i32;
                 JyotishMonthCell {
                     day: day as u8,
                     color,
                     is_today: date == today,
-                    offset: (date - today).num_days() as i32,
+                    is_selected: offset == cfg.day_offset,
+                    offset,
                 }
             })
             .collect();
@@ -210,12 +215,23 @@ impl JyotishHandle {
     ) -> (i32, Vec<JyotishMonthSummary>, &'static str) {
         let natal = *self.natal.read();
         let year = today.year() + cfg.year_offset;
+        let fingerprint: NatalFingerprint = (
+            cfg.birth_date.clone(),
+            cfg.birth_time.clone(),
+            cfg.birth_utc_offset_minutes,
+            cfg.ayanamsa,
+        );
+        if let Some((fp, cached_year, months, note)) = self.year_cache.read().as_ref() {
+            if *fp == fingerprint && *cached_year == year {
+                return (year, months.clone(), note);
+            }
+        }
         let year_gochara = natal.as_ref().map(|n| {
             let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
             let at = local_noon_utc(mid, cfg.longitude);
             gochara_modifier(n.moon_rashi, at, cfg.ayanamsa)
         });
-        let months = (1..=12u32)
+        let months: Vec<JyotishMonthSummary> = (1..=12u32)
             .map(|month| {
                 let days_in = days_in_month(year, month);
                 let mut green = 0u16;
@@ -250,11 +266,9 @@ impl JyotishHandle {
                 }
             })
             .collect();
-        (
-            year,
-            months,
-            year_gochara.map(gochara_note_key).unwrap_or(""),
-        )
+        let note = year_gochara.map(gochara_note_key).unwrap_or("");
+        *self.year_cache.write() = Some((fingerprint, year, months.clone(), note));
+        (year, months, note)
     }
 
     fn build_life(
@@ -894,6 +908,7 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut JyotishConfig))
         mutate(&mut cfg);
         cfg.normalize();
     }
+    *h.year_cache.write() = None;
     // Keep an open rectify draft aligned with the current place / ayanamsa.
     {
         let cfg = h.config.read().clone();
@@ -1090,6 +1105,7 @@ impl JyotishWidget {
             natal: Arc::new(RwLock::new(None)),
             natal_fingerprint: RwLock::new(None),
             color_cache: DashMap::new(),
+            year_cache: RwLock::new(None),
             rectify: RwLock::new(None),
             rectify_wizard_step: RwLock::new(0),
             life_detail_year: RwLock::new(None),

@@ -89,6 +89,8 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         dasha_pratyantar_text: SharedString::new(),
         has_birth_data: false,
         birth_prompt: locale.tr("jyotish-birth-prompt").into(),
+        empty_location: locale.tr("jyotish-empty-location").into(),
+        month_selected_hint: locale.tr("jyotish-month-selected-hint").into(),
         rectify_button_label: locale.tr("jyotish-rectify-button").into(),
         legend_green: locale.tr("jyotish-legend-green").into(),
         legend_yellow: locale.tr("jyotish-legend-yellow").into(),
@@ -193,6 +195,7 @@ pub(crate) fn build_jyotish_model(
             day: i32::from(cell.day),
             color: i32::from(cell.color),
             is_today: cell.is_today,
+            is_selected: cell.is_selected,
             offset: cell.offset,
         })
         .collect();
@@ -341,6 +344,8 @@ pub(crate) fn build_jyotish_model(
         dasha_pratyantar_text: dasha_line(p.dasha_now.pratyantar_key, &p.dasha_now.pratyantar_range),
         has_birth_data: p.has_birth_data,
         birth_prompt: locale.tr("jyotish-birth-prompt").into(),
+        empty_location: locale.tr("jyotish-empty-location").into(),
+        month_selected_hint: locale.tr("jyotish-month-selected-hint").into(),
         rectify_button_label: rectify_button_label(locale, p.rectify.has_draft),
         legend_green: locale.tr("jyotish-legend-green").into(),
         legend_yellow: locale.tr("jyotish-legend-yellow").into(),
