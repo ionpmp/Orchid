@@ -193,6 +193,15 @@ fn jyotish_to_text_lines(p: &JyotishPayload) -> Vec<String> {
     if let Some(ref t) = p.sunset_time {
         lines.push(format!("Sunset {t}"));
     }
+    if let Some(ref t) = p.rahukalam_text {
+        lines.push(format!("Rahu Kalam {t}"));
+    }
+    if let Some(ref t) = p.yamagandam_text {
+        lines.push(format!("Yamagandam {t}"));
+    }
+    if let Some(ref t) = p.gulika_text {
+        lines.push(format!("Gulika {t}"));
+    }
     for g in &p.planets {
         let r = if g.is_retrograde { " R" } else { "" };
         lines.push(format!(

@@ -3,9 +3,12 @@
 pub mod astro;
 pub mod config;
 pub mod dasha;
+pub mod golden;
+pub mod muhurta;
 pub mod narrative;
 pub mod rectify;
 pub mod score;
+pub mod transitions;
 
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
@@ -33,11 +36,13 @@ use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 pub use astro::{compute_jyotish, JyotishData};
 pub use config::{AyanamsaSystem, JyotishConfig};
 pub use dasha::{antar_dashas, dasha_at, maha_dashas, DashaLord, DashaPeriod};
+pub use muhurta::{day_muhurtas, in_window, DayMuhurtas, MuhurtaWindow};
 pub use narrative::{build_narrative, Narrative};
 pub use rectify::{Candidate, EventKind, LifeEvent, RectifySession};
 pub use score::{
     compute_day_score, compute_natal, local_noon_utc, DayColor, DayScore, Factor, NatalInfo,
 };
+pub use transitions::{next_transition, panchanga_ends, Limb, PanchangaEnds};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "jyotish";
@@ -280,12 +285,39 @@ impl JyotishHandle {
 
         let today = Utc::now().date_naive();
         let selected_date = today + ChronoDuration::days(i64::from(cfg.day_offset));
-        let day_score = compute_day_score(
-            local_noon_utc(selected_date, cfg.longitude),
-            cfg.ayanamsa,
-            natal.as_ref(),
-        );
-        let narrative = build_narrative(&day_score);
+        let noon_at = local_noon_utc(selected_date, cfg.longitude);
+        let day_score = compute_day_score(noon_at, cfg.ayanamsa, natal.as_ref());
+        // Instantaneous score: live clock on "today", otherwise noon of the
+        // selected civil day (same sample as the day score).
+        let now_at = if cfg.day_offset == 0 { at } else { noon_at };
+        let now_score = compute_day_score(now_at, cfg.ayanamsa, natal.as_ref());
+        let primary_score = if cfg.day_offset == 0 {
+            &now_score
+        } else {
+            &day_score
+        };
+        let narrative = build_narrative(primary_score);
+
+        let ends = transitions::panchanga_ends(at, cfg.ayanamsa);
+        let fmt_end = |t: Option<DateTime<Utc>>| t.map(fmt_time);
+
+        let muhurtas = match (data.sunrise, data.sunset) {
+            (Some(rise), Some(set)) => day_muhurtas(rise, set, data.vara_index),
+            _ => None,
+        };
+        let fmt_range =
+            |w: muhurta::MuhurtaWindow| format!("{}–{}", fmt_time(w.start), fmt_time(w.end));
+        let (rahukalam_text, yamagandam_text, gulika_text, in_rahukalam) = if let Some(m) = muhurtas
+        {
+            (
+                Some(fmt_range(m.rahukalam)),
+                Some(fmt_range(m.yamagandam)),
+                Some(fmt_range(m.gulika)),
+                in_window(at, m.rahukalam),
+            )
+        } else {
+            (None, None, None, false)
+        };
 
         let week_strip = self.build_week_strip(&cfg, today);
         let (
@@ -318,12 +350,14 @@ impl JyotishHandle {
             is_today: cfg.day_offset == 0,
             tithi_key: astro::tithi_ftl_key(data.tithi_index),
             paksha_key: astro::paksha_ftl_key(data.paksha_shukla),
-            tithi_end_text: None,
+            tithi_end_text: fmt_end(ends.tithi),
             nakshatra_key: astro::nakshatra_ftl_key(data.nakshatra_index),
             pada: data.pada,
-            nakshatra_end_text: None,
+            nakshatra_end_text: fmt_end(ends.nakshatra),
             yoga_key: astro::yoga_ftl_key(data.yoga_index),
+            yoga_end_text: fmt_end(ends.yoga),
             karana_key: astro::karana_ftl_key(data.karana_index),
+            karana_end_text: fmt_end(ends.karana),
             vara_key: astro::vara_ftl_key(data.vara_index),
             sunrise_time: if cfg.show_sunrise_sunset {
                 data.sunrise.map(fmt_time)
@@ -335,11 +369,17 @@ impl JyotishHandle {
             } else {
                 None
             },
+            rahukalam_text,
+            yamagandam_text,
+            gulika_text,
+            in_rahukalam,
             planets,
             show_planets: cfg.show_planets,
             is_loading: false,
             active_tab: cfg.active_tab,
-            score_color: color_of(day_score.color),
+            score_color: color_of(primary_score.color),
+            now_score_color: color_of(now_score.color),
+            day_score_color: color_of(day_score.color),
             headline_key: narrative.headline_key,
             influence_keys: narrative.influence_keys,
             advice_keys: narrative.advice_keys,
@@ -869,15 +909,23 @@ fn loading_payload(cfg: &JyotishConfig) -> JyotishPayload {
         pada: 1,
         nakshatra_end_text: None,
         yoga_key: "jyotish-yoga-vishkambha",
+        yoga_end_text: None,
         karana_key: "jyotish-karana-bava",
+        karana_end_text: None,
         vara_key: "jyotish-vara-ravi",
         sunrise_time: None,
         sunset_time: None,
+        rahukalam_text: None,
+        yamagandam_text: None,
+        gulika_text: None,
+        in_rahukalam: false,
         planets: Vec::new(),
         show_planets: cfg.show_planets,
         is_loading: true,
         active_tab: cfg.active_tab,
         score_color: 0,
+        now_score_color: 0,
+        day_score_color: 0,
         headline_key: "",
         influence_keys: Vec::new(),
         advice_keys: Vec::new(),

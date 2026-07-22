@@ -37,6 +37,13 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         sunset_label: locale.tr("jyotish-sunset-label").into(),
         sunrise_text: SharedString::new(),
         sunset_text: SharedString::new(),
+        rahukalam_label: locale.tr("jyotish-label-rahukalam").into(),
+        yamagandam_label: locale.tr("jyotish-label-yamagandam").into(),
+        gulika_label: locale.tr("jyotish-label-gulika").into(),
+        rahukalam_text: SharedString::new(),
+        yamagandam_text: SharedString::new(),
+        gulika_text: SharedString::new(),
+        in_rahukalam: false,
         is_today: true,
         is_loading: true,
         show_planets: false,
@@ -45,9 +52,14 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         active_tab: 0,
         tab_labels: ModelRc::new(VecModel::from(tab_labels(locale))),
         score_color: 0,
+        now_score_color: 0,
+        day_score_color: 0,
+        score_now_label: locale.tr("jyotish-score-now").into(),
+        score_day_label: locale.tr("jyotish-score-day").into(),
         headline: SharedString::new(),
         influences: ModelRc::new(VecModel::default()),
         advice: ModelRc::new(VecModel::default()),
+        disclaimer: locale.tr("jyotish-disclaimer").into(),
         week_strip: ModelRc::new(VecModel::default()),
         month_title: SharedString::new(),
         month_cells: ModelRc::new(VecModel::default()),
@@ -90,23 +102,35 @@ pub(crate) fn build_jyotish_model(
         "jyotish-pada",
         &orchid_i18n::FluentArgs::new().with("n", p.pada.to_string()),
     );
+    let with_until = |base: String, end: &Option<String>| -> String {
+        match end {
+            Some(t) if !t.is_empty() => format!(
+                "{base} · {}",
+                locale.tr_args(
+                    "jyotish-until",
+                    &orchid_i18n::FluentArgs::new().with("time", t.clone()),
+                )
+            ),
+            _ => base,
+        }
+    };
 
     let panchanga = vec![
         JyotishPanchangaRow {
             label: locale.tr("jyotish-label-tithi").into(),
-            value: format!("{tithi} ({paksha})").into(),
+            value: with_until(format!("{tithi} ({paksha})"), &p.tithi_end_text).into(),
         },
         JyotishPanchangaRow {
             label: locale.tr("jyotish-label-nakshatra").into(),
-            value: format!("{nakshatra} · {pada_text}").into(),
+            value: with_until(format!("{nakshatra} · {pada_text}"), &p.nakshatra_end_text).into(),
         },
         JyotishPanchangaRow {
             label: locale.tr("jyotish-label-yoga").into(),
-            value: locale.tr(p.yoga_key).into(),
+            value: with_until(locale.tr(p.yoga_key), &p.yoga_end_text).into(),
         },
         JyotishPanchangaRow {
             label: locale.tr("jyotish-label-karana").into(),
-            value: locale.tr(p.karana_key).into(),
+            value: with_until(locale.tr(p.karana_key), &p.karana_end_text).into(),
         },
         JyotishPanchangaRow {
             label: locale.tr("jyotish-label-vara").into(),
@@ -195,6 +219,13 @@ pub(crate) fn build_jyotish_model(
         sunset_label: locale.tr("jyotish-sunset-label").into(),
         sunrise_text: p.sunrise_time.clone().unwrap_or_default().into(),
         sunset_text: p.sunset_time.clone().unwrap_or_default().into(),
+        rahukalam_label: locale.tr("jyotish-label-rahukalam").into(),
+        yamagandam_label: locale.tr("jyotish-label-yamagandam").into(),
+        gulika_label: locale.tr("jyotish-label-gulika").into(),
+        rahukalam_text: p.rahukalam_text.clone().unwrap_or_default().into(),
+        yamagandam_text: p.yamagandam_text.clone().unwrap_or_default().into(),
+        gulika_text: p.gulika_text.clone().unwrap_or_default().into(),
+        in_rahukalam: p.in_rahukalam,
         is_today: p.is_today,
         is_loading: false,
         show_planets: p.show_planets,
@@ -203,6 +234,10 @@ pub(crate) fn build_jyotish_model(
         active_tab: i32::from(p.active_tab),
         tab_labels: ModelRc::new(VecModel::from(tab_labels(locale))),
         score_color: i32::from(p.score_color),
+        now_score_color: i32::from(p.now_score_color),
+        day_score_color: i32::from(p.day_score_color),
+        score_now_label: locale.tr("jyotish-score-now").into(),
+        score_day_label: locale.tr("jyotish-score-day").into(),
         headline: locale.tr(p.headline_key).into(),
         influences: ModelRc::new(VecModel::from(
             p.influence_keys
@@ -216,6 +251,7 @@ pub(crate) fn build_jyotish_model(
                 .map(|k| SharedString::from(locale.tr(k)))
                 .collect::<Vec<_>>(),
         )),
+        disclaimer: locale.tr("jyotish-disclaimer").into(),
         week_strip: ModelRc::new(VecModel::from(week_strip)),
         month_title: month_title.into(),
         month_cells: ModelRc::new(VecModel::from(month_cells)),

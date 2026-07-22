@@ -1278,3 +1278,12 @@ jyotish-event-career-fall = Карьерная неудача
 jyotish-event-loss = Утрата близкого человека
 jyotish-event-windfall = Финансовая удача
 jyotish-event-health = Проблемы со здоровьем
+
+# ---- jyotish phase A ----
+jyotish-disclaimer = Эвристическая оценка дня для ориентира — не замена мухурте.
+jyotish-score-now = Сейчас
+jyotish-score-day = День
+jyotish-label-rahukalam = Рахукалам
+jyotish-label-yamagandam = Ямагандам
+jyotish-label-gulika = Гулика
+jyotish-until = до { $time }

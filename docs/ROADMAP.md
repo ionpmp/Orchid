@@ -98,7 +98,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Onboarding tour, hint mode — four-step first-run overlay; `Win+?` hint overlays; persisted `[onboarding]` config
 
 ### Additional
-- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog) + personal day scores, monthly/yearly forecast, life retrospective, birth-time rectification
+- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog) + personal day scores, monthly/yearly forecast, life retrospective, birth-time rectification; Phase A trust layer (limb end-times, now/day scores, Rahu/Yama/Gulika, golden fixtures, disclaimer)
 
 ## v1.x — 9–18 months
 

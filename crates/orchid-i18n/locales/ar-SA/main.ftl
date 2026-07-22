@@ -1276,3 +1276,12 @@ jyotish-event-health = Health crisis
 widget-settings-jyotish-birth-date = Birth date (YYYY-MM-DD)
 widget-settings-jyotish-birth-time = Birth time (HH:MM)
 widget-settings-jyotish-birth-utc-offset = Birth UTC offset (minutes)
+
+# ---- jyotish phase A ----
+jyotish-disclaimer = Heuristic day score for orientation — not a muhurta consultation.
+jyotish-score-now = Now
+jyotish-score-day = Day
+jyotish-label-rahukalam = Rahu Kalam
+jyotish-label-yamagandam = Yamagandam
+jyotish-label-gulika = Gulika
+jyotish-until = until { $time }

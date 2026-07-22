@@ -109,18 +109,31 @@ pub struct JyotishPayload {
     pub pada: u8,
     pub nakshatra_end_text: Option<String>,
     pub yoga_key: &'static str,
+    pub yoga_end_text: Option<String>,
     pub karana_key: &'static str,
+    pub karana_end_text: Option<String>,
     pub vara_key: &'static str,
 
     pub sunrise_time: Option<String>,
     pub sunset_time: Option<String>,
+    /// Formatted "HH:MM–HH:MM" local ranges when sunrise/sunset known.
+    pub rahukalam_text: Option<String>,
+    pub yamagandam_text: Option<String>,
+    pub gulika_text: Option<String>,
+    /// True when `calculated_at` falls inside Rahu Kalam.
+    pub in_rahukalam: bool,
 
     pub planets: Vec<JyotishPlanetRow>,
     pub show_planets: bool,
     pub is_loading: bool,
 
     pub active_tab: u8,
+    /// Primary traffic-light color (now when viewing today, else day).
     pub score_color: u8,
+    /// Instantaneous score color at the selected sample time.
+    pub now_score_color: u8,
+    /// Whole-day (local noon) score color.
+    pub day_score_color: u8,
     pub headline_key: &'static str,
     pub influence_keys: Vec<&'static str>,
     pub advice_keys: Vec<&'static str>,

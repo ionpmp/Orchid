@@ -3,11 +3,11 @@
 use crate::widget::payloads::{
     CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload, FileManagerPayload,
     JyotishDayChip, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishYearSummary,
-    MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView,
-    PasswordEntryView, PasswordManagerPayload, ProcessRowView, ProcessesPayload,
-    RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
-    StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload, UserRowView,
-    ViewerPayload, WeatherForecastDay, WeatherPayload,
+    MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView,
+    PasswordManagerPayload, ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView,
+    RssPayload, SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator,
+    SystemPayload, UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay,
+    WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -375,10 +375,16 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
         && a.pada == b.pada
         && a.nakshatra_end_text == b.nakshatra_end_text
         && a.yoga_key == b.yoga_key
+        && a.yoga_end_text == b.yoga_end_text
         && a.karana_key == b.karana_key
+        && a.karana_end_text == b.karana_end_text
         && a.vara_key == b.vara_key
         && a.sunrise_time == b.sunrise_time
         && a.sunset_time == b.sunset_time
+        && a.rahukalam_text == b.rahukalam_text
+        && a.yamagandam_text == b.yamagandam_text
+        && a.gulika_text == b.gulika_text
+        && a.in_rahukalam == b.in_rahukalam
         && a.show_planets == b.show_planets
         && a.is_loading == b.is_loading
         && a.planets.len() == b.planets.len()
@@ -390,6 +396,8 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
         })
         && a.active_tab == b.active_tab
         && a.score_color == b.score_color
+        && a.now_score_color == b.now_score_color
+        && a.day_score_color == b.day_score_color
         && a.headline_key == b.headline_key
         && a.influence_keys == b.influence_keys
         && a.advice_keys == b.advice_keys
@@ -596,6 +604,10 @@ fn calendar_payload_eq(a: &CalendarPayload, b: &CalendarPayload) -> bool {
         && a.first_day_of_week == b.first_day_of_week
         && a.days == b.days
         && a.events == b.events
+        && a.upcoming == b.upcoming
+        && a.show_upcoming == b.show_upcoming
+        && a.show_notes_preview == b.show_notes_preview
+        && a.time_step_minutes == b.time_step_minutes
         && a.editor_open == b.editor_open
         && a.editor_event_id == b.editor_event_id
         && a.editor_is_new == b.editor_is_new
@@ -608,6 +620,7 @@ fn calendar_payload_eq(a: &CalendarPayload, b: &CalendarPayload) -> bool {
         && a.editor_end_min == b.editor_end_min
         && a.editor_notes == b.editor_notes
         && a.editor_color == b.editor_color
+        && a.delete_confirm_open == b.delete_confirm_open
 }
 
 fn opt_f32_eq(a: Option<f32>, b: Option<f32>) -> bool {

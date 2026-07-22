@@ -216,6 +216,31 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
+                if !model.is-loading : HorizontalLayout {
+                    spacing: 12px;
+                    alignment: center;
+                    HorizontalLayout {
+                        spacing: 4px;
+                        ColorDot { color-code: model.now-score-color; y: (parent.height - self.height) / 2; }
+                        Text {
+                            text: model.score-now-label;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        ColorDot { color-code: model.day-score-color; y: (parent.height - self.height) / 2; }
+                        Text {
+                            text: model.score-day-label;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
                 if !model.is-loading && model.influences.length > 0 : VerticalLayout {
                     spacing: 2px;
                     for line[i] in model.influences : Text {
@@ -358,6 +383,38 @@ export component JyotishView inherits Rectangle {
                         wrap: no-wrap;
                         overflow: elide;
                     }
+                }
+
+                // Inauspicious daylight windows
+                if !model.is-loading && model.rahukalam-text != "" : VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: model.rahukalam-label + " " + model.rahukalam-text;
+                        color: model.in-rahukalam ? #ff3b30 : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: model.in-rahukalam ? Theme.weight-semibold : Theme.weight-medium;
+                        wrap: word-wrap;
+                    }
+                    if model.yamagandam-text != "" : Text {
+                        text: model.yamagandam-label + " " + model.yamagandam-text;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                    }
+                    if model.gulika-text != "" : Text {
+                        text: model.gulika-label + " " + model.gulika-text;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                    }
+                }
+
+                if !model.is-loading && model.disclaimer != "" : Text {
+                    text: model.disclaimer;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
                 }
 
                 // Graha table
