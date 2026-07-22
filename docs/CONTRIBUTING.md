@@ -94,6 +94,12 @@ logical task per pull request.
    `{config_dir}/locales/<tag>/main.ftl`; those files overlay the bundled
    catalogue at runtime.
 
+**Jyotish glossary:** keep Sanskrit technical terms as transliteration across
+locales (`tithi`, `nakshatra`, `yoga`, `karana`, `vara`, tara names, graha
+labels, `Mahā` / `Antar` / `Pratyantar`, ayanamsa system names). Translate UI
+chrome, advice, headlines, month names, weekdays, and the rectify wizard.
+Preserve Fluent placeholders (`{ $n }`, `{ $time }`, …) exactly.
+
 ### How to add a theme
 
 **Built-in (bundled):**
