@@ -364,6 +364,24 @@ pub fn confirm_delete(instance_id: Uuid) {
     delete_event(instance_id, &event_id);
 }
 
+/// Turn an open edit session into a create session with the same draft fields.
+///
+/// The original event is left unchanged until the user saves the duplicate.
+pub fn duplicate_editor(instance_id: Uuid) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut ui = h.ui.write();
+        if !ui.editor_open || ui.draft.is_none() || ui.editing_id.is_none() {
+            return;
+        }
+        ui.editing_id = None;
+        ui.delete_confirm_open = false;
+    }
+    h.publish();
+}
+
 /// Update a draft field while the editor is open.
 pub fn set_editor_title(instance_id: Uuid, title: String) {
     mutate_draft(instance_id, |d| d.title = title);
@@ -429,9 +447,10 @@ pub fn save_editor(instance_id: Uuid) {
     }
     {
         let mut cfg = h.config.write();
+        let title = draft.title.trim().to_string();
         if let Some(id) = editing_id {
             if let Some(ev) = cfg.events.iter_mut().find(|e| e.id == id) {
-                ev.title = draft.title;
+                ev.title = title;
                 ev.date = draft.date.clone();
                 ev.all_day = draft.all_day;
                 ev.start_minutes = draft.start_minutes;
@@ -442,7 +461,7 @@ pub fn save_editor(instance_id: Uuid) {
         } else {
             cfg.events.push(CalendarEvent {
                 id: Uuid::new_v4().to_string(),
-                title: draft.title,
+                title,
                 date: draft.date.clone(),
                 all_day: draft.all_day,
                 start_minutes: draft.start_minutes,
@@ -1091,6 +1110,156 @@ mod tests {
         };
         assert!(!p3.editor_open);
         assert!(p3.events.is_empty());
+    }
+
+    #[test]
+    fn build_upcoming_lists_next_days_only() {
+        let events = vec![
+            CalendarEvent {
+                id: "past".into(),
+                title: "Past".into(),
+                date: "2026-07-20".into(),
+                all_day: true,
+                start_minutes: 0,
+                end_minutes: 0,
+                notes: String::new(),
+                color: 0,
+            },
+            CalendarEvent {
+                id: "today".into(),
+                title: "Today".into(),
+                date: "2026-07-21".into(),
+                all_day: true,
+                start_minutes: 0,
+                end_minutes: 0,
+                notes: String::new(),
+                color: 1,
+            },
+            CalendarEvent {
+                id: "soon".into(),
+                title: "Soon".into(),
+                date: "2026-07-24".into(),
+                all_day: false,
+                start_minutes: 600,
+                end_minutes: 660,
+                notes: String::new(),
+                color: 2,
+            },
+            CalendarEvent {
+                id: "far".into(),
+                title: "Far".into(),
+                date: "2026-08-01".into(),
+                all_day: true,
+                start_minutes: 0,
+                end_minutes: 0,
+                notes: String::new(),
+                color: 3,
+            },
+        ];
+        let rows = build_upcoming(&events, "2026-07-21", 7);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, "today");
+        assert_eq!(rows[1].id, "soon");
+        assert!(rows[1].time_label.contains("10:00"));
+    }
+
+    #[test]
+    fn decode_config_accepts_legacy_four_field_blob() {
+        #[derive(serde::Serialize)]
+        struct Legacy {
+            events: Vec<CalendarEvent>,
+            view_year: i32,
+            view_month: u8,
+            selected_date: String,
+        }
+        let legacy = Legacy {
+            events: vec![CalendarEvent {
+                id: "e1".into(),
+                title: "Legacy".into(),
+                date: "2026-07-21".into(),
+                all_day: true,
+                start_minutes: 0,
+                end_minutes: 0,
+                notes: String::new(),
+                color: 2,
+            }],
+            view_year: 2026,
+            view_month: 7,
+            selected_date: "2026-07-21".into(),
+        };
+        let bytes = bincode::serde::encode_to_vec(&legacy, bincode::config::standard()).unwrap();
+        let cfg = decode_config(&bytes);
+        assert_eq!(cfg.events.len(), 1);
+        assert_eq!(cfg.events[0].title, "Legacy");
+        assert!(cfg.show_upcoming);
+        assert_eq!(cfg.time_step_minutes, 15);
+    }
+
+    #[test]
+    fn duplicate_editor_switches_to_create_flow() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let mut cfg = CalendarConfig::default();
+        cfg.selected_date = "2026-07-21".into();
+        cfg.view_year = 2026;
+        cfg.view_month = 7;
+        let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
+
+        open_new_editor(id);
+        set_editor_title(id, "Original".into());
+        save_editor(id);
+        let snap = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p) = snap.payload else {
+            panic!("expected calendar");
+        };
+        let eid = p.events[0].id.clone();
+        open_edit_editor(id, &eid);
+        duplicate_editor(id);
+        let snap2 = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p2) = snap2.payload else {
+            panic!("expected calendar");
+        };
+        assert!(p2.editor_open);
+        assert!(p2.editor_is_new);
+        assert_eq!(p2.editor_title, "Original");
+        // Original still the only persisted event until save.
+        assert_eq!(p2.events.len(), 1);
+        save_editor(id);
+        let snap3 = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p3) = snap3.payload else {
+            panic!("expected calendar");
+        };
+        assert_eq!(p3.events.len(), 2);
+    }
+
+    #[test]
+    fn search_all_events_matches_title_and_notes() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let mut cfg = CalendarConfig::default();
+        cfg.selected_date = "2026-07-21".into();
+        cfg.events.push(CalendarEvent {
+            id: "e1".into(),
+            title: "Dentist".into(),
+            date: "2026-07-22".into(),
+            all_day: false,
+            start_minutes: 600,
+            end_minutes: 660,
+            notes: "bring insurance card".into(),
+            color: 0,
+        });
+        let _widget = CalendarWidget::new(id, cfg, bus, orchid_config);
+        let by_title = search_all_events("dent", 10);
+        assert_eq!(by_title.len(), 1);
+        assert_eq!(by_title[0].event_id, "e1");
+        let by_notes = search_all_events("insurance", 10);
+        assert_eq!(by_notes.len(), 1);
     }
 
     #[test]

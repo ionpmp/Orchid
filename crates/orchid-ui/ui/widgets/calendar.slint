@@ -310,6 +310,7 @@ export component CalendarView inherits Rectangle {
     callback open-edit(string);
     callback close-editor();
     callback save-editor();
+    callback duplicate-editor();
     callback request-delete();
     callback confirm-delete();
     callback cancel-delete();
@@ -349,6 +350,11 @@ export component CalendarView inherits Rectangle {
             alignment: center;
 
             CalToolBtn {
+                label: "«";
+                tip: model.tip-prev-year;
+                clicked => { root.shift-month(-12); }
+            }
+            CalToolBtn {
                 label: "◀";
                 tip: model.tip-prev;
                 clicked => { root.shift-month(-1); }
@@ -366,6 +372,11 @@ export component CalendarView inherits Rectangle {
                 label: "▶";
                 tip: model.tip-next;
                 clicked => { root.shift-month(1); }
+            }
+            CalToolBtn {
+                label: "»";
+                tip: model.tip-next-year;
+                clicked => { root.shift-month(12); }
             }
             CalToolBtn {
                 label: model.today-label;
@@ -461,6 +472,11 @@ export component CalendarView inherits Rectangle {
                     color: Theme.text-primary;
                     font-size: Theme.font-size-md;
                     font-weight: Theme.weight-semibold;
+                }
+                if model.events.length > 0 : Text {
+                    text: model.events-count-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
                 }
 
                 if model.events.length == 0 : Text {
@@ -705,6 +721,10 @@ export component CalendarView inherits Rectangle {
                     spacing: 8px;
                     alignment: end;
 
+                    if !model.editor-is-new : CalToolBtn {
+                        label: model.duplicate-label;
+                        clicked => { root.duplicate-editor(); }
+                    }
                     if !model.editor-is-new : CalToolBtn {
                         label: model.delete-label;
                         danger: true;

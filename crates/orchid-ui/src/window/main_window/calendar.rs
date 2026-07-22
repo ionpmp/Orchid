@@ -90,6 +90,14 @@ impl MainWindowController {
         self.refresh_calendar(inst);
     }
 
+    pub(super) fn on_calendar_duplicate_editor(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::duplicate_editor(inst);
+        self.refresh_calendar(inst);
+    }
+
     pub(super) fn on_calendar_request_delete(self: &Arc<Self>, id: &SharedString) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;

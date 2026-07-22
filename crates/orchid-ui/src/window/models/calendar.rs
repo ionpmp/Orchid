@@ -112,6 +112,13 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         show_notes_preview: p.show_notes_preview,
         time_step_minutes: p.time_step_minutes,
         upcoming_title: locale.tr("calendar-upcoming").into(),
+        events_count_label: locale
+            .tr_args(
+                "calendar-events-count",
+                &orchid_i18n::FluentArgs::new().with("count", p.events.len().to_string()),
+            )
+            .into(),
+        duplicate_label: locale.tr("calendar-duplicate").into(),
         color_options: ModelRc::new(VecModel::from(vec![0, 1, 2, 3, 4, 5])),
         editor_open: p.editor_open,
         editor_event_id: p.editor_event_id.clone().into(),
@@ -148,6 +155,8 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         color_label: locale.tr("calendar-color").into(),
         tip_prev: locale.tr("calendar-tip-prev").into(),
         tip_next: locale.tr("calendar-tip-next").into(),
+        tip_prev_year: locale.tr("calendar-tip-prev-year").into(),
+        tip_next_year: locale.tr("calendar-tip-next-year").into(),
         tip_today: locale.tr("calendar-tip-today").into(),
         tip_add: locale.tr("calendar-tip-add").into(),
         tip_date_prev: locale.tr("calendar-tip-date-prev").into(),

@@ -159,6 +159,7 @@ export component WidgetFrame inherits Rectangle {
     callback calendar-open-edit(string, string);
     callback calendar-close-editor(string);
     callback calendar-save-editor(string);
+    callback calendar-duplicate-editor(string);
     callback calendar-request-delete(string);
     callback calendar-confirm-delete(string);
     callback calendar-cancel-delete(string);
@@ -680,6 +681,7 @@ export component WidgetFrame inherits Rectangle {
                     open-edit(eid) => { root.calendar-open-edit(root.model.instance-id, eid); }
                     close-editor => { root.calendar-close-editor(root.model.instance-id); }
                     save-editor => { root.calendar-save-editor(root.model.instance-id); }
+                    duplicate-editor => { root.calendar-duplicate-editor(root.model.instance-id); }
                     delete-event(eid) => { root.calendar-delete-event(root.model.instance-id, eid); }
                     editor-title-changed(t) => { root.calendar-editor-title(root.model.instance-id, t); }
                     editor-date-changed(d) => { root.calendar-editor-date(root.model.instance-id, d); }

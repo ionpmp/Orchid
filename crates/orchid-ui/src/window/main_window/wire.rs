@@ -1041,6 +1041,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_calendar_duplicate_editor({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_duplicate_editor(&id);
+                }
+            }
+        });
         self.window.on_calendar_request_delete({
             let t = t.clone();
             move |id| {
