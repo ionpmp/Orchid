@@ -3,8 +3,9 @@ use orchid_widgets::{JyotishRectifyView, JyotishYearSummary};
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
-    JyotishDayChipModel, JyotishModel, JyotishMonthCellModel, JyotishMonthRowModel,
-    JyotishPanchangaRow, JyotishPlanetEntry, JyotishRectifyModel, JyotishYearRowModel,
+    JyotishAntarRowModel, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
+    JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
+    JyotishRectifyModel, JyotishYearRowModel,
 };
 
 const WEEKDAY_KEYS: [&str; 7] = [
@@ -54,8 +55,13 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         score_color: 0,
         now_score_color: 0,
         day_score_color: 0,
+        score_value: 0,
+        score_label: locale.tr("jyotish-score-label").into(),
         score_now_label: locale.tr("jyotish-score-now").into(),
         score_day_label: locale.tr("jyotish-score-day").into(),
+        factors: ModelRc::new(VecModel::default()),
+        personal_mode: false,
+        personal_badge: locale.tr("jyotish-badge-panchanga").into(),
         headline: SharedString::new(),
         influences: ModelRc::new(VecModel::default()),
         advice: ModelRc::new(VecModel::default()),
@@ -69,7 +75,18 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         month_red: 0,
         year_title: SharedString::new(),
         year_months: ModelRc::new(VecModel::default()),
+        gochara_note: SharedString::new(),
         life_years: ModelRc::new(VecModel::default()),
+        life_antars: ModelRc::new(VecModel::default()),
+        life_antars_title: locale.tr("jyotish-life-antars-title").into(),
+        has_dasha_now: false,
+        dasha_now_title: locale.tr("jyotish-dasha-now-title").into(),
+        dasha_maha_label: locale.tr("jyotish-dasha-maha").into(),
+        dasha_antar_label: locale.tr("jyotish-dasha-antar").into(),
+        dasha_pratyantar_label: locale.tr("jyotish-dasha-pratyantar").into(),
+        dasha_maha_text: SharedString::new(),
+        dasha_antar_text: SharedString::new(),
+        dasha_pratyantar_text: SharedString::new(),
         has_birth_data: false,
         birth_prompt: locale.tr("jyotish-birth-prompt").into(),
         rectify_button_label: locale.tr("jyotish-rectify-button").into(),
@@ -202,10 +219,34 @@ pub(crate) fn build_jyotish_model(
             green: i32::from(row.green),
             yellow: i32::from(row.yellow),
             red: i32::from(row.red),
-            dasha: locale.tr(row.dasha_key).into(),
+            dasha: if row.dasha_key.is_empty() {
+                SharedString::new()
+            } else {
+                locale.tr(row.dasha_key).into()
+            },
             year_offset: row.year_offset,
+            is_selected: row.is_selected,
+            is_current: row.is_current,
         })
         .collect();
+
+    let life_antars: Vec<JyotishAntarRowModel> = p
+        .life_antars
+        .iter()
+        .map(|row| JyotishAntarRowModel {
+            lord: locale.tr(row.lord_key).into(),
+            range: format!("{} – {}", row.from_text, row.to_text).into(),
+            is_current: row.is_current,
+        })
+        .collect();
+
+    let dasha_line = |lord_key: &str, range: &str| -> SharedString {
+        if lord_key.is_empty() {
+            SharedString::new()
+        } else {
+            format!("{} · {}", locale.tr(lord_key), range).into()
+        }
+    };
 
     JyotishModel {
         date_text: p.date_text.clone().into(),
@@ -236,8 +277,29 @@ pub(crate) fn build_jyotish_model(
         score_color: i32::from(p.score_color),
         now_score_color: i32::from(p.now_score_color),
         day_score_color: i32::from(p.day_score_color),
+        score_value: i32::from(p.score_value),
+        score_label: locale.tr("jyotish-score-label").into(),
         score_now_label: locale.tr("jyotish-score-now").into(),
         score_day_label: locale.tr("jyotish-score-day").into(),
+        factors: ModelRc::new(VecModel::from(
+            p.factors
+                .iter()
+                .map(|f| JyotishFactorEntry {
+                    label: locale.tr(f.label_key).into(),
+                    delta_text: format!("{:+}", f.delta).into(),
+                    strength: i32::from(f.strength),
+                    valence: i32::from(f.valence),
+                })
+                .collect::<Vec<_>>(),
+        )),
+        personal_mode: p.personal_mode,
+        personal_badge: locale
+            .tr(if p.personal_mode {
+                "jyotish-badge-personal"
+            } else {
+                "jyotish-badge-panchanga"
+            })
+            .into(),
         headline: locale.tr(p.headline_key).into(),
         influences: ModelRc::new(VecModel::from(
             p.influence_keys
@@ -261,7 +323,22 @@ pub(crate) fn build_jyotish_model(
         month_red: i32::from(p.month_red),
         year_title: p.year_value.to_string().into(),
         year_months: ModelRc::new(VecModel::from(year_months)),
+        gochara_note: if p.gochara_note_key.is_empty() {
+            SharedString::new()
+        } else {
+            locale.tr(p.gochara_note_key).into()
+        },
         life_years: ModelRc::new(VecModel::from(life_years)),
+        life_antars: ModelRc::new(VecModel::from(life_antars)),
+        life_antars_title: locale.tr("jyotish-life-antars-title").into(),
+        has_dasha_now: p.has_dasha_now,
+        dasha_now_title: locale.tr("jyotish-dasha-now-title").into(),
+        dasha_maha_label: locale.tr("jyotish-dasha-maha").into(),
+        dasha_antar_label: locale.tr("jyotish-dasha-antar").into(),
+        dasha_pratyantar_label: locale.tr("jyotish-dasha-pratyantar").into(),
+        dasha_maha_text: dasha_line(p.dasha_now.maha_key, &p.dasha_now.maha_range),
+        dasha_antar_text: dasha_line(p.dasha_now.antar_key, &p.dasha_now.antar_range),
+        dasha_pratyantar_text: dasha_line(p.dasha_now.pratyantar_key, &p.dasha_now.pratyantar_range),
         has_birth_data: p.has_birth_data,
         birth_prompt: locale.tr("jyotish-birth-prompt").into(),
         rectify_button_label: locale.tr("jyotish-rectify-button").into(),

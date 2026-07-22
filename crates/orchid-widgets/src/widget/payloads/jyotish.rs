@@ -14,6 +14,20 @@ pub struct JyotishPlanetRow {
     pub is_retrograde: bool,
 }
 
+/// One scored factor row for the day tab (delta + intensity).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishFactorRow {
+    /// Fluent influence key explaining the factor.
+    pub label_key: &'static str,
+    /// Signed point contribution.
+    pub delta: i8,
+    /// 0..=100 intensity.
+    pub strength: u8,
+    /// 0=favorable, 1=unfavorable, 2=neutral.
+    pub valence: u8,
+}
+
 /// One day chip in the 7-day strip.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -57,6 +71,32 @@ pub struct JyotishYearSummary {
     pub red: u16,
     pub dasha_key: &'static str,
     pub year_offset: i32,
+    /// Selected for antar expansion on the Life tab.
+    pub is_selected: bool,
+    /// Civil year equals today.
+    pub is_current: bool,
+}
+
+/// Current Vimshottari stack for the Day “now” strip.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[allow(missing_docs)]
+pub struct JyotishDashaNow {
+    pub maha_key: &'static str,
+    pub antar_key: &'static str,
+    pub pratyantar_key: &'static str,
+    pub maha_range: String,
+    pub antar_range: String,
+    pub pratyantar_range: String,
+}
+
+/// One antar-daśā row under an expanded Life year.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishAntarRow {
+    pub lord_key: &'static str,
+    pub from_text: String,
+    pub to_text: String,
+    pub is_current: bool,
 }
 
 /// Rectification wizard state for the UI.
@@ -134,6 +174,12 @@ pub struct JyotishPayload {
     pub now_score_color: u8,
     /// Whole-day (local noon) score color.
     pub day_score_color: u8,
+    /// Primary numeric score 0..=100.
+    pub score_value: u8,
+    /// Ranked factor contributions for the transparent score breakdown.
+    pub factors: Vec<JyotishFactorRow>,
+    /// Natal layers active for this payload.
+    pub personal_mode: bool,
     pub headline_key: &'static str,
     pub influence_keys: Vec<&'static str>,
     pub advice_keys: Vec<&'static str>,
@@ -148,6 +194,14 @@ pub struct JyotishPayload {
     pub year_value: i32,
     pub year_months: Vec<JyotishMonthSummary>,
     pub life_years: Vec<JyotishYearSummary>,
+    /// Absolute year expanded on the Life tab (`0` = none).
+    pub life_detail_year: i32,
+    pub life_antars: Vec<JyotishAntarRow>,
+    /// Present when birth data yields a Vimshottari stack for the selected day.
+    pub has_dasha_now: bool,
+    pub dasha_now: JyotishDashaNow,
+    /// Soft gochara note for the active year/month context (empty when unused).
+    pub gochara_note_key: &'static str,
     pub has_birth_data: bool,
     pub rectify: JyotishRectifyView,
 }

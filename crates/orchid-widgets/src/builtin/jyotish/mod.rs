@@ -3,6 +3,8 @@
 pub mod astro;
 pub mod config;
 pub mod dasha;
+pub mod gochara;
+#[cfg(test)]
 pub mod golden;
 pub mod muhurta;
 pub mod narrative;
@@ -23,8 +25,8 @@ use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    JyotishDayChip, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
-    JyotishRectifyView, JyotishYearSummary,
+    JyotishAntarRow, JyotishDashaNow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
+    JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishRectifyView, JyotishYearSummary,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -35,12 +37,18 @@ use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 
 pub use astro::{compute_jyotish, JyotishData};
 pub use config::{AyanamsaSystem, JyotishConfig};
-pub use dasha::{antar_dashas, dasha_at, maha_dashas, DashaLord, DashaPeriod};
+pub use dasha::{
+    antar_dashas, dasha_at, dasha_stack_at, maha_dashas, pratyantar_dashas, DashaLord, DashaPeriod,
+    DashaStack,
+};
+pub use gochara::{gochara_modifier, gochara_note_key, tint_counts};
 pub use muhurta::{day_muhurtas, in_window, DayMuhurtas, MuhurtaWindow};
-pub use narrative::{build_narrative, Narrative};
+pub use narrative::{build_narrative, build_narrative_simple, Narrative, NarrativeContext};
 pub use rectify::{Candidate, EventKind, LifeEvent, RectifySession};
 pub use score::{
-    compute_day_score, compute_natal, local_noon_utc, DayColor, DayScore, Factor, NatalInfo,
+    compute_day_score, compute_natal, contribute, local_noon_utc, DayColor, DayScore, Factor,
+    FactorContribution, NatalInfo, Valence, BASE_GENERIC, BASE_NATAL, THRESHOLD_GREEN,
+    THRESHOLD_YELLOW,
 };
 pub use transitions::{next_transition, panchanga_ends, Limb, PanchangaEnds};
 
@@ -62,6 +70,8 @@ struct JyotishHandle {
     color_cache: DashMap<NaiveDate, u8>,
     rectify: RwLock<Option<RectifySession>>,
     rectify_wizard_step: RwLock<u8>,
+    /// Absolute civil year expanded on the Life tab (`None` = collapsed).
+    life_detail_year: RwLock<Option<i32>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -171,6 +181,16 @@ impl JyotishHandle {
             })
             .collect();
 
+        let (green, yellow, red) = if let Some(n) = natal.as_ref() {
+            let mid = NaiveDate::from_ymd_opt(year, month, 15)
+                .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today));
+            let at = local_noon_utc(mid, cfg.longitude);
+            let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
+            tint_counts(green, yellow, red, modif)
+        } else {
+            (green, yellow, red)
+        };
+
         (
             month_key(month),
             year,
@@ -182,9 +202,18 @@ impl JyotishHandle {
         )
     }
 
-    fn build_year(&self, cfg: &JyotishConfig, today: NaiveDate) -> (i32, Vec<JyotishMonthSummary>) {
+    fn build_year(
+        &self,
+        cfg: &JyotishConfig,
+        today: NaiveDate,
+    ) -> (i32, Vec<JyotishMonthSummary>, &'static str) {
         let natal = *self.natal.read();
         let year = today.year() + cfg.year_offset;
+        let year_gochara = natal.as_ref().map(|n| {
+            let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
+            let at = local_noon_utc(mid, cfg.longitude);
+            gochara_modifier(n.moon_rashi, at, cfg.ayanamsa)
+        });
         let months = (1..=12u32)
             .map(|month| {
                 let days_in = days_in_month(year, month);
@@ -200,6 +229,15 @@ impl JyotishHandle {
                         }
                     }
                 }
+                let (green, yellow, red) = if let Some(n) = natal.as_ref() {
+                    let mid = NaiveDate::from_ymd_opt(year, month, 15)
+                        .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today));
+                    let at = local_noon_utc(mid, cfg.longitude);
+                    let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
+                    tint_counts(green, yellow, red, modif)
+                } else {
+                    (green, yellow, red)
+                };
                 let month_offset =
                     (year - today.year()) * 12 + (month as i32 - today.month() as i32);
                 JyotishMonthSummary {
@@ -211,7 +249,11 @@ impl JyotishHandle {
                 }
             })
             .collect();
-        (year, months)
+        (
+            year,
+            months,
+            year_gochara.map(gochara_note_key).unwrap_or(""),
+        )
     }
 
     fn build_life(
@@ -227,6 +269,7 @@ impl JyotishHandle {
             .or_else(|| NaiveDate::from_ymd_opt(natal.birth_year, 1, 1))
             .unwrap_or(today);
         let current_year = today.year();
+        let selected = *self.life_detail_year.read();
 
         (natal.birth_year..=current_year)
             .map(|year| {
@@ -242,20 +285,78 @@ impl JyotishHandle {
                         }
                     }
                 }
-                let dasha_key = NaiveDate::from_ymd_opt(year, 6, 15)
-                    .and_then(|d| dasha_at(natal.moon_longitude, birth_date, d))
-                    .map(|(maha, _)| maha.ftl_key())
+                let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
+                let modif =
+                    gochara_modifier(natal.moon_rashi, local_noon_utc(mid, cfg.longitude), cfg.ayanamsa);
+                let (green, yellow, red) = tint_counts(green * 30, yellow * 30, red * 30, modif);
+                let dasha_key = dasha_at(natal.moon_longitude, birth_date, mid)
+                    .map(|(maha, _, _)| maha.ftl_key())
                     .unwrap_or("");
                 JyotishYearSummary {
                     year,
-                    green: green * 30,
-                    yellow: yellow * 30,
-                    red: red * 30,
+                    green,
+                    yellow,
+                    red,
                     dasha_key,
                     year_offset: year - current_year,
+                    is_selected: selected == Some(year),
+                    is_current: year == current_year,
                 }
             })
             .collect()
+    }
+
+    fn build_life_antars(
+        &self,
+        cfg: &JyotishConfig,
+        natal: &NatalInfo,
+        today: NaiveDate,
+        locale: &LocaleConfig,
+    ) -> Vec<JyotishAntarRow> {
+        let Some(year) = *self.life_detail_year.read() else {
+            return Vec::new();
+        };
+        let birth_date = cfg
+            .birth_date
+            .as_deref()
+            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+            .or_else(|| NaiveDate::from_ymd_opt(natal.birth_year, 1, 1))
+            .unwrap_or(today);
+        let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
+        let Some(stack) = dasha_stack_at(natal.moon_longitude, birth_date, mid) else {
+            return Vec::new();
+        };
+        antar_dashas(&stack.maha)
+            .into_iter()
+            .map(|period| JyotishAntarRow {
+                lord_key: period.lord.ftl_key(),
+                from_text: format_naive_date(locale, period.from),
+                to_text: format_naive_date(locale, period_end_display(period.to)),
+                is_current: period.from <= today && today < period.to,
+            })
+            .collect()
+    }
+
+    fn build_dasha_now(
+        &self,
+        cfg: &JyotishConfig,
+        natal: &NatalInfo,
+        selected_date: NaiveDate,
+        locale: &LocaleConfig,
+    ) -> Option<JyotishDashaNow> {
+        let birth_date = cfg
+            .birth_date
+            .as_deref()
+            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())?;
+        let stack = dasha_stack_at(natal.moon_longitude, birth_date, selected_date)?;
+        Some(JyotishDashaNow {
+            maha_key: stack.maha.lord.ftl_key(),
+            antar_key: stack.antar.lord.ftl_key(),
+            pratyantar_key: stack.pratyantar.lord.ftl_key(),
+            maha_range: period_range_text(locale, stack.maha),
+            antar_range: period_range_text(locale, stack.antar),
+            pratyantar_range: period_range_text(locale, stack.pratyantar),
+        })
     }
 
     fn render_payload(&self, locale: &LocaleConfig) -> JyotishPayload {
@@ -296,7 +397,11 @@ impl JyotishHandle {
         } else {
             &day_score
         };
-        let narrative = build_narrative(primary_score);
+        let day_seed = u32::try_from(selected_date.num_days_from_ce()).unwrap_or(0);
+        let narrative_ctx =
+            NarrativeContext::new(primary_score, data.vara_index, data.paksha_shukla, day_seed);
+        let narrative = build_narrative(primary_score, &narrative_ctx);
+        let factor_rows = factor_rows_from_score(primary_score);
 
         let ends = transitions::panchanga_ends(at, cfg.ayanamsa);
         let fmt_end = |t: Option<DateTime<Utc>>| t.map(fmt_time);
@@ -329,11 +434,35 @@ impl JyotishHandle {
             month_yellow,
             month_red,
         ) = self.build_month(&cfg, today);
-        let (year_value, year_months) = self.build_year(&cfg, today);
+        let (year_value, year_months, year_gochara_key) = self.build_year(&cfg, today);
         let life_years = natal
             .as_ref()
             .map(|n| self.build_life(&cfg, n, today))
             .unwrap_or_default();
+        let life_antars = natal
+            .as_ref()
+            .map(|n| self.build_life_antars(&cfg, n, today, locale))
+            .unwrap_or_default();
+        let dasha_now = natal
+            .as_ref()
+            .and_then(|n| self.build_dasha_now(&cfg, n, selected_date, locale));
+        let detail_year = *self.life_detail_year.read();
+        let gochara_note_key = if cfg.active_tab == 3 {
+            detail_year
+                .and_then(|year| {
+                    natal.as_ref().map(|n| {
+                        let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
+                        gochara_note_key(gochara_modifier(
+                            n.moon_rashi,
+                            local_noon_utc(mid, cfg.longitude),
+                            cfg.ayanamsa,
+                        ))
+                    })
+                })
+                .unwrap_or("")
+        } else {
+            year_gochara_key
+        };
 
         let wizard_step = *self.rectify_wizard_step.read();
         let rectify_view = {
@@ -380,6 +509,9 @@ impl JyotishHandle {
             score_color: color_of(primary_score.color),
             now_score_color: color_of(now_score.color),
             day_score_color: color_of(day_score.color),
+            score_value: primary_score.score,
+            factors: factor_rows,
+            personal_mode: primary_score.personal,
             headline_key: narrative.headline_key,
             influence_keys: narrative.influence_keys,
             advice_keys: narrative.advice_keys,
@@ -394,9 +526,28 @@ impl JyotishHandle {
             year_value,
             year_months,
             life_years,
+            life_detail_year: detail_year.unwrap_or(0),
+            life_antars,
+            has_dasha_now: dasha_now.is_some(),
+            dasha_now: dasha_now.unwrap_or_default(),
+            gochara_note_key,
             has_birth_data: cfg.has_birth_data(),
             rectify: rectify_view,
         }
+    }
+
+    fn select_life_year(&self, year: i32) {
+        let mut guard = self.life_detail_year.write();
+        *guard = match *guard {
+            Some(y) if y == year => None,
+            _ => Some(year.clamp(1800, 2200)),
+        };
+        drop(guard);
+        {
+            let mut cfg = self.config.write();
+            cfg.active_tab = 3;
+        }
+        self.publish();
     }
 
     fn rectify_start(&self) {
@@ -514,6 +665,56 @@ fn color_of(color: DayColor) -> u8 {
         DayColor::Yellow => 1,
         DayColor::Red => 2,
     }
+}
+
+fn format_naive_date(locale: &LocaleConfig, date: NaiveDate) -> String {
+    let noon = date
+        .and_hms_opt(12, 0, 0)
+        .unwrap_or_else(|| date.and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap_or_default()));
+    locale.format_date(noon.and_utc())
+}
+
+/// Exclusive period end → last inclusive civil day for display.
+fn period_end_display(exclusive_to: NaiveDate) -> NaiveDate {
+    exclusive_to
+        .pred_opt()
+        .unwrap_or(exclusive_to)
+}
+
+fn period_range_text(locale: &LocaleConfig, period: DashaPeriod) -> String {
+    format!(
+        "{} – {}",
+        format_naive_date(locale, period.from),
+        format_naive_date(locale, period_end_display(period.to))
+    )
+}
+
+fn factor_rows_from_score(score: &DayScore) -> Vec<JyotishFactorRow> {
+    let mut rows: Vec<JyotishFactorRow> = score
+        .factors
+        .iter()
+        .filter_map(|c| {
+            let label_key = narrative::influence_key(c.factor)?;
+            let valence = match c.valence {
+                Valence::Favorable => 0,
+                Valence::Unfavorable => 1,
+                Valence::Neutral => 2,
+            };
+            Some(JyotishFactorRow {
+                label_key,
+                delta: c.delta,
+                strength: c.strength,
+                valence,
+            })
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        b.strength
+            .cmp(&a.strength)
+            .then_with(|| b.delta.unsigned_abs().cmp(&a.delta.unsigned_abs()))
+    });
+    rows.truncate(6);
+    rows
 }
 
 /// Fluent key for a weekday (`jyotish-wd-mon` … `jyotish-wd-sun`).
@@ -686,13 +887,19 @@ pub fn year_nav(instance_id: Uuid, delta: i32) {
     });
 }
 
-/// Jump directly to an absolute year offset (e.g. from the life
-/// retrospective) and switch to the year tab.
+/// Jump directly to an absolute year offset and switch to the year tab.
 pub fn set_year_offset(instance_id: Uuid, offset: i32) {
     update_config(instance_id, |cfg| {
         cfg.year_offset = offset;
         cfg.active_tab = 2;
     });
+}
+
+/// Toggle Life-tab expansion for an absolute civil year (antar list).
+pub fn select_life_year(instance_id: Uuid, year: i32) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.select_life_year(year);
+    }
 }
 
 /// Open the rectification wizard at the window-picker step.
@@ -788,6 +995,7 @@ impl JyotishWidget {
             color_cache: DashMap::new(),
             rectify: RwLock::new(None),
             rectify_wizard_step: RwLock::new(0),
+            life_detail_year: RwLock::new(None),
             bus,
         });
         JYOTISH_LIVE.insert(instance_id, Arc::clone(&handle));
@@ -926,6 +1134,9 @@ fn loading_payload(cfg: &JyotishConfig) -> JyotishPayload {
         score_color: 0,
         now_score_color: 0,
         day_score_color: 0,
+        score_value: 0,
+        factors: Vec::new(),
+        personal_mode: false,
         headline_key: "",
         influence_keys: Vec::new(),
         advice_keys: Vec::new(),
@@ -940,6 +1151,11 @@ fn loading_payload(cfg: &JyotishConfig) -> JyotishPayload {
         year_value: 0,
         year_months: Vec::new(),
         life_years: Vec::new(),
+        life_detail_year: 0,
+        life_antars: Vec::new(),
+        has_dasha_now: false,
+        dasha_now: JyotishDashaNow::default(),
+        gochara_note_key: "",
         has_birth_data: cfg.has_birth_data(),
         rectify: JyotishRectifyView::default(),
     }

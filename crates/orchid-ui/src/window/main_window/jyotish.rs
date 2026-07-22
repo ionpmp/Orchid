@@ -75,6 +75,13 @@ impl MainWindowController {
         orchid_widgets::builtin::jyotish::set_year_offset(inst, offset);
     }
 
+    pub(super) fn on_jyotish_select_life_year(self: &Arc<Self>, id: &SharedString, year: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::select_life_year(inst, year);
+    }
+
     pub(super) fn on_jyotish_rectify_start(self: &Arc<Self>, id: &SharedString) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;

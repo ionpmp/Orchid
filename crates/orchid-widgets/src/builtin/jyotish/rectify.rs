@@ -450,8 +450,13 @@ fn event_score_for(
     let mut score = 0i32;
     for e in events {
         let event_date = NaiveDate::from_ymd_opt(e.year, 7, 1).unwrap_or(birth_date);
-        if let Some((maha, antar)) = dasha_at(natal.moon_longitude, birth_date, event_date) {
+        if let Some((maha, antar, pratyantar)) =
+            dasha_at(natal.moon_longitude, birth_date, event_date)
+        {
             let fav = e.kind.favorable_lords();
+            if fav.contains(&pratyantar) {
+                score += 5;
+            }
             if fav.contains(&antar) {
                 score += 3;
             }
@@ -556,7 +561,7 @@ mod tests {
         // Pick a candidate interval and force moon via compute_natal at a
         // known UTC instant where moon is near 0° sidereal is hard; instead
         // unit-test event_score_for with a synthetic natal via dasha_at.
-        let (maha, _) =
+        let (maha, _, _) =
             dasha_at(0.0, birth, NaiveDate::from_ymd_opt(2005, 7, 1).unwrap()).expect("dasha");
         assert_eq!(maha, DashaLord::Venus);
         let mut s = RectifySession::new(birth, 0.0, 0.0, 0, AyanamsaSystem::Lahiri, None, None);

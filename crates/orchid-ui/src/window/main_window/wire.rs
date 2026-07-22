@@ -676,6 +676,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_jyotish_select_life_year({
+            let t = t.clone();
+            move |id, year| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_select_life_year(&id, year);
+                }
+            }
+        });
         self.window.on_jyotish_rectify_start({
             let t = t.clone();
             move |id| {

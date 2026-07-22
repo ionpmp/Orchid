@@ -2,12 +2,13 @@
 
 use crate::widget::payloads::{
     CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload, FileManagerPayload,
-    JyotishDayChip, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishYearSummary,
-    MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView,
-    PasswordManagerPayload, ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView,
-    RssPayload, SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator,
-    SystemPayload, UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay,
-    WeatherPayload,
+    JyotishAntarRow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary,
+    JyotishPayload, JyotishYearSummary, MediaPlayerPayload, MoonPayload, NotesPayload,
+    PasswordEntryDetailView,
+    PasswordEntryView, PasswordManagerPayload, ProcessRowView, ProcessesPayload,
+    RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
+    StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload, UserRowView,
+    ViewerPayload, WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
 
@@ -398,6 +399,9 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
         && a.score_color == b.score_color
         && a.now_score_color == b.now_score_color
         && a.day_score_color == b.day_score_color
+        && a.score_value == b.score_value
+        && jyotish_factors_eq(&a.factors, &b.factors)
+        && a.personal_mode == b.personal_mode
         && a.headline_key == b.headline_key
         && a.influence_keys == b.influence_keys
         && a.advice_keys == b.advice_keys
@@ -412,8 +416,17 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
         && a.year_value == b.year_value
         && jyotish_year_months_eq(&a.year_months, &b.year_months)
         && jyotish_life_years_eq(&a.life_years, &b.life_years)
+        && a.life_detail_year == b.life_detail_year
+        && jyotish_life_antars_eq(&a.life_antars, &b.life_antars)
+        && a.has_dasha_now == b.has_dasha_now
+        && a.dasha_now == b.dasha_now
+        && a.gochara_note_key == b.gochara_note_key
         && a.has_birth_data == b.has_birth_data
         && a.rectify == b.rectify
+}
+
+fn jyotish_factors_eq(a: &[JyotishFactorRow], b: &[JyotishFactorRow]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
 }
 
 fn jyotish_week_strip_eq(a: &[JyotishDayChip], b: &[JyotishDayChip]) -> bool {
@@ -429,6 +442,10 @@ fn jyotish_year_months_eq(a: &[JyotishMonthSummary], b: &[JyotishMonthSummary]) 
 }
 
 fn jyotish_life_years_eq(a: &[JyotishYearSummary], b: &[JyotishYearSummary]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
+}
+
+fn jyotish_life_antars_eq(a: &[JyotishAntarRow], b: &[JyotishAntarRow]) -> bool {
     a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
 }
 

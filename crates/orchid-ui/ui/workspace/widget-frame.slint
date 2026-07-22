@@ -84,6 +84,7 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-year-nav(string, int);
     callback jyotish-open-month(string, int);
     callback jyotish-open-year(string, int);
+    callback jyotish-select-life-year(string, int);
     callback jyotish-rectify-start(string);
     callback jyotish-rectify-set-window(string, int, int);
     callback jyotish-rectify-answer(string, int, int);
@@ -576,6 +577,7 @@ export component WidgetFrame inherits Rectangle {
                     year-nav(d) => { root.jyotish-year-nav(root.model.instance-id, d); }
                     open-month(o) => { root.jyotish-open-month(root.model.instance-id, o); }
                     open-year(o) => { root.jyotish-open-year(root.model.instance-id, o); }
+                    select-life-year(y) => { root.jyotish-select-life-year(root.model.instance-id, y); }
                     rectify-start => { root.jyotish-rectify-start(root.model.instance-id); }
                     rectify-set-window(m, h) => { root.jyotish-rectify-set-window(root.model.instance-id, m, h); }
                     rectify-answer(q, o) => { root.jyotish-rectify-answer(root.model.instance-id, q, o); }

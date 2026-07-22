@@ -154,6 +154,13 @@ export struct JyotishPlanetEntry {
     is-retrograde: bool,
 }
 
+export struct JyotishFactorEntry {
+    label: string,
+    delta-text: string,
+    strength: int,
+    valence: int,
+}
+
 export struct JyotishDayChipModel {
     weekday: string,
     day-num: int,
@@ -184,6 +191,14 @@ export struct JyotishYearRowModel {
     red: int,
     dasha: string,
     year-offset: int,
+    is-selected: bool,
+    is-current: bool,
+}
+
+export struct JyotishAntarRowModel {
+    lord: string,
+    range: string,
+    is-current: bool,
 }
 
 export struct JyotishRectifyModel {
@@ -233,8 +248,13 @@ export struct JyotishModel {
     score-color: int,
     now-score-color: int,
     day-score-color: int,
+    score-value: int,
+    score-label: string,
     score-now-label: string,
     score-day-label: string,
+    factors: [JyotishFactorEntry],
+    personal-mode: bool,
+    personal-badge: string,
     headline: string,
     influences: [string],
     advice: [string],
@@ -248,7 +268,18 @@ export struct JyotishModel {
     month-red: int,
     year-title: string,
     year-months: [JyotishMonthRowModel],
+    gochara-note: string,
     life-years: [JyotishYearRowModel],
+    life-antars: [JyotishAntarRowModel],
+    life-antars-title: string,
+    has-dasha-now: bool,
+    dasha-now-title: string,
+    dasha-maha-label: string,
+    dasha-antar-label: string,
+    dasha-pratyantar-label: string,
+    dasha-maha-text: string,
+    dasha-antar-text: string,
+    dasha-pratyantar-text: string,
     has-birth-data: bool,
     birth-prompt: string,
     rectify-button-label: string,

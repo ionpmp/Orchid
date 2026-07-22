@@ -141,11 +141,22 @@ pub fn maha_dashas(natal_moon_lon: f64, birth: NaiveDate, until: NaiveDate) -> V
 /// order.
 #[must_use]
 pub fn antar_dashas(maha: &DashaPeriod) -> Vec<DashaPeriod> {
-    let start_idx = maha.lord.order_index();
-    let total_days = ((maha.to - maha.from).num_days() as f64).max(0.0);
+    subdivide(maha, maha.lord.order_index())
+}
+
+/// Pratyantar-daśā (sub-sub-period) breakdown of a single antar-daśā,
+/// starting with the antar lord's own pratyantar and cycling the
+/// Vimshottari order.
+#[must_use]
+pub fn pratyantar_dashas(antar: &DashaPeriod) -> Vec<DashaPeriod> {
+    subdivide(antar, antar.lord.order_index())
+}
+
+fn subdivide(parent: &DashaPeriod, start_idx: usize) -> Vec<DashaPeriod> {
+    let total_days = ((parent.to - parent.from).num_days() as f64).max(0.0);
 
     let mut periods = Vec::with_capacity(9);
-    let mut cursor = maha.from;
+    let mut cursor = parent.from;
     for i in 0..9 {
         let lord = ORDER[(start_idx + i) % 9];
         let days = (total_days * (lord.years() / 120.0)).round() as i64;
@@ -159,29 +170,65 @@ pub fn antar_dashas(maha: &DashaPeriod) -> Vec<DashaPeriod> {
     }
 
     if let Some(last) = periods.last_mut() {
-        last.to = maha.to;
+        last.to = parent.to;
     }
     periods
 }
 
-/// The (mahā, antar) lord pair active on `date`.
+/// Mahā / antar / pratyantar periods active on `date`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DashaStack {
+    /// Outer (mahā) period.
+    pub maha: DashaPeriod,
+    /// Middle (antar) period.
+    pub antar: DashaPeriod,
+    /// Inner (pratyantar) period.
+    pub pratyantar: DashaPeriod,
+}
+
+/// Full Vimshottari stack active on `date`.
+#[must_use]
+pub fn dasha_stack_at(
+    natal_moon_lon: f64,
+    birth: NaiveDate,
+    date: NaiveDate,
+) -> Option<DashaStack> {
+    let mahas = maha_dashas(natal_moon_lon, birth, date + ChronoDuration::days(1));
+    let maha = *mahas
+        .iter()
+        .find(|p| p.from <= date && date < p.to)
+        .or_else(|| mahas.last())?;
+    let antars = antar_dashas(&maha);
+    let antar = *antars
+        .iter()
+        .find(|p| p.from <= date && date < p.to)
+        .or_else(|| antars.last())?;
+    let pratyantars = pratyantar_dashas(&antar);
+    let pratyantar = *pratyantars
+        .iter()
+        .find(|p| p.from <= date && date < p.to)
+        .or_else(|| pratyantars.last())?;
+    Some(DashaStack {
+        maha,
+        antar,
+        pratyantar,
+    })
+}
+
+/// The (mahā, antar, pratyantar) lord triple active on `date`.
 #[must_use]
 pub fn dasha_at(
     natal_moon_lon: f64,
     birth: NaiveDate,
     date: NaiveDate,
-) -> Option<(DashaLord, DashaLord)> {
-    let mahas = maha_dashas(natal_moon_lon, birth, date + ChronoDuration::days(1));
-    let maha = mahas
-        .iter()
-        .find(|p| p.from <= date && date < p.to)
-        .or_else(|| mahas.last())?;
-    let antars = antar_dashas(maha);
-    let antar = antars
-        .iter()
-        .find(|p| p.from <= date && date < p.to)
-        .or_else(|| antars.last())?;
-    Some((maha.lord, antar.lord))
+) -> Option<(DashaLord, DashaLord, DashaLord)> {
+    dasha_stack_at(natal_moon_lon, birth, date).map(|s| {
+        (
+            s.maha.lord,
+            s.antar.lord,
+            s.pratyantar.lord,
+        )
+    })
 }
 
 #[cfg(test)]
@@ -247,25 +294,27 @@ mod tests {
     #[test]
     fn dasha_at_returns_consistent_lords() {
         let birth = NaiveDate::from_ymd_opt(1990, 3, 10).unwrap();
-        let (maha, antar) = dasha_at(200.0, birth, birth + ChronoDuration::days(3000))
-            .expect("dasha lookup should succeed");
-        let mahas = maha_dashas(200.0, birth, birth + ChronoDuration::days(3001));
-        let expected_maha = mahas
-            .iter()
-            .find(|p| {
-                p.from <= birth + ChronoDuration::days(3000)
-                    && birth + ChronoDuration::days(3000) < p.to
-            })
-            .unwrap();
-        assert_eq!(maha, expected_maha.lord);
-        let antars = antar_dashas(expected_maha);
-        let expected_antar = antars
-            .iter()
-            .find(|p| {
-                p.from <= birth + ChronoDuration::days(3000)
-                    && birth + ChronoDuration::days(3000) < p.to
-            })
-            .unwrap();
-        assert_eq!(antar, expected_antar.lord);
+        let date = birth + ChronoDuration::days(3000);
+        let (maha, antar, pratyantar) =
+            dasha_at(200.0, birth, date).expect("dasha lookup should succeed");
+        let stack = dasha_stack_at(200.0, birth, date).expect("stack");
+        assert_eq!(maha, stack.maha.lord);
+        assert_eq!(antar, stack.antar.lord);
+        assert_eq!(pratyantar, stack.pratyantar.lord);
+        assert!(stack.maha.from <= date && date < stack.maha.to);
+        assert!(stack.antar.from <= date && date < stack.antar.to);
+        assert!(stack.pratyantar.from <= date && date < stack.pratyantar.to);
+    }
+
+    #[test]
+    fn pratyantar_starts_with_antar_lord() {
+        let birth = NaiveDate::from_ymd_opt(1990, 3, 10).unwrap();
+        let mahas = maha_dashas(200.0, birth, birth + ChronoDuration::days(365 * 25));
+        let antar = &antar_dashas(&mahas[1])[0];
+        let pratyantars = pratyantar_dashas(antar);
+        assert_eq!(pratyantars.len(), 9);
+        assert_eq!(pratyantars[0].lord, antar.lord);
+        assert_eq!(pratyantars[0].from, antar.from);
+        assert_eq!(pratyantars.last().unwrap().to, antar.to);
     }
 }

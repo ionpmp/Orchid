@@ -146,6 +146,7 @@ export component MainWindow inherits Window {
     callback jyotish-year-nav(string, int);
     callback jyotish-open-month(string, int);
     callback jyotish-open-year(string, int);
+    callback jyotish-select-life-year(string, int);
     callback jyotish-rectify-start(string);
     callback jyotish-rectify-set-window(string, int, int);
     callback jyotish-rectify-answer(string, int, int);
@@ -507,6 +508,7 @@ export component MainWindow inherits Window {
             jyotish-year-nav(id, d) => { root.jyotish-year-nav(id, d); }
             jyotish-open-month(id, o) => { root.jyotish-open-month(id, o); }
             jyotish-open-year(id, o) => { root.jyotish-open-year(id, o); }
+            jyotish-select-life-year(id, y) => { root.jyotish-select-life-year(id, y); }
             jyotish-rectify-start(id) => { root.jyotish-rectify-start(id); }
             jyotish-rectify-set-window(id, m, h) => { root.jyotish-rectify-set-window(id, m, h); }
             jyotish-rectify-answer(id, q, o) => { root.jyotish-rectify-answer(id, q, o); }

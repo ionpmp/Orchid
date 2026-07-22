@@ -1,7 +1,8 @@
 import { Theme } from "../theme_global.slint";
 import {
     JyotishModel, JyotishPanchangaRow, JyotishPlanetEntry, JyotishDayChipModel,
-    JyotishMonthCellModel, JyotishMonthRowModel, JyotishYearRowModel, JyotishRectifyModel,
+    JyotishMonthCellModel, JyotishMonthRowModel, JyotishYearRowModel, JyotishAntarRowModel,
+    JyotishRectifyModel,
 } from "../workspace/defs.slint";
 
 component NavBtn inherits TouchArea {
@@ -97,6 +98,7 @@ export component JyotishView inherits Rectangle {
     callback year-nav(int);
     callback open-month(int);
     callback open-year(int);
+    callback select-life-year(int);
     callback rectify-start();
     callback rectify-set-window(int, int);
     callback rectify-answer(int, int);
@@ -207,6 +209,24 @@ export component JyotishView inherits Rectangle {
                     alignment: center;
                     ColorDot { color-code: model.score-color; y: (parent.height - self.height) / 2; }
                     Text {
+                        text: model.score-label + " " + model.score-value;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: model.personal-badge;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if !model.is-loading : HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    ColorDot { color-code: model.score-color; y: (parent.height - self.height) / 2; }
+                    Text {
                         text: model.headline;
                         color: Theme.text-primary;
                         font-size: Theme.font-size-sm;
@@ -241,6 +261,27 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
+                if !model.is-loading && model.factors.length > 0 : VerticalLayout {
+                    spacing: 2px;
+                    for f[i] in model.factors : HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: f.delta-text;
+                            color: f.valence == 0 ? #34c759 : (f.valence == 1 ? #ff3b30 : Theme.text-tertiary);
+                            font-size: Theme.font-size-sm;
+                            font-weight: Theme.weight-medium;
+                            horizontal-stretch: 0;
+                        }
+                        Text {
+                            text: f.label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+
                 if !model.is-loading && model.influences.length > 0 : VerticalLayout {
                     spacing: 2px;
                     for line[i] in model.influences : Text {
@@ -259,6 +300,35 @@ export component JyotishView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         wrap: word-wrap;
                         horizontal-alignment: center;
+                    }
+                }
+
+
+                if !model.is-loading && model.has-dasha-now : VerticalLayout {
+                    spacing: 3px;
+                    Text {
+                        text: model.dasha-now-title;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-medium;
+                    }
+                    Text {
+                        text: model.dasha-maha-label + ": " + model.dasha-maha-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: model.dasha-antar-label + ": " + model.dasha-antar-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: model.dasha-pratyantar-label + ": " + model.dasha-pratyantar-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
                     }
                 }
 
@@ -608,6 +678,15 @@ export component JyotishView inherits Rectangle {
                 }
             }
 
+
+            if model.gochara-note != "" : Text {
+                text: model.gochara-note;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+
             Flickable {
                 vertical-stretch: 1;
                 viewport-width: parent.width;
@@ -673,46 +752,94 @@ export component JyotishView inherits Rectangle {
 
                 if model.has-birth-data : VerticalLayout {
                     spacing: 4px;
-                    for row[i] in model.life-years : Rectangle {
-                        height: 40px;
-                        border-radius: Theme.radius-md;
-                        background: year-ta.has-hover ? Theme.surface-raised : transparent;
+                    if model.gochara-note != "" : Text {
+                        text: model.gochara-note;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                    }
+                    for row[i] in model.life-years : VerticalLayout {
+                        spacing: 2px;
+                        Rectangle {
+                            height: 40px;
+                            border-radius: Theme.radius-md;
+                            background: row.is-selected ? Theme.surface-raised : (year-ta.has-hover ? Theme.surface-raised : transparent);
+                            border-width: row.is-current ? 1px : 0px;
+                            border-color: Theme.accent-brand;
 
-                        year-ta := TouchArea {
-                            clicked => { root.open-year(row.year-offset); }
-                        }
+                            year-ta := TouchArea {
+                                clicked => { root.select-life-year(row.year); }
+                            }
 
-                        VerticalLayout {
-                            padding-left: 6px;
-                            padding-right: 6px;
-                            padding-top: 3px;
-                            padding-bottom: 3px;
-                            spacing: 3px;
+                            VerticalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                padding-top: 3px;
+                                padding-bottom: 3px;
+                                spacing: 3px;
 
-                            HorizontalLayout {
-                                spacing: 8px;
-                                alignment: space-between;
-                                Text {
-                                    text: row.year;
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-sm;
-                                    font-weight: Theme.weight-medium;
-                                    vertical-alignment: center;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    alignment: space-between;
+                                    Text {
+                                        text: row.year;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: Theme.weight-medium;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: row.dasha;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
                                 }
-                                Text {
-                                    text: row.dasha;
-                                    color: Theme.text-tertiary;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
-                                    horizontal-alignment: right;
-                                    wrap: no-wrap;
-                                    overflow: elide;
+                                ScoreBar {
+                                    green: row.green;
+                                    yellow: row.yellow;
+                                    red: row.red;
                                 }
                             }
-                            ScoreBar {
-                                green: row.green;
-                                yellow: row.yellow;
-                                red: row.red;
+                        }
+                        if row.is-selected && model.life-antars.length > 0 : VerticalLayout {
+                            spacing: 2px;
+                            padding-left: 10px;
+                            Text {
+                                text: model.life-antars-title;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.weight-medium;
+                            }
+                            for antar[j] in model.life-antars : Rectangle {
+                                height: 28px;
+                                border-radius: Theme.radius-md;
+                                background: antar.is-current ? Theme.accent-brand : transparent;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    spacing: 8px;
+                                    alignment: space-between;
+                                    Text {
+                                        text: antar.lord;
+                                        color: antar.is-current ? Theme.surface-base : Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: antar.range;
+                                        color: antar.is-current ? Theme.surface-base : Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                        wrap: no-wrap;
+                                        overflow: elide;
+                                    }
+                                }
                             }
                         }
                     }

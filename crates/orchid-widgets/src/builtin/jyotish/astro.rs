@@ -422,14 +422,14 @@ pub(crate) fn moon_longitude(t: f64) -> f64 {
     norm360(lambda)
 }
 
-fn true_node_longitude(t: f64) -> f64 {
+pub(crate) fn true_node_longitude(t: f64) -> f64 {
     // Mean ascending node + small correction (Meeus ch.47).
     let omega = 125.044_52 - 1_934.136_261 * t + 0.002_070_8 * t * t;
     norm360(omega)
 }
 
 #[derive(Clone, Copy)]
-enum Planet {
+pub(crate) enum Planet {
     Mercury,
     Venus,
     Mars,
@@ -438,7 +438,7 @@ enum Planet {
 }
 
 /// Approximate heliocentric → geocentric ecliptic longitude and retrograde flag.
-fn planet_longitude(t: f64, planet: Planet) -> (f64, bool) {
+pub(crate) fn planet_longitude(t: f64, planet: Planet) -> (f64, bool) {
     // Orbital elements at J2000: (semi-major AU, ecc, mean long, perihelion, °/day).
     let (a, e, l0, peri, n): (f64, f64, f64, f64, f64) = match planet {
         Planet::Mercury => (0.387_098, 0.205_630, 252.251, 77.456, 4.092_317),

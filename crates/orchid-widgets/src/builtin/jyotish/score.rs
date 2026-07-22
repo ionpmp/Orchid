@@ -4,6 +4,27 @@
 //! muhurta consultation: it combines classical panchanga rules (tithi
 //! quality, yoga, karana) with, when natal data is available, taras
 //! (nakshatra counting) and chandrashtama-style moon-house checks.
+//!
+//! # Weight table (signed points added to the base)
+//!
+//! | Factor | Favorable | Mild | Unfavorable |
+//! |--------|-----------|------|-------------|
+//! | Tara good (Sampat/Kshema/Sadhana/Mitra/Parama) | +12 | | |
+//! | Tara Janma | | −4 | |
+//! | Tara Vipat/Pratyak/Naidhana | | | −18 |
+//! | Chandra kendra/trikona (1,3,6,7,10,11) | +10 | | |
+//! | Chandra dusthana (4,8,12) | | | −14 |
+//! | Tithi Nanda/Bhadra/Jaya | | +2 | |
+//! | Tithi Rikta | | | −8 |
+//! | Tithi Purna class | +6 | | |
+//! | Amavasya / Purnima | +3 (Purnima) | | −6 (Amavasya) |
+//! | Yoga Vyatipata/Vaidhriti | | | −14 |
+//! | Other tense yogas | | | −10 |
+//! | Vishti karana | | | −8 (high strength) |
+//! | Fixed karana | | | −4 |
+//!
+//! Bases: [`BASE_GENERIC`] without natal, [`BASE_NATAL`] with natal.
+//! Color thresholds: ≥[`THRESHOLD_GREEN`] green, ≥[`THRESHOLD_YELLOW`] yellow, else red.
 
 use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
 
@@ -12,6 +33,44 @@ use super::config::AyanamsaSystem;
 
 const NAK_SPAN: f64 = 360.0 / 27.0;
 
+/// Base score when no birth chart is available (panchanga-only).
+pub const BASE_GENERIC: i32 = 62;
+/// Base score when natal tara/chandra layers apply (lower, more headroom for swings).
+pub const BASE_NATAL: i32 = 55;
+/// Score ≥ this → [`DayColor::Green`].
+pub const THRESHOLD_GREEN: u8 = 65;
+/// Score ≥ this (and < green) → [`DayColor::Yellow`].
+pub const THRESHOLD_YELLOW: u8 = 40;
+
+/// Favorable tara categories (Sampat, Kshema, Sadhana, Mitra, Parama Mitra).
+pub const W_TARA_GOOD: i8 = 12;
+/// Janma tara mild penalty.
+pub const W_TARA_JANMA: i8 = -4;
+/// Vipat / Pratyak / Naidhana tara penalty.
+pub const W_TARA_BAD: i8 = -18;
+/// Favorable chandra houses (kendra/trikona set used here).
+pub const W_CHANDRA_GOOD: i8 = 10;
+/// Dusthana-like chandra houses (4/8/12).
+pub const W_CHANDRA_BAD: i8 = -14;
+/// Nanda / Bhadra / Jaya tithi flow bonus.
+pub const W_TITHI_FLOW: i8 = 2;
+/// Rikta tithi penalty.
+pub const W_TITHI_RIKTA: i8 = -8;
+/// Purna-class tithi bonus.
+pub const W_TITHI_PURNA_CLASS: i8 = 6;
+/// Amavasya penalty.
+pub const W_AMAVASYA: i8 = -6;
+/// Purnima bonus.
+pub const W_PURNIMA: i8 = 3;
+/// Vyatipata / Vaidhriti yoga penalty.
+pub const W_YOGA_SEVERE: i8 = -14;
+/// Other tense yoga penalty.
+pub const W_YOGA_TENSE: i8 = -10;
+/// Vishti (Bhadra) karana penalty.
+pub const W_VISHTI: i8 = -8;
+/// Fixed karana (Shakuni / Chatushpada / Naga) penalty.
+pub const W_FIXED_KARANA: i8 = -4;
+
 fn norm360(x: f64) -> f64 {
     x.rem_euclid(360.0)
 }
@@ -19,12 +78,39 @@ fn norm360(x: f64) -> f64 {
 /// Traffic-light classification of a [`DayScore`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DayColor {
-    /// Favorable (score >= 65).
+    /// Favorable (score >= [`THRESHOLD_GREEN`]).
     Green,
-    /// Mixed (40..=64).
+    /// Mixed ([`THRESHOLD_YELLOW`]..=THRESHOLD_GREEN-1).
     Yellow,
-    /// Unfavorable (score < 40).
+    /// Unfavorable (score < [`THRESHOLD_YELLOW`]).
     Red,
+}
+
+/// Qualitative direction of a factor, independent of magnitude.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Valence {
+    /// Supports auspiciousness.
+    Favorable,
+    /// Opposes auspiciousness.
+    Unfavorable,
+    /// Present but not strongly signed.
+    Neutral,
+}
+
+/// A single scoring input with signed delta, intensity, and valence.
+///
+/// Strength is not just `|delta|`: Vishti and bad taras are marked as high
+/// intensity even when their point delta is modest relative to the worst case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FactorContribution {
+    /// Which classical input produced this contribution.
+    pub factor: Factor,
+    /// Signed points added to the day total.
+    pub delta: i8,
+    /// 0..=100 intensity for UI bars / ranking.
+    pub strength: u8,
+    /// Favorable / unfavorable / neutral.
+    pub valence: Valence,
 }
 
 /// A single scoring input and its signed contribution to the total.
@@ -59,8 +145,10 @@ pub struct DayScore {
     pub score: u8,
     /// Traffic-light classification of `score`.
     pub color: DayColor,
-    /// Ordered (insertion order) list of factors and their signed weights.
-    pub factors: Vec<(Factor, i8)>,
+    /// Ordered (insertion order) factor contributions.
+    pub factors: Vec<FactorContribution>,
+    /// `true` when tara/chandra natal layers were applied.
+    pub personal: bool,
 }
 
 /// Natal (birth-chart) data required for tara/chandra scoring.
@@ -76,6 +164,40 @@ pub struct NatalInfo {
     pub birth_year: i32,
 }
 
+/// Build a contribution with strength/valence derived from `factor` + `delta`.
+#[must_use]
+pub fn contribute(factor: Factor, delta: i8) -> FactorContribution {
+    let valence = if delta > 0 {
+        Valence::Favorable
+    } else if delta < 0 {
+        Valence::Unfavorable
+    } else {
+        Valence::Neutral
+    };
+    FactorContribution {
+        factor,
+        delta,
+        strength: strength_of(factor, delta),
+        valence,
+    }
+}
+
+/// Intensity 0..=100: scale `|delta|` against [`W_TARA_BAD`], then boost
+/// classically "loud" factors (Vishti, Vipat-class taras, severe yogas).
+pub(crate) fn strength_of(factor: Factor, delta: i8) -> u8 {
+    let max = W_TARA_BAD.unsigned_abs().max(1);
+    let scaled = (u16::from(delta.unsigned_abs()) * 100 / u16::from(max)).min(100) as u8;
+    let boost = match factor {
+        Factor::VishtiKarana => 85,
+        Factor::Tara(2 | 4 | 6) => 90,
+        Factor::BadYoga(16 | 26) => 80,
+        Factor::Chandra(4 | 8 | 12) => 75,
+        Factor::Amavasya => 70,
+        _ => 0,
+    };
+    scaled.max(boost)
+}
+
 /// Tara (nakshatra-counting) index of `nakshatra_index` from `janma_nakshatra`.
 pub(crate) fn tara_index(nakshatra_index: u8, janma_nakshatra: u8) -> u8 {
     let n = u32::from(nakshatra_index);
@@ -86,9 +208,9 @@ pub(crate) fn tara_index(nakshatra_index: u8, janma_nakshatra: u8) -> u8 {
 /// Signed weight of a tara category (0..=8).
 pub(crate) fn tara_weight(tara: u8) -> i8 {
     match tara {
-        1 | 3 | 5 | 7 | 8 => 12,
-        0 => -4,
-        2 | 4 | 6 => -18,
+        1 | 3 | 5 | 7 | 8 => W_TARA_GOOD,
+        0 => W_TARA_JANMA,
+        2 | 4 | 6 => W_TARA_BAD,
         _ => 0,
     }
 }
@@ -103,8 +225,8 @@ pub(crate) fn chandra_house(day_moon_rashi: u8, natal_moon_rashi: u8) -> u8 {
 /// Signed weight of a chandra house (1..=12); neutral houses score 0.
 pub(crate) fn chandra_weight(house: u8) -> i8 {
     match house {
-        1 | 3 | 6 | 7 | 10 | 11 => 10,
-        4 | 8 | 12 => -14,
+        1 | 3 | 6 | 7 | 10 | 11 => W_CHANDRA_GOOD,
+        4 | 8 | 12 => W_CHANDRA_BAD,
         _ => 0,
     }
 }
@@ -124,43 +246,42 @@ pub(crate) fn tithi_class(tithi_index: u8) -> u8 {
 /// Signed weight of a tithi class (0..=4).
 pub(crate) fn tithi_class_weight(class: u8) -> i8 {
     match class {
-        3 => -8,
-        4 => 6,
-        _ => 2,
+        3 => W_TITHI_RIKTA,
+        4 => W_TITHI_PURNA_CLASS,
+        _ => W_TITHI_FLOW,
     }
 }
 
 /// Signed weight for an inauspicious yoga index, if any.
 pub(crate) fn yoga_weight(yoga_index: u8) -> Option<i8> {
     match yoga_index {
-        16 | 26 => Some(-14),
-        5 | 8 | 9 | 12 | 14 | 18 => Some(-10),
+        16 | 26 => Some(W_YOGA_SEVERE),
+        5 | 8 | 9 | 12 | 14 | 18 => Some(W_YOGA_TENSE),
         _ => None,
     }
 }
 
 /// Classify a clamped 0..=100 score into a [`DayColor`].
 pub(crate) fn classify_color(score: u8) -> DayColor {
-    if score >= 65 {
+    if score >= THRESHOLD_GREEN {
         DayColor::Green
-    } else if score >= 40 {
+    } else if score >= THRESHOLD_YELLOW {
         DayColor::Yellow
     } else {
         DayColor::Red
     }
 }
 
-/// Sum `base` with every factor weight and clamp to 0..=100.
-pub(crate) fn total(base: i32, factors: &[(Factor, i8)]) -> u8 {
-    let sum: i32 = factors.iter().map(|(_, w)| i32::from(*w)).sum();
+/// Sum `base` with every factor delta and clamp to 0..=100.
+pub(crate) fn total(base: i32, factors: &[FactorContribution]) -> u8 {
+    let sum: i32 = factors.iter().map(|c| i32::from(c.delta)).sum();
     (base + sum).clamp(0, 100) as u8
 }
 
 /// Compute the day-quality score for `at`.
 ///
 /// When `natal` is `None` only panchanga-only factors (tithi, yoga, karana)
-/// apply and the base score is higher (62 vs. 55), since tara/chandra checks
-/// are unavailable without a birth chart.
+/// apply and the base score is higher ([`BASE_GENERIC`] vs [`BASE_NATAL`]).
 #[must_use]
 pub fn compute_day_score(
     at: DateTime<Utc>,
@@ -183,37 +304,44 @@ pub fn compute_day_score(
     let karana_num = (elong / 6.0).floor() as i32 % 60;
     let karana_index = karana_name_index(karana_num);
 
-    let base: i32 = if natal.is_some() { 55 } else { 62 };
-    let mut factors: Vec<(Factor, i8)> = Vec::new();
+    let personal = natal.is_some();
+    let base: i32 = if personal { BASE_NATAL } else { BASE_GENERIC };
+    let mut factors: Vec<FactorContribution> = Vec::new();
 
     if let Some(natal) = natal {
         let tara = tara_index(nak_index, natal.janma_nakshatra);
-        factors.push((Factor::Tara(tara), tara_weight(tara)));
+        factors.push(contribute(Factor::Tara(tara), tara_weight(tara)));
 
         let house = chandra_house(day_moon_rashi, natal.moon_rashi);
         let weight = chandra_weight(house);
         if weight != 0 {
-            factors.push((Factor::Chandra(house), weight));
+            factors.push(contribute(Factor::Chandra(house), weight));
         }
     }
 
     let class = tithi_class(tithi_index);
-    factors.push((Factor::TithiClass(class), tithi_class_weight(class)));
+    factors.push(contribute(
+        Factor::TithiClass(class),
+        tithi_class_weight(class),
+    ));
 
     if tithi_index == 30 {
-        factors.push((Factor::Amavasya, -6));
+        factors.push(contribute(Factor::Amavasya, W_AMAVASYA));
     } else if tithi_index == 15 {
-        factors.push((Factor::Purnima, 3));
+        factors.push(contribute(Factor::Purnima, W_PURNIMA));
     }
 
     if let Some(weight) = yoga_weight(yoga_index) {
-        factors.push((Factor::BadYoga(yoga_index), weight));
+        factors.push(contribute(Factor::BadYoga(yoga_index), weight));
     }
 
     if karana_index == 6 {
-        factors.push((Factor::VishtiKarana, -8));
+        factors.push(contribute(Factor::VishtiKarana, W_VISHTI));
     } else if matches!(karana_index, 7..=9) {
-        factors.push((Factor::FixedKarana(karana_index), -4));
+        factors.push(contribute(
+            Factor::FixedKarana(karana_index),
+            W_FIXED_KARANA,
+        ));
     }
 
     let score = total(base, &factors);
@@ -222,6 +350,7 @@ pub fn compute_day_score(
         score,
         color,
         factors,
+        personal,
     }
 }
 
@@ -261,57 +390,104 @@ mod tests {
 
     #[test]
     fn tara_vipat_and_kin_are_strongly_negative() {
-        // Vipat (2), Pratyak (4), Naidhana (6) are the classically
-        // inauspicious taras.
         for bad in [2, 4, 6] {
-            assert_eq!(tara_weight(bad), -18);
+            assert_eq!(tara_weight(bad), W_TARA_BAD);
         }
-        // nakshatra 5 counted from janma 3: (5+27-3)%27%9 = 2 (Vipat).
         assert_eq!(tara_index(5, 3), 2);
     }
 
     #[test]
     fn tara_good_categories_are_positive() {
         for good in [1, 3, 5, 7, 8] {
-            assert_eq!(tara_weight(good), 12);
+            assert_eq!(tara_weight(good), W_TARA_GOOD);
         }
-        assert_eq!(tara_weight(0), -4);
+        assert_eq!(tara_weight(0), W_TARA_JANMA);
     }
 
     #[test]
     fn chandra_house_eight_is_penalized() {
-        // day rashi 7 from natal rashi 0 -> house 8 (chandrashtama-like).
         let house = chandra_house(7, 0);
         assert_eq!(house, 8);
-        assert_eq!(chandra_weight(house), -14);
+        assert_eq!(chandra_weight(house), W_CHANDRA_BAD);
     }
 
     #[test]
     fn chandra_kendra_trikona_houses_are_favorable() {
         for house in [1u8, 3, 6, 7, 10, 11] {
-            assert_eq!(chandra_weight(house), 10, "house {house}");
+            assert_eq!(chandra_weight(house), W_CHANDRA_GOOD, "house {house}");
         }
     }
 
     #[test]
     fn score_thresholds_map_to_expected_colors() {
-        assert_eq!(classify_color(65), DayColor::Green);
+        assert_eq!(classify_color(THRESHOLD_GREEN), DayColor::Green);
         assert_eq!(classify_color(100), DayColor::Green);
-        assert_eq!(classify_color(64), DayColor::Yellow);
-        assert_eq!(classify_color(40), DayColor::Yellow);
-        assert_eq!(classify_color(39), DayColor::Red);
+        assert_eq!(classify_color(THRESHOLD_GREEN - 1), DayColor::Yellow);
+        assert_eq!(classify_color(THRESHOLD_YELLOW), DayColor::Yellow);
+        assert_eq!(classify_color(THRESHOLD_YELLOW - 1), DayColor::Red);
         assert_eq!(classify_color(0), DayColor::Red);
     }
 
     #[test]
     fn total_clamps_to_valid_range() {
-        assert_eq!(total(62, &[(Factor::VishtiKarana, -8)]), 54);
         assert_eq!(
-            total(10, &[(Factor::Tara(2), -18), (Factor::Amavasya, -6)]),
+            total(BASE_GENERIC, &[contribute(Factor::VishtiKarana, W_VISHTI)]),
+            (BASE_GENERIC + i32::from(W_VISHTI)) as u8
+        );
+        assert_eq!(
+            total(
+                10,
+                &[
+                    contribute(Factor::Tara(2), W_TARA_BAD),
+                    contribute(Factor::Amavasya, W_AMAVASYA)
+                ]
+            ),
             0
         );
-        assert_eq!(total(95, &[(Factor::Purnima, 3)]), 98);
-        assert_eq!(total(99, &[(Factor::TithiClass(4), 6)]), 100);
+        assert_eq!(total(95, &[contribute(Factor::Purnima, W_PURNIMA)]), 98);
+        assert_eq!(
+            total(
+                99,
+                &[contribute(Factor::TithiClass(4), W_TITHI_PURNA_CLASS)]
+            ),
+            100
+        );
+    }
+
+    #[test]
+    fn vishti_has_high_strength_beyond_raw_delta() {
+        let c = contribute(Factor::VishtiKarana, W_VISHTI);
+        assert_eq!(c.valence, Valence::Unfavorable);
+        assert!(c.strength >= 85, "strength={}", c.strength);
+        // Mild flow tithi is weaker despite same order of magnitude sometimes.
+        let mild = contribute(Factor::TithiClass(0), W_TITHI_FLOW);
+        assert!(mild.strength < c.strength);
+    }
+
+    #[test]
+    fn factor_to_color_matrix_smoke() {
+        // Isolated Vishti on generic base should stay yellow (62-8=54).
+        let vishti_only = DayScore {
+            score: total(BASE_GENERIC, &[contribute(Factor::VishtiKarana, W_VISHTI)]),
+            color: DayColor::Yellow,
+            factors: vec![contribute(Factor::VishtiKarana, W_VISHTI)],
+            personal: false,
+        };
+        assert_eq!(classify_color(vishti_only.score), DayColor::Yellow);
+
+        // Bad tara alone from natal base: 55-18=37 → red.
+        let bad_tara = total(BASE_NATAL, &[contribute(Factor::Tara(2), W_TARA_BAD)]);
+        assert_eq!(classify_color(bad_tara), DayColor::Red);
+
+        // Good tara + purna class from natal: 55+12+6=73 → green.
+        let good = total(
+            BASE_NATAL,
+            &[
+                contribute(Factor::Tara(1), W_TARA_GOOD),
+                contribute(Factor::TithiClass(4), W_TITHI_PURNA_CLASS),
+            ],
+        );
+        assert_eq!(classify_color(good), DayColor::Green);
     }
 
     #[test]
@@ -329,8 +505,6 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2026, 7, 21).unwrap();
         let at_greenwich = local_noon_utc(date, 0.0);
         assert_eq!(at_greenwich.hour(), 12);
-
-        // 82.9739°E (Varanasi) ~ +5h32m -> noon local is ~06:28 UTC.
         let at_varanasi = local_noon_utc(date, 82.9739);
         assert!(at_varanasi < at_greenwich);
     }
@@ -348,14 +522,16 @@ mod tests {
             let at = start + chrono::Duration::days(day);
 
             let without_natal = compute_day_score(at, AyanamsaSystem::Lahiri, None);
+            assert!(!without_natal.personal);
             assert_eq!(without_natal.color, classify_color(without_natal.score));
 
             let with_natal = compute_day_score(at, AyanamsaSystem::Lahiri, Some(&natal));
+            assert!(with_natal.personal);
             assert_eq!(with_natal.color, classify_color(with_natal.score));
             assert!(with_natal
                 .factors
                 .iter()
-                .any(|(f, _)| matches!(f, Factor::Tara(_))));
+                .any(|c| matches!(c.factor, Factor::Tara(_))));
         }
     }
 }
