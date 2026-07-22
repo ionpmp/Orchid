@@ -328,10 +328,16 @@ export component CalendarView inherits Rectangle {
 
     property <string> draft-title: model.editor-title;
     property <string> draft-notes: model.editor-notes;
+    property <string> jump-draft: model.selected-date;
+    property <string> synced-selected-date: model.selected-date;
     property <string> synced-editor-id: model.editor-event-id;
     property <bool> synced-editor-open: model.editor-open;
 
     changed model => {
+        if model.selected-date != synced-selected-date {
+            jump-draft = model.selected-date;
+            synced-selected-date = model.selected-date;
+        }
         if model.editor-open != synced-editor-open
             || model.editor-event-id != synced-editor-id
             || (!model.editor-open) {
@@ -389,6 +395,38 @@ export component CalendarView inherits Rectangle {
                 tip: model.tip-add;
                 primary: true;
                 clicked => { root.open-new(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: center;
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 28px;
+                min-width: 110px;
+                border-radius: Theme.radius-md;
+                background: Theme.surface-raised;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                jump-edit := TextInput {
+                    x: 8px; y: 0;
+                    width: parent.width - 16px;
+                    height: 100%;
+                    text: root.jump-draft;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    font-family: Theme.font-family-mono;
+                    single-line: true;
+                    edited => { root.jump-draft = self.text; }
+                    accepted => { root.select-date(self.text); }
+                }
+            }
+            CalToolBtn {
+                label: model.jump-go-label;
+                tip: model.tip-jump;
+                clicked => { root.select-date(root.jump-draft); }
             }
         }
 

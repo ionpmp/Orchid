@@ -163,6 +163,8 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         tip_next_year: locale.tr("calendar-tip-next-year").into(),
         tip_today: locale.tr("calendar-tip-today").into(),
         tip_add: locale.tr("calendar-tip-add").into(),
+        tip_jump: locale.tr("calendar-tip-jump").into(),
+        jump_go_label: locale.tr("calendar-jump-go").into(),
         tip_date_prev: locale.tr("calendar-tip-date-prev").into(),
         tip_date_next: locale.tr("calendar-tip-date-next").into(),
         tip_time_minus: locale

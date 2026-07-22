@@ -25,7 +25,8 @@ use crate::{
 use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::{
-    decode_config, format_date, format_minutes, parse_date, CalendarConfig, CalendarEvent,
+    decode_config, format_date, format_minutes, parse_date, parse_date_input, CalendarConfig,
+    CalendarEvent,
 };
 
 /// Stable type id.
@@ -134,7 +135,7 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut CalendarConfig)
 ///
 /// When the editor is open, also moves the draft onto that day (date picker).
 pub fn select_date(instance_id: Uuid, date_key: &str) {
-    let Some(d) = parse_date(date_key) else {
+    let Some(d) = parse_date_input(date_key) else {
         return;
     };
     let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
@@ -1108,6 +1109,42 @@ mod tests {
     fn format_minutes_pads() {
         assert_eq!(format_minutes(0), "00:00");
         assert_eq!(format_minutes(9 * 60 + 5), "09:05");
+    }
+
+    #[test]
+    fn parse_date_input_accepts_compact_and_dashed() {
+        assert_eq!(
+            parse_date_input("2026-07-21"),
+            NaiveDate::from_ymd_opt(2026, 7, 21)
+        );
+        assert_eq!(
+            parse_date_input("20260721"),
+            NaiveDate::from_ymd_opt(2026, 7, 21)
+        );
+        assert_eq!(parse_date_input(" 2026-07-21 "), NaiveDate::from_ymd_opt(2026, 7, 21));
+        assert!(parse_date_input("2026-13-01").is_none());
+        assert!(parse_date_input("not-a-date").is_none());
+    }
+
+    #[test]
+    fn select_date_accepts_compact_input() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let mut cfg = CalendarConfig::default();
+        cfg.selected_date = "2026-01-01".into();
+        cfg.view_year = 2026;
+        cfg.view_month = 1;
+        let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
+        select_date(id, "20260721");
+        let snap = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p) = snap.payload else {
+            panic!("expected calendar");
+        };
+        assert_eq!(p.selected_date, "2026-07-21");
+        assert_eq!(p.month, 7);
     }
 
     #[test]

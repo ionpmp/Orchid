@@ -205,6 +205,22 @@ pub fn parse_date(s: &str) -> Option<NaiveDate> {
     NaiveDate::from_ymd_opt(y, m, d)
 }
 
+/// Parse a user-entered date (`YYYY-MM-DD` or `YYYYMMDD`).
+#[must_use]
+pub fn parse_date_input(s: &str) -> Option<NaiveDate> {
+    let s = s.trim();
+    if let Some(d) = parse_date(s) {
+        return Some(d);
+    }
+    if s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) {
+        let y: i32 = s[0..4].parse().ok()?;
+        let m: u32 = s[4..6].parse().ok()?;
+        let d: u32 = s[6..8].parse().ok()?;
+        return NaiveDate::from_ymd_opt(y, m, d);
+    }
+    None
+}
+
 /// Format minutes-from-midnight as `HH:MM`.
 #[must_use]
 pub fn format_minutes(mins: u16) -> String {
