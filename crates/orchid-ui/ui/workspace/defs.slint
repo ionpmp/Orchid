@@ -154,6 +154,56 @@ export struct JyotishPlanetEntry {
     is-retrograde: bool,
 }
 
+export struct JyotishDayChipModel {
+    weekday: string,
+    day-num: int,
+    color: int,
+    offset: int,
+    is-selected: bool,
+}
+
+export struct JyotishMonthCellModel {
+    day: int,
+    color: int,
+    is-today: bool,
+    offset: int,
+}
+
+export struct JyotishMonthRowModel {
+    name: string,
+    green: int,
+    yellow: int,
+    red: int,
+    month-offset: int,
+}
+
+export struct JyotishYearRowModel {
+    year: int,
+    green: int,
+    yellow: int,
+    red: int,
+    dasha: string,
+    year-offset: int,
+}
+
+export struct JyotishRectifyModel {
+    step: int,
+    question-idx: int,
+    question-total: int,
+    question: string,
+    options: [string],
+    events: [string],
+    event-kinds: [string],
+    candidates: [string],
+    title: string,
+    next-label: string,
+    cancel-label: string,
+    accept-label: string,
+    window-labels: [string],
+    add-event-label: string,
+    year-placeholder: string,
+}
+
 export struct JyotishModel {
     date-text: string,
     location-name: string,
@@ -171,6 +221,30 @@ export struct JyotishModel {
     show-planets: bool,
     panchanga: [JyotishPanchangaRow],
     planets: [JyotishPlanetEntry],
+    active-tab: int,
+    tab-labels: [string],
+    score-color: int,
+    headline: string,
+    influences: [string],
+    advice: [string],
+    week-strip: [JyotishDayChipModel],
+    month-title: string,
+    month-cells: [JyotishMonthCellModel],
+    month-first-weekday: int,
+    month-green: int,
+    month-yellow: int,
+    month-red: int,
+    year-title: string,
+    year-months: [JyotishMonthRowModel],
+    life-years: [JyotishYearRowModel],
+    has-birth-data: bool,
+    birth-prompt: string,
+    rectify-button-label: string,
+    legend-green: string,
+    legend-yellow: string,
+    legend-red: string,
+    weekday-headers: [string],
+    rectify: JyotishRectifyModel,
 }
 
 export struct ClockCityEntry {

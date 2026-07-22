@@ -1,5 +1,89 @@
 import { Theme } from "../theme_global.slint";
-import { JyotishModel, JyotishPanchangaRow, JyotishPlanetEntry } from "../workspace/defs.slint";
+import {
+    JyotishModel, JyotishPanchangaRow, JyotishPlanetEntry, JyotishDayChipModel,
+    JyotishMonthCellModel, JyotishMonthRowModel, JyotishYearRowModel, JyotishRectifyModel,
+} from "../workspace/defs.slint";
+
+component NavBtn inherits TouchArea {
+    in property <string> glyph;
+
+    width: 28px;
+    height: 28px;
+
+    Rectangle {
+        background: root.has-hover ? Theme.surface-raised : transparent;
+        border-radius: Theme.radius-md;
+        Text {
+            width: 100%; height: 100%;
+            text: root.glyph;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-md;
+            font-weight: Theme.weight-semibold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component PillBtn inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> danger: false;
+    callback clicked();
+
+    height: 26px;
+    width: max(32px, lbl.preferred-width + 16px);
+    border-radius: Theme.radius-md;
+    background: root.active ? Theme.accent-brand :
+        root.danger ? #e35d6a :
+        ta.has-hover ? Theme.surface-raised : Theme.surface-base;
+    border-width: root.active || root.danger ? 0 : 1px;
+    border-color: Theme.border-default;
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    lbl := Text {
+        width: 100%; height: 100%;
+        text: root.label;
+        color: (root.active || root.danger) ? Theme.surface-base : Theme.text-primary;
+        font-size: Theme.font-size-sm;
+        font-weight: Theme.weight-medium;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        wrap: no-wrap;
+        overflow: elide;
+    }
+}
+
+component ColorDot inherits Rectangle {
+    in property <int> color-code;
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background: root.color-code == 0 ? #34c759 : root.color-code == 1 ? #ffcc00 : #ff3b30;
+}
+
+component ScoreBar inherits Rectangle {
+    in property <int> green;
+    in property <int> yellow;
+    in property <int> red;
+
+    height: 6px;
+    border-radius: 3px;
+    clip: true;
+    background: Theme.surface-raised;
+
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        spacing: 0px;
+        Rectangle { background: #34c759; horizontal-stretch: root.green + 0.0; }
+        Rectangle { background: #ffcc00; horizontal-stretch: root.yellow + 0.0; }
+        Rectangle { background: #ff3b30; horizontal-stretch: root.red + 0.0; }
+    }
+}
 
 export component JyotishView inherits Rectangle {
     in property <JyotishModel> model;
@@ -7,261 +91,777 @@ export component JyotishView inherits Rectangle {
     callback prev-day();
     callback next-day();
     callback go-today();
+    callback select-tab(int);
+    callback select-offset(int);
+    callback month-nav(int);
+    callback year-nav(int);
+    callback open-month(int);
+    callback open-year(int);
+    callback rectify-start();
+    callback rectify-set-window(int, int);
+    callback rectify-answer(int, int);
+    callback rectify-add-event(int, int);
+    callback rectify-remove-event(int);
+    callback rectify-next();
+    callback rectify-accept();
+    callback rectify-cancel();
+
+    property <int> draft-event-kind: 0;
+    property <int> draft-event-year: 2000;
 
     background: transparent;
 
     VerticalLayout {
         padding: 12px;
-        spacing: 10px;
-        alignment: start;
+        spacing: 8px;
 
-        // Date navigation
+        // Tab bar
         HorizontalLayout {
-            spacing: 8px;
-            alignment: center;
+            spacing: 4px;
+            for tab-label[i] in model.tab-labels : PillBtn {
+                label: tab-label;
+                active: model.active-tab == i;
+                horizontal-stretch: 1;
+                clicked => { root.select-tab(i); }
+            }
+        }
 
-            nav-prev := TouchArea {
-                width: 28px;
-                height: 28px;
-                clicked => { root.prev-day(); }
-                Rectangle {
-                    background: nav-prev.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    Text {
-                        width: 100%; height: 100%;
-                        text: "<";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        font-weight: Theme.weight-semibold;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+        if model.active-tab == 0 : Flickable {
+            vertical-stretch: 1;
+            viewport-width: parent.width;
+            viewport-height: day-col.preferred-height;
+
+            day-col := VerticalLayout {
+                width: parent.width;
+                spacing: 10px;
+
+                // Date navigation
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+
+                    NavBtn {
+                        glyph: "<";
+                        clicked => { root.prev-day(); }
+                    }
+
+                    VerticalLayout {
+                        spacing: 2px;
+                        alignment: center;
+                        horizontal-stretch: 1;
+
+                        Text {
+                            text: model.date-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-semibold;
+                            horizontal-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            text: model.location-name;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+                    }
+
+                    NavBtn {
+                        glyph: ">";
+                        clicked => { root.next-day(); }
                     }
                 }
+
+                if !model.is-today : today-btn := TouchArea {
+                    height: 22px;
+                    clicked => { root.go-today(); }
+                    Rectangle {
+                        background: today-btn.has-hover ? Theme.surface-raised : transparent;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        Text {
+                            width: 100%; height: 100%;
+                            text: model.today-label;
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                if model.is-loading : Text {
+                    text: model.loading-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
+
+                if !model.is-loading : HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    ColorDot { color-code: model.score-color; y: (parent.height - self.height) / 2; }
+                    Text {
+                        text: model.headline;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-medium;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                if !model.is-loading && model.influences.length > 0 : VerticalLayout {
+                    spacing: 2px;
+                    for line[i] in model.influences : Text {
+                        text: "· " + line;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                    }
+                }
+
+                if !model.is-loading && model.advice.length > 0 : VerticalLayout {
+                    spacing: 2px;
+                    for line[i] in model.advice : Text {
+                        text: line;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                // 7-day strip
+                if !model.is-loading && model.week-strip.length > 0 : HorizontalLayout {
+                    spacing: 4px;
+                    for chip[i] in model.week-strip : Rectangle {
+                        height: 52px;
+                        horizontal-stretch: 1;
+                        border-radius: Theme.radius-md;
+                        background: chip.is-selected ? Theme.accent-brand : (chip-ta.has-hover ? Theme.surface-raised : transparent);
+
+                        chip-ta := TouchArea {
+                            clicked => { root.select-offset(chip.offset); }
+                        }
+
+                        VerticalLayout {
+                            padding-top: 4px;
+                            padding-bottom: 4px;
+                            spacing: 3px;
+                            alignment: center;
+
+                            Text {
+                                text: chip.weekday;
+                                color: chip.is-selected ? Theme.surface-base : Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: chip.day-num;
+                                color: chip.is-selected ? Theme.surface-base : Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.weight-medium;
+                                horizontal-alignment: center;
+                            }
+                            ColorDot {
+                                color-code: chip.color;
+                                x: (parent.width - self.width) / 2;
+                            }
+                        }
+                    }
+                }
+
+                if !model.is-loading : Rectangle {
+                    height: 1px;
+                    background: Theme.border-default;
+                    horizontal-stretch: 1;
+                }
+
+                // Panchanga rows
+                if !model.is-loading : VerticalLayout {
+                    spacing: 0px;
+                    for entry[i] in model.panchanga : Rectangle {
+                        height: 22px;
+
+                        row-ta := TouchArea { }
+                        if row-ta.has-hover && (entry.label != "" || entry.value != "") : Rectangle {
+                            x: parent.x;
+                            y: parent.height + 2px;
+                            width: row-hint.preferred-width + 12px;
+                            height: row-hint.preferred-height + 6px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border-default;
+                            z: 100;
+                            row-hint := Text {
+                                x: 6px; y: 3px;
+                                text: entry.label + ": " + entry.value;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: space-between;
+                            width: 100%;
+                            height: 100%;
+
+                            Text {
+                                text: entry.label;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                wrap: no-wrap;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+
+                            Text {
+                                text: entry.value;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+
+                // Sun times
+                if !model.is-loading && (model.sunrise-text != "" || model.sunset-text != "") : HorizontalLayout {
+                    spacing: 12px;
+                    alignment: space-around;
+
+                    if model.sunrise-text != "" : Text {
+                        text: model.sunrise-label + " " + model.sunrise-text;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        wrap: no-wrap;
+                        overflow: elide;
+                    }
+                    if model.sunset-text != "" : Text {
+                        text: model.sunset-label + " " + model.sunset-text;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        wrap: no-wrap;
+                        overflow: elide;
+                    }
+                }
+
+                // Graha table
+                if !model.is-loading && model.show-planets && model.planets.length > 0 : VerticalLayout {
+                    spacing: 4px;
+
+                    Text {
+                        text: model.planets-title;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-semibold;
+                    }
+
+                    for planet[i] in model.planets : Rectangle {
+                        height: 20px;
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: space-between;
+                            width: 100%;
+                            height: 100%;
+
+                            Text {
+                                text: planet.graha;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                wrap: no-wrap;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+
+                            Text {
+                                text: planet.rashi;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+
+                            Text {
+                                text: planet.degree-text + (planet.is-retrograde ? " R" : "");
+                                color: planet.is-retrograde ? Theme.accent-brand : Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                                wrap: no-wrap;
+                                overflow: elide;
+                                min-width: 56px;
+                            }
+                        }
+                    }
+                }
+
+                if !model.is-loading : Text {
+                    text: model.ayanamsa-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
             }
+        }
 
-            VerticalLayout {
-                spacing: 2px;
+        if model.active-tab == 1 : VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
                 alignment: center;
-                horizontal-stretch: 1;
-
+                NavBtn {
+                    glyph: "◀";
+                    clicked => { root.month-nav(-1); }
+                }
                 Text {
-                    text: model.date-text;
+                    horizontal-stretch: 1;
+                    text: model.month-title;
                     color: Theme.text-primary;
                     font-size: Theme.font-size-md;
                     font-weight: Theme.weight-semibold;
                     horizontal-alignment: center;
-                    wrap: no-wrap;
-                    overflow: elide;
+                    vertical-alignment: center;
                 }
-
-                Text {
-                    text: model.location-name;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    wrap: no-wrap;
-                    overflow: elide;
+                NavBtn {
+                    glyph: "▶";
+                    clicked => { root.month-nav(1); }
                 }
             }
 
-            nav-next := TouchArea {
-                width: 28px;
-                height: 28px;
-                clicked => { root.next-day(); }
-                Rectangle {
-                    background: nav-next.has-hover ? Theme.surface-raised : transparent;
+            HorizontalLayout {
+                spacing: 2px;
+                height: 18px;
+                for wd[i] in model.weekday-headers : Text {
+                    horizontal-stretch: 1;
+                    text: wd;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    font-weight: Theme.weight-medium;
+                    horizontal-alignment: center;
+                }
+            }
+
+            GridLayout {
+                spacing: 2px;
+                vertical-stretch: 1;
+
+                for pad in model.month-first-weekday : Rectangle {
+                    row: pad / 7;
+                    col: mod(pad, 7);
+                }
+
+                for cell[j] in model.month-cells : Rectangle {
+                    row: (j + model.month-first-weekday) / 7;
+                    col: mod(j + model.month-first-weekday, 7);
+                    height: 30px;
                     border-radius: Theme.radius-md;
-                    Text {
-                        width: 100%; height: 100%;
-                        text: ">";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        font-weight: Theme.weight-semibold;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    background: cell.is-today ? Theme.surface-raised : (cell-ta.has-hover ? Theme.surface-raised : transparent);
+                    border-width: cell.is-today ? 1px : 0;
+                    border-color: Theme.accent-brand;
+
+                    cell-ta := TouchArea {
+                        clicked => { root.select-offset(cell.offset); }
                     }
+
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: cell.day;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                        }
+                        ColorDot {
+                            color-code: cell.color;
+                            x: (parent.width - self.width) / 2;
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: center;
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: center;
+                    ColorDot { color-code: 0; y: (parent.height - self.height) / 2; }
+                    Text { text: model.legend-green; color: Theme.text-tertiary; font-size: Theme.font-size-sm; vertical-alignment: center; }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: center;
+                    ColorDot { color-code: 1; y: (parent.height - self.height) / 2; }
+                    Text { text: model.legend-yellow; color: Theme.text-tertiary; font-size: Theme.font-size-sm; vertical-alignment: center; }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: center;
+                    ColorDot { color-code: 2; y: (parent.height - self.height) / 2; }
+                    Text { text: model.legend-red; color: Theme.text-tertiary; font-size: Theme.font-size-sm; vertical-alignment: center; }
                 }
             }
         }
 
-        if !model.is-today : today-btn := TouchArea {
-            height: 22px;
-            clicked => { root.go-today(); }
-            Rectangle {
-                background: today-btn.has-hover ? Theme.surface-raised : transparent;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
+        if model.active-tab == 2 : VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: center;
+                NavBtn {
+                    glyph: "◀";
+                    clicked => { root.year-nav(-1); }
+                }
                 Text {
-                    width: 100%; height: 100%;
-                    text: model.today-label;
-                    color: Theme.accent-brand;
-                    font-size: Theme.font-size-sm;
+                    horizontal-stretch: 1;
+                    text: model.year-title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-semibold;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
+                NavBtn {
+                    glyph: "▶";
+                    clicked => { root.year-nav(1); }
+                }
+            }
+
+            Flickable {
+                vertical-stretch: 1;
+                viewport-width: parent.width;
+                viewport-height: year-col.preferred-height;
+
+                year-col := VerticalLayout {
+                    width: parent.width;
+                    spacing: 4px;
+                    for row[i] in model.year-months : Rectangle {
+                        height: 34px;
+                        border-radius: Theme.radius-md;
+                        background: month-ta.has-hover ? Theme.surface-raised : transparent;
+
+                        month-ta := TouchArea {
+                            clicked => { root.open-month(row.month-offset); }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            spacing: 8px;
+                            alignment: center;
+
+                            Text {
+                                text: row.name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                min-width: 72px;
+                                vertical-alignment: center;
+                            }
+                            ScoreBar {
+                                horizontal-stretch: 1;
+                                y: (parent.height - self.height) / 2;
+                                green: row.green;
+                                yellow: row.yellow;
+                                red: row.red;
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        Text {
-            text: model.vara-label;
-            color: Theme.accent-brand;
-            font-size: Theme.font-size-lg;
-            font-weight: Theme.weight-semibold;
-            horizontal-alignment: center;
-        }
+        if model.active-tab == 3 : Flickable {
+            vertical-stretch: 1;
+            viewport-width: parent.width;
+            viewport-height: life-col.preferred-height;
 
-        if model.is-loading : Text {
-            text: model.loading-label;
-            color: Theme.text-secondary;
-            font-size: Theme.font-size-sm;
-            horizontal-alignment: center;
-        }
+            life-col := VerticalLayout {
+                width: parent.width;
+                spacing: 8px;
 
-        if !model.is-loading : Rectangle {
-            height: 1px;
-            background: Theme.border-default;
-            horizontal-stretch: 1;
-        }
-
-        // Panchanga rows
-        if !model.is-loading : VerticalLayout {
-            spacing: 0px;
-            for entry[i] in model.panchanga : Rectangle {
-                height: 22px;
-
-                row-ta := TouchArea { }
-                if row-ta.has-hover && (entry.label != "" || entry.value != "") : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: row-hint.preferred-width + 12px;
-                    height: row-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    row-hint := Text {
-                        x: 6px; y: 3px;
-                        text: entry.label + ": " + entry.value;
+                if !model.has-birth-data : VerticalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: model.birth-prompt;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
                     }
                 }
+
+                if model.has-birth-data : VerticalLayout {
+                    spacing: 4px;
+                    for row[i] in model.life-years : Rectangle {
+                        height: 40px;
+                        border-radius: Theme.radius-md;
+                        background: year-ta.has-hover ? Theme.surface-raised : transparent;
+
+                        year-ta := TouchArea {
+                            clicked => { root.open-year(row.year-offset); }
+                        }
+
+                        VerticalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            padding-top: 3px;
+                            padding-bottom: 3px;
+                            spacing: 3px;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: space-between;
+                                Text {
+                                    text: row.year;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: Theme.weight-medium;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: row.dasha;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: right;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
+                            }
+                            ScoreBar {
+                                green: row.green;
+                                yellow: row.yellow;
+                                red: row.red;
+                            }
+                        }
+                    }
+                }
+
+                PillBtn {
+                    label: model.rectify-button-label;
+                    clicked => { root.rectify-start(); }
+                }
+            }
+        }
+    }
+
+    // Rectification wizard overlay
+    if model.rectify.step > 0 : Rectangle {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: #00000088;
+        z: 200;
+
+        TouchArea { }
+
+        Rectangle {
+            x: 8px; y: 8px;
+            width: parent.width - 16px;
+            height: parent.height - 16px;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+
+            TouchArea { }
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 10px;
 
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: space-between;
-                    width: 100%;
-                    height: 100%;
-
                     Text {
-                        text: entry.label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        wrap: no-wrap;
-                        overflow: elide;
+                        text: model.rectify.title;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        font-weight: Theme.weight-semibold;
                         horizontal-stretch: 1;
                     }
-
-                    Text {
-                        text: entry.value;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        horizontal-alignment: right;
-                        wrap: no-wrap;
-                        overflow: elide;
+                    PillBtn {
+                        label: model.rectify.cancel-label;
+                        clicked => { root.rectify-cancel(); }
                     }
                 }
-            }
-        }
 
-        // Sun times
-        if !model.is-loading && (model.sunrise-text != "" || model.sunset-text != "") : HorizontalLayout {
-            spacing: 12px;
-            alignment: space-around;
-
-            if model.sunrise-text != "" : Text {
-                text: model.sunrise-label + " " + model.sunrise-text;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                wrap: no-wrap;
-                overflow: elide;
-            }
-            if model.sunset-text != "" : Text {
-                text: model.sunset-label + " " + model.sunset-text;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                wrap: no-wrap;
-                overflow: elide;
-            }
-        }
-
-        // Graha table
-        if !model.is-loading && model.show-planets && model.planets.length > 0 : VerticalLayout {
-            spacing: 4px;
-
-            Text {
-                text: model.planets-title;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                font-weight: Theme.weight-semibold;
-            }
-
-            for planet[i] in model.planets : Rectangle {
-                height: 20px;
-                HorizontalLayout {
+                // Step 1: uncertainty window
+                if model.rectify.step == 1 : VerticalLayout {
                     spacing: 6px;
-                    alignment: space-between;
-                    width: 100%;
-                    height: 100%;
+                    vertical-stretch: 1;
+                    alignment: center;
+
+                    if model.rectify.window-labels.length > 0 : PillBtn {
+                        label: model.rectify.window-labels[0];
+                        clicked => { root.rectify-set-window(720, 30); }
+                    }
+                    if model.rectify.window-labels.length > 1 : PillBtn {
+                        label: model.rectify.window-labels[1];
+                        clicked => { root.rectify-set-window(720, 120); }
+                    }
+                    if model.rectify.window-labels.length > 2 : PillBtn {
+                        label: model.rectify.window-labels[2];
+                        clicked => { root.rectify-set-window(720, 360); }
+                    }
+                    if model.rectify.window-labels.length > 3 : PillBtn {
+                        label: model.rectify.window-labels[3];
+                        clicked => { root.rectify-set-window(-1, -1); }
+                    }
+                }
+
+                // Step 2: quiz
+                if model.rectify.step == 2 : VerticalLayout {
+                    spacing: 8px;
+                    vertical-stretch: 1;
 
                     Text {
-                        text: planet.graha;
+                        text: "" + (model.rectify.question-idx + 1) + " / " + model.rectify.question-total;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: model.rectify.question;
                         color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        wrap: no-wrap;
-                        overflow: elide;
-                        horizontal-stretch: 1;
+                        font-size: Theme.font-size-md;
+                        font-weight: Theme.weight-medium;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                    }
+                    VerticalLayout {
+                        spacing: 4px;
+                        for opt[oi] in model.rectify.options : PillBtn {
+                            label: opt;
+                            clicked => { root.rectify-answer(model.rectify.question-idx, oi); }
+                        }
+                    }
+                }
+
+                // Step 3: life events
+                if model.rectify.step == 3 : VerticalLayout {
+                    spacing: 8px;
+                    vertical-stretch: 1;
+
+                    if model.rectify.events.length > 0 : VerticalLayout {
+                        spacing: 2px;
+                        for ev[ei] in model.rectify.events : HorizontalLayout {
+                            spacing: 6px;
+                            alignment: space-between;
+                            Text {
+                                text: ev;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                            PillBtn {
+                                label: "x";
+                                danger: true;
+                                clicked => { root.rectify-remove-event(ei); }
+                            }
+                        }
                     }
 
-                    Text {
-                        text: planet.rashi;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        wrap: no-wrap;
-                        overflow: elide;
+                    Rectangle {
+                        height: 1px;
+                        background: Theme.border-default;
                     }
 
-                    Text {
-                        text: planet.degree-text + (planet.is-retrograde ? " R" : "");
-                        color: planet.is-retrograde ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        horizontal-alignment: right;
-                        wrap: no-wrap;
-                        overflow: elide;
-                        min-width: 56px;
+                    HorizontalLayout {
+                        spacing: 4px;
+                        for kind[ki] in model.rectify.event-kinds : PillBtn {
+                            label: kind;
+                            active: root.draft-event-kind == ki;
+                            clicked => { root.draft-event-kind = ki; }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: center;
+                        PillBtn {
+                            label: "−";
+                            clicked => { root.draft-event-year = max(1, root.draft-event-year - 1); }
+                        }
+                        Text {
+                            text: model.rectify.year-placeholder + ": " + root.draft-event-year;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        PillBtn {
+                            label: "+";
+                            clicked => { root.draft-event-year = root.draft-event-year + 1; }
+                        }
+                        PillBtn {
+                            label: model.rectify.add-event-label;
+                            clicked => { root.rectify-add-event(root.draft-event-kind, root.draft-event-year); }
+                        }
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    PillBtn {
+                        label: model.rectify.next-label;
+                        active: true;
+                        clicked => { root.rectify-next(); }
+                    }
+                }
+
+                // Step 4: candidates
+                if model.rectify.step == 4 : VerticalLayout {
+                    spacing: 6px;
+                    vertical-stretch: 1;
+
+                    Flickable {
+                        vertical-stretch: 1;
+                        viewport-width: parent.width;
+                        viewport-height: cand-col.preferred-height;
+
+                        cand-col := VerticalLayout {
+                            width: parent.width;
+                            spacing: 2px;
+                            for c[ci] in model.rectify.candidates : Text {
+                                text: c;
+                                color: ci == 0 ? Theme.accent-brand : Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: ci == 0 ? Theme.weight-semibold : Theme.weight-regular;
+                            }
+                        }
+                    }
+
+                    PillBtn {
+                        label: model.rectify.accept-label;
+                        active: true;
+                        clicked => { root.rectify-accept(); }
                     }
                 }
             }
         }
-
-        if !model.is-loading : Text {
-            text: model.ayanamsa-label;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            horizontal-alignment: center;
-            wrap: no-wrap;
-            overflow: elide;
-        }
-
-        Rectangle { vertical-stretch: 1; }
     }
 }

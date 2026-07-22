@@ -39,7 +39,8 @@ pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
     CalcHistoryRow, CalculatorPayload, CalendarDayCell, CalendarEventRow, CalendarPayload,
     ClockCityView, ClockPayload, ClockSearchHit, EntryPayload, FileManagerPayload, FmViewMode,
-    IndicatorStatus, JyotishPayload, JyotishPlanetRow, ManagedFolderSidebarPayload,
+    IndicatorStatus, JyotishDayChip, JyotishMonthCell, JyotishMonthSummary, JyotishPayload,
+    JyotishPlanetRow, JyotishRectifyView, JyotishYearSummary, ManagedFolderSidebarPayload,
     MediaPlayerPayload, MoonPayload, NetworkMountPayload, NotesPayload, NotesTabRow, PanePayload,
     PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload, ProcessGroup,
     ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab, RecentFileItemView,

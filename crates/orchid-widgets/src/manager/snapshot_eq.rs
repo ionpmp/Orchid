@@ -2,7 +2,8 @@
 
 use crate::widget::payloads::{
     CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload, FileManagerPayload,
-    JyotishPayload, MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView,
+    JyotishDayChip, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishYearSummary,
+    MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView,
     PasswordEntryView, PasswordManagerPayload, ProcessRowView, ProcessesPayload,
     RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
     StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload, UserRowView,
@@ -387,6 +388,40 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
                 && x.degree_text == y.degree_text
                 && x.is_retrograde == y.is_retrograde
         })
+        && a.active_tab == b.active_tab
+        && a.score_color == b.score_color
+        && a.headline_key == b.headline_key
+        && a.influence_keys == b.influence_keys
+        && a.advice_keys == b.advice_keys
+        && jyotish_week_strip_eq(&a.week_strip, &b.week_strip)
+        && a.month_key == b.month_key
+        && a.month_year == b.month_year
+        && jyotish_month_cells_eq(&a.month_cells, &b.month_cells)
+        && a.month_first_weekday == b.month_first_weekday
+        && a.month_green == b.month_green
+        && a.month_yellow == b.month_yellow
+        && a.month_red == b.month_red
+        && a.year_value == b.year_value
+        && jyotish_year_months_eq(&a.year_months, &b.year_months)
+        && jyotish_life_years_eq(&a.life_years, &b.life_years)
+        && a.has_birth_data == b.has_birth_data
+        && a.rectify == b.rectify
+}
+
+fn jyotish_week_strip_eq(a: &[JyotishDayChip], b: &[JyotishDayChip]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
+}
+
+fn jyotish_month_cells_eq(a: &[JyotishMonthCell], b: &[JyotishMonthCell]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
+}
+
+fn jyotish_year_months_eq(a: &[JyotishMonthSummary], b: &[JyotishMonthSummary]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
+}
+
+fn jyotish_life_years_eq(a: &[JyotishYearSummary], b: &[JyotishYearSummary]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
 }
 
 fn system_indicator_eq(a: &SystemIndicator, b: &SystemIndicator) -> bool {

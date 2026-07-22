@@ -59,6 +59,20 @@ export component WorkspaceView inherits Rectangle {
     callback jyotish-prev-day(string);
     callback jyotish-next-day(string);
     callback jyotish-go-today(string);
+    callback jyotish-select-tab(string, int);
+    callback jyotish-select-offset(string, int);
+    callback jyotish-month-nav(string, int);
+    callback jyotish-year-nav(string, int);
+    callback jyotish-open-month(string, int);
+    callback jyotish-open-year(string, int);
+    callback jyotish-rectify-start(string);
+    callback jyotish-rectify-set-window(string, int, int);
+    callback jyotish-rectify-answer(string, int, int);
+    callback jyotish-rectify-add-event(string, int, int);
+    callback jyotish-rectify-remove-event(string, int);
+    callback jyotish-rectify-next(string);
+    callback jyotish-rectify-accept(string);
+    callback jyotish-rectify-cancel(string);
     callback clock-open-cities(string);
     callback clock-close-cities(string);
     callback clock-remove-city(string, int);
@@ -373,6 +387,20 @@ export component WorkspaceView inherits Rectangle {
                     jyotish-prev-day(id) => { root.jyotish-prev-day(id); }
                     jyotish-next-day(id) => { root.jyotish-next-day(id); }
                     jyotish-go-today(id) => { root.jyotish-go-today(id); }
+                    jyotish-select-tab(id, t) => { root.jyotish-select-tab(id, t); }
+                    jyotish-select-offset(id, o) => { root.jyotish-select-offset(id, o); }
+                    jyotish-month-nav(id, d) => { root.jyotish-month-nav(id, d); }
+                    jyotish-year-nav(id, d) => { root.jyotish-year-nav(id, d); }
+                    jyotish-open-month(id, o) => { root.jyotish-open-month(id, o); }
+                    jyotish-open-year(id, o) => { root.jyotish-open-year(id, o); }
+                    jyotish-rectify-start(id) => { root.jyotish-rectify-start(id); }
+                    jyotish-rectify-set-window(id, m, h) => { root.jyotish-rectify-set-window(id, m, h); }
+                    jyotish-rectify-answer(id, q, o) => { root.jyotish-rectify-answer(id, q, o); }
+                    jyotish-rectify-add-event(id, k, y) => { root.jyotish-rectify-add-event(id, k, y); }
+                    jyotish-rectify-remove-event(id, i) => { root.jyotish-rectify-remove-event(id, i); }
+                    jyotish-rectify-next(id) => { root.jyotish-rectify-next(id); }
+                    jyotish-rectify-accept(id) => { root.jyotish-rectify-accept(id); }
+                    jyotish-rectify-cancel(id) => { root.jyotish-rectify-cancel(id); }
                     clock-open-cities(id) => { root.clock-open-cities(id); }
                     clock-close-cities(id) => { root.clock-close-cities(id); }
                     clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }

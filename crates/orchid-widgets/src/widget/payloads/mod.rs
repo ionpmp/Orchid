@@ -29,7 +29,10 @@ pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
     PanePayload, TabPayload,
 };
-pub use jyotish::{JyotishPayload, JyotishPlanetRow};
+pub use jyotish::{
+    JyotishDayChip, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
+    JyotishRectifyView, JyotishYearSummary,
+};
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
 pub use notes::{NotesPayload, NotesTabRow};

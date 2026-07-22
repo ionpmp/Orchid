@@ -95,7 +95,7 @@ impl SlintPayload {
             },
             WidgetPayload::Weather(p) => Self::Text(weather_to_text_lines(p)),
             WidgetPayload::Moon(p) => Self::Text(moon_to_text_lines(p)),
-            WidgetPayload::Jyotish(p) => Self::Text(jyotish_to_text_lines(p)),
+            WidgetPayload::Jyotish(p) => Self::Text(jyotish_to_text_lines(p.as_ref())),
             WidgetPayload::Clock(p) => Self::Text(clock_to_text_lines(p)),
             WidgetPayload::SystemIndicators(p) => Self::Text(system_to_text_lines(p)),
             WidgetPayload::Processes(p) => Self::Text(processes_to_text_lines(p)),

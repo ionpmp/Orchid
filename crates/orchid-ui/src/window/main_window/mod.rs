@@ -1697,7 +1697,7 @@ impl MainWindowController {
                     true,
                     empty_weather_model(&self.locale),
                     empty_moon_model(&self.locale),
-                    build_jyotish_model(j, &self.locale),
+                    build_jyotish_model(j.as_ref(), &self.locale),
                     empty_clock_model(&self.locale),
                     empty_system_model(&self.locale),
                     empty_processes_model(&self.locale),

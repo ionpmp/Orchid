@@ -628,6 +628,119 @@ impl MainWindowController {
             }
         });
 
+        self.window.on_jyotish_select_tab({
+            let t = t.clone();
+            move |id, tab| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_select_tab(&id, tab);
+                }
+            }
+        });
+        self.window.on_jyotish_select_offset({
+            let t = t.clone();
+            move |id, offset| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_select_offset(&id, offset);
+                }
+            }
+        });
+        self.window.on_jyotish_month_nav({
+            let t = t.clone();
+            move |id, delta| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_month_nav(&id, delta);
+                }
+            }
+        });
+        self.window.on_jyotish_year_nav({
+            let t = t.clone();
+            move |id, delta| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_year_nav(&id, delta);
+                }
+            }
+        });
+        self.window.on_jyotish_open_month({
+            let t = t.clone();
+            move |id, offset| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_open_month(&id, offset);
+                }
+            }
+        });
+        self.window.on_jyotish_open_year({
+            let t = t.clone();
+            move |id, offset| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_open_year(&id, offset);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_start({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_start(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_set_window({
+            let t = t.clone();
+            move |id, approx_minute, half_window| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_set_window(&id, approx_minute, half_window);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_answer({
+            let t = t.clone();
+            move |id, question_idx, option_idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_answer(&id, question_idx, option_idx);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_add_event({
+            let t = t.clone();
+            move |id, kind_idx, year| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_add_event(&id, kind_idx, year);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_remove_event({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_remove_event(&id, idx);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_next({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_next(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_accept({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_accept(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_rectify_cancel({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_rectify_cancel(&id);
+                }
+            }
+        });
+
         self.window.on_clock_open_cities({
             let t = t.clone();
             move |id| {

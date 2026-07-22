@@ -1,6 +1,7 @@
 //! Jyotish widget persistent configuration.
 
 use bincode::{Decode, Encode};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 /// Ayanamsa system used to convert tropical → sidereal longitudes.
@@ -60,6 +61,13 @@ pub struct JyotishConfig {
     pub day_offset: i32,
     pub show_planets: bool,
     pub show_sunrise_sunset: bool,
+    pub birth_date: Option<String>,
+    pub birth_time: Option<String>,
+    pub birth_utc_offset_minutes: i32,
+    pub birth_time_rectified: bool,
+    pub active_tab: u8,
+    pub month_offset: i32,
+    pub year_offset: i32,
 }
 
 impl Default for JyotishConfig {
@@ -73,6 +81,13 @@ impl Default for JyotishConfig {
             day_offset: 0,
             show_planets: true,
             show_sunrise_sunset: true,
+            birth_date: None,
+            birth_time: None,
+            birth_utc_offset_minutes: 0,
+            birth_time_rectified: false,
+            active_tab: 0,
+            month_offset: 0,
+            year_offset: 0,
         }
     }
 }
@@ -83,8 +98,28 @@ impl JyotishConfig {
         self.latitude = self.latitude.clamp(-90.0, 90.0);
         self.longitude = self.longitude.clamp(-180.0, 180.0);
         self.day_offset = self.day_offset.clamp(-3650, 3650);
+        self.active_tab = self.active_tab.min(3);
+        self.month_offset = self.month_offset.clamp(-1200, 1200);
+        self.year_offset = self.year_offset.clamp(-100, 100);
+        self.birth_utc_offset_minutes = self.birth_utc_offset_minutes.clamp(-14 * 60, 14 * 60);
         if self.location_name.trim().is_empty() {
             self.location_name = "Varanasi".into();
         }
+        if let Some(ref d) = self.birth_date {
+            if NaiveDate::parse_from_str(d, "%Y-%m-%d").is_err() {
+                self.birth_date = None;
+            }
+        }
+        if let Some(ref t) = self.birth_time {
+            if chrono::NaiveTime::parse_from_str(t, "%H:%M").is_err() {
+                self.birth_time = None;
+            }
+        }
+    }
+
+    /// Whether birth date is set.
+    #[must_use]
+    pub fn has_birth_data(&self) -> bool {
+        self.birth_date.is_some()
     }
 }

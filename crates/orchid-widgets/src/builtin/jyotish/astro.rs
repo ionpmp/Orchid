@@ -345,15 +345,15 @@ pub fn compute_jyotish(
     }
 }
 
-fn karana_name_index(karana_num: i32) -> u8 {
+pub(crate) fn karana_name_index(karana_num: i32) -> u8 {
     // First karana of Shukla Pratipada is Kimstughna (fixed).
     // Last three of Krishna Chaturdashi / Amavasya are fixed.
     // Middle 56 cycle through the 7 movable karanas.
     match karana_num {
-        0 => 10,  // Kimstughna
-        57 => 7,  // Shakuni
-        58 => 8,  // Chatushpada
-        59 => 9,  // Naga
+        0 => 10, // Kimstughna
+        57 => 7, // Shakuni
+        58 => 8, // Chatushpada
+        59 => 9, // Naga
         n => u8::try_from((n - 1).rem_euclid(7)).unwrap_or(0),
     }
 }
@@ -394,7 +394,7 @@ fn compute_planets(t: f64, ayanamsa: f64) -> Vec<PlanetPosition> {
     ]
 }
 
-fn sun_longitude(t: f64) -> f64 {
+pub(crate) fn sun_longitude(t: f64) -> f64 {
     let l0 = norm360(280.466_46 + 36_000.769_83 * t + 0.000_303_2 * t * t);
     let m = norm360(357.529_11 + 35_999.050_29 * t - 0.000_153_7 * t * t).to_radians();
     let c = (1.914_602 - 0.004_817 * t) * m.sin()
@@ -403,16 +403,14 @@ fn sun_longitude(t: f64) -> f64 {
     norm360(l0 + c)
 }
 
-fn moon_longitude(t: f64) -> f64 {
+pub(crate) fn moon_longitude(t: f64) -> f64 {
     let l_prime = norm360(218.316_447_7 + 481_267.881_234_21 * t);
     let d = norm360(297.850_192_1 + 445_267.111_403_4 * t).to_radians();
     let m = norm360(357.529_109_2 + 35_999.050_290_9 * t).to_radians();
     let mp = norm360(134.963_396_4 + 477_198.867_505_5 * t).to_radians();
     let f = norm360(93.272_095_0 + 483_202.017_527_3 * t).to_radians();
 
-    let lambda = l_prime
-        + 6.289 * mp.sin()
-        - 1.274 * (2.0 * d - mp).sin()
+    let lambda = l_prime + 6.289 * mp.sin() - 1.274 * (2.0 * d - mp).sin()
         + 0.658 * (2.0 * d).sin()
         - 0.186 * m.sin()
         - 0.114 * (2.0 * f).sin()
@@ -491,7 +489,12 @@ fn is_retrograde(t: f64, planet: Planet) -> bool {
     }
 }
 
-fn rise_set_of(at: DateTime<Utc>, lat_deg: f64, lon_deg: f64, rising: bool) -> Option<DateTime<Utc>> {
+fn rise_set_of(
+    at: DateTime<Utc>,
+    lat_deg: f64,
+    lon_deg: f64,
+    rising: bool,
+) -> Option<DateTime<Utc>> {
     let day_start = Utc
         .with_ymd_and_hms(
             at.date_naive().year(),
@@ -541,8 +544,36 @@ fn sun_altitude(lat_deg: f64, lon_deg: f64, at: DateTime<Utc>) -> f64 {
         .to_degrees()
 }
 
-fn norm360(x: f64) -> f64 {
+pub(crate) fn norm360(x: f64) -> f64 {
     x.rem_euclid(360.0)
+}
+
+/// Tropical ascendant (lagna) longitude in degrees for the given Julian Day
+/// and geographic location.
+///
+/// Uses the standard right-ascension-of-the-midheaven formula (Meeus-style
+/// spherical trig). Latitude is clamped to ±66° since the ascendant formula
+/// becomes numerically unstable (and astrologically meaningless) near the
+/// poles.
+#[must_use]
+pub fn ascendant_tropical(jd: f64, lat_deg: f64, lon_deg: f64) -> f64 {
+    let t = (jd - 2_451_545.0) / 36_525.0;
+    let gmst = norm360(280.460_618_37 + 360.985_647_366_29 * (jd - 2_451_545.0));
+    let ramc = norm360(gmst + lon_deg).to_radians();
+    let eps = (23.439_291 - 0.013_004_2 * t).to_radians();
+    let lat = lat_deg.clamp(-66.0, 66.0).to_radians();
+
+    let asc = ramc
+        .cos()
+        .atan2(-(ramc.sin() * eps.cos() + lat.tan() * eps.sin()));
+    norm360(asc.to_degrees())
+}
+
+/// Sidereal ascendant (lagna) longitude, i.e. [`ascendant_tropical`] shifted
+/// by the selected ayanamsa.
+#[must_use]
+pub fn ascendant_sidereal(jd: f64, lat_deg: f64, lon_deg: f64, system: AyanamsaSystem) -> f64 {
+    norm360(ascendant_tropical(jd, lat_deg, lon_deg) - ayanamsa_deg(jd, system))
 }
 
 #[cfg(test)]
@@ -555,10 +586,7 @@ mod tests {
         let at = Utc.with_ymd_and_hms(2026, 7, 21, 12, 0, 0).unwrap();
         let aya = ayanamsa_deg(julian_day(at), AyanamsaSystem::Lahiri);
         // Lahiri ~24.2° in mid-2020s.
-        assert!(
-            (23.8..24.8).contains(&aya),
-            "ayanamsa out of range: {aya}"
-        );
+        assert!((23.8..24.8).contains(&aya), "ayanamsa out of range: {aya}");
     }
 
     #[test]
@@ -594,5 +622,62 @@ mod tests {
     fn format_degree_pads_minutes() {
         assert_eq!(format_degree_in_rashi(12.5), "12°30'");
         assert_eq!(format_degree_in_rashi(0.0), "0°00'");
+    }
+
+    #[test]
+    fn ascendant_cycles_through_most_rashis_in_a_day() {
+        let jd0 = julian_day(Utc.with_ymd_and_hms(2026, 7, 21, 0, 0, 0).unwrap());
+        let mut seen = std::collections::HashSet::new();
+        for step in 0..48 {
+            let jd = jd0 + f64::from(step) / 48.0;
+            let asc = ascendant_tropical(jd, 25.3176, 82.9739);
+            assert!((0.0..360.0).contains(&asc));
+            seen.insert((asc / 30.0).floor() as u8 % 12);
+        }
+        assert!(
+            seen.len() >= 10,
+            "expected the ascendant to cycle through most rashis in 24h, got {}",
+            seen.len()
+        );
+    }
+
+    #[test]
+    fn ascendant_changes_sign_roughly_every_two_hours() {
+        let jd0 = julian_day(Utc.with_ymd_and_hms(2026, 7, 21, 0, 0, 0).unwrap());
+        let samples = 24 * 60;
+        let mut prev_rashi = (ascendant_tropical(jd0, 25.3176, 82.9739) / 30.0).floor() as u8 % 12;
+        let mut transitions = 0;
+        for minute in 1..samples {
+            let jd = jd0 + f64::from(minute) / f64::from(samples);
+            let rashi = (ascendant_tropical(jd, 25.3176, 82.9739) / 30.0).floor() as u8 % 12;
+            if rashi != prev_rashi {
+                transitions += 1;
+                prev_rashi = rashi;
+            }
+        }
+        // 12 rashis over 24h average ~2h/sign; allow a wide margin for
+        // latitude-dependent compression/expansion of oblique signs.
+        assert!(
+            (8..=16).contains(&transitions),
+            "unexpected ascendant transition count: {transitions}"
+        );
+    }
+
+    #[test]
+    fn ascendant_sidereal_is_tropical_minus_ayanamsa() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 21, 6, 0, 0).unwrap();
+        let jd = julian_day(at);
+        let trop = ascendant_tropical(jd, 25.3176, 82.9739);
+        let sid = ascendant_sidereal(jd, 25.3176, 82.9739, AyanamsaSystem::Lahiri);
+        let expected = norm360(trop - ayanamsa_deg(jd, AyanamsaSystem::Lahiri));
+        assert!((sid - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ascendant_handles_high_latitude_without_panic() {
+        let at = Utc.with_ymd_and_hms(2026, 7, 21, 12, 0, 0).unwrap();
+        let jd = julian_day(at);
+        let asc = ascendant_tropical(jd, 89.0, 20.0);
+        assert!((0.0..360.0).contains(&asc));
     }
 }

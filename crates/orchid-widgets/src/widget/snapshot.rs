@@ -50,7 +50,7 @@ pub enum WidgetPayload {
     /// Moon widget.
     Moon(crate::widget::payloads::MoonPayload),
     /// Jyotish (Vedic panchanga) widget.
-    Jyotish(crate::widget::payloads::JyotishPayload),
+    Jyotish(Box<crate::widget::payloads::JyotishPayload>),
     /// Clock / world-clocks widget.
     Clock(crate::widget::payloads::ClockPayload),
     /// System indicators widget.

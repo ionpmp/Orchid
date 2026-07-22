@@ -1,7 +1,7 @@
 //! Payload for the Jyotish (Vedic panchanga) widget.
 
 /// One graha (planet) row for the sidereal table.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct JyotishPlanetRow {
     /// Fluent key for the graha name (`jyotish-graha-*`).
@@ -12,6 +12,83 @@ pub struct JyotishPlanetRow {
     pub degree_text: String,
     /// Retrograde marker when applicable.
     pub is_retrograde: bool,
+}
+
+/// One day chip in the 7-day strip.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishDayChip {
+    pub weekday_key: &'static str,
+    pub day_num: u8,
+    /// 0=green, 1=yellow, 2=red.
+    pub color: u8,
+    pub offset: i32,
+    pub is_selected: bool,
+}
+
+/// One cell in the month grid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishMonthCell {
+    pub day: u8,
+    pub color: u8,
+    pub is_today: bool,
+    pub offset: i32,
+}
+
+/// One month row in the year view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishMonthSummary {
+    pub month_key: &'static str,
+    pub green: u16,
+    pub yellow: u16,
+    pub red: u16,
+    pub month_offset: i32,
+}
+
+/// One year row in the life retrospective.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishYearSummary {
+    pub year: i32,
+    pub green: u16,
+    pub yellow: u16,
+    pub red: u16,
+    pub dasha_key: &'static str,
+    pub year_offset: i32,
+}
+
+/// Rectification wizard state for the UI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishRectifyView {
+    /// 0=hidden, 1=window, 2=quiz, 3=events, 4=results.
+    pub step: u8,
+    pub question_idx: u8,
+    pub question_total: u8,
+    pub question_key: &'static str,
+    pub option_keys: Vec<&'static str>,
+    /// (kind ftl key, year).
+    pub events: Vec<(&'static str, i32)>,
+    pub event_kind_keys: Vec<&'static str>,
+    /// (time range, rashi key, confidence pct).
+    pub candidates: Vec<(String, &'static str, u8)>,
+}
+
+impl Default for JyotishRectifyView {
+    fn default() -> Self {
+        Self {
+            step: 0,
+            question_idx: 0,
+            question_total: 8,
+            question_key: "",
+            option_keys: Vec::new(),
+            events: Vec::new(),
+            event_kind_keys: Vec::new(),
+            candidates: Vec::new(),
+        }
+    }
 }
 
 /// Render-ready Jyotish payload.
@@ -41,4 +118,23 @@ pub struct JyotishPayload {
     pub planets: Vec<JyotishPlanetRow>,
     pub show_planets: bool,
     pub is_loading: bool,
+
+    pub active_tab: u8,
+    pub score_color: u8,
+    pub headline_key: &'static str,
+    pub influence_keys: Vec<&'static str>,
+    pub advice_keys: Vec<&'static str>,
+    pub week_strip: Vec<JyotishDayChip>,
+    pub month_key: &'static str,
+    pub month_year: i32,
+    pub month_cells: Vec<JyotishMonthCell>,
+    pub month_first_weekday: u8,
+    pub month_green: u16,
+    pub month_yellow: u16,
+    pub month_red: u16,
+    pub year_value: i32,
+    pub year_months: Vec<JyotishMonthSummary>,
+    pub life_years: Vec<JyotishYearSummary>,
+    pub has_birth_data: bool,
+    pub rectify: JyotishRectifyView,
 }
