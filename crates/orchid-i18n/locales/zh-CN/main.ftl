@@ -289,6 +289,7 @@ calendar-weekday-thu = 四
 calendar-weekday-tue = 二
 calendar-weekday-wed = 三
 search-source-calendar = 日历
+search-source-jyotish = Jyotish
 search-source-files = 文件
 search-source-commands = 命令
 search-source-settings = 设置
@@ -1318,9 +1319,18 @@ jyotish-event-health = 健康危机
 widget-settings-jyotish-birth-date = Birth date (YYYY-MM-DD)
 widget-settings-jyotish-birth-time = Birth time (HH:MM)
 widget-settings-jyotish-birth-utc-offset = Birth UTC offset (minutes)
+widget-settings-jyotish-notify-day-color = 今日评分颜色变化时通知
+widget-settings-jyotish-notify-rahukalam = 罗侯时段开始时通知
 
 # ---- jyotish phase A ----
 jyotish-disclaimer = 定向日启发式得分 — 不是 muhurta 咨询。
+jyotish-notify-rahukalam = 罗侯时段已开始
+jyotish-notify-day-green = 今日评分转为有利
+jyotish-notify-day-yellow = 今日评分转为中性
+jyotish-notify-day-red = 今日评分转为不利
+jyotish-export-day = 复制当日
+jyotish-export-week = 复制本周
+jyotish-exported = 已复制到剪贴板
 jyotish-score-now = 现在
 jyotish-score-day = 天
 jyotish-advice-mode-panchanga = 建议一般panchanga指导

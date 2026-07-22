@@ -739,10 +739,7 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
         "ayanamsa",
         "widget-settings-jyotish-ayanamsa",
         &[
-            (
-                "lahiri".into(),
-                locale.tr("jyotish-ayanamsa-lahiri").into(),
-            ),
+            ("lahiri".into(), locale.tr("jyotish-ayanamsa-lahiri").into()),
             (
                 "krishnamurti".into(),
                 locale.tr("jyotish-ayanamsa-krishnamurti").into(),
@@ -785,6 +782,20 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
         "birth_utc_offset_minutes",
         "widget-settings-jyotish-birth-utc-offset",
         cfg.birth_utc_offset_minutes.to_string(),
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "notify_day_color",
+        "widget-settings-jyotish-notify-day-color",
+        cfg.notify_day_color,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "notify_rahukalam",
+        "widget-settings-jyotish-notify-rahukalam",
+        cfg.notify_rahukalam,
     );
     rows
 }
@@ -831,6 +842,17 @@ fn apply_jyotish(instance_id: Uuid, key: &str, value: &str) {
             if let Ok(n) = value.parse::<i32>() {
                 cfg.birth_utc_offset_minutes = n;
             }
+        }
+        "notify_day_color" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.notify_day_color = b;
+            }
+        }
+        "notify_rahukalam" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.notify_rahukalam = b;
+            }
+        }
         _ => {}
     });
 }

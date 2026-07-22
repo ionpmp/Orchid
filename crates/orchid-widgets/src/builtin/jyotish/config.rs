@@ -68,6 +68,14 @@ pub struct JyotishConfig {
     pub active_tab: u8,
     pub month_offset: i32,
     pub year_offset: i32,
+    #[serde(default = "default_true")]
+    pub notify_day_color: bool,
+    #[serde(default = "default_true")]
+    pub notify_rahukalam: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for JyotishConfig {
@@ -88,6 +96,8 @@ impl Default for JyotishConfig {
             active_tab: 0,
             month_offset: 0,
             year_offset: 0,
+            notify_day_color: true,
+            notify_rahukalam: true,
         }
     }
 }

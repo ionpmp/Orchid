@@ -4,6 +4,7 @@ pub mod calculator;
 pub mod calendar;
 pub mod commands;
 pub mod files;
+pub mod jyotish;
 pub mod settings;
 
 use async_trait::async_trait;
@@ -12,6 +13,7 @@ pub use calculator::CalculatorSource;
 pub use calendar::CalendarSource;
 pub use commands::CommandsSource;
 pub use files::FilesSource;
+pub use jyotish::JyotishSource;
 pub use settings::SettingsSource;
 
 /// What happens when the user activates a candidate.
@@ -28,6 +30,11 @@ pub enum ActionTarget {
         instance_id: String,
         event_id: String,
         date: String,
+    },
+    /// Focus a Jyotish widget on a given day offset from today.
+    OpenJyotishDay {
+        instance_id: String,
+        day_offset: i32,
     },
 }
 

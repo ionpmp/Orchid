@@ -95,6 +95,8 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-rectify-refine(string);
     callback jyotish-rectify-accept(string);
     callback jyotish-rectify-cancel(string);
+    callback jyotish-export-day(string);
+    callback jyotish-export-week(string);
 
     // Clock
     callback clock-open-cities(string);
@@ -596,6 +598,8 @@ export component WidgetFrame inherits Rectangle {
                     rectify-refine => { root.jyotish-rectify-refine(root.model.instance-id); }
                     rectify-accept => { root.jyotish-rectify-accept(root.model.instance-id); }
                     rectify-cancel => { root.jyotish-rectify-cancel(root.model.instance-id); }
+                    export-day => { root.jyotish-export-day(root.model.instance-id); }
+                    export-week => { root.jyotish-export-week(root.model.instance-id); }
                 }
 
                 if model.type-id == "clock" : ClockView {

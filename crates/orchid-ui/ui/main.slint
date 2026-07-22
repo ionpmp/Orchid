@@ -157,6 +157,8 @@ export component MainWindow inherits Window {
     callback jyotish-rectify-refine(string);
     callback jyotish-rectify-accept(string);
     callback jyotish-rectify-cancel(string);
+    callback jyotish-export-day(string);
+    callback jyotish-export-week(string);
     callback clock-open-cities(string);
     callback clock-close-cities(string);
     callback clock-remove-city(string, int);
@@ -527,6 +529,8 @@ export component MainWindow inherits Window {
             jyotish-rectify-refine(id) => { root.jyotish-rectify-refine(id); }
             jyotish-rectify-accept(id) => { root.jyotish-rectify-accept(id); }
             jyotish-rectify-cancel(id) => { root.jyotish-rectify-cancel(id); }
+            jyotish-export-day(id) => { root.jyotish-export-day(id); }
+            jyotish-export-week(id) => { root.jyotish-export-week(id); }
             clock-open-cities(id) => { root.clock-open-cities(id); }
             clock-close-cities(id) => { root.clock-close-cities(id); }
             clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }

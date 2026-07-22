@@ -97,6 +97,8 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         legend_red: locale.tr("jyotish-legend-red").into(),
         weekday_headers: ModelRc::new(VecModel::from(weekday_headers(locale))),
         rectify: build_rectify_model(&JyotishRectifyView::default(), locale),
+        export_day_label: locale.tr("jyotish-export-day").into(),
+        export_week_label: locale.tr("jyotish-export-week").into(),
     }
 }
 
@@ -341,7 +343,10 @@ pub(crate) fn build_jyotish_model(
         dasha_pratyantar_label: locale.tr("jyotish-dasha-pratyantar").into(),
         dasha_maha_text: dasha_line(p.dasha_now.maha_key, &p.dasha_now.maha_range),
         dasha_antar_text: dasha_line(p.dasha_now.antar_key, &p.dasha_now.antar_range),
-        dasha_pratyantar_text: dasha_line(p.dasha_now.pratyantar_key, &p.dasha_now.pratyantar_range),
+        dasha_pratyantar_text: dasha_line(
+            p.dasha_now.pratyantar_key,
+            &p.dasha_now.pratyantar_range,
+        ),
         has_birth_data: p.has_birth_data,
         birth_prompt: locale.tr("jyotish-birth-prompt").into(),
         empty_location: locale.tr("jyotish-empty-location").into(),
@@ -352,6 +357,8 @@ pub(crate) fn build_jyotish_model(
         legend_red: locale.tr("jyotish-legend-red").into(),
         weekday_headers: ModelRc::new(VecModel::from(weekday_headers(locale))),
         rectify: build_rectify_model(&p.rectify, locale),
+        export_day_label: locale.tr("jyotish-export-day").into(),
+        export_week_label: locale.tr("jyotish-export-week").into(),
     }
 }
 

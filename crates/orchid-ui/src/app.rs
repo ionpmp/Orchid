@@ -23,8 +23,8 @@ use orchid_storage::{
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
     builtin::search::{
-        CalculatorSource, CalendarSource, CommandsSource, FilesSource, SearchAggregator,
-        SearchSource, SettingsSource,
+        CalculatorSource, CalendarSource, CommandsSource, FilesSource, JyotishSource,
+        SearchAggregator, SearchSource, SettingsSource,
     },
     commands::build_command_set,
     GroupManager, LayoutEngine, WidgetManager, WidgetManagerOptions, WidgetRegistry,
@@ -214,6 +214,7 @@ impl OrchidApp {
             Arc::new(SettingsSource::new()),
             Arc::new(CalculatorSource::new()),
             Arc::new(CalendarSource::new()),
+            Arc::new(JyotishSource::new()),
         ];
         let search_aggregator: Arc<SearchAggregator> =
             Arc::new(SearchAggregator::new(search_sources));

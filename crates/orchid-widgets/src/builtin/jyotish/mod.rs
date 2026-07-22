@@ -70,7 +70,14 @@ struct JyotishHandle {
     natal_fingerprint: RwLock<Option<NatalFingerprint>>,
     color_cache: DashMap<NaiveDate, u8>,
     /// Cached year-tab aggregates: (natal fingerprint, year, months, gochara key).
-    year_cache: RwLock<Option<(NatalFingerprint, i32, Vec<JyotishMonthSummary>, &'static str)>>,
+    year_cache: RwLock<
+        Option<(
+            NatalFingerprint,
+            i32,
+            Vec<JyotishMonthSummary>,
+            &'static str,
+        )>,
+    >,
     rectify: RwLock<Option<RectifySession>>,
     rectify_wizard_step: RwLock<u8>,
     /// Absolute civil year expanded on the Life tab (`None` = collapsed).
@@ -247,8 +254,9 @@ impl JyotishHandle {
                     }
                 }
                 let (green, yellow, red) = if let Some(n) = natal.as_ref() {
-                    let mid = NaiveDate::from_ymd_opt(year, month, 15)
-                        .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today));
+                    let mid = NaiveDate::from_ymd_opt(year, month, 15).unwrap_or_else(|| {
+                        NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today)
+                    });
                     let at = local_noon_utc(mid, cfg.longitude);
                     let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
                     tint_counts(green, yellow, red, modif)
@@ -301,8 +309,11 @@ impl JyotishHandle {
                     }
                 }
                 let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
-                let modif =
-                    gochara_modifier(natal.moon_rashi, local_noon_utc(mid, cfg.longitude), cfg.ayanamsa);
+                let modif = gochara_modifier(
+                    natal.moon_rashi,
+                    local_noon_utc(mid, cfg.longitude),
+                    cfg.ayanamsa,
+                );
                 let (green, yellow, red) = tint_counts(green * 30, yellow * 30, red * 30, modif);
                 let dasha_key = dasha_at(natal.moon_longitude, birth_date, mid)
                     .map(|(maha, _, _)| maha.ftl_key())
@@ -733,9 +744,7 @@ fn format_naive_date(locale: &LocaleConfig, date: NaiveDate) -> String {
 
 /// Exclusive period end → last inclusive civil day for display.
 fn period_end_display(exclusive_to: NaiveDate) -> NaiveDate {
-    exclusive_to
-        .pred_opt()
-        .unwrap_or(exclusive_to)
+    exclusive_to.pred_opt().unwrap_or(exclusive_to)
 }
 
 fn period_range_text(locale: &LocaleConfig, period: DashaPeriod) -> String {
@@ -888,6 +897,101 @@ fn build_rectify_view(wizard_step: u8, session: Option<&RectifySession>) -> Jyot
         }
     }
     view
+}
+
+/// Hit produced by [`search_catalog`].
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct JyotishSearchHit {
+    pub instance_id: Uuid,
+    pub title: String,
+    pub subtitle: String,
+    pub score: i32,
+    pub day_offset: i32,
+}
+
+/// Static keyword catalog matched (case-insensitively) against the query.
+///
+/// `(keyword, title, subtitle, force_today)` — `force_today` pins the action
+/// to `day_offset = 0` regardless of the instance's currently viewed day
+/// (used for "today" / Rahu Kalam hits); other keywords keep the instance's
+/// current offset so a generic "jyotish" search returns to wherever the
+/// widget was left.
+const KEYWORDS: &[(&str, &str, &str, bool)] = &[
+    ("today", "Jyotish · Today", "Panchanga for today", true),
+    ("jyotish", "Jyotish", "Vedic panchanga", false),
+    (
+        "panchanga",
+        "Jyotish · Panchanga",
+        "Tithi, nakshatra, yoga, karana",
+        false,
+    ),
+    ("rahu", "Rahu Kalam", "Inauspicious window", true),
+    ("rahukalam", "Rahu Kalam", "Inauspicious window", true),
+    ("tithi", "Jyotish · Tithi", "Lunar day", false),
+    ("nakshatra", "Jyotish · Nakshatra", "Lunar mansion", false),
+    ("yoga", "Jyotish · Yoga", "Panchanga yoga", false),
+    ("karana", "Jyotish · Karana", "Half-tithi", false),
+    ("muhurta", "Jyotish · Muhurta", "Auspicious windows", false),
+    ("dasha", "Jyotish · Dasha", "Vimshottari periods", false),
+];
+
+/// Score a query against the static keyword catalog.
+///
+/// Exposed separately from [`search_catalog`] so keyword matching can be
+/// unit-tested without a live [`JyotishHandle`].
+#[must_use]
+pub fn score_keyword_match(query: &str) -> Option<(i32, &'static str, &'static str, bool)> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return None;
+    }
+    let mut best: Option<(i32, &'static str, &'static str, bool)> = None;
+    for (kw, title, subtitle, force_today) in KEYWORDS.iter().copied() {
+        let score = if kw == q {
+            100
+        } else if kw.starts_with(q.as_str()) {
+            85
+        } else if q.starts_with(kw) || kw.contains(q.as_str()) {
+            70
+        } else {
+            continue;
+        };
+        if best.is_none_or(|(best_score, ..)| score > best_score) {
+            best = Some((score, title, subtitle, force_today));
+        }
+    }
+    best
+}
+
+/// Search across live Jyotish instances for keyword or location hits.
+#[must_use]
+pub fn search_catalog(query: &str, limit: usize) -> Vec<JyotishSearchHit> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() || limit == 0 {
+        return Vec::new();
+    }
+    let mut hits = Vec::new();
+    for entry in JYOTISH_LIVE.iter() {
+        let instance_id = *entry.key();
+        let cfg = entry.value().config.read();
+        let hit = score_keyword_match(&q).or_else(|| {
+            let loc_l = cfg.location_name.to_lowercase();
+            (!loc_l.is_empty() && loc_l.contains(&q)).then_some((60, "Jyotish", "Panchanga", false))
+        });
+        if let Some((score, title, subtitle, force_today)) = hit {
+            hits.push(JyotishSearchHit {
+                instance_id,
+                title: title.to_string(),
+                subtitle: subtitle.to_string(),
+                score,
+                day_offset: if force_today { 0 } else { cfg.day_offset },
+            });
+        }
+    }
+    hits.sort_by_key(|h| std::cmp::Reverse(h.score));
+    hits.truncate(limit);
+    hits
 }
 
 /// Snapshot the live config for the settings dialog.
@@ -1301,5 +1405,97 @@ pub fn descriptor() -> WidgetDescriptor {
         default_lifecycle: LifecycleState::Active,
         allows_multiple_instances: true,
         factory,
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    #[test]
+    fn score_keyword_match_exact_beats_prefix() {
+        let (score, title, _subtitle, force_today) =
+            score_keyword_match("rahukalam").expect("keyword hit");
+        assert_eq!(title, "Rahu Kalam");
+        assert!(force_today);
+        assert_eq!(score, 100);
+    }
+
+    #[test]
+    fn score_keyword_match_prefix_hit() {
+        let (_score, title, _subtitle, force_today) =
+            score_keyword_match("tith").expect("prefix hit");
+        assert_eq!(title, "Jyotish · Tithi");
+        assert!(!force_today);
+    }
+
+    #[test]
+    fn score_keyword_match_no_hit_for_unrelated_query() {
+        assert!(score_keyword_match("xyzzy").is_none());
+        assert!(score_keyword_match("").is_none());
+    }
+
+    #[test]
+    fn score_keyword_match_today_forces_day_zero() {
+        let (_score, _title, _subtitle, force_today) =
+            score_keyword_match("today").expect("today hit");
+        assert!(force_today);
+    }
+
+    fn test_bus() -> Arc<orchid_core::EventBus> {
+        Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ))
+    }
+
+    // `JYOTISH_LIVE` is a crate-wide static, so other tests' instances may
+    // still be registered when these run in parallel — assert on the
+    // instance under test rather than the total hit count.
+    #[test]
+    fn search_catalog_matches_keyword_and_respects_day_offset() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let cfg = JyotishConfig {
+            day_offset: 5,
+            ..JyotishConfig::default()
+        };
+        let _widget = JyotishWidget::new(id, cfg, bus, orchid_config);
+
+        let hits = search_catalog("nakshatra", 50);
+        let hit = hits
+            .iter()
+            .find(|h| h.instance_id == id)
+            .expect("hit for this instance");
+        // Generic keyword hit keeps the instance's current offset.
+        assert_eq!(hit.day_offset, 5);
+
+        let today_hits = search_catalog("rahu", 50);
+        let today_hit = today_hits
+            .iter()
+            .find(|h| h.instance_id == id)
+            .expect("rahu hit for this instance");
+        assert_eq!(today_hit.day_offset, 0);
+    }
+
+    #[test]
+    fn search_catalog_matches_location_name() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let cfg = JyotishConfig {
+            location_name: "Zzyzxville".into(),
+            ..JyotishConfig::default()
+        };
+        let _widget = JyotishWidget::new(id, cfg, bus, orchid_config);
+
+        let hits = search_catalog("zzyzxville", 50);
+        assert!(hits.iter().any(|h| h.instance_id == id));
+    }
+
+    #[test]
+    fn search_catalog_empty_query_returns_nothing() {
+        assert!(search_catalog("", 10).is_empty());
+        assert!(search_catalog("jyotish", 0).is_empty());
     }
 }

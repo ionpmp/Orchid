@@ -627,7 +627,6 @@ impl MainWindowController {
                 }
             }
         });
-
         self.window.on_jyotish_select_tab({
             let t = t.clone();
             move |id, tab| {
@@ -761,6 +760,22 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     c.on_jyotish_rectify_cancel(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_export_day({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_export_day(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_export_week({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_export_week(&id);
                 }
             }
         });

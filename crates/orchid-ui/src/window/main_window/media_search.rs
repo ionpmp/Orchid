@@ -203,6 +203,24 @@ impl MainWindowController {
                     }
                 });
             }
+            ActionTarget::OpenJyotishDay {
+                instance_id,
+                day_offset,
+            } => {
+                let Ok(jyotish_id) = Uuid::parse_str(&instance_id) else {
+                    warn!(%instance_id, "invalid jyotish instance id from search");
+                    return;
+                };
+                orchid_widgets::builtin::jyotish::set_day_offset(jyotish_id, day_offset);
+                let wm = self.widget_manager.clone();
+                let t = Arc::downgrade(self);
+                spawn::spawn_local_compat(async move {
+                    let _ = wm.refresh_snapshot_cache(jyotish_id).await;
+                    if let Some(c) = t.upgrade() {
+                        c.schedule_rebuild();
+                    }
+                });
+            }
         }
     }
 

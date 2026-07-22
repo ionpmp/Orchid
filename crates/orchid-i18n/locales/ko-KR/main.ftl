@@ -289,6 +289,7 @@ calendar-weekday-thu = 목
 calendar-weekday-tue = 화
 calendar-weekday-wed = 수
 search-source-calendar = 캘린더
+search-source-jyotish = Jyotish
 search-source-files = 파일
 search-source-commands = 명령
 search-source-settings = 설정
@@ -1318,9 +1319,18 @@ jyotish-event-health = 건강 위기
 widget-settings-jyotish-birth-date = Birth date (YYYY-MM-DD)
 widget-settings-jyotish-birth-time = Birth time (HH:MM)
 widget-settings-jyotish-birth-utc-offset = Birth UTC offset (minutes)
+widget-settings-jyotish-notify-day-color = 오늘의 점수 색상이 변경되면 알림
+widget-settings-jyotish-notify-rahukalam = 라후 칼람이 시작되면 알림
 
 # ---- jyotish phase A ----
 jyotish-disclaimer = 오리엔테이션에 대한 휴리스틱 데이 점수 - muhurta 상담이 아닙니다.
+jyotish-notify-rahukalam = 라후 칼람이 시작되었습니다
+jyotish-notify-day-green = 오늘의 점수가 좋아졌습니다
+jyotish-notify-day-yellow = 오늘의 점수가 혼조되었습니다
+jyotish-notify-day-red = 오늘의 점수가 어려워졌습니다
+jyotish-export-day = 하루 복사
+jyotish-export-week = 주간 복사
+jyotish-exported = 클립보드에 복사됨
 jyotish-score-now = 지금
 jyotish-score-day = 낮
 jyotish-advice-mode-panchanga = 조언은 일반적인 panchanga 지침입니다.

@@ -289,6 +289,7 @@ calendar-weekday-thu = خمي
 calendar-weekday-tue = ثلا
 calendar-weekday-wed = أرب
 search-source-calendar = التقويم
+search-source-jyotish = Jyotish
 search-source-files = الملفات
 search-source-commands = الأوامر
 search-source-settings = الإعدادات
@@ -1320,9 +1321,18 @@ jyotish-event-health = أزمة صحية
 widget-settings-jyotish-birth-date = Birth date (YYYY-MM-DD)
 widget-settings-jyotish-birth-time = Birth time (HH:MM)
 widget-settings-jyotish-birth-utc-offset = Birth UTC offset (minutes)
+widget-settings-jyotish-notify-day-color = إشعار عند تغيّر لون تقييم اليوم
+widget-settings-jyotish-notify-rahukalam = إشعار عند بدء Rahu Kalam
 
 # ---- jyotish phase A ----
 jyotish-disclaimer = النتيجة اليومية الإرشادية للتوجيه - وليست استشارة muhurta.
+jyotish-notify-rahukalam = بدأ Rahu Kalam
+jyotish-notify-day-green = أصبح تقييم اليوم مؤاتيًا
+jyotish-notify-day-yellow = أصبح تقييم اليوم مختلطًا
+jyotish-notify-day-red = أصبح تقييم اليوم صعبًا
+jyotish-export-day = نسخ اليوم
+jyotish-export-week = نسخ الأسبوع
+jyotish-exported = تم النسخ إلى الحافظة
 jyotish-score-now = الآن
 jyotish-score-day = يوم
 jyotish-advice-mode-panchanga = النصيحة هي التوجيه العام panchanga

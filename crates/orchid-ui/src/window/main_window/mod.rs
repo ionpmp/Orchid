@@ -112,6 +112,8 @@ pub struct MainWindowController {
     fm_ingest_failure_pending: Arc<Mutex<Option<String>>>,
     /// Last file-manager transfer error mirrored to the notification center.
     last_fm_transfer_error: Arc<Mutex<Option<String>>>,
+    /// Per-instance Jyotish notification state (Rahu Kalam edge, day color).
+    jyotish_notify_state: Arc<Mutex<HashMap<Uuid, jyotish::JyotishNotifyState>>>,
     widget_manager: Arc<WidgetManager>,
     workspace_manager: Arc<WorkspaceManager>,
     layout_engine: Arc<LayoutEngine>,
@@ -428,6 +430,7 @@ impl MainWindowController {
             _fm_ingest_failed_sub: fm_ingest_failed_sub,
             fm_ingest_failure_pending,
             last_fm_transfer_error: Arc::new(Mutex::new(None)),
+            jyotish_notify_state: Arc::new(Mutex::new(HashMap::new())),
             widget_manager: widget_manager.clone(),
             workspace_manager: workspace_manager.clone(),
             layout_engine: layout_engine.clone(),
@@ -2458,6 +2461,7 @@ impl MainWindowController {
         );
         *self.search_autofocus_pending.lock() = None;
         self.sync_fm_transfer_notifications();
+        self.sync_jyotish_notifications();
         Ok(())
     }
 

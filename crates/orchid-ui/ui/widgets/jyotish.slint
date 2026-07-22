@@ -58,6 +58,28 @@ component PillBtn inherits Rectangle {
     }
 }
 
+component LinkBtn inherits TouchArea {
+    in property <string> label;
+
+    height: 22px;
+    width: lbl.preferred-width + 16px;
+
+    Rectangle {
+        background: root.has-hover ? Theme.surface-raised : transparent;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        lbl := Text {
+            width: 100%; height: 100%;
+            text: root.label;
+            color: Theme.accent-brand;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
 component ColorDot inherits Rectangle {
     in property <int> color-code;
     width: 8px;
@@ -109,6 +131,8 @@ export component JyotishView inherits Rectangle {
     callback rectify-refine();
     callback rectify-accept();
     callback rectify-cancel();
+    callback export-day();
+    callback export-week();
 
     property <int> draft-event-kind: 0;
     property <int> draft-event-year: 2000;
@@ -494,6 +518,19 @@ export component JyotishView inherits Rectangle {
                     font-size: Theme.font-size-sm;
                     wrap: word-wrap;
                     horizontal-alignment: center;
+                }
+
+                if !model.is-loading : HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    LinkBtn {
+                        label: model.export-day-label;
+                        clicked => { root.export-day(); }
+                    }
+                    LinkBtn {
+                        label: model.export-week-label;
+                        clicked => { root.export-week(); }
+                    }
                 }
 
                 // Graha table

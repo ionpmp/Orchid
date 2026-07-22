@@ -289,6 +289,7 @@ calendar-weekday-thu = 木
 calendar-weekday-tue = 火
 calendar-weekday-wed = 水
 search-source-calendar = カレンダー
+search-source-jyotish = Jyotish
 search-source-files = ファイル
 search-source-commands = コマンド
 search-source-settings = 設定
@@ -1318,9 +1319,18 @@ jyotish-event-health = 健康危機
 widget-settings-jyotish-birth-date = Birth date (YYYY-MM-DD)
 widget-settings-jyotish-birth-time = Birth time (HH:MM)
 widget-settings-jyotish-birth-utc-offset = Birth UTC offset (minutes)
+widget-settings-jyotish-notify-day-color = 今日のスコアの色が変わったら通知する
+widget-settings-jyotish-notify-rahukalam = ラーフ・カーラムが始まったら通知する
 
 # ---- jyotish phase A ----
 jyotish-disclaimer = オリエンテーションのヒューリスティックな日のスコア — muhurta コンサルテーションではありません。
+jyotish-notify-rahukalam = ラーフ・カーラムが始まりました
+jyotish-notify-day-green = 今日のスコアが好調になりました
+jyotish-notify-day-yellow = 今日のスコアが混在になりました
+jyotish-notify-day-red = 今日のスコアが厳しくなりました
+jyotish-export-day = 日をコピー
+jyotish-export-week = 週をコピー
+jyotish-exported = クリップボードにコピーしました
 jyotish-score-now = 今
 jyotish-score-day = 日
 jyotish-advice-mode-panchanga = アドバイスは一般的な panchanga ガイダンスです
