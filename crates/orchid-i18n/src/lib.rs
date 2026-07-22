@@ -348,8 +348,7 @@ impl LocaleManager {
 }
 
 fn new_bundle(locale: LocaleId) -> IntlBundle {
-    let mut bundle: IntlBundle =
-        FluentBundle::new_concurrent(vec![locale.inner().clone()]);
+    let mut bundle: IntlBundle = FluentBundle::new_concurrent(vec![locale.inner().clone()]);
     // Fluent's default bidi isolation pads every substitution with
     // `U+2068 / U+2069`, which mangles the way desktop UI renders
     // runs of arguments. Disable for our terminal-style strings.
@@ -450,5 +449,41 @@ mod tests {
     fn available_locales_returns_all_bundled() {
         let mgr = LocaleManager::new(default_language(), None).unwrap();
         assert_eq!(mgr.available_locales().len(), 11);
+    }
+
+    #[test]
+    fn bundled_ftl_parses_without_errors() {
+        for (tag, source) in [
+            ("en-US", EN_US_FTL),
+            ("ru-RU", RU_RU_FTL),
+            ("de-DE", DE_DE_FTL),
+            ("fr-FR", FR_FR_FTL),
+            ("es-ES", ES_ES_FTL),
+            ("it-IT", IT_IT_FTL),
+            ("pt-BR", PT_BR_FTL),
+            ("ja-JP", JA_JP_FTL),
+            ("zh-CN", ZH_CN_FTL),
+            ("ko-KR", KO_KR_FTL),
+            ("ar-SA", AR_SA_FTL),
+        ] {
+            if let Err((_, errors)) = FluentResource::try_new(source.to_string()) {
+                panic!("{tag}: Fluent parse errors: {errors:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn hyphenated_settings_keys_resolve() {
+        let mgr = LocaleManager::new(default_language(), None).unwrap();
+        let weather = mgr.tr("widget-settings-weather-units");
+        assert_ne!(weather, "widget-settings-weather-units");
+        assert!(
+            weather.contains("Temperature") || weather.contains("unit"),
+            "got: {weather}"
+        );
+        let section = mgr.tr("settings-section-general");
+        assert_ne!(section, "settings-section-general");
+        let cmd = mgr.tr("command-widget-create-name");
+        assert_ne!(cmd, "command-widget-create-name");
     }
 }

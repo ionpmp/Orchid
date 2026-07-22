@@ -80,7 +80,8 @@ logical task per pull request.
    `crates/orchid-i18n/locales/<tag>/main.ftl` (use a valid BCP-47 tag, e.g.
    `nl-NL`).
 2. Translate every message id; keep placeholder names (`{ $version }`, etc.)
-   identical to the English source.
+   identical to the English source. Message IDs must be Fluent-legal
+   (`[a-zA-Z][a-zA-Z0-9_-]*` only — no dots).
 3. Register the catalogue in `crates/orchid-i18n/src/lib.rs`:
    - add a `const <TAG>_FTL: &str = include_str!(...)` entry,
    - append `("<tag>", <TAG>_FTL)` to the array inside

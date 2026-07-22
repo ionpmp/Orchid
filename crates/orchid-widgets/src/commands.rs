@@ -50,8 +50,8 @@ fn widget_create_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.create".into(),
-        display_name_key: "command.widget.create.name".into(),
-        description_key: Some("command.widget.create.desc".into()),
+        display_name_key: "command-widget-create-name".into(),
+        description_key: Some("command-widget-create-desc".into()),
         category: CommandCategory::Widget,
         default_shortcut: None,
         terminal_invocation: Some(TerminalInvocation {
@@ -59,7 +59,7 @@ fn widget_create_command(
             args: vec![
                 CommandArg {
                     name: "type".into(),
-                    description_key: Some("command.widget.create.arg.type".into()),
+                    description_key: Some("command-widget-create-arg-type".into()),
                     required: true,
                     kind: CommandArgKind::String,
                 },
@@ -100,7 +100,7 @@ impl Action for WidgetCreateAction {
         "widget.create"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.widget.create.name"
+        "command-widget-create-name"
     }
     fn command_text(&self) -> String {
         match self.workspace_id {
@@ -140,8 +140,8 @@ fn widget_close_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.close".into(),
-        display_name_key: "command.widget.close.name".into(),
-        description_key: Some("command.widget.close.desc".into()),
+        display_name_key: "command-widget-close-name".into(),
+        description_key: Some("command-widget-close-desc".into()),
         category: CommandCategory::Widget,
         default_shortcut: orchid_core::Shortcut::parse("Ctrl+W").ok(),
         terminal_invocation: Some(TerminalInvocation {
@@ -178,7 +178,7 @@ impl Action for WidgetCloseAction {
         "widget.close"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.widget.close.name"
+        "command-widget-close-name"
     }
     fn command_text(&self) -> String {
         format!("orc widget close {}", self.id)
@@ -203,7 +203,7 @@ fn widget_move_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.move".into(),
-        display_name_key: "command.widget.move.name".into(),
+        display_name_key: "command-widget-move-name".into(),
         description_key: None,
         category: CommandCategory::Widget,
         default_shortcut: None,
@@ -236,7 +236,7 @@ impl Action for WidgetMoveAction {
         "widget.move"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.widget.move.name"
+        "command-widget-move-name"
     }
     fn command_text(&self) -> String {
         format!("orc widget move {} {} {}", self.id, self.col, self.row)
@@ -258,7 +258,7 @@ fn widget_resize_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.resize".into(),
-        display_name_key: "command.widget.resize.name".into(),
+        display_name_key: "command-widget-resize-name".into(),
         description_key: None,
         category: CommandCategory::Widget,
         default_shortcut: None,
@@ -293,7 +293,7 @@ impl Action for WidgetResizeAction {
         "widget.resize"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.widget.resize.name"
+        "command-widget-resize-name"
     }
     fn command_text(&self) -> String {
         format!("orc widget resize {} {:?}", self.id, self.size)
@@ -313,7 +313,7 @@ impl Action for WidgetResizeAction {
 fn widget_focus_next_command() -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.focus_next".into(),
-        display_name_key: "command.widget.focus_next.name".into(),
+        display_name_key: "command-widget-focus_next-name".into(),
         description_key: None,
         category: CommandCategory::Widget,
         default_shortcut: None,
@@ -326,7 +326,7 @@ fn widget_focus_next_command() -> (CommandDescriptor, ActionFactory) {
     let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
         Ok(Box::new(NoopAction {
             id: "widget.focus_next",
-            name: "command.widget.focus_next.name",
+            name: "command-widget-focus_next-name",
             text: "orc widget focus next",
         }) as Box<dyn Action>)
     });
@@ -336,7 +336,7 @@ fn widget_focus_next_command() -> (CommandDescriptor, ActionFactory) {
 fn widget_show_all_command() -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.show_all".into(),
-        display_name_key: "command.widget.show_all.name".into(),
+        display_name_key: "command-widget-show_all-name".into(),
         description_key: None,
         category: CommandCategory::Widget,
         default_shortcut: None,
@@ -349,7 +349,7 @@ fn widget_show_all_command() -> (CommandDescriptor, ActionFactory) {
     let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
         Ok(Box::new(NoopAction {
             id: "widget.show_all",
-            name: "command.widget.show_all.name",
+            name: "command-widget-show_all-name",
             text: "orc widget show all",
         }) as Box<dyn Action>)
     });
@@ -365,7 +365,7 @@ fn workspace_create_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "workspace.create".into(),
-        display_name_key: "command.workspace.create.name".into(),
+        display_name_key: "command-workspace-create-name".into(),
         description_key: None,
         category: CommandCategory::View,
         default_shortcut: None,
@@ -403,7 +403,7 @@ impl Action for WorkspaceCreateAction {
         "workspace.create"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.workspace.create.name"
+        "command-workspace-create-name"
     }
     fn command_text(&self) -> String {
         format!("orc workspace create {:?}", self.name)
@@ -421,7 +421,7 @@ fn workspace_delete_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "workspace.delete".into(),
-        display_name_key: "command.workspace.delete.name".into(),
+        display_name_key: "command-workspace-delete-name".into(),
         description_key: None,
         category: CommandCategory::View,
         default_shortcut: None,
@@ -455,7 +455,7 @@ impl Action for WorkspaceDeleteAction {
         "workspace.delete"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.workspace.delete.name"
+        "command-workspace-delete-name"
     }
     fn command_text(&self) -> String {
         format!("orc workspace delete {}", self.id)
@@ -473,7 +473,7 @@ fn workspace_switch_to_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "workspace.switch_to".into(),
-        display_name_key: "command.workspace.switch_to.name".into(),
+        display_name_key: "command-workspace-switch_to-name".into(),
         description_key: None,
         category: CommandCategory::View,
         default_shortcut: None,
@@ -511,7 +511,7 @@ impl Action for WorkspaceSwitchToAction {
         "workspace.switch_to"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.workspace.switch_to.name"
+        "command-workspace-switch_to-name"
     }
     fn command_text(&self) -> String {
         format!("orc workspace switch {}", self.ordinal)
@@ -529,7 +529,7 @@ fn workspace_switch_next_command(
 ) -> (CommandDescriptor, ActionFactory) {
     simple_workspace_command(
         "workspace.switch_next",
-        "command.workspace.switch_next.name",
+        "command-workspace-switch_next-name",
         "workspace switch next",
         workspace_manager,
         WorkspaceSwitchDirection::Next,
@@ -542,7 +542,7 @@ fn workspace_switch_previous_command(
 ) -> (CommandDescriptor, ActionFactory) {
     simple_workspace_command(
         "workspace.switch_previous",
-        "command.workspace.switch_previous.name",
+        "command-workspace-switch_previous-name",
         "workspace switch previous",
         workspace_manager,
         WorkspaceSwitchDirection::Previous,
@@ -629,7 +629,7 @@ fn group_dissolve_command(
 ) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.group.dissolve".into(),
-        display_name_key: "command.widget.group.dissolve.name".into(),
+        display_name_key: "command-widget-group-dissolve-name".into(),
         description_key: None,
         category: CommandCategory::Widget,
         default_shortcut: None,
@@ -658,7 +658,7 @@ impl Action for GroupDissolveAction {
         "widget.group.dissolve"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.widget.group.dissolve.name"
+        "command-widget-group-dissolve-name"
     }
     fn command_text(&self) -> String {
         format!("orc widget group dissolve {}", self.id)

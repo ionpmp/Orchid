@@ -47,7 +47,7 @@ impl MainWindowController {
         } else {
             st.section.clone()
         };
-        let title_key = format!("settings.section.{}", section);
+        let title_key = format!("settings-section-{}", section);
         let title = self.locale.tr(&title_key).into();
         let hint = self.locale.tr("settings-panel-hint").into();
         // Shortcuts (and similar) are view-only in the panel — surface the

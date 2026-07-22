@@ -148,18 +148,18 @@ fn weather_fields(cfg: &WeatherConfig, locale: &LocaleManager) -> Vec<SettingsFi
         &mut rows,
         locale,
         "units",
-        "widget-settings.weather.units",
+        "widget-settings-weather-units",
         &[
             (
                 "celsius".into(),
                 locale
-                    .tr("widget-settings.weather.units.celsius")
+                    .tr("widget-settings-weather-units-celsius")
                     .into(),
             ),
             (
                 "fahrenheit".into(),
                 locale
-                    .tr("widget-settings.weather.units.fahrenheit")
+                    .tr("widget-settings-weather-units-fahrenheit")
                     .into(),
             ),
         ],
@@ -169,7 +169,7 @@ fn weather_fields(cfg: &WeatherConfig, locale: &LocaleManager) -> Vec<SettingsFi
         &mut rows,
         locale,
         "refresh_minutes",
-        "widget-settings.weather.refresh",
+        "widget-settings-weather-refresh",
         cfg.refresh_interval_minutes.to_string(),
     );
     rows
@@ -181,35 +181,35 @@ fn moon_fields(cfg: &MoonConfig, locale: &LocaleManager) -> Vec<SettingsFieldRow
         &mut rows,
         locale,
         "location_name",
-        "widget-settings.moon.location-name",
+        "widget-settings-moon-location-name",
         cfg.location_name.clone(),
     );
     push_text(
         &mut rows,
         locale,
         "latitude",
-        "widget-settings.moon.latitude",
+        "widget-settings-moon-latitude",
         format!("{:.4}", cfg.latitude),
     );
     push_text(
         &mut rows,
         locale,
         "longitude",
-        "widget-settings.moon.longitude",
+        "widget-settings-moon-longitude",
         format!("{:.4}", cfg.longitude),
     );
     push_bool(
         &mut rows,
         locale,
         "show_sunrise_sunset",
-        "widget-settings.moon.show-sunrise-sunset",
+        "widget-settings-moon-show-sunrise-sunset",
         cfg.show_sunrise_sunset,
     );
     push_bool(
         &mut rows,
         locale,
         "show_libration",
-        "widget-settings.moon.show-libration",
+        "widget-settings-moon-show-libration",
         cfg.show_libration,
     );
     rows
@@ -224,21 +224,21 @@ fn clock_fields(
         &mut rows,
         locale,
         "show_seconds",
-        "widget-settings.clock.show-seconds",
+        "widget-settings-clock-show-seconds",
         cfg.show_seconds,
     );
     push_bool(
         &mut rows,
         locale,
         "show_dates",
-        "widget-settings.clock.show-dates",
+        "widget-settings-clock-show-dates",
         cfg.show_dates,
     );
     push_bool(
         &mut rows,
         locale,
         "show_offsets",
-        "widget-settings.clock.show-offsets",
+        "widget-settings-clock-show-offsets",
         cfg.show_offsets,
     );
     rows
@@ -353,70 +353,70 @@ fn system_fields(cfg: &SystemConfig, locale: &LocaleManager) -> Vec<SettingsFiel
         &mut rows,
         locale,
         "show_cpu",
-        "widget-settings.system.show-cpu",
+        "widget-settings-system-show-cpu",
         cfg.show_cpu,
     );
     push_bool(
         &mut rows,
         locale,
         "show_cpu_cores",
-        "widget-settings.system.show-cpu-cores",
+        "widget-settings-system-show-cpu-cores",
         cfg.show_cpu_cores,
     );
     push_bool(
         &mut rows,
         locale,
         "show_memory",
-        "widget-settings.system.show-memory",
+        "widget-settings-system-show-memory",
         cfg.show_memory,
     );
     push_bool(
         &mut rows,
         locale,
         "show_disks",
-        "widget-settings.system.show-disks",
+        "widget-settings-system-show-disks",
         cfg.show_disks,
     );
     push_bool(
         &mut rows,
         locale,
         "show_removable_disks",
-        "widget-settings.system.show-removable-disks",
+        "widget-settings-system-show-removable-disks",
         cfg.show_removable_disks,
     );
     push_bool(
         &mut rows,
         locale,
         "show_network",
-        "widget-settings.system.show-network",
+        "widget-settings-system-show-network",
         cfg.show_network,
     );
     push_bool(
         &mut rows,
         locale,
         "aggregate_network",
-        "widget-settings.system.aggregate-network",
+        "widget-settings-system-aggregate-network",
         cfg.aggregate_network,
     );
     push_bool(
         &mut rows,
         locale,
         "show_battery",
-        "widget-settings.system.show-battery",
+        "widget-settings-system-show-battery",
         cfg.show_battery,
     );
     push_bool(
         &mut rows,
         locale,
         "show_uptime",
-        "widget-settings.system.show-uptime",
+        "widget-settings-system-show-uptime",
         cfg.show_uptime,
     );
     push_text(
         &mut rows,
         locale,
         "refresh_seconds",
-        "widget-settings.system.refresh",
+        "widget-settings-system-refresh",
         cfg.refresh_interval_seconds.to_string(),
     );
     rows
@@ -433,35 +433,35 @@ fn rss_fields(cfg: &RssConfig, locale: &LocaleManager) -> Vec<SettingsFieldRow> 
         &mut rows,
         locale,
         "feed_name",
-        "widget-settings.rss.feed-name",
+        "widget-settings-rss-feed-name",
         name,
     );
     push_text(
         &mut rows,
         locale,
         "feed_url",
-        "widget-settings.rss.feed-url",
+        "widget-settings-rss-feed-url",
         url,
     );
     push_text(
         &mut rows,
         locale,
         "max_items",
-        "widget-settings.rss.max-items",
+        "widget-settings-rss-max-items",
         cfg.max_items_displayed.to_string(),
     );
     push_text(
         &mut rows,
         locale,
         "refresh_minutes",
-        "widget-settings.rss.refresh",
+        "widget-settings-rss-refresh",
         cfg.refresh_interval_minutes.to_string(),
     );
     push_bool(
         &mut rows,
         locale,
         "open_in_browser",
-        "widget-settings.rss.open-in-browser",
+        "widget-settings-rss-open-in-browser",
         cfg.open_in_browser,
     );
     rows
@@ -473,42 +473,42 @@ fn fm_fields(cfg: &FileManagerConfig, locale: &LocaleManager) -> Vec<SettingsFie
         &mut rows,
         locale,
         "dual_pane",
-        "widget-settings.fm.dual-pane",
+        "widget-settings-fm-dual-pane",
         cfg.dual_pane,
     );
     push_bool(
         &mut rows,
         locale,
         "show_hidden",
-        "widget-settings.fm.show-hidden",
+        "widget-settings-fm-show-hidden",
         cfg.show_hidden,
     );
     push_bool(
         &mut rows,
         locale,
         "single_click_open",
-        "widget-settings.fm.single-click-open",
+        "widget-settings-fm-single-click-open",
         matches!(cfg.click_behavior, ClickBehavior::SingleToOpen),
     );
     push_bool(
         &mut rows,
         locale,
         "show_extensions",
-        "widget-settings.fm.show-extensions",
+        "widget-settings-fm-show-extensions",
         cfg.show_extensions,
     );
     push_bool(
         &mut rows,
         locale,
         "confirm_delete",
-        "widget-settings.fm.confirm-delete",
+        "widget-settings-fm-confirm-delete",
         cfg.confirm_delete,
     );
     push_bool(
         &mut rows,
         locale,
         "delete_to_recycle",
-        "widget-settings.fm.delete-to-recycle",
+        "widget-settings-fm-delete-to-recycle",
         cfg.delete_to_recycle,
     );
     let thumb = match cfg.thumbnail_size {
@@ -520,24 +520,24 @@ fn fm_fields(cfg: &FileManagerConfig, locale: &LocaleManager) -> Vec<SettingsFie
         &mut rows,
         locale,
         "thumbnail_size",
-        "widget-settings.fm.thumbnail-size",
+        "widget-settings-fm-thumbnail-size",
         &[
             (
                 "small".into(),
                 locale
-                    .tr("widget-settings.fm.thumbnail-size.small")
+                    .tr("widget-settings-fm-thumbnail-size-small")
                     .into(),
             ),
             (
                 "medium".into(),
                 locale
-                    .tr("widget-settings.fm.thumbnail-size.medium")
+                    .tr("widget-settings-fm-thumbnail-size-medium")
                     .into(),
             ),
             (
                 "large".into(),
                 locale
-                    .tr("widget-settings.fm.thumbnail-size.large")
+                    .tr("widget-settings-fm-thumbnail-size-large")
                     .into(),
             ),
         ],
@@ -644,28 +644,28 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
         &mut rows,
         locale,
         "location_name",
-        "widget-settings.jyotish.location-name",
+        "widget-settings-jyotish-location-name",
         cfg.location_name.clone(),
     );
     push_text(
         &mut rows,
         locale,
         "latitude",
-        "widget-settings.jyotish.latitude",
+        "widget-settings-jyotish-latitude",
         format!("{:.4}", cfg.latitude),
     );
     push_text(
         &mut rows,
         locale,
         "longitude",
-        "widget-settings.jyotish.longitude",
+        "widget-settings-jyotish-longitude",
         format!("{:.4}", cfg.longitude),
     );
     push_combo(
         &mut rows,
         locale,
         "ayanamsa",
-        "widget-settings.jyotish.ayanamsa",
+        "widget-settings-jyotish-ayanamsa",
         &[
             (
                 "lahiri".into(),
@@ -683,35 +683,35 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
         &mut rows,
         locale,
         "show_planets",
-        "widget-settings.jyotish.show-planets",
+        "widget-settings-jyotish-show-planets",
         cfg.show_planets,
     );
     push_bool(
         &mut rows,
         locale,
         "show_sunrise_sunset",
-        "widget-settings.jyotish.show-sunrise-sunset",
+        "widget-settings-jyotish-show-sunrise-sunset",
         cfg.show_sunrise_sunset,
     );
     push_text(
         &mut rows,
         locale,
         "birth_date",
-        "widget-settings.jyotish.birth-date",
+        "widget-settings-jyotish-birth-date",
         cfg.birth_date.clone().unwrap_or_default(),
     );
     push_text(
         &mut rows,
         locale,
         "birth_time",
-        "widget-settings.jyotish.birth-time",
+        "widget-settings-jyotish-birth-time",
         cfg.birth_time.clone().unwrap_or_default(),
     );
     push_text(
         &mut rows,
         locale,
         "birth_utc_offset_minutes",
-        "widget-settings.jyotish.birth-utc-offset",
+        "widget-settings-jyotish-birth-utc-offset",
         cfg.birth_utc_offset_minutes.to_string(),
     );
     rows

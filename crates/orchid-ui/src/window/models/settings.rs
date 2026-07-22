@@ -21,7 +21,7 @@ pub(crate) fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSec
     SETTINGS_SECTION_IDS
         .iter()
         .map(|id| {
-            let key = format!("settings.section.{id}");
+            let key = format!("settings-section-{id}");
             SettingsSectionEntry {
                 id: (*id).into(),
                 label: locale.tr(&key).into(),

@@ -29,7 +29,7 @@ pub fn build_terminal_command_set(
     vec![
         terminal_command(
             "terminal.split_horizontal",
-            "command.terminal.split_horizontal.name",
+            "command-terminal-split_horizontal-name",
             "terminal split horizontal",
             Shortcut::parse("Ctrl+Shift+H").ok(),
             deps.clone(),
@@ -39,7 +39,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.split_vertical",
-            "command.terminal.split_vertical.name",
+            "command-terminal-split_vertical-name",
             "terminal split vertical",
             Shortcut::parse("Ctrl+Shift+J").ok(),
             deps.clone(),
@@ -49,7 +49,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.tab_new",
-            "command.terminal.tab_new.name",
+            "command-terminal-tab_new-name",
             "terminal tab new",
             Shortcut::parse("Ctrl+Shift+T").ok(),
             deps.clone(),
@@ -59,7 +59,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.close",
-            "command.terminal.close.name",
+            "command-terminal-close-name",
             "terminal close",
             Shortcut::parse("Ctrl+Shift+W").ok(),
             deps.clone(),
@@ -69,7 +69,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.focus_next_pane",
-            "command.terminal.focus_next_pane.name",
+            "command-terminal-focus_next_pane-name",
             "terminal focus next pane",
             Shortcut::parse("Ctrl+Shift+ArrowRight").ok(),
             deps.clone(),
@@ -79,7 +79,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.focus_previous_pane",
-            "command.terminal.focus_previous_pane.name",
+            "command-terminal-focus_previous_pane-name",
             "terminal focus previous pane",
             Shortcut::parse("Ctrl+Shift+ArrowLeft").ok(),
             deps.clone(),
@@ -89,7 +89,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.tab_next",
-            "command.terminal.tab_next.name",
+            "command-terminal-tab_next-name",
             "terminal tab next",
             Shortcut::parse("Ctrl+PageDown").ok(),
             deps.clone(),
@@ -99,7 +99,7 @@ pub fn build_terminal_command_set(
         ),
         terminal_command(
             "terminal.tab_previous",
-            "command.terminal.tab_previous.name",
+            "command-terminal-tab_previous-name",
             "terminal tab previous",
             Shortcut::parse("Ctrl+PageUp").ok(),
             deps,

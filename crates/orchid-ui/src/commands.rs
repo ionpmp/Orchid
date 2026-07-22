@@ -25,8 +25,8 @@ pub fn build_ui_command_set() -> Vec<(CommandDescriptor, ActionFactory)> {
 fn settings_open_command() -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "settings.open".into(),
-        display_name_key: "command.settings.open.name".into(),
-        description_key: Some("command.settings.open.desc".into()),
+        display_name_key: "command-settings-open-name".into(),
+        description_key: Some("command-settings-open-desc".into()),
         category: CommandCategory::Settings,
         default_shortcut: Shortcut::parse("Ctrl+,").ok(),
         terminal_invocation: Some(TerminalInvocation {
@@ -44,8 +44,8 @@ fn settings_open_command() -> (CommandDescriptor, ActionFactory) {
 fn settings_open_config_file_command() -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "settings.open_config_file".into(),
-        display_name_key: "command.settings.open_config_file.name".into(),
-        description_key: Some("command.settings.open_config_file.desc".into()),
+        display_name_key: "command-settings-open_config_file-name".into(),
+        description_key: Some("command-settings-open_config_file-desc".into()),
         category: CommandCategory::Settings,
         default_shortcut: None,
         terminal_invocation: Some(TerminalInvocation {
@@ -63,8 +63,8 @@ fn settings_open_config_file_command() -> (CommandDescriptor, ActionFactory) {
 fn password_lock_command() -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "password.lock".into(),
-        display_name_key: "command.password.lock.name".into(),
-        description_key: Some("command.password.lock.desc".into()),
+        display_name_key: "command-password-lock-name".into(),
+        description_key: Some("command-password-lock-desc".into()),
         category: CommandCategory::Settings,
         default_shortcut: None,
         terminal_invocation: Some(TerminalInvocation {
@@ -82,8 +82,8 @@ fn password_lock_command() -> (CommandDescriptor, ActionFactory) {
 fn navigation_show_workspace_panel_command() -> (CommandDescriptor, ActionFactory) {
     panel_toggle_command(
         "navigation.show_workspace_panel",
-        "command.navigation.show_workspace_panel.name",
-        Some("command.navigation.show_workspace_panel.desc"),
+        "command-navigation-show_workspace_panel-name",
+        Some("command-navigation-show_workspace_panel-desc"),
         CommandCategory::Navigation,
         "navigation show workspace panel",
     )
@@ -92,8 +92,8 @@ fn navigation_show_workspace_panel_command() -> (CommandDescriptor, ActionFactor
 fn notification_show_center_command() -> (CommandDescriptor, ActionFactory) {
     panel_toggle_command(
         "notification.show_center",
-        "command.notification.show_center.name",
-        Some("command.notification.show_center.desc"),
+        "command-notification-show_center-name",
+        Some("command-notification-show_center-desc"),
         CommandCategory::Navigation,
         "notification show center",
     )
@@ -102,8 +102,8 @@ fn notification_show_center_command() -> (CommandDescriptor, ActionFactory) {
 fn dock_show_command() -> (CommandDescriptor, ActionFactory) {
     panel_toggle_command(
         "dock.show",
-        "command.dock.show.name",
-        Some("command.dock.show.desc"),
+        "command-dock-show-name",
+        Some("command-dock-show-desc"),
         CommandCategory::Navigation,
         "dock show",
     )
@@ -112,8 +112,8 @@ fn dock_show_command() -> (CommandDescriptor, ActionFactory) {
 fn search_show_universal_command() -> (CommandDescriptor, ActionFactory) {
     panel_toggle_command(
         "search.show_universal",
-        "command.search.show_universal.name",
-        Some("command.search.show_universal.desc"),
+        "command-search-show_universal-name",
+        Some("command-search-show_universal-desc"),
         CommandCategory::Search,
         "search show universal",
     )
@@ -122,8 +122,8 @@ fn search_show_universal_command() -> (CommandDescriptor, ActionFactory) {
 fn onboarding_toggle_hint_mode_command() -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "onboarding.toggle_hint_mode".into(),
-        display_name_key: "command.onboarding.toggle_hint_mode.name".into(),
-        description_key: Some("command.onboarding.toggle_hint_mode.desc".into()),
+        display_name_key: "command-onboarding-toggle_hint_mode-name".into(),
+        description_key: Some("command-onboarding-toggle_hint_mode-desc".into()),
         category: CommandCategory::Settings,
         default_shortcut: Shortcut::parse("Win+?").ok(),
         terminal_invocation: Some(TerminalInvocation {
@@ -135,7 +135,7 @@ fn onboarding_toggle_hint_mode_command() -> (CommandDescriptor, ActionFactory) {
     let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
         Ok(Box::new(PanelToggleAction {
             id: "onboarding.toggle_hint_mode",
-            name_key: "command.onboarding.toggle_hint_mode.name",
+            name_key: "command-onboarding-toggle_hint_mode-name",
             verb: "onboarding toggle hint mode",
         }) as Box<dyn Action>)
     });
@@ -175,7 +175,7 @@ impl Action for SettingsOpenAction {
         "settings.open"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.settings.open.name"
+        "command-settings-open-name"
     }
     fn command_text(&self) -> String {
         "orc settings open".into()
@@ -193,7 +193,7 @@ impl Action for SettingsOpenConfigFileAction {
         "settings.open_config_file"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.settings.open_config_file.name"
+        "command-settings-open_config_file-name"
     }
     fn command_text(&self) -> String {
         "orc settings open config file".into()
@@ -211,7 +211,7 @@ impl Action for PasswordLockAction {
         "password.lock"
     }
     fn display_name_key(&self) -> &'static str {
-        "command.password.lock.name"
+        "command-password-lock-name"
     }
     fn command_text(&self) -> String {
         "orc password lock".into()

@@ -20,32 +20,32 @@ struct Section {
 const SECTIONS: &[Section] = &[
     Section {
         id: "general",
-        title_key: "settings.section.general",
+        title_key: "settings-section-general",
         icon: "settings-general",
     },
     Section {
         id: "appearance",
-        title_key: "settings.section.appearance",
+        title_key: "settings-section-appearance",
         icon: "settings-appearance",
     },
     Section {
         id: "input",
-        title_key: "settings.section.input",
+        title_key: "settings-section-input",
         icon: "settings-input",
     },
     Section {
         id: "shortcuts",
-        title_key: "settings.section.shortcuts",
+        title_key: "settings-section-shortcuts",
         icon: "settings-shortcuts",
     },
     Section {
         id: "locale",
-        title_key: "settings.section.locale",
+        title_key: "settings-section-locale",
         icon: "settings-locale",
     },
     Section {
         id: "privacy",
-        title_key: "settings.section.privacy",
+        title_key: "settings-section-privacy",
         icon: "settings-privacy",
     },
 ];
