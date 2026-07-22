@@ -518,6 +518,16 @@ export struct CalendarEventEntry {
     color: int,
 }
 
+export struct CalendarUpcomingEntry {
+    id: string,
+    title: string,
+    date-key: string,
+    date-label: string,
+    time-label: string,
+    all-day: bool,
+    color: int,
+}
+
 export struct CalendarWeekdayEntry {
     label: string,
 }
@@ -533,6 +543,11 @@ export struct CalendarModel {
     weekdays: [CalendarWeekdayEntry],
     days: [CalendarDayEntry],
     events: [CalendarEventEntry],
+    upcoming: [CalendarUpcomingEntry],
+    show-upcoming: bool,
+    show-notes-preview: bool,
+    time-step-minutes: int,
+    upcoming-title: string,
     color-options: [int],
     editor-open: bool,
     editor-event-id: string,
@@ -548,6 +563,8 @@ export struct CalendarModel {
     editor-end-text: string,
     editor-notes: string,
     editor-color: int,
+    editor-date-label: string,
+    delete-confirm-open: bool,
     today-label: string,
     all-day-label: string,
     empty-label: string,
@@ -557,6 +574,8 @@ export struct CalendarModel {
     save-label: string,
     delete-label: string,
     cancel-label: string,
+    delete-confirm-title: string,
+    delete-confirm-yes: string,
     title-field-label: string,
     date-field-label: string,
     notes-field-label: string,
@@ -567,6 +586,12 @@ export struct CalendarModel {
     tip-next: string,
     tip-today: string,
     tip-add: string,
+    tip-date-prev: string,
+    tip-date-next: string,
+    tip-time-minus: string,
+    tip-time-plus: string,
+    tip-hour-minus: string,
+    tip-hour-plus: string,
 }
 
 export struct RssItemEntry {

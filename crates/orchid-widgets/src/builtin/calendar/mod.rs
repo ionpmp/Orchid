@@ -3,24 +3,30 @@
 pub mod config;
 
 use std::sync::{Arc, LazyLock};
+use std::time::Duration as StdDuration;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
 use dashmap::DashMap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{CalendarDayCell, CalendarEventRow, CalendarPayload};
+use crate::widget::payloads::{
+    CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow,
+};
+use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{format_date, format_minutes, parse_date, CalendarConfig, CalendarEvent};
+pub use config::{
+    decode_config, format_date, format_minutes, parse_date, CalendarConfig, CalendarEvent,
+};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "calendar";
@@ -62,6 +68,7 @@ struct UiState {
     editor_open: bool,
     editing_id: Option<String>,
     draft: Option<EventDraft>,
+    delete_confirm_open: bool,
 }
 
 struct CalendarHandle {
@@ -70,6 +77,7 @@ struct CalendarHandle {
     ui: Arc<RwLock<UiState>>,
     orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     bus: Arc<orchid_core::EventBus>,
+    refresh: Mutex<PeriodicRefresh>,
 }
 
 impl CalendarHandle {
@@ -80,6 +88,22 @@ impl CalendarHandle {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    fn schedule_refresh(self: &Arc<Self>) {
+        let mut refresh = self.refresh.lock();
+        refresh.set_interval(StdDuration::from_secs(60 * 30));
+        let handle = Arc::clone(self);
+        refresh.start(move || {
+            let handle = Arc::clone(&handle);
+            async move {
+                handle.publish();
+            }
+        });
+    }
+
+    fn stop_refresh(&self) {
+        self.refresh.lock().stop();
     }
 }
 
@@ -105,6 +129,8 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut CalendarConfig)
 }
 
 /// Select a day (`YYYY-MM-DD`) and align the month view.
+///
+/// When the editor is open, also moves the draft onto that day (date picker).
 pub fn select_date(instance_id: Uuid, date_key: &str) {
     let Some(d) = parse_date(date_key) else {
         return;
@@ -112,14 +138,29 @@ pub fn select_date(instance_id: Uuid, date_key: &str) {
     let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
         return;
     };
+    let key = format_date(d);
     {
         let mut cfg = h.config.write();
-        cfg.selected_date = format_date(d);
+        cfg.selected_date = key.clone();
         cfg.view_year = d.year();
         cfg.view_month = d.month() as u8;
         cfg.normalize();
     }
+    {
+        let mut ui = h.ui.write();
+        if ui.editor_open {
+            if let Some(draft) = ui.draft.as_mut() {
+                draft.date = key;
+            }
+        }
+    }
     h.publish();
+}
+
+/// Select a day and open the new-event editor (double-click shortcut).
+pub fn activate_day(instance_id: Uuid, date_key: &str) {
+    select_date(instance_id, date_key);
+    open_new_editor(instance_id);
 }
 
 /// Shift the visible month by `delta` (−1 / +1).
@@ -171,12 +212,18 @@ pub fn open_new_editor(instance_id: Uuid) {
     let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
         return;
     };
-    let date = h.config.read().selected_date.clone();
+    let (date, default_all_day) = {
+        let cfg = h.config.read();
+        (cfg.selected_date.clone(), cfg.default_all_day)
+    };
     {
         let mut ui = h.ui.write();
         ui.editor_open = true;
         ui.editing_id = None;
-        ui.draft = Some(EventDraft::blank_on(&date));
+        let mut draft = EventDraft::blank_on(&date);
+        draft.all_day = default_all_day;
+        ui.draft = Some(draft);
+        ui.delete_confirm_open = false;
     }
     h.publish();
 }
@@ -198,6 +245,7 @@ pub fn open_edit_editor(instance_id: Uuid, event_id: &str) {
         ui.editor_open = true;
         ui.editing_id = Some(ev.id.clone());
         ui.draft = Some(EventDraft::from_event(&ev));
+        ui.delete_confirm_open = false;
     }
     h.publish();
 }
@@ -212,8 +260,108 @@ pub fn close_editor(instance_id: Uuid) {
         ui.editor_open = false;
         ui.editing_id = None;
         ui.draft = None;
+        ui.delete_confirm_open = false;
     }
     h.publish();
+}
+
+/// Shift the draft date by whole days (−1 / +1) and keep the grid selection in sync.
+pub fn shift_editor_date(instance_id: Uuid, delta_days: i32) {
+    if delta_days == 0 {
+        return;
+    }
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    let next_key = {
+        let ui = h.ui.read();
+        let Some(draft) = ui.draft.as_ref() else {
+            return;
+        };
+        let Some(cur) = parse_date(&draft.date) else {
+            return;
+        };
+        cur.checked_add_signed(Duration::days(i64::from(delta_days)))
+            .map(format_date)
+    };
+    let Some(next_key) = next_key else {
+        return;
+    };
+    {
+        let mut ui = h.ui.write();
+        if let Some(draft) = ui.draft.as_mut() {
+            draft.date = next_key.clone();
+        }
+    }
+    if let Some(d) = parse_date(&next_key) {
+        let mut cfg = h.config.write();
+        cfg.selected_date = next_key;
+        cfg.view_year = d.year();
+        cfg.view_month = d.month() as u8;
+        cfg.normalize();
+    }
+    h.publish();
+}
+
+/// Nudge draft start time by minutes (can be ±15 / ±60).
+pub fn nudge_editor_start(instance_id: Uuid, delta_minutes: i32) {
+    mutate_draft(instance_id, |d| {
+        let next = i32::from(d.start_minutes).saturating_add(delta_minutes);
+        d.start_minutes = next.clamp(0, 23 * 60 + 59) as u16;
+        if d.end_minutes < d.start_minutes {
+            d.end_minutes = d.start_minutes;
+        }
+    });
+}
+
+/// Nudge draft end time by minutes (can be ±15 / ±60).
+pub fn nudge_editor_end(instance_id: Uuid, delta_minutes: i32) {
+    mutate_draft(instance_id, |d| {
+        let next = i32::from(d.end_minutes).saturating_add(delta_minutes);
+        d.end_minutes = next.clamp(0, 23 * 60 + 59) as u16;
+        if d.end_minutes < d.start_minutes {
+            d.end_minutes = d.start_minutes;
+        }
+    });
+}
+
+/// Show the delete confirmation sheet (edit mode only).
+pub fn request_delete(instance_id: Uuid) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut ui = h.ui.write();
+        if ui.editing_id.is_none() || !ui.editor_open {
+            return;
+        }
+        ui.delete_confirm_open = true;
+    }
+    h.publish();
+}
+
+/// Dismiss the delete confirmation sheet.
+pub fn cancel_delete(instance_id: Uuid) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut ui = h.ui.write();
+        ui.delete_confirm_open = false;
+    }
+    h.publish();
+}
+
+/// Confirm deletion of the event currently being edited.
+pub fn confirm_delete(instance_id: Uuid) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    let event_id = h.ui.read().editing_id.clone();
+    let Some(event_id) = event_id else {
+        return;
+    };
+    delete_event(instance_id, &event_id);
 }
 
 /// Update a draft field while the editor is open.
@@ -315,6 +463,7 @@ pub fn save_editor(instance_id: Uuid) {
         ui.editor_open = false;
         ui.editing_id = None;
         ui.draft = None;
+        ui.delete_confirm_open = false;
     }
     h.publish();
 }
@@ -335,6 +484,7 @@ pub fn delete_event(instance_id: Uuid, event_id: &str) {
             ui.editing_id = None;
             ui.draft = None;
         }
+        ui.delete_confirm_open = false;
     }
     h.publish();
 }
@@ -369,6 +519,75 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     };
     next.and_then(|n| n.signed_duration_since(first).num_days().try_into().ok())
         .unwrap_or(30)
+}
+
+/// Hit produced by [`search_all_events`].
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct CalendarSearchHit {
+    pub instance_id: Uuid,
+    pub event_id: String,
+    pub title: String,
+    pub date: String,
+    pub subtitle: String,
+    pub score: i32,
+}
+
+/// Search events across all live calendar instances.
+#[must_use]
+pub fn search_all_events(query: &str, limit: usize) -> Vec<CalendarSearchHit> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() || limit == 0 {
+        return Vec::new();
+    }
+    let mut hits = Vec::new();
+    for entry in CALENDAR_LIVE.iter() {
+        let instance_id = *entry.key();
+        let cfg = entry.value().config.read();
+        for ev in &cfg.events {
+            let title = ev.title.trim();
+            let title_l = title.to_lowercase();
+            let notes_l = ev.notes.to_lowercase();
+            let score = if title_l == q {
+                100
+            } else if title_l.starts_with(&q) {
+                90
+            } else if title_l.contains(&q) {
+                75
+            } else if notes_l.contains(&q) {
+                55
+            } else if ev.date.contains(&q) {
+                40
+            } else {
+                continue;
+            };
+            let time = if ev.all_day {
+                String::new()
+            } else {
+                format_minutes(ev.start_minutes)
+            };
+            let subtitle = if time.is_empty() {
+                ev.date.clone()
+            } else {
+                format!("{} · {}", ev.date, time)
+            };
+            hits.push(CalendarSearchHit {
+                instance_id,
+                event_id: ev.id.clone(),
+                title: if title.is_empty() {
+                    String::new()
+                } else {
+                    title.to_string()
+                },
+                date: ev.date.clone(),
+                subtitle,
+                score,
+            });
+        }
+    }
+    hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.date.cmp(&b.date)));
+    hits.truncate(limit);
+    hits
 }
 
 /// Build the 42-cell month grid for a view month.
@@ -487,6 +706,7 @@ impl CalendarWidget {
             ui: Arc::new(RwLock::new(UiState::default())),
             orchid_config,
             bus,
+            refresh: Mutex::new(PeriodicRefresh::new(StdDuration::from_secs(60 * 30))),
         });
         CALENDAR_LIVE.insert(instance_id, Arc::clone(&handle));
         Self {
@@ -549,6 +769,24 @@ impl CalendarWidget {
             .clone()
             .unwrap_or_else(|| EventDraft::blank_on(&cfg.selected_date));
 
+        let upcoming = if cfg.show_upcoming {
+            build_upcoming(&cfg.events, &today, 7)
+        } else {
+            Vec::new()
+        };
+
+        let events = if cfg.show_notes_preview {
+            events
+        } else {
+            events
+                .into_iter()
+                .map(|mut e| {
+                    e.notes_preview.clear();
+                    e
+                })
+                .collect()
+        };
+
         CalendarPayload {
             year: cfg.view_year,
             month: i32::from(cfg.view_month),
@@ -557,6 +795,10 @@ impl CalendarWidget {
             first_day_of_week: i32::from(first_day),
             days,
             events,
+            upcoming,
+            show_upcoming: cfg.show_upcoming,
+            show_notes_preview: cfg.show_notes_preview,
+            time_step_minutes: i32::from(cfg.time_step_minutes),
             editor_open: ui.editor_open,
             editor_event_id: ui.editing_id.clone().unwrap_or_default(),
             editor_is_new: ui.editing_id.is_none(),
@@ -569,8 +811,58 @@ impl CalendarWidget {
             editor_end_min: i32::from(draft.end_minutes % 60),
             editor_notes: draft.notes,
             editor_color: i32::from(draft.color),
+            delete_confirm_open: ui.delete_confirm_open,
         }
     }
+}
+
+fn build_upcoming(
+    events: &[CalendarEvent],
+    today_key: &str,
+    days: i64,
+) -> Vec<CalendarUpcomingRow> {
+    let Some(today) = parse_date(today_key) else {
+        return Vec::new();
+    };
+    let end = today + Duration::days(days);
+    let mut rows: Vec<(String, CalendarUpcomingRow)> = Vec::new();
+    for ev in events {
+        let Some(d) = parse_date(&ev.date) else {
+            continue;
+        };
+        if d < today || d >= end {
+            continue;
+        }
+        let time_label = if ev.all_day {
+            String::new()
+        } else if ev.end_minutes > ev.start_minutes {
+            format!(
+                "{}–{}",
+                format_minutes(ev.start_minutes),
+                format_minutes(ev.end_minutes)
+            )
+        } else {
+            format_minutes(ev.start_minutes)
+        };
+        rows.push((
+            format!(
+                "{}-{:04}-{}",
+                ev.date,
+                if ev.all_day { 0 } else { ev.start_minutes },
+                ev.title
+            ),
+            CalendarUpcomingRow {
+                id: ev.id.clone(),
+                title: ev.title.clone(),
+                date_key: ev.date.clone(),
+                time_label,
+                all_day: ev.all_day,
+                color: i32::from(ev.color),
+            },
+        ));
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows.into_iter().map(|(_, r)| r).take(12).collect()
 }
 
 #[async_trait]
@@ -588,18 +880,22 @@ impl Widget for CalendarWidget {
     }
 
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.handle.schedule_refresh();
         Ok(())
     }
 
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.handle.stop_refresh();
         Ok(())
     }
 
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.handle.stop_refresh();
         Ok(())
     }
 
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.handle.stop_refresh();
         CALENDAR_LIVE.remove(&self.instance_id);
         Ok(())
     }
@@ -625,8 +921,7 @@ impl Widget for CalendarWidget {
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let mut cfg: CalendarConfig = state_codec::restore_state(bytes).unwrap_or_default();
-        cfg.normalize();
+        let cfg = decode_config(bytes);
         *self.handle.config.write() = cfg;
         Ok(())
     }
@@ -639,7 +934,7 @@ impl Widget for CalendarWidget {
             preferred_size: Some(WidgetSize::Large),
             allows_grouping: true,
             keeps_state_when_unloaded: true,
-            has_settings_panel: false,
+            has_settings_panel: true,
         }
     }
 }
@@ -648,11 +943,14 @@ impl Widget for CalendarWidget {
 #[must_use]
 pub fn descriptor() -> WidgetDescriptor {
     let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
-        let mut cfg = match state_bytes {
-            Some(bytes) => state_codec::restore_state::<CalendarConfig>(bytes).unwrap_or_default(),
-            None => CalendarConfig::default(),
+        let cfg = match state_bytes {
+            Some(bytes) => decode_config(bytes),
+            None => {
+                let mut c = CalendarConfig::default();
+                c.normalize();
+                c
+            }
         };
-        cfg.normalize();
         Ok(Box::new(CalendarWidget::new(
             ctx.instance_id,
             cfg,
@@ -741,6 +1039,7 @@ mod tests {
             view_year: 2026,
             view_month: 7,
             selected_date: "not-a-date".into(),
+            ..CalendarConfig::default()
         };
         cfg.normalize();
         assert_eq!(cfg.selected_date, "2026-07-01");
@@ -750,6 +1049,48 @@ mod tests {
     fn format_minutes_pads() {
         assert_eq!(format_minutes(0), "00:00");
         assert_eq!(format_minutes(9 * 60 + 5), "09:05");
+    }
+
+    #[test]
+    fn shift_editor_date_and_confirm_delete() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let mut cfg = CalendarConfig::default();
+        cfg.selected_date = "2026-07-21".into();
+        cfg.view_year = 2026;
+        cfg.view_month = 7;
+        let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
+
+        open_new_editor(id);
+        set_editor_title(id, "Trip".into());
+        shift_editor_date(id, 1);
+        save_editor(id);
+
+        let snap = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p) = snap.payload else {
+            panic!("expected calendar");
+        };
+        assert_eq!(p.selected_date, "2026-07-22");
+        // Agenda is for selected day; event was saved on 22nd.
+        assert_eq!(p.events.len(), 1);
+
+        open_edit_editor(id, &p.events[0].id);
+        request_delete(id);
+        let snap2 = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p2) = snap2.payload else {
+            panic!("expected calendar");
+        };
+        assert!(p2.delete_confirm_open);
+        confirm_delete(id);
+        let snap3 = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p3) = snap3.payload else {
+            panic!("expected calendar");
+        };
+        assert!(!p3.editor_open);
+        assert!(p3.events.is_empty());
     }
 
     #[test]

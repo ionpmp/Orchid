@@ -7,8 +7,8 @@ use tracing::warn;
 use uuid::Uuid;
 
 use orchid_storage::LifecycleState;
-use orchid_widgets::WidgetPayload;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
+use orchid_widgets::WidgetPayload;
 
 use crate::window::errors::media_localized_error;
 use crate::window::spawn;
@@ -75,7 +75,10 @@ impl MainWindowController {
         });
     }
 
-    pub(super) fn notify_media_control_failed(self: &Arc<Self>, err: &orchid_widgets::builtin::media::MediaError) {
+    pub(super) fn notify_media_control_failed(
+        self: &Arc<Self>,
+        err: &orchid_widgets::builtin::media::MediaError,
+    ) {
         let body = media_localized_error(&self.locale, err);
         self.push_notification(&self.locale.tr("widget-media-name"), &body, 2);
     }
@@ -97,21 +100,6 @@ impl MainWindowController {
         }
         None
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     pub(super) fn on_search_query_changed(self: &Arc<Self>, inst: &SharedString, q: &SharedString) {
         let Ok(instance_id) = Uuid::parse_str(inst.as_str()) else {
@@ -140,18 +128,27 @@ impl MainWindowController {
         });
     }
 
-    pub(super) fn on_search_candidate_activated(self: &Arc<Self>, inst: &SharedString, cand: &SharedString) {
+    pub(super) fn on_search_candidate_activated(
+        self: &Arc<Self>,
+        inst: &SharedString,
+        cand: &SharedString,
+    ) {
         let Ok(instance_id) = Uuid::parse_str(inst.as_str()) else {
             return;
         };
         let candidate_id = cand.to_string();
         let this = Arc::clone(self);
         spawn::spawn_local_compat(async move {
-            this.dispatch_search_action_target(instance_id, candidate_id).await;
+            this.dispatch_search_action_target(instance_id, candidate_id)
+                .await;
         });
     }
 
-    pub(super) async fn dispatch_search_action_target(self: &Arc<Self>, instance_id: Uuid, candidate_id: String) {
+    pub(super) async fn dispatch_search_action_target(
+        self: &Arc<Self>,
+        instance_id: Uuid,
+        candidate_id: String,
+    ) {
         let Some(target) =
             search_widget::universal_search_action_target(instance_id, candidate_id.as_str())
         else {
@@ -185,6 +182,26 @@ impl MainWindowController {
                     }
                     Err(e) => warn!(?e, "open clipboard for search calc copy"),
                 }
+            }
+            ActionTarget::OpenCalendarEvent {
+                instance_id,
+                event_id,
+                date,
+            } => {
+                let Ok(cal_id) = Uuid::parse_str(&instance_id) else {
+                    warn!(%instance_id, "invalid calendar instance id from search");
+                    return;
+                };
+                orchid_widgets::builtin::calendar::select_date(cal_id, &date);
+                orchid_widgets::builtin::calendar::open_edit_editor(cal_id, &event_id);
+                let wm = self.widget_manager.clone();
+                let t = Arc::downgrade(self);
+                spawn::spawn_local_compat(async move {
+                    let _ = wm.refresh_snapshot_cache(cal_id).await;
+                    if let Some(c) = t.upgrade() {
+                        c.schedule_rebuild();
+                    }
+                });
             }
         }
     }

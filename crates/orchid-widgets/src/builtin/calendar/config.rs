@@ -49,6 +49,26 @@ pub struct CalendarConfig {
     pub view_month: u8,
     /// Selected day as `YYYY-MM-DD`.
     pub selected_date: String,
+    /// New events default to all-day when true.
+    #[serde(default = "default_true")]
+    pub default_all_day: bool,
+    /// Show notes preview under agenda rows.
+    #[serde(default = "default_true")]
+    pub show_notes_preview: bool,
+    /// Show the next-7-days upcoming strip.
+    #[serde(default = "default_true")]
+    pub show_upcoming: bool,
+    /// Minute step for time nudge buttons (15 or 30).
+    #[serde(default = "default_time_step")]
+    pub time_step_minutes: u8,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_time_step() -> u8 {
+    15
 }
 
 impl Default for CalendarConfig {
@@ -59,11 +79,25 @@ impl Default for CalendarConfig {
             view_year: today.year(),
             view_month: today.month() as u8,
             selected_date: format_date(today),
+            default_all_day: true,
+            show_notes_preview: true,
+            show_upcoming: true,
+            time_step_minutes: 15,
         }
     }
 }
 
 impl CalendarConfig {
+    /// Clamp time-step to supported values.
+    #[must_use]
+    pub fn clamp_time_step(step: u8) -> u8 {
+        if step >= 30 {
+            30
+        } else {
+            15
+        }
+    }
+
     /// Clamp fields and repair invalid dates.
     pub fn normalize(&mut self) {
         if !(1..=12).contains(&self.view_month) {
@@ -72,6 +106,7 @@ impl CalendarConfig {
         if self.view_year < 1 {
             self.view_year = 1;
         }
+        self.time_step_minutes = Self::clamp_time_step(self.time_step_minutes);
         if parse_date(&self.selected_date).is_none() {
             if let Some(d) = NaiveDate::from_ymd_opt(self.view_year, u32::from(self.view_month), 1)
             {
@@ -95,6 +130,41 @@ impl CalendarConfig {
             }
         }
     }
+}
+
+/// Decode persisted bytes, accepting the pre-settings layout.
+#[must_use]
+pub fn decode_config(bytes: &[u8]) -> CalendarConfig {
+    if let Ok((mut cfg, _)) =
+        bincode::serde::decode_from_slice::<CalendarConfig, _>(bytes, bincode::config::standard())
+    {
+        cfg.normalize();
+        return cfg;
+    }
+
+    #[derive(Deserialize)]
+    struct Legacy {
+        events: Vec<CalendarEvent>,
+        view_year: i32,
+        view_month: u8,
+        selected_date: String,
+    }
+
+    if let Ok((legacy, _)) =
+        bincode::serde::decode_from_slice::<Legacy, _>(bytes, bincode::config::standard())
+    {
+        let mut cfg = CalendarConfig {
+            events: legacy.events,
+            view_year: legacy.view_year,
+            view_month: legacy.view_month,
+            selected_date: legacy.selected_date,
+            ..CalendarConfig::default()
+        };
+        cfg.normalize();
+        return cfg;
+    }
+
+    CalendarConfig::default()
 }
 
 /// Format a naive date as `YYYY-MM-DD`.

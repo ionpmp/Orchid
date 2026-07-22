@@ -1,6 +1,7 @@
 //! Search-source trait + shared candidate types.
 
 pub mod calculator;
+pub mod calendar;
 pub mod commands;
 pub mod files;
 pub mod settings;
@@ -8,6 +9,7 @@ pub mod settings;
 use async_trait::async_trait;
 
 pub use calculator::CalculatorSource;
+pub use calendar::CalendarSource;
 pub use commands::CommandsSource;
 pub use files::FilesSource;
 pub use settings::SettingsSource;
@@ -21,6 +23,12 @@ pub enum ActionTarget {
     OpenSettings(String),
     /// Copy plain text to the system clipboard.
     CopyText(String),
+    /// Focus a calendar widget on an event.
+    OpenCalendarEvent {
+        instance_id: String,
+        event_id: String,
+        date: String,
+    },
 }
 
 /// A single search candidate produced by a source.
@@ -49,4 +57,3 @@ pub trait SearchSource: Send + Sync {
     /// Execute a search and return up to `limit` candidates.
     async fn search(&self, query: &str, limit: usize) -> Vec<SearchCandidate>;
 }
-

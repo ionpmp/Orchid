@@ -969,6 +969,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_calendar_activate_day({
+            let t = t.clone();
+            move |id, date| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_activate_day(&id, &date);
+                }
+            }
+        });
         self.window.on_calendar_shift_month({
             let t = t.clone();
             move |id, delta| {
@@ -1017,11 +1025,27 @@ impl MainWindowController {
                 }
             }
         });
-        self.window.on_calendar_delete_event({
+        self.window.on_calendar_request_delete({
             let t = t.clone();
-            move |id, event_id| {
+            move |id| {
                 if let Some(c) = t.upgrade() {
-                    c.on_calendar_delete_event(&id, &event_id);
+                    c.on_calendar_request_delete(&id);
+                }
+            }
+        });
+        self.window.on_calendar_confirm_delete({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_confirm_delete(&id);
+                }
+            }
+        });
+        self.window.on_calendar_cancel_delete({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_cancel_delete(&id);
                 }
             }
         });
@@ -1041,6 +1065,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_calendar_shift_editor_date({
+            let t = t.clone();
+            move |id, delta| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_shift_editor_date(&id, delta);
+                }
+            }
+        });
         self.window.on_calendar_editor_all_day({
             let t = t.clone();
             move |id, all_day| {
@@ -1049,19 +1081,19 @@ impl MainWindowController {
                 }
             }
         });
-        self.window.on_calendar_editor_start({
+        self.window.on_calendar_nudge_editor_start({
             let t = t.clone();
-            move |id, hour, minute| {
+            move |id, delta| {
                 if let Some(c) = t.upgrade() {
-                    c.on_calendar_editor_start(&id, hour, minute);
+                    c.on_calendar_nudge_editor_start(&id, delta);
                 }
             }
         });
-        self.window.on_calendar_editor_end({
+        self.window.on_calendar_nudge_editor_end({
             let t = t.clone();
-            move |id, hour, minute| {
+            move |id, delta| {
                 if let Some(c) = t.upgrade() {
-                    c.on_calendar_editor_end(&id, hour, minute);
+                    c.on_calendar_nudge_editor_end(&id, delta);
                 }
             }
         });

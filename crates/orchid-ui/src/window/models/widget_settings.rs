@@ -92,6 +92,7 @@ pub(crate) fn widget_has_settings(type_id: &str) -> bool {
     matches!(
         type_id,
         "weather" | "moon" | "jyotish" | "clock" | "system" | "processes" | "calculator" | "notes"
+            | "calendar"
             | "rss" | "file-manager"
     )
 }
@@ -127,6 +128,9 @@ pub(crate) fn build_widget_settings_fields(
             .unwrap_or_default(),
         "notes" => orchid_widgets::builtin::notes::current_config(instance_id)
             .map(|cfg| notes_fields(&cfg, locale))
+            .unwrap_or_default(),
+        "calendar" => orchid_widgets::builtin::calendar::current_config(instance_id)
+            .map(|cfg| calendar_fields(&cfg, locale))
             .unwrap_or_default(),
         "rss" => orchid_widgets::builtin::rss::current_config(instance_id)
             .map(|cfg| rss_fields(&cfg, locale))
@@ -324,6 +328,52 @@ fn notes_fields(
     );
     rows
 }
+fn calendar_fields(
+    cfg: &orchid_widgets::builtin::calendar::CalendarConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_bool(
+        &mut rows,
+        locale,
+        "default_all_day",
+        "calendar-settings-default-all-day",
+        cfg.default_all_day,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_notes_preview",
+        "calendar-settings-show-notes",
+        cfg.show_notes_preview,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_upcoming",
+        "calendar-settings-show-upcoming",
+        cfg.show_upcoming,
+    );
+    push_combo(
+        &mut rows,
+        locale,
+        "time_step_minutes",
+        "calendar-settings-time-step",
+        &[
+            (
+                "15".into(),
+                locale.tr("calendar-settings-time-step-15").into(),
+            ),
+            (
+                "30".into(),
+                locale.tr("calendar-settings-time-step-30").into(),
+            ),
+        ],
+        &cfg.time_step_minutes.to_string(),
+    );
+    rows
+}
+
 
 fn processes_fields(
     cfg: &orchid_widgets::builtin::processes::ProcessesConfig,
@@ -565,6 +615,7 @@ pub(crate) async fn apply_widget_setting(type_id: &str, instance_id: Uuid, key: 
         "processes" => apply_processes(instance_id, key, value),
         "calculator" => apply_calculator(instance_id, key, value),
         "notes" => apply_notes(instance_id, key, value),
+        "calendar" => apply_calendar(instance_id, key, value),
         "rss" => apply_rss(instance_id, key, value),
         "file-manager" => {
             let _ = apply_fm(instance_id, key, value).await;
@@ -881,6 +932,33 @@ fn apply_notes(instance_id: Uuid, key: &str, value: &str) {
         _ => {}
     });
 }
+fn apply_calendar(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::calendar::update_config(instance_id, |cfg| match key {
+        "default_all_day" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.default_all_day = b;
+            }
+        }
+        "show_notes_preview" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_notes_preview = b;
+            }
+        }
+        "show_upcoming" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_upcoming = b;
+            }
+        }
+        "time_step_minutes" => {
+            if let Ok(n) = value.parse::<u8>() {
+                cfg.time_step_minutes =
+                    orchid_widgets::builtin::calendar::CalendarConfig::clamp_time_step(n);
+            }
+        }
+        _ => {}
+    });
+}
+
 
 fn apply_rss(instance_id: Uuid, key: &str, value: &str) {
     orchid_widgets::builtin::rss::update_config(instance_id, |cfg| match key {

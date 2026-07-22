@@ -28,6 +28,17 @@ pub struct CalendarEventRow {
     pub color: i32,
 }
 
+/// One upcoming event in the next-7-days strip.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalendarUpcomingRow {
+    pub id: String,
+    pub title: String,
+    pub date_key: String,
+    pub time_label: String,
+    pub all_day: bool,
+    pub color: i32,
+}
+
 /// Render payload for the calendar widget.
 #[derive(Debug, Clone)]
 pub struct CalendarPayload {
@@ -40,6 +51,10 @@ pub struct CalendarPayload {
     pub first_day_of_week: i32,
     pub days: Vec<CalendarDayCell>,
     pub events: Vec<CalendarEventRow>,
+    pub upcoming: Vec<CalendarUpcomingRow>,
+    pub show_upcoming: bool,
+    pub show_notes_preview: bool,
+    pub time_step_minutes: i32,
     pub editor_open: bool,
     /// Empty when creating a new event.
     pub editor_event_id: String,
@@ -53,4 +68,6 @@ pub struct CalendarPayload {
     pub editor_end_min: i32,
     pub editor_notes: String,
     pub editor_color: i32,
+    /// Confirmation sheet visible above the editor.
+    pub delete_confirm_open: bool,
 }

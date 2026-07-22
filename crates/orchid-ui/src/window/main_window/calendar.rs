@@ -26,6 +26,18 @@ impl MainWindowController {
         self.refresh_calendar(inst);
     }
 
+    pub(super) fn on_calendar_activate_day(
+        self: &Arc<Self>,
+        id: &SharedString,
+        date: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::activate_day(inst, date.as_str());
+        self.refresh_calendar(inst);
+    }
+
     pub(super) fn on_calendar_shift_month(self: &Arc<Self>, id: &SharedString, delta: i32) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;
@@ -78,15 +90,27 @@ impl MainWindowController {
         self.refresh_calendar(inst);
     }
 
-    pub(super) fn on_calendar_delete_event(
-        self: &Arc<Self>,
-        id: &SharedString,
-        event_id: &SharedString,
-    ) {
+    pub(super) fn on_calendar_request_delete(self: &Arc<Self>, id: &SharedString) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;
         };
-        orchid_widgets::builtin::calendar::delete_event(inst, event_id.as_str());
+        orchid_widgets::builtin::calendar::request_delete(inst);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_confirm_delete(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::confirm_delete(inst);
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_cancel_delete(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::cancel_delete(inst);
         self.refresh_calendar(inst);
     }
 
@@ -110,6 +134,15 @@ impl MainWindowController {
             return;
         };
         orchid_widgets::builtin::calendar::set_editor_date(inst, date.to_string());
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_shift_editor_date(self: &Arc<Self>, id: &SharedString, delta: i32) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::shift_editor_date(inst, delta);
+        self.refresh_calendar(inst);
     }
 
     pub(super) fn on_calendar_editor_all_day(self: &Arc<Self>, id: &SharedString, all_day: bool) {
@@ -120,29 +153,27 @@ impl MainWindowController {
         self.refresh_calendar(inst);
     }
 
-    pub(super) fn on_calendar_editor_start(
+    pub(super) fn on_calendar_nudge_editor_start(
         self: &Arc<Self>,
         id: &SharedString,
-        hour: i32,
-        minute: i32,
+        delta_minutes: i32,
     ) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;
         };
-        orchid_widgets::builtin::calendar::set_editor_start(inst, hour, minute);
+        orchid_widgets::builtin::calendar::nudge_editor_start(inst, delta_minutes);
         self.refresh_calendar(inst);
     }
 
-    pub(super) fn on_calendar_editor_end(
+    pub(super) fn on_calendar_nudge_editor_end(
         self: &Arc<Self>,
         id: &SharedString,
-        hour: i32,
-        minute: i32,
+        delta_minutes: i32,
     ) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;
         };
-        orchid_widgets::builtin::calendar::set_editor_end(inst, hour, minute);
+        orchid_widgets::builtin::calendar::nudge_editor_end(inst, delta_minutes);
         self.refresh_calendar(inst);
     }
 

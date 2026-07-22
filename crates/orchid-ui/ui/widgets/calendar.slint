@@ -1,12 +1,14 @@
 import { Theme } from "../theme_global.slint";
 import {
-    CalendarModel, CalendarDayEntry, CalendarEventEntry, CalendarWeekdayEntry
+    CalendarModel, CalendarDayEntry, CalendarEventEntry, CalendarUpcomingEntry,
+    CalendarWeekdayEntry
 } from "../workspace/defs.slint";
 
 component CalToolBtn inherits Rectangle {
     in property <string> label;
     in property <string> tip;
     in property <bool> primary: false;
+    in property <bool> danger: false;
     in property <bool> enabled: true;
     callback clicked();
 
@@ -15,8 +17,9 @@ component CalToolBtn inherits Rectangle {
     border-radius: Theme.radius-md;
     background: !root.enabled ? transparent :
         root.primary ? Theme.accent-brand :
+        root.danger ? #e35d6a :
         ta.has-hover ? Theme.surface-raised : transparent;
-    border-width: root.primary ? 0 : (ta.has-hover ? 1px : 0);
+    border-width: (root.primary || root.danger) ? 0 : (ta.has-hover ? 1px : 0);
     border-color: Theme.border-default;
 
     ta := TouchArea {
@@ -29,7 +32,7 @@ component CalToolBtn inherits Rectangle {
         height: 100%;
         text: root.label;
         color: !root.enabled ? Theme.text-tertiary :
-            root.primary ? Theme.surface-base : Theme.text-secondary;
+            (root.primary || root.danger) ? Theme.surface-base : Theme.text-secondary;
         font-size: Theme.font-size-sm;
         font-weight: Theme.weight-medium;
         font-family: Theme.font-family-sans;
@@ -72,6 +75,7 @@ component ColorDot inherits Rectangle {
 component DayCell inherits Rectangle {
     in property <CalendarDayEntry> day;
     callback clicked();
+    callback double-clicked();
 
     border-radius: Theme.radius-md;
     background: day.is-selected ? Theme.accent-brand :
@@ -82,6 +86,7 @@ component DayCell inherits Rectangle {
 
     ta := TouchArea {
         clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
     }
 
     VerticalLayout {
@@ -116,7 +121,7 @@ component EventRow inherits Rectangle {
     in property <string> untitled-label;
     callback clicked();
 
-    height: 44px;
+    height: event.notes-preview == "" ? 44px : 58px;
     border-radius: Theme.radius-md;
     background: ta.has-hover ? Theme.surface-raised : transparent;
 
@@ -132,7 +137,7 @@ component EventRow inherits Rectangle {
 
         Rectangle {
             width: 4px;
-            height: 28px;
+            height: event.notes-preview == "" ? 28px : 40px;
             border-radius: 2px;
             background: event.color == 0 ? #5B8DEF :
                 event.color == 1 ? #34C759 :
@@ -155,6 +160,12 @@ component EventRow inherits Rectangle {
             Text {
                 text: event.all-day ? all-day-label : event.time-label;
                 color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+            if event.notes-preview != "" : Text {
+                text: event.notes-preview;
+                color: Theme.text-tertiary;
                 font-size: Theme.font-size-sm;
                 overflow: elide;
             }
@@ -184,29 +195,136 @@ component ColorSwatch inherits Rectangle {
     }
 }
 
+component UpcomingChip inherits Rectangle {
+    in property <CalendarUpcomingEntry> item;
+    in property <string> all-day-label;
+    in property <string> untitled-label;
+    callback clicked();
+
+    height: 34px;
+    border-radius: Theme.radius-md;
+    background: ta.has-hover ? Theme.surface-raised : Theme.surface-base;
+    border-width: 1px;
+    border-color: Theme.border-default;
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: center;
+
+        Rectangle {
+            width: 3px;
+            height: 18px;
+            border-radius: 1.5px;
+            background: item.color == 0 ? #5B8DEF :
+                item.color == 1 ? #34C759 :
+                item.color == 2 ? #FF9F0A :
+                item.color == 3 ? #FF453A :
+                item.color == 4 ? #BF5AF2 :
+                #64D2FF;
+        }
+        VerticalLayout {
+            spacing: 0px;
+            alignment: center;
+            Text {
+                text: item.title == "" ? untitled-label : item.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-medium;
+                overflow: elide;
+            }
+            Text {
+                text: item.date-label + " · " + (item.all-day ? all-day-label : item.time-label);
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+component TimeRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> time-text;
+    in property <int> step-minutes: 15;
+    in property <string> tip-minus;
+    in property <string> tip-plus;
+    in property <string> tip-hour-minus;
+    in property <string> tip-hour-plus;
+    callback nudge(int);
+
+    spacing: 4px;
+    alignment: center;
+
+    Text {
+        text: root.label;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+        min-width: 36px;
+    }
+    CalToolBtn {
+        label: "«";
+        tip: root.tip-hour-minus;
+        clicked => { root.nudge(-60); }
+    }
+    CalToolBtn {
+        label: "−";
+        tip: root.tip-minus;
+        clicked => { root.nudge(-root.step-minutes); }
+    }
+    Text {
+        text: root.time-text;
+        color: Theme.text-primary;
+        font-size: Theme.font-size-md;
+        font-family: Theme.font-family-mono;
+        vertical-alignment: center;
+        min-width: 48px;
+        horizontal-alignment: center;
+    }
+    CalToolBtn {
+        label: "+";
+        tip: root.tip-plus;
+        clicked => { root.nudge(root.step-minutes); }
+    }
+    CalToolBtn {
+        label: "»";
+        tip: root.tip-hour-plus;
+        clicked => { root.nudge(60); }
+    }
+}
+
 export component CalendarView inherits Rectangle {
     in property <CalendarModel> model;
 
     callback select-date(string);
+    callback activate-day(string);
     callback shift-month(int);
     callback goto-today();
     callback open-new();
     callback open-edit(string);
     callback close-editor();
     callback save-editor();
-    callback delete-event(string);
+    callback request-delete();
+    callback confirm-delete();
+    callback cancel-delete();
     callback editor-title-changed(string);
     callback editor-date-changed(string);
+    callback shift-editor-date(int);
     callback editor-all-day-changed(bool);
-    callback editor-start-changed(int, int);
-    callback editor-end-changed(int, int);
+    callback nudge-editor-start(int);
+    callback nudge-editor-end(int);
     callback editor-notes-changed(string);
     callback editor-color-changed(int);
 
     background: transparent;
 
     property <string> draft-title: model.editor-title;
-    property <string> draft-date: model.editor-date;
     property <string> draft-notes: model.editor-notes;
     property <string> synced-editor-id: model.editor-event-id;
     property <bool> synced-editor-open: model.editor-open;
@@ -216,7 +334,6 @@ export component CalendarView inherits Rectangle {
             || model.editor-event-id != synced-editor-id
             || (!model.editor-open) {
             draft-title = model.editor-title;
-            draft-date = model.editor-date;
             draft-notes = model.editor-notes;
             synced-editor-id = model.editor-event-id;
             synced-editor-open = model.editor-open;
@@ -227,7 +344,6 @@ export component CalendarView inherits Rectangle {
         padding: 10px;
         spacing: 8px;
 
-        // Toolbar
         HorizontalLayout {
             spacing: 6px;
             alignment: center;
@@ -264,11 +380,41 @@ export component CalendarView inherits Rectangle {
             }
         }
 
+        if model.show-upcoming && model.upcoming.length > 0 : VerticalLayout {
+            spacing: 4px;
+            Text {
+                text: model.upcoming-title;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-medium;
+            }
+            Flickable {
+                height: 38px;
+                viewport-width: upcoming-row.preferred-width;
+                viewport-height: 38px;
+
+                upcoming-row := HorizontalLayout {
+                    spacing: 6px;
+                    height: 34px;
+                    for u[i] in model.upcoming : UpcomingChip {
+                        item: u;
+                        all-day-label: model.all-day-label;
+                        untitled-label: model.untitled-label;
+                        min-width: 160px;
+                        max-width: 220px;
+                        clicked => {
+                            root.select-date(u.date-key);
+                            root.open-edit(u.id);
+                        }
+                    }
+                }
+            }
+        }
+
         HorizontalLayout {
             spacing: 12px;
             vertical-stretch: 1;
 
-            // Month grid
             VerticalLayout {
                 spacing: 4px;
                 horizontal-stretch: 3;
@@ -295,6 +441,7 @@ export component CalendarView inherits Rectangle {
                         col: mod(i, 7);
                         day: day;
                         clicked => { root.select-date(day.date-key); }
+                        double-clicked => { root.activate-day(day.date-key); }
                     }
                 }
             }
@@ -304,7 +451,6 @@ export component CalendarView inherits Rectangle {
                 background: Theme.border-default;
             }
 
-            // Agenda
             VerticalLayout {
                 spacing: 6px;
                 horizontal-stretch: 2;
@@ -359,8 +505,8 @@ export component CalendarView inherits Rectangle {
         }
 
         Rectangle {
-            width: min(parent.width - 24px, 340px);
-            height: min(parent.height - 24px, 420px);
+            width: min(parent.width - 24px, 360px);
+            height: min(parent.height - 24px, 460px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             background: Theme.surface-base;
@@ -368,7 +514,7 @@ export component CalendarView inherits Rectangle {
             border-width: 1px;
             border-color: Theme.border-default;
 
-            TouchArea { } // swallow clicks
+            TouchArea { }
 
             VerticalLayout {
                 padding: 14px;
@@ -417,25 +563,37 @@ export component CalendarView inherits Rectangle {
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                     }
-                    Rectangle {
-                        height: 32px;
-                        border-radius: Theme.radius-md;
-                        background: Theme.surface-raised;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        date-edit := TextInput {
-                            x: 8px; y: 0;
-                            width: parent.width - 16px;
-                            height: 100%;
-                            text: root.draft-date;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            font-family: Theme.font-family-mono;
-                            single-line: true;
-                            edited => {
-                                root.draft-date = self.text;
-                                root.editor-date-changed(self.text);
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: center;
+                        CalToolBtn {
+                            label: "◀";
+                            tip: model.tip-date-prev;
+                            clicked => { root.shift-editor-date(-1); }
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 1px;
+                            Text {
+                                text: model.editor-date-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-md;
+                                font-weight: Theme.weight-medium;
+                                horizontal-alignment: center;
+                                overflow: elide;
                             }
+                            Text {
+                                text: model.editor-date;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                font-family: Theme.font-family-mono;
+                                horizontal-alignment: center;
+                            }
+                        }
+                        CalToolBtn {
+                            label: "▶";
+                            tip: model.tip-date-next;
+                            clicked => { root.shift-editor-date(1); }
                         }
                     }
                 }
@@ -472,62 +630,27 @@ export component CalendarView inherits Rectangle {
                     }
                 }
 
-                if !model.editor-all-day : HorizontalLayout {
-                    spacing: 8px;
-                    alignment: center;
-                    Text {
-                        text: model.start-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                if !model.editor-all-day : VerticalLayout {
+                    spacing: 6px;
+                    TimeRow {
+                        label: model.start-label;
+                        time-text: model.editor-start-text;
+                        step-minutes: model.time-step-minutes;
+                        tip-minus: model.tip-time-minus;
+                        tip-plus: model.tip-time-plus;
+                        tip-hour-minus: model.tip-hour-minus;
+                        tip-hour-plus: model.tip-hour-plus;
+                        nudge(d) => { root.nudge-editor-start(d); }
                     }
-                    CalToolBtn {
-                        label: "-";
-                        clicked => {
-                            root.editor-start-changed(model.editor-start-hour, model.editor-start-min - 15);
-                        }
-                    }
-                    Text {
-                        text: model.editor-start-text;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        font-family: Theme.font-family-mono;
-                        vertical-alignment: center;
-                        min-width: 48px;
-                        horizontal-alignment: center;
-                    }
-                    CalToolBtn {
-                        label: "+";
-                        clicked => {
-                            root.editor-start-changed(model.editor-start-hour, model.editor-start-min + 15);
-                        }
-                    }
-                    Text {
-                        text: model.end-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-                    CalToolBtn {
-                        label: "-";
-                        clicked => {
-                            root.editor-end-changed(model.editor-end-hour, model.editor-end-min - 15);
-                        }
-                    }
-                    Text {
-                        text: model.editor-end-text;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        font-family: Theme.font-family-mono;
-                        vertical-alignment: center;
-                        min-width: 48px;
-                        horizontal-alignment: center;
-                    }
-                    CalToolBtn {
-                        label: "+";
-                        clicked => {
-                            root.editor-end-changed(model.editor-end-hour, model.editor-end-min + 15);
-                        }
+                    TimeRow {
+                        label: model.end-label;
+                        step-minutes: model.time-step-minutes;
+                        time-text: model.editor-end-text;
+                        tip-minus: model.tip-time-minus;
+                        tip-plus: model.tip-time-plus;
+                        tip-hour-minus: model.tip-hour-minus;
+                        tip-hour-plus: model.tip-hour-plus;
+                        nudge(d) => { root.nudge-editor-end(d); }
                     }
                 }
 
@@ -541,7 +664,7 @@ export component CalendarView inherits Rectangle {
                     }
                     Rectangle {
                         vertical-stretch: 1;
-                        min-height: 60px;
+                        min-height: 56px;
                         border-radius: Theme.radius-md;
                         background: Theme.surface-raised;
                         border-width: 1px;
@@ -584,7 +707,8 @@ export component CalendarView inherits Rectangle {
 
                     if !model.editor-is-new : CalToolBtn {
                         label: model.delete-label;
-                        clicked => { root.delete-event(model.editor-event-id); }
+                        danger: true;
+                        clicked => { root.request-delete(); }
                     }
                     CalToolBtn {
                         label: model.cancel-label;
@@ -594,6 +718,60 @@ export component CalendarView inherits Rectangle {
                         label: model.save-label;
                         primary: true;
                         clicked => { root.save-editor(); }
+                    }
+                }
+            }
+        }
+    }
+
+    // Delete confirmation
+    if model.editor-open && model.delete-confirm-open : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #00000066;
+        z: 50;
+
+        TouchArea {
+            clicked => { root.cancel-delete(); }
+        }
+
+        Rectangle {
+            width: min(parent.width - 48px, 280px);
+            height: 140px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+
+            TouchArea { }
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 14px;
+
+                Text {
+                    text: model.delete-confirm-title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-semibold;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+
+                    CalToolBtn {
+                        label: model.cancel-label;
+                        clicked => { root.cancel-delete(); }
+                    }
+                    CalToolBtn {
+                        label: model.delete-confirm-yes;
+                        danger: true;
+                        clicked => { root.confirm-delete(); }
                     }
                 }
             }

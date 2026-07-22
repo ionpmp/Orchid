@@ -4,7 +4,8 @@ use orchid_widgets::CalendarPayload;
 use slint::{ModelRc, VecModel};
 
 use crate::slint_generated::{
-    CalendarDayEntry, CalendarEventEntry, CalendarModel, CalendarWeekdayEntry,
+    CalendarDayEntry, CalendarEventEntry, CalendarModel, CalendarUpcomingEntry,
+    CalendarWeekdayEntry,
 };
 
 pub(crate) fn empty_calendar_model(locale: &LocaleManager) -> CalendarModel {
@@ -18,6 +19,10 @@ pub(crate) fn empty_calendar_model(locale: &LocaleManager) -> CalendarModel {
             first_day_of_week: 1,
             days: Vec::new(),
             events: Vec::new(),
+            upcoming: Vec::new(),
+            show_upcoming: true,
+            show_notes_preview: true,
+            time_step_minutes: 15,
             editor_open: false,
             editor_event_id: String::new(),
             editor_is_new: true,
@@ -30,6 +35,7 @@ pub(crate) fn empty_calendar_model(locale: &LocaleManager) -> CalendarModel {
             editor_end_min: 0,
             editor_notes: String::new(),
             editor_color: 0,
+            delete_confirm_open: false,
         },
     )
 }
@@ -67,6 +73,19 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
             color: e.color,
         })
         .collect();
+    let upcoming: Vec<CalendarUpcomingEntry> = p
+        .upcoming
+        .iter()
+        .map(|u| CalendarUpcomingEntry {
+            id: u.id.clone().into(),
+            title: u.title.clone().into(),
+            date_key: u.date_key.clone().into(),
+            date_label: selected_day_label(locale, &u.date_key).into(),
+            time_label: u.time_label.clone().into(),
+            all_day: u.all_day,
+            color: u.color,
+        })
+        .collect();
 
     let month_title = locale.tr_args(
         "calendar-month-title",
@@ -75,6 +94,7 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
             .with("year", p.year.to_string()),
     );
     let selected_label = selected_day_label(locale, &p.selected_date);
+    let editor_date_label = selected_day_label(locale, &p.editor_date);
 
     CalendarModel {
         year: p.year,
@@ -87,6 +107,11 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         weekdays: ModelRc::new(VecModel::from(weekdays)),
         days: ModelRc::new(VecModel::from(days)),
         events: ModelRc::new(VecModel::from(events)),
+        upcoming: ModelRc::new(VecModel::from(upcoming)),
+        show_upcoming: p.show_upcoming,
+        show_notes_preview: p.show_notes_preview,
+        time_step_minutes: p.time_step_minutes,
+        upcoming_title: locale.tr("calendar-upcoming").into(),
         color_options: ModelRc::new(VecModel::from(vec![0, 1, 2, 3, 4, 5])),
         editor_open: p.editor_open,
         editor_event_id: p.editor_event_id.clone().into(),
@@ -102,6 +127,8 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         editor_end_text: format_hm(p.editor_end_hour, p.editor_end_min).into(),
         editor_notes: p.editor_notes.clone().into(),
         editor_color: p.editor_color,
+        editor_date_label: editor_date_label.into(),
+        delete_confirm_open: p.delete_confirm_open,
         today_label: locale.tr("calendar-today").into(),
         all_day_label: locale.tr("calendar-all-day").into(),
         empty_label: locale.tr("calendar-empty-day").into(),
@@ -111,6 +138,8 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         save_label: locale.tr("calendar-save").into(),
         delete_label: locale.tr("calendar-delete").into(),
         cancel_label: locale.tr("calendar-cancel").into(),
+        delete_confirm_title: locale.tr("calendar-delete-confirm").into(),
+        delete_confirm_yes: locale.tr("calendar-delete-confirm-yes").into(),
         title_field_label: locale.tr("calendar-field-title").into(),
         date_field_label: locale.tr("calendar-field-date").into(),
         notes_field_label: locale.tr("calendar-field-notes").into(),
@@ -121,6 +150,22 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         tip_next: locale.tr("calendar-tip-next").into(),
         tip_today: locale.tr("calendar-tip-today").into(),
         tip_add: locale.tr("calendar-tip-add").into(),
+        tip_date_prev: locale.tr("calendar-tip-date-prev").into(),
+        tip_date_next: locale.tr("calendar-tip-date-next").into(),
+        tip_time_minus: locale
+            .tr_args(
+                "calendar-tip-time-minus",
+                &orchid_i18n::FluentArgs::new().with("minutes", p.time_step_minutes.to_string()),
+            )
+            .into(),
+        tip_time_plus: locale
+            .tr_args(
+                "calendar-tip-time-plus",
+                &orchid_i18n::FluentArgs::new().with("minutes", p.time_step_minutes.to_string()),
+            )
+            .into(),
+        tip_hour_minus: locale.tr("calendar-tip-hour-minus").into(),
+        tip_hour_plus: locale.tr("calendar-tip-hour-plus").into(),
     }
 }
 
