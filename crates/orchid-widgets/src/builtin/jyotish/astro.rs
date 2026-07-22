@@ -582,6 +582,18 @@ mod tests {
     use crate::builtin::jyotish::config::AyanamsaSystem;
 
     #[test]
+    fn norm360_wraps_full_circle_and_negatives() {
+        assert!((norm360(0.0) - 0.0).abs() < 1e-12);
+        assert!((norm360(360.0) - 0.0).abs() < 1e-12);
+        assert!((norm360(720.0) - 0.0).abs() < 1e-12);
+        assert!((norm360(-0.0) - 0.0).abs() < 1e-12);
+        assert!((norm360(-1.0) - 359.0).abs() < 1e-12);
+        assert!((norm360(-360.0) - 0.0).abs() < 1e-12);
+        assert!((norm360(359.9) - 359.9).abs() < 1e-12);
+        assert!((norm360(720.5) - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
     fn ayanamsa_near_expected_for_2026() {
         let at = Utc.with_ymd_and_hms(2026, 7, 21, 12, 0, 0).unwrap();
         let aya = ayanamsa_deg(julian_day(at), AyanamsaSystem::Lahiri);

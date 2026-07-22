@@ -1174,6 +1174,8 @@ widget-settings-jyotish-location-name = Location name
 widget-settings-jyotish-longitude = Longitude
 widget-settings-jyotish-show-planets = Show graha table
 widget-settings-jyotish-show-sunrise-sunset = Show sunrise / sunset
+widget-settings-jyotish-show-rahukalam = Rahu Kalam / Yamagandam / Gulika anzeigen
+widget-settings-jyotish-enable-personal = Persönliche (natal) Tagesschicht nutzen
 
 # ---- jyotish align27 ----
 jyotish-tab-day = Tag

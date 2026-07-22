@@ -48,6 +48,10 @@ The Day tab shows a small badge indicating which layer is currently active
 ("Panchanga" or "Personal") so it's always clear whether a given score used
 your birth data.
 
+Widget settings can also toggle **Use personal (natal) day layer**. When off,
+birth data stays stored but scores, Life/daśā, and gochara notes fall back to
+the generic panchanga layer — useful for comparing “with / without natal”.
+
 ## Rahu, Yama, and Gulika (inauspicious windows)
 
 Below sunrise/sunset the widget shows three daylight windows classically
@@ -61,7 +65,16 @@ assigned by weekday:
 
 All three require sunrise/sunset to be computable for the configured
 location, which in turn requires a location with a resolvable latitude and
-longitude (the default is Varanasi).
+longitude (the default is Varanasi). **Show Rahu Kalam / Yamagandam / Gulika**
+in settings hides the Day-tab ranges without disabling Rahu-Kalam
+notifications.
+
+## Engineering notes
+
+- Day colors for Month/Year grids are memoized per civil date (`color_cache`);
+  changing birth data, ayanamsa, or the personal-layer toggle invalidates it.
+- `JyotishPayload` is `Box`’d in snapshots; the closed rectify wizard skips
+  quiz/chrome Fluent strings on every UI patch.
 
 ## Setting up birth data
 

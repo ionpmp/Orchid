@@ -246,6 +246,26 @@ mod tests {
     }
 
     #[test]
+    fn ashwini_full_maha_chain_spans_about_120_years() {
+        let birth = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+        // Start of Ashwini → full Ketu balance; request a span covering one cycle.
+        let until = birth + ChronoDuration::days((120.0 * DAYS_PER_YEAR) as i64 + 2);
+        let mahas = maha_dashas(0.0, birth, until);
+        assert!(!mahas.is_empty());
+        assert_eq!(mahas[0].lord, DashaLord::Ketu);
+        let spanned = years_between(mahas[0].from, mahas.last().unwrap().to);
+        assert!(
+            (spanned - 120.0).abs() < 0.05,
+            "expected ~120y maha chain, got {spanned}"
+        );
+        let lord_years: f64 = mahas.iter().map(|p| years_between(p.from, p.to)).sum();
+        assert!(
+            (lord_years - 120.0).abs() < 0.05,
+            "sum of maha lengths was {lord_years}"
+        );
+    }
+
+    #[test]
     fn ashwini_start_begins_full_ketu_dasha() {
         let birth = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
         // Longitude 0.0 is the very start of Ashwini (fraction elapsed = 0).

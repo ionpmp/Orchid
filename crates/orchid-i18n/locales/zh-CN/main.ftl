@@ -1173,6 +1173,8 @@ widget-settings-jyotish-location-name = Location name
 widget-settings-jyotish-longitude = Longitude
 widget-settings-jyotish-show-planets = Show graha table
 widget-settings-jyotish-show-sunrise-sunset = Show sunrise / sunset
+widget-settings-jyotish-show-rahukalam = 显示罗睺时 / 阎摩甘达 / 俱利迦
+widget-settings-jyotish-enable-personal = 使用个人（本命）日层
 
 # ---- jyotish align27 ----
 jyotish-tab-day = 天

@@ -59,8 +59,8 @@ pub const TYPE_ID: &str = "jyotish";
 static JYOTISH_LIVE: LazyLock<DashMap<Uuid, Arc<JyotishHandle>>> = LazyLock::new(DashMap::new);
 
 /// Config-derived fingerprint used to decide when the day-color cache must
-/// be invalidated (birth date/time/offset or ayanamsa changed).
-type NatalFingerprint = (Option<String>, Option<String>, i32, AyanamsaSystem);
+/// be invalidated (birth data, ayanamsa, or personal-layer toggle).
+type NatalFingerprint = (Option<String>, Option<String>, i32, AyanamsaSystem, bool);
 
 struct JyotishHandle {
     instance_id: Uuid,
@@ -111,6 +111,7 @@ impl JyotishHandle {
             cfg.birth_time.clone(),
             cfg.birth_utc_offset_minutes,
             cfg.ayanamsa,
+            cfg.enable_personal,
         );
         let fingerprint_changed = {
             let mut last = self.natal_fingerprint.write();
@@ -130,6 +131,14 @@ impl JyotishHandle {
         *self.natal.write() = natal;
     }
 
+    fn score_natal<'a>(cfg: &JyotishConfig, natal: Option<&'a NatalInfo>) -> Option<&'a NatalInfo> {
+        if cfg.enable_personal {
+            natal
+        } else {
+            None
+        }
+    }
+
     /// Auspiciousness color (0=green, 1=yellow, 2=red) for `date`, memoized.
     fn day_color(&self, date: NaiveDate, cfg: &JyotishConfig, natal: Option<&NatalInfo>) -> u8 {
         if let Some(c) = self.color_cache.get(&date) {
@@ -144,13 +153,14 @@ impl JyotishHandle {
 
     fn build_week_strip(&self, cfg: &JyotishConfig, today: NaiveDate) -> Vec<JyotishDayChip> {
         let natal = *self.natal.read();
+        let natal_score = Self::score_natal(cfg, natal.as_ref());
         (cfg.day_offset - 3..=cfg.day_offset + 3)
             .map(|offset| {
                 let date = today + ChronoDuration::days(i64::from(offset));
                 JyotishDayChip {
                     weekday_key: weekday_key(date.weekday()),
                     day_num: date.day() as u8,
-                    color: self.day_color(date, cfg, natal.as_ref()),
+                    color: self.day_color(date, cfg, natal_score),
                     offset,
                     is_selected: offset == cfg.day_offset,
                 }
@@ -165,6 +175,7 @@ impl JyotishHandle {
         today: NaiveDate,
     ) -> (&'static str, i32, Vec<JyotishMonthCell>, u8, u16, u16, u16) {
         let natal = *self.natal.read();
+        let natal_score = Self::score_natal(cfg, natal.as_ref());
         let (year, month) = month_year_from_offset(today, cfg.month_offset);
         let first_weekday = NaiveDate::from_ymd_opt(year, month, 1)
             .map(|d| d.weekday().num_days_from_monday() as u8)
@@ -177,7 +188,7 @@ impl JyotishHandle {
         let cells = (1..=days_in)
             .filter_map(|day| NaiveDate::from_ymd_opt(year, month, day).map(|date| (day, date)))
             .map(|(day, date)| {
-                let color = self.day_color(date, cfg, natal.as_ref());
+                let color = self.day_color(date, cfg, natal_score);
                 match color {
                     0 => green += 1,
                     1 => yellow += 1,
@@ -194,7 +205,7 @@ impl JyotishHandle {
             })
             .collect();
 
-        let (green, yellow, red) = if let Some(n) = natal.as_ref() {
+        let (green, yellow, red) = if let Some(n) = natal_score {
             let mid = NaiveDate::from_ymd_opt(year, month, 15)
                 .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today));
             let at = local_noon_utc(mid, cfg.longitude);
@@ -221,19 +232,21 @@ impl JyotishHandle {
         today: NaiveDate,
     ) -> (i32, Vec<JyotishMonthSummary>, &'static str) {
         let natal = *self.natal.read();
+        let natal_score = Self::score_natal(cfg, natal.as_ref());
         let year = today.year() + cfg.year_offset;
         let fingerprint: NatalFingerprint = (
             cfg.birth_date.clone(),
             cfg.birth_time.clone(),
             cfg.birth_utc_offset_minutes,
             cfg.ayanamsa,
+            cfg.enable_personal,
         );
         if let Some((fp, cached_year, months, note)) = self.year_cache.read().as_ref() {
             if *fp == fingerprint && *cached_year == year {
                 return (year, months.clone(), note);
             }
         }
-        let year_gochara = natal.as_ref().map(|n| {
+        let year_gochara = natal_score.map(|n| {
             let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
             let at = local_noon_utc(mid, cfg.longitude);
             gochara_modifier(n.moon_rashi, at, cfg.ayanamsa)
@@ -246,14 +259,14 @@ impl JyotishHandle {
                 let mut red = 0u16;
                 for day in 1..=days_in {
                     if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
-                        match self.day_color(date, cfg, natal.as_ref()) {
+                        match self.day_color(date, cfg, natal_score) {
                             0 => green += 1,
                             1 => yellow += 1,
                             _ => red += 1,
                         }
                     }
                 }
-                let (green, yellow, red) = if let Some(n) = natal.as_ref() {
+                let (green, yellow, red) = if let Some(n) = natal_score {
                     let mid = NaiveDate::from_ymd_opt(year, month, 15).unwrap_or_else(|| {
                         NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today)
                     });
@@ -413,11 +426,16 @@ impl JyotishHandle {
         let today = Utc::now().date_naive();
         let selected_date = today + ChronoDuration::days(i64::from(cfg.day_offset));
         let noon_at = local_noon_utc(selected_date, cfg.longitude);
-        let day_score = compute_day_score(noon_at, cfg.ayanamsa, natal.as_ref());
+        let natal_for_score = if cfg.enable_personal {
+            natal.as_ref()
+        } else {
+            None
+        };
+        let day_score = compute_day_score(noon_at, cfg.ayanamsa, natal_for_score);
         // Instantaneous score: live clock on "today", otherwise noon of the
         // selected civil day (same sample as the day score).
         let now_at = if cfg.day_offset == 0 { at } else { noon_at };
-        let now_score = compute_day_score(now_at, cfg.ayanamsa, natal.as_ref());
+        let now_score = compute_day_score(now_at, cfg.ayanamsa, natal_for_score);
         let primary_score = if cfg.day_offset == 0 {
             &now_score
         } else {
@@ -438,17 +456,24 @@ impl JyotishHandle {
         };
         let fmt_range =
             |w: muhurta::MuhurtaWindow| format!("{}–{}", fmt_time(w.start), fmt_time(w.end));
-        let (rahukalam_text, yamagandam_text, gulika_text, in_rahukalam) = if let Some(m) = muhurtas
-        {
-            (
-                Some(fmt_range(m.rahukalam)),
-                Some(fmt_range(m.yamagandam)),
-                Some(fmt_range(m.gulika)),
-                in_window(at, m.rahukalam),
-            )
-        } else {
-            (None, None, None, false)
-        };
+        // Always track `in_rahukalam` for notifications; gate display strings only.
+        let in_rahukalam = muhurtas
+            .as_ref()
+            .is_some_and(|m| in_window(at, m.rahukalam));
+        let (rahukalam_text, yamagandam_text, gulika_text) =
+            if cfg.show_rahukalam {
+                if let Some(m) = muhurtas {
+                    (
+                        Some(fmt_range(m.rahukalam)),
+                        Some(fmt_range(m.yamagandam)),
+                        Some(fmt_range(m.gulika)),
+                    )
+                } else {
+                    (None, None, None)
+                }
+            } else {
+                (None, None, None)
+            };
 
         let week_strip = self.build_week_strip(&cfg, today);
         let (
@@ -461,19 +486,32 @@ impl JyotishHandle {
             month_red,
         ) = self.build_month(&cfg, today);
         let (year_value, year_months, year_gochara_key) = self.build_year(&cfg, today);
-        let life_years = natal
-            .as_ref()
-            .map(|n| self.build_life(&cfg, n, today))
-            .unwrap_or_default();
-        let life_antars = natal
-            .as_ref()
-            .map(|n| self.build_life_antars(&cfg, n, today, locale))
-            .unwrap_or_default();
-        let dasha_now = natal
-            .as_ref()
-            .and_then(|n| self.build_dasha_now(&cfg, n, selected_date, locale));
+        let personal_active = cfg.enable_personal && natal.is_some();
+        let life_years = if personal_active {
+            natal
+                .as_ref()
+                .map(|n| self.build_life(&cfg, n, today))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let life_antars = if personal_active {
+            natal
+                .as_ref()
+                .map(|n| self.build_life_antars(&cfg, n, today, locale))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let dasha_now = if personal_active {
+            natal
+                .as_ref()
+                .and_then(|n| self.build_dasha_now(&cfg, n, selected_date, locale))
+        } else {
+            None
+        };
         let detail_year = *self.life_detail_year.read();
-        let gochara_note_key = if cfg.active_tab == 3 {
+        let gochara_note_key = if personal_active && cfg.active_tab == 3 {
             detail_year
                 .and_then(|year| {
                     natal.as_ref().map(|n| {
@@ -486,8 +524,10 @@ impl JyotishHandle {
                     })
                 })
                 .unwrap_or("")
-        } else {
+        } else if personal_active {
             year_gochara_key
+        } else {
+            ""
         };
 
         let wizard_step = *self.rectify_wizard_step.read();
@@ -1497,5 +1537,38 @@ mod search_tests {
     fn search_catalog_empty_query_returns_nothing() {
         assert!(search_catalog("", 10).is_empty());
         assert!(search_catalog("jyotish", 0).is_empty());
+    }
+
+    #[test]
+    fn month_color_cache_reuses_entries_on_second_build() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(id, JyotishConfig::default(), bus, orchid_config);
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        let cfg = h.config.read().clone();
+        let today = Utc::now().date_naive();
+        h.color_cache.clear();
+        assert_eq!(h.color_cache.len(), 0);
+        let _ = h.build_month(&cfg, today);
+        let filled = h.color_cache.len();
+        assert!(filled >= 28, "expected a full month of colors, got {filled}");
+        let _ = h.build_month(&cfg, today);
+        assert_eq!(
+            h.color_cache.len(),
+            filled,
+            "second month build must reuse the color cache"
+        );
+    }
+
+    #[test]
+    fn jyotish_payload_struct_stays_bounded() {
+        // Heap data (Vec/String) is separate; keep the stack-shaped payload
+        // from growing unchecked so snapshots stay cheap to move when Boxed.
+        assert!(
+            std::mem::size_of::<JyotishPayload>() < 2048,
+            "JyotishPayload is {} bytes",
+            std::mem::size_of::<JyotishPayload>()
+        );
     }
 }

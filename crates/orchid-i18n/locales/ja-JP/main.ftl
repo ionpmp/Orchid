@@ -1173,6 +1173,8 @@ widget-settings-jyotish-location-name = Location name
 widget-settings-jyotish-longitude = Longitude
 widget-settings-jyotish-show-planets = Show graha table
 widget-settings-jyotish-show-sunrise-sunset = Show sunrise / sunset
+widget-settings-jyotish-show-rahukalam = ラーフ・カーラーム／ヤマガンダム／グリカを表示
+widget-settings-jyotish-enable-personal = パーソナル（出生）レイヤーを使う
 
 # ---- jyotish align27 ----
 jyotish-tab-day = 日

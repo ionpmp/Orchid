@@ -1177,6 +1177,8 @@ widget-settings-jyotish-location-name = Название места
 widget-settings-jyotish-longitude = Долгота
 widget-settings-jyotish-show-planets = Показывать таблицу грах
 widget-settings-jyotish-show-sunrise-sunset = Показывать восход / закат
+widget-settings-jyotish-show-rahukalam = Показывать Раху-калам / Ямагандам / Гулику
+widget-settings-jyotish-enable-personal = Личный (натальный) слой дня
 
 # ---- jyotish align27 ----
 widget-settings-jyotish-birth-date = Дата рождения (ГГГГ-ММ-ДД)

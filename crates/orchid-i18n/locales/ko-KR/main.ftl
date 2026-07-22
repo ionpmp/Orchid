@@ -1173,6 +1173,8 @@ widget-settings-jyotish-location-name = Location name
 widget-settings-jyotish-longitude = Longitude
 widget-settings-jyotish-show-planets = Show graha table
 widget-settings-jyotish-show-sunrise-sunset = Show sunrise / sunset
+widget-settings-jyotish-show-rahukalam = 라후 칼람 / 야마간담 / 굴리카 표시
+widget-settings-jyotish-enable-personal = 개인(출생) 일일 레이어 사용
 
 # ---- jyotish align27 ----
 jyotish-tab-day = 낮

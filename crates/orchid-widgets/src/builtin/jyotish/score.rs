@@ -389,6 +389,20 @@ mod tests {
     use chrono::Timelike;
 
     #[test]
+    fn tara_cycle_covers_all_janma_and_offsets() {
+        for janma in 0u8..27 {
+            for k in 0u8..27 {
+                let nak = (janma + k) % 27;
+                assert_eq!(
+                    tara_index(nak, janma),
+                    k % 9,
+                    "janma={janma} k={k} nak={nak}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn tara_vipat_and_kin_are_strongly_negative() {
         for bad in [2, 4, 6] {
             assert_eq!(tara_weight(bad), W_TARA_BAD);

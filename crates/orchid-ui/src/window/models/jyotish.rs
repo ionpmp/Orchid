@@ -395,6 +395,37 @@ fn build_rectify_model(
     rectify: &JyotishRectifyView,
     locale: &LocaleManager,
 ) -> JyotishRectifyModel {
+    // Closed wizard: keep the draft flag only — skip Fluent chrome / quiz strings.
+    if rectify.step == 0 {
+        return JyotishRectifyModel {
+            step: 0,
+            question_idx: 0,
+            question_total: 0,
+            question: SharedString::new(),
+            options: ModelRc::new(VecModel::default()),
+            events: ModelRc::new(VecModel::default()),
+            event_kinds: ModelRc::new(VecModel::default()),
+            candidates: ModelRc::new(VecModel::default()),
+            title: SharedString::new(),
+            next_label: SharedString::new(),
+            cancel_label: SharedString::new(),
+            accept_label: SharedString::new(),
+            back_label: SharedString::new(),
+            refine_label: SharedString::new(),
+            window_labels: ModelRc::new(VecModel::default()),
+            add_event_label: SharedString::new(),
+            year_placeholder: SharedString::new(),
+            progress_text: SharedString::new(),
+            step_title: SharedString::new(),
+            error_text: SharedString::new(),
+            can_go_back: false,
+            can_refine: false,
+            has_draft: rectify.has_draft,
+            event_year_min: rectify.event_year_min,
+            event_year_max: rectify.event_year_max,
+        };
+    }
+
     let question = if rectify.question_key.is_empty() {
         String::new()
     } else {
@@ -450,16 +481,12 @@ fn build_rectify_model(
         4 => "jyotish-rectify-step-results",
         _ => "",
     };
-    let progress_text = if rectify.step == 0 {
-        String::new()
-    } else {
-        locale.tr_args(
-            "jyotish-rectify-progress",
-            &orchid_i18n::FluentArgs::new()
-                .with("n", rectify.step.to_string())
-                .with("total", "4"),
-        )
-    };
+    let progress_text = locale.tr_args(
+        "jyotish-rectify-progress",
+        &orchid_i18n::FluentArgs::new()
+            .with("n", rectify.step.to_string())
+            .with("total", "4"),
+    );
     let error_text = if rectify.error_key.is_empty() {
         String::new()
     } else {

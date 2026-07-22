@@ -72,6 +72,12 @@ pub struct JyotishConfig {
     pub notify_day_color: bool,
     #[serde(default = "default_true")]
     pub notify_rahukalam: bool,
+    /// Show Rahu Kalam / Yamagandam / Gulika windows on the Day tab.
+    #[serde(default = "default_true")]
+    pub show_rahukalam: bool,
+    /// Apply natal tara/chandra layers (and life/dasha) when birth data is set.
+    #[serde(default = "default_true")]
+    pub enable_personal: bool,
 }
 
 fn default_true() -> bool {
@@ -98,6 +104,8 @@ impl Default for JyotishConfig {
             year_offset: 0,
             notify_day_color: true,
             notify_rahukalam: true,
+            show_rahukalam: true,
+            enable_personal: true,
         }
     }
 }

@@ -762,6 +762,20 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
         "widget-settings-jyotish-show-sunrise-sunset",
         cfg.show_sunrise_sunset,
     );
+    push_bool(
+        &mut rows,
+        locale,
+        "show_rahukalam",
+        "widget-settings-jyotish-show-rahukalam",
+        cfg.show_rahukalam,
+    );
+    push_bool(
+        &mut rows,
+        locale,
+        "enable_personal",
+        "widget-settings-jyotish-enable-personal",
+        cfg.enable_personal,
+    );
     push_text(
         &mut rows,
         locale,
@@ -822,6 +836,16 @@ fn apply_jyotish(instance_id: Uuid, key: &str, value: &str) {
         "show_sunrise_sunset" => {
             if let Some(b) = parse_bool(value) {
                 cfg.show_sunrise_sunset = b;
+            }
+        }
+        "show_rahukalam" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.show_rahukalam = b;
+            }
+        }
+        "enable_personal" => {
+            if let Some(b) = parse_bool(value) {
+                cfg.enable_personal = b;
             }
         }
         "birth_date" => {
