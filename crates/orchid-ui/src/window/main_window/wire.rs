@@ -1049,6 +1049,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_calendar_set_color_filter({
+            let t = t.clone();
+            move |id, color| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_set_color_filter(&id, color);
+                }
+            }
+        });
         self.window.on_calendar_request_delete({
             let t = t.clone();
             move |id| {

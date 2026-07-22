@@ -55,6 +55,8 @@ pub struct CalendarPayload {
     pub show_upcoming: bool,
     pub show_notes_preview: bool,
     pub time_step_minutes: i32,
+    /// Active color filter, or `-1` when showing all colors.
+    pub color_filter: i32,
     pub editor_open: bool,
     /// Empty when creating a new event.
     pub editor_event_id: String,

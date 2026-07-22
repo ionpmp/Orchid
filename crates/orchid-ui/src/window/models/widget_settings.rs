@@ -371,6 +371,27 @@ fn calendar_fields(
         ],
         &cfg.time_step_minutes.to_string(),
     );
+    push_combo(
+        &mut rows,
+        locale,
+        "default_duration_minutes",
+        "calendar-settings-default-duration",
+        &[
+            (
+                "30".into(),
+                locale.tr("calendar-settings-duration-30").into(),
+            ),
+            (
+                "60".into(),
+                locale.tr("calendar-settings-duration-60").into(),
+            ),
+            (
+                "90".into(),
+                locale.tr("calendar-settings-duration-90").into(),
+            ),
+        ],
+        &cfg.default_duration_minutes.to_string(),
+    );
     rows
 }
 
@@ -953,6 +974,12 @@ fn apply_calendar(instance_id: Uuid, key: &str, value: &str) {
             if let Ok(n) = value.parse::<u8>() {
                 cfg.time_step_minutes =
                     orchid_widgets::builtin::calendar::CalendarConfig::clamp_time_step(n);
+            }
+        }
+        "default_duration_minutes" => {
+            if let Ok(n) = value.parse::<u16>() {
+                cfg.default_duration_minutes =
+                    orchid_widgets::builtin::calendar::CalendarConfig::clamp_duration(n);
             }
         }
         _ => {}

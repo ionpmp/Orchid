@@ -130,6 +130,7 @@ export component WorkspaceView inherits Rectangle {
     callback calendar-close-editor(string);
     callback calendar-save-editor(string);
     callback calendar-duplicate-editor(string);
+    callback calendar-set-color-filter(string, int);
     callback calendar-request-delete(string);
     callback calendar-confirm-delete(string);
     callback calendar-cancel-delete(string);
@@ -465,6 +466,7 @@ export component WorkspaceView inherits Rectangle {
                     calendar-close-editor(id) => { root.calendar-close-editor(id); }
                     calendar-save-editor(id) => { root.calendar-save-editor(id); }
                     calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
+                    calendar-set-color-filter(id, c) => { root.calendar-set-color-filter(id, c); }
             calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
                     calendar-request-delete(id) => { root.calendar-request-delete(id); }
                     calendar-confirm-delete(id) => { root.calendar-confirm-delete(id); }

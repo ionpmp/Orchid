@@ -311,6 +311,7 @@ export component CalendarView inherits Rectangle {
     callback close-editor();
     callback save-editor();
     callback duplicate-editor();
+    callback set-color-filter(int);
     callback request-delete();
     callback confirm-delete();
     callback cancel-delete();
@@ -388,6 +389,27 @@ export component CalendarView inherits Rectangle {
                 tip: model.tip-add;
                 primary: true;
                 clicked => { root.open-new(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: center;
+            Text {
+                text: model.filter-title;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+            }
+            CalToolBtn {
+                label: model.filter-all-label;
+                primary: model.color-filter < 0;
+                clicked => { root.set-color-filter(-1); }
+            }
+            for c[ci] in model.color-options : ColorSwatch {
+                color-index: c;
+                selected: model.color-filter == c;
+                clicked => { root.set-color-filter(c); }
             }
         }
 

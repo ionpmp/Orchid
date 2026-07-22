@@ -625,6 +625,7 @@ fn calendar_payload_eq(a: &CalendarPayload, b: &CalendarPayload) -> bool {
         && a.show_upcoming == b.show_upcoming
         && a.show_notes_preview == b.show_notes_preview
         && a.time_step_minutes == b.time_step_minutes
+        && a.color_filter == b.color_filter
         && a.editor_open == b.editor_open
         && a.editor_event_id == b.editor_event_id
         && a.editor_is_new == b.editor_is_new

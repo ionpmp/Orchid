@@ -69,6 +69,8 @@ struct UiState {
     editing_id: Option<String>,
     draft: Option<EventDraft>,
     delete_confirm_open: bool,
+    /// When set, agenda / upcoming / month dots show only this color (0..=5).
+    color_filter: Option<u8>,
 }
 
 struct CalendarHandle {
@@ -212,9 +214,15 @@ pub fn open_new_editor(instance_id: Uuid) {
     let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
         return;
     };
-    let (date, default_all_day) = {
+    let (date, default_all_day, duration, color_filter) = {
         let cfg = h.config.read();
-        (cfg.selected_date.clone(), cfg.default_all_day)
+        let ui = h.ui.read();
+        (
+            cfg.selected_date.clone(),
+            cfg.default_all_day,
+            cfg.default_duration_minutes,
+            ui.color_filter,
+        )
     };
     {
         let mut ui = h.ui.write();
@@ -222,8 +230,36 @@ pub fn open_new_editor(instance_id: Uuid) {
         ui.editing_id = None;
         let mut draft = EventDraft::blank_on(&date);
         draft.all_day = default_all_day;
+        if !default_all_day {
+            let start = draft.start_minutes;
+            let end = start.saturating_add(duration).min(23 * 60 + 59);
+            draft.end_minutes = end.max(start);
+        }
+        if let Some(c) = color_filter {
+            draft.color = c;
+        }
         ui.draft = Some(draft);
         ui.delete_confirm_open = false;
+    }
+    h.publish();
+}
+
+/// Toggle agenda/month color filter (`color` 0..=5). Pass a negative value to clear.
+pub fn set_color_filter(instance_id: Uuid, color: i32) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut ui = h.ui.write();
+        if color < 0 {
+            ui.color_filter = None;
+        } else {
+            let c = color.clamp(0, 5) as u8;
+            ui.color_filter = match ui.color_filter {
+                Some(cur) if cur == c => None,
+                _ => Some(c),
+            };
+        }
     }
     h.publish();
 }
@@ -745,17 +781,20 @@ impl CalendarWidget {
             .first_day_of_week
             .min(1);
         let today = format_date(Local::now().date_naive());
+        let visible_events: Vec<CalendarEvent> = match ui.color_filter {
+            Some(c) => cfg.events.iter().filter(|e| e.color == c).cloned().collect(),
+            None => cfg.events.clone(),
+        };
         let days = build_month_grid(
             cfg.view_year,
             cfg.view_month,
             &cfg.selected_date,
             &today,
             first_day,
-            &cfg.events,
+            &visible_events,
         );
 
-        let mut day_events: Vec<CalendarEvent> = cfg
-            .events
+        let mut day_events: Vec<CalendarEvent> = visible_events
             .iter()
             .filter(|e| e.date == cfg.selected_date)
             .cloned()
@@ -789,7 +828,7 @@ impl CalendarWidget {
             .unwrap_or_else(|| EventDraft::blank_on(&cfg.selected_date));
 
         let upcoming = if cfg.show_upcoming {
-            build_upcoming(&cfg.events, &today, 7)
+            build_upcoming(&visible_events, &today, 7)
         } else {
             Vec::new()
         };
@@ -818,6 +857,7 @@ impl CalendarWidget {
             show_upcoming: cfg.show_upcoming,
             show_notes_preview: cfg.show_notes_preview,
             time_step_minutes: i32::from(cfg.time_step_minutes),
+            color_filter: ui.color_filter.map(i32::from).unwrap_or(-1),
             editor_open: ui.editor_open,
             editor_event_id: ui.editing_id.clone().unwrap_or_default(),
             editor_is_new: ui.editing_id.is_none(),
@@ -1233,6 +1273,81 @@ mod tests {
             panic!("expected calendar");
         };
         assert_eq!(p3.events.len(), 2);
+    }
+
+    #[test]
+    fn color_filter_limits_agenda_and_toggles_off() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let mut cfg = CalendarConfig::default();
+        cfg.selected_date = "2026-07-21".into();
+        cfg.view_year = 2026;
+        cfg.view_month = 7;
+        cfg.events = vec![
+            CalendarEvent {
+                id: "blue".into(),
+                title: "Blue".into(),
+                date: "2026-07-21".into(),
+                all_day: true,
+                start_minutes: 0,
+                end_minutes: 0,
+                notes: String::new(),
+                color: 0,
+            },
+            CalendarEvent {
+                id: "green".into(),
+                title: "Green".into(),
+                date: "2026-07-21".into(),
+                all_day: true,
+                start_minutes: 0,
+                end_minutes: 0,
+                notes: String::new(),
+                color: 1,
+            },
+        ];
+        let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
+        set_color_filter(id, 1);
+        let snap = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p) = snap.payload else {
+            panic!("expected calendar");
+        };
+        assert_eq!(p.color_filter, 1);
+        assert_eq!(p.events.len(), 1);
+        assert_eq!(p.events[0].id, "green");
+        set_color_filter(id, 1); // toggle off
+        let snap2 = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p2) = snap2.payload else {
+            panic!("expected calendar");
+        };
+        assert_eq!(p2.color_filter, -1);
+        assert_eq!(p2.events.len(), 2);
+    }
+
+    #[test]
+    fn open_new_editor_uses_default_duration_when_timed() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let mut cfg = CalendarConfig::default();
+        cfg.selected_date = "2026-07-21".into();
+        cfg.default_all_day = false;
+        cfg.default_duration_minutes = 90;
+        let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
+        open_new_editor(id);
+        let snap = widget.snapshot().expect("snapshot");
+        let WidgetPayload::Calendar(p) = snap.payload else {
+            panic!("expected calendar");
+        };
+        assert!(!p.editor_all_day);
+        assert_eq!(p.editor_start_hour, 9);
+        assert_eq!(p.editor_start_min, 0);
+        assert_eq!(p.editor_end_hour, 10);
+        assert_eq!(p.editor_end_min, 30);
     }
 
     #[test]

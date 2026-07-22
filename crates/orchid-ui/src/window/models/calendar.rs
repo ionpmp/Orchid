@@ -23,6 +23,7 @@ pub(crate) fn empty_calendar_model(locale: &LocaleManager) -> CalendarModel {
             show_upcoming: true,
             show_notes_preview: true,
             time_step_minutes: 15,
+            color_filter: -1,
             editor_open: false,
             editor_event_id: String::new(),
             editor_is_new: true,
@@ -111,6 +112,9 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
         show_upcoming: p.show_upcoming,
         show_notes_preview: p.show_notes_preview,
         time_step_minutes: p.time_step_minutes,
+        color_filter: p.color_filter,
+        filter_all_label: locale.tr("calendar-filter-all").into(),
+        filter_title: locale.tr("calendar-filter-title").into(),
         upcoming_title: locale.tr("calendar-upcoming").into(),
         events_count_label: locale
             .tr_args(

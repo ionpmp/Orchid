@@ -61,6 +61,9 @@ pub struct CalendarConfig {
     /// Minute step for time nudge buttons (15 or 30).
     #[serde(default = "default_time_step")]
     pub time_step_minutes: u8,
+    /// Default timed-event length in minutes (30 / 60 / 90).
+    #[serde(default = "default_duration")]
+    pub default_duration_minutes: u16,
 }
 
 fn default_true() -> bool {
@@ -69,6 +72,10 @@ fn default_true() -> bool {
 
 fn default_time_step() -> u8 {
     15
+}
+
+fn default_duration() -> u16 {
+    60
 }
 
 impl Default for CalendarConfig {
@@ -83,6 +90,7 @@ impl Default for CalendarConfig {
             show_notes_preview: true,
             show_upcoming: true,
             time_step_minutes: 15,
+            default_duration_minutes: 60,
         }
     }
 }
@@ -98,6 +106,16 @@ impl CalendarConfig {
         }
     }
 
+    /// Clamp default duration to supported values.
+    #[must_use]
+    pub fn clamp_duration(mins: u16) -> u16 {
+        match mins {
+            0..=44 => 30,
+            45..=74 => 60,
+            _ => 90,
+        }
+    }
+
     /// Clamp fields and repair invalid dates.
     pub fn normalize(&mut self) {
         if !(1..=12).contains(&self.view_month) {
@@ -107,6 +125,7 @@ impl CalendarConfig {
             self.view_year = 1;
         }
         self.time_step_minutes = Self::clamp_time_step(self.time_step_minutes);
+        self.default_duration_minutes = Self::clamp_duration(self.default_duration_minutes);
         if parse_date(&self.selected_date).is_none() {
             if let Some(d) = NaiveDate::from_ymd_opt(self.view_year, u32::from(self.view_month), 1)
             {

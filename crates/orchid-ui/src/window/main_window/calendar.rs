@@ -98,6 +98,14 @@ impl MainWindowController {
         self.refresh_calendar(inst);
     }
 
+    pub(super) fn on_calendar_set_color_filter(self: &Arc<Self>, id: &SharedString, color: i32) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::set_color_filter(inst, color);
+        self.refresh_calendar(inst);
+    }
+
     pub(super) fn on_calendar_request_delete(self: &Arc<Self>, id: &SharedString) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;
