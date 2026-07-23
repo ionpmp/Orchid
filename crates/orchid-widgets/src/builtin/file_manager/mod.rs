@@ -2029,7 +2029,6 @@ fn build_tab_payload(
                 type_text: classify(
                     &inner.deps.locale,
                     &e.name,
-                    e.metadata.mime.as_deref(),
                     matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
                 ),
                 icon: if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
@@ -2238,27 +2237,41 @@ fn to_payload_mode(mode: ViewMode) -> FmViewMode {
     }
 }
 
-fn classify(
-    locale: &orchid_i18n::LocaleManager,
-    name: &str,
-    mime: Option<&str>,
-    is_dir: bool,
-) -> String {
+/// Max extension length shown in the Type column.
+///
+/// Longer "extensions" (e.g. `.dotnetUserLevelCache`) produce unreadable
+/// labels like `DOTNETUSERLEVELCACHE file` that clip badly in a narrow column.
+const TYPE_COLUMN_MAX_EXT_LEN: usize = 8;
+
+/// Short file extension suitable for the Type column, if any.
+fn type_column_extension(name: &str) -> Option<&str> {
+    let (stem, ext) = name.rsplit_once('.')?;
+    if stem.is_empty() || ext.is_empty() || ext.len() > TYPE_COLUMN_MAX_EXT_LEN {
+        return None;
+    }
+    if !ext
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '_')
+    {
+        return None;
+    }
+    Some(ext)
+}
+
+fn classify(locale: &orchid_i18n::LocaleManager, name: &str, is_dir: bool) -> String {
     if is_dir {
         return locale.tr("fm-properties-kind-folder");
     }
-    if let Some(m) = mime {
-        return m.to_string();
+    // Prefer a short extension label over raw MIME (`image/png`) — Properties
+    // already surfaces the MIME type. Unknown / absurdly long extensions fall
+    // back to a generic "File" so the column stays readable.
+    if let Some(ext) = type_column_extension(name) {
+        return locale.tr_args(
+            "fm-type-ext-file",
+            &orchid_i18n::FluentArgs::new().with("ext", ext.to_ascii_uppercase()),
+        );
     }
-    name.rsplit('.')
-        .next()
-        .map(|ext| {
-            locale.tr_args(
-                "fm-type-ext-file",
-                &orchid_i18n::FluentArgs::new().with("ext", ext.to_uppercase()),
-            )
-        })
-        .unwrap_or_else(|| locale.tr("fm-properties-kind-file"))
+    locale.tr("fm-properties-kind-file")
 }
 
 fn is_image_entry(e: &orchid_fs::FsEntry) -> bool {
@@ -3969,5 +3982,37 @@ mod display_name_tests {
     #[test]
     fn keeps_extensionless_files() {
         assert_eq!(entry_display_name("Makefile", false, false), "Makefile");
+    }
+}
+
+#[cfg(test)]
+mod type_column_tests {
+    use super::type_column_extension;
+
+    #[test]
+    fn short_extensions_are_kept() {
+        assert_eq!(type_column_extension("readme.txt"), Some("txt"));
+        assert_eq!(type_column_extension("photo.jpeg"), Some("jpeg"));
+        assert_eq!(type_column_extension("archive.tar.gz"), Some("gz"));
+        assert_eq!(type_column_extension("Component.tsx"), Some("tsx"));
+    }
+
+    #[test]
+    fn long_cache_extensions_are_rejected() {
+        assert_eq!(
+            type_column_extension("MachineId.v1.dotnetUserLevelCache"),
+            None
+        );
+        assert_eq!(
+            type_column_extension("7.0.302_IsDockerContainer.dotnetUserLevelCache"),
+            None
+        );
+    }
+
+    #[test]
+    fn dotfiles_and_extensionless_are_rejected() {
+        assert_eq!(type_column_extension(".gitignore"), None);
+        assert_eq!(type_column_extension("Makefile"), None);
+        assert_eq!(type_column_extension("trailing."), None);
     }
 }
