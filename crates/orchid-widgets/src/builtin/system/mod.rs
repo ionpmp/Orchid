@@ -1,6 +1,8 @@
 //! System-indicators widget — CPU / Memory / Disk / Network / Battery.
 
 pub mod config;
+#[cfg(windows)]
+mod cpu_windows;
 pub mod provider;
 pub mod types;
 
@@ -463,8 +465,7 @@ pub fn descriptor() -> WidgetDescriptor {
     let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
             Some(bytes) => {
-                let mut cfg =
-                    state_codec::restore_state::<SystemConfig>(bytes).unwrap_or_default();
+                let mut cfg = state_codec::restore_state::<SystemConfig>(bytes).unwrap_or_default();
                 cfg.normalize();
                 cfg
             }
