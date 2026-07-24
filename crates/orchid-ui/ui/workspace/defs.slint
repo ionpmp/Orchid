@@ -241,9 +241,35 @@ export struct JyotishRectifyModel {
     event-year-max: int,
 }
 
+export struct JyotishCityEntry {
+    name: string,
+    active: bool,
+}
+
+export struct JyotishSearchHit {
+    name: string,
+    detail: string,
+    latitude: float,
+    longitude: float,
+}
+
 export struct JyotishModel {
     date-text: string,
     location-name: string,
+    cities: [JyotishCityEntry],
+    active-city-index: int,
+    picker-open: bool,
+    search-query: string,
+    search-results: [JyotishSearchHit],
+    search-busy: bool,
+    picker-title: string,
+    search-placeholder: string,
+    add-city-hint: string,
+    remove-city-hint: string,
+    close-picker-label: string,
+    cities-hint: string,
+    no-results-label: string,
+    searching-label: string,
     vara-label: string,
     ayanamsa-label: string,
     loading-label: string,

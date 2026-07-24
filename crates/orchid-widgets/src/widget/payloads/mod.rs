@@ -30,9 +30,9 @@ pub use file_manager::{
     PanePayload, TabPayload,
 };
 pub use jyotish::{
-    JyotishAntarRow, JyotishDashaNow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
-    JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishRectifyCandidate,
-    JyotishRectifyView, JyotishYearSummary,
+    JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
+    JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
 };
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;

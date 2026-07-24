@@ -69,10 +69,22 @@ longitude (the default is Varanasi). **Show Rahu Kalam / Yamagandam / Gulika**
 in settings hides the Day-tab ranges without disabling Rahu-Kalam
 notifications.
 
+### Multi-location picker
+
+Tap the location name on the Day tab to open the location picker. From there
+you can search for a place by name (Open-Meteo geocoding, same provider as
+the Weather widget), add it to your saved locations, switch the active
+location via the chip strip or the picker list, and remove any location you
+no longer need (at least one location is always kept). Locations are no
+longer edited from the settings panel — latitude/longitude/name fields there
+have been replaced by this in-widget picker.
+
 ## Engineering notes
 
 - Day colors for Month/Year grids are memoized per civil date (`color_cache`);
-  changing birth data, ayanamsa, or the personal-layer toggle invalidates it.
+  changing birth data, ayanamsa, the personal-layer toggle, or the active
+  location (select/add/remove in the picker) invalidates it, since sunrise
+  and muhurta windows are location-dependent.
 - `JyotishPayload` is `Box`’d in snapshots; the closed rectify wizard skips
   quiz/chrome Fluent strings on every UI patch.
 

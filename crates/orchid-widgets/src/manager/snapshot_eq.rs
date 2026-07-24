@@ -365,6 +365,12 @@ fn moon_payload_eq(a: &MoonPayload, b: &MoonPayload) -> bool {
 fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
     a.date_text == b.date_text
         && a.location_name == b.location_name
+        && a.cities == b.cities
+        && a.active_city_index == b.active_city_index
+        && a.picker_open == b.picker_open
+        && a.search_query == b.search_query
+        && a.search_results == b.search_results
+        && a.search_busy == b.search_busy
         && a.ayanamsa_key == b.ayanamsa_key
         && a.ayanamsa_deg_text == b.ayanamsa_deg_text
         && a.day_offset == b.day_offset

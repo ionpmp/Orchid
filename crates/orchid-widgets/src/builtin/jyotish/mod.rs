@@ -19,15 +19,16 @@ use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration as ChronoDuration, NaiveDate, NaiveTime, Utc, Weekday};
 use dashmap::DashMap;
 use parking_lot::RwLock;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    JyotishAntarRow, JyotishDashaNow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
-    JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishRectifyCandidate,
-    JyotishRectifyView, JyotishYearSummary,
+    JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
+    JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -36,8 +37,10 @@ use crate::{
 };
 use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 
+use super::weather::provider::{GeocodingHit, OpenMeteoProvider, WeatherProvider};
+
 pub use astro::{compute_jyotish, JyotishData};
-pub use config::{AyanamsaSystem, JyotishConfig};
+pub use config::{decode_config, AyanamsaSystem, JyotishConfig, JyotishLocation};
 pub use dasha::{
     antar_dashas, dasha_at, dasha_stack_at, maha_dashas, pratyantar_dashas, DashaLord, DashaPeriod,
     DashaStack,
@@ -58,32 +61,99 @@ pub const TYPE_ID: &str = "jyotish";
 
 static JYOTISH_LIVE: LazyLock<DashMap<Uuid, Arc<JyotishHandle>>> = LazyLock::new(DashMap::new);
 
-/// Config-derived fingerprint used to decide when the day-color cache must
-/// be invalidated (birth data, ayanamsa, or personal-layer toggle).
-type NatalFingerprint = (Option<String>, Option<String>, i32, AyanamsaSystem, bool);
+/// Config-derived fingerprint used to decide when the day-color and year
+/// caches must be invalidated (birth data, ayanamsa, personal-layer toggle,
+/// or the active location — sunrise/muhurta/panchanga are computed locally).
+type NatalFingerprint = (
+    Option<String>,
+    Option<String>,
+    i32,
+    AyanamsaSystem,
+    bool,
+    (i32, i32),
+);
+
+fn fingerprint_of(cfg: &JyotishConfig) -> NatalFingerprint {
+    (
+        cfg.birth_date.clone(),
+        cfg.birth_time.clone(),
+        cfg.birth_utc_offset_minutes,
+        cfg.ayanamsa,
+        cfg.enable_personal,
+        location_key(cfg.active_location()),
+    )
+}
+
+/// Coords cache key (centi-degrees) so float noise does not duplicate entries.
+fn location_key(loc: &JyotishLocation) -> (i32, i32) {
+    (
+        (loc.latitude * 100.0).round() as i32,
+        (loc.longitude * 100.0).round() as i32,
+    )
+}
+
+/// In-widget location-picker UI state (not persisted).
+#[derive(Clone, Default)]
+struct JyotishUiState {
+    picker_open: bool,
+    search_query: String,
+    search_results: Vec<GeocodingHit>,
+    search_busy: bool,
+    search_generation: u64,
+}
+
+/// Build the location chip/picker list and geocoding-result rows shared by
+/// [`JyotishHandle::render_payload`] and [`loading_payload`].
+fn cities_and_search(
+    cfg: &JyotishConfig,
+    ui: &JyotishUiState,
+) -> (Vec<JyotishCityEntry>, Vec<JyotishSearchHit>) {
+    let cities = cfg
+        .locations
+        .iter()
+        .enumerate()
+        .map(|(i, loc)| JyotishCityEntry {
+            name: loc.name.clone(),
+            active: i == cfg.active_index,
+        })
+        .collect();
+    let search_results = ui
+        .search_results
+        .iter()
+        .map(|h| JyotishSearchHit {
+            name: h.name.clone(),
+            detail: h.detail.clone(),
+            latitude: h.latitude,
+            longitude: h.longitude,
+        })
+        .collect();
+    (cities, search_results)
+}
 
 struct JyotishHandle {
     instance_id: Uuid,
     config: Arc<RwLock<JyotishConfig>>,
+    provider: Arc<dyn WeatherProvider>,
+    ui: Arc<RwLock<JyotishUiState>>,
     data: Arc<RwLock<Option<JyotishData>>>,
     natal: Arc<RwLock<Option<NatalInfo>>>,
     natal_fingerprint: RwLock<Option<NatalFingerprint>>,
     color_cache: DashMap<NaiveDate, u8>,
     /// Cached year-tab aggregates: (natal fingerprint, year, months, gochara key).
-    year_cache: RwLock<
-        Option<(
-            NatalFingerprint,
-            i32,
-            Vec<JyotishMonthSummary>,
-            &'static str,
-        )>,
-    >,
+    year_cache: RwLock<Option<YearCacheEntry>>,
     rectify: RwLock<Option<RectifySession>>,
     rectify_wizard_step: RwLock<u8>,
     /// Absolute civil year expanded on the Life tab (`None` = collapsed).
     life_detail_year: RwLock<Option<i32>>,
     bus: Arc<orchid_core::EventBus>,
 }
+
+type YearCacheEntry = (
+    NatalFingerprint,
+    i32,
+    Vec<JyotishMonthSummary>,
+    &'static str,
+);
 
 impl JyotishHandle {
     fn publish(&self) {
@@ -103,16 +173,10 @@ impl JyotishHandle {
         };
 
         let at = Utc::now() + ChronoDuration::days(i64::from(cfg.day_offset));
-        let data = compute_jyotish(cfg.latitude, cfg.longitude, at, cfg.ayanamsa);
+        let data = compute_jyotish(cfg.latitude(), cfg.longitude(), at, cfg.ayanamsa);
         *self.data.write() = Some(data);
 
-        let fingerprint: NatalFingerprint = (
-            cfg.birth_date.clone(),
-            cfg.birth_time.clone(),
-            cfg.birth_utc_offset_minutes,
-            cfg.ayanamsa,
-            cfg.enable_personal,
-        );
+        let fingerprint = fingerprint_of(&cfg);
         let fingerprint_changed = {
             let mut last = self.natal_fingerprint.write();
             if *last == Some(fingerprint.clone()) {
@@ -144,7 +208,7 @@ impl JyotishHandle {
         if let Some(c) = self.color_cache.get(&date) {
             return *c;
         }
-        let at = local_noon_utc(date, cfg.longitude);
+        let at = local_noon_utc(date, cfg.longitude());
         let score = compute_day_score(at, cfg.ayanamsa, natal);
         let color = color_of(score.color);
         self.color_cache.insert(date, color);
@@ -208,7 +272,7 @@ impl JyotishHandle {
         let (green, yellow, red) = if let Some(n) = natal_score {
             let mid = NaiveDate::from_ymd_opt(year, month, 15)
                 .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today));
-            let at = local_noon_utc(mid, cfg.longitude);
+            let at = local_noon_utc(mid, cfg.longitude());
             let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
             tint_counts(green, yellow, red, modif)
         } else {
@@ -234,13 +298,7 @@ impl JyotishHandle {
         let natal = *self.natal.read();
         let natal_score = Self::score_natal(cfg, natal.as_ref());
         let year = today.year() + cfg.year_offset;
-        let fingerprint: NatalFingerprint = (
-            cfg.birth_date.clone(),
-            cfg.birth_time.clone(),
-            cfg.birth_utc_offset_minutes,
-            cfg.ayanamsa,
-            cfg.enable_personal,
-        );
+        let fingerprint: NatalFingerprint = fingerprint_of(cfg);
         if let Some((fp, cached_year, months, note)) = self.year_cache.read().as_ref() {
             if *fp == fingerprint && *cached_year == year {
                 return (year, months.clone(), note);
@@ -248,7 +306,7 @@ impl JyotishHandle {
         }
         let year_gochara = natal_score.map(|n| {
             let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
-            let at = local_noon_utc(mid, cfg.longitude);
+            let at = local_noon_utc(mid, cfg.longitude());
             gochara_modifier(n.moon_rashi, at, cfg.ayanamsa)
         });
         let months: Vec<JyotishMonthSummary> = (1..=12u32)
@@ -270,7 +328,7 @@ impl JyotishHandle {
                     let mid = NaiveDate::from_ymd_opt(year, month, 15).unwrap_or_else(|| {
                         NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today)
                     });
-                    let at = local_noon_utc(mid, cfg.longitude);
+                    let at = local_noon_utc(mid, cfg.longitude());
                     let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
                     tint_counts(green, yellow, red, modif)
                 } else {
@@ -324,7 +382,7 @@ impl JyotishHandle {
                 let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
                 let modif = gochara_modifier(
                     natal.moon_rashi,
-                    local_noon_utc(mid, cfg.longitude),
+                    local_noon_utc(mid, cfg.longitude()),
                     cfg.ayanamsa,
                 );
                 let (green, yellow, red) = tint_counts(green * 30, yellow * 30, red * 30, modif);
@@ -401,7 +459,8 @@ impl JyotishHandle {
     fn render_payload(&self, locale: &LocaleConfig) -> JyotishPayload {
         let cfg = self.config.read().clone();
         let Some(data) = self.data.read().clone() else {
-            return loading_payload(&cfg);
+            let ui = self.ui.read().clone();
+            return loading_payload(&cfg, &ui);
         };
         let natal = *self.natal.read();
 
@@ -425,7 +484,7 @@ impl JyotishHandle {
 
         let today = Utc::now().date_naive();
         let selected_date = today + ChronoDuration::days(i64::from(cfg.day_offset));
-        let noon_at = local_noon_utc(selected_date, cfg.longitude);
+        let noon_at = local_noon_utc(selected_date, cfg.longitude());
         let natal_for_score = if cfg.enable_personal {
             natal.as_ref()
         } else {
@@ -460,20 +519,19 @@ impl JyotishHandle {
         let in_rahukalam = muhurtas
             .as_ref()
             .is_some_and(|m| in_window(at, m.rahukalam));
-        let (rahukalam_text, yamagandam_text, gulika_text) =
-            if cfg.show_rahukalam {
-                if let Some(m) = muhurtas {
-                    (
-                        Some(fmt_range(m.rahukalam)),
-                        Some(fmt_range(m.yamagandam)),
-                        Some(fmt_range(m.gulika)),
-                    )
-                } else {
-                    (None, None, None)
-                }
+        let (rahukalam_text, yamagandam_text, gulika_text) = if cfg.show_rahukalam {
+            if let Some(m) = muhurtas {
+                (
+                    Some(fmt_range(m.rahukalam)),
+                    Some(fmt_range(m.yamagandam)),
+                    Some(fmt_range(m.gulika)),
+                )
             } else {
                 (None, None, None)
-            };
+            }
+        } else {
+            (None, None, None)
+        };
 
         let week_strip = self.build_week_strip(&cfg, today);
         let (
@@ -518,7 +576,7 @@ impl JyotishHandle {
                         let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
                         gochara_note_key(gochara_modifier(
                             n.moon_rashi,
-                            local_noon_utc(mid, cfg.longitude),
+                            local_noon_utc(mid, cfg.longitude()),
                             cfg.ayanamsa,
                         ))
                     })
@@ -536,9 +594,18 @@ impl JyotishHandle {
             build_rectify_view(wizard_step, guard.as_ref())
         };
 
+        let ui = self.ui.read().clone();
+        let (cities, search_results) = cities_and_search(&cfg, &ui);
+
         JyotishPayload {
             date_text,
-            location_name: cfg.location_name.clone(),
+            location_name: cfg.location_name().to_string(),
+            cities,
+            active_city_index: cfg.active_index,
+            picker_open: ui.picker_open,
+            search_query: ui.search_query.clone(),
+            search_results,
+            search_busy: ui.search_busy,
             ayanamsa_key: cfg.ayanamsa.ftl_key(),
             ayanamsa_deg_text: format!("{:.2}°", data.ayanamsa_deg),
             day_offset: cfg.day_offset,
@@ -645,8 +712,8 @@ impl JyotishHandle {
         };
         let session = RectifySession::new(
             birth_date,
-            cfg.latitude,
-            cfg.longitude,
+            cfg.latitude(),
+            cfg.longitude(),
             cfg.birth_utc_offset_minutes,
             cfg.ayanamsa,
             approx,
@@ -752,6 +819,133 @@ impl JyotishHandle {
         *self.rectify.write() = None;
         *self.rectify_wizard_step.write() = 0;
         self.publish();
+    }
+
+    fn set_picker_open(&self, open: bool) {
+        let mut ui = self.ui.write();
+        ui.picker_open = open;
+        if !open {
+            ui.search_query.clear();
+            ui.search_results.clear();
+            ui.search_busy = false;
+        }
+        drop(ui);
+        self.publish();
+    }
+
+    fn select_city(&self, index: usize) {
+        {
+            let mut cfg = self.config.write();
+            if index < cfg.locations.len() {
+                cfg.active_index = index;
+            }
+        }
+        self.recalculate();
+        self.publish();
+    }
+
+    fn remove_city(&self, index: usize) {
+        {
+            let mut cfg = self.config.write();
+            if cfg.locations.len() <= 1 || index >= cfg.locations.len() {
+                return;
+            }
+            cfg.locations.remove(index);
+            if cfg.active_index > index {
+                cfg.active_index -= 1;
+            } else if cfg.active_index >= cfg.locations.len() {
+                cfg.active_index = cfg.locations.len().saturating_sub(1);
+            }
+            cfg.normalize();
+        }
+        self.recalculate();
+        self.publish();
+    }
+
+    fn add_city(&self, location: JyotishLocation) {
+        {
+            let mut cfg = self.config.write();
+            if let Some(existing) = cfg
+                .locations
+                .iter()
+                .position(|l| location_key(l) == location_key(&location))
+            {
+                cfg.active_index = existing;
+            } else {
+                cfg.locations.push(location);
+                cfg.active_index = cfg.locations.len() - 1;
+            }
+            cfg.normalize();
+        }
+        {
+            let mut ui = self.ui.write();
+            ui.picker_open = false;
+            ui.search_query.clear();
+            ui.search_results.clear();
+            ui.search_busy = false;
+        }
+        // Keep an open rectify draft aligned with the new place.
+        {
+            let cfg = self.config.read().clone();
+            if let Some(session) = self.rectify.write().as_mut() {
+                session.resync_place(
+                    cfg.latitude(),
+                    cfg.longitude(),
+                    cfg.birth_utc_offset_minutes,
+                    cfg.ayanamsa,
+                );
+            }
+        }
+        self.recalculate();
+        self.publish();
+    }
+
+    fn search_cities(&self, query: String) {
+        let generation = {
+            let mut ui = self.ui.write();
+            ui.search_query = query.clone();
+            ui.search_generation = ui.search_generation.wrapping_add(1);
+            ui.search_busy = !query.trim().is_empty();
+            if query.trim().is_empty() {
+                ui.search_results.clear();
+                ui.search_busy = false;
+            }
+            ui.search_generation
+        };
+        self.publish();
+        if query.trim().is_empty() {
+            return;
+        }
+
+        let provider = self.provider.clone();
+        let ui = self.ui.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        tokio::spawn(async move {
+            // Debounce keystrokes so we do not hammer the geocoding API.
+            tokio::time::sleep(std::time::Duration::from_millis(280)).await;
+            if ui.read().search_generation != generation {
+                return;
+            }
+            let result = provider.search_cities(&query).await;
+            let mut slot = ui.write();
+            if slot.search_generation != generation {
+                return;
+            }
+            slot.search_busy = false;
+            match result {
+                Ok(hits) => slot.search_results = hits,
+                Err(e) => {
+                    warn!(%instance_id, error = %e, "jyotish geocoding failed");
+                    slot.search_results.clear();
+                }
+            }
+            drop(slot);
+            bus.publish(
+                orchid_core::EventSource::Widget(instance_id),
+                WidgetSnapshotUpdated { instance_id },
+            );
+        });
     }
 }
 
@@ -877,8 +1071,10 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 }
 
 fn build_rectify_view(wizard_step: u8, session: Option<&RectifySession>) -> JyotishRectifyView {
-    let mut view = JyotishRectifyView::default();
-    view.has_draft = session.is_some() && wizard_step == 0;
+    let mut view = JyotishRectifyView {
+        has_draft: session.is_some() && wizard_step == 0,
+        ..Default::default()
+    };
     if wizard_step == 0 {
         return view;
     }
@@ -942,7 +1138,7 @@ fn build_rectify_view(wizard_step: u8, session: Option<&RectifySession>) -> Jyot
 /// Hit produced by [`search_catalog`].
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
-pub struct JyotishSearchHit {
+pub struct JyotishCatalogHit {
     pub instance_id: Uuid,
     pub title: String,
     pub subtitle: String,
@@ -1006,7 +1202,7 @@ pub fn score_keyword_match(query: &str) -> Option<(i32, &'static str, &'static s
 
 /// Search across live Jyotish instances for keyword or location hits.
 #[must_use]
-pub fn search_catalog(query: &str, limit: usize) -> Vec<JyotishSearchHit> {
+pub fn search_catalog(query: &str, limit: usize) -> Vec<JyotishCatalogHit> {
     let q = query.trim().to_lowercase();
     if q.is_empty() || limit == 0 {
         return Vec::new();
@@ -1016,11 +1212,11 @@ pub fn search_catalog(query: &str, limit: usize) -> Vec<JyotishSearchHit> {
         let instance_id = *entry.key();
         let cfg = entry.value().config.read();
         let hit = score_keyword_match(&q).or_else(|| {
-            let loc_l = cfg.location_name.to_lowercase();
+            let loc_l = cfg.location_name().to_lowercase();
             (!loc_l.is_empty() && loc_l.contains(&q)).then_some((60, "Jyotish", "Panchanga", false))
         });
         if let Some((score, title, subtitle, force_today)) = hit {
-            hits.push(JyotishSearchHit {
+            hits.push(JyotishCatalogHit {
                 instance_id,
                 title: title.to_string(),
                 subtitle: subtitle.to_string(),
@@ -1058,8 +1254,8 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut JyotishConfig))
         let cfg = h.config.read().clone();
         if let Some(session) = h.rectify.write().as_mut() {
             session.resync_place(
-                cfg.latitude,
-                cfg.longitude,
+                cfg.latitude(),
+                cfg.longitude(),
                 cfg.birth_utc_offset_minutes,
                 cfg.ayanamsa,
             );
@@ -1134,6 +1330,45 @@ pub fn set_year_offset(instance_id: Uuid, offset: i32) {
 pub fn select_life_year(instance_id: Uuid, year: i32) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
         h.select_life_year(year);
+    }
+}
+
+/// Open / close the location picker overlay.
+pub fn set_picker_open(instance_id: Uuid, open: bool) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.set_picker_open(open);
+    }
+}
+
+/// Select which configured location is shown.
+pub fn select_city(instance_id: Uuid, index: usize) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.select_city(index);
+    }
+}
+
+/// Remove a configured location (keeps at least one).
+pub fn remove_city(instance_id: Uuid, index: usize) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.remove_city(index);
+    }
+}
+
+/// Update the location-search query and kick off geocoding.
+pub fn search_cities(instance_id: Uuid, query: String) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.search_cities(query);
+    }
+}
+
+/// Add a location from a geocoding hit and make it active.
+pub fn add_city(instance_id: Uuid, name: String, latitude: f64, longitude: f64) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.add_city(JyotishLocation {
+            name,
+            latitude,
+            longitude,
+        });
     }
 }
 
@@ -1238,6 +1473,7 @@ impl JyotishWidget {
     pub fn new(
         instance_id: Uuid,
         mut config: JyotishConfig,
+        provider: Arc<dyn WeatherProvider>,
         bus: Arc<orchid_core::EventBus>,
         orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     ) -> Self {
@@ -1245,6 +1481,8 @@ impl JyotishWidget {
         let handle = Arc::new(JyotishHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
+            provider,
+            ui: Arc::new(RwLock::new(JyotishUiState::default())),
             data: Arc::new(RwLock::new(None)),
             natal: Arc::new(RwLock::new(None)),
             natal_fingerprint: RwLock::new(None),
@@ -1323,12 +1561,13 @@ impl Widget for JyotishWidget {
         let payload = if has_data {
             self.handle.render_payload(&locale)
         } else {
-            loading_payload(&cfg)
+            let ui = self.handle.ui.read().clone();
+            loading_payload(&cfg, &ui)
         };
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: cfg.location_name.clone(),
+            title: cfg.location_name().to_string(),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::Jyotish(Box::new(payload)),
         })
@@ -1340,8 +1579,7 @@ impl Widget for JyotishWidget {
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let mut cfg: JyotishConfig = state_codec::restore_state(bytes)?;
-        cfg.normalize();
+        let cfg = decode_config(bytes)?;
         *self.handle.config.write() = cfg;
         Ok(())
     }
@@ -1359,10 +1597,17 @@ impl Widget for JyotishWidget {
     }
 }
 
-fn loading_payload(cfg: &JyotishConfig) -> JyotishPayload {
+fn loading_payload(cfg: &JyotishConfig, ui: &JyotishUiState) -> JyotishPayload {
+    let (cities, search_results) = cities_and_search(cfg, ui);
     JyotishPayload {
         date_text: String::new(),
-        location_name: cfg.location_name.clone(),
+        location_name: cfg.location_name().to_string(),
+        cities,
+        active_city_index: cfg.active_index,
+        picker_open: ui.picker_open,
+        search_query: ui.search_query.clone(),
+        search_results,
+        search_busy: ui.search_busy,
         ayanamsa_key: cfg.ayanamsa.ftl_key(),
         ayanamsa_deg_text: String::new(),
         day_offset: cfg.day_offset,
@@ -1420,15 +1665,17 @@ fn loading_payload(cfg: &JyotishConfig) -> JyotishPayload {
 
 /// Descriptor ready to register on a widget registry.
 #[must_use]
-pub fn descriptor() -> WidgetDescriptor {
-    let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
+pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
+    let provider: Arc<dyn WeatherProvider> = Arc::new(OpenMeteoProvider::new(http_client));
+    let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
-            Some(bytes) => state_codec::restore_state::<JyotishConfig>(bytes).unwrap_or_default(),
+            Some(bytes) => decode_config(bytes).unwrap_or_default(),
             None => JyotishConfig::default(),
         };
         Ok(Box::new(JyotishWidget::new(
             ctx.instance_id,
             cfg,
+            provider.clone(),
             ctx.bus.clone(),
             ctx.config.clone(),
         )) as Box<dyn Widget>)
@@ -1488,6 +1735,10 @@ mod search_tests {
         ))
     }
 
+    fn test_provider() -> Arc<dyn WeatherProvider> {
+        Arc::new(OpenMeteoProvider::new(reqwest::Client::new()))
+    }
+
     // `JYOTISH_LIVE` is a crate-wide static, so other tests' instances may
     // still be registered when these run in parallel — assert on the
     // instance under test rather than the total hit count.
@@ -1500,7 +1751,7 @@ mod search_tests {
             day_offset: 5,
             ..JyotishConfig::default()
         };
-        let _widget = JyotishWidget::new(id, cfg, bus, orchid_config);
+        let _widget = JyotishWidget::new(id, cfg, test_provider(), bus, orchid_config);
 
         let hits = search_catalog("nakshatra", 50);
         let hit = hits
@@ -1524,10 +1775,13 @@ mod search_tests {
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
         let cfg = JyotishConfig {
-            location_name: "Zzyzxville".into(),
+            locations: vec![JyotishLocation {
+                name: "Zzyzxville".into(),
+                ..JyotishLocation::default()
+            }],
             ..JyotishConfig::default()
         };
-        let _widget = JyotishWidget::new(id, cfg, bus, orchid_config);
+        let _widget = JyotishWidget::new(id, cfg, test_provider(), bus, orchid_config);
 
         let hits = search_catalog("zzyzxville", 50);
         assert!(hits.iter().any(|h| h.instance_id == id));
@@ -1544,7 +1798,13 @@ mod search_tests {
         let bus = test_bus();
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let _widget = JyotishWidget::new(id, JyotishConfig::default(), bus, orchid_config);
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            bus,
+            orchid_config,
+        );
         let h = JYOTISH_LIVE.get(&id).expect("live handle");
         let cfg = h.config.read().clone();
         let today = Utc::now().date_naive();
@@ -1552,7 +1812,10 @@ mod search_tests {
         assert_eq!(h.color_cache.len(), 0);
         let _ = h.build_month(&cfg, today);
         let filled = h.color_cache.len();
-        assert!(filled >= 28, "expected a full month of colors, got {filled}");
+        assert!(
+            filled >= 28,
+            "expected a full month of colors, got {filled}"
+        );
         let _ = h.build_month(&cfg, today);
         assert_eq!(
             h.color_cache.len(),
@@ -1569,6 +1832,124 @@ mod search_tests {
             std::mem::size_of::<JyotishPayload>() < 2048,
             "JyotishPayload is {} bytes",
             std::mem::size_of::<JyotishPayload>()
+        );
+    }
+
+    #[test]
+    fn add_city_dedups_by_rounded_location_and_switches_active() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+
+        h.add_city(JyotishLocation {
+            name: "Ujjain".into(),
+            latitude: 23.1765,
+            longitude: 75.7885,
+        });
+        assert_eq!(h.config.read().locations.len(), 2);
+        assert_eq!(h.config.read().active_index, 1);
+
+        // Re-adding the same (rounded) coordinates should not duplicate —
+        // just re-select the existing entry.
+        h.add_city(JyotishLocation {
+            name: "Varanasi".into(),
+            latitude: 25.3176,
+            longitude: 82.9739,
+        });
+        assert_eq!(h.config.read().locations.len(), 2);
+        assert_eq!(h.config.read().active_index, 0);
+    }
+
+    #[test]
+    fn select_city_switches_active_location() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        h.add_city(JyotishLocation {
+            name: "Ujjain".into(),
+            latitude: 23.1765,
+            longitude: 75.7885,
+        });
+
+        h.select_city(0);
+        assert_eq!(h.config.read().active_index, 0);
+        assert_eq!(h.config.read().location_name(), "Varanasi");
+    }
+
+    #[test]
+    fn remove_city_keeps_at_least_one_location() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+
+        // Only one location — removal is a no-op.
+        h.remove_city(0);
+        assert_eq!(h.config.read().locations.len(), 1);
+
+        h.add_city(JyotishLocation {
+            name: "Ujjain".into(),
+            latitude: 23.1765,
+            longitude: 75.7885,
+        });
+        assert_eq!(h.config.read().locations.len(), 2);
+        h.remove_city(0);
+        assert_eq!(h.config.read().locations.len(), 1);
+        assert_eq!(h.config.read().location_name(), "Ujjain");
+        // Cannot go below one location.
+        h.remove_city(0);
+        assert_eq!(h.config.read().locations.len(), 1);
+    }
+
+    #[test]
+    fn location_change_invalidates_day_color_cache() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        let cfg = h.config.read().clone();
+        let today = Utc::now().date_naive();
+        let _ = h.build_month(&cfg, today);
+        assert!(!h.color_cache.is_empty());
+
+        h.add_city(JyotishLocation {
+            name: "Ujjain".into(),
+            latitude: 23.1765,
+            longitude: 75.7885,
+        });
+        assert!(
+            h.color_cache.is_empty(),
+            "changing the active location must invalidate cached day colors"
         );
     }
 }

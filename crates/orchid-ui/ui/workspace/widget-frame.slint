@@ -97,6 +97,12 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-rectify-cancel(string);
     callback jyotish-export-day(string);
     callback jyotish-export-week(string);
+    callback jyotish-open-cities(string);
+    callback jyotish-close-cities(string);
+    callback jyotish-select-city(string, int);
+    callback jyotish-remove-city(string, int);
+    callback jyotish-search-cities(string, string);
+    callback jyotish-add-city(string, string, float, float);
 
     // Clock
     callback clock-open-cities(string);
@@ -600,6 +606,12 @@ export component WidgetFrame inherits Rectangle {
                     rectify-cancel => { root.jyotish-rectify-cancel(root.model.instance-id); }
                     export-day => { root.jyotish-export-day(root.model.instance-id); }
                     export-week => { root.jyotish-export-week(root.model.instance-id); }
+                    open-cities => { root.jyotish-open-cities(root.model.instance-id); }
+                    close-cities => { root.jyotish-close-cities(root.model.instance-id); }
+                    select-city(i) => { root.jyotish-select-city(root.model.instance-id, i); }
+                    remove-city(i) => { root.jyotish-remove-city(root.model.instance-id, i); }
+                    search-cities(q) => { root.jyotish-search-cities(root.model.instance-id, q); }
+                    add-city(n, la, lo) => { root.jyotish-add-city(root.model.instance-id, n, la, lo); }
                 }
 
                 if model.type-id == "clock" : ClockView {

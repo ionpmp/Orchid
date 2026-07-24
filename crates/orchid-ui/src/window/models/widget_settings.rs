@@ -91,9 +91,17 @@ fn push_combo(
 pub(crate) fn widget_has_settings(type_id: &str) -> bool {
     matches!(
         type_id,
-        "weather" | "moon" | "jyotish" | "clock" | "system" | "processes" | "calculator" | "notes"
+        "weather"
+            | "moon"
+            | "jyotish"
+            | "clock"
+            | "system"
+            | "processes"
+            | "calculator"
+            | "notes"
             | "calendar"
-            | "rss" | "file-manager"
+            | "rss"
+            | "file-manager"
     )
 }
 
@@ -156,15 +164,11 @@ fn weather_fields(cfg: &WeatherConfig, locale: &LocaleManager) -> Vec<SettingsFi
         &[
             (
                 "celsius".into(),
-                locale
-                    .tr("widget-settings-weather-units-celsius")
-                    .into(),
+                locale.tr("widget-settings-weather-units-celsius").into(),
             ),
             (
                 "fahrenheit".into(),
-                locale
-                    .tr("widget-settings-weather-units-fahrenheit")
-                    .into(),
+                locale.tr("widget-settings-weather-units-fahrenheit").into(),
             ),
         ],
         units,
@@ -248,7 +252,6 @@ fn clock_fields(
     rows
 }
 
-
 fn calculator_fields(
     cfg: &orchid_widgets::builtin::calculator::CalculatorConfig,
     locale: &LocaleManager,
@@ -260,10 +263,7 @@ fn calculator_fields(
         "mode",
         "calc-settings-mode",
         &[
-            (
-                "0".into(),
-                locale.tr("calc-settings-mode-standard").into(),
-            ),
+            ("0".into(), locale.tr("calc-settings-mode-standard").into()),
             (
                 "1".into(),
                 locale.tr("calc-settings-mode-scientific").into(),
@@ -394,7 +394,6 @@ fn calendar_fields(
     );
     rows
 }
-
 
 fn processes_fields(
     cfg: &orchid_widgets::builtin::processes::ProcessesConfig,
@@ -595,21 +594,15 @@ fn fm_fields(cfg: &FileManagerConfig, locale: &LocaleManager) -> Vec<SettingsFie
         &[
             (
                 "small".into(),
-                locale
-                    .tr("widget-settings-fm-thumbnail-size-small")
-                    .into(),
+                locale.tr("widget-settings-fm-thumbnail-size-small").into(),
             ),
             (
                 "medium".into(),
-                locale
-                    .tr("widget-settings-fm-thumbnail-size-medium")
-                    .into(),
+                locale.tr("widget-settings-fm-thumbnail-size-medium").into(),
             ),
             (
                 "large".into(),
-                locale
-                    .tr("widget-settings-fm-thumbnail-size-large")
-                    .into(),
+                locale.tr("widget-settings-fm-thumbnail-size-large").into(),
             ),
         ],
         thumb,
@@ -712,27 +705,6 @@ fn apply_moon(instance_id: Uuid, key: &str, value: &str) {
 
 fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFieldRow> {
     let mut rows = Vec::new();
-    push_text(
-        &mut rows,
-        locale,
-        "location_name",
-        "widget-settings-jyotish-location-name",
-        cfg.location_name.clone(),
-    );
-    push_text(
-        &mut rows,
-        locale,
-        "latitude",
-        "widget-settings-jyotish-latitude",
-        format!("{:.4}", cfg.latitude),
-    );
-    push_text(
-        &mut rows,
-        locale,
-        "longitude",
-        "widget-settings-jyotish-longitude",
-        format!("{:.4}", cfg.longitude),
-    );
     push_combo(
         &mut rows,
         locale,
@@ -816,17 +788,6 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
 
 fn apply_jyotish(instance_id: Uuid, key: &str, value: &str) {
     orchid_widgets::builtin::jyotish::update_config(instance_id, |cfg| match key {
-        "location_name" => cfg.location_name = value.to_string(),
-        "latitude" => {
-            if let Ok(n) = value.parse::<f64>() {
-                cfg.latitude = n.clamp(-90.0, 90.0);
-            }
-        }
-        "longitude" => {
-            if let Ok(n) = value.parse::<f64>() {
-                cfg.longitude = n.clamp(-180.0, 180.0);
-            }
-        }
         "ayanamsa" => cfg.ayanamsa = AyanamsaSystem::from_str_value(value),
         "show_planets" => {
             if let Some(b) = parse_bool(value) {
@@ -1031,7 +992,6 @@ fn apply_calendar(instance_id: Uuid, key: &str, value: &str) {
         _ => {}
     });
 }
-
 
 fn apply_rss(instance_id: Uuid, key: &str, value: &str) {
     orchid_widgets::builtin::rss::update_config(instance_id, |cfg| match key {

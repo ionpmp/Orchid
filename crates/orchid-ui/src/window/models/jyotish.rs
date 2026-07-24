@@ -3,9 +3,9 @@ use orchid_widgets::{JyotishRectifyView, JyotishYearSummary};
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
-    JyotishAntarRowModel, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
+    JyotishAntarRowModel, JyotishCityEntry, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
-    JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishYearRowModel,
+    JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishSearchHit, JyotishYearRowModel,
 };
 
 const WEEKDAY_KEYS: [&str; 7] = [
@@ -29,6 +29,20 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
     JyotishModel {
         date_text: SharedString::new(),
         location_name: SharedString::new(),
+        cities: ModelRc::new(VecModel::default()),
+        active_city_index: 0,
+        picker_open: false,
+        search_query: SharedString::new(),
+        search_results: ModelRc::new(VecModel::default()),
+        search_busy: false,
+        picker_title: locale.tr("jyotish-cities-title").into(),
+        search_placeholder: locale.tr("jyotish-city-search-placeholder").into(),
+        add_city_hint: locale.tr("jyotish-city-add").into(),
+        remove_city_hint: locale.tr("jyotish-city-remove").into(),
+        close_picker_label: locale.tr("jyotish-cities-close").into(),
+        cities_hint: locale.tr("jyotish-cities-hint").into(),
+        no_results_label: locale.tr("jyotish-city-no-results").into(),
+        searching_label: locale.tr("jyotish-city-searching").into(),
         vara_label: SharedString::new(),
         ayanamsa_label: SharedString::new(),
         loading_label: locale.tr("jyotish-loading").into(),
@@ -113,6 +127,12 @@ pub(crate) fn build_jyotish_model(
         m.show_planets = p.show_planets;
         m.active_tab = i32::from(p.active_tab);
         m.has_birth_data = p.has_birth_data;
+        m.cities = ModelRc::new(VecModel::from(jyotish_city_entries(p)));
+        m.active_city_index = p.active_city_index as i32;
+        m.picker_open = p.picker_open;
+        m.search_query = p.search_query.clone().into();
+        m.search_results = ModelRc::new(VecModel::from(jyotish_search_hits(p)));
+        m.search_busy = p.search_busy;
         return m;
     }
 
@@ -256,6 +276,20 @@ pub(crate) fn build_jyotish_model(
     JyotishModel {
         date_text: p.date_text.clone().into(),
         location_name: p.location_name.clone().into(),
+        cities: ModelRc::new(VecModel::from(jyotish_city_entries(p))),
+        active_city_index: p.active_city_index as i32,
+        picker_open: p.picker_open,
+        search_query: p.search_query.clone().into(),
+        search_results: ModelRc::new(VecModel::from(jyotish_search_hits(p))),
+        search_busy: p.search_busy,
+        picker_title: locale.tr("jyotish-cities-title").into(),
+        search_placeholder: locale.tr("jyotish-city-search-placeholder").into(),
+        add_city_hint: locale.tr("jyotish-city-add").into(),
+        remove_city_hint: locale.tr("jyotish-city-remove").into(),
+        close_picker_label: locale.tr("jyotish-cities-close").into(),
+        cities_hint: locale.tr("jyotish-cities-hint").into(),
+        no_results_label: locale.tr("jyotish-city-no-results").into(),
+        searching_label: locale.tr("jyotish-city-searching").into(),
         vara_label: locale.tr(p.vara_key).into(),
         ayanamsa_label: ayanamsa_label.into(),
         loading_label: locale.tr("jyotish-loading").into(),
@@ -360,6 +394,28 @@ pub(crate) fn build_jyotish_model(
         export_day_label: locale.tr("jyotish-export-day").into(),
         export_week_label: locale.tr("jyotish-export-week").into(),
     }
+}
+
+fn jyotish_city_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishCityEntry> {
+    p.cities
+        .iter()
+        .map(|c| JyotishCityEntry {
+            name: c.name.clone().into(),
+            active: c.active,
+        })
+        .collect()
+}
+
+fn jyotish_search_hits(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishSearchHit> {
+    p.search_results
+        .iter()
+        .map(|h| JyotishSearchHit {
+            name: h.name.clone().into(),
+            detail: h.detail.clone().into(),
+            latitude: h.latitude as f32,
+            longitude: h.longitude as f32,
+        })
+        .collect()
 }
 
 fn rectify_button_label(locale: &LocaleManager, has_draft: bool) -> SharedString {

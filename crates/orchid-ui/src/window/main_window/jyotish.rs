@@ -9,6 +9,8 @@ use uuid::Uuid;
 use orchid_i18n::LocaleManager;
 use orchid_widgets::{JyotishPayload, WidgetPayload};
 
+use crate::window::spawn;
+
 use super::MainWindowController;
 
 /// Per-instance notification edge-tracking for the Jyotish widget.
@@ -292,6 +294,100 @@ impl MainWindowController {
             return;
         };
         self.export_jyotish_to_clipboard(inst, true);
+    }
+
+    pub(super) fn on_jyotish_open_cities(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_picker_open(inst, true);
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_close_cities(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_picker_open(inst, false);
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_select_city(self: &Arc<Self>, id: &SharedString, index: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        orchid_widgets::builtin::jyotish::select_city(inst, index as usize);
+        self.persist_and_refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_remove_city(self: &Arc<Self>, id: &SharedString, index: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        orchid_widgets::builtin::jyotish::remove_city(inst, index as usize);
+        self.persist_and_refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_search_cities(
+        self: &Arc<Self>,
+        id: &SharedString,
+        query: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::search_cities(inst, query.to_string());
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_add_city(
+        self: &Arc<Self>,
+        id: &SharedString,
+        name: &SharedString,
+        lat: f32,
+        lon: f32,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::add_city(
+            inst,
+            name.to_string(),
+            f64::from(lat),
+            f64::from(lon),
+        );
+        self.persist_and_refresh_jyotish(inst);
+    }
+
+    fn refresh_jyotish(self: &Arc<Self>, inst_id: Uuid) {
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            let _ = wm.refresh_snapshot_cache(inst_id).await;
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    fn persist_and_refresh_jyotish(self: &Arc<Self>, inst_id: Uuid) {
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            if let Err(e) = wm.save_widget_state(inst_id).await {
+                warn!(%inst_id, error = %e, "jyotish: persist config failed");
+            }
+            let _ = wm.refresh_snapshot_cache(inst_id).await;
+            if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
     }
 
     fn export_jyotish_to_clipboard(self: &Arc<Self>, inst: Uuid, week: bool) {

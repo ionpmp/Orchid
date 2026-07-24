@@ -78,6 +78,12 @@ export component WorkspaceView inherits Rectangle {
     callback jyotish-rectify-cancel(string);
     callback jyotish-export-day(string);
     callback jyotish-export-week(string);
+    callback jyotish-open-cities(string);
+    callback jyotish-close-cities(string);
+    callback jyotish-select-city(string, int);
+    callback jyotish-remove-city(string, int);
+    callback jyotish-search-cities(string, string);
+    callback jyotish-add-city(string, string, float, float);
     callback clock-open-cities(string);
     callback clock-close-cities(string);
     callback clock-remove-city(string, int);
@@ -417,6 +423,12 @@ export component WorkspaceView inherits Rectangle {
                     jyotish-rectify-cancel(id) => { root.jyotish-rectify-cancel(id); }
                     jyotish-export-day(id) => { root.jyotish-export-day(id); }
                     jyotish-export-week(id) => { root.jyotish-export-week(id); }
+            jyotish-open-cities(id) => { root.jyotish-open-cities(id); }
+            jyotish-close-cities(id) => { root.jyotish-close-cities(id); }
+            jyotish-select-city(id, i) => { root.jyotish-select-city(id, i); }
+            jyotish-remove-city(id, i) => { root.jyotish-remove-city(id, i); }
+            jyotish-search-cities(id, q) => { root.jyotish-search-cities(id, q); }
+            jyotish-add-city(id, n, la, lo) => { root.jyotish-add-city(id, n, la, lo); }
                     clock-open-cities(id) => { root.clock-open-cities(id); }
                     clock-close-cities(id) => { root.clock-close-cities(id); }
                     clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }

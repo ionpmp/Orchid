@@ -1,5 +1,27 @@
 //! Payload for the Jyotish (Vedic panchanga) widget.
 
+/// One configured location chip / picker row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JyotishCityEntry {
+    /// Display name.
+    pub name: String,
+    /// Whether this is the active location.
+    pub active: bool,
+}
+
+/// One geocoding search result shown in the location picker.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JyotishSearchHit {
+    /// Place name.
+    pub name: String,
+    /// Secondary line (region, country).
+    pub detail: String,
+    /// WGS84 latitude.
+    pub latitude: f64,
+    /// WGS84 longitude.
+    pub longitude: f64,
+}
+
 /// One graha (planet) row for the sidereal table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -167,6 +189,18 @@ impl Default for JyotishRectifyView {
 pub struct JyotishPayload {
     pub date_text: String,
     pub location_name: String,
+    /// All configured locations (for chips / picker list).
+    pub cities: Vec<JyotishCityEntry>,
+    /// Index of the active location in [`Self::cities`].
+    pub active_city_index: usize,
+    /// Location-picker overlay visibility.
+    pub picker_open: bool,
+    /// Current location-search query.
+    pub search_query: String,
+    /// Geocoding hits for the current query.
+    pub search_results: Vec<JyotishSearchHit>,
+    /// True while a geocoding request is in flight.
+    pub search_busy: bool,
     pub ayanamsa_key: &'static str,
     pub ayanamsa_deg_text: String,
     pub day_offset: i32,
