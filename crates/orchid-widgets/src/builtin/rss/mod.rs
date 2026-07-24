@@ -75,15 +75,20 @@ impl RssHandle {
     fn schedule_job(self: &Arc<Self>) {
         let handle = Arc::clone(self);
         let interval = self.refresh_interval();
-        self.jobs.schedule(job_key(self.instance_id), interval, move || {
+        let key = job_key(self.instance_id);
+        self.jobs.schedule(key.clone(), interval, move || {
             let handle = Arc::clone(&handle);
+            let key = key.clone();
             async move {
-                let feeds = handle.enabled_feeds();
-                let provider = handle.provider.clone();
-                let data_slot = handle.data.clone();
-                let bus = handle.bus.clone();
-                let instance_id = handle.instance_id;
-                RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
+                handle
+                    .jobs
+                    .run_coalesced(&key, || {
+                        let handle = Arc::clone(&handle);
+                        async move {
+                            handle.fetch_now().await;
+                        }
+                    })
+                    .await;
             }
         });
     }
@@ -91,23 +96,61 @@ impl RssHandle {
     fn cancel_job(&self) {
         self.jobs.cancel(&job_key(self.instance_id));
     }
+
+    /// Trigger a fetch through the coalesce gate (interval + settings share it).
+    fn request_fetch(&self) {
+        let provider = self.provider.clone();
+        let config = self.config.clone();
+        let data_slot = self.data.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        self.jobs
+            .spawn_coalesced(job_key(instance_id), move || {
+                let provider = provider.clone();
+                let config = config.clone();
+                let data_slot = data_slot.clone();
+                let bus = bus.clone();
+                async move {
+                    let feeds: Vec<FeedSource> = config
+                        .read()
+                        .feeds
+                        .iter()
+                        .filter(|f| f.enabled)
+                        .cloned()
+                        .collect();
+                    RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
+                }
+            });
+    }
+
+    async fn fetch_now(&self) {
+        let feeds = self.enabled_feeds();
+        RssWidget::fetch_once(
+            self.provider.clone(),
+            feeds,
+            self.data.clone(),
+            self.bus.clone(),
+            self.instance_id,
+        )
+        .await;
+    }
 }
 
 fn feeds_differ(before: &RssConfig, after: &RssConfig) -> bool {
     if before.feeds.len() != after.feeds.len() {
         return true;
     }
-    before.feeds.iter().zip(&after.feeds).any(|(a, b)| {
-        a.name != b.name || a.url != b.url || a.enabled != b.enabled
-    })
+    before
+        .feeds
+        .iter()
+        .zip(&after.feeds)
+        .any(|(a, b)| a.name != b.name || a.url != b.url || a.enabled != b.enabled)
 }
 
 /// Snapshot the live RSS config for the settings dialog.
 #[must_use]
 pub fn current_config(instance_id: Uuid) -> Option<RssConfig> {
-    RSS_LIVE
-        .get(&instance_id)
-        .map(|h| h.config.read().clone())
+    RSS_LIVE.get(&instance_id).map(|h| h.config.read().clone())
 }
 
 /// Apply a settings-dialog mutation to the live RSS config.
@@ -122,17 +165,9 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut RssConfig)) {
         cfg.normalize();
     }
     let after = h.config.read().clone();
-    let interval_changed =
-        before.refresh_interval_minutes != after.refresh_interval_minutes;
+    let interval_changed = before.refresh_interval_minutes != after.refresh_interval_minutes;
     if feeds_differ(&before, &after) {
-        let provider = h.provider.clone();
-        let feeds = h.enabled_feeds();
-        let data_slot = h.data.clone();
-        let bus = h.bus.clone();
-        let instance_id = h.instance_id;
-        tokio::spawn(async move {
-            RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
-        });
+        h.request_fetch();
     } else {
         h.publish();
     }

@@ -68,13 +68,7 @@ pub fn search_cities(instance_id: Uuid, query: String) {
 }
 
 /// Add a city from a geocoding hit and make it active.
-pub fn add_city(
-    instance_id: Uuid,
-    name: String,
-    latitude: f64,
-    longitude: f64,
-    timezone: String,
-) {
+pub fn add_city(instance_id: Uuid, name: String, latitude: f64, longitude: f64, timezone: String) {
     if let Some(h) = WEATHER_LIVE.get(&instance_id) {
         h.add_city(Location {
             name,
@@ -181,22 +175,33 @@ impl WeatherHandle {
     fn schedule_job(self: &Arc<Self>) {
         let handle = Arc::clone(self);
         let interval = self.refresh_interval();
-        self.jobs
-            .schedule(job_key(self.instance_id), interval, move || {
-                let provider = handle.provider.clone();
-                let config = handle.config.clone();
-                let cache = handle.cache.clone();
-                let last_error = handle.last_error.clone();
-                let is_fetching = handle.is_fetching.clone();
-                let bus = handle.bus.clone();
-                let instance_id = handle.instance_id;
-                async move {
-                    fetch_all_locations(
-                        provider, config, cache, last_error, is_fetching, bus, instance_id,
-                    )
+        let key = job_key(self.instance_id);
+        self.jobs.schedule(key.clone(), interval, move || {
+            let handle = Arc::clone(&handle);
+            let key = key.clone();
+            async move {
+                // Share the coalesce gate with ad-hoc `spawn_fetch_all` so a
+                // config mutation cannot overlap an interval tick.
+                handle
+                    .jobs
+                    .run_coalesced(&key, || {
+                        let handle = Arc::clone(&handle);
+                        async move {
+                            fetch_all_locations(
+                                handle.provider.clone(),
+                                handle.config.clone(),
+                                handle.cache.clone(),
+                                handle.last_error.clone(),
+                                handle.is_fetching.clone(),
+                                handle.bus.clone(),
+                                handle.instance_id,
+                            )
+                            .await;
+                        }
+                    })
                     .await;
-                }
-            });
+            }
+        });
     }
 
     fn cancel_job(&self) {
@@ -334,18 +339,29 @@ impl WeatherHandle {
         let is_fetching = self.is_fetching.clone();
         let bus = self.bus.clone();
         let instance_id = self.instance_id;
-        tokio::spawn(async move {
-            fetch_all_locations(
-                provider,
-                config,
-                cache,
-                last_error,
-                is_fetching,
-                bus,
-                instance_id,
-            )
-            .await;
-        });
+        // Trailing coalesce: overlapping requests collapse to one re-run that
+        // re-reads `config` after the in-flight fetch finishes.
+        self.jobs
+            .spawn_coalesced(job_key(instance_id), move || {
+                let provider = provider.clone();
+                let config = config.clone();
+                let cache = cache.clone();
+                let last_error = last_error.clone();
+                let is_fetching = is_fetching.clone();
+                let bus = bus.clone();
+                async move {
+                    fetch_all_locations(
+                        provider,
+                        config,
+                        cache,
+                        last_error,
+                        is_fetching,
+                        bus,
+                        instance_id,
+                    )
+                    .await;
+                }
+            });
     }
 }
 
