@@ -16,26 +16,20 @@ use orchid_storage::LifecycleState;
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::WidgetPayload;
 
-use crate::window::errors::{
-    fm_localized_error, is_passphrase_retryable,
-};
-use crate::window::spawn;
+use crate::slint_generated::{FmConfirmDialog, FmPassphraseState, FmRenameState, FmTagState};
+use crate::window::errors::{fm_localized_error, is_passphrase_retryable};
 use crate::window::models::{
     build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_context_menu,
     empty_managed_policy_state, empty_passphrase_state, empty_rename_state, empty_tag_state,
     fm_grid_window, fm_list_window, fm_passphrase_dialog_labels, patch_fm_selection,
     FileManagerOverlays, FmViewport,
 };
-use crate::slint_generated::{
-    FmConfirmDialog,
-    FmRenameState, FmTagState, FmPassphraseState,
-};
+use crate::window::spawn;
 
-
-use super::{MainWindowController, open_with_application_picker};
+use super::{open_with_application_picker, MainWindowController};
 
 impl MainWindowController {
-        pub(super) fn notify_fm_action_failed(self: &Arc<Self>, err: &impl std::fmt::Display) {
+    pub(super) fn notify_fm_action_failed(self: &Arc<Self>, err: &impl std::fmt::Display) {
         let title = self.locale.tr("widget-fm-name");
         let reason = fm_localized_error(&self.locale, &err.to_string());
         let body = self.locale.tr_args(
@@ -45,7 +39,7 @@ impl MainWindowController {
         self.push_notification(&title, &body, 3);
     }
 
-        pub(super) fn sync_fm_transfer_notifications(self: &Arc<Self>) {
+    pub(super) fn sync_fm_transfer_notifications(self: &Arc<Self>) {
         let mut transfer_error: Option<String> = None;
         for inst in self.widget_manager.list_instances() {
             if inst.type_id != "file-manager" {
@@ -77,7 +71,7 @@ impl MainWindowController {
             }
         }
     }
-        pub(super) fn drain_fm_ingest_failure_notification(self: &Arc<Self>) {
+    pub(super) fn drain_fm_ingest_failure_notification(self: &Arc<Self>) {
         let Some(name) = self.fm_ingest_failure_pending.lock().take() else {
             return;
         };
@@ -88,10 +82,10 @@ impl MainWindowController {
         );
         self.push_notification(&title, &body, 3);
     }
-        pub(super) fn set_fm_focus(&self, inst: Uuid, pane: u8) {
+    pub(super) fn set_fm_focus(&self, inst: Uuid, pane: u8) {
         *self.fm_focus.lock() = Some((inst, pane));
     }
-        pub(super) fn fm_instances_on_active_workspace(&self) -> Vec<Uuid> {
+    pub(super) fn fm_instances_on_active_workspace(&self) -> Vec<Uuid> {
         let Ok(w) = self.workspace_manager.active() else {
             return Vec::new();
         };
@@ -102,7 +96,7 @@ impl MainWindowController {
             .map(|inst| inst.id)
             .collect()
     }
-        pub(super) fn find_active_fm(&self) -> Option<Uuid> {
+    pub(super) fn find_active_fm(&self) -> Option<Uuid> {
         let fm_ids = self.fm_instances_on_active_workspace();
         if fm_ids.is_empty() {
             *self.fm_focus.lock() = None;
@@ -115,7 +109,7 @@ impl MainWindowController {
         }
         Some(fm_ids[0])
     }
-        pub(super) fn fm_prepare_instance(
+    pub(super) fn fm_prepare_instance(
         self: &Arc<Self>,
         fm_id: &SharedString,
         pane: Option<u8>,
@@ -132,7 +126,7 @@ impl MainWindowController {
         self.fm_wake_instance(inst);
         Some(inst)
     }
-        pub(super) fn fm_wake_instance(self: &Arc<Self>, inst: Uuid) {
+    pub(super) fn fm_wake_instance(self: &Arc<Self>, inst: Uuid) {
         self.widget_manager.touch(inst);
         if let Ok(iref) = self.widget_manager.get_instance(inst) {
             let state = *iref.lifecycle.read();
@@ -146,7 +140,7 @@ impl MainWindowController {
             }
         }
     }
-        pub(super) async fn fm_refresh_ui(self: &Arc<Self>, inst: Uuid) {
+    pub(super) async fn fm_refresh_ui(self: &Arc<Self>, inst: Uuid) {
         let _ = self.widget_manager.refresh_snapshot_cache(inst).await;
         // Prefer an in-place frame patch. A full workspace rebuild remounts FM
         // TouchAreas/FocusScopes and can freeze the Slint event loop on Windows
@@ -172,12 +166,11 @@ impl MainWindowController {
 
     fn try_patch_fm_selection(&self, inst: Uuid, pane: u8) -> bool {
         use std::collections::HashSet;
-        let selected: HashSet<String> = orchid_widgets::builtin::file_manager::selected_entries(
-            inst, pane,
-        )
-        .into_iter()
-        .map(|(p, _)| p)
-        .collect();
+        let selected: HashSet<String> =
+            orchid_widgets::builtin::file_manager::selected_entries(inst, pane)
+                .into_iter()
+                .map(|(p, _)| p)
+                .collect();
         let Some((selection_count, item_count)) =
             orchid_widgets::builtin::file_manager::selection_counts(inst, pane)
         else {
@@ -211,7 +204,7 @@ impl MainWindowController {
         }
         false
     }
-        pub(super) fn widget_bounds_at_canvas_point(
+    pub(super) fn widget_bounds_at_canvas_point(
         &self,
         content_x: f32,
         content_y: f32,
@@ -283,7 +276,7 @@ impl MainWindowController {
         }
         None
     }
-        pub(super) fn fm_pane_at_point(&self, inst: Uuid, content_x: f32, bounds: PixelBounds) -> u8 {
+    pub(super) fn fm_pane_at_point(&self, inst: Uuid, content_x: f32, bounds: PixelBounds) -> u8 {
         let dual = self
             .widget_manager
             .snapshot_cache()
@@ -305,10 +298,11 @@ impl MainWindowController {
             1
         }
     }
-        pub(super) fn fm_drop_target(&self) -> Option<(Uuid, u8)> {
-        if let (Some((cx, cy)), Ok(w)) =
-            (*self.last_canvas_pointer.lock(), self.workspace_manager.active())
-        {
+    pub(super) fn fm_drop_target(&self) -> Option<(Uuid, u8)> {
+        if let (Some((cx, cy)), Ok(w)) = (
+            *self.last_canvas_pointer.lock(),
+            self.workspace_manager.active(),
+        ) {
             let (vw, vh) = *self.canvas_size.lock();
             let instances = self.widget_manager.instances_for_workspace(w.id);
             self.layout_engine
@@ -343,29 +337,24 @@ impl MainWindowController {
                 }
             }
         }
-        self.fm_focus
-            .lock()
-            .clone()
-            .or_else(|| {
-                self.find_active_fm()
-                    .map(|id| (id, self.fm_active_pane(id)))
-            })
+        (*self.fm_focus.lock()).or_else(|| {
+            self.find_active_fm()
+                .map(|id| (id, self.fm_active_pane(id)))
+        })
     }
-        pub(super) fn pointer_over_viewer_content(&self) -> bool {
-        let Some((cx, cy)) = self.last_canvas_pointer.lock().clone() else {
+    pub(super) fn pointer_over_viewer_content(&self) -> bool {
+        let Some((cx, cy)) = *self.last_canvas_pointer.lock() else {
             return false;
         };
-        let Some((_inst, bounds)) = self.widget_bounds_at_canvas_point(
-            cx,
-            cy,
-            orchid_widgets::builtin::viewer::TYPE_ID,
-        ) else {
+        let Some((_inst, bounds)) =
+            self.widget_bounds_at_canvas_point(cx, cy, orchid_widgets::builtin::viewer::TYPE_ID)
+        else {
             return false;
         };
         let content_top = bounds.y + Self::WIDGET_FRAME_HEADER_PX;
         cy >= content_top && cy < bounds.y + bounds.height
     }
-        pub(super) fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
+    pub(super) fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let mut opened = 0usize;
@@ -412,7 +401,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn fm_dispatch_drag_transfer(
+    pub(super) fn fm_dispatch_drag_transfer(
         self: &Arc<Self>,
         source_inst: Uuid,
         target_inst: Uuid,
@@ -444,8 +433,7 @@ impl MainWindowController {
                 }
             }
             if source_inst != target_inst {
-                let _ =
-                    orchid_widgets::builtin::file_manager::refresh_instance(source_inst).await;
+                let _ = orchid_widgets::builtin::file_manager::refresh_instance(source_inst).await;
             }
             if let Some(c) = tw.upgrade() {
                 let _ = c.widget_manager.refresh_snapshot_cache(target_inst).await;
@@ -456,7 +444,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn fm_resolve_move_dest(
+    pub(super) fn fm_resolve_move_dest(
         &self,
         source_inst: Uuid,
         hinted_dest: Option<String>,
@@ -479,7 +467,11 @@ impl MainWindowController {
             (None, None) => None,
         }
     }
-        pub(super) fn fm_complete_drag_drop(self: &Arc<Self>, source_inst: Uuid, hinted_dest: Option<String>) {
+    pub(super) fn fm_complete_drag_drop(
+        self: &Arc<Self>,
+        source_inst: Uuid,
+        hinted_dest: Option<String>,
+    ) {
         let paths = {
             let over = self.fm_overlays.read();
             over.get(&source_inst)
@@ -511,14 +503,7 @@ impl MainWindowController {
             .contains(slint::winit_030::winit::keyboard::ModifiersState::CONTROL);
         self.fm_dispatch_drag_transfer(source_inst, target_inst, paths, dest, copy);
     }
-        pub(super) fn ensure_fm_overlays(&self, inst: Uuid) -> FileManagerOverlays {
-        self.fm_overlays
-            .read()
-            .get(&inst)
-            .cloned()
-            .unwrap_or_else(default_fm_overlays)
-    }
-        pub(super) fn clear_fm_drag(&self, inst: Uuid) {
+    pub(super) fn clear_fm_drag(&self, inst: Uuid) {
         let mut over = self.fm_overlays.write();
         if let Some(entry) = over.get_mut(&inst) {
             entry.drag_active = false;
@@ -527,7 +512,7 @@ impl MainWindowController {
             entry.drag_target_pane = -1;
         }
     }
-        pub(super) fn fm_active_tab_path(&self, inst: Uuid, pane: u8) -> Option<String> {
+    pub(super) fn fm_active_tab_path(&self, inst: Uuid, pane: u8) -> Option<String> {
         let cache = self.widget_manager.snapshot_cache();
         let snap = cache.get(inst).map(|s| (*s).clone())?;
         let WidgetPayload::FileManager(fm) = &snap.payload else {
@@ -538,7 +523,7 @@ impl MainWindowController {
         let tab = pane.tabs.get(pane.active_tab as usize)?;
         Some(tab.path_display.clone())
     }
-        pub(super) fn fm_active_pane(&self, inst: Uuid) -> u8 {
+    pub(super) fn fm_active_pane(&self, inst: Uuid) -> u8 {
         let cache = self.widget_manager.snapshot_cache();
         cache
             .get(inst)
@@ -548,7 +533,7 @@ impl MainWindowController {
             })
             .unwrap_or(0)
     }
-        pub(super) fn queue_os_file_drop(self: &Arc<Self>, path: String) {
+    pub(super) fn queue_os_file_drop(self: &Arc<Self>, path: String) {
         let generation = {
             let mut batch = self.os_drop_batch.lock();
             batch.paths.push(path);
@@ -574,7 +559,7 @@ impl MainWindowController {
             c.on_os_files_dropped(paths);
         });
     }
-        pub(super) fn on_os_files_dropped(self: &Arc<Self>, paths: Vec<String>) {
+    pub(super) fn on_os_files_dropped(self: &Arc<Self>, paths: Vec<String>) {
         let Some((inst, pane)) = self.fm_drop_target() else {
             return;
         };
@@ -590,19 +575,11 @@ impl MainWindowController {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let result = if copy {
-                orchid_widgets::builtin::file_manager::copy_paths_to_directory(
-                    inst,
-                    paths,
-                    &dest,
-                )
-                .await
+                orchid_widgets::builtin::file_manager::copy_paths_to_directory(inst, paths, &dest)
+                    .await
             } else {
-                orchid_widgets::builtin::file_manager::move_paths_to_directory(
-                    inst,
-                    paths,
-                    &dest,
-                )
-                .await
+                orchid_widgets::builtin::file_manager::move_paths_to_directory(inst, paths, &dest)
+                    .await
             };
             if let Err(e) = result {
                 warn!(?e, dest = %dest, copy, "fm os file drop");
@@ -616,18 +593,18 @@ impl MainWindowController {
         });
     }
 
-        pub(super) fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
+    pub(super) fn fm_selected_paths(&self, inst: Uuid, pane: u8) -> Vec<String> {
         self.fm_selected_entries(inst, pane)
             .into_iter()
             .map(|(path, _)| path)
             .collect()
     }
 
-        pub(super) fn fm_selected_entries(&self, inst: Uuid, pane: u8) -> Vec<(String, bool)> {
+    pub(super) fn fm_selected_entries(&self, inst: Uuid, pane: u8) -> Vec<(String, bool)> {
         orchid_widgets::builtin::file_manager::selected_entries(inst, pane)
     }
 
-        pub(super) fn fm_entry_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> bool {
+    pub(super) fn fm_entry_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> bool {
         let cache = self.widget_manager.snapshot_cache();
         let Some(snap) = cache.get(inst) else {
             return false;
@@ -649,7 +626,7 @@ impl MainWindowController {
             .unwrap_or(false)
     }
 
-        pub(super) fn on_fm_sidebar_clicked(self: &Arc<Self>, fm_id: &SharedString, id: &SharedString) {
+    pub(super) fn on_fm_sidebar_clicked(self: &Arc<Self>, fm_id: &SharedString, id: &SharedString) {
         let item_id = id.to_string();
         if item_id.starts_with("section:") {
             return;
@@ -686,7 +663,7 @@ impl MainWindowController {
             },
         );
     }
-        pub(super) fn on_fm_toggle_dual_pane(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_toggle_dual_pane(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -698,7 +675,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_toggle_show_hidden(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_toggle_show_hidden(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -710,7 +687,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_toggle_click_behavior(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_toggle_click_behavior(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -722,7 +699,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_open_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_open_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -734,7 +711,7 @@ impl MainWindowController {
         };
         self.fm_dispatch_open(inst, p, path.clone(), *is_dir);
     }
-        pub(super) fn on_fm_move_selection(
+    pub(super) fn on_fm_move_selection(
         self: &Arc<Self>,
         fm_id: &SharedString,
         pane: i32,
@@ -748,8 +725,7 @@ impl MainWindowController {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             if let Err(e) =
-                orchid_widgets::builtin::file_manager::select_relative(inst, p, delta, extend)
-                    .await
+                orchid_widgets::builtin::file_manager::select_relative(inst, p, delta, extend).await
             {
                 warn!(?e, "fm move selection");
                 return;
@@ -759,7 +735,12 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_entry_drag_start(self: &Arc<Self>, fm_id: &SharedString, pane: i32, _path: &SharedString) {
+    pub(super) fn on_fm_entry_drag_start(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        _path: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -779,14 +760,19 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_entry_drag_hover(self: &Arc<Self>, fm_id: &SharedString, pane: i32, folder: &SharedString) {
+    pub(super) fn on_fm_entry_drag_hover(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        folder: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         self.set_fm_drag_hover(inst, pane, folder.to_string());
     }
-        pub(super) fn set_fm_drag_hover(self: &Arc<Self>, inst: Uuid, pane: i32, folder: String) {
+    pub(super) fn set_fm_drag_hover(self: &Arc<Self>, inst: Uuid, pane: i32, folder: String) {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         if !entry.drag_active {
@@ -800,7 +786,7 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn clear_fm_drag_hover_to_pane(self: &Arc<Self>, inst: Uuid, pane: i32) {
+    pub(super) fn clear_fm_drag_hover_to_pane(self: &Arc<Self>, inst: Uuid, pane: i32) {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         if !entry.drag_active {
@@ -811,7 +797,7 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_entry_drag_scroll(
+    pub(super) fn on_fm_entry_drag_scroll(
         self: &Arc<Self>,
         fm_id: &SharedString,
         pane: i32,
@@ -834,20 +820,15 @@ impl MainWindowController {
             return;
         }
         let p = pane.max(0) as u8;
-        if let Some(path) = self.fm_drag_hover_path_at_pointer(
-            inst,
-            p,
-            mouse_x,
-            mouse_y,
-            viewport_y,
-            width,
-        ) {
+        if let Some(path) =
+            self.fm_drag_hover_path_at_pointer(inst, p, mouse_x, mouse_y, viewport_y, width)
+        {
             self.set_fm_drag_hover(inst, pane, path);
         } else {
             self.clear_fm_drag_hover_to_pane(inst, pane);
         }
     }
-        pub(super) fn fm_drag_hover_path_at_pointer(
+    pub(super) fn fm_drag_hover_path_at_pointer(
         &self,
         inst: Uuid,
         pane: u8,
@@ -869,14 +850,20 @@ impl MainWindowController {
         match tab.view_mode {
             List => {
                 let row = (content_y / 28.0).floor() as usize;
-                tab.entries.get(row).filter(|e| e.is_dir).map(|e| e.path.clone())
+                tab.entries
+                    .get(row)
+                    .filter(|e| e.is_dir)
+                    .map(|e| e.path.clone())
             }
             Details => {
                 if content_y < 28.0 {
                     return None;
                 }
                 let row = ((content_y - 28.0) / 28.0).floor() as usize;
-                tab.entries.get(row).filter(|e| e.is_dir).map(|e| e.path.clone())
+                tab.entries
+                    .get(row)
+                    .filter(|e| e.is_dir)
+                    .map(|e| e.path.clone())
             }
             Icons | Gallery => {
                 let large = tab.view_mode == Gallery;
@@ -887,7 +874,8 @@ impl MainWindowController {
                     .floor()
                     .max(1.0) as usize;
                 let col = ((mouse_x - tile_spacing) / (tile_size + tile_spacing)).floor() as i32;
-                let row = ((content_y - tile_spacing) / (tile_height + tile_spacing)).floor() as i32;
+                let row =
+                    ((content_y - tile_spacing) / (tile_height + tile_spacing)).floor() as i32;
                 if col < 0 || row < 0 {
                     return None;
                 }
@@ -899,7 +887,12 @@ impl MainWindowController {
             }
         }
     }
-        pub(super) fn on_fm_entry_drag_drop(self: &Arc<Self>, fm_id: &SharedString, pane: i32, folder: &SharedString) {
+    pub(super) fn on_fm_entry_drag_drop(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        folder: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -907,7 +900,7 @@ impl MainWindowController {
         let folder_path = folder.to_string();
         self.fm_complete_drag_drop(inst, Some(folder_path));
     }
-        pub(super) fn on_fm_pane_drag_hover(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_pane_drag_hover(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -922,7 +915,7 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_drop_on_current_dir(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_drop_on_current_dir(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(source) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -931,7 +924,7 @@ impl MainWindowController {
         self.set_fm_focus(source, p);
         self.fm_complete_drag_drop(source, None);
     }
-        pub(super) fn on_fm_entry_drag_cancel(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_entry_drag_cancel(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -939,7 +932,7 @@ impl MainWindowController {
         self.clear_fm_drag(inst);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_pane_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_pane_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -954,7 +947,12 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_tab_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, tab_id: &SharedString) {
+    pub(super) fn on_fm_tab_clicked(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        tab_id: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -969,7 +967,12 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_tab_closed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, tab_id: &SharedString) {
+    pub(super) fn on_fm_tab_closed(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        tab_id: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -984,7 +987,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_tab_new(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_tab_new(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -998,7 +1001,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_new_folder(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_new_folder(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1006,22 +1009,23 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            let outcome = match orchid_widgets::builtin::file_manager::request_new_folder(inst, p).await {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!(?e, "fm new folder");
-                    if let Some(c) = tw.upgrade() {
-                        c.notify_fm_action_failed(&e);
+            let outcome =
+                match orchid_widgets::builtin::file_manager::request_new_folder(inst, p).await {
+                    Ok(o) => o,
+                    Err(e) => {
+                        warn!(?e, "fm new folder");
+                        if let Some(c) = tw.upgrade() {
+                            c.notify_fm_action_failed(&e);
+                        }
+                        return;
                     }
-                    return;
-                }
-            };
+                };
             if let Some(c) = tw.upgrade() {
                 c.apply_fm_action_outcome(inst, outcome);
             }
         });
     }
-        pub(super) fn on_fm_nav_back(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_nav_back(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1040,7 +1044,7 @@ impl MainWindowController {
             },
         );
     }
-        pub(super) fn on_fm_nav_forward(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_nav_forward(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1059,7 +1063,7 @@ impl MainWindowController {
             },
         );
     }
-        pub(super) fn on_fm_nav_up(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_nav_up(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1078,7 +1082,7 @@ impl MainWindowController {
             },
         );
     }
-        pub(super) fn on_fm_nav_home(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_nav_home(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1092,7 +1096,12 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_breadcrumb_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
+    pub(super) fn on_fm_breadcrumb_clicked(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1116,7 +1125,7 @@ impl MainWindowController {
             },
         );
     }
-        pub(super) fn on_fm_view_mode_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_view_mode_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1130,7 +1139,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_sort_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_sort_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1144,13 +1153,18 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_sort_column_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, column: i32) {
+    pub(super) fn on_fm_sort_column_clicked(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        column: i32,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let p = pane.max(0) as u8;
-        let col = column.max(0).min(3) as u8;
+        let col = column.clamp(0, 3) as u8;
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::set_sort_column(inst, p, col).await;
@@ -1159,7 +1173,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_viewport_changed(
+    pub(super) fn on_fm_viewport_changed(
         self: &Arc<Self>,
         fm_id: &SharedString,
         pane: i32,
@@ -1188,17 +1202,15 @@ impl MainWindowController {
             let Some(tab) = pane.tabs.get(pane.active_tab as usize) else {
                 return;
             };
-            (tab.view_mode, tab.entries.len())
+            (tab.view_mode, tab.item_count as usize)
         };
 
-        let (first, _, _, content_h) = match view_mode {
+        let (first, end, _, content_h) = match view_mode {
             orchid_widgets::FmViewMode::Icons | orchid_widgets::FmViewMode::Gallery => {
                 let large = matches!(view_mode, orchid_widgets::FmViewMode::Gallery);
                 fm_grid_window(total, scroll_y, view_h, view_w, large)
             }
-            orchid_widgets::FmViewMode::Details => {
-                fm_list_window(total, scroll_y, view_h, true)
-            }
+            orchid_widgets::FmViewMode::Details => fm_list_window(total, scroll_y, view_h, true),
             orchid_widgets::FmViewMode::List => fm_list_window(total, scroll_y, view_h, false),
         };
 
@@ -1210,6 +1222,8 @@ impl MainWindowController {
                 view_w,
             },
         );
+
+        orchid_widgets::builtin::file_manager::set_viewport_window(inst, p, first, end);
 
         // Natural layout — no window slice to maintain.
         if content_h <= 0.0 {
@@ -1227,6 +1241,7 @@ impl MainWindowController {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             if let Some(c) = tw.upgrade() {
+                let _ = c.widget_manager.refresh_snapshot_cache(inst).await;
                 if let Err(e) = c.patch_workspace_frames(&[inst]) {
                     warn!(?e, "fm viewport patch");
                 }
@@ -1234,7 +1249,12 @@ impl MainWindowController {
         });
     }
 
-        pub(super) fn on_fm_quick_filter_changed(self: &Arc<Self>, fm_id: &SharedString, pane: i32, q: &SharedString) {
+    pub(super) fn on_fm_quick_filter_changed(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        q: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1262,7 +1282,13 @@ impl MainWindowController {
             c.fm_refresh_ui(inst).await;
         });
     }
-        pub(super) fn on_fm_entry_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, ctrl: bool) {
+    pub(super) fn on_fm_entry_clicked(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+        ctrl: bool,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1281,12 +1307,14 @@ impl MainWindowController {
         {
             let now = Instant::now();
             let mut last = self.fm_last_click.lock();
-            let is_double = last.as_ref().is_some_and(|(prev_inst, prev_pane, prev_path, t)| {
-                *prev_inst == inst
-                    && *prev_pane == p
-                    && prev_path == &ps
-                    && now.duration_since(*t).as_millis() <= DOUBLE_CLICK_MS
-            });
+            let is_double = last
+                .as_ref()
+                .is_some_and(|(prev_inst, prev_pane, prev_path, t)| {
+                    *prev_inst == inst
+                        && *prev_pane == p
+                        && prev_path == &ps
+                        && now.duration_since(*t).as_millis() <= DOUBLE_CLICK_MS
+                });
             *last = Some((inst, p, ps.clone(), now));
             is_double
         } else {
@@ -1326,7 +1354,12 @@ impl MainWindowController {
         let is_dir = self.fm_entry_is_dir(inst, p, &ps);
         self.fm_try_dispatch_open(inst, p, ps, is_dir);
     }
-        pub(super) fn on_fm_entry_shift_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString) {
+    pub(super) fn on_fm_entry_shift_clicked(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1347,7 +1380,13 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_entry_double_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, is_dir: bool) {
+    pub(super) fn on_fm_entry_double_clicked(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+        is_dir: bool,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -1364,8 +1403,8 @@ impl MainWindowController {
             self.fm_try_dispatch_open(inst, p, raw, false);
         }
     }
-        /// Open a path unless the same path was just opened (Slint + Rust double-click).
-        pub(super) fn fm_try_dispatch_open(
+    /// Open a path unless the same path was just opened (Slint + Rust double-click).
+    pub(super) fn fm_try_dispatch_open(
         self: &Arc<Self>,
         inst: Uuid,
         pane: u8,
@@ -1388,7 +1427,13 @@ impl MainWindowController {
         }
         self.fm_dispatch_open(inst, pane, path, is_dir);
     }
-        pub(super) fn fm_dispatch_open(self: &Arc<Self>, inst: Uuid, pane: u8, path: String, is_dir: bool) {
+    pub(super) fn fm_dispatch_open(
+        self: &Arc<Self>,
+        inst: Uuid,
+        pane: u8,
+        path: String,
+        is_dir: bool,
+    ) {
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         debug!(%path, is_dir, pane, %inst, "fm_dispatch_open");
@@ -1420,8 +1465,7 @@ impl MainWindowController {
                         c.clear_fm_drag(inst);
                         {
                             let mut over = c.fm_overlays.write();
-                            let entry =
-                                over.entry(inst).or_insert_with(default_fm_overlays);
+                            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                             entry.context_menu = empty_context_menu();
                             entry.confirm_dialog = empty_confirm_dialog();
                             entry.rename = empty_rename_state();
@@ -1452,23 +1496,27 @@ impl MainWindowController {
             },
         );
     }
-        pub(super) fn on_fm_entry_context(self: &Arc<Self>, fm_id: &SharedString, pane: i32, path: &SharedString, x: f32, y: f32) {
+    pub(super) fn on_fm_entry_context(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+        x: f32,
+        y: f32,
+    ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         let target = path.to_string();
-        let (actions, target_paths) = match orchid_widgets::builtin::file_manager::context_menu_for(
-            inst,
-            p,
-            &target,
-        ) {
-            Ok(v) => v,
-            Err(e) => {
-                warn!(?e, "fm context menu");
-                return;
-            }
-        };
+        let (actions, target_paths) =
+            match orchid_widgets::builtin::file_manager::context_menu_for(inst, p, &target) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(?e, "fm context menu");
+                    return;
+                }
+            };
         let menu = build_context_menu(&actions, &target_paths, x, y, &self.locale);
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
@@ -1492,7 +1540,12 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_context_action(self: &Arc<Self>, fm_id: &SharedString, action_id: &SharedString, paths: &ModelRc<SharedString>) {
+    pub(super) fn on_fm_context_action(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        action_id: &SharedString,
+        paths: &ModelRc<SharedString>,
+    ) {
         let id = action_id.to_string();
         let path_vec: Vec<String> = (0..paths.row_count())
             .filter_map(|i| paths.row_data(i))
@@ -1526,7 +1579,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn apply_fm_action_outcome(
+    pub(super) fn apply_fm_action_outcome(
         self: &Arc<Self>,
         inst: Uuid,
         outcome: orchid_widgets::builtin::file_manager::ActionOutcome,
@@ -1554,16 +1607,15 @@ impl MainWindowController {
                 paths,
             } => {
                 let n = paths.len();
-                let message_text = if message == "fm-confirm-delete"
-                    || message == "fm-confirm-delete-permanent"
-                {
-                    self.locale.tr_args(
-                        &message,
-                        &orchid_i18n::FluentArgs::new().with("n", n.to_string()),
-                    )
-                } else {
-                    message
-                };
+                let message_text =
+                    if message == "fm-confirm-delete" || message == "fm-confirm-delete-permanent" {
+                        self.locale.tr_args(
+                            &message,
+                            &orchid_i18n::FluentArgs::new().with("n", n.to_string()),
+                        )
+                    } else {
+                        message
+                    };
                 let dlg = FmConfirmDialog {
                     visible: true,
                     title: self.locale.tr("fm-confirm-title").into(),
@@ -1572,7 +1624,10 @@ impl MainWindowController {
                     cancel_label: self.locale.tr("action-confirm-no").into(),
                     pending_action: action_id.into(),
                     pending_paths: ModelRc::new(VecModel::from(
-                        paths.into_iter().map(SharedString::from).collect::<Vec<_>>(),
+                        paths
+                            .into_iter()
+                            .map(SharedString::from)
+                            .collect::<Vec<_>>(),
                     )),
                 };
                 let mut over = self.fm_overlays.write();
@@ -1582,7 +1637,10 @@ impl MainWindowController {
                 drop(over);
                 self.schedule_rebuild();
             }
-            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename { path, current_name } => {
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename {
+                path,
+                current_name,
+            } => {
                 let mut over = self.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.create_folder_parent = None;
@@ -1633,7 +1691,8 @@ impl MainWindowController {
                 paths,
                 purpose,
             } => {
-                let (title, hint, ok_label) = fm_passphrase_dialog_labels(self.locale.as_ref(), purpose);
+                let (title, hint, ok_label) =
+                    fm_passphrase_dialog_labels(self.locale.as_ref(), purpose);
                 let mut over = self.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.passphrase_paths = paths;
@@ -1648,8 +1707,7 @@ impl MainWindowController {
                     biometric_available: self.fm_passphrase_vault.biometric_unlock_available(),
                     biometric_label: self.locale.tr("fm-passphrase-biometric").into(),
                 };
-                if let Err(e) =
-                    orchid_widgets::builtin::file_manager::clear_passphrase_error(inst)
+                if let Err(e) = orchid_widgets::builtin::file_manager::clear_passphrase_error(inst)
                 {
                     warn!(?e, "fm clear passphrase error");
                 }
@@ -1676,10 +1734,8 @@ impl MainWindowController {
                 };
                 let tw2 = Arc::downgrade(self);
                 spawn::spawn_local_compat(async move {
-                    let _ = MainWindowController::open_in_viewer_for_controller(
-                        tw2, fs_path, true,
-                    )
-                    .await;
+                    let _ = MainWindowController::open_in_viewer_for_controller(tw2, fs_path, true)
+                        .await;
                 });
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany { paths } => {
@@ -1779,7 +1835,7 @@ impl MainWindowController {
             }
         }
     }
-        pub(super) fn on_fm_context_dismiss(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_context_dismiss(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1789,7 +1845,7 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_confirm_yes(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_confirm_yes(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1816,9 +1872,7 @@ impl MainWindowController {
                 inst,
                 &action,
                 path_vec,
-                orchid_widgets::builtin::file_manager::RunActionOpts {
-                    skip_confirm: true,
-                },
+                orchid_widgets::builtin::file_manager::RunActionOpts { skip_confirm: true },
             )
             .await
             {
@@ -1848,7 +1902,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_confirm_no(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_confirm_no(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1858,7 +1912,12 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_rename_commit(self: &Arc<Self>, fm_id: &SharedString, old_path: &SharedString, new_name: &SharedString) {
+    pub(super) fn on_fm_rename_commit(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        old_path: &SharedString,
+        new_name: &SharedString,
+    ) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1909,7 +1968,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_rename_cancel(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_rename_cancel(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1920,7 +1979,7 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_tag_commit(self: &Arc<Self>, fm_id: &SharedString, tag: &SharedString) {
+    pub(super) fn on_fm_tag_commit(self: &Arc<Self>, fm_id: &SharedString, tag: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1933,8 +1992,8 @@ impl MainWindowController {
         let tag_str = tag.to_string();
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            let _ =
-                orchid_widgets::builtin::file_manager::add_tag_to_paths(inst, paths, &tag_str).await;
+            let _ = orchid_widgets::builtin::file_manager::add_tag_to_paths(inst, paths, &tag_str)
+                .await;
             if let Some(c) = tw.upgrade() {
                 let mut over = c.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
@@ -1945,7 +2004,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_tag_cancel(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_tag_cancel(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1956,7 +2015,11 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_passphrase_commit(self: &Arc<Self>, fm_id: &SharedString, passphrase: &SharedString) {
+    pub(super) fn on_fm_passphrase_commit(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        passphrase: &SharedString,
+    ) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -1982,10 +2045,7 @@ impl MainWindowController {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
-                inst,
-                paths,
-                pw,
-                purpose,
+                inst, paths, pw, purpose,
             )
             .await
             {
@@ -2016,14 +2076,14 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_passphrase_cancel(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_passphrase_cancel(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
         self.clear_fm_passphrase_overlay(inst);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_managed_policy_close(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_managed_policy_close(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -2035,7 +2095,7 @@ impl MainWindowController {
         drop(over);
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_passphrase_biometric(self: &Arc<Self>, fm_id: &SharedString) {
+    pub(super) fn on_fm_passphrase_biometric(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
@@ -2056,9 +2116,10 @@ impl MainWindowController {
             Err(e) => {
                 let msg = e.to_string();
                 warn!(?e, "fm passphrase biometric");
-                if let Err(report) =
-                    orchid_widgets::builtin::file_manager::report_passphrase_error(inst, msg.clone())
-                {
+                if let Err(report) = orchid_widgets::builtin::file_manager::report_passphrase_error(
+                    inst,
+                    msg.clone(),
+                ) {
                     warn!(?report, "fm passphrase error report");
                 }
                 self.schedule_rebuild();
@@ -2068,10 +2129,7 @@ impl MainWindowController {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let outcome = match orchid_widgets::builtin::file_manager::apply_passphrase(
-                inst,
-                paths,
-                passphrase,
-                purpose,
+                inst, paths, passphrase, purpose,
             )
             .await
             {
@@ -2102,7 +2160,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn clear_fm_passphrase_overlay(self: &Arc<Self>, inst: Uuid) {
+    pub(super) fn clear_fm_passphrase_overlay(self: &Arc<Self>, inst: Uuid) {
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.passphrase = empty_passphrase_state();
@@ -2114,7 +2172,7 @@ impl MainWindowController {
         }
         self.schedule_rebuild();
     }
-        pub(super) fn on_fm_select_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_select_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -2122,8 +2180,7 @@ impl MainWindowController {
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            if let Err(e) =
-                orchid_widgets::builtin::file_manager::select_all_in_pane(inst, p).await
+            if let Err(e) = orchid_widgets::builtin::file_manager::select_all_in_pane(inst, p).await
             {
                 warn!(?e, "fm select all");
                 return;
@@ -2133,7 +2190,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_deselect_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_deselect_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -2152,7 +2209,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_fm_delete_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_delete_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -2163,7 +2220,7 @@ impl MainWindowController {
         }
         self.spawn_fm_action(inst, "fs.delete", paths);
     }
-        pub(super) fn on_fm_copy_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_copy_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -2174,14 +2231,14 @@ impl MainWindowController {
         }
         self.spawn_fm_action(inst, "fs.copy", paths);
     }
-        pub(super) fn on_fm_paste_clipboard(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_paste_clipboard(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
         self.spawn_fm_action(inst, "fs.paste", Vec::new());
     }
-        pub(super) fn on_fm_rename_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
+    pub(super) fn on_fm_rename_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
@@ -2192,26 +2249,28 @@ impl MainWindowController {
         }
         self.spawn_fm_action(inst, "fs.rename", paths);
     }
-        pub(super) fn spawn_fm_action(self: &Arc<Self>, inst: Uuid, action_id: &str, paths: Vec<String>) {
+    pub(super) fn spawn_fm_action(
+        self: &Arc<Self>,
+        inst: Uuid,
+        action_id: &str,
+        paths: Vec<String>,
+    ) {
         let tw = Arc::downgrade(self);
         let action_id = action_id.to_string();
         spawn::spawn_local_compat(async move {
-            let outcome = match orchid_widgets::builtin::file_manager::run_action(
-                inst,
-                &action_id,
-                paths,
-            )
-            .await
-            {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!(?e, action_id = %action_id, "fm action");
-                    if let Some(c) = tw.upgrade() {
-                        c.notify_fm_action_failed(&e);
+            let outcome =
+                match orchid_widgets::builtin::file_manager::run_action(inst, &action_id, paths)
+                    .await
+                {
+                    Ok(o) => o,
+                    Err(e) => {
+                        warn!(?e, action_id = %action_id, "fm action");
+                        if let Some(c) = tw.upgrade() {
+                            c.notify_fm_action_failed(&e);
+                        }
+                        return;
                     }
-                    return;
-                }
-            };
+                };
             if let Some(c) = tw.upgrade() {
                 c.apply_fm_action_outcome(inst, outcome);
             }

@@ -66,7 +66,11 @@ impl FsProvider for LocalProvider {
                 continue;
             };
             let name = entry.file_name().to_string_lossy().into_owned();
-            let metadata = os_metadata_to_fs(&entry_path).await?;
+            // Prefer DirEntry metadata to avoid a second filesystem round-trip.
+            let metadata = match entry.metadata().await {
+                Ok(std_meta) => std_metadata_to_fs(&entry_path, std_meta).await?,
+                Err(_) => os_metadata_to_fs(&entry_path).await?,
+            };
             out.push(FsEntry {
                 path: fs_path,
                 name,
@@ -176,45 +180,59 @@ impl FsProvider for LocalProvider {
         }
     }
 
-    async fn watch(&self, path: &FsPath) -> Result<Option<Box<dyn FsWatcherHandle>>> {
+    async fn watch(
+        &self,
+        path: &FsPath,
+        recursive: bool,
+    ) -> Result<Option<Box<dyn FsWatcherHandle>>> {
         let os_path = path.to_local()?;
+        let mode = if recursive {
+            RecursiveMode::Recursive
+        } else {
+            RecursiveMode::NonRecursive
+        };
+        // `notify` registration is synchronous and can walk a large tree when
+        // recursive — keep it off the async runtime.
         let (tx, rx) = mpsc::unbounded_channel::<Vec<FsChange>>();
-        let mut debouncer = new_debouncer(
-            Duration::from_millis(300),
-            None,
-            move |res: DebounceEventResult| match res {
-                Ok(events) => {
-                    let mut batch: Vec<FsChange> = Vec::with_capacity(events.len());
-                    let now = Utc::now();
-                    for ev in events {
-                        for p in &ev.paths {
-                            let Ok(fs_path) = FsPath::from_local(p) else {
-                                continue;
-                            };
-                            let kind = notify_kind_to_fs_change(&ev.kind);
-                            if let Some(k) = kind {
-                                batch.push(FsChange {
-                                    path: fs_path,
-                                    kind: k,
-                                    timestamp: now,
-                                });
+        let debouncer = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut debouncer = new_debouncer(
+                Duration::from_millis(300),
+                None,
+                move |res: DebounceEventResult| match res {
+                    Ok(events) => {
+                        let mut batch: Vec<FsChange> = Vec::with_capacity(events.len());
+                        let now = Utc::now();
+                        for ev in events {
+                            for p in &ev.paths {
+                                let Ok(fs_path) = FsPath::from_local(p) else {
+                                    continue;
+                                };
+                                let kind = notify_kind_to_fs_change(&ev.kind);
+                                if let Some(k) = kind {
+                                    batch.push(FsChange {
+                                        path: fs_path,
+                                        kind: k,
+                                        timestamp: now,
+                                    });
+                                }
                             }
                         }
+                        if !batch.is_empty() {
+                            let _ = tx.send(batch);
+                        }
                     }
-                    if !batch.is_empty() {
-                        let _ = tx.send(batch);
+                    Err(errs) => {
+                        for e in errs {
+                            warn!(error = %e, "notify watcher error");
+                        }
                     }
-                }
-                Err(errs) => {
-                    for e in errs {
-                        warn!(error = %e, "notify watcher error");
-                    }
-                }
-            },
-        )?;
-        debouncer
-            .watch(&os_path, RecursiveMode::Recursive)
-            .map_err(FsError::Notify)?;
+                },
+            )?;
+            debouncer.watch(&os_path, mode).map_err(FsError::Notify)?;
+            Ok(debouncer)
+        })
+        .await
+        .map_err(|e| FsError::Io(std::io::Error::other(format!("watch join: {e}"))))??;
         let handle = LocalWatcherHandle {
             _debouncer: Some(debouncer),
             rx,
@@ -282,6 +300,10 @@ fn notify_kind_to_fs_change(kind: &notify::EventKind) -> Option<FsChangeKind> {
 
 async fn os_metadata_to_fs(path: &Path) -> Result<FsMetadata> {
     let std_meta = tokio::fs::metadata(path).await.map_err(map_io(path))?;
+    std_metadata_to_fs(path, std_meta).await
+}
+
+async fn std_metadata_to_fs(path: &Path, std_meta: std::fs::Metadata) -> Result<FsMetadata> {
     let kind = if std_meta.is_dir() {
         FsEntryKind::Directory
     } else if std_meta.is_symlink() {

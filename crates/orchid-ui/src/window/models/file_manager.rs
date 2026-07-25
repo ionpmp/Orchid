@@ -9,8 +9,8 @@ use uuid::Uuid;
 use super::super::errors::fm_localized_error;
 use crate::slint_generated::{
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu,
-    FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane,
-    FmPassphraseState, FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
+    FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane, FmPassphraseState,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
 };
 
 /// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
@@ -45,8 +45,8 @@ impl FmThumbCache {
     }
 
     fn insert(&mut self, key: FmThumbCacheKey, image: Image) {
-        if self.map.contains_key(&key) {
-            self.map.insert(key, FmThumbCacheEntry { image });
+        if let std::collections::hash_map::Entry::Occupied(mut e) = self.map.entry(key) {
+            e.insert(FmThumbCacheEntry { image });
             return;
         }
         while self.map.len() >= FM_THUMB_CACHE_CAP {
@@ -97,8 +97,11 @@ fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
     if let Some(image) = cached {
         return image;
     }
-    let buf =
-        slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_slice(), width, height);
+    let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+        rgba.as_slice(),
+        width,
+        height,
+    );
     let image = Image::from_rgba8(buf);
     FM_THUMB_CACHE.with(|cache| {
         cache.borrow_mut().insert(key, image.clone());
@@ -365,9 +368,7 @@ fn active_network_sidebar_index(
     active_path: &str,
     network_mounts: &[orchid_widgets::NetworkMountPayload],
 ) -> Option<usize> {
-    network_mounts
-        .iter()
-        .position(|m| m.uri == active_path)
+    network_mounts.iter().position(|m| m.uri == active_path)
 }
 
 fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPayload) -> String {
@@ -663,7 +664,9 @@ pub(crate) fn fm_grid_window(
     let tile_size = if large { 220.0 } else { 100.0 };
     let tile_height = if large { 240.0 } else { 120.0 };
     let spacing = 8.0;
-    let cols = ((view_w - spacing) / (tile_size + spacing)).floor().max(1.0) as usize;
+    let cols = ((view_w - spacing) / (tile_size + spacing))
+        .floor()
+        .max(1.0) as usize;
     let row_h = tile_height + spacing;
     let rows = total.div_ceil(cols);
     let content_h = rows as f32 * row_h + spacing;
@@ -677,38 +680,6 @@ pub(crate) fn fm_grid_window(
     let end = (first + visible_rows * cols).min(total);
     let pad_top = first_row as f32 * row_h;
     (first, end, pad_top, content_h)
-}
-
-#[cfg(test)]
-mod virtualization_tests {
-    use super::{fm_grid_window, fm_list_window, FM_VIRTUALIZE_THRESHOLD};
-
-    #[test]
-    fn list_below_threshold_is_not_virtualized() {
-        let (first, end, pad, content) = fm_list_window(40, 0.0, 400.0, false);
-        assert_eq!((first, end, pad, content), (0, 40, 0.0, 0.0));
-    }
-
-    #[test]
-    fn list_window_moves_with_scroll() {
-        let total = FM_VIRTUALIZE_THRESHOLD + 200;
-        let (first, end, pad, content) = fm_list_window(total, 28.0 * 50.0, 280.0, false);
-        assert!(first > 0);
-        assert!(end > first);
-        assert!(end - first < total);
-        assert!(pad > 0.0);
-        assert!(content > 0.0);
-    }
-
-    #[test]
-    fn grid_window_respects_columns() {
-        let total = FM_VIRTUALIZE_THRESHOLD + 100;
-        let (first, end, pad, content) = fm_grid_window(total, 0.0, 400.0, 440.0, false);
-        assert_eq!(first, 0);
-        assert!(end < total);
-        assert_eq!(pad, 0.0);
-        assert!(content > 0.0);
-    }
 }
 
 pub(crate) fn build_file_manager_model(
@@ -750,8 +721,9 @@ pub(crate) fn build_file_manager_model(
                 .enumerate()
                 .map(|(tab_idx, t)| {
                     let view_mode = view_mode_to_int(t.view_mode);
-                    let total = t.entries.len();
-                    let (first, end, pad_top, content_h) = {
+                    // Prefer item_count — widget may only ship the viewport window.
+                    let total = t.item_count as usize;
+                    let (first, _end, pad_top, content_h) = {
                         let (sy, vh, vw) = if tab_idx == pp.active_tab as usize {
                             (vp.scroll_y, vp.view_h, vp.view_w)
                         } else {
@@ -763,12 +735,11 @@ pub(crate) fn build_file_manager_model(
                             _ => fm_list_window(total, sy, vh, false),
                         }
                     };
+                    let _ = first; // pad_top already encodes the window start
 
                     let entries: Vec<FmEntry> = t
                         .entries
                         .iter()
-                        .skip(first)
-                        .take(end.saturating_sub(first))
                         .map(|e| {
                             let tags: Vec<FmTagChip> = e
                                 .tags
@@ -782,7 +753,11 @@ pub(crate) fn build_file_manager_model(
                                 e.thumbnail_rgba
                                     .as_ref()
                                     .map(|rgba| {
-                                        fm_rgba_to_image(rgba, e.thumbnail_width, e.thumbnail_height)
+                                        fm_rgba_to_image(
+                                            rgba,
+                                            e.thumbnail_width,
+                                            e.thumbnail_height,
+                                        )
                                     })
                                     .unwrap_or_default()
                             } else {
@@ -852,8 +827,8 @@ pub(crate) fn build_file_manager_model(
         })
         .collect();
 
-    let show_hidden = orchid_widgets::builtin::file_manager::show_hidden(instance_id)
-        .unwrap_or(false);
+    let show_hidden =
+        orchid_widgets::builtin::file_manager::show_hidden(instance_id).unwrap_or(false);
     let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
         .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
         .unwrap_or(false);
@@ -867,10 +842,7 @@ pub(crate) fn build_file_manager_model(
         locale.tr_args(
             key,
             &orchid_i18n::FluentArgs::new()
-                .with(
-                    "name",
-                    p.transfer_current.as_deref().unwrap_or(""),
-                )
+                .with("name", p.transfer_current.as_deref().unwrap_or(""))
                 .with("percent", percent.to_string()),
         )
     } else if let Some(err) = p.transfer_error.as_ref() {
@@ -998,7 +970,10 @@ fn context_menu_item_label(
     a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
     locale: &LocaleManager,
 ) -> SharedString {
-    if a.id.starts_with("fs.tag:") || a.id.starts_with("fs.tag-remove:") || a.id.starts_with("fs.color-label:") {
+    if a.id.starts_with("fs.tag:")
+        || a.id.starts_with("fs.tag-remove:")
+        || a.id.starts_with("fs.color-label:")
+    {
         if a.id.starts_with("fs.tag-remove:") {
             return format!("− {}", a.label_key).into();
         }
@@ -1010,9 +985,7 @@ fn context_menu_item_label(
     locale.tr(&a.label_key).into()
 }
 
-fn context_menu_item_enabled(
-    a: &orchid_widgets::builtin::file_manager::ContextMenuItem,
-) -> bool {
+fn context_menu_item_enabled(a: &orchid_widgets::builtin::file_manager::ContextMenuItem) -> bool {
     if a.id == "fs.tag-remove" || a.id == "fs.color-label" {
         return false;
     }
@@ -1095,5 +1068,37 @@ pub(crate) fn build_context_menu(
         y,
         actions: ModelRc::new(VecModel::from(actions_vec)),
         target_paths: ModelRc::new(VecModel::from(paths_vec)),
+    }
+}
+
+#[cfg(test)]
+mod virtualization_tests {
+    use super::{fm_grid_window, fm_list_window, FM_VIRTUALIZE_THRESHOLD};
+
+    #[test]
+    fn list_below_threshold_is_not_virtualized() {
+        let (first, end, pad, content) = fm_list_window(40, 0.0, 400.0, false);
+        assert_eq!((first, end, pad, content), (0, 40, 0.0, 0.0));
+    }
+
+    #[test]
+    fn list_window_moves_with_scroll() {
+        let total = FM_VIRTUALIZE_THRESHOLD + 200;
+        let (first, end, pad, content) = fm_list_window(total, 28.0 * 50.0, 280.0, false);
+        assert!(first > 0);
+        assert!(end > first);
+        assert!(end - first < total);
+        assert!(pad > 0.0);
+        assert!(content > 0.0);
+    }
+
+    #[test]
+    fn grid_window_respects_columns() {
+        let total = FM_VIRTUALIZE_THRESHOLD + 100;
+        let (first, end, pad, content) = fm_grid_window(total, 0.0, 400.0, 440.0, false);
+        assert_eq!(first, 0);
+        assert!(end < total);
+        assert_eq!(pad, 0.0);
+        assert!(content > 0.0);
     }
 }

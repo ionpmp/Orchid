@@ -21,7 +21,9 @@ use uuid::Uuid;
 use vte::{Params, Perform};
 
 use crate::error::{Result, TerminalError};
-use crate::events::{TerminalBell, TerminalClipboardWrite, TerminalCwdChanged, TerminalTitleChanged};
+use crate::events::{
+    TerminalBell, TerminalClipboardWrite, TerminalCwdChanged, TerminalTitleChanged,
+};
 use crate::search::SearchMatch;
 
 pub use color::{resolve_color, xterm_256_color, CellColor, ColorRole, Rgba, TerminalPalette};
@@ -73,6 +75,9 @@ impl TerminalEmulator {
     /// must forward them to the PTY input.
     pub fn feed(&self, bytes: &[u8]) -> Vec<u8> {
         let mut state = self.inner.lock();
+        if !bytes.is_empty() {
+            state.bump_generation();
+        }
         let mut parser = state.parser.take().unwrap_or_default();
         let mut handler = Handler {
             state: &mut state,
@@ -159,7 +164,9 @@ impl TerminalEmulator {
     /// Substring search across visible + scrollback.
     #[must_use]
     pub fn search_in_scrollback(&self, query: &str, case_sensitive: bool) -> Vec<SearchMatch> {
-        self.inner.lock().search_in_scrollback(query, case_sensitive)
+        self.inner
+            .lock()
+            .search_in_scrollback(query, case_sensitive)
     }
 }
 
@@ -191,6 +198,8 @@ struct EmulatorState {
     // Scrollable region (DECSTBM). Zero-indexed, inclusive bounds.
     scroll_top: u16,
     scroll_bottom: u16,
+    /// Bumped on feed / resize / scroll so UI equality can skip cell walks.
+    content_generation: u64,
 }
 
 impl EmulatorState {
@@ -215,13 +224,19 @@ impl EmulatorState {
             selection: None,
             scroll_top: 0,
             scroll_bottom: rows.saturating_sub(1),
+            content_generation: 1,
         }
+    }
+
+    fn bump_generation(&mut self) {
+        self.content_generation = self.content_generation.wrapping_add(1).max(1);
     }
 
     fn resize(&mut self, cols: u16, rows: u16) {
         if cols == self.cols && rows == self.rows {
             return;
         }
+        self.bump_generation();
         let cols_usize = cols as usize;
         // Resize each existing row.
         for line in &mut self.grid {
@@ -299,10 +314,12 @@ impl EmulatorState {
             scrollback_total: self.scrollback.len(),
             lines,
             cursor: self.cursor,
+            content_generation: self.content_generation,
         }
     }
 
     fn scroll_to(&mut self, pos: ScrollPosition) {
+        self.bump_generation();
         match pos {
             ScrollPosition::Top => {
                 self.viewport_offset = self.scrollback.len();
@@ -318,6 +335,9 @@ impl EmulatorState {
     }
 
     fn scroll_by(&mut self, lines: i32) {
+        if lines != 0 {
+            self.bump_generation();
+        }
         if lines > 0 {
             self.viewport_offset = self.viewport_offset.saturating_sub(lines as usize);
         } else {
@@ -426,13 +446,21 @@ impl EmulatorState {
         // Scrollback first (negative line numbers).
         for (idx, line) in self.scrollback.iter().enumerate() {
             let hay = cells_to_string(line);
-            let hay = if case_sensitive { hay } else { hay.to_lowercase() };
+            let hay = if case_sensitive {
+                hay
+            } else {
+                hay.to_lowercase()
+            };
             let line_no = (idx as i64) - (self.scrollback.len() as i64);
             push_matches(&mut out, &hay, needle, line_no);
         }
         for (idx, line) in self.grid.iter().enumerate() {
             let hay = cells_to_string(line);
-            let hay = if case_sensitive { hay } else { hay.to_lowercase() };
+            let hay = if case_sensitive {
+                hay
+            } else {
+                hay.to_lowercase()
+            };
             push_matches(&mut out, &hay, needle, idx as i64);
         }
         out
@@ -484,7 +512,8 @@ impl EmulatorState {
     fn reverse_line_feed(&mut self) {
         if self.cursor.row == self.scroll_top {
             let insert_at = self.scroll_top as usize;
-            self.grid.insert(insert_at, vec![Cell::empty(); self.cols as usize]);
+            self.grid
+                .insert(insert_at, vec![Cell::empty(); self.cols as usize]);
             // Remove the row that fell out the bottom of the region.
             let remove_at = (self.scroll_bottom as usize + 1).min(self.grid.len() - 1);
             self.grid.remove(remove_at);
@@ -611,17 +640,15 @@ impl EmulatorState {
                 30..=37 => self.current_fg = CellColor::Indexed((n - 30) as u8),
                 38 => {
                     let Some(next) = iter.next() else { break };
-                    self.current_fg =
-                        parse_extended_color(*next.first().unwrap_or(&0), &mut iter)
-                            .unwrap_or(self.current_fg);
+                    self.current_fg = parse_extended_color(*next.first().unwrap_or(&0), &mut iter)
+                        .unwrap_or(self.current_fg);
                 }
                 39 => self.current_fg = CellColor::Default,
                 40..=47 => self.current_bg = CellColor::Indexed((n - 40) as u8),
                 48 => {
                     let Some(next) = iter.next() else { break };
-                    self.current_bg =
-                        parse_extended_color(*next.first().unwrap_or(&0), &mut iter)
-                            .unwrap_or(self.current_bg);
+                    self.current_bg = parse_extended_color(*next.first().unwrap_or(&0), &mut iter)
+                        .unwrap_or(self.current_bg);
                 }
                 49 => self.current_bg = CellColor::Default,
                 90..=97 => self.current_fg = CellColor::Indexed((n - 90 + 8) as u8),
@@ -642,10 +669,7 @@ impl EmulatorState {
     }
 }
 
-fn parse_extended_color<'a>(
-    mode: u16,
-    iter: &mut vte::ParamsIter<'a>,
-) -> Option<CellColor> {
+fn parse_extended_color<'a>(mode: u16, iter: &mut vte::ParamsIter<'a>) -> Option<CellColor> {
     match mode {
         2 => {
             let r = iter.next()?.first().copied().unwrap_or(0) as u8;
@@ -852,14 +876,7 @@ impl<'a> Perform for Handler<'a> {
         }
     }
 
-    fn hook(
-        &mut self,
-        _params: &Params,
-        _intermediates: &[u8],
-        _ignore: bool,
-        _action: char,
-    ) {
-    }
+    fn hook(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
     fn put(&mut self, _byte: u8) {}
     fn unhook(&mut self) {}
 }
@@ -938,7 +955,9 @@ mod tests {
     use super::*;
 
     fn bus() -> Arc<orchid_core::EventBus> {
-        Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()))
+        Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ))
     }
 
     #[test]
@@ -1005,8 +1024,8 @@ mod tests {
 
     #[test]
     fn osc52_publishes_clipboard_write() {
-        use orchid_core::{Event, EventFilter, HandlerPriority};
         use crate::events::TerminalClipboardWrite;
+        use orchid_core::{Event, EventFilter, HandlerPriority};
 
         let bus = bus();
         let received = Arc::new(Mutex::new(None::<String>));

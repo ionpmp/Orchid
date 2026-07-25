@@ -4,12 +4,49 @@
 //! a code point, an optional `glyph_fallback` (e.g. a system UI / symbol font) is used; if that
 //! also misses, we try U+FFFD and finally a small cell-center dot so the cell is not blank.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use fontdue::Font;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::TerminalPayloadCell;
 use slint::Image;
-use slint::SharedPixelBuffer;
 use slint::Rgba8Pixel;
+use slint::SharedPixelBuffer;
+
+type GlyphRaster = Option<(fontdue::Metrics, Vec<u8>)>;
+
+/// Cached glyph coverage for `(font identity, char, size_bucket)`.
+struct GlyphCache {
+    /// Primary font pointer identity (stable for process lifetime of loaded fonts).
+    primary_ptr: usize,
+    fallback_ptr: usize,
+    /// Size quantized to 0.25 px to keep the key space small.
+    size_q: u32,
+    map: HashMap<(char, bool), GlyphRaster>,
+}
+
+impl GlyphCache {
+    fn new(primary: &Font, fallback: Option<&Font>, size_draw: f32) -> Self {
+        Self {
+            primary_ptr: primary as *const Font as usize,
+            fallback_ptr: fallback.map(|f| f as *const Font as usize).unwrap_or(0),
+            size_q: (size_draw * 4.0).round() as u32,
+            map: HashMap::with_capacity(512),
+        }
+    }
+
+    fn matches(&self, primary: &Font, fallback: Option<&Font>, size_draw: f32) -> bool {
+        self.primary_ptr == primary as *const Font as usize
+            && self.fallback_ptr == fallback.map(|f| f as *const Font as usize).unwrap_or(0)
+            && self.size_q == (size_draw * 4.0).round() as u32
+    }
+}
+
+fn glyph_cache() -> &'static Mutex<Option<GlyphCache>> {
+    static CACHE: Mutex<Option<GlyphCache>> = Mutex::new(None);
+    &CACHE
+}
 
 /// Alpha-blend `fg` (straight) over `dst` using `alpha` 0.0..=1.0.
 fn blend_over_rgba(dst: &mut [u8], i: usize, fg: [u8; 4], alpha: f32) {
@@ -58,6 +95,30 @@ fn best_raster_for_cell(
         .or_else(|| glyph_fallback.and_then(|fb| try_raster_glyph(fb, ch, size)))
         .or_else(|| try_raster_glyph(primary, '\u{FFFD}', size))
         .or_else(|| glyph_fallback.and_then(|fb| try_raster_glyph(fb, '\u{FFFD}', size)))
+}
+
+fn cached_raster_for_cell(
+    primary: &Font,
+    glyph_fallback: Option<&Font>,
+    ch: char,
+    size: f32,
+) -> Option<(fontdue::Metrics, Vec<u8>)> {
+    let mut guard = glyph_cache().lock().unwrap_or_else(|e| e.into_inner());
+    let need_new = guard
+        .as_ref()
+        .is_none_or(|c| !c.matches(primary, glyph_fallback, size));
+    if need_new {
+        *guard = Some(GlyphCache::new(primary, glyph_fallback, size));
+    }
+    let cache = guard.as_mut().expect("glyph cache just initialized");
+    // `true` key = primary path; we store the resolved raster once.
+    let key = (ch, false);
+    if let Some(hit) = cache.map.get(&key) {
+        return hit.clone();
+    }
+    let rendered = best_raster_for_cell(primary, glyph_fallback, ch, size);
+    cache.map.insert(key, rendered.clone());
+    rendered
 }
 
 /// 2×2–3×3 block in the cell so undefined points are visible even with no TTF.
@@ -159,7 +220,7 @@ pub fn render_terminal(
                 }
                 let fg = cell.fg_rgba;
                 if let Some((m, coverage)) =
-                    best_raster_for_cell(font, glyph_fallback, cell.ch, size_draw)
+                    cached_raster_for_cell(font, glyph_fallback, cell.ch, size_draw)
                 {
                     let w = m.width;
                     let h = m.height;
@@ -170,9 +231,8 @@ pub fn render_terminal(
                     let baseline = cy + line.ascent;
                     // y-up: bottom = ymin, top of outline = ymin + height.
                     let y_top = baseline - (b.ymin + b.height);
-                    let x_left = cx
-                        + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5
-                        + m.xmin as f32;
+                    let x_left =
+                        cx + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5 + m.xmin as f32;
                     for y in 0..h {
                         for x in 0..w {
                             let a = *coverage.get(y * w + x).unwrap_or(&0) as f32 / 255.0;
@@ -181,11 +241,7 @@ pub fn render_terminal(
                             }
                             let px = (x_left + x as f32).round() as i32;
                             let py = (y_top + y as f32).round() as i32;
-                            if px < 0
-                                || py < 0
-                                || (px as u32) >= tw
-                                || (py as u32) >= th
-                            {
+                            if px < 0 || py < 0 || (px as u32) >= tw || (py as u32) >= th {
                                 continue;
                             }
                             let oi = (py as u32 * tw + px as u32) as usize * 4;
@@ -195,16 +251,7 @@ pub fn render_terminal(
                         }
                     }
                 } else {
-                    draw_missing_glyphs_marker(
-                        p,
-                        tw,
-                        th,
-                        c as u32,
-                        r as u32,
-                        cell_wp,
-                        cell_hp,
-                        fg,
-                    );
+                    draw_missing_glyphs_marker(p, tw, th, c as u32, r as u32, cell_wp, cell_hp, fg);
                 }
             }
         }

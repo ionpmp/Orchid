@@ -32,6 +32,7 @@ use orchid_core::{
 };
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
+use orchid_terminal::events::TerminalOutput;
 use orchid_terminal::FontMetrics;
 use orchid_terminal::SessionManager;
 use orchid_widgets::layout::PixelBounds;
@@ -49,15 +50,16 @@ use super::models::{
     build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
     build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
     build_rss_model, build_search_model, build_system_model, build_terminal_divider_models,
-    build_terminal_model, build_terminal_tab_models, build_viewer_model, build_weather_model,
+    build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_calculator_model, empty_calendar_model, empty_clock_model, empty_confirm_dialog,
     empty_context_menu, empty_file_manager_model, empty_jyotish_model, empty_managed_policy_state,
     empty_media_model, empty_moon_model, empty_notes_model, empty_passphrase_state,
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
     empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
-    empty_viewer_model, empty_weather_model, locale_display_name, patch_processes_model,
-    theme_display_name, widget_has_settings, FileManagerOverlays, PasswordAddDialogOverlay,
+    empty_terminal_cells, empty_viewer_model, empty_weather_model, locale_display_name,
+    patch_processes_model, theme_display_name, widget_has_settings, FileManagerOverlays,
+    PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
@@ -97,6 +99,9 @@ use canvas::ResizeInteraction;
 /// Canvas fills the window; the workspace orb overlays the bottom corner.
 const WORKSPACE_CHROME_H: f32 = 0.0;
 
+type ProcessesContextMap = HashMap<Uuid, (bool, f32, f32)>;
+type FmLastClick = Option<(Uuid, u8, String, Instant)>;
+
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
     window: MainWindow,
@@ -108,6 +113,7 @@ pub struct MainWindowController {
     bus: Arc<EventBus>,
     _config_reload_sub: SubscriptionHandle,
     _fm_ingest_failed_sub: SubscriptionHandle,
+    _terminal_output_sub: SubscriptionHandle,
     /// Managed ingest failure file name; drained on the next UI tick.
     fm_ingest_failure_pending: Arc<Mutex<Option<String>>>,
     /// Last file-manager transfer error mirrored to the notification center.
@@ -169,7 +175,7 @@ pub struct MainWindowController {
     /// Per password-manager instance: add-entry dialog overlay state.
     password_add_dialogs: Arc<RwLock<HashMap<Uuid, PasswordAddDialogOverlay>>>,
     /// Per processes widget: context menu visibility and position.
-    processes_context: Arc<RwLock<HashMap<Uuid, (bool, f32, f32)>>>,
+    processes_context: Arc<RwLock<ProcessesContextMap>>,
     /// Per processes widget: End task / End tree / Sign out confirm dialog.
     processes_confirm: Arc<RwLock<HashMap<Uuid, ProcessesConfirmDialog>>>,
     /// UI-only overlays for file-manager widgets (context menu, confirm dialog, rename).
@@ -183,7 +189,7 @@ pub struct MainWindowController {
     /// Last interacted file-manager instance and pane (for drop targeting).
     fm_focus: Arc<Mutex<Option<(Uuid, u8)>>>,
     /// Recent entry click for synthesizing double-open across workspace rebuilds.
-    fm_last_click: Arc<Mutex<Option<(Uuid, u8, String, Instant)>>>,
+    fm_last_click: Arc<Mutex<FmLastClick>>,
     /// Debounce duplicate open from Slint double-click + Rust double-click.
     fm_last_open: Arc<Mutex<Option<(Uuid, String, Instant)>>>,
     /// Monotonic sequence per (instance, pane) for quick-filter debounce.
@@ -254,19 +260,10 @@ struct SettingsUiState {
     section: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct NavigationUiState {
     workspace_orb_open: bool,
     notification_center_visible: bool,
-}
-
-impl Default for NavigationUiState {
-    fn default() -> Self {
-        Self {
-            workspace_orb_open: false,
-            notification_center_visible: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -288,18 +285,10 @@ enum PasswordCopyKind {
     Totp,
 }
 
+#[derive(Default)]
 struct OsDropBatch {
     paths: Vec<String>,
     generation: u64,
-}
-
-impl Default for OsDropBatch {
-    fn default() -> Self {
-        Self {
-            paths: Vec::new(),
-            generation: 0,
-        }
-    }
 }
 
 impl MainWindowController {
@@ -407,6 +396,43 @@ impl MainWindowController {
                 },
             )
             .map_err(|e| UiError::Slint(format!("fm ingest failed sub: {e}")))?;
+        let terminal_output_wm = widget_manager.clone();
+        let terminal_output_layouts = terminal_deps.layouts.clone();
+        let terminal_output_routing = session_routing.clone();
+        let terminal_output_sub = bus
+            .subscribe_async(
+                EventFilter::of_type(TerminalOutput::event_type()),
+                HandlerPriority::Normal,
+                move |env| {
+                    let session_id = env.downcast_arc::<TerminalOutput>().map(|e| e.session_id);
+                    let wm = terminal_output_wm.clone();
+                    let layouts = terminal_output_layouts.clone();
+                    let routing = terminal_output_routing.clone();
+                    async move {
+                        let Some(session_id) = session_id else {
+                            return;
+                        };
+                        // Prefer the focused-session routing table (hot path).
+                        for entry in routing.lock().iter() {
+                            if *entry.1 == session_id {
+                                wm.mark_snapshot_dirty(*entry.0);
+                                return;
+                            }
+                        }
+                        // Multi-pane: any leaf in the layout may have produced output.
+                        for (instance_id, layout) in layouts.lock().iter() {
+                            let mut leaves = Vec::new();
+                            for tab in &layout.tabs.tabs {
+                                tab.root.leaves(&mut leaves);
+                            }
+                            if leaves.contains(&session_id) {
+                                wm.mark_snapshot_dirty(*instance_id);
+                            }
+                        }
+                    }
+                },
+            )
+            .map_err(|e| UiError::Slint(format!("terminal output sub: {e}")))?;
         let input_mapper = Arc::new(InputMapper::new());
         let gesture_recognizer = Arc::new(Mutex::new(GestureRecognizer::new(
             GestureConfig::default(),
@@ -428,6 +454,7 @@ impl MainWindowController {
             bus,
             _config_reload_sub: config_reload_sub,
             _fm_ingest_failed_sub: fm_ingest_failed_sub,
+            _terminal_output_sub: terminal_output_sub,
             fm_ingest_failure_pending,
             last_fm_transfer_error: Arc::new(Mutex::new(None)),
             jyotish_notify_state: Arc::new(Mutex::new(HashMap::new())),
@@ -1614,7 +1641,7 @@ impl MainWindowController {
                         tstr,
                         i32::from(t.cols),
                         i32::from(t.rows),
-                        build_terminal_model(t),
+                        empty_terminal_cells(),
                         img,
                         i32::from(t.cursor_col),
                         i32::from(t.cursor_row),
@@ -2561,8 +2588,7 @@ impl MainWindowController {
                     }
                     WindowEvent::Touch(touch) => {
                         if let Some(c) = tw.upgrade() {
-                            if let Some(ev) =
-                                input::winit_touch_to_orchid(&touch, c.window.window())
+                            if let Some(ev) = input::winit_touch_to_orchid(touch, c.window.window())
                             {
                                 c.feed_touch_input(ev);
                             }

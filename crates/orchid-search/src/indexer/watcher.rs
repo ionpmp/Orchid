@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use orchid_core::Event;
 use parking_lot::RwLock;
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
@@ -113,10 +114,16 @@ impl IndexFsSubscriber {
         }
 
         let sub = self.clone();
-        let (handle, mut rx) = self.inner.bus.subscribe(
-            orchid_core::EventFilter::any(),
-            orchid_core::HandlerPriority::Normal,
-        )?;
+        // Only FS / tag events — not every WidgetSnapshotUpdated tick.
+        let filter = orchid_core::EventFilter::of_type(orchid_fs::FsCreatedEvent::event_type())
+            .add_type(orchid_fs::FsModifiedEvent::event_type())
+            .add_type(orchid_fs::FsDeletedEvent::event_type())
+            .add_type(orchid_fs::FsRenamedEvent::event_type())
+            .add_type(orchid_fs::TagsChangedEvent::event_type());
+        let (handle, mut rx) = self
+            .inner
+            .bus
+            .subscribe(filter, orchid_core::HandlerPriority::Normal)?;
         handle.leak();
 
         let task = tokio::spawn(async move {
@@ -185,10 +192,7 @@ impl IndexFsSubscriber {
             }
         };
         let scope = self.inner.scope.read().clone();
-        let name = path
-            .file_name()
-            .unwrap_or("")
-            .to_string();
+        let name = path.file_name().unwrap_or("").to_string();
         let extension = path.extension().map(|s| s.to_ascii_lowercase());
         let modified = meta.modified.map(|t| t.timestamp()).unwrap_or(0);
 

@@ -192,15 +192,14 @@ impl PasswordDatabase {
     /// exist.
     pub fn add_entry(&self, entry: PasswordEntry) -> Result<Uuid> {
         let entry_id = entry.id;
-        let mut guard = self.inner.lock();
-        let mut group = group_mut(&mut guard, entry.group_id)?;
-        let mut kp = group
-            .add_entry_with_id(EntryId::from(entry_id))
-            .map_err(|e| CryptoError::KdbxOpen(format!("add entry: {e}")))?;
-        apply_password_entry(&mut kp, &entry);
-        drop(kp);
-        drop(group);
-        drop(guard);
+        {
+            let mut guard = self.inner.lock();
+            let mut group = group_mut(&mut guard, entry.group_id)?;
+            let mut kp = group
+                .add_entry_with_id(EntryId::from(entry_id))
+                .map_err(|e| CryptoError::KdbxOpen(format!("add entry: {e}")))?;
+            apply_password_entry(&mut kp, &entry);
+        }
         self.dirty.store(true, Ordering::Relaxed);
         Ok(entry_id)
     }
@@ -225,10 +224,10 @@ impl PasswordDatabase {
                     .map_err(|_| CryptoError::GroupNotFound(target_group))?;
             }
         }
-        let mut kp = entry_mut(&mut guard, id)?;
-        apply_password_entry(&mut kp, &entry);
-        drop(kp);
-        drop(guard);
+        {
+            let mut kp = entry_mut(&mut guard, id)?;
+            apply_password_entry(&mut kp, &entry);
+        }
         self.dirty.store(true, Ordering::Relaxed);
         Ok(())
     }
@@ -284,12 +283,12 @@ impl PasswordDatabase {
     /// Returns [`CryptoError::EntryNotFound`] /
     /// [`CryptoError::GroupNotFound`] as appropriate.
     pub fn move_entry(&self, id: Uuid, target_group: Uuid) -> Result<()> {
-        let mut guard = self.inner.lock();
-        let mut kp = entry_mut(&mut guard, id)?;
-        kp.move_to(GroupId::from(target_group))
-            .map_err(|_| CryptoError::GroupNotFound(target_group))?;
-        drop(kp);
-        drop(guard);
+        {
+            let mut guard = self.inner.lock();
+            let mut kp = entry_mut(&mut guard, id)?;
+            kp.move_to(GroupId::from(target_group))
+                .map_err(|_| CryptoError::GroupNotFound(target_group))?;
+        }
         self.dirty.store(true, Ordering::Relaxed);
         Ok(())
     }
@@ -312,14 +311,13 @@ impl PasswordDatabase {
     ///
     /// Returns [`CryptoError::GroupNotFound`] if the parent is unknown.
     pub fn add_group(&self, parent_id: Uuid, name: &str) -> Result<Uuid> {
-        let mut guard = self.inner.lock();
-        let mut parent = group_mut(&mut guard, parent_id)?;
-        let mut new = parent.add_group();
-        new.name = name.to_string();
-        let new_id = new.id().uuid();
-        drop(new);
-        drop(parent);
-        drop(guard);
+        let new_id = {
+            let mut guard = self.inner.lock();
+            let mut parent = group_mut(&mut guard, parent_id)?;
+            let mut new = parent.add_group();
+            new.name = name.to_string();
+            new.id().uuid()
+        };
         self.dirty.store(true, Ordering::Relaxed);
         Ok(new_id)
     }
@@ -330,11 +328,11 @@ impl PasswordDatabase {
     ///
     /// Returns [`CryptoError::GroupNotFound`] if the id is unknown.
     pub fn rename_group(&self, id: Uuid, name: &str) -> Result<()> {
-        let mut guard = self.inner.lock();
-        let mut group = group_mut(&mut guard, id)?;
-        group.name = name.to_string();
-        drop(group);
-        drop(guard);
+        {
+            let mut guard = self.inner.lock();
+            let mut group = group_mut(&mut guard, id)?;
+            group.name = name.to_string();
+        }
         self.dirty.store(true, Ordering::Relaxed);
         Ok(())
     }
@@ -439,11 +437,7 @@ fn entry_from_keepass(kp: EntryRef<'_>, group_id: Uuid) -> PasswordEntry {
         custom_fields.insert(k.clone(), SecretString::from(plain));
     }
 
-    let created_at = kp
-        .times
-        .creation
-        .map(naive_to_utc)
-        .unwrap_or_else(Utc::now);
+    let created_at = kp.times.creation.map(naive_to_utc).unwrap_or_else(Utc::now);
     let modified_at = kp
         .times
         .last_modification

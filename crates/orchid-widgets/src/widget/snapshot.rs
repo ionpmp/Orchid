@@ -94,6 +94,8 @@ pub struct TerminalPayload {
     pub cursor_row: u16,
     /// Whether the cursor should be drawn.
     pub cursor_visible: bool,
+    /// Monotonic content generation from the emulator (cheap equality).
+    pub content_generation: u64,
     /// Tab strip entries for the Slint terminal chrome.
     pub tabs: Vec<TerminalTabPayload>,
     /// Active tab index in [`Self::tabs`].
@@ -133,6 +135,8 @@ pub struct TerminalPanePayload {
     pub cursor_row: u16,
     /// Cursor visibility.
     pub cursor_visible: bool,
+    /// Emulator content generation for this pane's grid.
+    pub content_generation: u64,
 }
 
 /// Draggable divider between two terminal panes.

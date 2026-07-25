@@ -6,9 +6,7 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use parking_lot::Mutex;
-use sysinfo::{
-    Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users,
-};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind, Users};
 
 use super::classify::classify_process;
 use super::types::{ProcessSample, ProcessesSnapshot};
@@ -43,17 +41,11 @@ impl ProcessesProvider {
     /// New provider with a baseline process sample (CPU not yet meaningful).
     #[must_use]
     pub fn new() -> Self {
-        let mut system = System::new();
-        system.refresh_processes_specifics(
-            ProcessesToUpdate::All,
-            true,
-            process_refresh_kind(true),
-        );
-        let users = Users::new_with_refreshed_list();
+        // Defer the expensive first scan to [Self::refresh] / widget activate.
         Self {
-            system: Mutex::new(system),
-            users: Mutex::new(users),
-            last_refresh: Mutex::new(Some(Instant::now())),
+            system: Mutex::new(System::new()),
+            users: Mutex::new(Users::new()),
+            last_refresh: Mutex::new(None),
             prev_io: Mutex::new(HashMap::new()),
             app_pids: Mutex::new((Instant::now(), HashSet::new())),
             sample_n: AtomicU32::new(0),

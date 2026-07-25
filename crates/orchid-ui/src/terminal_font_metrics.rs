@@ -2,13 +2,62 @@
 //! derived from a real system font (same path as a serious terminal emulator) instead of
 //! multiplying `size_md` by a magic factor.
 
+use std::sync::OnceLock;
+use std::time::Duration;
+
 use fontdb::{Database, Family, Query, Stretch, Style, Weight};
 use fontdue::Font;
 use fontdue::FontSettings;
 use orchid_terminal::FontMetrics;
+use parking_lot::RwLock;
 use tracing::debug;
 
 use crate::theme::TypographyTokens;
+
+/// Shared system font database. Filled asynchronously by [`warm_system_fonts`].
+static FONT_DB: OnceLock<RwLock<Option<Database>>> = OnceLock::new();
+
+fn font_db_slot() -> &'static RwLock<Option<Database>> {
+    FONT_DB.get_or_init(|| RwLock::new(None))
+}
+
+/// Kick off a background system-font scan so first paint need not wait for it.
+pub fn warm_system_fonts() {
+    let slot = font_db_slot();
+    if slot.read().is_some() {
+        return;
+    }
+    std::thread::Builder::new()
+        .name("orchid-fontdb".into())
+        .spawn(|| {
+            let mut d = Database::new();
+            d.load_system_fonts();
+            *font_db_slot().write() = Some(d);
+            debug!(target: "orchid_ui::font_metrics", "system font database ready");
+        })
+        .ok();
+}
+
+fn wait_for_font_db(timeout: Duration) -> Option<&'static Database> {
+    static READY: OnceLock<Database> = OnceLock::new();
+    if let Some(db) = READY.get() {
+        return Some(db);
+    }
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        {
+            let mut guard = font_db_slot().write();
+            if let Some(db) = guard.take() {
+                let _ = READY.set(db);
+                return READY.get();
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
 
 const SAMPLE_CHARS: &[char] = &['M', '0', 'm', 'W', ' '];
 
@@ -93,12 +142,12 @@ pub fn font_and_metrics_from_typography(
     if !size_px.is_finite() || size_px <= 0.0 {
         return (heuristic_font_metrics(tokens), None, None);
     }
-    static DB: std::sync::OnceLock<Database> = std::sync::OnceLock::new();
-    let db = DB.get_or_init(|| {
-        let mut d = Database::new();
-        d.load_system_fonts();
-        d
-    });
+    // Prefer a warmed DB; if still loading, fall back to heuristics so first
+    // paint is not blocked by a full system font enumeration.
+    let Some(db) = wait_for_font_db(Duration::from_millis(50)) else {
+        warm_system_fonts();
+        return (heuristic_font_metrics(tokens), None, None);
+    };
 
     let names = parse_family_list(&tokens.font_family_mono);
     let mut font: Option<Font> = None;
@@ -158,4 +207,3 @@ fn heuristic_font_metrics(tokens: &TypographyTokens) -> FontMetrics {
         cell_height_px,
     }
 }
-

@@ -116,14 +116,13 @@ impl ActionMiddleware for HistoryRecorder {
             correlation_id: ctx.correlation_id,
             source_label: ctx.source.label(),
         };
-        let metadata_bytes =
-            match bincode::encode_to_vec(&metadata, bincode::config::standard()) {
-                Ok(b) => b,
-                Err(e) => {
-                    warn!(error = %e, "failed to encode history metadata; skipping entry");
-                    return;
-                }
-            };
+        let metadata_bytes = match bincode::encode_to_vec(&metadata, bincode::config::standard()) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!(error = %e, "failed to encode history metadata; skipping entry");
+                return;
+            }
+        };
 
         let entry = HistoryEntry {
             id: Uuid::new_v4(),
@@ -137,15 +136,23 @@ impl ActionMiddleware for HistoryRecorder {
         };
 
         let storage = Arc::clone(&self.storage);
-        let write_result = (|| {
+        let action_id = action.id().to_string();
+        // Offload sync DB I/O from the async worker; still await so history
+        // is durable before the middleware returns.
+        let join = tokio::task::spawn_blocking(move || {
             let mut w = storage.write()?;
             w.put_history(&entry)?;
             w.commit()?;
             Ok::<_, crate::CoreError>(())
-        })();
-
-        if let Err(e) = write_result {
-            warn!(error = %e, action.id = action.id(), "history recording failed");
+        });
+        match join.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                warn!(error = %e, action.id = %action_id, "history recording failed");
+            }
+            Err(e) => {
+                warn!(error = %e, action.id = %action_id, "history recording join failed");
+            }
         }
     }
 }
@@ -159,8 +166,9 @@ mod tests {
 
     fn make_ctx(storage: Arc<StateStore>) -> ActionContext {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
-        let config =
-            Arc::new(parking_lot::RwLock::new(orchid_storage::OrchidConfig::default()));
+        let config = Arc::new(parking_lot::RwLock::new(
+            orchid_storage::OrchidConfig::default(),
+        ));
         ActionContext::new(bus, storage, config)
     }
 

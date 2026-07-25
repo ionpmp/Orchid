@@ -36,6 +36,72 @@ pub const TYPE_ID: &str = "system";
 
 static SYSTEM_LIVE: LazyLock<DashMap<Uuid, Arc<SystemHandle>>> = LazyLock::new(DashMap::new);
 
+/// Render-relevant equality for idle change-gating (ignore `captured_at`,
+/// bucket noisy float metrics so sub-percent jitter does not dirty the UI).
+fn system_snapshot_renders_eq(a: &SystemSnapshot, b: &SystemSnapshot) -> bool {
+    pct_bucket(a.cpu_total_percent) == pct_bucket(b.cpu_total_percent)
+        && a.cpu_per_core.len() == b.cpu_per_core.len()
+        && a.cpu_per_core
+            .iter()
+            .zip(b.cpu_per_core.iter())
+            .all(|(x, y)| pct_bucket(*x) == pct_bucket(*y))
+        && opt_pct_bucket(a.cpu_temp_c) == opt_pct_bucket(b.cpu_temp_c)
+        && a.memory_total_bytes == b.memory_total_bytes
+        && a.memory_used_bytes == b.memory_used_bytes
+        && a.swap_total_bytes == b.swap_total_bytes
+        && a.swap_used_bytes == b.swap_used_bytes
+        && a.uptime_seconds == b.uptime_seconds
+        && disks_eq(&a.disks, &b.disks)
+        && networks_eq(&a.networks, &b.networks)
+        && battery_eq(a.battery.as_ref(), b.battery.as_ref())
+}
+
+fn pct_bucket(v: f32) -> i32 {
+    (v * 2.0).round() as i32 // 0.5% steps
+}
+
+fn opt_pct_bucket(v: Option<f32>) -> Option<i32> {
+    v.map(pct_bucket)
+}
+
+fn disks_eq(a: &[DiskUsage], b: &[DiskUsage]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b.iter()).all(|(x, y)| {
+            x.mount == y.mount
+                && x.total_bytes == y.total_bytes
+                && x.used_bytes == y.used_bytes
+                && x.file_system == y.file_system
+                && x.is_removable == y.is_removable
+        })
+}
+
+fn networks_eq(a: &[NetworkRate], b: &[NetworkRate]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b.iter()).all(|(x, y)| {
+            x.interface == y.interface
+                && rate_bucket(x.upload_bps) == rate_bucket(y.upload_bps)
+                && rate_bucket(x.download_bps) == rate_bucket(y.download_bps)
+        })
+}
+
+fn rate_bucket(bps: f64) -> i64 {
+    // ~1 KiB/s buckets — enough for UI labels, quiet when idle.
+    (bps / 1024.0).round() as i64
+}
+
+fn battery_eq(a: Option<&BatteryStatus>, b: Option<&BatteryStatus>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.percent == b.percent
+                && a.charging == b.charging
+                && a.time_to_empty_seconds == b.time_to_empty_seconds
+                && a.time_to_full_seconds == b.time_to_full_seconds
+        }
+        _ => false,
+    }
+}
+
 struct SystemHandle {
     instance_id: Uuid,
     config: Arc<RwLock<SystemConfig>>,
@@ -81,8 +147,17 @@ impl SystemHandle {
                         return;
                     }
                 };
-                *snap_slot.write() = Some(snap);
-                handle.publish();
+                let changed = {
+                    let mut slot = snap_slot.write();
+                    let changed = slot
+                        .as_ref()
+                        .is_none_or(|prev| !system_snapshot_renders_eq(prev, &snap));
+                    *slot = Some(snap);
+                    changed
+                };
+                if changed {
+                    handle.publish();
+                }
             }
         });
     }
@@ -167,16 +242,18 @@ impl Widget for SystemWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let provider = self.handle.provider.clone();
-        let snap = tokio::task::spawn_blocking(move || provider.refresh())
-            .await
-            .map_err(|e| {
-                WidgetError::CreationFailed(format!("system metrics initial refresh: {e}"))
-            })?;
-        *self.handle.snapshot.write() = Some(snap);
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        if self.handle.snapshot.read().is_none() {
+            let provider = self.handle.provider.clone();
+            let snap = tokio::task::spawn_blocking(move || provider.refresh())
+                .await
+                .map_err(|e| {
+                    WidgetError::CreationFailed(format!("system metrics initial refresh: {e}"))
+                })?;
+            *self.handle.snapshot.write() = Some(snap);
+        }
         self.handle.schedule_refresh();
         Ok(())
     }
@@ -215,7 +292,7 @@ impl Widget for SystemWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: self.handle.locale.tr("widget-system-name").into(),
+            title: self.handle.locale.tr("widget-system-name"),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::SystemIndicators(SystemPayload {
                 indicators,
@@ -554,13 +631,15 @@ mod tests {
 
     #[test]
     fn cpu_cores_respect_toggle() {
-        let mut cfg = SystemConfig::default();
-        cfg.show_cpu_cores = false;
-        cfg.show_memory = false;
-        cfg.show_disks = false;
-        cfg.show_network = false;
-        cfg.show_battery = false;
-        cfg.show_uptime = false;
+        let cfg = SystemConfig {
+            show_cpu_cores: false,
+            show_memory: false,
+            show_disks: false,
+            show_network: false,
+            show_battery: false,
+            show_uptime: false,
+            ..Default::default()
+        };
         let locale = test_locale();
         let indicators = build_indicators(&cfg, &snap(50.0), &locale);
         assert!(indicators[0].segments.is_empty());
@@ -568,12 +647,14 @@ mod tests {
 
     #[test]
     fn network_aggregates_by_default() {
-        let mut cfg = SystemConfig::default();
-        cfg.show_cpu = false;
-        cfg.show_memory = false;
-        cfg.show_disks = false;
-        cfg.show_battery = false;
-        cfg.show_uptime = false;
+        let cfg = SystemConfig {
+            show_cpu: false,
+            show_memory: false,
+            show_disks: false,
+            show_battery: false,
+            show_uptime: false,
+            ..Default::default()
+        };
         let mut s = snap(0.0);
         s.networks = vec![
             NetworkRate {

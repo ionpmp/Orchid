@@ -122,6 +122,7 @@ enum TerminalOp {
     TabPrevious,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn terminal_command(
     id: &'static str,
     name_key: &'static str,

@@ -13,15 +13,15 @@ use uuid::Uuid;
 use orchid_terminal::SplitDirection;
 use orchid_widgets::TerminalPayload;
 
+use crate::slint_generated::TerminalPaneModel;
 use crate::terminal_raster;
 use crate::widgets::terminal::{
     add_tab, close_focused_pane_or_tab, close_pane, close_tab, focus_next_pane, focus_pane,
     focus_previous_pane, set_split_ratio, split_horizontal, split_vertical, switch_tab,
     switch_tab_relative,
 };
+use crate::window::models::{empty_terminal_cells, pane_payload_to_terminal};
 use crate::window::spawn;
-use crate::window::models::{build_terminal_model, pane_payload_to_terminal};
-use crate::slint_generated::TerminalPaneModel;
 
 use super::MainWindowController;
 
@@ -34,12 +34,7 @@ impl MainWindowController {
     ) -> bool {
         let w = viewport_w.max(1.0);
         let h = viewport_h.max(1.0);
-        let layout = self
-            .terminal_deps
-            .layouts
-            .lock()
-            .get(&inst)
-            .cloned();
+        let layout = self.terminal_deps.layouts.lock().get(&inst).cloned();
         let Some(layout) = layout else {
             return false;
         };
@@ -85,23 +80,17 @@ impl MainWindowController {
             let ch = self.font_metrics.cell_height_px as u32;
             let scale = self.window.window().scale_factor();
             let glyph_fb = self.mono_font_glyph_fallback.as_ref();
-            terminal_raster::render_terminal(
-                t,
-                f,
-                glyph_fb,
-                size_md,
-                cw,
-                ch,
-                scale,
-                ccol,
-            )
-            .unwrap_or_default()
+            terminal_raster::render_terminal(t, f, glyph_fb, size_md, cw, ch, scale, ccol)
+                .unwrap_or_default()
         } else {
             Image::default()
         }
     }
 
-    pub(super) fn build_terminal_pane_models(&self, t: &TerminalPayload) -> ModelRc<TerminalPaneModel> {
+    pub(super) fn build_terminal_pane_models(
+        &self,
+        t: &TerminalPayload,
+    ) -> ModelRc<TerminalPaneModel> {
         let panes: Vec<TerminalPaneModel> = if t.panes.is_empty() {
             let mini = TerminalPayload {
                 cols: t.cols,
@@ -110,6 +99,7 @@ impl MainWindowController {
                 cursor_col: t.cursor_col,
                 cursor_row: t.cursor_row,
                 cursor_visible: t.cursor_visible,
+                content_generation: t.content_generation,
                 tabs: Vec::new(),
                 active_tab: 0,
                 panes: Vec::new(),
@@ -125,7 +115,7 @@ impl MainWindowController {
                 show_close: false,
                 cols: i32::from(t.cols),
                 rows: i32::from(t.rows),
-                cells: build_terminal_model(&mini),
+                cells: empty_terminal_cells(),
                 pixels: self.raster_terminal_payload(&mini),
                 cursor_col: i32::from(t.cursor_col),
                 cursor_row: i32::from(t.cursor_row),
@@ -146,7 +136,7 @@ impl MainWindowController {
                         show_close: p.show_close,
                         cols: i32::from(p.cols),
                         rows: i32::from(p.rows),
-                        cells: build_terminal_model(&mini),
+                        cells: empty_terminal_cells(),
                         pixels: self.raster_terminal_payload(&mini),
                         cursor_col: i32::from(p.cursor_col),
                         cursor_row: i32::from(p.cursor_row),
@@ -309,7 +299,11 @@ impl MainWindowController {
         });
     }
 
-    pub(super) fn on_terminal_pane_clicked(self: &Arc<Self>, id: &SharedString, session_id: &SharedString) {
+    pub(super) fn on_terminal_pane_clicked(
+        self: &Arc<Self>,
+        id: &SharedString,
+        session_id: &SharedString,
+    ) {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
         };
@@ -328,7 +322,11 @@ impl MainWindowController {
         });
     }
 
-    pub(super) fn on_terminal_pane_closed(self: &Arc<Self>, id: &SharedString, session_id: &SharedString) {
+    pub(super) fn on_terminal_pane_closed(
+        self: &Arc<Self>,
+        id: &SharedString,
+        session_id: &SharedString,
+    ) {
         let Ok(inst) = Uuid::parse_str(id.as_str()) else {
             return;
         };
@@ -456,10 +454,7 @@ fn peel_slint_modifier_prefix(
 ) -> (&str, orchid_core::Modifiers) {
     use orchid_core::Modifiers;
     let mut t = text;
-    loop {
-        let Some(c) = t.chars().next() else {
-            break;
-        };
+    while let Some(c) = t.chars().next() {
         let embedded = match c as u32 {
             0x10 => Some(Modifiers::SHIFT),
             0x11 => Some(Modifiers::CTRL),
@@ -841,4 +836,3 @@ mod key_encode_tests {
         );
     }
 }
-

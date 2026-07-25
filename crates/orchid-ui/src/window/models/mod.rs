@@ -48,9 +48,9 @@ pub(crate) use settings::{
 };
 pub(crate) use system::{build_system_model, empty_system_model};
 pub(crate) use terminal::{
-    blank_terminal, build_terminal_divider_models, build_terminal_model, build_terminal_tab_models,
+    blank_terminal, build_terminal_divider_models, build_terminal_tab_models,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
-    pane_payload_to_terminal,
+    empty_terminal_cells, pane_payload_to_terminal,
 };
 pub(crate) use viewer::{build_viewer_model, empty_viewer_model};
 pub(crate) use weather::{build_weather_model, empty_weather_model};

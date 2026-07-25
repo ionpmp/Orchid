@@ -73,6 +73,9 @@ pub(crate) struct WidgetManagerInner {
     pub snapshot_cache: Arc<WidgetSnapshotCache>,
     /// Instance ids with a new snapshot; drained on the UI thread to refresh those rows only.
     frame_dirty: parking_lot::Mutex<HashSet<Uuid>>,
+    /// Instances that need a snapshot rebuild on the next pump tick (event-driven).
+    /// Replaces polling every Active widget at 30 Hz.
+    snapshot_dirty: parking_lot::Mutex<HashSet<Uuid>>,
     /// Unsubscribed in [`WidgetManager::shutdown`] so disk handles are not kept alive by the bus.
     snapshot_refresh_sub: parking_lot::Mutex<Option<SubscriptionHandle>>,
 }
@@ -122,9 +125,19 @@ impl WidgetManager {
                 snapshot_pump: Mutex::new(None),
                 snapshot_cache,
                 frame_dirty: parking_lot::Mutex::new(HashSet::new()),
+                snapshot_dirty: parking_lot::Mutex::new(HashSet::new()),
                 snapshot_refresh_sub: parking_lot::Mutex::new(None),
             }),
         }
+    }
+
+    /// Mark `instance_id` so the snapshot pump rebuilds it on the next tick.
+    ///
+    /// Prefer publishing [`WidgetSnapshotUpdated`] when the widget already knows
+    /// its payload changed; use this for subsystems (e.g. terminal PTY output)
+    /// that update shared state without going through the widget event path.
+    pub fn mark_snapshot_dirty(&self, instance_id: Uuid) {
+        self.inner.snapshot_dirty.lock().insert(instance_id);
     }
 
     /// Always-on job queue shared with widget contexts.
@@ -238,6 +251,9 @@ impl WidgetManager {
                 if state == LifecycleState::Sleeping || state == LifecycleState::Unloaded {
                     if let Err(e) = self.change_lifecycle(id, LifecycleState::Active).await {
                         warn!(widget_id = %id, error = %e, "apply_visibility: wake failed");
+                    } else {
+                        // Wake path does not always publish WidgetSnapshotUpdated.
+                        self.mark_snapshot_dirty(id);
                     }
                 }
             } else if state == LifecycleState::Active {
@@ -347,13 +363,19 @@ impl WidgetManager {
             let now = Utc::now();
             let canonical_type =
                 crate::registry::WidgetRegistry::canonical_type_id(&row.widget_type).to_string();
+            // Defer Active until apply_visibility so heavy on_activate work
+            // (PTY spawn, FM listing, process scan) only runs for visible widgets.
+            let restore_lifecycle = match row.lifecycle {
+                LifecycleState::Unloaded => LifecycleState::Unloaded,
+                _ => LifecycleState::Sleeping,
+            };
             let runtime = Arc::new(WidgetInstanceRuntime {
                 id: row.id,
                 workspace_id: row.workspace_id,
                 type_id: canonical_type,
                 position: RwLock::new(row.position),
                 size: RwLock::new(row.size),
-                lifecycle: RwLock::new(row.lifecycle),
+                lifecycle: RwLock::new(restore_lifecycle),
                 group_id: RwLock::new(None),
                 created_at: row.created_at,
                 updated_at: RwLock::new(row.updated_at),
@@ -372,13 +394,7 @@ impl WidgetManager {
                     continue;
                 }
             }
-            if row.lifecycle == LifecycleState::Active {
-                let ctx = self.context_for(&runtime);
-                let mut w = runtime.widget.lock().await;
-                if let Err(e) = w.on_activate(&ctx).await {
-                    warn!(widget_id = %row.id, error = %e, "restore: on_activate failed");
-                }
-            }
+            // on_activate runs later via apply_visibility for visible widgets.
 
             self.inner.instances.insert(row.id, runtime);
             count += 1;
@@ -489,12 +505,18 @@ fn snapshot_renders_unchanged(prev: &WidgetSnapshot, new: &WidgetSnapshot) -> bo
 }
 
 async fn run_snapshot_pump(inner: &WidgetManagerInner) {
-    let instances: Vec<SharedInstance> = inner
-        .instances
-        .iter()
-        .map(|e| Arc::clone(e.value()))
-        .collect();
-    for inst in instances {
+    let dirty: Vec<Uuid> = {
+        let mut g = inner.snapshot_dirty.lock();
+        if g.is_empty() {
+            return;
+        }
+        mem::take(&mut *g).into_iter().collect()
+    };
+    let mut rebuilt = 0usize;
+    for id in dirty {
+        let Some(inst) = inner.instances.get(&id).map(|e| Arc::clone(e.value())) else {
+            continue;
+        };
         if *inst.lifecycle.read() != LifecycleState::Active {
             continue;
         }
@@ -503,25 +525,25 @@ async fn run_snapshot_pump(inner: &WidgetManagerInner) {
             guard.snapshot()
         };
         if let Some(snap) = snapshot {
-            let id = inst.id;
             let prev = inner.snapshot_cache.get(id);
             let changed = prev
                 .as_deref()
                 .is_none_or(|p| !snapshot_renders_unchanged(p, &snap));
-            // Skip put when render-identical: avoids allocating a fresh
-            // Arc<WidgetSnapshot> (~30 Hz) for every idle active widget.
             if changed {
                 inner.snapshot_cache.put(id, snap);
                 inner.frame_dirty.lock().insert(id);
+                rebuilt += 1;
             }
         }
     }
-    trace!(
-        target: "orchid_widgets::snapshot_pump",
-        instances = inner.instances.len(),
-        cached = inner.snapshot_cache.len(),
-        "snapshot pump tick"
-    );
+    if rebuilt > 0 {
+        trace!(
+            target: "orchid_widgets::snapshot_pump",
+            rebuilt,
+            cached = inner.snapshot_cache.len(),
+            "snapshot pump tick"
+        );
+    }
 }
 
 async fn run_sweepers(inner: &WidgetManagerInner) {

@@ -20,7 +20,9 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::payloads::MediaPlayerPayload;
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 #[cfg(windows)]
@@ -56,6 +58,42 @@ pub struct MediaSession {
     pub duration: Option<Duration>,
     pub is_playing: bool,
     pub thumbnail_bytes: Option<Vec<u8>>,
+}
+
+/// Render-relevant equality: ignore sub-100ms position jitter and compare
+/// thumbnail by length + first/last bytes (avoid O(n) full scans on every poll).
+fn media_session_renders_eq(a: Option<&MediaSession>, b: Option<&MediaSession>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.title == b.title
+                && a.artist == b.artist
+                && a.album == b.album
+                && a.source_app == b.source_app
+                && a.is_playing == b.is_playing
+                && a.duration == b.duration
+                && duration_bucket(a.position) == duration_bucket(b.position)
+                && thumb_eq(a.thumbnail_bytes.as_deref(), b.thumbnail_bytes.as_deref())
+        }
+        _ => false,
+    }
+}
+
+fn duration_bucket(d: Option<Duration>) -> Option<u64> {
+    d.map(|d| d.as_millis() as u64 / 100)
+}
+
+fn thumb_eq(a: Option<&[u8]>, b: Option<&[u8]>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.len() == b.len()
+                && a.first() == b.first()
+                && a.last() == b.last()
+                && (a.len() < 64 || a[a.len() / 2] == b[b.len() / 2])
+        }
+        _ => false,
+    }
 }
 
 /// Abstract media provider.
@@ -136,7 +174,9 @@ pub async fn execute_command(instance_id: Uuid, cmd: &'static str) -> Result<(),
         "pause" => p.pause().await,
         "next" => p.next().await,
         "previous" => p.previous().await,
-        other => Err(MediaError::ControlFailed(format!("unknown command: {other}"))),
+        other => Err(MediaError::ControlFailed(format!(
+            "unknown command: {other}"
+        ))),
     }
 }
 
@@ -178,12 +218,24 @@ impl MediaPlayerWidget {
         instance_id: Uuid,
     ) {
         let session = provider.current().await;
-        *slot.write() = session;
-        *first_poll_done.write() = true;
-        bus.publish(
-            orchid_core::EventSource::Widget(instance_id),
-            WidgetSnapshotUpdated { instance_id },
-        );
+        let changed = {
+            let mut guard = slot.write();
+            let changed = !media_session_renders_eq(guard.as_ref(), session.as_ref());
+            *guard = session;
+            changed
+        };
+        let first = {
+            let mut done = first_poll_done.write();
+            let was_first = !*done;
+            *done = true;
+            was_first
+        };
+        if changed || first {
+            bus.publish(
+                orchid_core::EventSource::Widget(instance_id),
+                WidgetSnapshotUpdated { instance_id },
+            );
+        }
     }
 
     /// Access the provider; used by the UI shell for transport controls.
@@ -207,16 +259,7 @@ impl Widget for MediaPlayerWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        if self.supported {
-            Self::poll_once(
-                self.provider.clone(),
-                self.session.clone(),
-                self.first_poll_done.clone(),
-                self.bus.clone(),
-                self.instance_id,
-            )
-            .await;
-        } else {
+        if !self.supported {
             *self.first_poll_done.write() = true;
         }
         Ok(())
@@ -258,7 +301,7 @@ impl Widget for MediaPlayerWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let is_loading = !*self.first_poll_done.read();
-        let title = self.locale.tr("widget-media-name").into();
+        let title = self.locale.tr("widget-media-name");
         if !self.supported {
             return Some(WidgetSnapshot {
                 instance_id: self.instance_id,
@@ -315,10 +358,7 @@ fn session_to_payload(s: MediaSession, is_loading: bool) -> MediaPlayerPayload {
     } else {
         (position.as_secs_f32() / duration.as_secs_f32()).clamp(0.0, 1.0)
     };
-    let thumbnail_base64 = s
-        .thumbnail_bytes
-        .as_ref()
-        .map(|bytes| base64_encode(bytes));
+    let thumbnail_base64 = s.thumbnail_bytes.as_ref().map(|bytes| base64_encode(bytes));
     MediaPlayerPayload {
         has_session: true,
         is_loading,
@@ -339,8 +379,7 @@ fn session_to_payload(s: MediaSession, is_loading: bool) -> MediaPlayerPayload {
 /// the UI's `data:image/...;base64,...` URL. A dependency like `base64`
 /// would also work; rolling it by hand avoids an extra runtime dep.
 fn base64_encode(data: &[u8]) -> String {
-    const CHARSET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let mut i = 0;
     while i + 3 <= data.len() {
@@ -422,10 +461,22 @@ mod tests {
     #[tokio::test]
     async fn null_provider_rejects_controls() {
         let p = NullProvider;
-        assert!(matches!(p.play().await.unwrap_err(), MediaError::Unsupported));
-        assert!(matches!(p.pause().await.unwrap_err(), MediaError::Unsupported));
-        assert!(matches!(p.next().await.unwrap_err(), MediaError::Unsupported));
-        assert!(matches!(p.previous().await.unwrap_err(), MediaError::Unsupported));
+        assert!(matches!(
+            p.play().await.unwrap_err(),
+            MediaError::Unsupported
+        ));
+        assert!(matches!(
+            p.pause().await.unwrap_err(),
+            MediaError::Unsupported
+        ));
+        assert!(matches!(
+            p.next().await.unwrap_err(),
+            MediaError::Unsupported
+        ));
+        assert!(matches!(
+            p.previous().await.unwrap_err(),
+            MediaError::Unsupported
+        ));
         assert!(p.current().await.is_none());
     }
 
@@ -456,7 +507,9 @@ mod tests {
 
     #[test]
     fn unsupported_provider_snapshot() {
-        let bus = Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()));
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
         let locale = Arc::new(
             orchid_i18n::LocaleManager::new(orchid_i18n::default_language(), None)
                 .expect("test locale"),

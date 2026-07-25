@@ -11,9 +11,9 @@ pub mod virtual_folders;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::Duration;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -37,8 +37,9 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use clipboard::{ClipboardOperation, FileClipboard};
 pub use config::{
-    ClickBehavior, FileManagerConfig, FileManagerPersisted, FileManagerSession, PersistedActivePane,
-    PersistedPane, PersistedTab, SortBy, ThumbnailSize as FmThumbnailSize, ViewMode, decode_persisted,
+    decode_persisted, ClickBehavior, FileManagerConfig, FileManagerPersisted, FileManagerSession,
+    PersistedActivePane, PersistedPane, PersistedTab, SortBy, ThumbnailSize as FmThumbnailSize,
+    ViewMode,
 };
 pub use context_menu::{build_for_selection, ContextMenuInputs, ContextMenuItem};
 pub use navigation::{BreadcrumbSegment, NavigationResult, Navigator};
@@ -225,6 +226,8 @@ struct FileManagerInner {
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Tab ids currently loading a directory listing (navigation in flight).
     loading_tabs: RwLock<HashSet<Uuid>>,
+    /// Visible filtered-entry window per pane: (first, end).
+    viewport_by_pane: RwLock<HashMap<u8, (usize, usize)>>,
     /// Last passphrase failure (brief status-bar toast while dialog is open).
     passphrase_error: RwLock<Option<(String, std::time::Instant)>>,
     /// Last managed ingest failure (file name for status-bar toast).
@@ -338,6 +341,7 @@ impl FileManagerWidget {
                 transfer: RwLock::new(TransferState::default()),
                 transfer_notice: RwLock::new(None),
                 loading_tabs: RwLock::new(HashSet::new()),
+                viewport_by_pane: RwLock::new(HashMap::new()),
                 passphrase_error: RwLock::new(None),
                 ingest_error: RwLock::new(None),
                 activity_notice_key: RwLock::new(None),
@@ -460,10 +464,11 @@ impl Widget for FileManagerWidget {
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         FM_LIVE.insert(self.inner.instance_id, Arc::clone(&self.inner));
         self.inner.install_dir_watch_handlers();
-        self.refresh().await;
+        // Directory listing deferred to on_activate (visibility-gated).
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.refresh().await;
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
@@ -484,16 +489,17 @@ impl Widget for FileManagerWidget {
         let config = self.inner.config.read().clone();
         let state = self.inner.state.lock().clone();
         let entries_map = self.inner.entries_by_tab.read().clone();
-        let left_pane = build_pane_payload(&state.left_pane, &entries_map, &config, &*self.inner);
+        let left_pane = build_pane_payload(&state.left_pane, 0, &entries_map, &config, &self.inner);
         let dual_pane = config.dual_pane;
         let mut panes = vec![left_pane];
         if dual_pane {
             if let Some(right) = &state.right_pane {
                 panes.push(build_pane_payload(
                     right,
+                    1,
                     &entries_map,
                     &config,
-                    &*self.inner,
+                    &self.inner,
                 ));
             }
         }
@@ -601,17 +607,19 @@ impl FileManagerInner {
             .add_type(FsDeletedEvent::event_type())
             .add_type(FsRenamedEvent::event_type());
         let this = Arc::downgrade(self);
-        match self.bus.subscribe_async(filter, HandlerPriority::Normal, move |env| {
-            let this = this.clone();
-            async move {
-                let Some(inner) = this.upgrade() else {
-                    return;
-                };
-                for path in fs_event_paths(&env) {
-                    inner.schedule_external_refresh(&path);
+        match self
+            .bus
+            .subscribe_async(filter, HandlerPriority::Normal, move |env| {
+                let this = this.clone();
+                async move {
+                    let Some(inner) = this.upgrade() else {
+                        return;
+                    };
+                    for path in fs_event_paths(&env) {
+                        inner.schedule_external_refresh(&path);
+                    }
                 }
-            }
-        }) {
+            }) {
             Ok(handle) => {
                 self.dir_watch_subs.lock().push(handle);
             }
@@ -640,7 +648,9 @@ impl FileManagerInner {
         let Some(watcher) = self.deps.file_watcher.as_ref() else {
             return;
         };
-        match watcher.watch(tab.path.clone()).await {
+        // Non-recursive: the listing only needs sibling-entry events. Recursive
+        // watches on home/OneDrive trees block startup for minutes.
+        match watcher.watch(tab.path.clone(), false).await {
             Ok(handle) => {
                 self.watch_paths
                     .write()
@@ -678,12 +688,14 @@ impl FileManagerInner {
         }
         let gen = self.external_refresh_gen.fetch_add(1, Ordering::Relaxed) + 1;
         let this = Arc::clone(self);
+        let changed_path = path.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(150)).await;
             if this.external_refresh_gen.load(Ordering::Relaxed) != gen {
                 return;
             }
             let show_hidden = this.config.read().show_hidden;
+            let mut need_publish = false;
             for tab in affected {
                 // Prefer the live tab state in case the user navigated away.
                 let live = {
@@ -696,10 +708,93 @@ impl FileManagerInner {
                 if live.path != tab.path {
                     continue;
                 }
+                // Fast path: patch a single direct child without re-listing.
+                if this
+                    .try_incremental_entry_update(&live, &changed_path, show_hidden)
+                    .await
+                {
+                    need_publish = true;
+                    continue;
+                }
                 this.refresh_tab(&live, show_hidden).await;
+                need_publish = true;
             }
-            this.publish_refresh();
+            if need_publish {
+                this.publish_refresh();
+            }
         });
+    }
+
+    /// Patch a single listing entry for `changed` when it is a direct child of `tab.path`.
+    /// Returns `true` when the listing was updated without a full re-list.
+    async fn try_incremental_entry_update(
+        self: &Arc<Self>,
+        tab: &TabState,
+        changed: &orchid_fs::FsPath,
+        show_hidden: bool,
+    ) -> bool {
+        if is_virtual(&tab.path) {
+            return false;
+        }
+        let Some(parent) = changed.parent() else {
+            return false;
+        };
+        if parent.as_str() != tab.path.as_str() {
+            // Nested noise under the open folder — keep coalesced full refresh.
+            return false;
+        }
+        let Some(provider) = self.deps.registry.for_path(changed) else {
+            return false;
+        };
+        let exists = match provider.exists(changed).await {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let mut entries = {
+            let guard = self.entries_by_tab.read();
+            guard
+                .get(&tab.id)
+                .map(|v| v.as_ref().clone())
+                .unwrap_or_default()
+        };
+        let key = changed.as_str();
+        if !exists {
+            let before = entries.len();
+            entries.retain(|e| e.path.as_str() != key);
+            if entries.len() == before {
+                return false;
+            }
+        } else {
+            let Ok(meta) = provider.metadata(changed).await else {
+                return false;
+            };
+            if !show_hidden && meta.hidden {
+                entries.retain(|e| e.path.as_str() != key);
+            } else {
+                let name = changed
+                    .file_name()
+                    .map(String::from)
+                    .unwrap_or_else(|| key.to_string());
+                let mut entry = orchid_fs::FsEntry {
+                    path: changed.clone(),
+                    name,
+                    metadata: meta,
+                };
+                let mut batch = vec![entry];
+                self.apply_entry_metadata(&mut batch);
+                entry = batch.remove(0);
+                if let Some(slot) = entries.iter_mut().find(|e| e.path.as_str() == key) {
+                    *slot = entry;
+                } else {
+                    entries.push(entry);
+                }
+                sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
+            }
+        }
+        self.entries_by_tab
+            .write()
+            .insert(tab.id, Arc::new(entries));
+        true
     }
 
     fn enabled_network_mounts(&self) -> Vec<orchid_storage::NetworkMountConfig> {
@@ -1143,13 +1238,12 @@ impl FileManagerInner {
             "fm refresh_tab listed"
         );
 
-        self.rewatch_tab(tab).await;
-
-        // Shell icons + image thumbnails are off the critical navigation path
-        // so the listing paints immediately with geometric fallbacks.
+        // Watch + icons/thumbs off the critical path so restore/bootstrap can
+        // finish and the main window can open without waiting on notify.
         let this = Arc::clone(self);
         let tab = tab.clone();
         tokio::spawn(async move {
+            this.rewatch_tab(&tab).await;
             this.ensure_shell_icons(&tab, entries.as_slice()).await;
             let mode_cfg = config_for_mode(tab.view_mode, 1.0);
             if mode_cfg.show_thumbnails {
@@ -1388,8 +1482,9 @@ impl FileManagerInner {
 
         // Shell extraction serializes on a process-wide lock, but scheduling
         // many spawn_blocking tasks still overlaps with cache hits / scheduling.
-        // Publish once per batch so the UI is not rebuilt once per icon.
+        // Publish once after the full icon pass so the UI is not rebuilt per batch.
         const BATCH: usize = 24;
+        let mut any_hit = false;
         for chunk in pending.chunks(BATCH) {
             let futs = chunk.iter().map(|(path_key, path, is_dir)| {
                 let path_key = path_key.clone();
@@ -1406,7 +1501,6 @@ impl FileManagerInner {
                 }
             });
             let results = futures::future::join_all(futs).await;
-            let mut batch_hit = false;
             {
                 let mut cache = self.shell_icon_rgba.write();
                 let mut order = self.shell_icon_order.write();
@@ -1425,12 +1519,12 @@ impl FileManagerInner {
                         },
                         SHELL_ICON_CACHE_CAP,
                     );
-                    batch_hit = true;
+                    any_hit = true;
                 }
             }
-            if batch_hit {
-                self.publish_refresh();
-            }
+        }
+        if any_hit {
+            self.publish_refresh();
         }
     }
 
@@ -1466,6 +1560,7 @@ impl FileManagerInner {
         }
 
         const CONCURRENCY: usize = 4;
+        let mut any_thumb = false;
         for chunk in pending.chunks(CONCURRENCY) {
             let futs = chunk.iter().map(|(path_key, path, key)| {
                 let path_key = path_key.clone();
@@ -1489,9 +1584,7 @@ impl FileManagerInner {
                             }
                         }
                     }
-                    let Some(provider) = registry.for_path(&path) else {
-                        return None;
-                    };
+                    let provider = registry.for_path(&path)?;
                     let bytes = match provider.read(&path).await {
                         Ok(b) if b.len() <= 16 * 1024 * 1024 => b,
                         _ => return None,
@@ -1506,7 +1599,6 @@ impl FileManagerInner {
                 }
             });
             let results = futures::future::join_all(futs).await;
-            let mut batch_hit = false;
             {
                 let mut cache = self.thumbnail_rgba.write();
                 let mut order = self.thumbnail_order.write();
@@ -1518,12 +1610,12 @@ impl FileManagerInner {
                         thumb,
                         THUMBNAIL_CACHE_CAP,
                     );
-                    batch_hit = true;
+                    any_thumb = true;
                 }
             }
-            if batch_hit {
-                self.publish_refresh();
-            }
+        }
+        if any_thumb {
+            self.publish_refresh();
         }
     }
 
@@ -1687,11 +1779,17 @@ impl FileManagerInner {
             if managed_roots.iter().any(|root| path_str.starts_with(root)) {
                 e.metadata.extended.is_managed = true;
             }
-            if encrypted_paths
+            let covered = encrypted_paths
                 .iter()
-                .any(|p| path_str == p || path_str.starts_with(p))
-                || orchid_fs::encrypted::marker::looks_encrypted(&e.path)
-                || orchid_fs::encrypted::marker::looks_encrypted_directory(&e.path)
+                .any(|p| path_str == p || path_str.starts_with(p));
+            if covered {
+                e.metadata.extended.is_encrypted = true;
+                continue;
+            }
+            // Cheap extension check for files; only directories pay the marker FS probe.
+            if orchid_fs::encrypted::marker::looks_encrypted(&e.path)
+                || (matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory)
+                    && orchid_fs::encrypted::marker::looks_encrypted_directory(&e.path))
             {
                 e.metadata.extended.is_encrypted = true;
             }
@@ -1935,6 +2033,7 @@ impl FileManagerInner {
 
 fn build_pane_payload(
     pane: &PaneState,
+    pane_idx: u8,
     entries_map: &HashMap<Uuid, Arc<Vec<orchid_fs::FsEntry>>>,
     config: &FileManagerConfig,
     inner: &FileManagerInner,
@@ -1942,12 +2041,14 @@ fn build_pane_payload(
     let tabs: Vec<TabPayload> = pane
         .tabs
         .iter()
-        .map(|tab| {
+        .enumerate()
+        .map(|(tab_idx, tab)| {
             let entries = entries_map
                 .get(&tab.id)
                 .map(|v| v.as_slice())
                 .unwrap_or(&[]);
-            build_tab_payload(tab, entries, config, inner)
+            let is_active_tab = tab_idx == pane.active_tab;
+            build_tab_payload(tab, entries, config, inner, pane_idx, is_active_tab)
         })
         .collect();
     PanePayload {
@@ -1971,6 +2072,8 @@ fn build_tab_payload(
     entries: &[orchid_fs::FsEntry],
     config: &FileManagerConfig,
     inner: &FileManagerInner,
+    pane_idx: u8,
+    is_active_tab: bool,
 ) -> TabPayload {
     let crumbs = inner.navigator.breadcrumbs_for(&tab.path);
     let breadcrumbs: Vec<(String, String)> = crumbs
@@ -1989,11 +2092,28 @@ fn build_tab_payload(
             .collect()
     };
 
+    let item_count = entries_filtered.len() as u32;
+    // Format only the visible window (+ overscan already applied by UI).
+    const DEFAULT_WINDOW: usize = 96;
+    let (first, end) = if is_active_tab {
+        inner
+            .viewport_by_pane
+            .read()
+            .get(&pane_idx)
+            .copied()
+            .unwrap_or((0, DEFAULT_WINDOW.min(entries_filtered.len())))
+    } else {
+        (0, DEFAULT_WINDOW.min(entries_filtered.len()))
+    };
+    let first = first.min(entries_filtered.len());
+    let end = end.clamp(first, entries_filtered.len());
+    let entries_offset = first as u32;
     let locale = inner.deps.orchid_config.read().locale.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
     let shell_cache = inner.shell_icon_rgba.read();
-    let entry_payloads: Vec<EntryPayload> = entries_filtered
-        .into_iter()
+    let entry_payloads: Vec<EntryPayload> = entries_filtered[first..end]
+        .iter()
+        .copied()
         .map(|e| {
             let path_key = e.path.as_str();
             // Prefer image previews; fall back to OS association icons.
@@ -2052,7 +2172,6 @@ fn build_tab_payload(
         })
         .collect();
     let selection_count = tab.selection.count() as u32;
-    let item_count = entry_payloads.len() as u32;
     let managed_stats_guard = inner.managed_stats.read();
     let managed_stats = managed_stats_guard.get(tab.path.as_str());
     let (managed_files_tracked, managed_dedup_bytes) = managed_stats
@@ -2061,7 +2180,7 @@ fn build_tab_payload(
             (Some(st.files_tracked as u32), Some(saved))
         })
         .unwrap_or((None, None));
-    let error = if entry_payloads.is_empty() {
+    let error = if item_count == 0 {
         virtual_folders::empty_placeholder_for_path(tab.path.as_str())
             .map(String::from)
             .or_else(|| inner.tab_errors.read().get(&tab.id).cloned().flatten())
@@ -2076,6 +2195,7 @@ fn build_tab_payload(
         can_go_forward: !tab.history_forward.is_empty(),
         view_mode: to_payload_mode(tab.view_mode),
         entries: entry_payloads,
+        entries_offset,
         selection_count,
         item_count,
         managed_files_tracked,
@@ -2116,7 +2236,7 @@ fn next_sort_by(current: SortBy) -> SortBy {
     }
 }
 
-fn find_tab_by_id<'a>(state: &'a FileManagerState, tab_id: Uuid) -> Option<&'a TabState> {
+fn find_tab_by_id(state: &FileManagerState, tab_id: Uuid) -> Option<&TabState> {
     state
         .left_pane
         .tabs
@@ -2477,9 +2597,7 @@ fn state_from_persisted(
 
     let active_pane = match session.active_pane {
         PersistedActivePane::Left => ActivePane::Left,
-        PersistedActivePane::Right if config.dual_pane && right_pane.is_some() => {
-            ActivePane::Right
-        }
+        PersistedActivePane::Right if config.dual_pane && right_pane.is_some() => ActivePane::Right,
         PersistedActivePane::Right => ActivePane::Left,
     };
 
@@ -2952,6 +3070,14 @@ pub async fn toggle_dual_pane(instance_id: Uuid) -> WidgetResult<()> {
     }
     inner.publish_refresh();
     Ok(())
+}
+
+/// Update the visible filtered-entry window for a pane (used by UI virtualization).
+pub fn set_viewport_window(instance_id: Uuid, pane: u8, first: usize, end: usize) {
+    if let Some(inner) = FM_LIVE.get(&instance_id) {
+        let end = end.max(first);
+        inner.viewport_by_pane.write().insert(pane, (first, end));
+    }
 }
 
 /// Whether hidden entries are listed in navigation results.

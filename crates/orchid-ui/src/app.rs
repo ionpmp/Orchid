@@ -41,6 +41,68 @@ use crate::widgets::terminal::{build_terminal_command_set, palette::palette_from
 use crate::window::main_window::MainWindowController;
 use crate::window::startup::StartupWindowController;
 
+/// Search indexing that must not run on the critical path before the UI opens.
+struct DeferredSearchIndex {
+    watcher: Arc<orchid_fs::FileWatcher>,
+    scheduler: Arc<orchid_search::IndexScheduler>,
+    extractor: Arc<orchid_search::Extractor>,
+    tags: Arc<orchid_fs::TagManager>,
+    registry: Arc<FsProviderRegistry>,
+    scope: orchid_search::IndexScope,
+    roots: Vec<orchid_fs::FsPath>,
+    handles: Arc<Mutex<Vec<orchid_fs::WatchHandle>>>,
+    started: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl DeferredSearchIndex {
+    fn start(&self) {
+        use std::sync::atomic::Ordering;
+        if self
+            .started
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+        let watcher = self.watcher.clone();
+        let scheduler = self.scheduler.clone();
+        let extractor = self.extractor.clone();
+        let tags = self.tags.clone();
+        let registry = self.registry.clone();
+        let scope = self.scope.clone();
+        let roots = self.roots.clone();
+        let handles = self.handles.clone();
+        tokio::spawn(async move {
+            // Let the Slint event loop paint the first frame first.
+            tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+            let mut watch_handles = Vec::new();
+            for root in &roots {
+                match watcher.watch(root.clone(), true).await {
+                    Ok(handle) => watch_handles.push(handle),
+                    Err(e) => {
+                        warn!(error = %e, %root, "search: failed to watch index root");
+                    }
+                }
+            }
+            *handles.lock() = watch_handles;
+            if let Err(e) = orchid_search::crawl_roots(
+                registry.as_ref(),
+                scheduler.as_ref(),
+                extractor.as_ref(),
+                tags.as_ref(),
+                &scope,
+                &roots,
+            )
+            .await
+            {
+                warn!(error = %e, "search: bootstrap crawl failed");
+            } else {
+                info!("search: bootstrap crawl finished");
+            }
+        });
+    }
+}
+
 /// Composition root of the Orchid application.
 pub struct OrchidApp {
     #[allow(dead_code)]
@@ -84,9 +146,8 @@ pub struct OrchidApp {
     /// Keeps the FS→index bus subscriber alive.
     #[allow(dead_code)]
     _index_subscriber: orchid_search::IndexFsSubscriber,
-    /// Active notify watches for search included-roots.
-    #[allow(dead_code)]
-    _index_watch_handles: Vec<orchid_fs::WatchHandle>,
+    /// Search root watches + crawl, started after the main window opens.
+    deferred_index: DeferredSearchIndex,
     /// Application-wide recent-files list.
     recent_files: Arc<orchid_widgets::RecentFilesStore>,
     /// KDBX password vault (unlock via passphrase or Windows Hello).
@@ -116,6 +177,8 @@ impl OrchidApp {
     /// Propagates whichever subsystem refuses to start.
     pub async fn bootstrap(paths: OrchidPaths) -> Result<Self> {
         paths.ensure_directories()?;
+        // Overlap system font enumeration with the rest of bootstrap.
+        crate::terminal_font_metrics::warm_system_fonts();
 
         let config = Arc::new(RwLock::new(ConfigLoader::load_or_create(
             &paths.config_file,
@@ -139,32 +202,67 @@ impl OrchidApp {
             }
         }
 
-        let storage = Arc::new(StateStore::open(
-            &paths.state_db_path,
-            env!("CARGO_PKG_VERSION"),
-        )?);
-
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
 
         let initial_lang = {
             let cfg = config.read();
             LocaleId::parse(&cfg.locale.language).unwrap_or_else(|_| default_language())
         };
-
-        let locale = Arc::new(LocaleManager::new(
-            initial_lang,
-            Some(paths.locales_dir.clone()),
-        )?);
-
         let theme_id = crate::system_theme::resolve_theme_id(&config.read().appearance);
-        let theme = Arc::new(ThemeManager::new(Some(paths.themes_dir.clone()))?);
-        if let Err(e) = theme.set_current(&theme_id) {
-            tracing::warn!(
-                configured = %theme_id,
-                error = %e,
-                "unknown theme id in config; using default"
-            );
-        }
+
+        let state_db_path = paths.state_db_path.clone();
+        let locales_dir = paths.locales_dir.clone();
+        let themes_dir = paths.themes_dir.clone();
+        let search_index_dir = paths.data_dir.join("search_index");
+        std::fs::create_dir_all(&search_index_dir)
+            .map_err(|e| UiError::Slint(format!("create search index dir: {e}")))?;
+
+        let (storage, locale, theme, search_engine) = tokio::try_join!(
+            async {
+                let path = state_db_path;
+                tokio::task::spawn_blocking(move || {
+                    StateStore::open(&path, env!("CARGO_PKG_VERSION"))
+                })
+                .await
+                .map_err(|e| UiError::Slint(format!("state store join: {e}")))?
+                .map_err(|e| UiError::Slint(format!("state store: {e}")))
+                .map(Arc::new)
+            },
+            async {
+                let lang = initial_lang;
+                let dir = locales_dir;
+                tokio::task::spawn_blocking(move || LocaleManager::new(lang, Some(dir)))
+                    .await
+                    .map_err(|e| UiError::Slint(format!("locale join: {e}")))?
+                    .map_err(|e| UiError::Slint(format!("locale: {e}")))
+                    .map(Arc::new)
+            },
+            async {
+                let dir = themes_dir;
+                let tid = theme_id.clone();
+                tokio::task::spawn_blocking(move || {
+                    let theme = ThemeManager::new(Some(dir))?;
+                    if let Err(e) = theme.set_current(&tid) {
+                        tracing::warn!(
+                            configured = %tid,
+                            error = %e,
+                            "unknown theme id in config; using default"
+                        );
+                    }
+                    Ok::<_, UiError>(Arc::new(theme))
+                })
+                .await
+                .map_err(|e| UiError::Slint(format!("theme join: {e}")))?
+            },
+            async {
+                let dir = search_index_dir.clone();
+                tokio::task::spawn_blocking(move || orchid_search::SearchEngine::open(&dir))
+                    .await
+                    .map_err(|e| UiError::Slint(format!("search index join: {e}")))?
+                    .map_err(|e| UiError::Slint(format!("open search index: {e}")))
+                    .map(Arc::new)
+            },
+        )?;
 
         let session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>> = Arc::new(Mutex::new(HashMap::new()));
         let session_manager: Arc<SessionManager> =
@@ -201,13 +299,6 @@ impl OrchidApp {
         let command_palette: Arc<CommandPalette> =
             Arc::new(CommandPalette::new(command_registry.clone()));
 
-        let search_index_dir = paths.data_dir.join("search_index");
-        std::fs::create_dir_all(&search_index_dir)
-            .map_err(|e| UiError::Slint(format!("create search index dir: {e}")))?;
-        let search_engine: Arc<orchid_search::SearchEngine> = Arc::new(
-            orchid_search::SearchEngine::open(&search_index_dir)
-                .map_err(|e| UiError::Slint(format!("open search index: {e}")))?,
-        );
         let search_sources: Vec<Arc<dyn SearchSource>> = vec![
             Arc::new(FilesSource::new(search_engine.clone())),
             Arc::new(CommandsSource::new(command_palette.clone())),
@@ -376,44 +467,23 @@ impl OrchidApp {
             .await
             .map_err(|e| UiError::Slint(format!("search index subscriber: {e}")))?;
 
+        // Defer root watches + crawl until after the main window is shown so
+        // OneDrive/Documents indexing cannot starve UI startup.
         let index_watcher = Arc::new(orchid_fs::FileWatcher::new(
             bus.clone(),
             fs_registry.clone(),
         ));
-        let mut index_watch_handles = Vec::new();
-        for root in &index_roots {
-            match index_watcher.watch(root.clone()).await {
-                Ok(handle) => index_watch_handles.push(handle),
-                Err(e) => {
-                    warn!(error = %e, %root, "search: failed to watch index root");
-                }
-            }
-        }
-
-        {
-            let registry = fs_registry.clone();
-            let scheduler = index_scheduler.clone();
-            let extractor = index_extractor.clone();
-            let tags = tag_manager.clone();
-            let scope = index_scope;
-            let roots = index_roots;
-            tokio::spawn(async move {
-                if let Err(e) = orchid_search::crawl_roots(
-                    registry.as_ref(),
-                    scheduler.as_ref(),
-                    extractor.as_ref(),
-                    tags.as_ref(),
-                    &scope,
-                    &roots,
-                )
-                .await
-                {
-                    warn!(error = %e, "search: bootstrap crawl failed");
-                } else {
-                    info!("search: bootstrap crawl finished");
-                }
-            });
-        }
+        let deferred_index = DeferredSearchIndex {
+            watcher: index_watcher,
+            scheduler: index_scheduler.clone(),
+            extractor: index_extractor,
+            tags: tag_manager.clone(),
+            registry: fs_registry.clone(),
+            scope: index_scope,
+            roots: index_roots,
+            handles: Arc::new(Mutex::new(Vec::new())),
+            started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        };
 
         let thumbnails = Arc::new(
             orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
@@ -686,7 +756,7 @@ impl OrchidApp {
             _index_scheduler: index_scheduler,
             jobs,
             _index_subscriber: index_subscriber,
-            _index_watch_handles: index_watch_handles,
+            deferred_index,
             recent_files,
             password_vault,
             fm_passphrase_vault,
@@ -790,6 +860,9 @@ impl OrchidApp {
             self.session_routing.clone(),
             self.terminal_deps.clone(),
         )?;
+        // Kick off deferred search indexing before the event loop so crawl/watch
+        // cannot block first paint (start() itself sleeps briefly then runs async).
+        self.deferred_index.start();
         c.run()?;
         Ok(())
     }

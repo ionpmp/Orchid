@@ -88,6 +88,8 @@ pub struct GridSnapshot {
     pub lines: Vec<GridLine>,
     /// Cursor state at snapshot time.
     pub cursor: CursorState,
+    /// Monotonic generation bumped whenever grid contents / viewport change.
+    pub content_generation: u64,
 }
 
 /// Where to position the viewport after a scroll operation.

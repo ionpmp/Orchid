@@ -9,11 +9,8 @@ pub fn sync_open_on_startup(cfg: &GeneralConfig) {
 
 fn sync_open_on_startup_enabled(enabled: bool) {
     #[cfg(windows)]
-    {
-        if let Err(e) = sync_open_on_startup_windows(enabled) {
-            tracing::warn!(?e, enabled, "failed to sync open-on-startup registry");
-        }
-        return;
+    if let Err(e) = sync_open_on_startup_windows(enabled) {
+        tracing::warn!(?e, enabled, "failed to sync open-on-startup registry");
     }
     #[cfg(not(windows))]
     {

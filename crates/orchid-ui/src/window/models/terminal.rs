@@ -2,18 +2,21 @@
 
 use slint::{Color, ModelRc, VecModel};
 
-use orchid_widgets::{TerminalPanePayload, TerminalPayload};
 use crate::slint_generated::{
     TerminalCellModel, TerminalDividerModel, TerminalPaneModel, TerminalTabModel,
 };
+use orchid_widgets::{TerminalPanePayload, TerminalPayload};
 
-pub(crate) fn blank_terminal(cols: u16, rows: u16) -> ModelRc<ModelRc<TerminalCellModel>> {
-    let c = char_to_cell(' ');
-    let row: Vec<TerminalCellModel> = (0..cols).map(|_| c.clone()).collect();
-    let rows_m: Vec<ModelRc<TerminalCellModel>> = (0..rows)
-        .map(|_| ModelRc::new(VecModel::from(row.clone())))
-        .collect();
-    ModelRc::new(VecModel::from(rows_m))
+/// Empty cell model — `TerminalView` paints via `pixels` only; the Slint
+/// `cells` property is unused for drawing. Avoid allocating cols×rows models.
+pub(crate) fn blank_terminal(_cols: u16, _rows: u16) -> ModelRc<ModelRc<TerminalCellModel>> {
+    empty_terminal_cells()
+}
+
+/// Shared empty `[[TerminalCellModel]]` for frame/pane fields that still exist
+/// in the Slint schema but are not bound for painting.
+pub(crate) fn empty_terminal_cells() -> ModelRc<ModelRc<TerminalCellModel>> {
+    ModelRc::new(VecModel::<ModelRc<TerminalCellModel>>::default())
 }
 
 fn char_to_cell(ch: char) -> TerminalCellModel {
@@ -25,6 +28,7 @@ fn char_to_cell(ch: char) -> TerminalCellModel {
     }
 }
 
+#[allow(dead_code)] // Kept for debugging / future cell-based paint paths.
 pub(crate) fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<TerminalCellModel>> {
     let mut rows = Vec::with_capacity(t.rows as usize);
     for r in 0..t.rows {
@@ -39,8 +43,18 @@ pub(crate) fn build_terminal_model(t: &TerminalPayload) -> ModelRc<ModelRc<Termi
                     } else {
                         cell.ch.to_string().into()
                     },
-                    fg: Color::from_argb_u8(cell.fg_rgba[3], cell.fg_rgba[0], cell.fg_rgba[1], cell.fg_rgba[2]),
-                    bg: Color::from_argb_u8(cell.bg_rgba[3], cell.bg_rgba[0], cell.bg_rgba[1], cell.bg_rgba[2]),
+                    fg: Color::from_argb_u8(
+                        cell.fg_rgba[3],
+                        cell.fg_rgba[0],
+                        cell.fg_rgba[1],
+                        cell.fg_rgba[2],
+                    ),
+                    bg: Color::from_argb_u8(
+                        cell.bg_rgba[3],
+                        cell.bg_rgba[0],
+                        cell.bg_rgba[1],
+                        cell.bg_rgba[2],
+                    ),
                     bold: cell.bold,
                 },
             );
@@ -105,6 +119,7 @@ pub(crate) fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPaylo
         cursor_col: p.cursor_col,
         cursor_row: p.cursor_row,
         cursor_visible: p.cursor_visible,
+        content_generation: p.content_generation,
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),

@@ -23,9 +23,9 @@ use orchid_terminal::{
     SessionManager, SplitDirection, TerminalPalette,
 };
 use orchid_widgets::{
-    widget::config, Result, TerminalDividerPayload, TerminalPayload, TerminalPayloadCell,
-    TerminalPanePayload, TerminalTabPayload, Widget,
-    WidgetCapabilities, WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
+    widget::config, Result, TerminalDividerPayload, TerminalPanePayload, TerminalPayload,
+    TerminalPayloadCell, TerminalTabPayload, Widget, WidgetCapabilities, WidgetContext,
+    WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
@@ -216,6 +216,12 @@ impl Widget for TerminalWidget {
     }
 
     async fn on_create(&mut self, _ctx: &WidgetContext) -> Result<()> {
+        // PTY spawn is deferred to on_activate so sleeping terminals do not
+        // block restore / first paint.
+        Ok(())
+    }
+
+    async fn on_activate(&mut self, _ctx: &WidgetContext) -> Result<()> {
         if self.deps.layouts.lock().contains_key(&self.instance_id) {
             return Ok(());
         }
@@ -261,34 +267,22 @@ impl Widget for TerminalWidget {
         let focused = layout
             .focused_session()
             .or_else(|| {
-                layout
-                    .tabs
-                    .tabs
-                    .first()
-                    .and_then(|t| {
-                        let mut leaves = Vec::new();
-                        t.root.leaves(&mut leaves);
-                        leaves.first().copied()
-                    })
+                layout.tabs.tabs.first().and_then(|t| {
+                    let mut leaves = Vec::new();
+                    t.root.leaves(&mut leaves);
+                    leaves.first().copied()
+                })
             })
             .ok_or_else(|| {
                 WidgetError::InvalidStateForOperation("terminal layout has no sessions".into())
             })?;
 
-        self.deps
-            .layouts
-            .lock()
-            .insert(self.instance_id, layout);
+        self.deps.layouts.lock().insert(self.instance_id, layout);
         self.deps
             .session_routing
             .lock()
             .insert(self.instance_id, focused);
         self.state.backend = StoredBackend::from_spec(&spec);
-        Ok(())
-    }
-
-    async fn on_activate(&mut self, _ctx: &WidgetContext) -> Result<()> {
-        // No-op: the PTY keeps running while the widget is resident.
         Ok(())
     }
 
@@ -365,6 +359,7 @@ impl Widget for TerminalWidget {
                         cursor_col: pane_terminal.cursor_col,
                         cursor_row: pane_terminal.cursor_row,
                         cursor_visible: pane_terminal.cursor_visible,
+                        content_generation: pane_terminal.content_generation,
                     });
                 }
             }
@@ -475,9 +470,7 @@ impl Widget for TerminalWidget {
 
 /// Build a [`orchid_widgets::WidgetDescriptor`] for the terminal type.
 #[must_use]
-pub fn terminal_descriptor(
-    deps: TerminalWidgetDeps,
-) -> orchid_widgets::WidgetDescriptor {
+pub fn terminal_descriptor(deps: TerminalWidgetDeps) -> orchid_widgets::WidgetDescriptor {
     orchid_widgets::WidgetDescriptor {
         type_id: TERMINAL_TYPE_ID,
         display_name_key: "widget-title-terminal",
@@ -561,6 +554,7 @@ fn grid_to_payload(
         cursor_col: grid.cursor.col,
         cursor_row: grid.cursor.row,
         cursor_visible: grid.cursor.visible,
+        content_generation: grid.content_generation,
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),
@@ -626,9 +620,7 @@ pub async fn add_tab(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()>
         let idx = layout.add_tab(session_id);
         layout.active_tab = idx;
     }
-    deps.session_routing
-        .lock()
-        .insert(instance_id, session_id);
+    deps.session_routing.lock().insert(instance_id, session_id);
     Ok(())
 }
 
@@ -664,11 +656,10 @@ async fn split_pane(
             },
         )
     };
-    let session_id = deps
-        .sessions
-        .open(spec, size)
-        .await
-        .map_err(|e| WidgetError::CreationFailed(format!("terminal split spawn failed: {e}")))?;
+    let session_id =
+        deps.sessions.open(spec, size).await.map_err(|e| {
+            WidgetError::CreationFailed(format!("terminal split spawn failed: {e}"))
+        })?;
     {
         let mut layouts = deps.layouts.lock();
         let Some(layout) = layouts.get_mut(&instance_id) else {
@@ -680,9 +671,7 @@ async fn split_pane(
             .split(direction, session_id)
             .map_err(|e| WidgetError::InvalidStateForOperation(format!("split: {e}")))?;
     }
-    deps.session_routing
-        .lock()
-        .insert(instance_id, session_id);
+    deps.session_routing.lock().insert(instance_id, session_id);
     Ok(())
 }
 
@@ -701,7 +690,7 @@ pub fn focus_pane(deps: &TerminalWidgetDeps, instance_id: Uuid, session_id: Uuid
         .ok_or_else(|| WidgetError::InvalidStateForOperation("no active tab".into()))?;
     let mut leaves = Vec::new();
     tab.root.leaves(&mut leaves);
-    if !leaves.iter().any(|s| *s == session_id) {
+    if !leaves.contains(&session_id) {
         return Err(WidgetError::InvalidStateForOperation(
             "session not in active tab".into(),
         ));
@@ -792,11 +781,7 @@ pub fn focus_previous_pane(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Resu
 }
 
 /// Switch to the next or previous tab (`delta` = ±1).
-pub fn switch_tab_relative(
-    deps: &TerminalWidgetDeps,
-    instance_id: Uuid,
-    delta: i32,
-) -> Result<()> {
+pub fn switch_tab_relative(deps: &TerminalWidgetDeps, instance_id: Uuid, delta: i32) -> Result<()> {
     let mut layouts = deps.layouts.lock();
     let Some(layout) = layouts.get_mut(&instance_id) else {
         return Err(WidgetError::InvalidStateForOperation(
@@ -818,10 +803,7 @@ pub fn switch_tab_relative(
 }
 
 /// Close the focused pane when split, otherwise close the active tab.
-pub async fn close_focused_pane_or_tab(
-    deps: &TerminalWidgetDeps,
-    instance_id: Uuid,
-) -> Result<()> {
+pub async fn close_focused_pane_or_tab(deps: &TerminalWidgetDeps, instance_id: Uuid) -> Result<()> {
     let (multi_pane, focused, active_tab, tab_count) = {
         let layouts = deps.layouts.lock();
         let Some(layout) = layouts.get(&instance_id) else {
@@ -906,16 +888,14 @@ pub async fn close_tab(
                 "terminal layout not found".into(),
             ));
         };
-        let tab = layout
-            .tabs
-            .tabs
-            .get(tab_index)
-            .ok_or_else(|| WidgetError::InvalidStateForOperation("tab index out of range".into()))?;
+        let tab = layout.tabs.tabs.get(tab_index).ok_or_else(|| {
+            WidgetError::InvalidStateForOperation("tab index out of range".into())
+        })?;
         let mut sessions = Vec::new();
         tab.root.leaves(&mut sessions);
-        layout.close_tab(tab_index).map_err(|e| {
-            WidgetError::InvalidStateForOperation(format!("close tab: {e}"))
-        })?;
+        layout
+            .close_tab(tab_index)
+            .map_err(|e| WidgetError::InvalidStateForOperation(format!("close tab: {e}")))?;
         sessions
     };
     for sid in closed_sessions {
@@ -923,7 +903,12 @@ pub async fn close_tab(
             tracing::warn!(session_id = %sid, error = %e, "terminal close tab session failed");
         }
     }
-    if let Some(sid) = deps.layouts.lock().get(&instance_id).and_then(|l| l.focused_session()) {
+    if let Some(sid) = deps
+        .layouts
+        .lock()
+        .get(&instance_id)
+        .and_then(|l| l.focused_session())
+    {
         deps.session_routing.lock().insert(instance_id, sid);
     } else {
         deps.session_routing.lock().remove(&instance_id);

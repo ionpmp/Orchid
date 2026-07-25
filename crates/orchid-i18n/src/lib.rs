@@ -165,6 +165,9 @@ struct Inner {
     bundles: RwLock<Vec<(LocaleId, IntlBundle)>>,
     current: RwLock<LocaleId>,
     fallback: LocaleId,
+    /// Bundled sources for locales not yet parsed (lazy load on switch).
+    pending: RwLock<Vec<(&'static str, &'static str)>>,
+    extra_dir: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for LocaleManager {
@@ -190,8 +193,7 @@ impl LocaleManager {
     /// I/O errors from `extra_dir` are logged and skipped — they never
     /// break construction.
     pub fn new(initial: LocaleId, extra_dir: Option<PathBuf>) -> Result<Self> {
-        let mut bundles = Vec::new();
-        for (tag, source) in [
+        let all = [
             ("en-US", EN_US_FTL),
             ("ru-RU", RU_RU_FTL),
             ("de-DE", DE_DE_FTL),
@@ -203,27 +205,38 @@ impl LocaleManager {
             ("zh-CN", ZH_CN_FTL),
             ("ko-KR", KO_KR_FTL),
             ("ar-SA", AR_SA_FTL),
-        ] {
-            let locale = LocaleId::parse(tag)?;
-            let mut bundle = new_bundle(locale.clone());
-            load_into(&mut bundle, source);
-            if let Some(extra) = extra_dir.as_ref() {
-                if let Some(path) = overlay_path(extra, tag) {
-                    if let Ok(contents) = std::fs::read_to_string(&path) {
-                        debug!(path = %path.display(), "overlaying locale");
-                        load_into(&mut bundle, &contents);
+        ];
+        let fallback = default_language();
+        let initial_tag = initial.as_str();
+        let fallback_tag = fallback.as_str();
+        let mut bundles = Vec::new();
+        let mut pending = Vec::new();
+        for (tag, source) in all {
+            if tag == initial_tag || tag == fallback_tag {
+                let locale = LocaleId::parse(tag)?;
+                let mut bundle = new_bundle(locale.clone());
+                load_into(&mut bundle, source);
+                if let Some(extra) = extra_dir.as_ref() {
+                    if let Some(path) = overlay_path(extra, tag) {
+                        if let Ok(contents) = std::fs::read_to_string(&path) {
+                            debug!(path = %path.display(), "overlaying locale");
+                            load_into(&mut bundle, &contents);
+                        }
                     }
                 }
+                bundles.push((locale, bundle));
+            } else {
+                pending.push((tag, source));
             }
-            bundles.push((locale, bundle));
         }
 
-        let fallback = default_language();
         Ok(Self {
             inner: Arc::new(Inner {
                 bundles: RwLock::new(bundles),
                 current: RwLock::new(initial),
                 fallback,
+                pending: RwLock::new(pending),
+                extra_dir,
             }),
         })
     }
@@ -234,26 +247,67 @@ impl LocaleManager {
         self.inner.current.read().clone()
     }
 
-    /// Switch the active locale. No-op if the language is not registered.
+    /// Switch the active locale. Lazily parses pending catalogues on first use.
     pub fn set_current(&self, locale: LocaleId) {
-        let bundles = self.inner.bundles.read();
-        if bundles.iter().any(|(l, _)| l == &locale) {
-            drop(bundles);
+        if self.ensure_loaded(&locale) {
             *self.inner.current.write() = locale;
         } else {
             warn!(?locale, "locale not registered; ignoring set_current");
         }
     }
 
-    /// Locales that have a bundle registered, in insertion order.
+    /// Ensure `locale` has a parsed bundle (loads from pending if needed).
+    fn ensure_loaded(&self, locale: &LocaleId) -> bool {
+        {
+            let bundles = self.inner.bundles.read();
+            if bundles.iter().any(|(l, _)| l == locale) {
+                return true;
+            }
+        }
+        let tag = locale.as_str();
+        let source = {
+            let mut pending = self.inner.pending.write();
+            let idx = pending.iter().position(|(t, _)| *t == tag);
+            idx.map(|i| pending.remove(i))
+        };
+        let Some((tag, source)) = source else {
+            return false;
+        };
+        let Ok(parsed) = LocaleId::parse(tag) else {
+            return false;
+        };
+        let mut bundle = new_bundle(parsed.clone());
+        load_into(&mut bundle, source);
+        if let Some(extra) = self.inner.extra_dir.as_ref() {
+            if let Some(path) = overlay_path(extra, tag) {
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    debug!(path = %path.display(), "overlaying locale");
+                    load_into(&mut bundle, &contents);
+                }
+            }
+        }
+        self.inner.bundles.write().push((parsed, bundle));
+        true
+    }
+
+    /// Locales that have a bundle registered or pending, in catalogue order.
     #[must_use]
     pub fn available_locales(&self) -> Vec<LocaleId> {
-        self.inner
+        let mut out: Vec<LocaleId> = self
+            .inner
             .bundles
             .read()
             .iter()
             .map(|(l, _)| l.clone())
-            .collect()
+            .collect();
+        for (tag, _) in self.inner.pending.read().iter() {
+            if let Ok(l) = LocaleId::parse(tag) {
+                if !out.iter().any(|x| x == &l) {
+                    out.push(l);
+                }
+            }
+        }
+        out
     }
 
     /// Resolve `key` in the current locale, falling back to

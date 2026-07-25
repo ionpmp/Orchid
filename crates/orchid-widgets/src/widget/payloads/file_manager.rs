@@ -80,6 +80,8 @@ pub struct TabPayload {
     pub can_go_forward: bool,
     pub view_mode: FmViewMode,
     pub entries: Vec<EntryPayload>,
+    /// Index of entries[0] in the full filtered listing (viewport window).
+    pub entries_offset: u32,
     pub selection_count: u32,
     pub item_count: u32,
     /// Managed-folder ingest stats when viewing a registered root.

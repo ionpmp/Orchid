@@ -10,7 +10,9 @@ use orchid_fs::{
 };
 
 fn bus() -> Arc<orchid_core::EventBus> {
-    Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()))
+    Arc::new(orchid_core::EventBus::new(
+        orchid_core::EventBusConfig::default(),
+    ))
 }
 
 fn storage() -> Arc<orchid_storage::StateStore> {
@@ -19,7 +21,8 @@ fn storage() -> Arc<orchid_storage::StateStore> {
 
 fn registry_with_local() -> Arc<FsProviderRegistry> {
     let reg = Arc::new(FsProviderRegistry::new());
-    reg.register(Arc::new(LocalProvider::new()) as Arc<dyn FsProvider>).unwrap();
+    reg.register(Arc::new(LocalProvider::new()) as Arc<dyn FsProvider>)
+        .unwrap();
     reg
 }
 
@@ -31,10 +34,7 @@ async fn local_provider_list_read_write_metadata() {
     let dir_path = FsPath::from_local(td.path()).unwrap();
     let file_path = dir_path.join("hello.txt");
 
-    provider
-        .write(&file_path, b"hello world")
-        .await
-        .unwrap();
+    provider.write(&file_path, b"hello world").await.unwrap();
 
     let listing = provider.list(&dir_path).await.unwrap();
     assert_eq!(listing.len(), 1);
@@ -72,12 +72,14 @@ async fn watcher_publishes_created_event() {
         )
         .unwrap();
 
-    let _watch = watcher.watch(dir_path.clone()).await.unwrap();
+    let _watch = watcher.watch(dir_path.clone(), true).await.unwrap();
     // Give the OS watcher a moment to register.
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Create a file inside the watched dir.
-    tokio::fs::write(td.path().join("new.txt"), b"payload").await.unwrap();
+    tokio::fs::write(td.path().join("new.txt"), b"payload")
+        .await
+        .unwrap();
 
     let env = tokio::time::timeout(Duration::from_secs(3), rx.recv())
         .await
@@ -94,7 +96,8 @@ async fn tag_manager_round_trip() {
     let td = tempfile::tempdir().unwrap();
     let path = FsPath::from_local(td.path()).unwrap().join("x.txt");
 
-    tags.set_tags(&path, vec!["Urgent".into(), "work".into()]).unwrap();
+    tags.set_tags(&path, vec!["Urgent".into(), "work".into()])
+        .unwrap();
     let rec = tags.get(&path).unwrap().unwrap();
     assert_eq!(rec.tags, vec!["urgent".to_string(), "work".to_string()]);
 
@@ -107,7 +110,8 @@ async fn tag_manager_round_trip() {
     let rec = tags.get(&path).unwrap().unwrap();
     assert!(!rec.tags.contains(&"work".to_string()));
 
-    tags.set_color(&path, Some(orchid_storage::ColorLabel::Red)).unwrap();
+    tags.set_color(&path, Some(orchid_storage::ColorLabel::Red))
+        .unwrap();
     tags.set_starred(&path, true).unwrap();
     let rec = tags.get(&path).unwrap().unwrap();
     assert_eq!(rec.color_label, Some(orchid_storage::ColorLabel::Red));
@@ -132,8 +136,8 @@ async fn zip_list_and_read_with_slip_protection() {
     {
         let file = std::fs::File::create(&zip_path).unwrap();
         let mut zw = zip::ZipWriter::new(file);
-        let opts: zip::write::SimpleFileOptions =
-            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         zw.start_file("inside/a.txt", opts).unwrap();
         zw.write_all(b"hello-a").unwrap();
         zw.start_file("inside/b.txt", opts).unwrap();
@@ -158,8 +162,8 @@ async fn zip_list_and_read_with_slip_protection() {
             .open(&zip_path)
             .unwrap();
         let mut zw = zip::ZipWriter::new(file);
-        let opts: zip::write::SimpleFileOptions =
-            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         zw.start_file("../evil.txt", opts).unwrap();
         zw.write_all(b"pwn").unwrap();
         zw.start_file("good.txt", opts).unwrap();
@@ -255,7 +259,7 @@ async fn encrypt_in_place_then_reveal_round_trip() {
 
 #[tokio::test]
 async fn decrypt_in_place_restores_plaintext() {
-    use orchid_crypto::{Identity, RevealDuration, RevealManager};
+    use orchid_crypto::{Identity, RevealManager};
     let td = tempfile::tempdir().unwrap();
     let reveal_root = td.path().join("reveal");
 
@@ -326,7 +330,9 @@ async fn encrypt_directory_in_place_round_trip() {
         .unwrap();
 
     assert!(!folder.join("a.txt").exists());
-    assert!(orchid_fs::encrypted::marker::looks_encrypted_directory(&fs_path));
+    assert!(orchid_fs::encrypted::marker::looks_encrypted_directory(
+        &fs_path
+    ));
 
     engine
         .decrypt_in_place(&fs_path, Identity::passphrase("pw"))
@@ -335,5 +341,7 @@ async fn encrypt_directory_in_place_round_trip() {
 
     assert_eq!(std::fs::read(folder.join("a.txt")).unwrap(), b"alpha");
     assert_eq!(std::fs::read(folder.join("nested/b.txt")).unwrap(), b"beta");
-    assert!(!orchid_fs::encrypted::marker::looks_encrypted_directory(&fs_path));
+    assert!(!orchid_fs::encrypted::marker::looks_encrypted_directory(
+        &fs_path
+    ));
 }

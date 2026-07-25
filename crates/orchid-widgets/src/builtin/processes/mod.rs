@@ -324,7 +324,12 @@ pub fn open_file_location(instance_id: Uuid, pid: u32) -> Result<(), String> {
         .snapshot
         .read()
         .as_ref()
-        .and_then(|s| s.processes.iter().find(|p| p.pid == pid).map(|p| p.path.clone()))
+        .and_then(|s| {
+            s.processes
+                .iter()
+                .find(|p| p.pid == pid)
+                .map(|p| p.path.clone())
+        })
         .unwrap_or_default();
     if path.is_empty() {
         return Err(h.locale.tr("processes-no-path"));
@@ -493,18 +498,20 @@ impl Widget for ProcessesWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        let provider = self.handle.provider.clone();
-        let snap = tokio::task::spawn_blocking(move || provider.refresh())
-            .await
-            .map_err(|e| {
-                WidgetError::CreationFailed(format!("processes initial refresh: {e}"))
-            })?;
-        let tab = self.handle.ui.read().tab;
-        refresh_side_tabs(&self.handle.ui, &self.handle.locale, &snap, tab);
-        *self.handle.snapshot.write() = Some(snap);
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        if self.handle.snapshot.read().is_none() {
+            let provider = self.handle.provider.clone();
+            let snap = tokio::task::spawn_blocking(move || provider.refresh())
+                .await
+                .map_err(|e| {
+                    WidgetError::CreationFailed(format!("processes initial refresh: {e}"))
+                })?;
+            let tab = self.handle.ui.read().tab;
+            refresh_side_tabs(&self.handle.ui, &self.handle.locale, &snap, tab);
+            *self.handle.snapshot.write() = Some(snap);
+        }
         self.handle.schedule_refresh();
         Ok(())
     }
@@ -546,7 +553,7 @@ impl Widget for ProcessesWidget {
         let built = WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: self.handle.locale.tr("widget-processes-name").into(),
+            title: self.handle.locale.tr("widget-processes-name"),
             status: if is_loading {
                 WidgetStatus::Loading
             } else {
@@ -775,7 +782,10 @@ fn format_io(locale: &orchid_i18n::LocaleManager, read_bps: u64, write_bps: u64)
 fn sort_processes(rows: &mut [ProcessRowView], sort: ProcessSortColumn, descending: bool) {
     rows.sort_by(|a, b| {
         let ord = match sort {
-            ProcessSortColumn::Name => a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()),
+            ProcessSortColumn::Name => a
+                .name
+                .to_ascii_lowercase()
+                .cmp(&b.name.to_ascii_lowercase()),
             ProcessSortColumn::Pid => a.pid.cmp(&b.pid),
             ProcessSortColumn::Cpu => a
                 .cpu_percent
@@ -787,8 +797,14 @@ fn sort_processes(rows: &mut [ProcessRowView], sort: ProcessSortColumn, descendi
                 let bi = b.io_read_bps.saturating_add(b.io_write_bps);
                 ai.cmp(&bi)
             }
-            ProcessSortColumn::User => a.user.to_ascii_lowercase().cmp(&b.user.to_ascii_lowercase()),
-            ProcessSortColumn::Path => a.path.to_ascii_lowercase().cmp(&b.path.to_ascii_lowercase()),
+            ProcessSortColumn::User => a
+                .user
+                .to_ascii_lowercase()
+                .cmp(&b.user.to_ascii_lowercase()),
+            ProcessSortColumn::Path => a
+                .path
+                .to_ascii_lowercase()
+                .cmp(&b.path.to_ascii_lowercase()),
             ProcessSortColumn::Status => a.status.cmp(&b.status),
         };
         if descending {

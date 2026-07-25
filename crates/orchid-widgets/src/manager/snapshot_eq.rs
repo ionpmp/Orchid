@@ -4,13 +4,12 @@ use crate::widget::payloads::{
     CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload, FileManagerPayload,
     JyotishAntarRow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary,
     JyotishPayload, JyotishYearSummary, MediaPlayerPayload, MoonPayload, NotesPayload,
-    PasswordEntryDetailView,
-    PasswordEntryView, PasswordManagerPayload, ProcessRowView, ProcessesPayload,
-    RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
-    StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload, UserRowView,
-    ViewerPayload, WeatherForecastDay, WeatherPayload,
+    PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload, ProcessRowView,
+    ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView,
+    ServiceRowView, StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload,
+    UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
 };
-use crate::widget::snapshot::{TerminalPayload, WidgetPayload};
+use crate::widget::snapshot::{TerminalPanePayload, TerminalPayload, WidgetPayload};
 
 /// `true` when two payloads would draw the same in the UI.
 pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> bool {
@@ -297,11 +296,33 @@ pub(crate) fn terminal_payload_eq(a: &TerminalPayload, b: &TerminalPayload) -> b
         && a.cols == b.cols
         && a.rows == b.rows
         && a.cursor_visible == b.cursor_visible
+        && a.content_generation == b.content_generation
         && a.active_tab == b.active_tab
         && a.tabs == b.tabs
-        && a.panes == b.panes
         && a.dividers == b.dividers
-        && a.cells == b.cells
+        && panes_eq(&a.panes, &b.panes)
+        // Prefer generation over full cell walks when present on both sides.
+        && (a.content_generation != 0 && b.content_generation != 0 || a.cells == b.cells)
+}
+
+fn panes_eq(a: &[TerminalPanePayload], b: &[TerminalPanePayload]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b.iter()).all(|(x, y)| {
+            x.session_id == y.session_id
+                && x.left == y.left
+                && x.top == y.top
+                && x.right == y.right
+                && x.bottom == y.bottom
+                && x.is_focused == y.is_focused
+                && x.show_close == y.show_close
+                && x.cols == y.cols
+                && x.rows == y.rows
+                && x.cursor_col == y.cursor_col
+                && x.cursor_row == y.cursor_row
+                && x.cursor_visible == y.cursor_visible
+                && x.content_generation == y.content_generation
+                && (x.content_generation != 0 && y.content_generation != 0 || x.cells == y.cells)
+        })
 }
 
 fn weather_payload_eq(a: &WeatherPayload, b: &WeatherPayload) -> bool {
