@@ -3,6 +3,7 @@
 pub mod astro;
 pub mod config;
 pub mod dasha;
+pub mod geolocate;
 pub mod gochara;
 #[cfg(test)]
 pub mod golden;
@@ -45,6 +46,10 @@ pub use dasha::{
     antar_dashas, dasha_at, dasha_stack_at, maha_dashas, pratyantar_dashas, DashaLord, DashaPeriod,
     DashaStack,
 };
+pub use geolocate::{
+    resolve_current_location, resolve_ip_location, resolve_with_gps_fallback, GeolocateError,
+    LocationSource, ResolvedLocation,
+};
 pub use gochara::{gochara_modifier, gochara_note_key, tint_counts};
 pub use muhurta::{day_muhurtas, in_window, DayMuhurtas, MuhurtaWindow};
 pub use narrative::{build_narrative, build_narrative_simple, Narrative, NarrativeContext};
@@ -73,15 +78,37 @@ type NatalFingerprint = (
     (i32, i32),
 );
 
-fn fingerprint_of(cfg: &JyotishConfig) -> NatalFingerprint {
+fn fingerprint_of(cfg: &JyotishConfig, current: Option<&ResolvedLocation>) -> NatalFingerprint {
+    let loc = observation_location(cfg, current);
     (
         cfg.birth_date.clone(),
         cfg.birth_time.clone(),
         cfg.birth_utc_offset_minutes,
         cfg.ayanamsa,
         cfg.enable_personal,
-        location_key(cfg.active_location()),
+        location_key(&loc),
     )
+}
+
+/// Observation place used for sunrise / muhurta / panchanga timing.
+fn observation_location(
+    cfg: &JyotishConfig,
+    current: Option<&ResolvedLocation>,
+) -> JyotishLocation {
+    if cfg.use_current {
+        if let Some(r) = current {
+            return JyotishLocation {
+                name: if r.label.is_empty() {
+                    "Current location".into()
+                } else {
+                    r.label.clone()
+                },
+                latitude: r.latitude,
+                longitude: r.longitude,
+            };
+        }
+    }
+    cfg.active_location().clone()
 }
 
 /// Coords cache key (centi-degrees) so float noise does not duplicate entries.
@@ -102,21 +129,44 @@ struct JyotishUiState {
     search_generation: u64,
 }
 
+/// Session cache for the pinned Current location row.
+#[derive(Clone, Default)]
+struct CurrentLocState {
+    resolved: Option<ResolvedLocation>,
+    locating: bool,
+    failed: bool,
+    generation: u64,
+}
+
 /// Build the location chip/picker list and geocoding-result rows shared by
 /// [`JyotishHandle::render_payload`] and [`loading_payload`].
 fn cities_and_search(
     cfg: &JyotishConfig,
     ui: &JyotishUiState,
-) -> (Vec<JyotishCityEntry>, Vec<JyotishSearchHit>) {
-    let cities = cfg
-        .locations
-        .iter()
-        .enumerate()
-        .map(|(i, loc)| JyotishCityEntry {
+    current: &CurrentLocState,
+) -> (Vec<JyotishCityEntry>, Vec<JyotishSearchHit>, usize) {
+    let mut cities = Vec::with_capacity(cfg.locations.len() + 1);
+    cities.push(JyotishCityEntry {
+        name: current
+            .resolved
+            .as_ref()
+            .map(|r| r.label.clone())
+            .unwrap_or_default(),
+        active: cfg.use_current,
+        is_current: true,
+    });
+    for (i, loc) in cfg.locations.iter().enumerate() {
+        cities.push(JyotishCityEntry {
             name: loc.name.clone(),
-            active: i == cfg.active_index,
-        })
-        .collect();
+            active: !cfg.use_current && i == cfg.active_index,
+            is_current: false,
+        });
+    }
+    let active_city_index = if cfg.use_current {
+        0
+    } else {
+        cfg.active_index + 1
+    };
     let search_results = ui
         .search_results
         .iter()
@@ -127,14 +177,16 @@ fn cities_and_search(
             longitude: h.longitude,
         })
         .collect();
-    (cities, search_results)
+    (cities, search_results, active_city_index)
 }
 
 struct JyotishHandle {
     instance_id: Uuid,
     config: Arc<RwLock<JyotishConfig>>,
     provider: Arc<dyn WeatherProvider>,
+    http: reqwest::Client,
     ui: Arc<RwLock<JyotishUiState>>,
+    current_loc: Arc<RwLock<CurrentLocState>>,
     data: Arc<RwLock<Option<JyotishData>>>,
     natal: Arc<RwLock<Option<NatalInfo>>>,
     natal_fingerprint: RwLock<Option<NatalFingerprint>>,
@@ -171,12 +223,14 @@ impl JyotishHandle {
             guard.normalize();
             guard.clone()
         };
+        let current = self.current_loc.read().resolved.clone();
+        let obs = observation_location(&cfg, current.as_ref());
 
         let at = Utc::now() + ChronoDuration::days(i64::from(cfg.day_offset));
-        let data = compute_jyotish(cfg.latitude(), cfg.longitude(), at, cfg.ayanamsa);
+        let data = compute_jyotish(obs.latitude, obs.longitude, at, cfg.ayanamsa);
         *self.data.write() = Some(data);
 
-        let fingerprint = fingerprint_of(&cfg);
+        let fingerprint = fingerprint_of(&cfg, current.as_ref());
         let fingerprint_changed = {
             let mut last = self.natal_fingerprint.write();
             if *last == Some(fingerprint.clone()) {
@@ -195,6 +249,26 @@ impl JyotishHandle {
         *self.natal.write() = natal;
     }
 
+    fn observation_lon(&self, cfg: &JyotishConfig) -> f64 {
+        observation_location(cfg, self.current_loc.read().resolved.as_ref()).longitude
+    }
+
+    fn observation_display_name(&self, cfg: &JyotishConfig) -> String {
+        if cfg.use_current {
+            let guard = self.current_loc.read();
+            if guard.locating {
+                return String::new(); // UI shows Fluent locating label
+            }
+            if let Some(r) = guard.resolved.as_ref() {
+                if !r.label.is_empty() {
+                    return r.label.clone();
+                }
+            }
+            return String::new(); // UI shows Fluent current / failed label
+        }
+        cfg.location_name().to_string()
+    }
+
     fn score_natal<'a>(cfg: &JyotishConfig, natal: Option<&'a NatalInfo>) -> Option<&'a NatalInfo> {
         if cfg.enable_personal {
             natal
@@ -208,7 +282,7 @@ impl JyotishHandle {
         if let Some(c) = self.color_cache.get(&date) {
             return *c;
         }
-        let at = local_noon_utc(date, cfg.longitude());
+        let at = local_noon_utc(date, self.observation_lon(cfg));
         let score = compute_day_score(at, cfg.ayanamsa, natal);
         let color = color_of(score.color);
         self.color_cache.insert(date, color);
@@ -269,10 +343,11 @@ impl JyotishHandle {
             })
             .collect();
 
+        let lon = self.observation_lon(cfg);
         let (green, yellow, red) = if let Some(n) = natal_score {
             let mid = NaiveDate::from_ymd_opt(year, month, 15)
                 .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today));
-            let at = local_noon_utc(mid, cfg.longitude());
+            let at = local_noon_utc(mid, lon);
             let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
             tint_counts(green, yellow, red, modif)
         } else {
@@ -298,15 +373,17 @@ impl JyotishHandle {
         let natal = *self.natal.read();
         let natal_score = Self::score_natal(cfg, natal.as_ref());
         let year = today.year() + cfg.year_offset;
-        let fingerprint: NatalFingerprint = fingerprint_of(cfg);
+        let current = self.current_loc.read().resolved.clone();
+        let fingerprint: NatalFingerprint = fingerprint_of(cfg, current.as_ref());
         if let Some((fp, cached_year, months, note)) = self.year_cache.read().as_ref() {
             if *fp == fingerprint && *cached_year == year {
                 return (year, months.clone(), note);
             }
         }
+        let lon = self.observation_lon(cfg);
         let year_gochara = natal_score.map(|n| {
             let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
-            let at = local_noon_utc(mid, cfg.longitude());
+            let at = local_noon_utc(mid, lon);
             gochara_modifier(n.moon_rashi, at, cfg.ayanamsa)
         });
         let months: Vec<JyotishMonthSummary> = (1..=12u32)
@@ -328,7 +405,7 @@ impl JyotishHandle {
                     let mid = NaiveDate::from_ymd_opt(year, month, 15).unwrap_or_else(|| {
                         NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today)
                     });
-                    let at = local_noon_utc(mid, cfg.longitude());
+                    let at = local_noon_utc(mid, lon);
                     let modif = gochara_modifier(n.moon_rashi, at, cfg.ayanamsa);
                     tint_counts(green, yellow, red, modif)
                 } else {
@@ -382,7 +459,7 @@ impl JyotishHandle {
                 let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
                 let modif = gochara_modifier(
                     natal.moon_rashi,
-                    local_noon_utc(mid, cfg.longitude()),
+                    local_noon_utc(mid, self.observation_lon(cfg)),
                     cfg.ayanamsa,
                 );
                 let (green, yellow, red) = tint_counts(green * 30, yellow * 30, red * 30, modif);
@@ -460,7 +537,8 @@ impl JyotishHandle {
         let cfg = self.config.read().clone();
         let Some(data) = self.data.read().clone() else {
             let ui = self.ui.read().clone();
-            return loading_payload(&cfg, &ui);
+            let current = self.current_loc.read().clone();
+            return loading_payload(&cfg, &ui, &current);
         };
         let natal = *self.natal.read();
 
@@ -484,7 +562,8 @@ impl JyotishHandle {
 
         let today = Utc::now().date_naive();
         let selected_date = today + ChronoDuration::days(i64::from(cfg.day_offset));
-        let noon_at = local_noon_utc(selected_date, cfg.longitude());
+        let obs_lon = self.observation_lon(&cfg);
+        let noon_at = local_noon_utc(selected_date, obs_lon);
         let natal_for_score = if cfg.enable_personal {
             natal.as_ref()
         } else {
@@ -576,7 +655,7 @@ impl JyotishHandle {
                         let mid = NaiveDate::from_ymd_opt(year, 6, 15).unwrap_or(today);
                         gochara_note_key(gochara_modifier(
                             n.moon_rashi,
-                            local_noon_utc(mid, cfg.longitude()),
+                            local_noon_utc(mid, obs_lon),
                             cfg.ayanamsa,
                         ))
                     })
@@ -595,17 +674,20 @@ impl JyotishHandle {
         };
 
         let ui = self.ui.read().clone();
-        let (cities, search_results) = cities_and_search(&cfg, &ui);
+        let current = self.current_loc.read().clone();
+        let (cities, search_results, active_city_index) = cities_and_search(&cfg, &ui, &current);
 
         JyotishPayload {
             date_text,
-            location_name: cfg.location_name().to_string(),
+            location_name: self.observation_display_name(&cfg),
             cities,
-            active_city_index: cfg.active_index,
+            active_city_index,
             picker_open: ui.picker_open,
             search_query: ui.search_query.clone(),
             search_results,
             search_busy: ui.search_busy,
+            current_locating: current.locating,
+            current_failed: current.failed && current.resolved.is_none(),
             ayanamsa_key: cfg.ayanamsa.ftl_key(),
             ayanamsa_deg_text: format!("{:.2}°", data.ayanamsa_deg),
             day_offset: cfg.day_offset,
@@ -837,11 +919,88 @@ impl JyotishHandle {
         {
             let mut cfg = self.config.write();
             if index < cfg.locations.len() {
+                cfg.use_current = false;
                 cfg.active_index = index;
             }
         }
         self.recalculate();
         self.publish();
+    }
+
+    fn select_current_location(&self) {
+        let already = self.config.read().use_current;
+        {
+            let mut cfg = self.config.write();
+            cfg.use_current = true;
+        }
+        if already {
+            self.begin_locate(true);
+        } else if self.current_loc.read().resolved.is_some() {
+            {
+                let mut cur = self.current_loc.write();
+                cur.failed = false;
+            }
+            self.recalculate();
+            self.publish();
+        } else {
+            self.begin_locate(false);
+        }
+    }
+
+    fn refresh_current_location(&self) {
+        {
+            let mut cfg = self.config.write();
+            cfg.use_current = true;
+        }
+        self.begin_locate(true);
+    }
+
+    fn begin_locate(&self, force: bool) {
+        let generation = {
+            let mut cur = self.current_loc.write();
+            if cur.locating && !force {
+                return;
+            }
+            cur.generation = cur.generation.wrapping_add(1);
+            cur.locating = true;
+            cur.failed = false;
+            cur.generation
+        };
+        self.publish();
+
+        let http = self.http.clone();
+        let instance_id = self.instance_id;
+        tokio::spawn(async move {
+            let result = resolve_current_location(&http).await;
+            let Some(h) = JYOTISH_LIVE.get(&instance_id) else {
+                return;
+            };
+            {
+                let mut cur = h.current_loc.write();
+                if cur.generation != generation {
+                    return;
+                }
+                cur.locating = false;
+                match result {
+                    Ok(loc) => {
+                        cur.resolved = Some(loc);
+                        cur.failed = false;
+                    }
+                    Err(e) => {
+                        warn!(%instance_id, error = %e, "jyotish current location failed");
+                        if cur.resolved.is_none() {
+                            cur.failed = true;
+                        }
+                    }
+                }
+            }
+            {
+                let mut cfg = h.config.write();
+                cfg.use_current = true;
+            }
+            h.recalculate();
+            h.publish();
+        });
     }
 
     fn remove_city(&self, index: usize) {
@@ -865,6 +1024,7 @@ impl JyotishHandle {
     fn add_city(&self, location: JyotishLocation) {
         {
             let mut cfg = self.config.write();
+            cfg.use_current = false;
             if let Some(existing) = cfg
                 .locations
                 .iter()
@@ -1340,10 +1500,26 @@ pub fn set_picker_open(instance_id: Uuid, open: bool) {
     }
 }
 
-/// Select which configured location is shown.
+/// Select which configured location is shown (clears `use_current`).
 pub fn select_city(instance_id: Uuid, index: usize) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
         h.select_city(index);
+    }
+}
+
+/// Pin observation to the resolved Current location (GPS → IP).
+///
+/// Re-selecting while already on Current refreshes the resolve.
+pub fn select_current_location(instance_id: Uuid) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.select_current_location();
+    }
+}
+
+/// Force-refresh the Current location resolve and keep it selected.
+pub fn refresh_current_location(instance_id: Uuid) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.refresh_current_location();
     }
 }
 
@@ -1474,6 +1650,7 @@ impl JyotishWidget {
         instance_id: Uuid,
         mut config: JyotishConfig,
         provider: Arc<dyn WeatherProvider>,
+        http_client: reqwest::Client,
         bus: Arc<orchid_core::EventBus>,
         orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     ) -> Self {
@@ -1482,7 +1659,9 @@ impl JyotishWidget {
             instance_id,
             config: Arc::new(RwLock::new(config)),
             provider,
+            http: http_client,
             ui: Arc::new(RwLock::new(JyotishUiState::default())),
+            current_loc: Arc::new(RwLock::new(CurrentLocState::default())),
             data: Arc::new(RwLock::new(None)),
             natal: Arc::new(RwLock::new(None)),
             natal_fingerprint: RwLock::new(None),
@@ -1519,6 +1698,9 @@ impl Widget for JyotishWidget {
 
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.recalculate();
+        if self.handle.config.read().use_current {
+            self.handle.begin_locate(false);
+        }
         Ok(())
     }
 
@@ -1562,7 +1744,8 @@ impl Widget for JyotishWidget {
             self.handle.render_payload(&locale)
         } else {
             let ui = self.handle.ui.read().clone();
-            loading_payload(&cfg, &ui)
+            let current = self.handle.current_loc.read().clone();
+            loading_payload(&cfg, &ui, &current)
         };
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
@@ -1597,17 +1780,31 @@ impl Widget for JyotishWidget {
     }
 }
 
-fn loading_payload(cfg: &JyotishConfig, ui: &JyotishUiState) -> JyotishPayload {
-    let (cities, search_results) = cities_and_search(cfg, ui);
+fn loading_payload(
+    cfg: &JyotishConfig,
+    ui: &JyotishUiState,
+    current: &CurrentLocState,
+) -> JyotishPayload {
+    let (cities, search_results, active_city_index) = cities_and_search(cfg, ui, current);
     JyotishPayload {
         date_text: String::new(),
-        location_name: cfg.location_name().to_string(),
+        location_name: if cfg.use_current {
+            current
+                .resolved
+                .as_ref()
+                .map(|r| r.label.clone())
+                .unwrap_or_default()
+        } else {
+            cfg.location_name().to_string()
+        },
         cities,
-        active_city_index: cfg.active_index,
+        active_city_index,
         picker_open: ui.picker_open,
         search_query: ui.search_query.clone(),
         search_results,
         search_busy: ui.search_busy,
+        current_locating: current.locating,
+        current_failed: current.failed && current.resolved.is_none(),
         ayanamsa_key: cfg.ayanamsa.ftl_key(),
         ayanamsa_deg_text: String::new(),
         day_offset: cfg.day_offset,
@@ -1666,7 +1863,8 @@ fn loading_payload(cfg: &JyotishConfig, ui: &JyotishUiState) -> JyotishPayload {
 /// Descriptor ready to register on a widget registry.
 #[must_use]
 pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
-    let provider: Arc<dyn WeatherProvider> = Arc::new(OpenMeteoProvider::new(http_client));
+    let provider: Arc<dyn WeatherProvider> = Arc::new(OpenMeteoProvider::new(http_client.clone()));
+    let http = http_client;
     let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
             Some(bytes) => decode_config(bytes).unwrap_or_default(),
@@ -1676,6 +1874,7 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
             ctx.instance_id,
             cfg,
             provider.clone(),
+            http.clone(),
             ctx.bus.clone(),
             ctx.config.clone(),
         )) as Box<dyn Widget>)
@@ -1751,7 +1950,14 @@ mod search_tests {
             day_offset: 5,
             ..JyotishConfig::default()
         };
-        let _widget = JyotishWidget::new(id, cfg, test_provider(), bus, orchid_config);
+        let _widget = JyotishWidget::new(
+            id,
+            cfg,
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
 
         let hits = search_catalog("nakshatra", 50);
         let hit = hits
@@ -1781,7 +1987,14 @@ mod search_tests {
             }],
             ..JyotishConfig::default()
         };
-        let _widget = JyotishWidget::new(id, cfg, test_provider(), bus, orchid_config);
+        let _widget = JyotishWidget::new(
+            id,
+            cfg,
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
 
         let hits = search_catalog("zzyzxville", 50);
         assert!(hits.iter().any(|h| h.instance_id == id));
@@ -1802,6 +2015,7 @@ mod search_tests {
             id,
             JyotishConfig::default(),
             test_provider(),
+            reqwest::Client::new(),
             bus,
             orchid_config,
         );
@@ -1844,6 +2058,7 @@ mod search_tests {
             id,
             JyotishConfig::default(),
             test_provider(),
+            reqwest::Client::new(),
             bus,
             orchid_config,
         );
@@ -1877,6 +2092,7 @@ mod search_tests {
             id,
             JyotishConfig::default(),
             test_provider(),
+            reqwest::Client::new(),
             bus,
             orchid_config,
         );
@@ -1889,7 +2105,55 @@ mod search_tests {
 
         h.select_city(0);
         assert_eq!(h.config.read().active_index, 0);
+        assert!(!h.config.read().use_current);
         assert_eq!(h.config.read().location_name(), "Varanasi");
+    }
+
+    #[test]
+    fn cities_list_prepends_current_entry() {
+        let cfg = JyotishConfig::default();
+        let ui = JyotishUiState::default();
+        let current = CurrentLocState::default();
+        let (cities, _, active) = cities_and_search(&cfg, &ui, &current);
+        assert_eq!(cities.len(), 2);
+        assert!(cities[0].is_current);
+        assert!(!cities[0].active);
+        assert!(!cities[1].is_current);
+        assert!(cities[1].active);
+        assert_eq!(active, 1);
+    }
+
+    #[test]
+    fn select_current_uses_session_cache_without_refresh() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        {
+            let mut cur = h.current_loc.write();
+            cur.resolved = Some(ResolvedLocation {
+                label: "Testville".into(),
+                latitude: 12.0,
+                longitude: 77.0,
+                source: LocationSource::Ip,
+                timezone: Some("Asia/Kolkata".into()),
+            });
+        }
+        h.select_current_location();
+        assert!(h.config.read().use_current);
+        assert!(!h.current_loc.read().locating);
+        assert_eq!(
+            observation_location(&h.config.read(), h.current_loc.read().resolved.as_ref()).name,
+            "Testville"
+        );
     }
 
     #[test]
@@ -1901,6 +2165,7 @@ mod search_tests {
             id,
             JyotishConfig::default(),
             test_provider(),
+            reqwest::Client::new(),
             bus,
             orchid_config,
         );
@@ -1933,6 +2198,7 @@ mod search_tests {
             id,
             JyotishConfig::default(),
             test_provider(),
+            reqwest::Client::new(),
             bus,
             orchid_config,
         );

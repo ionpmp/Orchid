@@ -32,7 +32,11 @@ pub(crate) fn build_clock_model(
         .iter()
         .map(|c| {
             let name = if c.is_local {
-                locale.tr("clock-local-label")
+                if c.name.is_empty() {
+                    locale.tr("clock-local-label")
+                } else {
+                    c.name.clone()
+                }
             } else {
                 c.name.clone()
             };

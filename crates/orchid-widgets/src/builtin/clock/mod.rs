@@ -25,9 +25,19 @@ use crate::{
 };
 use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 
+use super::jyotish::geolocate::{resolve_current_location, ResolvedLocation};
 use super::weather::provider::{GeocodingHit, OpenMeteoProvider, WeatherProvider};
 
 pub use config::{decode_config, ClockCity, ClockConfig};
+
+/// Cached GPS/IP place used to label the Local row (not used for wall-clock time).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct LocalPlace {
+    /// City (or "City, Country") label from geolocation.
+    label: String,
+    /// IANA id from the geolocation source when available.
+    timezone: Option<String>,
+}
 
 /// Stable type id.
 pub const TYPE_ID: &str = "clock";
@@ -56,6 +66,9 @@ struct ClockHandle {
     instance_id: Uuid,
     config: Arc<RwLock<ClockConfig>>,
     ui: Arc<RwLock<UiState>>,
+    /// Resolved geographic place for the Local hero (GPS → IP).
+    local_place: Arc<RwLock<Option<LocalPlace>>>,
+    http: reqwest::Client,
     provider: Arc<dyn WeatherProvider>,
     refresh: Mutex<PeriodicRefresh>,
     bus: Arc<orchid_core::EventBus>,
@@ -91,6 +104,28 @@ impl ClockHandle {
 
     fn stop_refresh(&self) {
         self.refresh.lock().stop();
+    }
+
+    /// Resolve GPS/IP place once so Local is not labeled with a Windows→IANA
+    /// representative city (e.g. Asia/Jakarta for all SE Asia Standard Time).
+    fn resolve_local_place(self: &Arc<Self>) {
+        let handle = Arc::clone(self);
+        tokio::spawn(async move {
+            let client = handle.http.clone();
+            let Ok(loc) = resolve_current_location(&client).await else {
+                return;
+            };
+            let place = local_place_from_resolved(&client, loc).await;
+            let changed = {
+                let mut slot = handle.local_place.write();
+                let changed = slot.as_ref() != Some(&place);
+                *slot = Some(place);
+                changed
+            };
+            if changed {
+                handle.publish();
+            }
+        });
     }
 
     fn set_picker_open(&self, open: bool) {
@@ -326,6 +361,7 @@ impl ClockWidget {
         instance_id: Uuid,
         config: ClockConfig,
         provider: Arc<dyn WeatherProvider>,
+        http: reqwest::Client,
         bus: Arc<orchid_core::EventBus>,
         orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
     ) -> Self {
@@ -336,6 +372,8 @@ impl ClockWidget {
             instance_id,
             config: Arc::new(RwLock::new(config)),
             ui: Arc::new(RwLock::new(UiState::default())),
+            local_place: Arc::new(RwLock::new(None)),
+            http,
             provider,
             refresh: Mutex::new(PeriodicRefresh::new(interval)),
             bus,
@@ -365,6 +403,7 @@ impl Widget for ClockWidget {
 
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.handle.schedule_refresh();
+        self.handle.resolve_local_place();
         Ok(())
     }
 
@@ -392,7 +431,8 @@ impl Widget for ClockWidget {
         let cfg = self.handle.config.read().clone();
         let ui = self.handle.ui.read().clone();
         let locale = self.handle.orchid_config.read().locale.clone();
-        let payload = render_payload(&cfg, &ui, &locale);
+        let local_place = self.handle.local_place.read().clone();
+        let payload = render_payload(&cfg, &ui, &locale, local_place.as_ref());
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
@@ -426,16 +466,18 @@ impl Widget for ClockWidget {
     }
 }
 
-fn render_payload(cfg: &ClockConfig, ui: &UiState, locale: &LocaleConfig) -> ClockPayload {
+fn render_payload(
+    cfg: &ClockConfig,
+    ui: &UiState,
+    locale: &LocaleConfig,
+    local_place: Option<&LocalPlace>,
+) -> ClockPayload {
     let now = Utc::now();
     let local_now = now.with_timezone(&Local);
     let local_date = local_now.date_naive();
 
     let time_fmt = time_format(locale, cfg.show_seconds);
-    let date_fmt = locale
-        .date_format
-        .as_deref()
-        .unwrap_or("%a, %b %d");
+    let date_fmt = locale.date_format.as_deref().unwrap_or("%a, %b %d");
 
     let local_time = local_now.format(&time_fmt).to_string();
     let local_date_text = if cfg.show_dates {
@@ -443,13 +485,21 @@ fn render_payload(cfg: &ClockConfig, ui: &UiState, locale: &LocaleConfig) -> Clo
     } else {
         String::new()
     };
-    let local_timezone = local_tz_name();
     let local_offset_secs = offset_secs_local(&local_now);
     let local_offset = format_utc_offset(local_offset_secs);
+    // Prefer geolocated city + its IANA zone; wall time always comes from chrono::Local.
+    let local_name = local_place
+        .map(|p| city_label(&p.label))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_default();
+    let local_timezone = pick_local_timezone(
+        local_place.and_then(|p| p.timezone.as_deref()),
+        local_offset_secs,
+    );
 
     let mut cities = Vec::with_capacity(cfg.cities.len() + 1);
     cities.push(ClockCityView {
-        name: String::new(), // UI fills with "Local" via i18n
+        name: local_name,
         timezone: local_timezone.clone(),
         time_text: local_time.clone(),
         date_text: local_date_text.clone(),
@@ -466,8 +516,7 @@ fn render_payload(cfg: &ClockConfig, ui: &UiState, locale: &LocaleConfig) -> Clo
         match Tz::from_str(&city.timezone) {
             Ok(tz) => {
                 let zoned = now.with_timezone(&tz);
-                let day_offset =
-                    (zoned.date_naive() - local_date).num_days().clamp(-1, 1) as i8;
+                let day_offset = (zoned.date_naive() - local_date).num_days().clamp(-1, 1) as i8;
                 cities.push(ClockCityView {
                     name: city.name.clone(),
                     timezone: city.timezone.clone(),
@@ -569,10 +618,14 @@ fn format_utc_offset(secs: i32) -> String {
 
 fn format_relative_offset(local_secs: i32, zone_secs: i32) -> String {
     let diff = zone_secs - local_secs;
-    if diff == 0 { return "\u{00b1}0".into(); }
+    if diff == 0 {
+        return "\u{00b1}0".into();
+    }
     let hours = diff / 3600;
     let mins = (diff.abs() % 3600) / 60;
-    if mins == 0 { return format!("{hours:+}h"); }
+    if mins == 0 {
+        return format!("{hours:+}h");
+    }
     format!("{hours:+}:{mins:02}")
 }
 
@@ -588,10 +641,85 @@ fn local_tz_name() -> String {
     iana_time_zone::get_timezone().unwrap_or_default()
 }
 
+fn city_label(label: &str) -> String {
+    label
+        .split(',')
+        .next()
+        .unwrap_or(label)
+        .trim()
+        .to_string()
+}
+
+/// Prefer a geolocated IANA id when its current offset matches the OS clock.
+fn pick_local_timezone(candidate: Option<&str>, local_offset_secs: i32) -> String {
+    if let Some(name) = candidate.filter(|s| !s.is_empty()) {
+        if timezone_matches_offset(name, local_offset_secs) {
+            return name.to_string();
+        }
+    }
+    let os = local_tz_name();
+    if timezone_matches_offset(&os, local_offset_secs) {
+        return os;
+    }
+    String::new()
+}
+
+fn timezone_matches_offset(name: &str, local_offset_secs: i32) -> bool {
+    let Ok(tz) = Tz::from_str(name) else {
+        return false;
+    };
+    let now = Utc::now();
+    offset_secs_zoned(&now.with_timezone(&tz)) == local_offset_secs
+}
+
+async fn local_place_from_resolved(client: &reqwest::Client, loc: ResolvedLocation) -> LocalPlace {
+    let mut timezone = loc.timezone.filter(|tz| !tz.is_empty());
+    if timezone.is_none() {
+        timezone = open_meteo_timezone(client, loc.latitude, loc.longitude).await;
+    }
+    let mut label = loc.label;
+    if label.is_empty() {
+        if let Some(tz) = timezone.as_deref() {
+            label = city_from_iana(tz).unwrap_or_default();
+        }
+    }
+    LocalPlace { label, timezone }
+}
+
+async fn open_meteo_timezone(
+    client: &reqwest::Client,
+    latitude: f64,
+    longitude: f64,
+) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Resp {
+        timezone: Option<String>,
+    }
+    let url = format!(
+        "https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true&timezone=auto"
+    );
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: Resp = resp.json().await.ok()?;
+    body.timezone.filter(|tz| !tz.is_empty())
+}
+
+fn city_from_iana(tz: &str) -> Option<String> {
+    let city = tz.rsplit('/').next()?.replace('_', " ");
+    if city.is_empty() || city.eq_ignore_ascii_case("UTC") {
+        None
+    } else {
+        Some(city)
+    }
+}
+
 /// Descriptor ready to register on a widget registry.
 #[must_use]
 pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
-    let provider: Arc<dyn WeatherProvider> = Arc::new(OpenMeteoProvider::new(http_client));
+    let provider: Arc<dyn WeatherProvider> =
+        Arc::new(OpenMeteoProvider::new(http_client.clone()));
     let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
             Some(bytes) => decode_config(bytes).unwrap_or_default(),
@@ -601,6 +729,7 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
             ctx.instance_id,
             cfg,
             provider.clone(),
+            http_client.clone(),
             ctx.bus.clone(),
             ctx.config.clone(),
         )) as Box<dyn Widget>)
@@ -658,5 +787,20 @@ mod tests {
         assert_eq!(format_utc_offset(7 * 3600), "UTC+7");
         assert_eq!(format_utc_offset(-5 * 3600), "UTC-5");
         assert_eq!(format_utc_offset(5 * 3600 + 30 * 60), "UTC+5:30");
+    }
+
+    #[test]
+    fn city_from_iana_uses_last_segment() {
+        assert_eq!(city_from_iana("Asia/Bangkok").as_deref(), Some("Bangkok"));
+        assert_eq!(
+            city_from_iana("Asia/Ho_Chi_Minh").as_deref(),
+            Some("Ho Chi Minh")
+        );
+    }
+
+    #[test]
+    fn city_label_takes_city_before_country() {
+        assert_eq!(city_label("Bangkok, Thailand"), "Bangkok");
+        assert_eq!(city_label("Singapore"), "Singapore");
     }
 }

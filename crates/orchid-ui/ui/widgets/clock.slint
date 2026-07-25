@@ -24,7 +24,10 @@ export component ClockView inherits Rectangle {
             alignment: center;
 
             Text {
-                text: model.cities[0].is-local ? model.local-label : model.cities[0].name;
+                // Prefer geolocated city name for Local; fall back to "Local".
+                text: model.cities[0].is-local
+                    ? (model.cities[0].name != "" ? model.cities[0].name : model.local-label)
+                    : model.cities[0].name;
                 color: Theme.text-secondary;
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
