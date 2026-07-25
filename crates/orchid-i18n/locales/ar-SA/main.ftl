@@ -513,6 +513,7 @@ viewer-text-read-only = للقراءة فقط
 viewer-text-editing = تحرير
 viewer-text-save = حفظ (Ctrl+S)
 viewer-text-lines = { $count } أسطر
+viewer-document-info = مستند · {  } كتل · {  } ميزات غير مدعومة
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

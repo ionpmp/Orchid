@@ -512,6 +512,7 @@ viewer-text-read-only = 只读
 viewer-text-editing = 编辑中
 viewer-text-save = 保存 (Ctrl+S)
 viewer-text-lines = { $count } 行
+viewer-document-info = 文档 · {  } 个块 · {  } 个不支持的功能
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

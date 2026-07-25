@@ -5484,6 +5484,7 @@ dependencies = [
  "orchid-storage",
  "parking_lot",
  "pdfium-render",
+ "quick-xml 0.41.0",
  "serde",
  "tantivy",
  "tempfile",
@@ -5491,6 +5492,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "zip",
 ]
 
 [[package]]
@@ -5595,7 +5597,9 @@ dependencies = [
  "orchid-fs",
  "orchid-storage",
  "parking_lot",
+ "parley",
  "pdfium-render",
+ "quick-xml 0.41.0",
  "resvg",
  "ropey",
  "serde",

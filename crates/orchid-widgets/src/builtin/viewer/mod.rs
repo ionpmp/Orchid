@@ -6,8 +6,10 @@ use std::sync::LazyLock;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
-use orchid_viewers::{ArchiveViewer, ImageViewer, PdfViewer, SyntaxHighlighter, TextViewer, Viewer};
 use orchid_viewers::ViewerSnapshot;
+use orchid_viewers::{
+    ArchiveViewer, ImageViewer, PdfViewer, SyntaxHighlighter, TextViewer, Viewer,
+};
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
 use tracing::warn;
@@ -19,7 +21,9 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::ViewerPayload;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "viewer";
@@ -305,9 +309,7 @@ pub async fn open_path(instance_id: Uuid, path: orchid_fs::FsPath) -> WidgetResu
     let inner = VIEWER_LIVE
         .get(&instance_id)
         .map(|e| Arc::clone(e.value()))
-        .ok_or_else(|| {
-            WidgetError::InvalidStateForOperation("viewer widget not live".into())
-        })?;
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))?;
     inner.open_path(path).await
 }
 
@@ -616,11 +618,11 @@ pub async fn pdf_current_page_text(instance_id: Uuid) -> WidgetResult<String> {
         return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
     };
     let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() else {
-        return Err(WidgetError::InvalidStateForOperation("not a pdf viewer".into()));
+        return Err(WidgetError::InvalidStateForOperation(
+            "not a pdf viewer".into(),
+        ));
     };
-    pdf.current_page_text()
-        .await
-        .map_err(map_viewer_err)
+    pdf.current_page_text().await.map_err(map_viewer_err)
 }
 
 /// Archive: open folder.
@@ -858,9 +860,9 @@ impl Widget for ViewerWidget {
             ViewerSnapshot::Pdf(s) => title_from(&s.path_display),
             ViewerSnapshot::Text(s) => title_from(&s.path_display),
             ViewerSnapshot::Archive(s) => title_from(&s.path_display),
-            ViewerSnapshot::Loading { path_display } | ViewerSnapshot::Error { path_display, .. } => {
-                title_from(path_display)
-            }
+            ViewerSnapshot::Document(s) => title_from(&s.path_display),
+            ViewerSnapshot::Loading { path_display }
+            | ViewerSnapshot::Error { path_display, .. } => title_from(path_display),
         };
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
@@ -927,7 +929,10 @@ pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
             None => ViewerPersisted::default(),
         };
         let widget = match (
-            persisted.path.as_deref().and_then(|raw| orchid_fs::FsPath::new(raw).ok()),
+            persisted
+                .path
+                .as_deref()
+                .and_then(|raw| orchid_fs::FsPath::new(raw).ok()),
             persisted.floating_bounds(),
         ) {
             (Some(path), Some(floating)) => ViewerWidget::with_pending_path_and_floating(

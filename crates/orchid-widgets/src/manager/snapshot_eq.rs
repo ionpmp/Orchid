@@ -126,6 +126,14 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && archive_preview_eq(&a.preview, &b.preview)
                 && archive_status_eq(&a.status, &b.status)
         }
+        (Vs::Document(a), Vs::Document(b)) => {
+            a.path_display == b.path_display
+                && a.dirty == b.dirty
+                && a.block_count == b.block_count
+                && a.warnings == b.warnings
+                && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
+                    || a.plain_text.as_ref() == b.plain_text.as_ref())
+        }
         _ => false,
     }
 }

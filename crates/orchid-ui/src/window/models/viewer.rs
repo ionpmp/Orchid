@@ -82,7 +82,12 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
                 cache.remove(&old);
             }
         }
-        cache.insert(key, RgbaImageCacheEntry { image: image.clone() });
+        cache.insert(
+            key,
+            RgbaImageCacheEntry {
+                image: image.clone(),
+            },
+        );
     });
 
     image
@@ -317,6 +322,30 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
         Vs::Archive(s) => {
             model.kind = 6;
             model.archive = build_archive_snapshot(s, locale);
+        }
+        // MVP: surface DOCX as editable plain text until viewer-document.slint lands.
+        Vs::Document(s) => {
+            model.kind = 5;
+            let mut text = empty_viewer_text_model(locale);
+            text.path_display = s.path_display.clone().into();
+            text.plain_text = s.plain_text.as_ref().into();
+            text.dirty = s.dirty;
+            text.read_only = false;
+            text.language = "docx".into();
+            text.total_lines = s.plain_text.lines().count() as i32;
+            let args = orchid_i18n::FluentArgs::new()
+                .with("blocks", s.block_count.to_string())
+                .with(
+                    "warnings",
+                    if s.warnings.is_empty() {
+                        "0".into()
+                    } else {
+                        s.warnings.len().to_string()
+                    },
+                );
+            text.info_text = locale.tr_args("viewer-document-info", &args).into();
+            text.mode_label = locale.tr("viewer-text-editing").into();
+            model.text = text;
         }
     }
 

@@ -49,6 +49,9 @@ tokio = { workspace = true }
 dashmap.workspace = true
 
 pdfium-render.workspace = true
+quick-xml.workspace = true
+parley.workspace = true
+zip.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true

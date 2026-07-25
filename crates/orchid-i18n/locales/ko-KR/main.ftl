@@ -512,6 +512,7 @@ viewer-text-read-only = 읽기 전용
 viewer-text-editing = 편집 중
 viewer-text-save = 저장 (Ctrl+S)
 viewer-text-lines = { $count }줄
+viewer-document-info = 문서 · {  }개 블록 · 미지원 {  }
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

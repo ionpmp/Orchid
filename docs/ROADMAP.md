@@ -71,6 +71,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation (toolbar + PageUp/Down/←/→ when focused), go-to-page input, fit width/page with active-mode highlight, zoom, toolbar hover hints, viewport re-fit; action failures (page/zoom/fit/viewport) surface as localized notifications; requires bundled `pdfium.dll`
 - [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown/javascript/typescript/tsx/yaml/go/bash/html/css/c/cpp/java/ruby/sql/php/kotlin; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S with hover hints, dirty ●, localized line count + LF/CRLF); read-only virtualized scroll (Flickable → text_scroll + viewport-sized window)
 - [~] Archives (ZIP, 7z, TAR, TAR.GZ, TAR.XZ) — browse + preview + extract selected/all; localized toolbar header + status strip (format/count + extract feedback); navigate/select/extract failures notify; TAR.XZ via `xz2`
+- [~] Document editor (DOCX) — Tier-1 rich text model + OOXML read/write (fonts/bold/italic/underline/color, alignment, lists, simple tables, page setup); `DocumentViewer` + dispatch before ZIP-archive; plain-text UI surface for MVP; undo/redo; Tantivy DOCX extractor; full Slint toolbar/canvas and Word round-trip fixtures still pending
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — unlock/lock UI + Hello; KDBX4 R/W, groups/entries/TOTP; `privacy.vault_auto_lock_seconds` idle lock (default 300s)
@@ -110,6 +111,17 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Built-in browser (WebView2)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace
+
+
+## Native format (`.orchid`) — see [`docs/ORCHID_FORMAT.md`](ORCHID_FORMAT.md)
+
+AI-native container (magic `ORCD`) for documents and media wrappers. Spec first; implementation phased:
+
+- [ ] Phase 1 — Framing: self-describing regions + FlatBuffers TOC + Raw/Clean-Text/Structured (snapshot) + mmap + zstd; sealed mode only
+- [ ] Phase 2 — Per-region `age` encryption + linked mode (`ChunkStore`) + CAS generation history
+- [ ] Phase 3 — C2PA provenance region (`c2pa` crate)
+- [ ] Phase 4 — CRDT structured region (multi-writer human + AI agent)
+- [ ] Phase 5 — Local embeddings (`ort`) + hierarchical vectors + ANN hybrid search with Tantivy
 
 ## v2.0 — Year 2
 

@@ -512,6 +512,7 @@ viewer-text-read-only = 読み取り専用
 viewer-text-editing = 編集中
 viewer-text-save = 保存 (Ctrl+S)
 viewer-text-lines = { $count } 行
+viewer-document-info = 文書 · {  } ブロック · 未対応 {  }
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

@@ -4,6 +4,7 @@
 //! [`ContentExtractor`] and reports which MIME / extension combinations it
 //! handles. [`Extractor`] picks one per file.
 
+pub mod docx;
 pub mod pdf;
 pub mod text;
 
@@ -60,6 +61,12 @@ impl Extractor {
     #[must_use]
     pub fn with_pdf(self) -> Self {
         self.with(Arc::new(pdf::PdfExtractor))
+    }
+
+    /// Convenience: enable the DOCX extractor.
+    #[must_use]
+    pub fn with_docx(self) -> Self {
+        self.with(Arc::new(docx::DocxExtractor))
     }
 
     /// Route `path` to a matching extractor, returning `None` when none

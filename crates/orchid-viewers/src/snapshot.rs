@@ -25,6 +25,22 @@ pub enum ViewerSnapshot {
     Text(TextSnapshot),
     /// Archive listing.
     Archive(ArchiveSnapshot),
+    /// Rich-text document (DOCX).
+    Document(DocumentSnapshot),
+}
+
+/// Document (DOCX) snapshot for the UI layer.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct DocumentSnapshot {
+    pub path_display: String,
+    pub dirty: bool,
+    pub block_count: u32,
+    /// Plain-text extraction for search / fallback display.
+    pub plain_text: Arc<str>,
+    /// Non-fatal warnings (e.g. unsupported OOXML features).
+    pub warnings: Vec<String>,
+    pub info_text: String,
 }
 
 /// Image snapshot.

@@ -161,6 +161,10 @@ starship-battery = "0.11"
 ropey = "1"
 memmap2 = "0.9"
 
+# Document / OOXML (DOCX) viewer-editor
+quick-xml = "0.41"
+parley = "0.10"
+
 # i18n
 icu = "2.2"
 fluent = "0.17"

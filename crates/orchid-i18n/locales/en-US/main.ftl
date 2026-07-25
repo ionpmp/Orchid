@@ -778,6 +778,7 @@ viewer-text-read-only = Read-only
 viewer-text-editing = Editing
 viewer-text-save = Save (Ctrl+S)
 viewer-text-lines = { $count } lines
+viewer-document-info = Document · {  } blocks · {  } unsupported features
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-utf-8 = UTF-8

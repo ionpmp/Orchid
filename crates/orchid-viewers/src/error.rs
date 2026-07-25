@@ -52,7 +52,9 @@ pub enum ViewerError {
     PdfEmpty,
 
     /// Pdfium shared library could not be loaded.
-    #[error("PDF support unavailable: place pdfium.dll next to the executable or see docs/BUILDING.md")]
+    #[error(
+        "PDF support unavailable: place pdfium.dll next to the executable or see docs/BUILDING.md"
+    )]
     PdfUnavailable,
 
     /// Text decode failed.
@@ -66,6 +68,18 @@ pub enum ViewerError {
     /// Edit position outside buffer bounds.
     #[error("edit outside buffer bounds")]
     EditOutOfBounds,
+
+    /// No document is currently open in the document viewer.
+    #[error("no document open")]
+    DocumentNotOpen,
+
+    /// Failed to parse a DOCX / OOXML package.
+    #[error("failed to parse document: {0}")]
+    DocumentParse(String),
+
+    /// Failed to save a DOCX / OOXML package.
+    #[error("failed to save document: {0}")]
+    DocumentSave(String),
 
     /// Archive entry missing.
     #[error("archive entry not found: {0}")]

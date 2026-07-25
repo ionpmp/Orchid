@@ -7,6 +7,7 @@
 
 pub mod archive;
 pub mod dispatch;
+pub mod document;
 pub mod error;
 pub mod image;
 pub mod pdf;
@@ -17,6 +18,7 @@ pub mod viewer_trait;
 
 pub use archive::ArchiveViewer;
 pub use dispatch::{kind_for, select_viewer, ViewerKind};
+pub use document::{Document, DocumentViewer, EditCommand, UndoStack as DocumentUndoStack};
 pub use error::{Result, ViewerError};
 pub use image::{
     is_image_file_extension, ImageFormat, ImageViewer, LoadedImage, ViewTransform,
@@ -24,8 +26,9 @@ pub use image::{
 };
 pub use pdf::PdfViewer;
 pub use snapshot::{
-    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, ImageSnapshot, PdfSnapshot,
-    SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
+    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, DocumentSnapshot,
+    ImageSnapshot, PdfSnapshot, SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment,
+    TextSnapshot, ViewerSnapshot,
 };
 pub use text::{
     CursorPos, LineEnding, SyntaxHighlighter, TextBuffer, TextOp, TextOpKind, TextViewer,

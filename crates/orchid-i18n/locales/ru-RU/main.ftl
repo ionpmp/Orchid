@@ -502,6 +502,7 @@ viewer-text-read-only = Только чтение
 viewer-text-editing = Редактирование
 viewer-text-save = Сохранить (Ctrl+S)
 viewer-text-lines = { $count } строк
+viewer-document-info = Документ · {  } блоков · {  } неподдерж. элементов
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

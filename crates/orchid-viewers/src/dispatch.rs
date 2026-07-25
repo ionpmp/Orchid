@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use crate::archive::ArchiveViewer;
+use crate::document::DocumentViewer;
 use crate::error::{Result, ViewerError};
 use crate::image::ImageViewer;
 use crate::pdf::PdfViewer;
@@ -17,12 +18,19 @@ pub enum ViewerKind {
     Pdf,
     Text,
     Archive,
+    Document,
 }
 
 /// Pick a viewer kind by sniffing magic bytes from `sample` with a fall
 /// back to the file extension. Pure — does not touch the filesystem.
 #[must_use]
 pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
+    // OOXML Office files are ZIP containers — check extension before archive magic
+    // so `.docx` does not open as a generic archive browser.
+    // TODO: sniff `[Content_Types].xml` inside the zip to distinguish xlsx/pptx.
+    if is_docx_path(path) && looks_like_zip(sample) {
+        return Some(ViewerKind::Document);
+    }
     // Archive signatures win outright.
     if orchid_fs::detect_format(sample).is_some() {
         return Some(ViewerKind::Archive);
@@ -41,6 +49,7 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
     if let Some(ext) = extension_of(path) {
         return match ext.as_str() {
             "pdf" => Some(ViewerKind::Pdf),
+            "docx" | "docm" => Some(ViewerKind::Document),
             "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
             other if crate::image::loader::is_image_file_extension(other) => {
                 Some(ViewerKind::Image)
@@ -85,6 +94,7 @@ pub async fn select_viewer(
         ViewerKind::Pdf => Box::new(PdfViewer::new()),
         ViewerKind::Text => Box::new(TextViewer::new(highlighter)),
         ViewerKind::Archive => Box::new(ArchiveViewer::new()),
+        ViewerKind::Document => Box::new(DocumentViewer::new()),
     };
     Ok(viewer)
 }
@@ -93,6 +103,20 @@ fn extension_of(path: &orchid_fs::FsPath) -> Option<String> {
     let name = path.file_name()?;
     let (_, ext) = name.rsplit_once('.')?;
     Some(ext.to_ascii_lowercase())
+}
+
+fn is_docx_path(path: &orchid_fs::FsPath) -> bool {
+    matches!(
+        extension_of(path).as_deref(),
+        Some("docx") | Some("docm")
+    )
+}
+
+fn looks_like_zip(sample: &[u8]) -> bool {
+    sample.starts_with(b"PK\x03\x04")
+        || sample.starts_with(b"PK\x05\x06")
+        || sample.starts_with(b"PK\x07\x08")
+        || sample.is_empty() // extension-only dispatch when no sample yet
 }
 
 #[cfg(test)]
@@ -113,6 +137,24 @@ mod tests {
     fn zip_magic_wins() {
         let kind = kind_for(&path("local:/a/b.unknown"), b"PK\x03\x04rest").unwrap();
         assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn docx_extension_with_zip_magic_is_document_not_archive() {
+        let kind = kind_for(&path("local:/a/b.docx"), b"PK\x03\x04rest").unwrap();
+        assert_eq!(kind, ViewerKind::Document);
+    }
+
+    #[test]
+    fn zip_extension_stays_archive() {
+        let kind = kind_for(&path("local:/a/b.zip"), b"PK\x03\x04rest").unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn docx_extension_fallback_without_sample() {
+        let kind = kind_for(&path("local:/a/b.docx"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Document);
     }
 
     #[test]

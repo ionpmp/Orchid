@@ -512,6 +512,7 @@ viewer-text-read-only = SchreibgeschÃ¼tzt
 viewer-text-editing = Bearbeitung
 viewer-text-save = Speichern (Ctrl+S)
 viewer-text-lines = { $count } Zeilen
+viewer-document-info = Dokument · {  } Blöcke · {  } nicht unterstützte Features
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

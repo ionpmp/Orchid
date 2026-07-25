@@ -512,6 +512,7 @@ viewer-text-read-only = Lecture seule
 viewer-text-editing = Ã‰dition
 viewer-text-save = Enregistrer (Ctrl+S)
 viewer-text-lines = { $count } lignes
+viewer-document-info = Document · {  } blocs · {  } éléments non pris en charge
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5

@@ -426,6 +426,20 @@ fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
             }
             lines
         }
+        ViewerSnapshot::Document(d) => {
+            let mut lines = vec![
+                d.path_display.clone(),
+                format!(
+                    "Document · {} blocks{}",
+                    d.block_count,
+                    if d.dirty { " · dirty" } else { "" }
+                ),
+            ];
+            for row in d.plain_text.lines().take(40) {
+                lines.push(row.to_string());
+            }
+            lines
+        }
         ViewerSnapshot::Archive(a) => {
             let mut lines = vec![
                 format!("{} — {}", a.path_display, a.format),
@@ -480,7 +494,7 @@ fn file_manager_to_text_lines(p: &FileManagerPayload) -> Vec<String> {
             if let Some(tracked) = tab.managed_files_tracked {
                 let dedup = tab
                     .managed_dedup_bytes
-                    .map(|b| format_byte_size(b))
+                    .map(format_byte_size)
                     .unwrap_or_default();
                 lines.push(format!(
                     "{} items, {} selected · {} ingested, {} deduped",
