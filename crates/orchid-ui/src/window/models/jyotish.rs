@@ -35,6 +35,8 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         search_query: SharedString::new(),
         search_results: ModelRc::new(VecModel::default()),
         search_busy: false,
+        current_locating: false,
+        current_failed: false,
         picker_title: locale.tr("jyotish-cities-title").into(),
         search_placeholder: locale.tr("jyotish-city-search-placeholder").into(),
         add_city_hint: locale.tr("jyotish-city-add").into(),
@@ -43,6 +45,9 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         cities_hint: locale.tr("jyotish-cities-hint").into(),
         no_results_label: locale.tr("jyotish-city-no-results").into(),
         searching_label: locale.tr("jyotish-city-searching").into(),
+        current_location_label: locale.tr("jyotish-current-location").into(),
+        current_locating_label: locale.tr("jyotish-current-locating").into(),
+        current_failed_label: locale.tr("jyotish-current-failed").into(),
         vara_label: SharedString::new(),
         ayanamsa_label: SharedString::new(),
         loading_label: locale.tr("jyotish-loading").into(),
@@ -133,6 +138,8 @@ pub(crate) fn build_jyotish_model(
         m.search_query = p.search_query.clone().into();
         m.search_results = ModelRc::new(VecModel::from(jyotish_search_hits(p)));
         m.search_busy = p.search_busy;
+        m.current_locating = p.current_locating;
+        m.current_failed = p.current_failed;
         return m;
     }
 
@@ -282,6 +289,8 @@ pub(crate) fn build_jyotish_model(
         search_query: p.search_query.clone().into(),
         search_results: ModelRc::new(VecModel::from(jyotish_search_hits(p))),
         search_busy: p.search_busy,
+        current_locating: p.current_locating,
+        current_failed: p.current_failed,
         picker_title: locale.tr("jyotish-cities-title").into(),
         search_placeholder: locale.tr("jyotish-city-search-placeholder").into(),
         add_city_hint: locale.tr("jyotish-city-add").into(),
@@ -290,6 +299,9 @@ pub(crate) fn build_jyotish_model(
         cities_hint: locale.tr("jyotish-cities-hint").into(),
         no_results_label: locale.tr("jyotish-city-no-results").into(),
         searching_label: locale.tr("jyotish-city-searching").into(),
+        current_location_label: locale.tr("jyotish-current-location").into(),
+        current_locating_label: locale.tr("jyotish-current-locating").into(),
+        current_failed_label: locale.tr("jyotish-current-failed").into(),
         vara_label: locale.tr(p.vara_key).into(),
         ayanamsa_label: ayanamsa_label.into(),
         loading_label: locale.tr("jyotish-loading").into(),
@@ -402,6 +414,7 @@ fn jyotish_city_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishCityEn
         .map(|c| JyotishCityEntry {
             name: c.name.clone().into(),
             active: c.active,
+            is_current: c.is_current,
         })
         .collect()
 }
@@ -517,9 +530,9 @@ fn build_rectify_model(
                 range: c.range.clone().into(),
                 rashi: locale.tr(c.rashi_key).into(),
                 confidence: i32::from(c.confidence_pct),
-                quiz_score: i32::from(c.quiz_score),
-                event_score: i32::from(c.event_score),
-                total_score: i32::from(c.total_score),
+                quiz_score: c.quiz_score,
+                event_score: c.event_score,
+                total_score: c.total_score,
                 breakdown: breakdown.into(),
                 is_top: c.is_top,
             }

@@ -3,10 +3,12 @@
 /// One configured location chip / picker row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct JyotishCityEntry {
-    /// Display name.
+    /// Display name (resolved place label for the synthetic Current row).
     pub name: String,
     /// Whether this is the active location.
     pub active: bool,
+    /// Synthetic pinned "Current location" row (not removable).
+    pub is_current: bool,
 }
 
 /// One geocoding search result shown in the location picker.
@@ -201,6 +203,10 @@ pub struct JyotishPayload {
     pub search_results: Vec<JyotishSearchHit>,
     /// True while a geocoding request is in flight.
     pub search_busy: bool,
+    /// True while resolving Current location (GPS/IP).
+    pub current_locating: bool,
+    /// True when the last Current-location resolve failed (and no cache).
+    pub current_failed: bool,
     pub ayanamsa_key: &'static str,
     pub ayanamsa_deg_text: String,
     pub day_offset: i32,

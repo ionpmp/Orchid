@@ -49,7 +49,11 @@ impl MainWindowController {
         self.persist_and_refresh_weather(inst_id);
     }
 
-    pub(super) fn on_weather_search_cities(self: &Arc<Self>, id: &SharedString, query: &SharedString) {
+    pub(super) fn on_weather_search_cities(
+        self: &Arc<Self>,
+        id: &SharedString,
+        query: &SharedString,
+    ) {
         let Some(inst_id) = parse_uuid(id) else {
             return;
         };
@@ -89,12 +93,42 @@ impl MainWindowController {
         self.refresh_weather(inst_id);
     }
 
-    /// Geolocation picker action — not wired to a provider yet.
+    /// Resolve Current location (Windows GPS -> IP) and add/select it.
     pub(super) fn on_weather_use_my_location(self: &Arc<Self>, id: &SharedString) {
         let Some(inst_id) = parse_uuid(id) else {
             return;
         };
-        warn!(%inst_id, "weather: use-my-location is not implemented yet");
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            let client = reqwest::Client::new();
+            match orchid_widgets::builtin::jyotish::resolve_current_location(&client).await {
+                Ok(loc) => {
+                    let name = if loc.label.is_empty() {
+                        "Current location".to_string()
+                    } else {
+                        loc.label
+                    };
+                    orchid_widgets::builtin::weather::add_city(
+                        inst_id,
+                        name,
+                        loc.latitude,
+                        loc.longitude,
+                        loc.timezone.unwrap_or_default(),
+                    );
+                    if let Err(e) = wm.save_widget_state(inst_id).await {
+                        warn!(%inst_id, error = %e, "weather: persist after my-location failed");
+                    }
+                    let _ = wm.refresh_snapshot_cache(inst_id).await;
+                    if let Some(c) = t.upgrade() {
+                        c.schedule_rebuild();
+                    }
+                }
+                Err(e) => {
+                    warn!(%inst_id, error = %e, "weather: use-my-location failed");
+                }
+            }
+        });
     }
 
     /// Drain transient weather UI notices after a snapshot patch (no-op for now).

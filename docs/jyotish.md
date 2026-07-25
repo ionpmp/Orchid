@@ -71,6 +71,14 @@ notifications.
 
 ### Multi-location picker
 
+The location list always starts with a pinned **Current location** row. When
+selected (`use_current` in config), sunrise / muhurta / panchanga timing use
+coordinates resolved for this session: Windows Location API first, then an
+IP geolocation fallback if GPS is denied or fails. Resolved coords are cached
+on the live widget handle; selecting Current again refreshes them. Busy and
+error states use the Fluent keys `jyotish-current-locating` /
+`jyotish-current-failed`.
+
 Tap the location name on the Day tab to open the location picker. From there
 you can search for a place by name (Open-Meteo geocoding, same provider as
 the Weather widget), add it to your saved locations, switch the active
@@ -83,8 +91,10 @@ have been replaced by this in-widget picker.
 
 - Day colors for Month/Year grids are memoized per civil date (`color_cache`);
   changing birth data, ayanamsa, the personal-layer toggle, or the active
-  location (select/add/remove in the picker) invalidates it, since sunrise
-  and muhurta windows are location-dependent.
+  observation location (saved city, Current resolve, or add/remove) invalidates
+  it, since sunrise and muhurta windows are location-dependent.
+- Live APIs: `select_current_location`, `refresh_current_location` (plus the
+  existing city picker helpers).
 - `JyotishPayload` is `Box`’d in snapshots; the closed rectify wizard skips
   quiz/chrome Fluent strings on every UI patch.
 

@@ -203,8 +203,12 @@ export component JyotishView inherits Rectangle {
                                 width: 100%;
 
                                 Text {
-                                    text: model.location-name == "" ? model.empty-location : model.location-name;
-                                    color: model.location-name == "" ? Theme.text-tertiary : Theme.text-secondary;
+                                    text: model.current-locating ? model.current-locating-label
+                                        : (model.current-failed && model.location-name == "" ? model.current-failed-label
+                                            : (model.location-name == ""
+                                                ? (model.active-city-index == 0 ? model.current-location-label : model.empty-location)
+                                                : model.location-name));
+                                    color: model.location-name == "" && !model.current-locating ? Theme.text-tertiary : Theme.text-secondary;
                                     font-size: Theme.font-size-sm;
                                     horizontal-alignment: center;
                                     wrap: no-wrap;
@@ -227,7 +231,7 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
-                if model.cities.length > 1 : Flickable {
+                if model.cities.length > 0 : Flickable {
                     height: 28px;
                     viewport-height: self.height;
                     viewport-width: city-row.preferred-width.max(self.width);
@@ -248,7 +252,11 @@ export component JyotishView inherits Rectangle {
                             }
 
                             city-label := Text {
-                                text: city.name;
+                                text: city.is-current
+                                    ? (model.current-locating ? model.current-locating-label
+                                        : (model.current-failed ? model.current-failed-label
+                                            : (city.name != "" ? city.name : model.current-location-label)))
+                                    : city.name;
                                 color: city.active ? Theme.surface-base : Theme.text-primary;
                                 font-size: Theme.font-size-sm;
                                 horizontal-alignment: center;
@@ -1095,7 +1103,11 @@ export component JyotishView inherits Rectangle {
                                 spacing: 4px;
 
                                 Text {
-                                    text: city.name;
+                                    text: city.is-current
+                                        ? (model.current-locating ? model.current-locating-label
+                                            : (model.current-failed ? model.current-failed-label
+                                                : (city.name != "" ? city.name : model.current-location-label)))
+                                        : city.name;
                                     color: city.active ? Theme.surface-base : Theme.text-primary;
                                     font-size: Theme.font-size-sm;
                                     vertical-alignment: center;
@@ -1104,7 +1116,7 @@ export component JyotishView inherits Rectangle {
                                     overflow: elide;
                                 }
 
-                                if model.cities.length > 1 : Rectangle {
+                                if !city.is-current && model.cities.length > 2 : Rectangle {
                                     width: 28px;
                                     height: 28px;
                                     y: 2px;

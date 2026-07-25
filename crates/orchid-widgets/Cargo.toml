@@ -48,6 +48,7 @@ windows-future.workspace = true
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
 features = [
+    "Devices_Geolocation",
     "Foundation",
     "Media_Control",
     "Storage_Streams",

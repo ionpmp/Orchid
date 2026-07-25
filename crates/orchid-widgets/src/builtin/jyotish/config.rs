@@ -78,8 +78,13 @@ pub struct JyotishConfig {
     #[serde(default)]
     pub locations: Vec<JyotishLocation>,
     /// Index into [`Self::locations`] for the place currently shown.
+    /// Ignored for calculations when [`Self::use_current`] is true.
     #[serde(default)]
     pub active_index: usize,
+    /// When true, observation coords come from the session-resolved
+    /// "Current location" (GPS/IP), not [`Self::locations`][`Self::active_index`].
+    #[serde(default)]
+    pub use_current: bool,
     pub ayanamsa: AyanamsaSystem,
     /// Days relative to today (UTC date). `0` = today.
     pub day_offset: i32,
@@ -113,6 +118,7 @@ impl Default for JyotishConfig {
         Self {
             locations: vec![JyotishLocation::default()],
             active_index: 0,
+            use_current: false,
             ayanamsa: AyanamsaSystem::Lahiri,
             day_offset: 0,
             show_planets: true,
@@ -198,6 +204,59 @@ impl JyotishConfig {
     }
 }
 
+/// Multi-location shape before [`JyotishConfig::use_current`] existed.
+#[derive(Debug, Serialize, Deserialize)]
+struct MultiLocJyotishConfig {
+    #[serde(default)]
+    locations: Vec<JyotishLocation>,
+    #[serde(default)]
+    active_index: usize,
+    ayanamsa: AyanamsaSystem,
+    day_offset: i32,
+    show_planets: bool,
+    show_sunrise_sunset: bool,
+    birth_date: Option<String>,
+    birth_time: Option<String>,
+    birth_utc_offset_minutes: i32,
+    birth_time_rectified: bool,
+    active_tab: u8,
+    month_offset: i32,
+    year_offset: i32,
+    #[serde(default = "default_true")]
+    notify_day_color: bool,
+    #[serde(default = "default_true")]
+    notify_rahukalam: bool,
+    #[serde(default = "default_true")]
+    show_rahukalam: bool,
+    #[serde(default = "default_true")]
+    enable_personal: bool,
+}
+
+impl MultiLocJyotishConfig {
+    fn into_config(self) -> JyotishConfig {
+        JyotishConfig {
+            locations: self.locations,
+            active_index: self.active_index,
+            use_current: false,
+            ayanamsa: self.ayanamsa,
+            day_offset: self.day_offset,
+            show_planets: self.show_planets,
+            show_sunrise_sunset: self.show_sunrise_sunset,
+            birth_date: self.birth_date,
+            birth_time: self.birth_time,
+            birth_utc_offset_minutes: self.birth_utc_offset_minutes,
+            birth_time_rectified: self.birth_time_rectified,
+            active_tab: self.active_tab,
+            month_offset: self.month_offset,
+            year_offset: self.year_offset,
+            notify_day_color: self.notify_day_color,
+            notify_rahukalam: self.notify_rahukalam,
+            show_rahukalam: self.show_rahukalam,
+            enable_personal: self.enable_personal,
+        }
+    }
+}
+
 /// Pre-multi-location shape (flat `latitude` / `longitude` / `location_name`).
 #[derive(Debug, Serialize, Deserialize)]
 struct LegacyJyotishConfig {
@@ -225,42 +284,44 @@ struct LegacyJyotishConfig {
     enable_personal: bool,
 }
 
-/// Decode config, accepting both multi-location and legacy flat-location blobs.
+/// Decode config, accepting current, pre-`use_current`, and legacy flat blobs.
 pub fn decode_config(bytes: &[u8]) -> crate::error::Result<JyotishConfig> {
-    match crate::widget::config::restore_state::<JyotishConfig>(bytes) {
-        Ok(mut cfg) => {
-            cfg.normalize();
-            Ok(cfg)
-        }
-        Err(_) => {
-            let legacy: LegacyJyotishConfig = crate::widget::config::restore_state(bytes)?;
-            let mut cfg = JyotishConfig {
-                locations: vec![JyotishLocation {
-                    name: legacy.location_name,
-                    latitude: legacy.latitude,
-                    longitude: legacy.longitude,
-                }],
-                active_index: 0,
-                ayanamsa: legacy.ayanamsa,
-                day_offset: legacy.day_offset,
-                show_planets: legacy.show_planets,
-                show_sunrise_sunset: legacy.show_sunrise_sunset,
-                birth_date: legacy.birth_date,
-                birth_time: legacy.birth_time,
-                birth_utc_offset_minutes: legacy.birth_utc_offset_minutes,
-                birth_time_rectified: legacy.birth_time_rectified,
-                active_tab: legacy.active_tab,
-                month_offset: legacy.month_offset,
-                year_offset: legacy.year_offset,
-                notify_day_color: legacy.notify_day_color,
-                notify_rahukalam: legacy.notify_rahukalam,
-                show_rahukalam: legacy.show_rahukalam,
-                enable_personal: legacy.enable_personal,
-            };
-            cfg.normalize();
-            Ok(cfg)
-        }
+    if let Ok(mut cfg) = crate::widget::config::restore_state::<JyotishConfig>(bytes) {
+        cfg.normalize();
+        return Ok(cfg);
     }
+    if let Ok(multi) = crate::widget::config::restore_state::<MultiLocJyotishConfig>(bytes) {
+        let mut cfg = multi.into_config();
+        cfg.normalize();
+        return Ok(cfg);
+    }
+    let legacy: LegacyJyotishConfig = crate::widget::config::restore_state(bytes)?;
+    let mut cfg = JyotishConfig {
+        locations: vec![JyotishLocation {
+            name: legacy.location_name,
+            latitude: legacy.latitude,
+            longitude: legacy.longitude,
+        }],
+        active_index: 0,
+        use_current: false,
+        ayanamsa: legacy.ayanamsa,
+        day_offset: legacy.day_offset,
+        show_planets: legacy.show_planets,
+        show_sunrise_sunset: legacy.show_sunrise_sunset,
+        birth_date: legacy.birth_date,
+        birth_time: legacy.birth_time,
+        birth_utc_offset_minutes: legacy.birth_utc_offset_minutes,
+        birth_time_rectified: legacy.birth_time_rectified,
+        active_tab: legacy.active_tab,
+        month_offset: legacy.month_offset,
+        year_offset: legacy.year_offset,
+        notify_day_color: legacy.notify_day_color,
+        notify_rahukalam: legacy.notify_rahukalam,
+        show_rahukalam: legacy.show_rahukalam,
+        enable_personal: legacy.enable_personal,
+    };
+    cfg.normalize();
+    Ok(cfg)
 }
 
 #[cfg(test)]
@@ -345,5 +406,38 @@ mod tests {
         assert_eq!(decoded.location_name(), "Delhi");
         assert_eq!(decoded.latitude(), 28.6139);
         assert_eq!(decoded.longitude(), 77.2090);
+        assert!(!decoded.use_current);
+    }
+
+    #[test]
+    fn decode_pre_use_current_multi_location_defaults_flag_false() {
+        let prior = MultiLocJyotishConfig {
+            locations: vec![JyotishLocation::default()],
+            active_index: 0,
+            ayanamsa: AyanamsaSystem::Lahiri,
+            day_offset: 0,
+            show_planets: true,
+            show_sunrise_sunset: true,
+            birth_date: None,
+            birth_time: None,
+            birth_utc_offset_minutes: 0,
+            birth_time_rectified: false,
+            active_tab: 0,
+            month_offset: 0,
+            year_offset: 0,
+            notify_day_color: true,
+            notify_rahukalam: true,
+            show_rahukalam: true,
+            enable_personal: true,
+        };
+        let bytes = crate::widget::config::save_state(&prior).expect("encode prior");
+        let decoded = decode_config(&bytes).expect("decode prior");
+        assert!(!decoded.use_current);
+        assert_eq!(decoded.location_name(), "Varanasi");
+    }
+
+    #[test]
+    fn default_config_use_current_is_false() {
+        assert!(!JyotishConfig::default().use_current);
     }
 }

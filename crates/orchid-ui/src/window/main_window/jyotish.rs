@@ -319,7 +319,12 @@ impl MainWindowController {
         if index < 0 {
             return;
         }
-        orchid_widgets::builtin::jyotish::select_city(inst, index as usize);
+        // UI index 0 is the pinned Current location row.
+        if index == 0 {
+            orchid_widgets::builtin::jyotish::select_current_location(inst);
+        } else {
+            orchid_widgets::builtin::jyotish::select_city(inst, (index as usize) - 1);
+        }
         self.persist_and_refresh_jyotish(inst);
     }
 
@@ -327,10 +332,11 @@ impl MainWindowController {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
         };
-        if index < 0 {
+        // Cannot remove the synthetic Current row.
+        if index <= 0 {
             return;
         }
-        orchid_widgets::builtin::jyotish::remove_city(inst, index as usize);
+        orchid_widgets::builtin::jyotish::remove_city(inst, (index as usize) - 1);
         self.persist_and_refresh_jyotish(inst);
     }
 
