@@ -513,6 +513,8 @@ impl Widget for ProcessesWidget {
             *self.handle.snapshot.write() = Some(snap);
         }
         self.handle.schedule_refresh();
+        // Ensure the first paint after wake is not waiting on the first tick.
+        self.handle.publish();
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
@@ -538,7 +540,7 @@ impl Widget for ProcessesWidget {
         let cfg = self.handle.config.read().clone();
         let ui = self.handle.ui.read().clone_view();
         let is_loading = self.handle.snapshot.read().is_none();
-        let processes = match self.handle.snapshot.read().as_ref() {
+        let (processes, matched) = match self.handle.snapshot.read().as_ref() {
             Some(snap) => build_process_rows(
                 snap,
                 &ui.search_query,
@@ -548,7 +550,20 @@ impl Widget for ProcessesWidget {
                 ui.selected_pid,
                 &self.handle.locale,
             ),
-            None => Vec::new(),
+            None => (Vec::new(), 0),
+        };
+        let shown = processes.iter().filter(|r| !r.is_group_header).count();
+        let status_message = if !ui.status_message.is_empty() {
+            ui.status_message
+        } else if matched > shown {
+            self.handle.locale.tr_args(
+                "processes-truncated",
+                &orchid_i18n::FluentArgs::new()
+                    .with("shown", shown.to_string())
+                    .with("total", matched.to_string()),
+            )
+        } else {
+            String::new()
         };
         let built = WidgetSnapshot {
             instance_id: self.instance_id,
@@ -573,7 +588,7 @@ impl Widget for ProcessesWidget {
                 startups: filter_startups(&ui.startups, &ui.search_query),
                 users: filter_users(&ui.users, &ui.search_query),
                 is_loading,
-                status_message: ui.status_message,
+                status_message,
                 show_grouping: cfg.show_grouping,
             }),
         };
@@ -664,10 +679,12 @@ fn matches_query(hay: &str, query: &str) -> bool {
         .contains(&query.to_ascii_lowercase())
 }
 
-/// Cap rows sent to Slint. ListView virtualizes paint, but building/sorting the
-/// full system process table is still bounded for the sample worker.
-const MAX_PROCESS_ROWS: usize = 80;
+/// Cap rows sent to Slint. ListView virtualizes paint; keep a high enough
+/// ceiling that a typical desktop process table is complete while still
+/// bounding worst-case sort/serialize cost on the sample worker.
+const MAX_PROCESS_ROWS: usize = 500;
 
+/// Build process rows for the UI. Returns `(rows, matched_before_cap)`.
 fn build_process_rows(
     snap: &ProcessesSnapshot,
     query: &str,
@@ -676,7 +693,7 @@ fn build_process_rows(
     show_grouping: bool,
     selected_pid: u32,
     locale: &orchid_i18n::LocaleManager,
-) -> Vec<ProcessRowView> {
+) -> (Vec<ProcessRowView>, usize) {
     let mut rows: Vec<ProcessRowView> = snap
         .processes
         .iter()
@@ -706,11 +723,12 @@ fn build_process_rows(
         })
         .collect();
 
+    let matched = rows.len();
     sort_processes(&mut rows, sort, descending);
     truncate_process_rows(&mut rows, selected_pid);
 
     if !show_grouping || !query.is_empty() {
-        return rows;
+        return (rows, matched);
     }
 
     let mut grouped = Vec::new();
@@ -748,7 +766,7 @@ fn build_process_rows(
         });
         grouped.extend(members);
     }
-    grouped
+    (grouped, matched)
 }
 
 fn truncate_process_rows(rows: &mut Vec<ProcessRowView>, selected_pid: u32) {
@@ -950,7 +968,7 @@ mod tests {
             }],
             captured_at: chrono::Utc::now(),
         };
-        let rows = build_process_rows(
+        let (rows, matched) = build_process_rows(
             &snap,
             "4242",
             ProcessSortColumn::Name,
@@ -960,5 +978,6 @@ mod tests {
             &locale,
         );
         assert_eq!(rows.len(), 1);
+        assert_eq!(matched, 1);
     }
 }

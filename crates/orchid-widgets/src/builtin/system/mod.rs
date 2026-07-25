@@ -36,72 +36,6 @@ pub const TYPE_ID: &str = "system";
 
 static SYSTEM_LIVE: LazyLock<DashMap<Uuid, Arc<SystemHandle>>> = LazyLock::new(DashMap::new);
 
-/// Render-relevant equality for idle change-gating (ignore `captured_at`,
-/// bucket noisy float metrics so sub-percent jitter does not dirty the UI).
-fn system_snapshot_renders_eq(a: &SystemSnapshot, b: &SystemSnapshot) -> bool {
-    pct_bucket(a.cpu_total_percent) == pct_bucket(b.cpu_total_percent)
-        && a.cpu_per_core.len() == b.cpu_per_core.len()
-        && a.cpu_per_core
-            .iter()
-            .zip(b.cpu_per_core.iter())
-            .all(|(x, y)| pct_bucket(*x) == pct_bucket(*y))
-        && opt_pct_bucket(a.cpu_temp_c) == opt_pct_bucket(b.cpu_temp_c)
-        && a.memory_total_bytes == b.memory_total_bytes
-        && a.memory_used_bytes == b.memory_used_bytes
-        && a.swap_total_bytes == b.swap_total_bytes
-        && a.swap_used_bytes == b.swap_used_bytes
-        && a.uptime_seconds == b.uptime_seconds
-        && disks_eq(&a.disks, &b.disks)
-        && networks_eq(&a.networks, &b.networks)
-        && battery_eq(a.battery.as_ref(), b.battery.as_ref())
-}
-
-fn pct_bucket(v: f32) -> i32 {
-    (v * 2.0).round() as i32 // 0.5% steps
-}
-
-fn opt_pct_bucket(v: Option<f32>) -> Option<i32> {
-    v.map(pct_bucket)
-}
-
-fn disks_eq(a: &[DiskUsage], b: &[DiskUsage]) -> bool {
-    a.len() == b.len()
-        && a.iter().zip(b.iter()).all(|(x, y)| {
-            x.mount == y.mount
-                && x.total_bytes == y.total_bytes
-                && x.used_bytes == y.used_bytes
-                && x.file_system == y.file_system
-                && x.is_removable == y.is_removable
-        })
-}
-
-fn networks_eq(a: &[NetworkRate], b: &[NetworkRate]) -> bool {
-    a.len() == b.len()
-        && a.iter().zip(b.iter()).all(|(x, y)| {
-            x.interface == y.interface
-                && rate_bucket(x.upload_bps) == rate_bucket(y.upload_bps)
-                && rate_bucket(x.download_bps) == rate_bucket(y.download_bps)
-        })
-}
-
-fn rate_bucket(bps: f64) -> i64 {
-    // ~1 KiB/s buckets — enough for UI labels, quiet when idle.
-    (bps / 1024.0).round() as i64
-}
-
-fn battery_eq(a: Option<&BatteryStatus>, b: Option<&BatteryStatus>) -> bool {
-    match (a, b) {
-        (None, None) => true,
-        (Some(a), Some(b)) => {
-            a.percent == b.percent
-                && a.charging == b.charging
-                && a.time_to_empty_seconds == b.time_to_empty_seconds
-                && a.time_to_full_seconds == b.time_to_full_seconds
-        }
-        _ => false,
-    }
-}
-
 struct SystemHandle {
     instance_id: Uuid,
     config: Arc<RwLock<SystemConfig>>,
@@ -147,17 +81,10 @@ impl SystemHandle {
                         return;
                     }
                 };
-                let changed = {
-                    let mut slot = snap_slot.write();
-                    let changed = slot
-                        .as_ref()
-                        .is_none_or(|prev| !system_snapshot_renders_eq(prev, &snap));
-                    *slot = Some(snap);
-                    changed
-                };
-                if changed {
-                    handle.publish();
-                }
+                *snap_slot.write() = Some(snap);
+                // Always publish: render-equality gating dropped live updates when
+                // coarse labels (e.g. "71%", "10.3 GB") stayed identical.
+                handle.publish();
             }
         });
     }
@@ -255,6 +182,8 @@ impl Widget for SystemWidget {
             *self.handle.snapshot.write() = Some(snap);
         }
         self.handle.schedule_refresh();
+        // Ensure the first paint after wake is not waiting on the first tick.
+        self.handle.publish();
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
