@@ -119,23 +119,20 @@ impl MainWindowController {
             .get(&id)
             .cloned()
             .unwrap_or_else(empty_close_confirm_dialog);
-        let v = match self
-            .workspace_widgets
-            .as_any()
-            .downcast_ref::<VecModel<WidgetFrameModel>>()
-        {
-            Some(m) => m,
-            None => return,
-        };
         let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
+        for model in [&self.workspace_widgets, &self.workspace_floating_widgets] {
+            let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
                 continue;
             };
-            if row.instance_id.as_str() == needle.as_str() {
-                row.close_confirm = dlg;
-                v.set_row_data(r, row);
-                return;
+            for r in 0..v.row_count() {
+                let Some(mut row) = v.row_data(r) else {
+                    continue;
+                };
+                if row.instance_id.as_str() == needle.as_str() {
+                    row.close_confirm = dlg.clone();
+                    v.set_row_data(r, row);
+                    break;
+                }
             }
         }
     }
