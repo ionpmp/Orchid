@@ -90,28 +90,50 @@ have been replaced by this in-widget picker.
 ## Engineering notes
 
 - Day colors for Month/Year grids are memoized per civil date (`color_cache`);
-  changing birth data, ayanamsa, the personal-layer toggle, or the active
-  observation location (saved city, Current resolve, or add/remove) invalidates
-  it, since sunrise and muhurta windows are location-dependent.
-- Live APIs: `select_current_location`, `refresh_current_location` (plus the
-  existing city picker helpers).
+  changing active-profile birth data, ayanamsa, the personal-layer toggle, or
+  the active observation location (saved city, Current resolve, or add/remove)
+  invalidates it, since sunrise and muhurta windows are location-dependent.
+- Live APIs: `select_current_location`, `refresh_current_location`, profile
+  picker helpers (see above), plus the existing city picker helpers.
 - `JyotishPayload` is `Box`’d in snapshots; the closed rectify wizard skips
   quiz/chrome Fluent strings on every UI patch.
+- Legacy flat `birth_*` config fields migrate into `profiles[0]` on decode;
+  birth place defaults to the first observation location.
 
-## Setting up birth data
+## Birth profiles
 
-Open the widget's settings panel and fill in:
+Birth data lives in **profiles** (people), not in the widget settings panel.
+Tap **Add profile** on the Day chip strip (or the Life-tab prompt) to open
+the profile picker — the same overlay pattern as the location list.
 
+Each profile stores:
+
+- **Name** and optional **gender** (UI / future narrative only; score math
+  ignores gender)
 - **Birth date** (`YYYY-MM-DD`)
 - **Birth time** (`HH:MM`, local clock time at birth)
 - **Birth UTC offset (minutes)** — the UTC offset that applied at the birth
   location/date (e.g. `330` for IST), since the widget does not carry a
   timezone database
+- **Birth place** (name + lat/lon) — searched via Open-Meteo geocoding,
+  **separate** from observation locations
 
-Once a birth date is present, `has_birth_data` unlocks the personal layer,
-the Life tab's retrospective, and the current daśā display. Birth time
-matters for the ascendant/houses used by rectification; if you don't know it
-precisely, use the rectification wizard below rather than guessing.
+Observation location (including Current) still drives sunrise / muhurta /
+Rahu Kalam only. Natal Moon, tara, daśā, and the rectification wizard use
+the **active profile** (birth datetime + birth place for lagna).
+
+Once the active profile has a birth date, `has_birth_data` unlocks the
+personal layer, the Life tab's retrospective, and the current daśā display.
+Birth time matters for the ascendant/houses used by rectification; if you
+don't know it precisely, use the rectification wizard below rather than
+guessing.
+
+Widget settings keep ayanamsa, show toggles, notifications, and **Use
+personal (natal) day layer** — not the birth fields themselves.
+
+Live APIs: `set_profile_picker_open`, `select_profile`, `remove_profile`,
+`begin_edit_profile`, `upsert_profile`, `search_birth_places`,
+`set_draft_birth_place` (plus gender draft helper).
 
 ## Rectification overview
 
@@ -129,9 +151,11 @@ requiring an outside tool:
    breakdown; you can **refine** (narrow further around the top result) or
    **accept** the top candidate as your rectified birth time.
 
-Accepting a candidate only updates the birth time field — it never touches
-birth date, location, or ayanamsa. The wizard keeps a resumable draft if you
-close it partway through.
+Accepting a candidate only updates the active profile's birth time — it never
+touches birth date, birth place, observation location, or ayanamsa. The
+wizard keeps a resumable draft if you close it partway through. An open draft
+resyncs to the active profile's **birth place** when the profile or place
+changes.
 
 ## Accuracy limits
 

@@ -11,6 +11,17 @@ pub struct JyotishCityEntry {
     pub is_current: bool,
 }
 
+/// One birth-profile chip / picker row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JyotishProfileEntry {
+    /// Display name.
+    pub name: String,
+    /// Whether this is the active profile.
+    pub active: bool,
+    /// Whether the profile has a birth date set.
+    pub has_birth_data: bool,
+}
+
 /// One geocoding search result shown in the location picker.
 #[derive(Debug, Clone, PartialEq)]
 pub struct JyotishSearchHit {
@@ -207,6 +218,29 @@ pub struct JyotishPayload {
     pub current_locating: bool,
     /// True when the last Current-location resolve failed (and no cache).
     pub current_failed: bool,
+    /// Birth profiles (chips / picker list).
+    pub profiles: Vec<JyotishProfileEntry>,
+    /// Index of the active profile in [`Self::profiles`].
+    pub active_profile_index: usize,
+    /// Profile-picker overlay visibility.
+    pub profile_picker_open: bool,
+    /// Birth-place search query inside the profile picker.
+    pub profile_search_query: String,
+    /// Geocoding hits for the birth-place search.
+    pub profile_search_results: Vec<JyotishSearchHit>,
+    /// True while a birth-place geocoding request is in flight.
+    pub profile_search_busy: bool,
+    /// True when the add/edit profile form is shown.
+    pub profile_editing: bool,
+    /// Profile index being edited (`-1` = creating a new profile).
+    pub profile_edit_index: i32,
+    pub profile_edit_name: String,
+    /// `0` unspecified, `1` female, `2` male.
+    pub profile_edit_gender: u8,
+    pub profile_edit_date: String,
+    pub profile_edit_time: String,
+    pub profile_edit_offset: i32,
+    pub profile_edit_place_name: String,
     pub ayanamsa_key: &'static str,
     pub ayanamsa_deg_text: String,
     pub day_offset: i32,

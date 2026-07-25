@@ -103,6 +103,17 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-remove-city(string, int);
     callback jyotish-search-cities(string, string);
     callback jyotish-add-city(string, string, float, float);
+    callback jyotish-open-profiles(string);
+    callback jyotish-close-profiles(string);
+    callback jyotish-select-profile(string, int);
+    callback jyotish-remove-profile(string, int);
+    callback jyotish-begin-add-profile(string);
+    callback jyotish-begin-edit-profile(string, int);
+    callback jyotish-cancel-edit-profile(string);
+    callback jyotish-set-profile-gender(string, int);
+    callback jyotish-search-birth-places(string, string);
+    callback jyotish-set-birth-place(string, string, float, float);
+    callback jyotish-upsert-profile(string, int, string, int, string, string, int, string, float, float);
 
     // Clock
     callback clock-open-cities(string);
@@ -612,6 +623,23 @@ export component WidgetFrame inherits Rectangle {
                     remove-city(i) => { root.jyotish-remove-city(root.model.instance-id, i); }
                     search-cities(q) => { root.jyotish-search-cities(root.model.instance-id, q); }
                     add-city(n, la, lo) => { root.jyotish-add-city(root.model.instance-id, n, la, lo); }
+                    open-profiles => { root.jyotish-open-profiles(root.model.instance-id); }
+                    close-profiles => { root.jyotish-close-profiles(root.model.instance-id); }
+                    select-profile(idx) => { root.jyotish-select-profile(root.model.instance-id, idx); }
+                    remove-profile(idx) => { root.jyotish-remove-profile(root.model.instance-id, idx); }
+                    begin-add-profile => { root.jyotish-begin-add-profile(root.model.instance-id); }
+                    begin-edit-profile(idx) => { root.jyotish-begin-edit-profile(root.model.instance-id, idx); }
+                    cancel-edit-profile => { root.jyotish-cancel-edit-profile(root.model.instance-id); }
+                    set-profile-gender(g) => { root.jyotish-set-profile-gender(root.model.instance-id, g); }
+                    search-birth-places(q) => { root.jyotish-search-birth-places(root.model.instance-id, q); }
+                    set-birth-place(name, lat, lon) => {
+                        root.jyotish-set-birth-place(root.model.instance-id, name, lat, lon);
+                    }
+                    upsert-profile(index, name, gender, date, time, offset, place, lat, lon) => {
+                        root.jyotish-upsert-profile(
+                            root.model.instance-id, index, name, gender, date, time, offset, place, lat, lon
+                        );
+                    }
                 }
 
                 if model.type-id == "clock" : ClockView {

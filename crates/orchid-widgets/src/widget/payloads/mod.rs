@@ -32,7 +32,8 @@ pub use file_manager::{
 pub use jyotish::{
     JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
     JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
-    JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
+    JyotishProfileEntry, JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit,
+    JyotishYearSummary,
 };
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;

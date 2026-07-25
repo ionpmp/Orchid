@@ -394,6 +394,20 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
         && a.search_busy == b.search_busy
         && a.current_locating == b.current_locating
         && a.current_failed == b.current_failed
+        && a.profiles == b.profiles
+        && a.active_profile_index == b.active_profile_index
+        && a.profile_picker_open == b.profile_picker_open
+        && a.profile_search_query == b.profile_search_query
+        && a.profile_search_results == b.profile_search_results
+        && a.profile_search_busy == b.profile_search_busy
+        && a.profile_editing == b.profile_editing
+        && a.profile_edit_index == b.profile_edit_index
+        && a.profile_edit_name == b.profile_edit_name
+        && a.profile_edit_gender == b.profile_edit_gender
+        && a.profile_edit_date == b.profile_edit_date
+        && a.profile_edit_time == b.profile_edit_time
+        && a.profile_edit_offset == b.profile_edit_offset
+        && a.profile_edit_place_name == b.profile_edit_place_name
         && a.ayanamsa_key == b.ayanamsa_key
         && a.ayanamsa_deg_text == b.ayanamsa_deg_text
         && a.day_offset == b.day_offset

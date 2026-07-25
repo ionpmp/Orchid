@@ -748,27 +748,6 @@ fn jyotish_fields(cfg: &JyotishConfig, locale: &LocaleManager) -> Vec<SettingsFi
         "widget-settings-jyotish-enable-personal",
         cfg.enable_personal,
     );
-    push_text(
-        &mut rows,
-        locale,
-        "birth_date",
-        "widget-settings-jyotish-birth-date",
-        cfg.birth_date.clone().unwrap_or_default(),
-    );
-    push_text(
-        &mut rows,
-        locale,
-        "birth_time",
-        "widget-settings-jyotish-birth-time",
-        cfg.birth_time.clone().unwrap_or_default(),
-    );
-    push_text(
-        &mut rows,
-        locale,
-        "birth_utc_offset_minutes",
-        "widget-settings-jyotish-birth-utc-offset",
-        cfg.birth_utc_offset_minutes.to_string(),
-    );
     push_bool(
         &mut rows,
         locale,
@@ -807,25 +786,6 @@ fn apply_jyotish(instance_id: Uuid, key: &str, value: &str) {
         "enable_personal" => {
             if let Some(b) = parse_bool(value) {
                 cfg.enable_personal = b;
-            }
-        }
-        "birth_date" => {
-            cfg.birth_date = if value.trim().is_empty() {
-                None
-            } else {
-                Some(value.trim().to_string())
-            };
-        }
-        "birth_time" => {
-            cfg.birth_time = if value.trim().is_empty() {
-                None
-            } else {
-                Some(value.trim().to_string())
-            };
-        }
-        "birth_utc_offset_minutes" => {
-            if let Ok(n) = value.parse::<i32>() {
-                cfg.birth_utc_offset_minutes = n;
             }
         }
         "notify_day_color" => {

@@ -29,7 +29,8 @@ use crate::widget::config as state_codec;
 use crate::widget::payloads::{
     JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
     JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
-    JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
+    JyotishProfileEntry, JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit,
+    JyotishYearSummary,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -41,7 +42,7 @@ use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 use super::weather::provider::{GeocodingHit, OpenMeteoProvider, WeatherProvider};
 
 pub use astro::{compute_jyotish, JyotishData};
-pub use config::{decode_config, AyanamsaSystem, JyotishConfig, JyotishLocation};
+pub use config::{decode_config, AyanamsaSystem, Gender, JyotishConfig, JyotishLocation, JyotishProfile};
 pub use dasha::{
     antar_dashas, dasha_at, dasha_stack_at, maha_dashas, pratyantar_dashas, DashaLord, DashaPeriod,
     DashaStack,
@@ -80,10 +81,11 @@ type NatalFingerprint = (
 
 fn fingerprint_of(cfg: &JyotishConfig, current: Option<&ResolvedLocation>) -> NatalFingerprint {
     let loc = observation_location(cfg, current);
+    let profile = cfg.active_profile();
     (
-        cfg.birth_date.clone(),
-        cfg.birth_time.clone(),
-        cfg.birth_utc_offset_minutes,
+        profile.and_then(|p| p.birth_date.clone()),
+        profile.and_then(|p| p.birth_time.clone()),
+        profile.map(|p| p.birth_utc_offset_minutes).unwrap_or(0),
         cfg.ayanamsa,
         cfg.enable_personal,
         location_key(&loc),
@@ -119,7 +121,7 @@ fn location_key(loc: &JyotishLocation) -> (i32, i32) {
     )
 }
 
-/// In-widget location-picker UI state (not persisted).
+/// In-widget location / profile picker UI state (not persisted).
 #[derive(Clone, Default)]
 struct JyotishUiState {
     picker_open: bool,
@@ -127,6 +129,20 @@ struct JyotishUiState {
     search_results: Vec<GeocodingHit>,
     search_busy: bool,
     search_generation: u64,
+    profile_picker_open: bool,
+    profile_search_query: String,
+    profile_search_results: Vec<GeocodingHit>,
+    profile_search_busy: bool,
+    profile_search_generation: u64,
+    profile_editing: bool,
+    /// None while creating a new profile.
+    profile_edit_index: Option<usize>,
+    profile_edit_name: String,
+    profile_edit_gender: u8,
+    profile_edit_date: String,
+    profile_edit_time: String,
+    profile_edit_offset: i32,
+    profile_edit_place: JyotishLocation,
 }
 
 /// Session cache for the pinned Current location row.
@@ -434,8 +450,8 @@ impl JyotishHandle {
         today: NaiveDate,
     ) -> Vec<JyotishYearSummary> {
         let birth_date = cfg
-            .birth_date
-            .as_deref()
+            .active_profile()
+            .and_then(|p| p.birth_date.as_deref())
             .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
             .or_else(|| NaiveDate::from_ymd_opt(natal.birth_year, 1, 1))
             .unwrap_or(today);
@@ -491,8 +507,8 @@ impl JyotishHandle {
             return Vec::new();
         };
         let birth_date = cfg
-            .birth_date
-            .as_deref()
+            .active_profile()
+            .and_then(|p| p.birth_date.as_deref())
             .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
             .or_else(|| NaiveDate::from_ymd_opt(natal.birth_year, 1, 1))
             .unwrap_or(today);
@@ -519,8 +535,8 @@ impl JyotishHandle {
         locale: &LocaleConfig,
     ) -> Option<JyotishDashaNow> {
         let birth_date = cfg
-            .birth_date
-            .as_deref()
+            .active_profile()
+            .and_then(|p| p.birth_date.as_deref())
             .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())?;
         let stack = dasha_stack_at(natal.moon_longitude, birth_date, selected_date)?;
         Some(JyotishDashaNow {
@@ -688,6 +704,20 @@ impl JyotishHandle {
             search_busy: ui.search_busy,
             current_locating: current.locating,
             current_failed: current.failed && current.resolved.is_none(),
+            profiles: profiles_for_payload(&cfg),
+            active_profile_index: cfg.active_profile_index,
+            profile_picker_open: ui.profile_picker_open,
+            profile_search_query: ui.profile_search_query.clone(),
+            profile_search_results: profile_search_hits(&ui),
+            profile_search_busy: ui.profile_search_busy,
+            profile_editing: ui.profile_editing,
+            profile_edit_index: ui.profile_edit_index.map(|i| i as i32).unwrap_or(-1),
+            profile_edit_name: ui.profile_edit_name.clone(),
+            profile_edit_gender: ui.profile_edit_gender,
+            profile_edit_date: ui.profile_edit_date.clone(),
+            profile_edit_time: ui.profile_edit_time.clone(),
+            profile_edit_offset: ui.profile_edit_offset,
+            profile_edit_place_name: ui.profile_edit_place.name.clone(),
             ayanamsa_key: cfg.ayanamsa.ftl_key(),
             ayanamsa_deg_text: format!("{:.2}°", data.ayanamsa_deg),
             day_offset: cfg.day_offset,
@@ -777,7 +807,10 @@ impl JyotishHandle {
 
     fn rectify_set_window(&self, approx_minute: i32, half_window: i32) {
         let cfg = self.config.read().clone();
-        let Some(birth_date) = cfg
+        let Some(profile) = cfg.active_profile().cloned() else {
+            return;
+        };
+        let Some(birth_date) = profile
             .birth_date
             .as_deref()
             .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
@@ -794,9 +827,9 @@ impl JyotishHandle {
         };
         let session = RectifySession::new(
             birth_date,
-            cfg.latitude(),
-            cfg.longitude(),
-            cfg.birth_utc_offset_minutes,
+            profile.birth_place.latitude,
+            profile.birth_place.longitude,
+            profile.birth_utc_offset_minutes,
             cfg.ayanamsa,
             approx,
             half,
@@ -882,8 +915,10 @@ impl JyotishHandle {
             .and_then(RectifySession::best_time_string);
         if let Some(best) = best {
             let mut cfg = self.config.write();
-            cfg.birth_time = Some(best);
-            cfg.birth_time_rectified = true;
+            if let Some(profile) = cfg.active_profile_mut() {
+                profile.birth_time = Some(best);
+                profile.birth_time_rectified = true;
+            }
         }
         *self.rectify.write() = None;
         *self.rectify_wizard_step.write() = 0;
@@ -910,6 +945,12 @@ impl JyotishHandle {
             ui.search_query.clear();
             ui.search_results.clear();
             ui.search_busy = false;
+        } else {
+            ui.profile_picker_open = false;
+            ui.profile_editing = false;
+            ui.profile_search_query.clear();
+            ui.profile_search_results.clear();
+            ui.profile_search_busy = false;
         }
         drop(ui);
         self.publish();
@@ -1044,18 +1085,7 @@ impl JyotishHandle {
             ui.search_results.clear();
             ui.search_busy = false;
         }
-        // Keep an open rectify draft aligned with the new place.
-        {
-            let cfg = self.config.read().clone();
-            if let Some(session) = self.rectify.write().as_mut() {
-                session.resync_place(
-                    cfg.latitude(),
-                    cfg.longitude(),
-                    cfg.birth_utc_offset_minutes,
-                    cfg.ayanamsa,
-                );
-            }
-        }
+        // Observation location does not affect rectify place (birth_place does).
         self.recalculate();
         self.publish();
     }
@@ -1107,18 +1137,330 @@ impl JyotishHandle {
             );
         });
     }
+
+    fn set_profile_picker_open(&self, open: bool) {
+        let mut ui = self.ui.write();
+        ui.profile_picker_open = open;
+        if !open {
+            ui.profile_search_query.clear();
+            ui.profile_search_results.clear();
+            ui.profile_search_busy = false;
+            ui.profile_editing = false;
+            ui.profile_edit_index = None;
+        } else {
+            // Close the location picker when opening profiles.
+            ui.picker_open = false;
+            ui.search_query.clear();
+            ui.search_results.clear();
+            ui.search_busy = false;
+        }
+        drop(ui);
+        self.publish();
+    }
+
+    fn select_profile(&self, index: usize) {
+        {
+            let mut cfg = self.config.write();
+            if index < cfg.profiles.len() {
+                cfg.active_profile_index = index;
+            }
+        }
+        {
+            let cfg = self.config.read().clone();
+            if let Some(session) = self.rectify.write().as_mut() {
+                resync_rectify_from_active_profile(&cfg, session);
+            }
+        }
+        self.recalculate();
+        self.publish();
+    }
+
+    fn remove_profile(&self, index: usize) {
+        {
+            let mut cfg = self.config.write();
+            if index >= cfg.profiles.len() {
+                return;
+            }
+            cfg.profiles.remove(index);
+            if cfg.active_profile_index > index {
+                cfg.active_profile_index -= 1;
+            } else if !cfg.profiles.is_empty()
+                && cfg.active_profile_index >= cfg.profiles.len()
+            {
+                cfg.active_profile_index = cfg.profiles.len() - 1;
+            } else if cfg.profiles.is_empty() {
+                cfg.active_profile_index = 0;
+            }
+            cfg.normalize();
+        }
+        {
+            let mut ui = self.ui.write();
+            if ui.profile_edit_index == Some(index) {
+                ui.profile_editing = false;
+                ui.profile_edit_index = None;
+            } else if let Some(edit) = ui.profile_edit_index {
+                if edit > index {
+                    ui.profile_edit_index = Some(edit - 1);
+                }
+            }
+        }
+        {
+            let cfg = self.config.read().clone();
+            if let Some(session) = self.rectify.write().as_mut() {
+                resync_rectify_from_active_profile(&cfg, session);
+            }
+        }
+        self.recalculate();
+        self.publish();
+    }
+
+    fn begin_edit_profile(&self, index: Option<usize>) {
+        let mut ui = self.ui.write();
+        ui.profile_picker_open = true;
+        ui.profile_editing = true;
+        ui.profile_edit_index = index;
+        ui.profile_search_query.clear();
+        ui.profile_search_results.clear();
+        ui.profile_search_busy = false;
+        if let Some(i) = index {
+            let cfg = self.config.read();
+            if let Some(p) = cfg.profiles.get(i) {
+                ui.profile_edit_name = p.name.clone();
+                ui.profile_edit_gender = p.gender.as_u8();
+                ui.profile_edit_date = p.birth_date.clone().unwrap_or_default();
+                ui.profile_edit_time = p.birth_time.clone().unwrap_or_default();
+                ui.profile_edit_offset = p.birth_utc_offset_minutes;
+                ui.profile_edit_place = p.birth_place.clone();
+            }
+        } else {
+            let default_place = self
+                .config
+                .read()
+                .locations
+                .first()
+                .cloned()
+                .unwrap_or_default();
+            ui.profile_edit_name.clear();
+            ui.profile_edit_gender = 0;
+            ui.profile_edit_date.clear();
+            ui.profile_edit_time.clear();
+            ui.profile_edit_offset = 0;
+            ui.profile_edit_place = default_place;
+        }
+        drop(ui);
+        self.publish();
+    }
+
+    fn cancel_edit_profile(&self) {
+        let mut ui = self.ui.write();
+        ui.profile_editing = false;
+        ui.profile_edit_index = None;
+        ui.profile_search_query.clear();
+        ui.profile_search_results.clear();
+        ui.profile_search_busy = false;
+        drop(ui);
+        self.publish();
+    }
+
+    fn set_profile_draft_gender(&self, gender: u8) {
+        self.ui.write().profile_edit_gender = gender.min(2);
+        self.publish();
+    }
+
+    fn set_draft_birth_place(&self, name: String, latitude: f64, longitude: f64) {
+        let mut ui = self.ui.write();
+        ui.profile_edit_place = JyotishLocation {
+            name,
+            latitude,
+            longitude,
+        };
+        ui.profile_search_query.clear();
+        ui.profile_search_results.clear();
+        ui.profile_search_busy = false;
+        drop(ui);
+        self.publish();
+    }
+
+    fn upsert_profile(
+        &self,
+        index: Option<usize>,
+        name: String,
+        gender: u8,
+        birth_date: String,
+        birth_time: String,
+        birth_utc_offset_minutes: i32,
+        place_name: String,
+        latitude: f64,
+        longitude: f64,
+    ) {
+        let place = if place_name.trim().is_empty() {
+            self.ui.read().profile_edit_place.clone()
+        } else {
+            JyotishLocation {
+                name: place_name,
+                latitude,
+                longitude,
+            }
+        };
+        let profile = JyotishProfile {
+            name,
+            gender: Gender::from_u8(gender),
+            birth_date: {
+                let t = birth_date.trim();
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            },
+            birth_time: {
+                let t = birth_time.trim();
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            },
+            birth_utc_offset_minutes,
+            birth_time_rectified: false,
+            birth_place: place,
+        };
+        {
+            let mut cfg = self.config.write();
+            // Preserve rectified flag when editing an existing profile without
+            // changing the birth time string.
+            let mut profile = profile;
+            if let Some(i) = index {
+                if let Some(existing) = cfg.profiles.get(i) {
+                    if existing.birth_time == profile.birth_time {
+                        profile.birth_time_rectified = existing.birth_time_rectified;
+                    }
+                }
+                if i < cfg.profiles.len() {
+                    cfg.profiles[i] = profile;
+                    cfg.active_profile_index = i;
+                } else {
+                    cfg.profiles.push(profile);
+                    cfg.active_profile_index = cfg.profiles.len() - 1;
+                }
+            } else {
+                cfg.profiles.push(profile);
+                cfg.active_profile_index = cfg.profiles.len() - 1;
+            }
+            cfg.normalize();
+        }
+        {
+            let mut ui = self.ui.write();
+            ui.profile_editing = false;
+            ui.profile_edit_index = None;
+            ui.profile_search_query.clear();
+            ui.profile_search_results.clear();
+            ui.profile_search_busy = false;
+        }
+        {
+            let cfg = self.config.read().clone();
+            if let Some(session) = self.rectify.write().as_mut() {
+                resync_rectify_from_active_profile(&cfg, session);
+            }
+        }
+        self.recalculate();
+        self.publish();
+    }
+
+    fn search_birth_places(&self, query: String) {
+        let generation = {
+            let mut ui = self.ui.write();
+            ui.profile_search_query = query.clone();
+            ui.profile_search_generation = ui.profile_search_generation.wrapping_add(1);
+            ui.profile_search_busy = !query.trim().is_empty();
+            if query.trim().is_empty() {
+                ui.profile_search_results.clear();
+                ui.profile_search_busy = false;
+            }
+            ui.profile_search_generation
+        };
+        self.publish();
+        if query.trim().is_empty() {
+            return;
+        }
+
+        let provider = self.provider.clone();
+        let ui = self.ui.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id;
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(280)).await;
+            if ui.read().profile_search_generation != generation {
+                return;
+            }
+            let result = provider.search_cities(&query).await;
+            let mut slot = ui.write();
+            if slot.profile_search_generation != generation {
+                return;
+            }
+            slot.profile_search_busy = false;
+            match result {
+                Ok(hits) => slot.profile_search_results = hits,
+                Err(e) => {
+                    warn!(%instance_id, error = %e, "jyotish birth-place geocoding failed");
+                    slot.profile_search_results.clear();
+                }
+            }
+            drop(slot);
+            bus.publish(
+                orchid_core::EventSource::Widget(instance_id),
+                WidgetSnapshotUpdated { instance_id },
+            );
+        });
+    }
 }
 
 fn birth_datetime_utc(cfg: &JyotishConfig) -> Option<DateTime<Utc>> {
-    let date = NaiveDate::parse_from_str(cfg.birth_date.as_deref()?, "%Y-%m-%d").ok()?;
-    let time = cfg
+    let profile = cfg.active_profile()?;
+    let date = NaiveDate::parse_from_str(profile.birth_date.as_deref()?, "%Y-%m-%d").ok()?;
+    let time = profile
         .birth_time
         .as_deref()
         .and_then(|t| NaiveTime::parse_from_str(t, "%H:%M").ok())
         .unwrap_or_else(|| NaiveTime::from_hms_opt(12, 0, 0).unwrap());
     let local = date.and_time(time);
-    let utc_naive = local - ChronoDuration::minutes(i64::from(cfg.birth_utc_offset_minutes));
+    let utc_naive = local - ChronoDuration::minutes(i64::from(profile.birth_utc_offset_minutes));
     Some(utc_naive.and_utc())
+}
+
+fn profiles_for_payload(cfg: &JyotishConfig) -> Vec<JyotishProfileEntry> {
+    cfg.profiles
+        .iter()
+        .enumerate()
+        .map(|(i, p)| JyotishProfileEntry {
+            name: p.name.clone(),
+            active: i == cfg.active_profile_index,
+            has_birth_data: p.has_birth_data(),
+        })
+        .collect()
+}
+
+fn profile_search_hits(ui: &JyotishUiState) -> Vec<JyotishSearchHit> {
+    ui.profile_search_results
+        .iter()
+        .map(|h| JyotishSearchHit {
+            name: h.name.clone(),
+            detail: h.detail.clone(),
+            latitude: h.latitude,
+            longitude: h.longitude,
+        })
+        .collect()
+}
+
+fn resync_rectify_from_active_profile(cfg: &JyotishConfig, session: &mut RectifySession) {
+    if let Some(profile) = cfg.active_profile() {
+        session.resync_place(
+            profile.birth_place.latitude,
+            profile.birth_place.longitude,
+            profile.birth_utc_offset_minutes,
+            cfg.ayanamsa,
+        );
+    }
 }
 
 fn color_of(color: DayColor) -> u8 {
@@ -1409,16 +1751,11 @@ pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut JyotishConfig))
         cfg.normalize();
     }
     *h.year_cache.write() = None;
-    // Keep an open rectify draft aligned with the current place / ayanamsa.
+    // Keep an open rectify draft aligned with active birth place / ayanamsa.
     {
         let cfg = h.config.read().clone();
         if let Some(session) = h.rectify.write().as_mut() {
-            session.resync_place(
-                cfg.latitude(),
-                cfg.longitude(),
-                cfg.birth_utc_offset_minutes,
-                cfg.ayanamsa,
-            );
+            resync_rectify_from_active_profile(&cfg, session);
         }
     }
     h.recalculate();
@@ -1545,6 +1882,101 @@ pub fn add_city(instance_id: Uuid, name: String, latitude: f64, longitude: f64) 
             latitude,
             longitude,
         });
+    }
+}
+
+/// Open / close the birth-profile picker overlay.
+pub fn set_profile_picker_open(instance_id: Uuid, open: bool) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.set_profile_picker_open(open);
+    }
+}
+
+/// Select which birth profile is active.
+pub fn select_profile(instance_id: Uuid, index: usize) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.select_profile(index);
+    }
+}
+
+/// Remove a birth profile (may leave the list empty).
+pub fn remove_profile(instance_id: Uuid, index: usize) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.remove_profile(index);
+    }
+}
+
+/// Open the add/edit form (`None` = create new).
+pub fn begin_edit_profile(instance_id: Uuid, index: Option<usize>) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.begin_edit_profile(index);
+    }
+}
+
+/// Close the add/edit form without saving.
+pub fn cancel_edit_profile(instance_id: Uuid) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.cancel_edit_profile();
+    }
+}
+
+/// Set gender on the in-progress profile draft (`0`/`1`/`2`).
+pub fn set_profile_draft_gender(instance_id: Uuid, gender: u8) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.set_profile_draft_gender(gender);
+    }
+}
+
+/// Set the draft birth place from a geocoding hit.
+pub fn set_draft_birth_place(
+    instance_id: Uuid,
+    name: String,
+    latitude: f64,
+    longitude: f64,
+) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.set_draft_birth_place(name, latitude, longitude);
+    }
+}
+
+/// Create or update a birth profile and make it active.
+///
+/// `index < 0` creates a new profile. Empty `place_name` keeps the draft place.
+pub fn upsert_profile(
+    instance_id: Uuid,
+    index: i32,
+    name: String,
+    gender: u8,
+    birth_date: String,
+    birth_time: String,
+    birth_utc_offset_minutes: i32,
+    place_name: String,
+    latitude: f64,
+    longitude: f64,
+) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.upsert_profile(
+            if index < 0 {
+                None
+            } else {
+                Some(index as usize)
+            },
+            name,
+            gender,
+            birth_date,
+            birth_time,
+            birth_utc_offset_minutes,
+            place_name,
+            latitude,
+            longitude,
+        );
+    }
+}
+
+/// Search cities for the active profile's birth place.
+pub fn search_birth_places(instance_id: Uuid, query: String) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.search_birth_places(query);
     }
 }
 
@@ -1805,6 +2237,20 @@ fn loading_payload(
         search_busy: ui.search_busy,
         current_locating: current.locating,
         current_failed: current.failed && current.resolved.is_none(),
+        profiles: profiles_for_payload(cfg),
+        active_profile_index: cfg.active_profile_index,
+        profile_picker_open: ui.profile_picker_open,
+        profile_search_query: ui.profile_search_query.clone(),
+        profile_search_results: profile_search_hits(ui),
+        profile_search_busy: ui.profile_search_busy,
+        profile_editing: ui.profile_editing,
+        profile_edit_index: ui.profile_edit_index.map(|i| i as i32).unwrap_or(-1),
+        profile_edit_name: ui.profile_edit_name.clone(),
+        profile_edit_gender: ui.profile_edit_gender,
+        profile_edit_date: ui.profile_edit_date.clone(),
+        profile_edit_time: ui.profile_edit_time.clone(),
+        profile_edit_offset: ui.profile_edit_offset,
+        profile_edit_place_name: ui.profile_edit_place.name.clone(),
         ayanamsa_key: cfg.ayanamsa.ftl_key(),
         ayanamsa_deg_text: String::new(),
         day_offset: cfg.day_offset,
@@ -2217,5 +2663,112 @@ mod search_tests {
             h.color_cache.is_empty(),
             "changing the active location must invalidate cached day colors"
         );
+    }
+    #[test]
+    fn upsert_and_select_profile_switches_active() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        h.upsert_profile(
+            None,
+            "Ada".into(),
+            1,
+            "1991-01-01".into(),
+            "08:15".into(),
+            60,
+            "London".into(),
+            51.5,
+            -0.12,
+        );
+        h.upsert_profile(
+            None,
+            "Bob".into(),
+            2,
+            "1985-12-25".into(),
+            String::new(),
+            0,
+            "Delhi".into(),
+            28.6,
+            77.2,
+        );
+        assert_eq!(h.config.read().profiles.len(), 2);
+        assert_eq!(h.config.read().active_profile_index, 1);
+        h.select_profile(0);
+        assert_eq!(h.config.read().active_profile_index, 0);
+        assert_eq!(
+            h.config.read().active_profile().map(|p| p.name.as_str()),
+            Some("Ada")
+        );
+        assert!(h.config.read().has_birth_data());
+    }
+
+    #[test]
+    fn remove_profile_allows_empty_list() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        h.upsert_profile(
+            None,
+            "Solo".into(),
+            0,
+            "2000-01-01".into(),
+            String::new(),
+            0,
+            "Varanasi".into(),
+            25.3,
+            83.0,
+        );
+        h.remove_profile(0);
+        assert!(h.config.read().profiles.is_empty());
+        assert!(!h.config.read().has_birth_data());
+    }
+
+    #[test]
+    fn rectify_uses_active_profile_birth_date() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        h.upsert_profile(
+            None,
+            "Ada".into(),
+            0,
+            "1990-06-15".into(),
+            "12:00".into(),
+            330,
+            "Delhi".into(),
+            28.6139,
+            77.2090,
+        );
+        h.rectify_set_window(720, 30);
+        let session = h.rectify.read();
+        let s = session.as_ref().expect("session");
+        assert_eq!(s.birth_year(), 1990);
     }
 }

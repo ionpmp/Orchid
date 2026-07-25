@@ -396,6 +396,131 @@ impl MainWindowController {
         });
     }
 
+    pub(super) fn on_jyotish_open_profiles(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_profile_picker_open(inst, true);
+    }
+
+    pub(super) fn on_jyotish_close_profiles(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_profile_picker_open(inst, false);
+    }
+
+    pub(super) fn on_jyotish_select_profile(self: &Arc<Self>, id: &SharedString, index: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        orchid_widgets::builtin::jyotish::select_profile(inst, index as usize);
+    }
+
+    pub(super) fn on_jyotish_remove_profile(self: &Arc<Self>, id: &SharedString, index: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        orchid_widgets::builtin::jyotish::remove_profile(inst, index as usize);
+    }
+
+    pub(super) fn on_jyotish_begin_add_profile(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::begin_edit_profile(inst, None);
+    }
+
+    pub(super) fn on_jyotish_begin_edit_profile(self: &Arc<Self>, id: &SharedString, index: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        orchid_widgets::builtin::jyotish::begin_edit_profile(inst, Some(index as usize));
+    }
+
+    pub(super) fn on_jyotish_cancel_edit_profile(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::cancel_edit_profile(inst);
+    }
+
+    pub(super) fn on_jyotish_set_profile_gender(self: &Arc<Self>, id: &SharedString, gender: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_profile_draft_gender(inst, gender.clamp(0, 2) as u8);
+    }
+
+    pub(super) fn on_jyotish_search_birth_places(
+        self: &Arc<Self>,
+        id: &SharedString,
+        query: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::search_birth_places(inst, query.to_string());
+    }
+
+    pub(super) fn on_jyotish_set_birth_place(
+        self: &Arc<Self>,
+        id: &SharedString,
+        name: &SharedString,
+        lat: f32,
+        lon: f32,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_draft_birth_place(
+            inst,
+            name.to_string(),
+            f64::from(lat),
+            f64::from(lon),
+        );
+    }
+
+    pub(super) fn on_jyotish_upsert_profile(
+        self: &Arc<Self>,
+        id: &SharedString,
+        index: i32,
+        name: &SharedString,
+        gender: i32,
+        date: &SharedString,
+        time: &SharedString,
+        offset: i32,
+        place_name: &SharedString,
+        lat: f32,
+        lon: f32,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::upsert_profile(
+            inst,
+            index,
+            name.to_string(),
+            gender.clamp(0, 2) as u8,
+            date.to_string(),
+            time.to_string(),
+            offset,
+            place_name.to_string(),
+            f64::from(lat),
+            f64::from(lon),
+        );
+    }
+
+
     fn export_jyotish_to_clipboard(self: &Arc<Self>, inst: Uuid, week: bool) {
         let Some(snap) = self.widget_manager.snapshot_cache().get(inst) else {
             return;

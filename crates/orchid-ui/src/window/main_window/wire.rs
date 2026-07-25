@@ -828,6 +828,97 @@ impl MainWindowController {
             }
         });
 
+        self.window.on_jyotish_open_profiles({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_open_profiles(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_close_profiles({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_close_profiles(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_select_profile({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_select_profile(&id, idx);
+                }
+            }
+        });
+        self.window.on_jyotish_remove_profile({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_remove_profile(&id, idx);
+                }
+            }
+        });
+        self.window.on_jyotish_begin_add_profile({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_begin_add_profile(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_begin_edit_profile({
+            let t = t.clone();
+            move |id, idx| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_begin_edit_profile(&id, idx);
+                }
+            }
+        });
+        self.window.on_jyotish_cancel_edit_profile({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_cancel_edit_profile(&id);
+                }
+            }
+        });
+        self.window.on_jyotish_set_profile_gender({
+            let t = t.clone();
+            move |id, g| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_set_profile_gender(&id, g);
+                }
+            }
+        });
+        self.window.on_jyotish_search_birth_places({
+            let t = t.clone();
+            move |id, q| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_search_birth_places(&id, &q);
+                }
+            }
+        });
+        self.window.on_jyotish_set_birth_place({
+            let t = t.clone();
+            move |id, name, lat, lon| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_set_birth_place(&id, &name, lat, lon);
+                }
+            }
+        });
+        self.window.on_jyotish_upsert_profile({
+            let t = t.clone();
+            move |id, index, name, gender, date, time, offset, place, lat, lon| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_upsert_profile(
+                        &id, index, &name, gender, &date, &time, offset, &place, lat, lon,
+                    );
+                }
+            }
+        });
+
         self.window.on_clock_open_cities({
             let t = t.clone();
             move |id| {

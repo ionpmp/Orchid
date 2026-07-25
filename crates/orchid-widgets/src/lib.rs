@@ -41,7 +41,7 @@ pub use widget::payloads::{
     ClockCityView, ClockPayload, ClockSearchHit, EntryPayload, FileManagerPayload, FmViewMode,
     IndicatorStatus, JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip,
     JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
-    JyotishRectifyView, JyotishSearchHit, JyotishYearSummary, ManagedFolderSidebarPayload,
+    JyotishProfileEntry, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary, ManagedFolderSidebarPayload,
     MediaPlayerPayload, MoonPayload, NetworkMountPayload, NotesPayload, NotesTabRow, PanePayload,
     PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload, ProcessGroup,
     ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab, RecentFileItemView,

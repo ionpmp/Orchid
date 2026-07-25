@@ -4,6 +4,7 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
     JyotishAntarRowModel, JyotishCityEntry, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
+    JyotishProfileEntry,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
     JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishSearchHit, JyotishYearRowModel,
 };
@@ -48,6 +49,36 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         current_location_label: locale.tr("jyotish-current-location").into(),
         current_locating_label: locale.tr("jyotish-current-locating").into(),
         current_failed_label: locale.tr("jyotish-current-failed").into(),
+        profiles: ModelRc::new(VecModel::default()),
+        active_profile_index: 0,
+        profile_picker_open: false,
+        profile_search_query: SharedString::new(),
+        profile_search_results: ModelRc::new(VecModel::default()),
+        profile_search_busy: false,
+        profile_editing: false,
+        profile_edit_index: -1,
+        profile_edit_name: SharedString::new(),
+        profile_edit_gender: 0,
+        profile_edit_date: SharedString::new(),
+        profile_edit_time: SharedString::new(),
+        profile_edit_offset: 0,
+        profile_edit_place_name: SharedString::new(),
+        profiles_title: locale.tr("jyotish-profiles-title").into(),
+        profiles_hint: locale.tr("jyotish-profiles-hint").into(),
+        profiles_close_label: locale.tr("jyotish-profiles-close").into(),
+        profiles_add_label: locale.tr("jyotish-profiles-add").into(),
+        profiles_edit_label: locale.tr("jyotish-profiles-edit").into(),
+        profiles_remove_hint: locale.tr("jyotish-profiles-remove").into(),
+        profiles_save_label: locale.tr("jyotish-profiles-save").into(),
+        profiles_cancel_label: locale.tr("jyotish-profiles-cancel").into(),
+        profiles_empty_label: locale.tr("jyotish-profiles-empty").into(),
+        profile_name_placeholder: locale.tr("jyotish-profile-name-placeholder").into(),
+        profile_date_placeholder: locale.tr("jyotish-profile-date-placeholder").into(),
+        profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
+        profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
+        profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
+        profile_place_search_placeholder: locale.tr("jyotish-profile-place-search-placeholder").into(),
+        gender_labels: ModelRc::new(VecModel::from(gender_labels(locale))),
         vara_label: SharedString::new(),
         ayanamsa_label: SharedString::new(),
         loading_label: locale.tr("jyotish-loading").into(),
@@ -140,6 +171,20 @@ pub(crate) fn build_jyotish_model(
         m.search_busy = p.search_busy;
         m.current_locating = p.current_locating;
         m.current_failed = p.current_failed;
+        m.profiles = ModelRc::new(VecModel::from(jyotish_profile_entries(p)));
+        m.active_profile_index = p.active_profile_index as i32;
+        m.profile_picker_open = p.profile_picker_open;
+        m.profile_search_query = p.profile_search_query.clone().into();
+        m.profile_search_results = ModelRc::new(VecModel::from(jyotish_profile_search_hits(p)));
+        m.profile_search_busy = p.profile_search_busy;
+        m.profile_editing = p.profile_editing;
+        m.profile_edit_index = p.profile_edit_index;
+        m.profile_edit_name = p.profile_edit_name.clone().into();
+        m.profile_edit_gender = i32::from(p.profile_edit_gender);
+        m.profile_edit_date = p.profile_edit_date.clone().into();
+        m.profile_edit_time = p.profile_edit_time.clone().into();
+        m.profile_edit_offset = p.profile_edit_offset;
+        m.profile_edit_place_name = p.profile_edit_place_name.clone().into();
         return m;
     }
 
@@ -302,6 +347,36 @@ pub(crate) fn build_jyotish_model(
         current_location_label: locale.tr("jyotish-current-location").into(),
         current_locating_label: locale.tr("jyotish-current-locating").into(),
         current_failed_label: locale.tr("jyotish-current-failed").into(),
+        profiles: ModelRc::new(VecModel::from(jyotish_profile_entries(p))),
+        active_profile_index: p.active_profile_index as i32,
+        profile_picker_open: p.profile_picker_open,
+        profile_search_query: p.profile_search_query.clone().into(),
+        profile_search_results: ModelRc::new(VecModel::from(jyotish_profile_search_hits(p))),
+        profile_search_busy: p.profile_search_busy,
+        profile_editing: p.profile_editing,
+        profile_edit_index: p.profile_edit_index,
+        profile_edit_name: p.profile_edit_name.clone().into(),
+        profile_edit_gender: i32::from(p.profile_edit_gender),
+        profile_edit_date: p.profile_edit_date.clone().into(),
+        profile_edit_time: p.profile_edit_time.clone().into(),
+        profile_edit_offset: p.profile_edit_offset,
+        profile_edit_place_name: p.profile_edit_place_name.clone().into(),
+        profiles_title: locale.tr("jyotish-profiles-title").into(),
+        profiles_hint: locale.tr("jyotish-profiles-hint").into(),
+        profiles_close_label: locale.tr("jyotish-profiles-close").into(),
+        profiles_add_label: locale.tr("jyotish-profiles-add").into(),
+        profiles_edit_label: locale.tr("jyotish-profiles-edit").into(),
+        profiles_remove_hint: locale.tr("jyotish-profiles-remove").into(),
+        profiles_save_label: locale.tr("jyotish-profiles-save").into(),
+        profiles_cancel_label: locale.tr("jyotish-profiles-cancel").into(),
+        profiles_empty_label: locale.tr("jyotish-profiles-empty").into(),
+        profile_name_placeholder: locale.tr("jyotish-profile-name-placeholder").into(),
+        profile_date_placeholder: locale.tr("jyotish-profile-date-placeholder").into(),
+        profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
+        profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
+        profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
+        profile_place_search_placeholder: locale.tr("jyotish-profile-place-search-placeholder").into(),
+        gender_labels: ModelRc::new(VecModel::from(gender_labels(locale))),
         vara_label: locale.tr(p.vara_key).into(),
         ayanamsa_label: ayanamsa_label.into(),
         loading_label: locale.tr("jyotish-loading").into(),
@@ -406,6 +481,41 @@ pub(crate) fn build_jyotish_model(
         export_day_label: locale.tr("jyotish-export-day").into(),
         export_week_label: locale.tr("jyotish-export-week").into(),
     }
+}
+
+
+fn jyotish_profile_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileEntry> {
+    p.profiles
+        .iter()
+        .map(|c| JyotishProfileEntry {
+            name: c.name.clone().into(),
+            active: c.active,
+            has_birth_data: c.has_birth_data,
+        })
+        .collect()
+}
+
+fn jyotish_profile_search_hits(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishSearchHit> {
+    p.profile_search_results
+        .iter()
+        .map(|h| JyotishSearchHit {
+            name: h.name.clone().into(),
+            detail: h.detail.clone().into(),
+            latitude: h.latitude as f32,
+            longitude: h.longitude as f32,
+        })
+        .collect()
+}
+
+fn gender_labels(locale: &LocaleManager) -> Vec<SharedString> {
+    [
+        "jyotish-gender-unspecified",
+        "jyotish-gender-female",
+        "jyotish-gender-male",
+    ]
+    .iter()
+    .map(|k| SharedString::from(locale.tr(k)))
+    .collect()
 }
 
 fn jyotish_city_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishCityEntry> {
