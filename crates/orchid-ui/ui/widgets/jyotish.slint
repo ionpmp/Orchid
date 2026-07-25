@@ -402,6 +402,14 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
+                if !model.is-loading && model.summary != "" : Text {
+                    text: model.summary;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                }
+
                 if !model.is-loading : HorizontalLayout {
                     spacing: 12px;
                     alignment: center;

@@ -1,8 +1,13 @@
 //! Plain-language narrative built from a [`DayScore`].
 //!
-//! Translates scoring factors into Fluent keys: a headline, ranked
-//! influences, and actionable advice. Context (personal vs generic, vara,
-//! paksha, day seed) diversifies copy and reduces strip-level repetition.
+//! Translates scoring factors into Fluent keys: a headline, a short summary,
+//! ranked influences, and actionable advice. Context (personal vs generic,
+//! vara, paksha, day seed, optional gochara) diversifies copy without changing
+//! the numeric score.
+//!
+//! Summary key scheme: `jyotish-summary-{color}-{mode}-{variant}`
+//! where `color` is `green|yellow|red`, `mode` is `personal|panchanga`,
+//! and `variant` is `0|1` rotated by `day_seed` plus a top-factor bump.
 
 use super::score::{DayColor, DayScore, Factor, FactorContribution, Valence};
 
@@ -17,17 +22,26 @@ pub struct NarrativeContext {
     pub paksha_shukla: bool,
     /// Stable per-day seed (e.g. ordinal) for rotating advice variants.
     pub day_seed: u32,
+    /// Optional gochara Fluent key when personal mode has a soft transit note.
+    pub gochara_key: Option<&'static str>,
 }
 
 impl NarrativeContext {
     /// Build context from score + panchanga limbs.
     #[must_use]
-    pub fn new(score: &DayScore, vara_index: u8, paksha_shukla: bool, day_seed: u32) -> Self {
+    pub fn new(
+        score: &DayScore,
+        vara_index: u8,
+        paksha_shukla: bool,
+        day_seed: u32,
+        gochara_key: Option<&'static str>,
+    ) -> Self {
         Self {
             personal: score.personal,
             vara_index,
             paksha_shukla,
             day_seed,
+            gochara_key: gochara_key.filter(|k| !k.is_empty()),
         }
     }
 }
@@ -37,6 +51,8 @@ impl NarrativeContext {
 pub struct Narrative {
     /// Overall headline key, keyed off [`DayColor`].
     pub headline_key: &'static str,
+    /// 2–3 sentence "what's happening" summary for the Day tab.
+    pub summary_key: &'static str,
     /// Top contributing factors, most impactful first (max 4).
     pub influence_keys: Vec<&'static str>,
     /// Suggested actions/cautions for the day.
@@ -82,6 +98,55 @@ pub(crate) fn influence_key(factor: Factor) -> Option<&'static str> {
 
         Factor::VishtiKarana => Some("jyotish-influence-vishti"),
         Factor::FixedKarana(_) => Some("jyotish-influence-karana-fixed"),
+    }
+}
+
+/// Bump used so top-factor family rotates summary variants across similar days.
+fn factor_variant_bump(factor: Option<Factor>) -> u32 {
+    match factor {
+        Some(Factor::Tara(_)) => 1,
+        Some(Factor::Chandra(_)) => 2,
+        Some(Factor::VishtiKarana) | Some(Factor::FixedKarana(_)) => 3,
+        Some(Factor::BadYoga(_)) => 4,
+        Some(Factor::Amavasya) | Some(Factor::Purnima) => 5,
+        Some(Factor::TithiClass(_)) => 6,
+        None => 0,
+    }
+}
+
+fn top_factor(score: &DayScore) -> Option<Factor> {
+    let mut ranked: Vec<&FactorContribution> = score.factors.iter().collect();
+    ranked.sort_by(|a, b| {
+        b.strength
+            .cmp(&a.strength)
+            .then_with(|| b.delta.unsigned_abs().cmp(&a.delta.unsigned_abs()))
+    });
+    ranked
+        .into_iter()
+        .find(|c| c.valence != Valence::Neutral || c.delta != 0)
+        .map(|c| c.factor)
+}
+
+/// Select `jyotish-summary-{color}-{mode}-{0|1}` from color, personal flag,
+/// day seed, and top-factor family.
+pub(crate) fn summary_key(score: &DayScore, ctx: &NarrativeContext) -> &'static str {
+    let variant = (ctx
+        .day_seed
+        .wrapping_add(factor_variant_bump(top_factor(score))))
+        % 2;
+    match (score.color, ctx.personal, variant) {
+        (DayColor::Green, true, 0) => "jyotish-summary-green-personal-0",
+        (DayColor::Green, true, _) => "jyotish-summary-green-personal-1",
+        (DayColor::Green, false, 0) => "jyotish-summary-green-panchanga-0",
+        (DayColor::Green, false, _) => "jyotish-summary-green-panchanga-1",
+        (DayColor::Yellow, true, 0) => "jyotish-summary-yellow-personal-0",
+        (DayColor::Yellow, true, _) => "jyotish-summary-yellow-personal-1",
+        (DayColor::Yellow, false, 0) => "jyotish-summary-yellow-panchanga-0",
+        (DayColor::Yellow, false, _) => "jyotish-summary-yellow-panchanga-1",
+        (DayColor::Red, true, 0) => "jyotish-summary-red-personal-0",
+        (DayColor::Red, true, _) => "jyotish-summary-red-personal-1",
+        (DayColor::Red, false, 0) => "jyotish-summary-red-panchanga-0",
+        (DayColor::Red, false, _) => "jyotish-summary-red-panchanga-1",
     }
 }
 
@@ -225,16 +290,28 @@ pub fn build_narrative(score: &DayScore, ctx: &NarrativeContext) -> Narrative {
         influence_keys.push("jyotish-influence-calm");
     }
 
+    // Optional personal gochara line when the caller already has a note.
+    if ctx.personal {
+        if let Some(key) = ctx.gochara_key {
+            if !influence_keys.contains(&key) && influence_keys.len() < 4 {
+                influence_keys.push(key);
+            }
+        }
+    }
+
     // Append at most one contextual line (paksha or layer), rotated by seed
     // so the 7-day strip does not repeat the same closing line.
-    let context_pool = contextual_influences(ctx);
-    let extra = context_pool[ctx.day_seed as usize % context_pool.len()];
-    if !influence_keys.contains(&extra) && influence_keys.len() < 4 {
-        influence_keys.push(extra);
+    if influence_keys.len() < 4 {
+        let context_pool = contextual_influences(ctx);
+        let extra = context_pool[ctx.day_seed as usize % context_pool.len()];
+        if !influence_keys.contains(&extra) {
+            influence_keys.push(extra);
+        }
     }
 
     Narrative {
         headline_key: headline_key(score.color),
+        summary_key: summary_key(score, ctx),
         influence_keys,
         advice_keys: advice_keys(score, ctx),
     }
@@ -248,6 +325,7 @@ pub fn build_narrative_simple(score: &DayScore) -> Narrative {
         vara_index: 0,
         paksha_shukla: true,
         day_seed: u32::from(score.score),
+        gochara_key: None,
     };
     build_narrative(score, &ctx)
 }
@@ -283,6 +361,109 @@ mod tests {
     }
 
     #[test]
+    fn summary_key_matches_color_and_mode() {
+        let personal = DayScore {
+            score: 30,
+            color: DayColor::Red,
+            factors: vec![contribute(Factor::Tara(2), -18)],
+            personal: true,
+        };
+        let panchanga = DayScore {
+            score: 72,
+            color: DayColor::Green,
+            factors: vec![contribute(Factor::TithiClass(4), 6)],
+            personal: false,
+        };
+        let p = build_narrative(
+            &personal,
+            &NarrativeContext::new(&personal, 1, true, 0, None),
+        );
+        let g = build_narrative(
+            &panchanga,
+            &NarrativeContext::new(&panchanga, 1, true, 0, None),
+        );
+        assert!(p.summary_key.starts_with("jyotish-summary-red-personal-"));
+        assert!(g
+            .summary_key
+            .starts_with("jyotish-summary-green-panchanga-"));
+    }
+
+    #[test]
+    fn summary_variants_rotate_with_seed_and_top_factor() {
+        let score = DayScore {
+            score: 50,
+            color: DayColor::Yellow,
+            factors: vec![contribute(Factor::VishtiKarana, -8)],
+            personal: false,
+        };
+        let a = summary_key(
+            &score,
+            &NarrativeContext {
+                personal: false,
+                vara_index: 0,
+                paksha_shukla: true,
+                day_seed: 0,
+                gochara_key: None,
+            },
+        );
+        let b = summary_key(
+            &score,
+            &NarrativeContext {
+                personal: false,
+                vara_index: 0,
+                paksha_shukla: true,
+                day_seed: 1,
+                gochara_key: None,
+            },
+        );
+        assert_ne!(a, b);
+        assert!(a.starts_with("jyotish-summary-yellow-panchanga-"));
+        assert!(b.starts_with("jyotish-summary-yellow-panchanga-"));
+
+        let tara_heavy = DayScore {
+            score: 50,
+            color: DayColor::Yellow,
+            factors: vec![contribute(Factor::Tara(2), -18)],
+            personal: true,
+        };
+        let tithi_heavy = DayScore {
+            score: 50,
+            color: DayColor::Yellow,
+            factors: vec![contribute(Factor::TithiClass(3), -6)],
+            personal: true,
+        };
+        let ctx = NarrativeContext {
+            personal: true,
+            vara_index: 0,
+            paksha_shukla: true,
+            day_seed: 0,
+            gochara_key: None,
+        };
+        // Different top-factor families bump the variant differently.
+        assert_ne!(
+            summary_key(&tara_heavy, &ctx),
+            summary_key(&tithi_heavy, &ctx)
+        );
+    }
+
+    #[test]
+    fn personal_gochara_appended_to_influences() {
+        let score = DayScore {
+            score: 55,
+            color: DayColor::Yellow,
+            factors: vec![contribute(Factor::TithiClass(0), 2)],
+            personal: true,
+        };
+        let narrative = build_narrative(
+            &score,
+            &NarrativeContext::new(&score, 0, true, 0, Some("jyotish-gochara-challenging")),
+        );
+        assert!(narrative
+            .influence_keys
+            .contains(&"jyotish-gochara-challenging"));
+    }
+
+    #[test]
     fn narrative_influences_are_sorted_by_strength_and_capped() {
         let score = DayScore {
             score: 40,
@@ -297,7 +478,7 @@ mod tests {
             ],
             personal: true,
         };
-        let ctx = NarrativeContext::new(&score, 2, true, 10);
+        let ctx = NarrativeContext::new(&score, 2, true, 10, None);
         let narrative = build_narrative(&score, &ctx);
         assert!(narrative.influence_keys.len() <= 4);
         assert_eq!(narrative.influence_keys[0], "jyotish-influence-tara-vipat");
@@ -322,6 +503,7 @@ mod tests {
                 vara_index: 0,
                 paksha_shukla: true,
                 day_seed: 3,
+                gochara_key: None,
             },
         );
         let p = build_narrative(
@@ -331,6 +513,7 @@ mod tests {
                 vara_index: 0,
                 paksha_shukla: true,
                 day_seed: 3,
+                gochara_key: None,
             },
         );
         assert!(g.advice_keys.contains(&"jyotish-advice-mode-panchanga"));
@@ -352,6 +535,7 @@ mod tests {
                 vara_index: 1,
                 paksha_shukla: false,
                 day_seed: 0,
+                gochara_key: None,
             },
         );
         let b = build_narrative(
@@ -361,6 +545,7 @@ mod tests {
                 vara_index: 1,
                 paksha_shukla: false,
                 day_seed: 1,
+                gochara_key: None,
             },
         );
         // Primary color advice should differ across seeds for red generic.
@@ -373,6 +558,7 @@ mod tests {
         let score = compute_day_score(at, AyanamsaSystem::Lahiri, None);
         let narrative = build_narrative_simple(&score);
         assert!(!narrative.headline_key.is_empty());
+        assert!(!narrative.summary_key.is_empty());
         assert!(narrative.influence_keys.len() <= 4);
     }
 }

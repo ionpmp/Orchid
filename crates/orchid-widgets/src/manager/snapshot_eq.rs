@@ -446,6 +446,7 @@ fn jyotish_payload_eq(a: &JyotishPayload, b: &JyotishPayload) -> bool {
         && jyotish_factors_eq(&a.factors, &b.factors)
         && a.personal_mode == b.personal_mode
         && a.headline_key == b.headline_key
+        && a.summary_key == b.summary_key
         && a.influence_keys == b.influence_keys
         && a.advice_keys == b.advice_keys
         && jyotish_week_strip_eq(&a.week_strip, &b.week_strip)

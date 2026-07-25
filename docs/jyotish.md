@@ -30,9 +30,11 @@ The resulting score is mapped to three colors:
 
 Two related scores are shown side by side on the Day tab: the **now** score
 (sampled at the current instant, only meaningful for today) and the **day**
-score (sampled at local solar noon, representing the day as a whole). The
-factor breakdown under the headline lists the top contributions ranked by
-strength so the number is never a black box.
+score (sampled at local solar noon, representing the day as a whole). Under
+the headline, a short Fluent **summary** (`jyotish-summary-{color}-{mode}-{0|1}`)
+explains the day in plain language; influence and advice lines then spell out
+what it means and what to do. The factor breakdown lists the top contributions
+ranked by strength so the number is never a black box.
 
 ## Personal vs. panchanga layers
 

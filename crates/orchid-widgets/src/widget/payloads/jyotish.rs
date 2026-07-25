@@ -285,6 +285,8 @@ pub struct JyotishPayload {
     /// Natal layers active for this payload.
     pub personal_mode: bool,
     pub headline_key: &'static str,
+    /// Day-tab "what's happening" prose key (`jyotish-summary-…`).
+    pub summary_key: &'static str,
     pub influence_keys: Vec<&'static str>,
     pub advice_keys: Vec<&'static str>,
     pub week_strip: Vec<JyotishDayChip>,

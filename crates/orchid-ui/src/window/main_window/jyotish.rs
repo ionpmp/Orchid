@@ -520,7 +520,6 @@ impl MainWindowController {
         );
     }
 
-
     fn export_jyotish_to_clipboard(self: &Arc<Self>, inst: Uuid, week: bool) {
         let Some(snap) = self.widget_manager.snapshot_cache().get(inst) else {
             return;
@@ -579,6 +578,9 @@ fn build_jyotish_day_export(payload: &JyotishPayload, locale: &LocaleManager) ->
     ));
     if !payload.headline_key.is_empty() {
         lines.push(locale.tr(payload.headline_key));
+    }
+    if !payload.summary_key.is_empty() {
+        lines.push(locale.tr(payload.summary_key));
     }
     lines.push(format!(
         "{}: {}",

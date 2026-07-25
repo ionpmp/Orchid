@@ -28,9 +28,8 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
     JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
-    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
-    JyotishProfileEntry, JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit,
-    JyotishYearSummary,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileEntry,
+    JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -42,7 +41,9 @@ use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 use super::weather::provider::{GeocodingHit, OpenMeteoProvider, WeatherProvider};
 
 pub use astro::{compute_jyotish, JyotishData};
-pub use config::{decode_config, AyanamsaSystem, Gender, JyotishConfig, JyotishLocation, JyotishProfile};
+pub use config::{
+    decode_config, AyanamsaSystem, Gender, JyotishConfig, JyotishLocation, JyotishProfile,
+};
 pub use dasha::{
     antar_dashas, dasha_at, dasha_stack_at, maha_dashas, pratyantar_dashas, DashaLord, DashaPeriod,
     DashaStack,
@@ -596,8 +597,15 @@ impl JyotishHandle {
             &day_score
         };
         let day_seed = u32::try_from(selected_date.num_days_from_ce()).unwrap_or(0);
-        let narrative_ctx =
-            NarrativeContext::new(primary_score, data.vara_index, data.paksha_shukla, day_seed);
+        let day_gochara_key = natal_for_score
+            .map(|n| gochara_note_key(gochara_modifier(n.moon_rashi, noon_at, cfg.ayanamsa)));
+        let narrative_ctx = NarrativeContext::new(
+            primary_score,
+            data.vara_index,
+            data.paksha_shukla,
+            day_seed,
+            day_gochara_key,
+        );
         let narrative = build_narrative(primary_score, &narrative_ctx);
         let factor_rows = factor_rows_from_score(primary_score);
 
@@ -758,6 +766,7 @@ impl JyotishHandle {
             factors: factor_rows,
             personal_mode: primary_score.personal,
             headline_key: narrative.headline_key,
+            summary_key: narrative.summary_key,
             influence_keys: narrative.influence_keys,
             advice_keys: narrative.advice_keys,
             week_strip,
@@ -1184,9 +1193,7 @@ impl JyotishHandle {
             cfg.profiles.remove(index);
             if cfg.active_profile_index > index {
                 cfg.active_profile_index -= 1;
-            } else if !cfg.profiles.is_empty()
-                && cfg.active_profile_index >= cfg.profiles.len()
-            {
+            } else if !cfg.profiles.is_empty() && cfg.active_profile_index >= cfg.profiles.len() {
                 cfg.active_profile_index = cfg.profiles.len() - 1;
             } else if cfg.profiles.is_empty() {
                 cfg.active_profile_index = 0;
@@ -1928,12 +1935,7 @@ pub fn set_profile_draft_gender(instance_id: Uuid, gender: u8) {
 }
 
 /// Set the draft birth place from a geocoding hit.
-pub fn set_draft_birth_place(
-    instance_id: Uuid,
-    name: String,
-    latitude: f64,
-    longitude: f64,
-) {
+pub fn set_draft_birth_place(instance_id: Uuid, name: String, latitude: f64, longitude: f64) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
         h.set_draft_birth_place(name, latitude, longitude);
     }
@@ -2283,6 +2285,7 @@ fn loading_payload(
         factors: Vec::new(),
         personal_mode: false,
         headline_key: "",
+        summary_key: "",
         influence_keys: Vec::new(),
         advice_keys: Vec::new(),
         week_strip: Vec::new(),

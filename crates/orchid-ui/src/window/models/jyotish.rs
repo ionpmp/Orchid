@@ -4,9 +4,9 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
     JyotishAntarRowModel, JyotishCityEntry, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
-    JyotishProfileEntry,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
-    JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishSearchHit, JyotishYearRowModel,
+    JyotishProfileEntry, JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishSearchHit,
+    JyotishYearRowModel,
 };
 
 const WEEKDAY_KEYS: [&str; 7] = [
@@ -77,7 +77,9 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
         profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
         profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
-        profile_place_search_placeholder: locale.tr("jyotish-profile-place-search-placeholder").into(),
+        profile_place_search_placeholder: locale
+            .tr("jyotish-profile-place-search-placeholder")
+            .into(),
         gender_labels: ModelRc::new(VecModel::from(gender_labels(locale))),
         vara_label: SharedString::new(),
         ayanamsa_label: SharedString::new(),
@@ -113,6 +115,7 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         personal_mode: false,
         personal_badge: locale.tr("jyotish-badge-panchanga").into(),
         headline: SharedString::new(),
+        summary: SharedString::new(),
         influences: ModelRc::new(VecModel::default()),
         advice: ModelRc::new(VecModel::default()),
         disclaimer: locale.tr("jyotish-disclaimer").into(),
@@ -375,7 +378,9 @@ pub(crate) fn build_jyotish_model(
         profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
         profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
         profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
-        profile_place_search_placeholder: locale.tr("jyotish-profile-place-search-placeholder").into(),
+        profile_place_search_placeholder: locale
+            .tr("jyotish-profile-place-search-placeholder")
+            .into(),
         gender_labels: ModelRc::new(VecModel::from(gender_labels(locale))),
         vara_label: locale.tr(p.vara_key).into(),
         ayanamsa_label: ayanamsa_label.into(),
@@ -427,6 +432,11 @@ pub(crate) fn build_jyotish_model(
             })
             .into(),
         headline: locale.tr(p.headline_key).into(),
+        summary: if p.summary_key.is_empty() {
+            SharedString::new()
+        } else {
+            locale.tr(p.summary_key).into()
+        },
         influences: ModelRc::new(VecModel::from(
             p.influence_keys
                 .iter()
@@ -482,7 +492,6 @@ pub(crate) fn build_jyotish_model(
         export_week_label: locale.tr("jyotish-export-week").into(),
     }
 }
-
 
 fn jyotish_profile_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileEntry> {
     p.profiles
