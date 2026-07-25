@@ -24,6 +24,10 @@ export component WorkspaceView inherits Rectangle {
     callback widget-drag-moved(string, length, length);
     callback widget-drag-ended(string);
     callback widget-activate(string);
+    callback widget-undock-clicked(string);
+    callback widget-minimize-clicked(string);
+    callback widget-maximize-clicked(string);
+    callback window-taskbar-activate(string);
     callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
@@ -374,6 +378,9 @@ export component WorkspaceView inherits Rectangle {
                     drag-started(dx, dy) => { root.widget-drag-started(w.instance-id, dx, dy); }
                     drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
                     drag-ended => { root.widget-drag-ended(w.instance-id); }
+                    undock-clicked => { root.widget-undock-clicked(w.instance-id); }
+                    minimize-clicked => { root.widget-minimize-clicked(w.instance-id); }
+                    maximize-clicked => { root.widget-maximize-clicked(w.instance-id); }
                     resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
                     resize-moved(px, py) => { root.widget-resize-moved(w.instance-id, px, py); }
                     resize-ended => { root.widget-resize-ended(w.instance-id); }
@@ -421,7 +428,7 @@ export component WorkspaceView inherits Rectangle {
                     jyotish-year-nav(id, d) => { root.jyotish-year-nav(id, d); }
                     jyotish-open-month(id, o) => { root.jyotish-open-month(id, o); }
                     jyotish-open-year(id, o) => { root.jyotish-open-year(id, o); }
-            jyotish-select-life-year(id, y) => { root.jyotish-select-life-year(id, y); }
+                    jyotish-select-life-year(id, y) => { root.jyotish-select-life-year(id, y); }
                     jyotish-rectify-start(id) => { root.jyotish-rectify-start(id); }
                     jyotish-rectify-set-window(id, m, h) => { root.jyotish-rectify-set-window(id, m, h); }
                     jyotish-rectify-answer(id, q, o) => { root.jyotish-rectify-answer(id, q, o); }
@@ -434,29 +441,31 @@ export component WorkspaceView inherits Rectangle {
                     jyotish-rectify-cancel(id) => { root.jyotish-rectify-cancel(id); }
                     jyotish-export-day(id) => { root.jyotish-export-day(id); }
                     jyotish-export-week(id) => { root.jyotish-export-week(id); }
-            jyotish-open-cities(id) => { root.jyotish-open-cities(id); }
-            jyotish-close-cities(id) => { root.jyotish-close-cities(id); }
-            jyotish-select-city(id, i) => { root.jyotish-select-city(id, i); }
-            jyotish-remove-city(id, i) => { root.jyotish-remove-city(id, i); }
-            jyotish-search-cities(id, q) => { root.jyotish-search-cities(id, q); }
-            jyotish-add-city(id, n, la, lo) => { root.jyotish-add-city(id, n, la, lo); }
-            jyotish-open-profiles(id) => { root.jyotish-open-profiles(id); }
-            jyotish-close-profiles(id) => { root.jyotish-close-profiles(id); }
-            jyotish-select-profile(id, idx) => { root.jyotish-select-profile(id, idx); }
-            jyotish-remove-profile(id, idx) => { root.jyotish-remove-profile(id, idx); }
-            jyotish-begin-add-profile(id) => { root.jyotish-begin-add-profile(id); }
-            jyotish-begin-edit-profile(id, idx) => { root.jyotish-begin-edit-profile(id, idx); }
-            jyotish-cancel-edit-profile(id) => { root.jyotish-cancel-edit-profile(id); }
-            jyotish-set-profile-gender(id, g) => { root.jyotish-set-profile-gender(id, g); }
-            jyotish-search-birth-places(id, q) => { root.jyotish-search-birth-places(id, q); }
-            jyotish-set-birth-place(id, name, lat, lon) => {
-                root.jyotish-set-birth-place(id, name, lat, lon);
-            }
-            jyotish-upsert-profile(id, index, name, gender, date, time, offset, place, lat, lon) => {
-                root.jyotish-upsert-profile(
-                    id, index, name, gender, date, time, offset, place, lat, lon
-                );
-            }
+                    jyotish-open-cities(id) => { root.jyotish-open-cities(id); }
+                    jyotish-close-cities(id) => { root.jyotish-close-cities(id); }
+                    jyotish-select-city(id, idx) => { root.jyotish-select-city(id, idx); }
+                    jyotish-remove-city(id, idx) => { root.jyotish-remove-city(id, idx); }
+                    jyotish-search-cities(id, q) => { root.jyotish-search-cities(id, q); }
+                    jyotish-add-city(id, name, lat, lon) => {
+                        root.jyotish-add-city(id, name, lat, lon);
+                    }
+                    jyotish-open-profiles(id) => { root.jyotish-open-profiles(id); }
+                    jyotish-close-profiles(id) => { root.jyotish-close-profiles(id); }
+                    jyotish-select-profile(id, idx) => { root.jyotish-select-profile(id, idx); }
+                    jyotish-remove-profile(id, idx) => { root.jyotish-remove-profile(id, idx); }
+                    jyotish-begin-add-profile(id) => { root.jyotish-begin-add-profile(id); }
+                    jyotish-begin-edit-profile(id, idx) => { root.jyotish-begin-edit-profile(id, idx); }
+                    jyotish-cancel-edit-profile(id) => { root.jyotish-cancel-edit-profile(id); }
+                    jyotish-set-profile-gender(id, g) => { root.jyotish-set-profile-gender(id, g); }
+                    jyotish-search-birth-places(id, q) => { root.jyotish-search-birth-places(id, q); }
+                    jyotish-set-birth-place(id, name, lat, lon) => {
+                        root.jyotish-set-birth-place(id, name, lat, lon);
+                    }
+                    jyotish-upsert-profile(id, index, name, gender, date, time, offset, place, lat, lon) => {
+                        root.jyotish-upsert-profile(
+                            id, index, name, gender, date, time, offset, place, lat, lon
+                        );
+                    }
                     clock-open-cities(id) => { root.clock-open-cities(id); }
                     clock-close-cities(id) => { root.clock-close-cities(id); }
                     clock-remove-city(id, idx) => { root.clock-remove-city(id, idx); }
@@ -511,7 +520,6 @@ export component WorkspaceView inherits Rectangle {
                     calendar-save-editor(id) => { root.calendar-save-editor(id); }
                     calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
                     calendar-set-color-filter(id, c) => { root.calendar-set-color-filter(id, c); }
-            calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
                     calendar-request-delete(id) => { root.calendar-request-delete(id); }
                     calendar-confirm-delete(id) => { root.calendar-confirm-delete(id); }
                     calendar-cancel-delete(id) => { root.calendar-cancel-delete(id); }
@@ -654,6 +662,9 @@ export component WorkspaceView inherits Rectangle {
             drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
             drag-ended => { root.widget-drag-ended(w.instance-id); }
             activated => { root.widget-activate(w.instance-id); }
+            undock-clicked => { root.widget-undock-clicked(w.instance-id); }
+            minimize-clicked => { root.widget-minimize-clicked(w.instance-id); }
+            maximize-clicked => { root.widget-maximize-clicked(w.instance-id); }
             resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
             resize-moved(px, py) => { root.widget-resize-moved(w.instance-id, px, py); }
             resize-ended => { root.widget-resize-ended(w.instance-id); }
@@ -697,6 +708,68 @@ export component WorkspaceView inherits Rectangle {
             border-color: w.placement-valid ? Theme.accent-brand : #e35d6a;
             border-radius: Theme.radius-md;
             opacity: 0.9;
+        }
+
+        // Edge snap ghost (left/right half / maximize).
+        if root.workspace.snap-zone-visible : Rectangle {
+            x: root.workspace.snap-zone-x;
+            y: root.workspace.snap-zone-y;
+            width: root.workspace.snap-zone-width;
+            height: root.workspace.snap-zone-height;
+            background: Theme.accent-brand;
+            opacity: 0.18;
+            border-width: 2px;
+            border-color: Theme.accent-brand;
+            border-radius: Theme.radius-md;
+        }
+
+        // In-app window taskbar for floating + minimized widgets.
+        if root.workspace.window-taskbar.length > 0 : Rectangle {
+            x: 0;
+            y: parent.height - 36px;
+            width: parent.width;
+            height: 36px;
+            background: Theme.surface-base;
+            border-width: 0;
+            Rectangle {
+                y: 0;
+                width: parent.width;
+                height: 1px;
+                background: Theme.border-default;
+            }
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: start;
+                for item[i] in root.workspace.window-taskbar: TouchArea {
+                    width: 160px;
+                    height: 28px;
+                    y: 4px;
+                    clicked => { root.window-taskbar-activate(item.instance-id); }
+                    Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        background: item.is-active ? Theme.surface-raised : transparent;
+                        border-radius: Theme.radius-md;
+                        border-width: item.is-minimized ? 1px : 0;
+                        border-color: Theme.border-default;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 6px;
+                            Text {
+                                text: item.title;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
     }

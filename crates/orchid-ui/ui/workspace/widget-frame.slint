@@ -34,8 +34,14 @@ export component WidgetFrame inherits Rectangle {
     callback close-confirm-save(string);
     callback close-confirm-discard(string);
     callback close-confirm-cancel(string);
-    /// Floating viewers: click (pointer up) brings this frame to the front.
+    /// Floating windows: click (pointer up) brings this frame to the front.
     callback activated();
+    /// Undock a grid widget into a floating window.
+    callback undock-clicked();
+    /// Minimize a floating window to the taskbar.
+    callback minimize-clicked();
+    /// Toggle maximize / restore for a floating window.
+    callback maximize-clicked();
     callback drag-started(length, length);
     callback drag-moved(length, length);
     callback drag-ended();
@@ -327,7 +333,9 @@ export component WidgetFrame inherits Rectangle {
         }
 
         drag-area := TouchArea {
-            width: model.has-settings ? parent.width - 68px : parent.width - 40px;
+            width: model.is-floating
+                ? (model.has-settings ? parent.width - 116px : parent.width - 88px)
+                : (model.has-settings ? parent.width - 96px : parent.width - 68px);
             height: parent.height;
             x: 0;
             y: 0;
@@ -337,6 +345,11 @@ export component WidgetFrame inherits Rectangle {
                     // Pointer in *canvas* (workspace) space: the grab bar moves with the frame, so
                     // local (mouse-pressed) fights the model and causes visible jitter.
                     root.drag-moved(root.x + self.mouse-x, root.y + self.mouse-y);
+                }
+            }
+            double-clicked => {
+                if (model.is-floating) {
+                    root.maximize-clicked();
                 }
             }
             pointer-event(event) => {
@@ -384,47 +397,7 @@ export component WidgetFrame inherits Rectangle {
             }
         }
 
-        settings-area := TouchArea {
-            visible: model.has-settings;
-            enabled: model.has-settings;
-            x: parent.width - 60px;
-            y: 4px;
-            width: 24px;
-            height: 24px;
-            clicked => { root.settings-clicked(); }
-
-            Rectangle {
-                background: settings-area.has-hover ? Theme.surface-raised : transparent;
-                border-radius: Theme.radius-md;
-
-                if settings-area.has-hover : Rectangle {
-                    x: parent.x - settings-hint.preferred-width;
-                    y: parent.height + 2px;
-                    width: settings-hint.preferred-width + 12px;
-                    height: settings-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    settings-hint := Text {
-                        x: 6px; y: 3px;
-                        text: Strings.widget-settings-tooltip;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-
-                Text {
-                    text: "⚙";
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-        }
-
+        // Window chrome buttons (right → left: close, max, min / undock, settings).
         close-area := TouchArea {
             x: parent.width - 32px;
             y: 4px;
@@ -435,29 +408,97 @@ export component WidgetFrame inherits Rectangle {
             Rectangle {
                 background: close-area.has-hover ? Theme.surface-raised : transparent;
                 border-radius: Theme.radius-md;
-
-                if close-area.has-hover : Rectangle {
-                    x: parent.x - close-hint.preferred-width;
-                    y: parent.height + 2px;
-                    width: close-hint.preferred-width + 12px;
-                    height: close-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    close-hint := Text {
-                        x: 6px; y: 3px;
-                        text: Strings.widget-close-tooltip;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-
                 Text {
                     text: "×";
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-lg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        maximize-area := TouchArea {
+            visible: model.is-floating;
+            enabled: model.is-floating;
+            x: parent.width - 56px;
+            y: 4px;
+            width: 24px;
+            height: 24px;
+            clicked => { root.maximize-clicked(); }
+            Rectangle {
+                background: maximize-area.has-hover ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                Text {
+                    text: model.window-state == 1 ? "❐" : "□";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        minimize-area := TouchArea {
+            visible: model.is-floating;
+            enabled: model.is-floating;
+            x: parent.width - 80px;
+            y: 4px;
+            width: 24px;
+            height: 24px;
+            clicked => { root.minimize-clicked(); }
+            Rectangle {
+                background: minimize-area.has-hover ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                Text {
+                    text: "–";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        undock-area := TouchArea {
+            visible: !model.is-floating;
+            enabled: !model.is-floating;
+            x: parent.width - 56px;
+            y: 4px;
+            width: 24px;
+            height: 24px;
+            clicked => { root.undock-clicked(); }
+            Rectangle {
+                background: undock-area.has-hover ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                Text {
+                    text: "⧉";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        settings-area := TouchArea {
+            visible: model.has-settings;
+            enabled: model.has-settings;
+            x: model.is-floating
+                ? (parent.width - 104px)
+                : (parent.width - 80px);
+            y: 4px;
+            width: 24px;
+            height: 24px;
+            clicked => { root.settings-clicked(); }
+
+            Rectangle {
+                background: settings-area.has-hover ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                Text {
+                    text: "⚙";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -619,10 +660,12 @@ export component WidgetFrame inherits Rectangle {
                     export-week => { root.jyotish-export-week(root.model.instance-id); }
                     open-cities => { root.jyotish-open-cities(root.model.instance-id); }
                     close-cities => { root.jyotish-close-cities(root.model.instance-id); }
-                    select-city(i) => { root.jyotish-select-city(root.model.instance-id, i); }
-                    remove-city(i) => { root.jyotish-remove-city(root.model.instance-id, i); }
+                    select-city(idx) => { root.jyotish-select-city(root.model.instance-id, idx); }
+                    remove-city(idx) => { root.jyotish-remove-city(root.model.instance-id, idx); }
                     search-cities(q) => { root.jyotish-search-cities(root.model.instance-id, q); }
-                    add-city(n, la, lo) => { root.jyotish-add-city(root.model.instance-id, n, la, lo); }
+                    add-city(name, lat, lon) => {
+                        root.jyotish-add-city(root.model.instance-id, name, lat, lon);
+                    }
                     open-profiles => { root.jyotish-open-profiles(root.model.instance-id); }
                     close-profiles => { root.jyotish-close-profiles(root.model.instance-id); }
                     select-profile(idx) => { root.jyotish-select-profile(root.model.instance-id, idx); }
@@ -720,6 +763,7 @@ export component WidgetFrame inherits Rectangle {
                     height: parent.height;
                     model: root.model.calendar;
                     select-date(d) => { root.calendar-select-date(root.model.instance-id, d); }
+                    activate-day(d) => { root.calendar-activate-day(root.model.instance-id, d); }
                     shift-month(delta) => { root.calendar-shift-month(root.model.instance-id, delta); }
                     goto-today => { root.calendar-goto-today(root.model.instance-id); }
                     open-new => { root.calendar-open-new(root.model.instance-id); }
@@ -728,12 +772,15 @@ export component WidgetFrame inherits Rectangle {
                     save-editor => { root.calendar-save-editor(root.model.instance-id); }
                     duplicate-editor => { root.calendar-duplicate-editor(root.model.instance-id); }
                     set-color-filter(c) => { root.calendar-set-color-filter(root.model.instance-id, c); }
-                    delete-event(eid) => { root.calendar-delete-event(root.model.instance-id, eid); }
+                    request-delete => { root.calendar-request-delete(root.model.instance-id); }
+                    confirm-delete => { root.calendar-confirm-delete(root.model.instance-id); }
+                    cancel-delete => { root.calendar-cancel-delete(root.model.instance-id); }
                     editor-title-changed(t) => { root.calendar-editor-title(root.model.instance-id, t); }
                     editor-date-changed(d) => { root.calendar-editor-date(root.model.instance-id, d); }
+                    shift-editor-date(delta) => { root.calendar-shift-editor-date(root.model.instance-id, delta); }
                     editor-all-day-changed(v) => { root.calendar-editor-all-day(root.model.instance-id, v); }
-                    editor-start-changed(h, m) => { root.calendar-editor-start(root.model.instance-id, h, m); }
-                    editor-end-changed(h, m) => { root.calendar-editor-end(root.model.instance-id, h, m); }
+                    nudge-editor-start(d) => { root.calendar-nudge-editor-start(root.model.instance-id, d); }
+                    nudge-editor-end(d) => { root.calendar-nudge-editor-end(root.model.instance-id, d); }
                     editor-notes-changed(t) => { root.calendar-editor-notes(root.model.instance-id, t); }
                     editor-color-changed(c) => { root.calendar-editor-color(root.model.instance-id, c); }
                 }

@@ -93,6 +93,7 @@ impl WidgetManager {
             position: RwLock::new(position),
             size: RwLock::new(size),
             lifecycle: RwLock::new(LifecycleState::Active),
+            placement: RwLock::new(orchid_storage::WindowPlacement::Grid),
             group_id: RwLock::new(None),
             created_at: now,
             updated_at: RwLock::new(now),
@@ -277,6 +278,7 @@ impl WidgetManager {
             position: RwLock::new(*instance.position.read()),
             size: RwLock::new(*instance.size.read()),
             lifecycle: RwLock::new(*instance.lifecycle.read()),
+            placement: RwLock::new(instance.placement.read().clone()),
             group_id: RwLock::new(*instance.group_id.read()),
             created_at: instance.created_at,
             updated_at: RwLock::new(now),
@@ -324,6 +326,198 @@ impl WidgetManager {
         };
         persistence::save_instance(&self.inner.storage, &instance, Some(bytes))?;
         Ok(())
+    }
+
+    /// Replace window placement and persist.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors.
+    pub async fn set_window_placement(
+        &self,
+        id: Uuid,
+        placement: orchid_storage::WindowPlacement,
+    ) -> Result<()> {
+        let instance = self.get_instance(id)?;
+        *instance.placement.write() = placement;
+        *instance.updated_at.write() = Utc::now();
+        let bytes = {
+            let w = instance.widget.lock().await;
+            w.save_state().unwrap_or_default()
+        };
+        persistence::save_instance(&self.inner.storage, &instance, Some(bytes))?;
+        Ok(())
+    }
+
+    /// Undock a grid widget into a floating window at `bounds`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors.
+    pub async fn undock_to_floating(
+        &self,
+        id: Uuid,
+        bounds: crate::layout::PixelBounds,
+    ) -> Result<()> {
+        let rect = crate::widget::instance::pixel_rect_from_bounds(bounds);
+        self.set_window_placement(
+            id,
+            orchid_storage::WindowPlacement::floating_normal(rect),
+        )
+        .await
+    }
+
+    /// Dock a floating widget back onto the grid (placement becomes [`WindowPlacement::Grid`]).
+    ///
+    /// Caller should have already called [`Self::move_to`] / [`Self::resize`] for the slot.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors.
+    pub async fn dock_to_grid(&self, id: Uuid) -> Result<()> {
+        self.set_window_placement(id, orchid_storage::WindowPlacement::Grid)
+            .await
+    }
+
+    /// Update floating bounds while staying in normal (or maximized) floating mode.
+    ///
+    /// # Errors
+    ///
+    /// * [`WidgetError::InvalidStateForOperation`] when not floating.
+    /// * Propagates storage errors.
+    pub async fn set_floating_bounds(
+        &self,
+        id: Uuid,
+        bounds: crate::layout::PixelBounds,
+    ) -> Result<()> {
+        let instance = self.get_instance(id)?;
+        let rect = crate::widget::instance::pixel_rect_from_bounds(bounds);
+        let mut placement = instance.placement.read().clone();
+        match &mut placement {
+            orchid_storage::WindowPlacement::Floating {
+                bounds: b,
+                restored_bounds,
+                state,
+            } => {
+                *b = rect;
+                if *state == orchid_storage::WindowState::Normal {
+                    *restored_bounds = rect;
+                } else if *state == orchid_storage::WindowState::Maximized {
+                    // Leaving maximized via resize/drag: treat as normal.
+                    *state = orchid_storage::WindowState::Normal;
+                    *restored_bounds = rect;
+                }
+            }
+            orchid_storage::WindowPlacement::Grid => {
+                return Err(WidgetError::InvalidStateForOperation(
+                    "widget is not floating".into(),
+                ));
+            }
+        }
+        self.set_window_placement(id, placement).await
+    }
+
+    /// Minimize a floating window.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage / invalid-state errors.
+    pub async fn minimize_window(&self, id: Uuid) -> Result<()> {
+        let instance = self.get_instance(id)?;
+        let mut placement = instance.placement.read().clone();
+        match &mut placement {
+            orchid_storage::WindowPlacement::Floating { state, .. } => {
+                *state = orchid_storage::WindowState::Minimized;
+            }
+            orchid_storage::WindowPlacement::Grid => {
+                return Err(WidgetError::InvalidStateForOperation(
+                    "cannot minimize a grid widget".into(),
+                ));
+            }
+        }
+        self.set_window_placement(id, placement).await
+    }
+
+    /// Maximize a floating window to `max_bounds` (viewport minus taskbar).
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage / invalid-state errors.
+    pub async fn maximize_window(
+        &self,
+        id: Uuid,
+        max_bounds: crate::layout::PixelBounds,
+    ) -> Result<()> {
+        let instance = self.get_instance(id)?;
+        let max_rect = crate::widget::instance::pixel_rect_from_bounds(max_bounds);
+        let mut placement = instance.placement.read().clone();
+        match &mut placement {
+            orchid_storage::WindowPlacement::Floating {
+                bounds,
+                restored_bounds,
+                state,
+            } => {
+                if *state == orchid_storage::WindowState::Normal {
+                    *restored_bounds = *bounds;
+                }
+                *bounds = max_rect;
+                *state = orchid_storage::WindowState::Maximized;
+            }
+            orchid_storage::WindowPlacement::Grid => {
+                return Err(WidgetError::InvalidStateForOperation(
+                    "cannot maximize a grid widget".into(),
+                ));
+            }
+        }
+        self.set_window_placement(id, placement).await
+    }
+
+    /// Restore a maximized or minimized floating window to normal bounds.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage / invalid-state errors.
+    pub async fn restore_window(&self, id: Uuid) -> Result<()> {
+        let instance = self.get_instance(id)?;
+        let mut placement = instance.placement.read().clone();
+        match &mut placement {
+            orchid_storage::WindowPlacement::Floating {
+                bounds,
+                restored_bounds,
+                state,
+            } => {
+                *bounds = *restored_bounds;
+                *state = orchid_storage::WindowState::Normal;
+            }
+            orchid_storage::WindowPlacement::Grid => {
+                return Err(WidgetError::InvalidStateForOperation(
+                    "cannot restore a grid widget".into(),
+                ));
+            }
+        }
+        self.set_window_placement(id, placement).await
+    }
+
+    /// Toggle maximize / restore for a floating window.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage / invalid-state errors.
+    pub async fn toggle_maximize_window(
+        &self,
+        id: Uuid,
+        max_bounds: crate::layout::PixelBounds,
+    ) -> Result<()> {
+        let instance = self.get_instance(id)?;
+        match instance.window_state() {
+            Some(orchid_storage::WindowState::Maximized) => self.restore_window(id).await,
+            Some(orchid_storage::WindowState::Normal | orchid_storage::WindowState::Minimized) => {
+                self.maximize_window(id, max_bounds).await
+            }
+            None => Err(WidgetError::InvalidStateForOperation(
+                "cannot toggle maximize on a grid widget".into(),
+            )),
+        }
     }
 }
 

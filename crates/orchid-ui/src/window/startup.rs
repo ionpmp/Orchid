@@ -272,6 +272,12 @@ fn apply_app_state_to(
         active_workspace_id: "".into(),
         widgets: ModelRc::new(VecModel::default()),
         floating_widgets: ModelRc::new(VecModel::default()),
+        window_taskbar: ModelRc::new(VecModel::default()),
+        snap_zone_visible: false,
+        snap_zone_x: 0f32,
+        snap_zone_y: 0f32,
+        snap_zone_width: 0f32,
+        snap_zone_height: 0f32,
         dock_types: ModelRc::new(VecModel::from(vec![DockWidgetType {
             type_id: "terminal".into(),
             label: locale.tr("dock-widget-terminal").into(),

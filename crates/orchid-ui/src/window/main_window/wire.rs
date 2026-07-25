@@ -379,6 +379,38 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_widget_undock_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_undock(&id);
+                }
+            }
+        });
+        self.window.on_widget_minimize_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_minimize(&id);
+                }
+            }
+        });
+        self.window.on_widget_maximize_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_maximize_toggle(&id);
+                }
+            }
+        });
+        self.window.on_window_taskbar_activate({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_window_taskbar_activate(&id);
+                }
+            }
+        });
         self.window.on_widget_resize_started({
             let t = t.clone();
             move |id, corner, press_x, press_y| {

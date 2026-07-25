@@ -51,6 +51,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
 ### Widgets
 - [x] Infrastructure (layouts, workspaces, lifecycle) — `orchid-widgets` ships the full framework: `Widget` trait, `WidgetRegistry`, `WidgetManager` (create / move / resize / close, visibility-driven Active↔Sleeping, Sleeping→Unloaded sweeper, persistence), `WorkspaceManager` (up to 9 workspaces, dense ordinals, switch-next/previous/by-ordinal), `LayoutEngine` (16×10 grid, auto-placement, collision, pixel snapshots), `GroupManager` (tab stacks persisted in a dedicated redb table), framework-wide events, and `build_command_set` of widget / workspace / group commands. `orchid-core::BackgroundJobQueue` runs always-on interval work (RSS/weather fetch; foundation for agents). `orchid-ui` exposes the renderer-agnostic `WidgetView` / `WidgetViewDispatcher` bridge and the Slint workspace dashboard (switcher, layout grid, drag/resize with snap ghost + collision feedback, dock show/hide + hover animations, group tab strip with drag-to-stack / switch / reorder / dissolve / Alt-drag detach).
+- [x] In-app window manager — per-widget `WindowPlacement` (grid or floating); undock/dock any widget; z-order; minimize / maximize / restore; in-app taskbar; Ctrl+Tab cycle; edge snap (left/right half, maximize); schema v2 persistence
 - [x] Widget: Weather
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators
@@ -111,7 +112,6 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [ ] Built-in browser (WebView2)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace
-
 
 ## Native format (`.orchid`) — see [`docs/ORCHID_FORMAT.md`](ORCHID_FORMAT.md)
 

@@ -50,6 +50,103 @@ pub struct HistoryEntry {
     pub metadata: Vec<u8>,
 }
 
+/// Pixel-space rectangle persisted for floating windows.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Encode, Decode)]
+pub struct PixelRect {
+    /// Left edge, logical pixels.
+    pub x: f32,
+    /// Top edge.
+    pub y: f32,
+    /// Width.
+    pub width: f32,
+    /// Height.
+    pub height: f32,
+}
+
+/// Window chrome state for a floating widget.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[serde(rename_all = "kebab-case")]
+pub enum WindowState {
+    /// Normal overlapping window.
+    #[default]
+    Normal,
+    /// Fills the viewport (minus taskbar).
+    Maximized,
+    /// Hidden; shown only in the in-app taskbar.
+    Minimized,
+}
+
+/// Per-instance placement: canvas grid slot or overlapping floating window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[serde(rename_all = "kebab-case")]
+pub enum WindowPlacement {
+    /// Participates in the workspace grid (collision, snap).
+    Grid,
+    /// Free-pixel overlay above the canvas.
+    Floating {
+        /// Current bounds (viewport-relative) when [`WindowState::Normal`].
+        bounds: PixelRect,
+        /// Bounds to restore after leaving maximized.
+        restored_bounds: PixelRect,
+        /// Normal / maximized / minimized.
+        state: WindowState,
+    },
+}
+
+impl Default for WindowPlacement {
+    fn default() -> Self {
+        Self::Grid
+    }
+}
+
+impl WindowPlacement {
+    /// Create a normal floating window at `bounds`.
+    #[must_use]
+    pub fn floating_normal(bounds: PixelRect) -> Self {
+        Self::Floating {
+            restored_bounds: bounds,
+            bounds,
+            state: WindowState::Normal,
+        }
+    }
+
+    /// `true` when this instance is not on the grid.
+    #[must_use]
+    pub fn is_windowed(&self) -> bool {
+        matches!(self, Self::Floating { .. })
+    }
+
+    /// `true` when painted in the floating overlay (not minimized).
+    #[must_use]
+    pub fn is_visible_floating(&self) -> bool {
+        matches!(
+            self,
+            Self::Floating {
+                state: WindowState::Normal | WindowState::Maximized,
+                ..
+            }
+        )
+    }
+
+    /// Floating bounds used for painting / hit-test when visible, if any.
+    #[must_use]
+    pub fn visible_bounds(&self) -> Option<PixelRect> {
+        match self {
+            Self::Floating {
+                state: WindowState::Normal,
+                bounds,
+                ..
+            } => Some(*bounds),
+            Self::Floating {
+                state: WindowState::Maximized,
+                bounds,
+                ..
+            } => Some(*bounds),
+            _ => None,
+        }
+    }
+}
+
 /// A saved widget instance on a workspace.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct WidgetInstance {
@@ -67,6 +164,8 @@ pub struct WidgetInstance {
     pub size: WidgetSize,
     /// Runtime lifecycle state.
     pub lifecycle: LifecycleState,
+    /// Grid vs floating window placement (schema v2+).
+    pub placement: WindowPlacement,
     /// Bincode-encoded per-widget configuration payload.
     pub config: Vec<u8>,
     /// When this instance was first created.
@@ -327,6 +426,12 @@ mod tests {
             position: GridPosition { col: 1, row: 2 },
             size: WidgetSize::Free { w: 3, h: 4 },
             lifecycle: LifecycleState::Active,
+            placement: WindowPlacement::floating_normal(PixelRect {
+                x: 10.0,
+                y: 20.0,
+                width: 320.0,
+                height: 240.0,
+            }),
             config: vec![9, 8, 7],
             created_at: now(),
             updated_at: now(),
@@ -336,6 +441,7 @@ mod tests {
         assert_eq!(w.position, back.position);
         assert_eq!(w.size, back.size);
         assert_eq!(w.lifecycle, back.lifecycle);
+        assert_eq!(w.placement, back.placement);
     }
 
     #[test]
@@ -388,8 +494,14 @@ mod tests {
             last_saved_at: now(),
         };
         let back = roundtrip(&s);
-        assert_eq!(s.open_file_manager_tabs.len(), back.open_file_manager_tabs.len());
-        assert_eq!(s.open_terminal_sessions[0].backend, back.open_terminal_sessions[0].backend);
+        assert_eq!(
+            s.open_file_manager_tabs.len(),
+            back.open_file_manager_tabs.len()
+        );
+        assert_eq!(
+            s.open_terminal_sessions[0].backend,
+            back.open_terminal_sessions[0].backend
+        );
     }
 
     #[test]

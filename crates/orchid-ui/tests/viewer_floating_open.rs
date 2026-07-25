@@ -39,9 +39,12 @@ async fn open_new_document_is_floating() {
     let path = FsPath::from_local(&src).expect("fs path");
     let viewer_id = app.open_in_viewer(path).await.expect("open");
 
-    let bounds = orchid_widgets::builtin::viewer::floating_bounds(viewer_id);
+    let inst = app
+        .widget_manager()
+        .get_instance(viewer_id)
+        .expect("viewer instance");
     assert!(
-        bounds.is_some(),
+        inst.is_visible_floating(),
         "new document should open as a floating viewer"
     );
 }
@@ -79,12 +82,96 @@ async fn dock_clears_floating_bounds() {
     let app = boot_with_workspace(&tmp).await;
     let path = FsPath::from_local(&src).expect("fs path");
     let viewer_id = app.open_in_viewer(path).await.expect("open");
-    assert!(orchid_widgets::builtin::viewer::floating_bounds(viewer_id).is_some());
+    assert!(app
+        .widget_manager()
+        .get_instance(viewer_id)
+        .unwrap()
+        .is_visible_floating());
 
-    orchid_widgets::builtin::viewer::set_floating_bounds(viewer_id, None)
-        .expect("clear floating");
+    app.widget_manager()
+        .dock_to_grid(viewer_id)
+        .await
+        .expect("dock");
     assert!(
-        orchid_widgets::builtin::viewer::floating_bounds(viewer_id).is_none(),
+        !app.widget_manager()
+            .get_instance(viewer_id)
+            .unwrap()
+            .is_windowed(),
         "docked viewer must leave the floating layer"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn undock_any_widget_and_minimize() {
+    let tmp = TempDir::new().expect("temp dir");
+    let app = boot_with_workspace(&tmp).await;
+    let ws = app.workspace_manager().active().expect("active").id;
+    let id = app
+        .widget_manager()
+        .create(orchid_widgets::CreateWidgetRequest {
+            type_id: "notes".into(),
+            workspace_id: ws,
+            position: None,
+            size: None,
+            initial_lifecycle: None,
+            config_bytes: None,
+        })
+        .await
+        .expect("create notes");
+
+    let bounds = orchid_widgets::PixelBounds {
+        x: 40.0,
+        y: 40.0,
+        width: 320.0,
+        height: 240.0,
+    };
+    app.widget_manager()
+        .undock_to_floating(id, bounds)
+        .await
+        .expect("undock");
+    assert!(app
+        .widget_manager()
+        .get_instance(id)
+        .unwrap()
+        .is_visible_floating());
+
+    app.widget_manager()
+        .minimize_window(id)
+        .await
+        .expect("minimize");
+    assert_eq!(
+        app.widget_manager()
+            .get_instance(id)
+            .unwrap()
+            .window_state(),
+        Some(orchid_storage::WindowState::Minimized)
+    );
+
+    app.widget_manager()
+        .restore_window(id)
+        .await
+        .expect("restore");
+    assert!(app
+        .widget_manager()
+        .get_instance(id)
+        .unwrap()
+        .is_visible_floating());
+
+    let max = orchid_widgets::PixelBounds {
+        x: 0.0,
+        y: 0.0,
+        width: 800.0,
+        height: 500.0,
+    };
+    app.widget_manager()
+        .maximize_window(id, max)
+        .await
+        .expect("maximize");
+    assert_eq!(
+        app.widget_manager()
+            .get_instance(id)
+            .unwrap()
+            .window_state(),
+        Some(orchid_storage::WindowState::Maximized)
     );
 }

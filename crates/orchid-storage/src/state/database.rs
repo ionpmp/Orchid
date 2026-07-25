@@ -108,8 +108,7 @@ impl StateStore {
     /// let _ = store.read().unwrap();
     /// ```
     pub fn open_in_memory(orchid_version: &str) -> Result<Self> {
-        let db = Database::builder()
-            .create_with_backend(redb::backends::InMemoryBackend::new())?;
+        let db = Database::builder().create_with_backend(redb::backends::InMemoryBackend::new())?;
         let schema_version = migrations::initialise(&db, orchid_version)?;
         Ok(Self {
             db: Arc::new(db),
@@ -490,7 +489,9 @@ impl WriteTransaction<'_> {
             let mut primary = txn.open_table(HISTORY_TABLE)?;
             // Remove the old timestamp index row if the entry already exists
             // under a different timestamp.
-            let prior_ts = primary.get(&key)?.map(|g| g.value().timestamp.timestamp_millis());
+            let prior_ts = primary
+                .get(&key)?
+                .map(|g| g.value().timestamp.timestamp_millis());
             primary.insert(&key, entry)?;
             drop(primary);
 
@@ -662,10 +663,7 @@ impl WriteTransaction<'_> {
     /// # Errors
     ///
     /// Propagates redb errors.
-    pub fn evict_history_older_than(
-        &mut self,
-        older_than: DateTime<Utc>,
-    ) -> Result<u64> {
+    pub fn evict_history_older_than(&mut self, older_than: DateTime<Utc>) -> Result<u64> {
         let txn = self.inner()?;
         let cutoff_ms = older_than.timestamp_millis();
 
@@ -698,10 +696,7 @@ impl WriteTransaction<'_> {
     /// # Errors
     ///
     /// Propagates redb errors.
-    pub fn evict_cache_older_than(
-        &mut self,
-        older_than: DateTime<Utc>,
-    ) -> Result<u64> {
+    pub fn evict_cache_older_than(&mut self, older_than: DateTime<Utc>) -> Result<u64> {
         let txn = self.inner()?;
         let mut table = txn.open_table(CACHE_TABLE)?;
 
@@ -814,6 +809,7 @@ mod tests {
             position: GridPosition { col: 0, row: 0 },
             size: WidgetSize::Small,
             lifecycle: LifecycleState::Active,
+            placement: crate::WindowPlacement::Grid,
             config: vec![],
             created_at: Utc::now(),
             updated_at: Utc::now(),

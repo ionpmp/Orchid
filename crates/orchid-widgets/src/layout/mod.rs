@@ -199,7 +199,12 @@ impl LayoutEngine {
         existing: &[SharedInstance],
     ) -> Result<GridPosition> {
         let opts = self.options.read().clone();
-        if !fits_in_grid(GridPosition { col: 0, row: 0 }, size, opts.grid_columns, opts.grid_rows) {
+        if !fits_in_grid(
+            GridPosition { col: 0, row: 0 },
+            size,
+            opts.grid_columns,
+            opts.grid_rows,
+        ) {
             return Err(WidgetError::Layout(format!(
                 "widget of size {size:?} does not fit in {}x{} grid",
                 opts.grid_columns, opts.grid_rows
@@ -212,12 +217,15 @@ impl LayoutEngine {
                     "no free slot on workspace {workspace_id} for size {size:?}"
                 ))
             }),
-            LayoutMode::Free => free::spiral_place(size, opts.grid_columns, opts.grid_rows, &occupied)
-                .ok_or_else(|| {
-                    WidgetError::Layout(format!(
-                        "free-layout spiral placement failed for size {size:?}"
-                    ))
-                }),
+            LayoutMode::Free => {
+                free::spiral_place(size, opts.grid_columns, opts.grid_rows, &occupied).ok_or_else(
+                    || {
+                        WidgetError::Layout(format!(
+                            "free-layout spiral placement failed for size {size:?}"
+                        ))
+                    },
+                )
+            }
         }
     }
 
@@ -233,7 +241,12 @@ impl LayoutEngine {
         ignore_instance: Uuid,
     ) -> Result<GridPosition> {
         let opts = self.options.read().clone();
-        if !fits_in_grid(GridPosition { col: 0, row: 0 }, size, opts.grid_columns, opts.grid_rows) {
+        if !fits_in_grid(
+            GridPosition { col: 0, row: 0 },
+            size,
+            opts.grid_columns,
+            opts.grid_rows,
+        ) {
             return Err(WidgetError::Layout(format!(
                 "widget of size {size:?} does not fit in {}x{} grid",
                 opts.grid_columns, opts.grid_rows
@@ -492,12 +505,7 @@ pub fn position_from_content_top_left(
     size: WidgetSize,
 ) -> GridPosition {
     let raw = grid_cell_from_content_top_left(viewport, opts, top_left_x, top_left_y);
-    snap_position(
-        raw,
-        size,
-        opts.grid_columns,
-        opts.grid_rows,
-    )
+    snap_position(raw, size, opts.grid_columns, opts.grid_rows)
 }
 
 /// Resolves live pixel `bounds` (as produced by [`LayoutEngine::snapshot`]) into a
@@ -522,10 +530,7 @@ pub fn free_placement_from_pixel_bounds(
     // Inverse of snapshot: width = w*cell_w - g, height = h*cell_h - g
     let w = (bounds.width + g) / cell_w;
     let h = (bounds.height + g) / cell_h;
-    let w = w
-        .round()
-        .max(1.0)
-        .min(f32::from(opts.grid_columns)) as u16;
+    let w = w.round().max(1.0).min(f32::from(opts.grid_columns)) as u16;
     let h = h.round().max(1.0) as u16;
     let size = WidgetSize::Free { w, h };
     let pos = grid_cell_from_content_top_left(viewport, opts, bounds.x, bounds.y);
@@ -561,9 +566,7 @@ fn rects_for_excluding(
 ) -> Vec<CellRect> {
     instances
         .iter()
-        .filter(|i| {
-            i.workspace_id == workspace_id && ignore.is_none_or(|e| i.id != e)
-        })
+        .filter(|i| i.workspace_id == workspace_id && ignore.is_none_or(|e| i.id != e))
         .map(|i| CellRect::from_widget(*i.position.read(), *i.size.read()))
         .collect()
 }
@@ -627,6 +630,7 @@ mod tests {
             position: RwLock::new(position),
             size: RwLock::new(size),
             lifecycle: RwLock::new(orchid_storage::LifecycleState::Active),
+            placement: RwLock::new(orchid_storage::WindowPlacement::Grid),
             group_id: RwLock::new(None),
             created_at: now,
             updated_at: RwLock::new(now),
@@ -680,18 +684,36 @@ mod tests {
 
         // A different widget trying to overlap fails.
         let err = engine
-            .can_place(ws, Uuid::new_v4(), GridPosition { col: 0, row: 0 }, WidgetSize::Small, &others)
+            .can_place(
+                ws,
+                Uuid::new_v4(),
+                GridPosition { col: 0, row: 0 },
+                WidgetSize::Small,
+                &others,
+            )
             .unwrap_err();
         assert!(matches!(err, WidgetError::PositionCollision(_)));
 
         // The same widget "moving" in place succeeds.
         engine
-            .can_place(ws, id, GridPosition { col: 0, row: 0 }, WidgetSize::Small, &others)
+            .can_place(
+                ws,
+                id,
+                GridPosition { col: 0, row: 0 },
+                WidgetSize::Small,
+                &others,
+            )
             .unwrap();
 
         // Moving somewhere free succeeds.
         engine
-            .can_place(ws, id, GridPosition { col: 5, row: 5 }, WidgetSize::Small, &others)
+            .can_place(
+                ws,
+                id,
+                GridPosition { col: 5, row: 5 },
+                WidgetSize::Small,
+                &others,
+            )
             .unwrap();
     }
 
@@ -777,10 +799,14 @@ mod tests {
         };
         let engine = LayoutEngine::new(opts);
         let ws = Uuid::new_v4();
-        let snap = engine.snapshot(ws, &[], ViewportSize {
-            width_px: 1600.0,
-            height_px: 1000.0,
-        });
+        let snap = engine.snapshot(
+            ws,
+            &[],
+            ViewportSize {
+                width_px: 1600.0,
+                height_px: 1000.0,
+            },
+        );
         assert!((snap.cell_height_px - 100.0).abs() < 0.1);
         assert!((snap.content_height_px - 2000.0).abs() < 0.1);
     }
@@ -794,10 +820,14 @@ mod tests {
         };
         let engine = LayoutEngine::new(opts);
         let ws = Uuid::new_v4();
-        let snap = engine.snapshot(ws, &[], ViewportSize {
-            width_px: 1600.0,
-            height_px: 1000.0,
-        });
+        let snap = engine.snapshot(
+            ws,
+            &[],
+            ViewportSize {
+                width_px: 1600.0,
+                height_px: 1000.0,
+            },
+        );
         assert!((snap.cell_width_px - 100.0).abs() < 0.1);
         assert!((snap.content_width_px - 3200.0).abs() < 0.1);
     }
@@ -823,13 +853,7 @@ mod tests {
         let g = opts.gutter_px;
         let x = pos.col as f32 * cell_w + g * 0.5;
         let y = pos.row as f32 * cell_h + g * 0.5;
-        let back = position_from_content_top_left(
-            viewport,
-            &opts,
-            x,
-            y,
-            WidgetSize::ExtraLarge,
-        );
+        let back = position_from_content_top_left(viewport, &opts, x, y, WidgetSize::ExtraLarge);
         assert_eq!(back, pos);
 
         // Example: vw=1280, 16 view cols, g=8 → cell_w=80, 4 cell span: 4*80-8=312, inverse (312+8)/80=4

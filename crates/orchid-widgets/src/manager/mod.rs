@@ -376,10 +376,11 @@ impl WidgetManager {
             let runtime = Arc::new(WidgetInstanceRuntime {
                 id: row.id,
                 workspace_id: row.workspace_id,
-                type_id: canonical_type,
+                type_id: canonical_type.clone(),
                 position: RwLock::new(row.position),
                 size: RwLock::new(row.size),
                 lifecycle: RwLock::new(restore_lifecycle),
+                placement: RwLock::new(row.placement.clone()),
                 group_id: RwLock::new(None),
                 created_at: row.created_at,
                 updated_at: RwLock::new(row.updated_at),
@@ -396,6 +397,25 @@ impl WidgetManager {
                 if let Err(e) = w.on_create(&ctx).await {
                     warn!(widget_id = %row.id, error = %e, "restore: on_create failed");
                     continue;
+                }
+            }
+            // Migrate legacy viewer float rects from widget config → placement.
+            if matches!(
+                *runtime.placement.read(),
+                orchid_storage::WindowPlacement::Grid
+            ) && canonical_type == crate::builtin::viewer::TYPE_ID
+            {
+                if let Some(bounds) = crate::builtin::viewer::floating_bounds(row.id) {
+                    *runtime.placement.write() =
+                        orchid_storage::WindowPlacement::floating_normal(
+                            crate::widget::instance::pixel_rect_from_bounds(bounds),
+                        );
+                    let _ = crate::builtin::viewer::set_floating_bounds(row.id, None);
+                    let bytes = {
+                        let w = runtime.widget.lock().await;
+                        w.save_state().unwrap_or_default()
+                    };
+                    let _ = persistence::save_instance(&self.inner.storage, &runtime, Some(bytes));
                 }
             }
             // on_activate runs later via apply_visibility for visible widgets.

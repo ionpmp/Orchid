@@ -1269,6 +1269,7 @@ jyotish-city-searching = 検索中…
 jyotish-current-location = 現在地
 jyotish-current-locating = 位置情報を取得中…
 jyotish-current-failed = 位置情報を取得できません
+
 jyotish-profiles-title = プロフィール
 jyotish-profiles-close = 閉じる
 jyotish-profiles-hint = 個人レイヤー用に誕生データありの人を追加
@@ -1287,6 +1288,7 @@ jyotish-profile-place-search-placeholder = 出産地を検索…
 jyotish-gender-unspecified = 未設定
 jyotish-gender-female = 女性
 jyotish-gender-male = 男性
+
 jyotish-month-selected-hint = 選択した日 — 完全な測定値を表示するには「日」タブを開きます
 jyotish-tip-week-chip = この日は営業しております
 jyotish-tip-month-cell = この日付のスコアの色
@@ -1408,3 +1410,10 @@ jyotish-label-rahukalam = Rahu Kalam
 jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = { $time }まで
+
+window-float-capped-title = Too many floating windows
+window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+widget-undock-tooltip = Open as floating window
+widget-minimize-tooltip = Minimize
+widget-maximize-tooltip = Maximize
+widget-restore-tooltip = Restore

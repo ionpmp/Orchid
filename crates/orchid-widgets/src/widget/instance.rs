@@ -3,10 +3,12 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use orchid_storage::{WindowPlacement, WindowState};
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::layout::PixelBounds;
 use crate::widget::snapshot::WidgetSnapshot;
 use crate::widget::Widget;
 
@@ -28,6 +30,8 @@ pub struct WidgetInstanceRuntime {
     pub size: RwLock<orchid_storage::WidgetSize>,
     /// Current lifecycle state.
     pub lifecycle: RwLock<orchid_storage::LifecycleState>,
+    /// Grid vs floating window placement.
+    pub placement: RwLock<WindowPlacement>,
     /// Group the widget belongs to, if any.
     pub group_id: RwLock<Option<Uuid>>,
     /// When the instance was created.
@@ -46,10 +50,7 @@ impl WidgetInstanceRuntime {
     /// Snapshot this runtime into the persistable [`orchid_storage::WidgetInstance`]
     /// shape. Callers supplement with `config` bytes from
     /// [`Widget::save_state`] before writing to storage.
-    pub fn to_storage(
-        &self,
-        config_bytes: Vec<u8>,
-    ) -> orchid_storage::WidgetInstance {
+    pub fn to_storage(&self, config_bytes: Vec<u8>) -> orchid_storage::WidgetInstance {
         orchid_storage::WidgetInstance {
             id: self.id,
             widget_type: self.type_id.clone(),
@@ -57,10 +58,63 @@ impl WidgetInstanceRuntime {
             position: *self.position.read(),
             size: *self.size.read(),
             lifecycle: *self.lifecycle.read(),
+            placement: self.placement.read().clone(),
             config: config_bytes,
             created_at: self.created_at,
             updated_at: *self.updated_at.read(),
         }
+    }
+
+    /// `true` when this instance uses floating-window placement.
+    #[must_use]
+    pub fn is_windowed(&self) -> bool {
+        self.placement.read().is_windowed()
+    }
+
+    /// `true` when painted in the floating overlay (not minimized / not grid).
+    #[must_use]
+    pub fn is_visible_floating(&self) -> bool {
+        self.placement.read().is_visible_floating()
+    }
+
+    /// Viewport-relative bounds when visible as a floating window.
+    #[must_use]
+    pub fn floating_bounds(&self) -> Option<PixelBounds> {
+        self.placement
+            .read()
+            .visible_bounds()
+            .map(pixel_bounds_from_rect)
+    }
+
+    /// Current window state when floating, else `None`.
+    #[must_use]
+    pub fn window_state(&self) -> Option<WindowState> {
+        match *self.placement.read() {
+            WindowPlacement::Floating { state, .. } => Some(state),
+            WindowPlacement::Grid => None,
+        }
+    }
+}
+
+/// Convert storage [`orchid_storage::PixelRect`] → layout [`PixelBounds`].
+#[must_use]
+pub fn pixel_bounds_from_rect(r: orchid_storage::PixelRect) -> PixelBounds {
+    PixelBounds {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+    }
+}
+
+/// Convert layout [`PixelBounds`] → storage [`orchid_storage::PixelRect`].
+#[must_use]
+pub fn pixel_rect_from_bounds(b: PixelBounds) -> orchid_storage::PixelRect {
+    orchid_storage::PixelRect {
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
     }
 }
 
@@ -73,6 +127,7 @@ impl std::fmt::Debug for WidgetInstanceRuntime {
             .field("position", &*self.position.read())
             .field("size", &*self.size.read())
             .field("lifecycle", &*self.lifecycle.read())
+            .field("placement", &*self.placement.read())
             .finish_non_exhaustive()
     }
 }

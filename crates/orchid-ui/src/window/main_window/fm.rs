@@ -216,11 +216,17 @@ impl MainWindowController {
         let all = self.widget_manager.instances_for_workspace(w.id);
         let off = self.drag_offset.lock();
 
-        // Floating viewers sit above the canvas; hit-test them first (viewport → content).
-        if type_id == orchid_widgets::builtin::viewer::TYPE_ID {
+        // Floating windows sit above the canvas; hit-test them first (viewport → content).
+        {
             let stack = self.floating_z_stack.lock().clone();
             for id in stack.iter().rev() {
-                let Some(mut b) = orchid_widgets::builtin::viewer::floating_bounds(*id) else {
+                let Ok(inst) = self.widget_manager.get_instance(*id) else {
+                    continue;
+                };
+                if inst.type_id != type_id {
+                    continue;
+                }
+                let Some(mut b) = inst.floating_bounds() else {
                     continue;
                 };
                 if let Some((dx, dy)) = off.get(id) {

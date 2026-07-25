@@ -1269,6 +1269,7 @@ jyotish-city-searching = 搜索中…
 jyotish-current-location = 当前位置
 jyotish-current-locating = 正在定位…
 jyotish-current-failed = 无法获取位置
+
 jyotish-profiles-title = 档案
 jyotish-profiles-close = 关闭
 jyotish-profiles-hint = 为个人层添加含出生数据的人员
@@ -1287,6 +1288,7 @@ jyotish-profile-place-search-placeholder = 搜索出生地…
 jyotish-gender-unspecified = 未指定
 jyotish-gender-female = 女
 jyotish-gender-male = 男
+
 jyotish-month-selected-hint = 选定日期 — 打开“日期”选项卡以获取完整阅读内容
 jyotish-tip-week-chip = 今日开放
 jyotish-tip-month-cell = 此日期的得分颜色
@@ -1408,3 +1410,10 @@ jyotish-label-rahukalam = Rahu Kalam
 jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = 直到{ $time }
+
+window-float-capped-title = Too many floating windows
+window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+widget-undock-tooltip = Open as floating window
+widget-minimize-tooltip = Minimize
+widget-maximize-tooltip = Maximize
+widget-restore-tooltip = Restore

@@ -127,6 +127,7 @@ mod tests {
             position: GridPosition { col: 0, row: 0 },
             size: WidgetSize::Medium,
             lifecycle: LifecycleState::Active,
+            placement: crate::state::types::WindowPlacement::Grid,
             config: vec![42],
             created_at: Utc::now(),
             updated_at: Utc::now(),

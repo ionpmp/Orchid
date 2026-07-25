@@ -105,6 +105,10 @@ export component MainWindow inherits Window {
     callback widget-drag-moved(string, length, length);
     callback widget-drag-ended(string);
     callback widget-activate(string);
+    callback widget-undock-clicked(string);
+    callback widget-minimize-clicked(string);
+    callback widget-maximize-clicked(string);
+    callback window-taskbar-activate(string);
     callback widget-resize-started(string, string, length, length);
     callback widget-resize-moved(string, length, length);
     callback widget-resize-ended(string);
@@ -488,6 +492,10 @@ export component MainWindow inherits Window {
             widget-drag-moved(id, dx, dy) => { root.widget-drag-moved(id, dx, dy); }
             widget-drag-ended(id) => { root.widget-drag-ended(id); }
             widget-activate(id) => { root.widget-activate(id); }
+            widget-undock-clicked(id) => { root.widget-undock-clicked(id); }
+            widget-minimize-clicked(id) => { root.widget-minimize-clicked(id); }
+            widget-maximize-clicked(id) => { root.widget-maximize-clicked(id); }
+            window-taskbar-activate(id) => { root.window-taskbar-activate(id); }
             widget-resize-started(id, c, px, py) => { root.widget-resize-started(id, c, px, py); }
             widget-resize-moved(id, px, py) => { root.widget-resize-moved(id, px, py); }
             widget-resize-ended(id) => { root.widget-resize-ended(id); }
@@ -550,10 +558,13 @@ export component MainWindow inherits Window {
             jyotish-export-week(id) => { root.jyotish-export-week(id); }
             jyotish-open-cities(id) => { root.jyotish-open-cities(id); }
             jyotish-close-cities(id) => { root.jyotish-close-cities(id); }
-            jyotish-select-city(id, i) => { root.jyotish-select-city(id, i); }
-            jyotish-remove-city(id, i) => { root.jyotish-remove-city(id, i); }
+            jyotish-select-city(id, idx) => { root.jyotish-select-city(id, idx); }
+            jyotish-remove-city(id, idx) => { root.jyotish-remove-city(id, idx); }
             jyotish-search-cities(id, q) => { root.jyotish-search-cities(id, q); }
-            jyotish-add-city(id, n, la, lo) => { root.jyotish-add-city(id, n, la, lo); }
+            jyotish-add-city(id, name, lat, lon) => {
+                root.jyotish-add-city(id, name, lat, lon);
+            }
+
             jyotish-open-profiles(id) => { root.jyotish-open-profiles(id); }
             jyotish-close-profiles(id) => { root.jyotish-close-profiles(id); }
             jyotish-select-profile(id, idx) => { root.jyotish-select-profile(id, idx); }
@@ -623,8 +634,6 @@ export component MainWindow inherits Window {
             calendar-open-edit(id, eid) => { root.calendar-open-edit(id, eid); }
             calendar-close-editor(id) => { root.calendar-close-editor(id); }
             calendar-save-editor(id) => { root.calendar-save-editor(id); }
-                    calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
-            calendar-set-color-filter(id, c) => { root.calendar-set-color-filter(id, c); }
             calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
             calendar-set-color-filter(id, c) => { root.calendar-set-color-filter(id, c); }
             calendar-request-delete(id) => { root.calendar-request-delete(id); }

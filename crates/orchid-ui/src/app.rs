@@ -805,18 +805,19 @@ impl OrchidApp {
             .await
             .map_err(|e| UiError::Slint(format!("viewer create: {e}")))?;
 
+        let bounds = orchid_widgets::PixelBounds {
+            x: 40.0,
+            y: 40.0,
+            width: 480.0,
+            height: 360.0,
+        };
         for _ in 0..50 {
             if self.widget_manager.get_instance(id).is_ok()
-                && orchid_widgets::builtin::viewer::set_floating_bounds(
-                    id,
-                    Some(orchid_widgets::PixelBounds {
-                        x: 40.0,
-                        y: 40.0,
-                        width: 480.0,
-                        height: 360.0,
-                    }),
-                )
-                .is_ok()
+                && self
+                    .widget_manager
+                    .undock_to_floating(id, bounds)
+                    .await
+                    .is_ok()
             {
                 break;
             }

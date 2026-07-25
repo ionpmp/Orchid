@@ -91,6 +91,9 @@ impl MainWindowController {
         matches!(
             &v.snapshot,
             orchid_viewers::ViewerSnapshot::Text(s) if !s.read_only && s.dirty
+        ) || matches!(
+            &v.snapshot,
+            orchid_viewers::ViewerSnapshot::Document(s) if s.dirty
         )
     }
 
@@ -175,7 +178,6 @@ impl MainWindowController {
                 c.password_autofocus_pending.write().remove(&u);
                 c.password_add_dialogs.write().remove(&u);
                 c.floating_z_stack.lock().retain(|id| *id != u);
-                let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, None);
                 c.schedule_rebuild();
             }
         });
@@ -198,10 +200,12 @@ impl MainWindowController {
             return;
         };
         self.drag_grab.lock().insert(u, (grab_lx, grab_ly));
-        if self.is_floating_viewer(u) {
-            if let Some(b) = orchid_widgets::builtin::viewer::floating_bounds(u) {
-                self.drag_start_bounds.lock().insert(u, b);
-                self.raise_floating(u);
+        if self.is_floating_window(u) {
+            if let Ok(inst) = self.widget_manager.get_instance(u) {
+                if let Some(b) = inst.floating_bounds() {
+                    self.drag_start_bounds.lock().insert(u, b);
+                    self.raise_floating(u);
+                }
             }
             return;
         }
@@ -245,7 +249,7 @@ impl MainWindowController {
     }
 
     fn frame_model_for_instance(&self, instance: Uuid) -> Option<&VecModel<WidgetFrameModel>> {
-        let floating = self.is_floating_viewer(instance);
+        let floating = self.is_floating_window(instance);
         let model = if floating {
             &self.workspace_floating_widgets
         } else {
@@ -277,7 +281,7 @@ impl MainWindowController {
             .entry(instance)
             .or_insert((0.0, 0.0)) = (fx - start.x, fy - start.y);
 
-        let floating = self.is_floating_viewer(instance);
+        let floating = self.is_floating_window(instance);
         let (snap_bounds, placement_valid) = if floating {
             self.floating_drag_snap_preview(instance, fx, fy)
         } else {
@@ -354,9 +358,11 @@ impl MainWindowController {
         viewport_y: f32,
     ) -> (Option<PixelBounds>, bool) {
         let Ok(w) = self.workspace_manager.active() else {
+            *self.snap_zone.lock() = None;
             return (None, true);
         };
         let Ok(inst) = self.widget_manager.get_instance(instance) else {
+            *self.snap_zone.lock() = None;
             return (None, true);
         };
         let size = *inst.size.read();
@@ -373,14 +379,33 @@ impl MainWindowController {
         let (pos, size) = le.snap(pos, size);
         let all = Self::docked_instances(&self.widget_manager.instances_for_workspace(w.id));
         let valid = le.can_place(w.id, instance, pos, size, &all).is_ok();
-        let content_bounds = le.pixel_bounds_for(pos, size, viewport);
-        let viewport_bounds = PixelBounds {
-            x: content_bounds.x - sx,
-            y: content_bounds.y - sy,
-            width: content_bounds.width,
-            height: content_bounds.height,
-        };
-        (Some(viewport_bounds), valid)
+        if valid {
+            *self.snap_zone.lock() = None;
+            let content_bounds = le.pixel_bounds_for(pos, size, viewport);
+            let viewport_bounds = PixelBounds {
+                x: content_bounds.x - sx,
+                y: content_bounds.y - sy,
+                width: content_bounds.width,
+                height: content_bounds.height,
+            };
+            return (Some(viewport_bounds), true);
+        }
+        // Edge snap when not over a free grid cell.
+        let cx = viewport_x
+            + self
+                .drag_start_bounds
+                .lock()
+                .get(&instance)
+                .map(|b| b.width * 0.5)
+                .unwrap_or(0.0);
+        if let Some(snap) = self.snap_bounds_for_pointer(cx, viewport_y) {
+            *self.snap_zone.lock() = Some(snap.bounds);
+            self.patch_workspace_snap_zone();
+            return (Some(snap.bounds), true);
+        }
+        *self.snap_zone.lock() = None;
+        self.patch_workspace_snap_zone();
+        (None, true)
     }
 
     pub(super) fn on_widget_drag_ended(self: &Arc<Self>, id: &SharedString) {
@@ -396,7 +421,7 @@ impl MainWindowController {
             (doff.get(&u).copied(), ds.get(&u).copied())
         };
 
-        if self.is_floating_viewer(u) {
+        if self.is_floating_window(u) {
             match (off, start) {
                 (Some(o), Some(s)) if o.0.abs() > 0.5 || o.1.abs() > 0.5 => {
                     self.finish_floating_drag(u, s, o);
@@ -583,8 +608,28 @@ impl MainWindowController {
                 if let Err(e) = wm.resize(u, size).await {
                     warn!(?e, "floating dock resize");
                 }
-                let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, None);
+                if let Err(e) = wm.dock_to_grid(u).await {
+                    warn!(?e, "floating dock placement");
+                }
                 c.floating_z_stack.lock().retain(|id| *id != u);
+                *c.snap_zone.lock() = None;
+                end_drag(&c);
+                c.schedule_rebuild();
+                return;
+            }
+            // Snap zones when not docking to a free grid cell.
+            if let Some(snap) = c.snap_bounds_for_pointer(new_x + start.width * 0.5, new_y) {
+                if let Err(e) = match snap.kind {
+                    SnapKind::Maximize => {
+                        wm.maximize_window(u, c.maximized_window_bounds()).await
+                    }
+                    SnapKind::LeftHalf | SnapKind::RightHalf => {
+                        wm.set_floating_bounds(u, snap.bounds).await
+                    }
+                } {
+                    warn!(?e, "floating snap apply");
+                }
+                *c.snap_zone.lock() = None;
                 end_drag(&c);
                 c.schedule_rebuild();
                 return;
@@ -596,7 +641,10 @@ impl MainWindowController {
                 width: start.width,
                 height: start.height,
             };
-            let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, Some(dropped));
+            if let Err(e) = wm.set_floating_bounds(u, dropped).await {
+                warn!(?e, "floating move");
+            }
+            *c.snap_zone.lock() = None;
             end_drag(&c);
             c.schedule_rebuild();
         });
@@ -906,15 +954,20 @@ impl MainWindowController {
         let Ok(u) = Uuid::parse_str(id.as_str()) else {
             return;
         };
-        if self.is_floating_viewer(u) {
-            if let Some(b) = orchid_widgets::builtin::viewer::floating_bounds(u) {
-                self.raise_floating(u);
-                *self.resize_state.lock() = Some(ResizeInteraction {
-                    instance_id: u,
-                    corner: corner.to_string(),
-                    start: b,
-                    press_canvas: (press_x, press_y),
-                });
+        if self.is_floating_window(u) {
+            if let Ok(inst) = self.widget_manager.get_instance(u) {
+                if inst.window_state() == Some(orchid_storage::WindowState::Maximized) {
+                    return;
+                }
+                if let Some(b) = inst.floating_bounds() {
+                    self.raise_floating(u);
+                    *self.resize_state.lock() = Some(ResizeInteraction {
+                        instance_id: u,
+                        corner: corner.to_string(),
+                        start: b,
+                        press_canvas: (press_x, press_y),
+                    });
+                }
             }
             return;
         }
@@ -998,7 +1051,7 @@ impl MainWindowController {
 
     /// O(1) update of a frame's bounds during live resize (no full `rebuild_workspace_model`).
     pub(super) fn apply_resize_frame_preview(self: &Arc<Self>, instance: Uuid, b: PixelBounds) {
-        let floating = self.is_floating_viewer(instance);
+        let floating = self.is_floating_window(instance);
         let (snap_bounds, placement_valid) = if floating {
             // Free pixel resize while floating — no grid snap required.
             (None, true)
@@ -1102,9 +1155,17 @@ impl MainWindowController {
             return;
         };
 
-        if self.is_floating_viewer(u) {
-            let _ = orchid_widgets::builtin::viewer::set_floating_bounds(u, Some(pb));
-            self.schedule_rebuild();
+        if self.is_floating_window(u) {
+            let wm = self.widget_manager.clone();
+            let t = Arc::downgrade(self);
+            spawn::spawn_local(async move {
+                if let Err(e) = wm.set_floating_bounds(u, pb).await {
+                    warn!(?e, "floating resize");
+                }
+                if let Some(c) = t.upgrade() {
+                    c.schedule_rebuild();
+                }
+            });
             return;
         }
 
@@ -1164,4 +1225,224 @@ impl MainWindowController {
             }
         });
     }
+
+    pub(super) fn on_widget_undock(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        if self.is_windowed(u) {
+            return;
+        }
+        let Ok(w) = self.workspace_manager.active() else {
+            return;
+        };
+        let windowed = self
+            .widget_manager
+            .instances_for_workspace(w.id)
+            .iter()
+            .filter(|i| i.is_windowed())
+            .count();
+        if windowed >= Self::FLOATING_WINDOW_CAP {
+            self.push_notification(
+                &self.locale.tr("window-float-capped-title"),
+                &self.locale.tr_args(
+                    "window-float-capped-body",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("cap", Self::FLOATING_WINDOW_CAP.to_string()),
+                ),
+                1,
+            );
+            return;
+        }
+        // Detach from group before floating.
+        if let Some(group) = self.group_manager.find_for_instance(u) {
+            let gm = self.group_manager.clone();
+            let t = Arc::downgrade(self);
+            spawn::spawn_local(async move {
+                let _ = gm.remove_from_group(group.id, u).await;
+                if let Some(c) = t.upgrade() {
+                    c.undock_instance(u);
+                }
+            });
+            return;
+        }
+        self.undock_instance(u);
+    }
+
+    fn undock_instance(self: &Arc<Self>, u: Uuid) {
+        let bounds = self.default_floating_bounds();
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            if let Err(e) = wm.undock_to_floating(u, bounds).await {
+                warn!(?e, "undock");
+                return;
+            }
+            if let Some(c) = t.upgrade() {
+                c.raise_floating(u);
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    pub(super) fn on_widget_minimize(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            if let Err(e) = wm.minimize_window(u).await {
+                warn!(?e, "minimize");
+                return;
+            }
+            if let Some(c) = t.upgrade() {
+                c.floating_z_stack.lock().retain(|id| *id != u);
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    pub(super) fn on_widget_maximize_toggle(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let max_bounds = self.maximized_window_bounds();
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            if let Err(e) = wm.toggle_maximize_window(u, max_bounds).await {
+                warn!(?e, "maximize toggle");
+                return;
+            }
+            if let Some(c) = t.upgrade() {
+                c.raise_floating(u);
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    pub(super) fn on_window_taskbar_activate(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        let wm = self.widget_manager.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            let Ok(inst) = wm.get_instance(u) else {
+                return;
+            };
+            if inst.window_state() == Some(orchid_storage::WindowState::Minimized) {
+                if let Err(e) = wm.restore_window(u).await {
+                    warn!(?e, "restore from taskbar");
+                    return;
+                }
+            }
+            if let Some(c) = t.upgrade() {
+                c.raise_floating(u);
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    pub(super) fn cycle_floating_windows(self: &Arc<Self>, reverse: bool) {
+        let Ok(w) = self.workspace_manager.active() else {
+            return;
+        };
+        let mut ids: Vec<Uuid> = self
+            .widget_manager
+            .instances_for_workspace(w.id)
+            .into_iter()
+            .filter(|i| i.is_windowed())
+            .map(|i| i.id)
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        // Prefer z-stack order for visible, then remaining minimized.
+        let stack = self.floating_z_stack.lock().clone();
+        ids.sort_by_key(|id| {
+            stack
+                .iter()
+                .position(|x| x == id)
+                .map(|i| i as i32)
+                .unwrap_or(-1)
+        });
+        let current = stack.last().copied();
+        let idx = current
+            .and_then(|c| ids.iter().position(|x| *x == c))
+            .unwrap_or(0);
+        let next = if reverse {
+            if idx == 0 {
+                ids.len() - 1
+            } else {
+                idx - 1
+            }
+        } else {
+            (idx + 1) % ids.len()
+        };
+        let target = ids[next];
+        self.on_window_taskbar_activate(&target.to_string().into());
+    }
+
+    fn snap_bounds_for_pointer(&self, pointer_x: f32, pointer_y: f32) -> Option<SnapTarget> {
+        let (vw, vh) = *self.canvas_size.lock();
+        let th = Self::SNAP_EDGE_THRESHOLD_PX;
+        let work_h = (vh - Self::WINDOW_TASKBAR_HEIGHT_PX).max(80.0);
+        if pointer_y <= th {
+            return Some(SnapTarget {
+                kind: SnapKind::Maximize,
+                bounds: self.maximized_window_bounds(),
+            });
+        }
+        if pointer_x <= th {
+            return Some(SnapTarget {
+                kind: SnapKind::LeftHalf,
+                bounds: PixelBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: (vw * 0.5).max(120.0),
+                    height: work_h,
+                },
+            });
+        }
+        if pointer_x >= vw - th {
+            let width = (vw * 0.5).max(120.0);
+            return Some(SnapTarget {
+                kind: SnapKind::RightHalf,
+                bounds: PixelBounds {
+                    x: (vw - width).max(0.0),
+                    y: 0.0,
+                    width,
+                    height: work_h,
+                },
+            });
+        }
+        None
+    }
+
+    fn patch_workspace_snap_zone(&self) {
+        let app_g = self.window.global::<crate::slint_generated::AppState>();
+        let mut ws = app_g.get_workspace();
+        let snap = *self.snap_zone.lock();
+        ws.snap_zone_visible = snap.is_some();
+        ws.snap_zone_x = snap.map(|b| b.x).unwrap_or(0.0);
+        ws.snap_zone_y = snap.map(|b| b.y).unwrap_or(0.0);
+        ws.snap_zone_width = snap.map(|b| b.width).unwrap_or(0.0);
+        ws.snap_zone_height = snap.map(|b| b.height).unwrap_or(0.0);
+        app_g.set_workspace(ws);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SnapKind {
+    LeftHalf,
+    RightHalf,
+    Maximize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SnapTarget {
+    kind: SnapKind,
+    bounds: PixelBounds,
 }

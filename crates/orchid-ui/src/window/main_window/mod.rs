@@ -69,8 +69,8 @@ use crate::slint_generated::{
     PasswordModel, ProcessesConfirmDialog, ProcessesModel, RecentFilesModel, RssModel,
     SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings,
     SystemModel, TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog,
-    WidgetCloseConfirmDialog, WidgetFrameModel, WidgetSettingsDialog, WorkspaceModel,
-    WorkspaceSummary,
+    WidgetCloseConfirmDialog, WidgetFrameModel, WidgetSettingsDialog, WindowTaskbarItem,
+    WorkspaceModel, WorkspaceSummary,
 };
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
@@ -157,11 +157,15 @@ pub struct MainWindowController {
     /// [`sync_vec_model`].
     workspace_workspaces: ModelRc<WorkspaceSummary>,
     workspace_widgets: ModelRc<WidgetFrameModel>,
-    /// Floating (undocked) viewer frames, viewport-relative.
+    /// Floating (undocked) window frames, viewport-relative.
     workspace_floating_widgets: ModelRc<WidgetFrameModel>,
+    /// Taskbar entries for floating + minimized windows.
+    workspace_window_taskbar: ModelRc<WindowTaskbarItem>,
     workspace_dock_types: ModelRc<DockWidgetType>,
-    /// Paint order for floating viewers (last = top).
+    /// Paint order for floating windows (last = top).
     floating_z_stack: Arc<Mutex<Vec<Uuid>>>,
+    /// Active snap-zone ghost while dragging a floating window.
+    snap_zone: Arc<Mutex<Option<PixelBounds>>>,
     /// Bumped when requesting a programmatic canvas scroll.
     canvas_scroll_gen: AtomicU32,
     /// Per universal-search instance: selected candidate row (clamped on rebuild).
@@ -328,6 +332,8 @@ impl MainWindowController {
             ModelRc::new(VecModel::<WidgetFrameModel>::default());
         let workspace_floating_widgets: ModelRc<WidgetFrameModel> =
             ModelRc::new(VecModel::<WidgetFrameModel>::default());
+        let workspace_window_taskbar: ModelRc<WindowTaskbarItem> =
+            ModelRc::new(VecModel::<WindowTaskbarItem>::default());
         let workspace_dock_types: ModelRc<DockWidgetType> =
             ModelRc::new(VecModel::from(dock_types_vec(&locale)));
         let palette_candidates: ModelRc<SearchCandidateEntry> =
@@ -482,8 +488,10 @@ impl MainWindowController {
             workspace_workspaces,
             workspace_widgets,
             workspace_floating_widgets,
+            workspace_window_taskbar,
             workspace_dock_types,
             floating_z_stack: Arc::new(Mutex::new(Vec::new())),
+            snap_zone: Arc::new(Mutex::new(None)),
             canvas_scroll_gen: AtomicU32::new(0),
             search_selection: Arc::new(RwLock::new(HashMap::new())),
             search_autofocus_pending: Arc::new(Mutex::new(None)),
@@ -872,7 +880,7 @@ impl MainWindowController {
         // Sleep widgets scrolled fully outside the canvas viewport (e.g. Processes
         // stops its expensive refresh while off-screen).
         ids.retain(|id| {
-            self.is_floating_viewer(*id)
+            self.is_windowed(*id)
                 || self.widget_intersects_canvas_viewport(ws.id, *id, sx, sy, vw, vh)
         });
         self.widget_manager.apply_visibility(&ids).await;
@@ -1370,7 +1378,7 @@ impl MainWindowController {
         for id in &unique {
             // Floating viewers live in a separate model; patch content in place
             // when possible, otherwise rebuild the floating overlay.
-            if self.is_floating_viewer(*id) {
+            if self.is_floating_window(*id) {
                 if !self.try_patch_viewer_row(
                     &self.workspace_floating_widgets,
                     *id,
@@ -2263,6 +2271,7 @@ impl MainWindowController {
             height: bounds.height,
             z_order,
             is_floating: false,
+            window_state: 0,
             placement_valid: true,
             snap_visible: false,
             snap_x: 0.0,
@@ -2460,12 +2469,23 @@ impl MainWindowController {
         sync_vec_model(&self.workspace_workspaces, wlist);
         sync_vec_model(&self.workspace_widgets, frames);
         sync_vec_model(&self.workspace_floating_widgets, floating_frames);
+        sync_vec_model(
+            &self.workspace_window_taskbar,
+            self.build_window_taskbar_items(&all_instances),
+        );
         sync_vec_model(&self.workspace_dock_types, dock_types_vec(&self.locale));
+        let snap_zone = *self.snap_zone.lock();
         app_g.set_workspace(WorkspaceModel {
             workspaces: self.workspace_workspaces.clone(),
             active_workspace_id: w.id.to_string().into(),
             widgets: self.workspace_widgets.clone(),
             floating_widgets: self.workspace_floating_widgets.clone(),
+            window_taskbar: self.workspace_window_taskbar.clone(),
+            snap_zone_visible: snap_zone.is_some(),
+            snap_zone_x: snap_zone.map(|b| b.x).unwrap_or(0.0),
+            snap_zone_y: snap_zone.map(|b| b.y).unwrap_or(0.0),
+            snap_zone_width: snap_zone.map(|b| b.width).unwrap_or(0.0),
+            snap_zone_height: snap_zone.map(|b| b.height).unwrap_or(0.0),
             dock_types: self.workspace_dock_types.clone(),
             dock_add_label: self.locale.tr("dock-add-label").into(),
             grid_columns: i32::from(snap.grid_columns),
@@ -2565,6 +2585,13 @@ impl MainWindowController {
                                         } else if c.try_viewer_text_ctrl_s(mods, &event.logical_key)
                                         {
                                             // Saved focused/last text editor; consume.
+                                        } else if mods.control_key()
+                                            && matches!(
+                                                event.logical_key,
+                                                Key::Named(NamedKey::Tab)
+                                            )
+                                        {
+                                            c.cycle_floating_windows(mods.shift_key());
                                         } else if let Some(shortcut) =
                                             input::winit_to_shortcut(mods, &event.logical_key)
                                         {
@@ -2615,32 +2642,44 @@ impl MainWindowController {
         Ok(())
     }
 
-    const VIEWER_MULTI_OPEN_CAP: usize = 8;
+    /// Soft cap on simultaneously open floating windows (taskbar still lists minimized).
+    pub(super) const FLOATING_WINDOW_CAP: usize = 8;
+    /// Alias used by multi-open viewer batching from the file manager.
+    pub(super) const VIEWER_MULTI_OPEN_CAP: usize = Self::FLOATING_WINDOW_CAP;
 
-    /// Instances that participate in the canvas grid (excludes floating viewers).
+    /// Height reserved for the in-app window taskbar (logical px).
+    pub(super) const WINDOW_TASKBAR_HEIGHT_PX: f32 = 36.0;
+
+    /// Edge threshold for snap zones (logical px).
+    pub(super) const SNAP_EDGE_THRESHOLD_PX: f32 = 16.0;
+
+    /// Instances that participate in the canvas grid (excludes windowed widgets).
     fn docked_instances(instances: &[SharedInstance]) -> Vec<SharedInstance> {
         instances
             .iter()
-            .filter(|i| {
-                if i.type_id == orchid_widgets::builtin::viewer::TYPE_ID {
-                    orchid_widgets::builtin::viewer::floating_bounds(i.id).is_none()
-                } else {
-                    true
-                }
-            })
+            .filter(|i| !i.is_windowed())
             .cloned()
             .collect()
     }
 
-    fn is_floating_viewer(&self, id: Uuid) -> bool {
-        orchid_widgets::builtin::viewer::floating_bounds(id).is_some()
+    fn is_floating_window(&self, id: Uuid) -> bool {
+        self.widget_manager
+            .get_instance(id)
+            .map(|i| i.is_visible_floating())
+            .unwrap_or(false)
+    }
+
+    fn is_windowed(&self, id: Uuid) -> bool {
+        self.widget_manager
+            .get_instance(id)
+            .map(|i| i.is_windowed())
+            .unwrap_or(false)
     }
 
     fn sync_floating_z_stack(&self, instances: &[SharedInstance]) {
         let live: HashSet<Uuid> = instances
             .iter()
-            .filter(|i| i.type_id == orchid_widgets::builtin::viewer::TYPE_ID)
-            .filter(|i| orchid_widgets::builtin::viewer::floating_bounds(i.id).is_some())
+            .filter(|i| i.is_visible_floating())
             .map(|i| i.id)
             .collect();
         let mut stack = self.floating_z_stack.lock();
@@ -2658,10 +2697,10 @@ impl MainWindowController {
         stack.push(id);
     }
 
-    /// Raise a floating viewer and refresh the overlay model so paint / hit-test
+    /// Raise a floating window and refresh the overlay model so paint / hit-test
     /// order matches the stack (Slint `for` order; later = on top).
     pub(crate) fn bring_floating_to_front(self: &Arc<Self>, id: Uuid) {
-        if !self.is_floating_viewer(id) {
+        if !self.is_floating_window(id) {
             return;
         }
         let already_top = self.floating_z_stack.lock().last().copied() == Some(id);
@@ -2670,6 +2709,17 @@ impl MainWindowController {
             return;
         }
         self.sync_floating_widgets_model();
+    }
+
+    /// Viewport bounds for a maximized floating window (above the taskbar).
+    pub(super) fn maximized_window_bounds(&self) -> PixelBounds {
+        let (vw, vh) = *self.canvas_size.lock();
+        PixelBounds {
+            x: 0.0,
+            y: 0.0,
+            width: vw.max(120.0),
+            height: (vh - Self::WINDOW_TASKBAR_HEIGHT_PX).max(80.0),
+        }
     }
 
     /// Rebuild only the floating overlay rows (no full workspace rebuild).
@@ -2722,10 +2772,10 @@ impl MainWindowController {
         let stack = self.floating_z_stack.lock().clone();
         let mut frames = Vec::new();
         for (zi, id) in stack.iter().enumerate() {
-            let Some(bounds0) = orchid_widgets::builtin::viewer::floating_bounds(*id) else {
+            let Ok(iref) = self.widget_manager.get_instance(*id) else {
                 continue;
             };
-            let Ok(iref) = self.widget_manager.get_instance(*id) else {
+            let Some(bounds0) = iref.floating_bounds() else {
                 continue;
             };
             let mut bounds = ro.get(id).copied().unwrap_or(bounds0);
@@ -2741,9 +2791,41 @@ impl MainWindowController {
             };
             let mut frame = self.build_widget_frame_for_placed(&pl, zi as i32, bounds, &iref);
             frame.is_floating = true;
+            frame.window_state = match iref.window_state() {
+                Some(orchid_storage::WindowState::Maximized) => 1,
+                Some(orchid_storage::WindowState::Minimized) => 2,
+                _ => 0,
+            };
             frames.push(frame);
         }
         frames
+    }
+
+    fn build_window_taskbar_items(&self, instances: &[SharedInstance]) -> Vec<WindowTaskbarItem> {
+        let top = self.floating_z_stack.lock().last().copied();
+        let mut items = Vec::new();
+        for inst in instances {
+            if !inst.is_windowed() {
+                continue;
+            }
+            let title = self
+                .widget_manager
+                .snapshot_cache()
+                .get(inst.id)
+                .map(|s| s.title.clone())
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| inst.type_id.clone());
+            let state = inst.window_state().unwrap_or(orchid_storage::WindowState::Normal);
+            items.push(WindowTaskbarItem {
+                instance_id: inst.id.to_string().into(),
+                title: title.into(),
+                type_id: inst.type_id.clone().into(),
+                is_active: top == Some(inst.id)
+                    && state != orchid_storage::WindowState::Minimized,
+                is_minimized: state == orchid_storage::WindowState::Minimized,
+            });
+        }
+        items
     }
 
     fn request_canvas_scroll_to(&self, bounds: PixelBounds) {
@@ -2785,7 +2867,7 @@ impl MainWindowController {
     }
 
     fn focus_viewer_ui(&self, id: Uuid) {
-        if self.is_floating_viewer(id) {
+        if self.is_floating_window(id) {
             // `focus_viewer` always follows with `schedule_rebuild`; stack raise is enough here.
             self.raise_floating(id);
             return;
@@ -2853,10 +2935,10 @@ impl MainWindowController {
 
         let bounds = c.default_floating_bounds();
         for _ in 0..50 {
-            if c.widget_manager.get_instance(id).is_ok()
-                && orchid_widgets::builtin::viewer::set_floating_bounds(id, Some(bounds)).is_ok()
-            {
-                break;
+            if c.widget_manager.get_instance(id).is_ok() {
+                if c.widget_manager.undock_to_floating(id, bounds).await.is_ok() {
+                    break;
+                }
             }
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
@@ -2901,6 +2983,12 @@ pub fn build_empty_workspace_model(locale: &LocaleManager) -> WorkspaceModel {
         active_workspace_id: SharedString::new(),
         widgets: ModelRc::new(VecModel::default()),
         floating_widgets: ModelRc::new(VecModel::default()),
+        window_taskbar: ModelRc::new(VecModel::default()),
+        snap_zone_visible: false,
+        snap_zone_x: 0f32,
+        snap_zone_y: 0f32,
+        snap_zone_width: 0f32,
+        snap_zone_height: 0f32,
         dock_types: ModelRc::new(VecModel::from(dock_types_vec(locale))),
         dock_add_label: locale.tr("dock-add-label").into(),
         grid_columns: 16,

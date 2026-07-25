@@ -1269,6 +1269,7 @@ jyotish-city-searching = 검색 중…
 jyotish-current-location = 현재 위치
 jyotish-current-locating = 위치 확인 중…
 jyotish-current-failed = 위치를 사용할 수 없음
+
 jyotish-profiles-title = 프로필
 jyotish-profiles-close = 닫기
 jyotish-profiles-hint = 개인 레이어를 위해 출생 데이터가 있는 사람을 추가하세요
@@ -1287,6 +1288,7 @@ jyotish-profile-place-search-placeholder = 출생지 검색…
 jyotish-gender-unspecified = 미지정
 jyotish-gender-female = 여성
 jyotish-gender-male = 남성
+
 jyotish-month-selected-hint = 선택한 날짜 — 전체 내용을 보려면 날짜 탭을 엽니다.
 jyotish-tip-week-chip = 이날 오픈
 jyotish-tip-month-cell = 이 날짜의 점수 색상
@@ -1408,3 +1410,10 @@ jyotish-label-rahukalam = Rahu Kalam
 jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = { $time }까지
+
+window-float-capped-title = Too many floating windows
+window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+widget-undock-tooltip = Open as floating window
+widget-minimize-tooltip = Minimize
+widget-maximize-tooltip = Maximize
+widget-restore-tooltip = Restore

@@ -1271,6 +1271,7 @@ jyotish-city-searching = جارٍ البحث…
 jyotish-current-location = الموقع الحالي
 jyotish-current-locating = جارٍ تحديد الموقع…
 jyotish-current-failed = الموقع غير متاح
+
 jyotish-profiles-title = الملفات
 jyotish-profiles-close = إغلاق
 jyotish-profiles-hint = أضف أشخاصًا ببيانات الولادة للطبقة الشخصية
@@ -1289,6 +1290,7 @@ jyotish-profile-place-search-placeholder = ابحث عن مكان الولادة
 jyotish-gender-unspecified = غير محدد
 jyotish-gender-female = أنثى
 jyotish-gender-male = ذكر
+
 jyotish-month-selected-hint = اليوم المحدد - افتح علامة التبويب "اليوم" للقراءة الكاملة
 jyotish-tip-week-chip = فتح هذا اليوم
 jyotish-tip-month-cell = لون النتيجة لهذا التاريخ
@@ -1410,3 +1412,10 @@ jyotish-label-rahukalam = Rahu Kalam
 jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = حتى { $time }
+
+window-float-capped-title = Too many floating windows
+window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+widget-undock-tooltip = Open as floating window
+widget-minimize-tooltip = Minimize
+widget-maximize-tooltip = Maximize
+widget-restore-tooltip = Restore

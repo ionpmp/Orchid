@@ -142,6 +142,25 @@ export struct MoonModel {
     values: [MoonValueEntry],
 }
 
+export struct JyotishCityEntry {
+    name: string,
+    active: bool,
+    is-current: bool,
+}
+
+export struct JyotishProfileEntry {
+    name: string,
+    active: bool,
+    has-birth-data: bool,
+}
+
+export struct JyotishSearchHit {
+    name: string,
+    detail: string,
+    latitude: float,
+    longitude: float,
+}
+
 export struct JyotishPanchangaRow {
     label: string,
     value: string,
@@ -241,25 +260,6 @@ export struct JyotishRectifyModel {
     event-year-max: int,
 }
 
-export struct JyotishCityEntry {
-    name: string,
-    active: bool,
-    is-current: bool,
-}
-
-export struct JyotishProfileEntry {
-    name: string,
-    active: bool,
-    has-birth-data: bool,
-}
-
-export struct JyotishSearchHit {
-    name: string,
-    detail: string,
-    latitude: float,
-    longitude: float,
-}
-
 export struct JyotishModel {
     date-text: string,
     location-name: string,
@@ -311,6 +311,7 @@ export struct JyotishModel {
     profile-offset-placeholder: string,
     profile-place-placeholder: string,
     profile-place-search-placeholder: string,
+    gender-labels: [string],
     vara-label: string,
     ayanamsa-label: string,
     loading-label: string,
@@ -1176,6 +1177,8 @@ export struct WidgetFrameModel {
     z-order: int,
     /// True when rendered in the floating overlay (not the canvas grid).
     is-floating: bool,
+    /// 0 = normal, 1 = maximized, 2 = minimized (floating only).
+    window-state: int,
     /// False while a live drag/resize would collide or leave the grid.
     placement-valid: bool,
     /// Show the snapped-cell ghost overlay during drag/resize.
@@ -1230,12 +1233,29 @@ export struct DockWidgetType {
     icon: string,
 }
 
+/// Entry in the in-app window taskbar (floating + minimized widgets).
+export struct WindowTaskbarItem {
+    instance-id: string,
+    title: string,
+    type-id: string,
+    is-active: bool,
+    is-minimized: bool,
+}
+
 export struct WorkspaceModel {
     workspaces: [WorkspaceSummary],
     active-workspace-id: string,
     widgets: [WidgetFrameModel],
-    /// Undocked viewers rendered above the canvas (viewport-relative).
+    /// Undocked windows rendered above the canvas (viewport-relative).
     floating-widgets: [WidgetFrameModel],
+    /// Floating + minimized windows listed in the taskbar strip.
+    window-taskbar: [WindowTaskbarItem],
+    /// Snap ghost while dragging a floating window near a viewport edge.
+    snap-zone-visible: bool,
+    snap-zone-x: length,
+    snap-zone-y: length,
+    snap-zone-width: length,
+    snap-zone-height: length,
     dock-types: [DockWidgetType],
     dock-add-label: string,
     grid-columns: int,

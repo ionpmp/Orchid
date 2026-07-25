@@ -71,13 +71,19 @@ fn history_is_iterated_in_timestamp_order() {
     let range = r.iter_history_range(from, to).unwrap();
     assert_eq!(range.len(), 5);
     for pair in range.windows(2) {
-        assert!(pair[0].timestamp <= pair[1].timestamp, "range must be ascending");
+        assert!(
+            pair[0].timestamp <= pair[1].timestamp,
+            "range must be ascending"
+        );
     }
 
     let recent = r.iter_history_recent(3).unwrap();
     assert_eq!(recent.len(), 3);
     for pair in recent.windows(2) {
-        assert!(pair[0].timestamp >= pair[1].timestamp, "recent must be descending");
+        assert!(
+            pair[0].timestamp >= pair[1].timestamp,
+            "recent must be descending"
+        );
     }
 }
 
@@ -99,6 +105,7 @@ fn widget_is_queryable_by_workspace() {
         position: GridPosition { col: 2, row: 2 },
         size: WidgetSize::Large,
         lifecycle: LifecycleState::Active,
+        placement: orchid_storage::WindowPlacement::Grid,
         config: vec![0xAB],
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -212,7 +219,10 @@ fn evict_cache_older_than_removes_correct_rows() {
 
     let r = store.read().unwrap();
     for k in &old_keys {
-        assert!(r.get_cache(k).unwrap().is_none(), "expired key was not evicted");
+        assert!(
+            r.get_cache(k).unwrap().is_none(),
+            "expired key was not evicted"
+        );
     }
     for k in &fresh_keys {
         assert!(r.get_cache(k).unwrap().is_some(), "fresh key should remain");
@@ -313,10 +323,7 @@ fn opening_db_with_future_version_fails() {
     }
 
     let err = StateStore::open(&path, TEST_ORCHID_VERSION).unwrap_err();
-    assert!(matches!(
-        err,
-        StorageError::UnsupportedSchemaVersion { .. }
-    ));
+    assert!(matches!(err, StorageError::UnsupportedSchemaVersion { .. }));
 }
 
 #[test]
@@ -385,8 +392,9 @@ async fn config_watcher_emits_on_change() {
     ConfigLoader::save(&cfg, &path).unwrap();
 
     // Debounce window is 500 ms, so give the watcher a safety margin.
-    let got =
-        tokio::time::timeout(Duration::from_secs(4), rx.recv()).await.expect("watcher did not fire");
+    let got = tokio::time::timeout(Duration::from_secs(4), rx.recv())
+        .await
+        .expect("watcher did not fire");
     let updated = got.expect("broadcast closed");
     assert_eq!(updated.appearance.theme, "custom");
 
@@ -408,7 +416,10 @@ async fn config_watcher_ignores_invalid_writes() {
     // With debounce + safety margin we should have heard a valid broadcast
     // already if the watcher were going to emit. Assert none arrives.
     let outcome = tokio::time::timeout(Duration::from_millis(1500), rx.recv()).await;
-    assert!(outcome.is_err(), "watcher should not broadcast invalid configs");
+    assert!(
+        outcome.is_err(),
+        "watcher should not broadcast invalid configs"
+    );
 
     watcher.stop().await.unwrap();
 }

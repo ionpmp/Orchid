@@ -11,15 +11,24 @@
 //! and write the migration body as a plain function taking
 //! `&redb::WriteTransaction`.
 
-use chrono::Utc;
-use redb::{Database, ReadableDatabase, WriteTransaction};
+use std::fmt::Debug;
+use std::marker::PhantomData;
+
+use bincode::{Decode, Encode};
+use chrono::{DateTime, Utc};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::error::{Result, StorageError};
-use crate::state::tables::{META_KEY_CURRENT, META_TABLE};
-use crate::state::types::SchemaMeta;
+use crate::state::codec::bincode_encode;
+use crate::state::tables::{uuid_key, META_KEY_CURRENT, META_TABLE};
+use crate::state::types::{
+    GridPosition, LifecycleState, SchemaMeta, WidgetInstance, WidgetSize, WindowPlacement,
+};
 
 /// The current supported schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 /// A single migration step.
 #[derive(Debug, Clone, Copy)]
@@ -48,7 +57,129 @@ static AVAILABLE: &[Migration] = &[
         description: "initial schema",
         run: |_txn| Ok(()),
     },
+    Migration {
+        from_version: 1,
+        to_version: 2,
+        description: "widget WindowPlacement field",
+        run: migrate_v1_to_v2_window_placement,
+    },
 ];
+
+/// Schema v1 widget row (no `placement` field).
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+struct WidgetInstanceV1 {
+    #[bincode(with_serde)]
+    id: Uuid,
+    widget_type: String,
+    #[bincode(with_serde)]
+    workspace_id: Uuid,
+    position: GridPosition,
+    size: WidgetSize,
+    lifecycle: LifecycleState,
+    config: Vec<u8>,
+    #[bincode(with_serde)]
+    created_at: DateTime<Utc>,
+    #[bincode(with_serde)]
+    updated_at: DateTime<Utc>,
+}
+
+/// Opaque blob value that claims the same redb type name as
+/// [`crate::state::codec::Value<WidgetInstance>`], so we can rewrite rows
+/// during migration without a table-type mismatch.
+#[derive(Debug)]
+struct WidgetBlob(PhantomData<()>);
+
+impl redb::Value for WidgetBlob {
+    type SelfType<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+    type AsBytes<'a>
+        = &'a [u8]
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        data.to_vec()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'a,
+        Self: 'b,
+    {
+        value.as_slice()
+    }
+
+    fn type_name() -> redb::TypeName {
+        // Must match `codec::Value<WidgetInstance>::type_name()`.
+        redb::TypeName::new(&format!(
+            "orchid_storage::Value<{}>",
+            std::any::type_name::<WidgetInstance>()
+        ))
+    }
+}
+
+const WIDGET_INSTANCES_BLOB: TableDefinition<&[u8; 16], WidgetBlob> =
+    TableDefinition::new("widget_instances");
+
+fn migrate_v1_to_v2_window_placement(txn: &WriteTransaction) -> Result<()> {
+    let table = match txn.open_table(WIDGET_INSTANCES_BLOB) {
+        Ok(t) => t,
+        Err(redb::TableError::TableDoesNotExist(_)) => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    let mut upgraded = Vec::new();
+    for entry in table.iter()? {
+        let (key, value) = entry?;
+        let bytes = value.value();
+        let _ = key;
+        // Exact v1 consume → upgrade. Otherwise accept already-v2 rows
+        // (idempotent re-run after a partial migration).
+        let v2 = match bincode::decode_from_slice::<WidgetInstanceV1, _>(
+            &bytes,
+            bincode::config::standard(),
+        ) {
+            Ok((v1, read)) if read == bytes.len() => WidgetInstance {
+                id: v1.id,
+                widget_type: v1.widget_type,
+                workspace_id: v1.workspace_id,
+                position: v1.position,
+                size: v1.size,
+                lifecycle: v1.lifecycle,
+                placement: WindowPlacement::Grid,
+                config: v1.config,
+                created_at: v1.created_at,
+                updated_at: v1.updated_at,
+            },
+            _ => bincode::decode_from_slice::<WidgetInstance, _>(
+                &bytes,
+                bincode::config::standard(),
+            )
+            .map(|(row, _)| row)
+            .map_err(|e| StorageError::MigrationFailed {
+                from: 1,
+                to: 2,
+                reason: format!("decode widget row: {e}"),
+            })?,
+        };
+        upgraded.push((uuid_key(v2.id), bincode_encode(&v2)?));
+    }
+    drop(table);
+
+    let mut table = txn.open_table(WIDGET_INSTANCES_BLOB)?;
+    for (key, bytes) in &upgraded {
+        table.insert(key, bytes)?;
+    }
+    Ok(())
+}
 
 /// Returns the registered migration list.
 ///
@@ -227,5 +358,46 @@ mod tests {
         let second = read_schema_meta(&db).unwrap().unwrap();
         assert!(second.last_opened_at >= first.last_opened_at);
         assert_eq!(second.orchid_version, "0.2");
+    }
+
+    #[test]
+    fn migrate_v1_widgets_gain_grid_placement() {
+        use crate::state::tables::{uuid_key, WIDGET_INSTANCES_TABLE};
+
+        let db = new_db();
+        // Seed a v1-shaped blob under the WidgetInstance type name.
+        let id = Uuid::new_v4();
+        let v1 = WidgetInstanceV1 {
+            id,
+            widget_type: "weather".into(),
+            workspace_id: Uuid::new_v4(),
+            position: GridPosition { col: 1, row: 2 },
+            size: WidgetSize::Medium,
+            lifecycle: LifecycleState::Active,
+            config: vec![1, 2, 3],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        {
+            let txn = db.begin_write().unwrap();
+            {
+                let mut table = txn.open_table(WIDGET_INSTANCES_BLOB).unwrap();
+                let bytes = bincode_encode(&v1).unwrap();
+                table.insert(&uuid_key(id), &bytes).unwrap();
+            }
+            txn.commit().unwrap();
+        }
+        {
+            let txn = db.begin_write().unwrap();
+            migrate_v1_to_v2_window_placement(&txn).unwrap();
+            txn.commit().unwrap();
+        }
+
+        let txn = db.begin_read().unwrap();
+        let table = txn.open_table(WIDGET_INSTANCES_TABLE).unwrap();
+        let row = table.get(&uuid_key(id)).unwrap().unwrap().value();
+        assert!(matches!(row.placement, WindowPlacement::Grid));
+        assert_eq!(row.widget_type, "weather");
+        assert_eq!(row.config, vec![1, 2, 3]);
     }
 }
