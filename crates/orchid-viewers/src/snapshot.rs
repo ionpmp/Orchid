@@ -41,6 +41,16 @@ pub struct DocumentSnapshot {
     /// Non-fatal warnings (e.g. unsupported OOXML features).
     pub warnings: Vec<String>,
     pub info_text: String,
+    /// Aggregate style of the first paragraph's first run (toolbar accents).
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    /// 0=left, 1=center, 2=right, 3=justify.
+    pub alignment: u8,
+    /// 0=none, 1=bullet, 2=numbered.
+    pub list_kind: u8,
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 
 /// Image snapshot.

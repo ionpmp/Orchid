@@ -1,0 +1,407 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerDocumentModel } from "../../workspace/defs.slint";
+
+export component ViewerDocumentView inherits Rectangle {
+    in property <ViewerDocumentModel> model;
+
+    callback action(string);
+    callback text-edited(string);
+
+    background: transparent;
+
+    property <string> draft-text: model.plain-text;
+    property <bool> locally-dirty: false;
+    property <string> last-path: "";
+
+    changed model => {
+        if root.last-path != model.path-display {
+            root.last-path = model.path-display;
+            root.draft-text = model.plain-text;
+            root.locally-dirty = model.dirty;
+        } else if root.draft-text == model.plain-text {
+            root.locally-dirty = model.dirty;
+        } else {
+            root.locally-dirty = true;
+        }
+    }
+
+    function tool-btn(active: bool) -> color {
+        return active ? Theme.accent-brand : Theme.text-primary;
+    }
+
+    function tool-bg(active: bool, hover: bool) -> color {
+        if (active) {
+            return Theme.surface-raised;
+        }
+        return hover ? Theme.surface-raised : transparent;
+    }
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                spacing: 2px;
+                alignment: start;
+
+                Rectangle {
+                    width: max(52px, save-label.preferred-width + 12px);
+                    height: 28px;
+                    background: (model.dirty || root.locally-dirty) ? Theme.surface-raised
+                        : save-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    save-ta := TouchArea { clicked => { root.action("save"); } }
+                    save-label := Text {
+                        text: model.save-label;
+                        color: (model.dirty || root.locally-dirty)
+                            ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, undo-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    opacity: model.can-undo ? 1.0 : 0.35;
+                    undo-ta := TouchArea {
+                        enabled: model.can-undo;
+                        clicked => { root.action("undo"); }
+                    }
+                    Text {
+                        text: model.undo-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, redo-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    opacity: model.can-redo ? 1.0 : 0.35;
+                    redo-ta := TouchArea {
+                        enabled: model.can-redo;
+                        clicked => { root.action("redo"); }
+                    }
+                    Text {
+                        text: model.redo-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.bold, bold-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    bold-ta := TouchArea { clicked => { root.action("bold"); } }
+                    Text {
+                        text: model.bold-label;
+                        color: tool-btn(model.bold);
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-semibold;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.italic, italic-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    italic-ta := TouchArea { clicked => { root.action("italic"); } }
+                    Text {
+                        text: model.italic-label;
+                        color: tool-btn(model.italic);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.underline, underline-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    underline-ta := TouchArea { clicked => { root.action("underline"); } }
+                    Text {
+                        text: model.underline-label;
+                        color: tool-btn(model.underline);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.alignment == 0, al-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    al-ta := TouchArea { clicked => { root.action("align-left"); } }
+                    Text {
+                        text: model.align-left-label;
+                        color: tool-btn(model.alignment == 0);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.alignment == 1, ac-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ac-ta := TouchArea { clicked => { root.action("align-center"); } }
+                    Text {
+                        text: model.align-center-label;
+                        color: tool-btn(model.alignment == 1);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.alignment == 2, ar-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ar-ta := TouchArea { clicked => { root.action("align-right"); } }
+                    Text {
+                        text: model.align-right-label;
+                        color: tool-btn(model.alignment == 2);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.alignment == 3, aj-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    aj-ta := TouchArea { clicked => { root.action("align-justify"); } }
+                    Text {
+                        text: model.align-justify-label;
+                        color: tool-btn(model.alignment == 3);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.list-kind == 1, bullet-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    bullet-ta := TouchArea { clicked => { root.action("list-bullet"); } }
+                    Text {
+                        text: model.list-bullet-label;
+                        color: tool-btn(model.list-kind == 1);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.list-kind == 2, num-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    num-ta := TouchArea { clicked => { root.action("list-numbered"); } }
+                    Text {
+                        text: model.list-numbered-label;
+                        color: tool-btn(model.list-kind == 2);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                if model.dirty || root.locally-dirty : Text {
+                    text: "●";
+                    color: #eab308;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Rectangle {
+            background: Theme.surface-base;
+            vertical-stretch: 1;
+            clip: true;
+
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: max(self.height, edit-pad.preferred-height);
+
+                edit-pad := HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+
+                    edit-input := TextInput {
+                        width: parent.width - 24px;
+                        text: root.draft-text;
+                        single-line: false;
+                        wrap: word-wrap;
+                        color: Theme.text-primary;
+                        font-family: Theme.font-family-sans;
+                        font-size: Theme.font-size-md;
+                        key-pressed(event) => {
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "s" || event.text == "S"))
+                            {
+                                root.action("save");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "z" || event.text == "Z"))
+                            {
+                                root.action("undo");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "z" || event.text == "Z"))
+                            {
+                                root.action("redo");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "y" || event.text == "Y"))
+                            {
+                                root.action("redo");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "b" || event.text == "B"))
+                            {
+                                root.action("bold");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "i" || event.text == "I"))
+                            {
+                                root.action("italic");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "u" || event.text == "U"))
+                            {
+                                root.action("underline");
+                                return accept;
+                            }
+                            return reject;
+                        }
+                        edited => {
+                            root.draft-text = self.text;
+                            root.locally-dirty = true;
+                            root.text-edited(self.text);
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            background: Theme.surface-raised;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 12px;
+
+                Text {
+                    text: model.info-text;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                if model.dirty || root.locally-dirty : Text {
+                    text: "●";
+                    color: #eab308;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

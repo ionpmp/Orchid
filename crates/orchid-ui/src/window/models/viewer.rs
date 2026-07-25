@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
-    ViewerArchiveEntry, ViewerArchiveModel, ViewerEmptyModel, ViewerImageModel, ViewerModel,
-    ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
+    ViewerArchiveEntry, ViewerArchiveModel, ViewerDocumentModel, ViewerEmptyModel,
+    ViewerImageModel, ViewerModel, ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine,
+    ViewerSyntaxSegment, ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -239,6 +240,34 @@ fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
     }
 }
 
+fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
+    ViewerDocumentModel {
+        path_display: SharedString::new(),
+        plain_text: SharedString::new(),
+        dirty: false,
+        info_text: SharedString::new(),
+        bold: false,
+        italic: false,
+        underline: false,
+        alignment: 0,
+        list_kind: 0,
+        can_undo: false,
+        can_redo: false,
+        save_label: locale.tr("viewer-document-save").into(),
+        undo_label: locale.tr("viewer-document-undo").into(),
+        redo_label: locale.tr("viewer-document-redo").into(),
+        bold_label: locale.tr("viewer-document-bold").into(),
+        italic_label: locale.tr("viewer-document-italic").into(),
+        underline_label: locale.tr("viewer-document-underline").into(),
+        align_left_label: locale.tr("viewer-document-align-left").into(),
+        align_center_label: locale.tr("viewer-document-align-center").into(),
+        align_right_label: locale.tr("viewer-document-align-right").into(),
+        align_justify_label: locale.tr("viewer-document-align-justify").into(),
+        list_bullet_label: locale.tr("viewer-document-list-bullet").into(),
+        list_numbered_label: locale.tr("viewer-document-list-numbered").into(),
+    }
+}
+
 pub(crate) fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
     ViewerModel {
         kind: 0,
@@ -254,6 +283,7 @@ pub(crate) fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         pdf: empty_viewer_pdf_model(locale),
         text: empty_viewer_text_model(locale),
         archive: empty_viewer_archive_model(locale),
+        document: empty_viewer_document_model(locale),
     }
 }
 
@@ -323,32 +353,41 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
             model.kind = 6;
             model.archive = build_archive_snapshot(s, locale);
         }
-        // MVP: surface DOCX as editable plain text until viewer-document.slint lands.
         Vs::Document(s) => {
-            model.kind = 5;
-            let mut text = empty_viewer_text_model(locale);
-            text.path_display = s.path_display.clone().into();
-            text.plain_text = s.plain_text.as_ref().into();
-            text.dirty = s.dirty;
-            text.read_only = false;
-            text.language = "docx".into();
-            text.total_lines = s.plain_text.lines().count() as i32;
-            let args = orchid_i18n::FluentArgs::new()
-                .with("blocks", s.block_count.to_string())
-                .with(
-                    "warnings",
-                    if s.warnings.is_empty() {
-                        "0".into()
-                    } else {
-                        s.warnings.len().to_string()
-                    },
-                );
-            text.info_text = locale.tr_args("viewer-document-info", &args).into();
-            text.mode_label = locale.tr("viewer-text-editing").into();
-            model.text = text;
+            model.kind = 7;
+            model.document = build_document_snapshot(s, locale);
         }
     }
 
+    model
+}
+
+fn build_document_snapshot(
+    s: &orchid_viewers::DocumentSnapshot,
+    locale: &LocaleManager,
+) -> ViewerDocumentModel {
+    let args = orchid_i18n::FluentArgs::new()
+        .with("blocks", s.block_count.to_string())
+        .with(
+            "warnings",
+            if s.warnings.is_empty() {
+                "0".into()
+            } else {
+                s.warnings.len().to_string()
+            },
+        );
+    let mut model = empty_viewer_document_model(locale);
+    model.path_display = s.path_display.clone().into();
+    model.plain_text = s.plain_text.as_ref().into();
+    model.dirty = s.dirty;
+    model.info_text = locale.tr_args("viewer-document-info", &args).into();
+    model.bold = s.bold;
+    model.italic = s.italic;
+    model.underline = s.underline;
+    model.alignment = i32::from(s.alignment);
+    model.list_kind = i32::from(s.list_kind);
+    model.can_undo = s.can_undo;
+    model.can_redo = s.can_redo;
     model
 }
 

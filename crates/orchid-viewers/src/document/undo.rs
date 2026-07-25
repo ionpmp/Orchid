@@ -78,6 +78,11 @@ pub enum EditCommand {
         /// Block to restore.
         previous: Block,
     },
+    /// Replace the entire body block list (plain-text push / bulk format).
+    ReplaceBlocks {
+        /// New body blocks.
+        blocks: Vec<Block>,
+    },
     /// Remove a block (inverse of insert).
     RemoveBlock {
         /// Block index to remove.
@@ -161,6 +166,18 @@ impl UndoStack {
     #[must_use]
     pub fn is_dirty(&self) -> bool {
         self.dirty
+    }
+
+    /// Whether undo is available.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        !self.past.is_empty()
+    }
+
+    /// Whether redo is available.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        !self.future.is_empty()
     }
 
     /// Mark the document as saved.
@@ -400,6 +417,10 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 block_idx: *block_idx,
                 previous: current,
             })
+        }
+        EditCommand::ReplaceBlocks { blocks } => {
+            let previous = std::mem::replace(&mut doc.blocks, blocks.clone());
+            Ok(EditCommand::ReplaceBlocks { blocks: previous })
         }
         EditCommand::RemoveBlock { block_idx } => {
             if *block_idx >= doc.blocks.len() {

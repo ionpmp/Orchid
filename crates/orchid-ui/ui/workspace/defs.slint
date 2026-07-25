@@ -922,6 +922,34 @@ export struct ViewerArchiveModel {
     path-display: string,
 }
 
+export struct ViewerDocumentModel {
+    path-display: string,
+    plain-text: string,
+    dirty: bool,
+    info-text: string,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    /// 0=left, 1=center, 2=right, 3=justify.
+    alignment: int,
+    /// 0=none, 1=bullet, 2=numbered.
+    list-kind: int,
+    can-undo: bool,
+    can-redo: bool,
+    save-label: string,
+    undo-label: string,
+    redo-label: string,
+    bold-label: string,
+    italic-label: string,
+    underline-label: string,
+    align-left-label: string,
+    align-center-label: string,
+    align-right-label: string,
+    align-justify-label: string,
+    list-bullet-label: string,
+    list-numbered-label: string,
+}
+
 export struct ViewerEmptyModel {
     placeholder-text: string,
 }
@@ -940,6 +968,7 @@ export struct ViewerModel {
     pdf: ViewerPdfModel,
     text: ViewerTextModel,
     archive: ViewerArchiveModel,
+    document: ViewerDocumentModel,
 }
 
 export struct FmTagChip {

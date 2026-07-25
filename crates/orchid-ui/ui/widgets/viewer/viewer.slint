@@ -5,6 +5,7 @@ import { ViewerImageView } from "viewer-image.slint";
 import { ViewerPdfView } from "viewer-pdf.slint";
 import { ViewerTextView } from "viewer-text.slint";
 import { ViewerArchiveView } from "viewer-archive.slint";
+import { ViewerDocumentView } from "viewer-document.slint";
 
 export component ViewerView inherits Rectangle {
     in property <ViewerModel> model;
@@ -38,6 +39,9 @@ export component ViewerView inherits Rectangle {
     callback text-save();
     callback text-edited(string);
     callback text-scroll(int);
+
+    callback document-action(string);
+    callback document-text-edited(string);
 
     background: transparent;
 
@@ -125,5 +129,13 @@ export component ViewerView inherits Rectangle {
         select(path) => { root.archive-select(path); }
         extract-selected => { root.archive-extract-selected(); }
         extract-all => { root.archive-extract-all(); }
+    }
+
+    if model.kind == 7 : ViewerDocumentView {
+        width: parent.width;
+        height: parent.height;
+        model: root.model.document;
+        action(a) => { root.document-action(a); }
+        text-edited(t) => { root.document-text-edited(t); }
     }
 }

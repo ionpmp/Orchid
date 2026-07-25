@@ -131,6 +131,13 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.dirty == b.dirty
                 && a.block_count == b.block_count
                 && a.warnings == b.warnings
+                && a.bold == b.bold
+                && a.italic == b.italic
+                && a.underline == b.underline
+                && a.alignment == b.alignment
+                && a.list_kind == b.list_kind
+                && a.can_undo == b.can_undo
+                && a.can_redo == b.can_redo
                 && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
                     || a.plain_text.as_ref() == b.plain_text.as_ref())
         }

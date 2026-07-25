@@ -243,7 +243,7 @@ impl Document {
             match block {
                 Block::Paragraph(p) => {
                     if !out.is_empty() {
-                        out.push_str("\n\n");
+                        out.push('\n');
                     }
                     out.push_str(&p.plain_text());
                 }
@@ -252,7 +252,7 @@ impl Document {
                         for cell in &row.cells {
                             for p in &cell.paragraphs {
                                 if !out.is_empty() {
-                                    out.push_str("\n\n");
+                                    out.push('\n');
                                 }
                                 out.push_str(&p.plain_text());
                             }

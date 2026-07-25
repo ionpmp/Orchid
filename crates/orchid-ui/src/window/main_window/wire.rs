@@ -2090,6 +2090,41 @@ impl MainWindowController {
             }
         });
 
+        self.window.on_viewer_document_action({
+            let t = t.clone();
+            move |id, action| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let action = action.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::document_action(inst, action)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_document_text_edited({
+            let t = t.clone();
+            move |id, text| {
+                if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                    if let Some(c) = t.upgrade() {
+                        *c.last_text_edit_instance.lock() = Some(inst);
+                    }
+                    let body = text.to_string();
+                    spawn::spawn_local_compat(async move {
+                        if let Err(e) =
+                            orchid_widgets::builtin::viewer::document_push_edit(inst, body).await
+                        {
+                            warn!(?e, "viewer document edit");
+                        }
+                    });
+                }
+            }
+        });
+
         self.window.on_fm_sidebar_clicked({
             let t = t.clone();
             move |fm_id, id| {

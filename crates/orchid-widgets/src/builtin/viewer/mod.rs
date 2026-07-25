@@ -8,7 +8,7 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    ArchiveViewer, ImageViewer, PdfViewer, SyntaxHighlighter, TextViewer, Viewer,
+    ArchiveViewer, DocumentViewer, ImageViewer, PdfViewer, SyntaxHighlighter, TextViewer, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -800,6 +800,66 @@ pub async fn text_save(instance_id: Uuid) -> WidgetResult<()> {
         v.save()
             .await
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Document: apply a toolbar / shortcut action (`save`, `undo`, `redo`, `bold`, …).
+pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<()> {
+    use orchid_viewers::{Alignment, ListKind};
+
+    let inner = live_inner(instance_id)?;
+    match action.as_str() {
+        "save" => {
+            let mut guard = inner.viewer.lock().await;
+            let v = guard
+                .as_mut()
+                .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+            v.save()
+                .await
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        }
+        other => {
+            let guard = inner.viewer.lock().await;
+            let v = guard
+                .as_ref()
+                .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+            let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+                return Ok(());
+            };
+            let result = match other {
+                "undo" => doc.undo(),
+                "redo" => doc.redo(),
+                "bold" => doc.toggle_style_all('b'),
+                "italic" => doc.toggle_style_all('i'),
+                "underline" => doc.toggle_style_all('u'),
+                "align-left" => doc.set_alignment_all(Alignment::Left),
+                "align-center" => doc.set_alignment_all(Alignment::Center),
+                "align-right" => doc.set_alignment_all(Alignment::Right),
+                "align-justify" => doc.set_alignment_all(Alignment::Justify),
+                "list-bullet" => doc.toggle_list_all(ListKind::Bullet),
+                "list-numbered" => doc.toggle_list_all(ListKind::Numbered),
+                _ => Ok(()),
+            };
+            result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Document: replace body from the Slint `TextInput` draft (no caret-breaking rebuild).
+pub async fn document_push_edit(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
+                doc.replace_plain_text(&text)
+                    .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            }
+        }
     }
     inner.refresh_snapshot().await;
     Ok(())

@@ -244,6 +244,9 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-text-edited(string, string);
     callback viewer-text-scroll(string, int);
 
+    callback viewer-document-action(string, string);
+    callback viewer-document-text-edited(string, string);
+
     callback fm-sidebar-clicked(string, string);
     callback fm-pane-clicked(string, int);
     callback fm-tab-clicked(string, int, string);
@@ -878,6 +881,9 @@ export component WidgetFrame inherits Rectangle {
                         text-save => { root.viewer-text-save(root.model.instance-id); }
                         text-edited(t) => { root.viewer-text-edited(root.model.instance-id, t); }
                         text-scroll(d) => { root.viewer-text-scroll(root.model.instance-id, d); }
+
+                        document-action(a) => { root.viewer-document-action(root.model.instance-id, a); }
+                        document-text-edited(t) => { root.viewer-document-text-edited(root.model.instance-id, t); }
                     }
                 }
 
