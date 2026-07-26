@@ -179,6 +179,197 @@ impl DocumentViewer {
         }
     }
 
+    /// Insert `text` at the preview caret (replacing a non-empty selection).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_insert_text(&self, text: &str) -> Result<()> {
+        if text.is_empty() {
+            return Ok(());
+        }
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard
+            .as_mut()
+            .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        let at = self.delete_selection_if_needed(doc, sel)?;
+        self.undo.lock().push(
+            doc,
+            EditCommand::InsertText {
+                at,
+                text: text.to_string(),
+            },
+        )?;
+        let caret = Cursor {
+            block_idx: at.block_idx,
+            run_idx: at.run_idx,
+            byte_offset: at.byte_offset + text.len(),
+        };
+        *self.selection.lock() = Selection {
+            anchor: caret,
+            head: caret,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Insert a paragraph break at the preview caret.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_insert_paragraph_break(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard
+            .as_mut()
+            .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        let at = self.delete_selection_if_needed(doc, sel)?;
+        let next = split_paragraph_blocks(doc, at)?;
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        let caret = Cursor {
+            block_idx: at.block_idx + 1,
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: caret,
+            head: caret,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Delete the selection, or one grapheme/cluster backward if collapsed.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn preview_delete_backward(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard
+            .as_mut()
+            .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        if !sel.is_collapsed() {
+            let at = self.delete_selection_if_needed(doc, sel)?;
+            *self.selection.lock() = Selection {
+                anchor: at,
+                head: at,
+            };
+            self.invalidate_preview();
+            return Ok(());
+        }
+        let head_off = plain_offset_from_cursor(doc, sel.head);
+        if head_off == 0 {
+            return Ok(());
+        }
+        let plain = doc.plain_text();
+        let prev = prev_char_boundary(&plain, head_off);
+        let range = selection_from_plain_offsets(doc, prev, head_off);
+        let at = self.delete_selection_if_needed(doc, range)?;
+        *self.selection.lock() = Selection {
+            anchor: at,
+            head: at,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Delete the selection, or one character forward if collapsed.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn preview_delete_forward(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard
+            .as_mut()
+            .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        if !sel.is_collapsed() {
+            let at = self.delete_selection_if_needed(doc, sel)?;
+            *self.selection.lock() = Selection {
+                anchor: at,
+                head: at,
+            };
+            self.invalidate_preview();
+            return Ok(());
+        }
+        let head_off = plain_offset_from_cursor(doc, sel.head);
+        let plain = doc.plain_text();
+        if head_off >= plain.len() {
+            return Ok(());
+        }
+        let next = next_char_boundary(&plain, head_off);
+        let range = selection_from_plain_offsets(doc, head_off, next);
+        let at = self.delete_selection_if_needed(doc, range)?;
+        *self.selection.lock() = Selection {
+            anchor: at,
+            head: at,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Move the caret by `delta` Unicode scalars (`extend` keeps the anchor).
+    pub fn preview_move_by_chars(&self, delta: i32, extend: bool) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let sel = *self.selection.lock();
+        let plain = doc.plain_text();
+        let mut off = plain_offset_from_cursor(doc, sel.head);
+        if delta < 0 {
+            for _ in 0..(-delta as usize) {
+                if off == 0 {
+                    break;
+                }
+                off = prev_char_boundary(&plain, off);
+            }
+        } else {
+            for _ in 0..(delta as usize) {
+                if off >= plain.len() {
+                    break;
+                }
+                off = next_char_boundary(&plain, off);
+            }
+        }
+        let head = cursor_from_plain_offset(doc, off);
+        let anchor = if extend { sel.anchor } else { head };
+        *self.selection.lock() = Selection { anchor, head };
+        // Caret paint updates via snapshot selection cache.
+    }
+
+    /// Delete `sel` when non-empty; returns the caret where typing should continue.
+    fn delete_selection_if_needed(&self, doc: &mut Document, sel: Selection) -> Result<Cursor> {
+        if sel.is_collapsed() {
+            return Ok(sel.head);
+        }
+        let (start, end) = sel.normalized();
+        if start.block_idx == end.block_idx {
+            self.undo.lock().push(
+                doc,
+                EditCommand::DeleteRange {
+                    range: Selection {
+                        anchor: start,
+                        head: end,
+                    },
+                },
+            )?;
+            return Ok(start);
+        }
+        let next = delete_multi_paragraph(doc, start, end)?;
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        Ok(start)
+    }
+
     /// Current selection.
     #[must_use]
     pub fn selection(&self) -> Selection {
@@ -516,6 +707,163 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
             byte_offset: p.runs[last].text.len(),
         },
     }
+}
+
+fn prev_char_boundary(text: &str, offset: usize) -> usize {
+    if offset == 0 {
+        return 0;
+    }
+    let mut i = offset.min(text.len()) - 1;
+    while i > 0 && !text.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+
+fn next_char_boundary(text: &str, offset: usize) -> usize {
+    if offset >= text.len() {
+        return text.len();
+    }
+    let mut i = offset + 1;
+    while i < text.len() && !text.is_char_boundary(i) {
+        i += 1;
+    }
+    i
+}
+
+fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
+    let Block::Paragraph(p) = doc
+        .blocks
+        .get(at.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let mut left_runs = Vec::new();
+    let mut right_runs = Vec::new();
+    if p.runs.is_empty() {
+        left_runs.push(Run {
+            text: String::new(),
+            style: RunStyle::default(),
+        });
+    } else {
+        for (ri, run) in p.runs.iter().enumerate() {
+            if ri < at.run_idx {
+                left_runs.push(run.clone());
+            } else if ri > at.run_idx {
+                right_runs.push(run.clone());
+            } else {
+                let split = at.byte_offset.min(run.text.len());
+                left_runs.push(Run {
+                    text: run.text[..split].to_string(),
+                    style: run.style.clone(),
+                });
+                right_runs.push(Run {
+                    text: run.text[split..].to_string(),
+                    style: run.style.clone(),
+                });
+            }
+        }
+    }
+    if left_runs.is_empty() {
+        left_runs.push(Run {
+            text: String::new(),
+            style: RunStyle::default(),
+        });
+    }
+    if right_runs.is_empty() {
+        right_runs.push(Run {
+            text: String::new(),
+            style: left_runs
+                .last()
+                .map(|r| r.style.clone())
+                .unwrap_or_default(),
+        });
+    }
+    let left = Paragraph {
+        runs: left_runs,
+        alignment: p.alignment,
+        list: p.list,
+        list_level: p.list_level,
+        num_id: p.num_id,
+        unsupported: p.unsupported.clone(),
+    };
+    let right = Paragraph {
+        runs: right_runs,
+        alignment: p.alignment,
+        list: ListKind::None,
+        list_level: 0,
+        num_id: None,
+        unsupported: Vec::new(),
+    };
+    let mut blocks = doc.blocks.clone();
+    blocks[at.block_idx] = Block::Paragraph(left);
+    blocks.insert(at.block_idx + 1, Block::Paragraph(right));
+    Ok(blocks)
+}
+
+fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<Vec<Block>> {
+    let Block::Paragraph(start_p) = doc
+        .blocks
+        .get(start.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let Block::Paragraph(end_p) = doc
+        .blocks
+        .get(end.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+
+    let mut merged_runs = Vec::new();
+    for (ri, run) in start_p.runs.iter().enumerate() {
+        if ri < start.run_idx {
+            merged_runs.push(run.clone());
+        } else if ri == start.run_idx {
+            merged_runs.push(Run {
+                text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
+                style: run.style.clone(),
+            });
+        }
+    }
+    for (ri, run) in end_p.runs.iter().enumerate() {
+        if ri > end.run_idx {
+            merged_runs.push(run.clone());
+        } else if ri == end.run_idx {
+            merged_runs.push(Run {
+                text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
+                style: run.style.clone(),
+            });
+        }
+    }
+    merged_runs.retain(|r| !r.text.is_empty());
+    if merged_runs.is_empty() {
+        merged_runs.push(Run {
+            text: String::new(),
+            style: RunStyle::default(),
+        });
+    }
+
+    let merged = Paragraph {
+        runs: merged_runs,
+        alignment: start_p.alignment,
+        list: start_p.list,
+        list_level: start_p.list_level,
+        num_id: start_p.num_id,
+        unsupported: start_p.unsupported.clone(),
+    };
+    let mut blocks = Vec::with_capacity(doc.blocks.len());
+    for (bi, block) in doc.blocks.iter().enumerate() {
+        if bi < start.block_idx || bi > end.block_idx {
+            blocks.push(block.clone());
+        } else if bi == start.block_idx {
+            blocks.push(Block::Paragraph(merged.clone()));
+        }
+    }
+    Ok(blocks)
 }
 
 #[async_trait]

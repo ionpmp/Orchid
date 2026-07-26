@@ -291,6 +291,7 @@ export component MainWindow inherits Window {
     callback viewer-document-selection-changed(string, int, int);
     callback viewer-document-viewport-changed(string, length);
     callback viewer-document-preview-pointer(string, int, float, float);
+    callback viewer-document-preview-key(string, string, bool, bool);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -703,6 +704,7 @@ export component MainWindow inherits Window {
             viewer-document-selection-changed(id, a, h) => { root.viewer-document-selection-changed(id, a, h); }
             viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
             viewer-document-preview-pointer(id, p, x, y) => { root.viewer-document-preview-pointer(id, p, x, y); }
+            viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
 
             fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
             fm-toggle-dual-pane(fm_id) => { root.fm-toggle-dual-pane(fm_id); }

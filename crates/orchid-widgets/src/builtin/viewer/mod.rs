@@ -927,6 +927,73 @@ pub async fn document_preview_pointer(
     Ok(())
 }
 
+/// Document: keyboard input while the preview canvas has focus.
+///
+/// Special keys are sent as tokens (`Backspace`, `Delete`, `Return`, `Left`,
+/// `Right`); otherwise `key` is inserted as literal text.
+pub async fn document_preview_key(
+    instance_id: Uuid,
+    key: String,
+    ctrl: bool,
+    shift: bool,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    if ctrl && matches!(key.as_str(), "s" | "S") {
+        return document_action(instance_id, "save".into()).await;
+    }
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        if doc.source_mode() {
+            return Ok(());
+        }
+        let result = if ctrl {
+            match key.as_str() {
+                "b" | "B" => doc.toggle_style_all('b'),
+                "i" | "I" => doc.toggle_style_all('i'),
+                "u" | "U" => doc.toggle_style_all('u'),
+                "z" | "Z" if shift => doc.redo(),
+                "z" | "Z" => doc.undo(),
+                "y" | "Y" => doc.redo(),
+                _ => Ok(()),
+            }
+        } else {
+            match key.as_str() {
+                "Backspace" => doc.preview_delete_backward(),
+                "Delete" => doc.preview_delete_forward(),
+                "Return" => doc.preview_insert_paragraph_break(),
+                "Left" => {
+                    doc.preview_move_by_chars(-1, shift);
+                    Ok(())
+                }
+                "Right" => {
+                    doc.preview_move_by_chars(1, shift);
+                    Ok(())
+                }
+                other if is_printable_preview_text(other) => doc.preview_insert_text(other),
+                _ => Ok(()),
+            }
+        };
+        result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+fn is_printable_preview_text(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    !key.chars().any(|c| {
+        c.is_control() || ('\u{f700}'..='\u{f7ff}').contains(&c) || c == '\u{7f}'
+    })
+}
+
 #[async_trait]
 impl Widget for ViewerWidget {
     fn type_id(&self) -> &'static str {

@@ -10,6 +10,8 @@ export component ViewerDocumentView inherits Rectangle {
     callback viewport-changed(length);
     /// Preview pointer: phase 0=down, 1=move, 2=up; x/y in preview image CSS pixels.
     callback preview-pointer(int, float, float);
+    /// Preview key: token or literal text, plus ctrl/shift.
+    callback preview-key(string, bool, bool);
 
     background: transparent;
 
@@ -324,40 +326,75 @@ export component ViewerDocumentView inherits Rectangle {
                 }
             }
 
-            if !model.source-mode : Flickable {
+            if !model.source-mode : preview-keys := FocusScope {
                 width: parent.width;
                 height: parent.height;
-                viewport-width: max(self.width, model.preview-width-px * 1px);
-                viewport-height: max(self.height, model.preview-height-px * 1px);
 
-                Rectangle {
-                    x: max(0px, (parent.width - self.width) / 2);
-                    width: model.preview-width-px * 1px;
-                    height: model.preview-height-px * 1px;
-                    background: #fafafc;
-
-                    Image {
-                        width: parent.width;
-                        height: parent.height;
-                        source: model.preview-image;
-                        image-fit: contain;
+                key-pressed(event) => {
+                    if (event.modifiers.control) {
+                        root.preview-key(event.text, true, event.modifiers.shift);
+                        return accept;
                     }
-                    TouchArea {
-                        width: parent.width;
-                        height: parent.height;
-                        double-clicked => { root.action("toggle-source"); }
-                        pointer-event(e) => {
-                            if (e.button == PointerEventButton.left) {
-                                if (e.kind == PointerEventKind.down) {
-                                    root.preview-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
-                                } else if (e.kind == PointerEventKind.up) {
-                                    root.preview-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
+                    if (event.text == Key.Backspace) {
+                        root.preview-key("Backspace", false, false);
+                        return accept;
+                    }
+                    if (event.text == Key.Delete) {
+                        root.preview-key("Delete", false, false);
+                        return accept;
+                    }
+                    if (event.text == Key.Return) {
+                        root.preview-key("Return", false, false);
+                        return accept;
+                    }
+                    if (event.text == Key.LeftArrow) {
+                        root.preview-key("Left", false, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.RightArrow) {
+                        root.preview-key("Right", false, event.modifiers.shift);
+                        return accept;
+                    }
+                    root.preview-key(event.text, false, event.modifiers.shift);
+                    return accept;
+                }
+
+                Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: max(self.width, model.preview-width-px * 1px);
+                    viewport-height: max(self.height, model.preview-height-px * 1px);
+
+                    Rectangle {
+                        x: max(0px, (parent.width - self.width) / 2);
+                        width: model.preview-width-px * 1px;
+                        height: model.preview-height-px * 1px;
+                        background: #fafafc;
+
+                        Image {
+                            width: parent.width;
+                            height: parent.height;
+                            source: model.preview-image;
+                            image-fit: contain;
+                        }
+                        TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            double-clicked => { root.action("toggle-source"); }
+                            pointer-event(e) => {
+                                if (e.button == PointerEventButton.left) {
+                                    if (e.kind == PointerEventKind.down) {
+                                        preview-keys.focus();
+                                        root.preview-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
+                                    } else if (e.kind == PointerEventKind.up) {
+                                        root.preview-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
+                                    }
                                 }
                             }
-                        }
-                        moved => {
-                            if (self.pressed) {
-                                root.preview-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
+                            moved => {
+                                if (self.pressed) {
+                                    root.preview-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
+                                }
                             }
                         }
                     }

@@ -261,6 +261,50 @@ async fn selection_format_only_selected_span() {
 }
 
 #[test]
+fn preview_typing_insert_backspace_and_return() {
+    use orchid_viewers::document::model::Document as Doc;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "Hi".into(),
+                style: RunStyle::default(),
+            }],
+            ..Default::default()
+        })],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    viewer.set_selection_plain_offsets(2, 2); // after "Hi"
+    viewer.preview_insert_text("!").unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.plain_text(), "Hi!");
+    }
+    viewer.preview_delete_backward().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.plain_text(), "Hi");
+    }
+    viewer.preview_insert_paragraph_break().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert_eq!(doc.plain_text(), "Hi\n");
+    }
+    viewer.preview_insert_text("Yo").unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.plain_text(), "Hi\nYo");
+    }
+}
+
+#[test]
 fn preview_pointer_selects_second_paragraph_for_bold() {
     use orchid_viewers::document::layout::PREVIEW_PADDING;
     use orchid_viewers::document::model::Document as Doc;
