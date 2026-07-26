@@ -44,6 +44,7 @@ export component ViewerView inherits Rectangle {
     callback document-text-edited(string);
     callback document-selection-changed(int, int);
     callback document-viewport-changed(length);
+    callback document-preview-pointer(int, float, float);
 
     background: transparent;
 
@@ -141,5 +142,6 @@ export component ViewerView inherits Rectangle {
         text-edited(t) => { root.document-text-edited(t); }
         selection-changed(a, h) => { root.document-selection-changed(a, h); }
         viewport-changed(w) => { root.document-viewport-changed(w); }
+        preview-pointer(p, x, y) => { root.document-preview-pointer(p, x, y); }
     }
 }

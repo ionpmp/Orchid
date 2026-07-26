@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use parley::layout::{
-    Alignment as ParleyAlignment, AlignmentOptions, GlyphRun, PositionedLayoutItem,
+    Alignment as ParleyAlignment, AlignmentOptions, Cluster, ClusterSide, GlyphRun,
+    PositionedLayoutItem,
 };
 use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, Layout, LayoutContext, LineHeight, RangedBuilder};
@@ -227,6 +228,116 @@ impl DocumentLayout {
 
         (Arc::new(pixels), width, height)
     }
+
+    /// Map a point in preview-image CSS pixels to a UTF-8 offset in [`Document::plain_text`].
+    ///
+    /// Coordinates are relative to the top-left of the rendered page (including padding).
+    #[must_use]
+    pub fn hit_test_plain_offset(
+        &mut self,
+        doc: &Document,
+        content_width: f32,
+        x: f32,
+        y: f32,
+    ) -> Option<usize> {
+        let pad = PREVIEW_PADDING;
+        let max_w = content_width.max(80.0);
+        let local_x = x - pad;
+        let local_y = y - pad;
+        let para_gap = 10.0;
+
+        let mut total_h = 0.0;
+        let mut plain_offset = 0usize;
+        let mut emitted_text = false;
+
+        if local_y < 0.0 {
+            return Some(0);
+        }
+
+        for block in &doc.blocks {
+            match block {
+                Block::Paragraph(p) => {
+                    if emitted_text {
+                        plain_offset += 1;
+                    }
+                    emitted_text = true;
+                    let body_len = p.plain_text().len();
+                    let prefix_len = list_prefix(p).len();
+                    let layout = self.layout_paragraph(p, max_w);
+                    let h = layout.height().max(16.0);
+                    let y0 = total_h;
+                    let y1 = total_h + h + para_gap;
+                    if local_y >= y0 && local_y < y1 {
+                        let ly = (local_y - y0).max(0.0);
+                        let lx = local_x.clamp(0.0, max_w);
+                        let body_idx = cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
+                        return Some(plain_offset + body_idx);
+                    }
+                    plain_offset += body_len;
+                    total_h += h + para_gap;
+                }
+                Block::Table(t) => {
+                    for row in &t.rows {
+                        for cell in &row.cells {
+                            for p in &cell.paragraphs {
+                                if emitted_text {
+                                    plain_offset += 1;
+                                }
+                                emitted_text = true;
+                                let body_len = p.plain_text().len();
+                                let prefix_len = list_prefix(p).len();
+                                let layout = self.layout_paragraph(p, max_w);
+                                let h = layout.height().max(14.0);
+                                let y0 = total_h;
+                                let y1 = total_h + h + 4.0;
+                                if local_y >= y0 && local_y < y1 {
+                                    let ly = (local_y - y0).max(0.0);
+                                    let lx = local_x.clamp(0.0, max_w);
+                                    let body_idx =
+                                        cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
+                                    return Some(plain_offset + body_idx);
+                                }
+                                plain_offset += body_len;
+                                total_h += h + 4.0;
+                            }
+                        }
+                    }
+                    total_h += para_gap;
+                }
+                Block::Image(img) => {
+                    let h = (img.height_px.min(120) as f32).max(24.0);
+                    let y0 = total_h;
+                    let y1 = total_h + h + para_gap;
+                    if local_y >= y0 && local_y < y1 {
+                        return Some(plain_offset);
+                    }
+                    total_h += h + para_gap;
+                }
+            }
+            if total_h > MAX_PREVIEW_HEIGHT as f32 {
+                break;
+            }
+        }
+        Some(plain_offset)
+    }
+}
+
+fn cluster_to_body_index(
+    layout: &Layout<ColorBrush>,
+    x: f32,
+    y: f32,
+    prefix_len: usize,
+    body_len: usize,
+) -> usize {
+    let Some((cluster, side)) = Cluster::from_point(layout, x, y) else {
+        return if y <= 0.0 { 0 } else { body_len };
+    };
+    let range = cluster.text_range();
+    let layout_idx = match side {
+        ClusterSide::Left => range.start,
+        ClusterSide::Right => range.end,
+    };
+    layout_idx.saturating_sub(prefix_len).min(body_len)
 }
 
 fn list_prefix(p: &Paragraph) -> String {
@@ -620,5 +731,49 @@ mod tests {
         assert!(w > 100);
         assert!(h > 40);
         assert_eq!(bytes.len(), (w * h * 4) as usize);
+    }
+
+    #[test]
+    fn hit_test_finds_second_paragraph() {
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "First".into(),
+                        style: RunStyle::default(),
+                    }],
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Second line here".into(),
+                        style: RunStyle::default(),
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            ..Default::default()
+        };
+        // Click near the top of the second paragraph (padding + first para height + gap).
+        let offset = dl
+            .hit_test_plain_offset(&doc, 400.0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 40.0)
+            .unwrap();
+        // "First\n" = 6 bytes; caret should land in the second paragraph.
+        assert!(offset >= 6, "offset={offset}");
+        assert!(offset <= doc.plain_text().len());
+    }
+
+    #[test]
+    fn hit_test_top_left_is_start() {
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Paragraph(sample_paragraph())],
+            ..Default::default()
+        };
+        let offset = dl
+            .hit_test_plain_offset(&doc, 400.0, PREVIEW_PADDING + 2.0, PREVIEW_PADDING + 2.0)
+            .unwrap();
+        assert_eq!(offset, 0);
     }
 }

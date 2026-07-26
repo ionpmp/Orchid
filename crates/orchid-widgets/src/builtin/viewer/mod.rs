@@ -906,6 +906,29 @@ pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> Wi
     Ok(())
 }
 
+/// Document: pointer on the preview canvas (`phase`: 0=down, 1=move, 2=up).
+pub async fn document_preview_pointer(
+    instance_id: Uuid,
+    phase: i32,
+    x: f32,
+    y: f32,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
+                doc.preview_pointer(phase.clamp(0, 2) as u8, x, y);
+            }
+        }
+    }
+    // Refresh toolbar accents after click / drag end; skip move spam.
+    if phase != 1 {
+        inner.refresh_snapshot().await;
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl Widget for ViewerWidget {
     fn type_id(&self) -> &'static str {

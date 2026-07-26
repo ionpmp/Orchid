@@ -248,6 +248,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-document-text-edited(string, string);
     callback viewer-document-selection-changed(string, int, int);
     callback viewer-document-viewport-changed(string, length);
+    callback viewer-document-preview-pointer(string, int, float, float);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-pane-clicked(string, int);
@@ -888,6 +889,7 @@ export component WidgetFrame inherits Rectangle {
                         document-text-edited(t) => { root.viewer-document-text-edited(root.model.instance-id, t); }
                         document-selection-changed(a, h) => { root.viewer-document-selection-changed(root.model.instance-id, a, h); }
                         document-viewport-changed(w) => { root.viewer-document-viewport-changed(root.model.instance-id, w); }
+                        document-preview-pointer(p, x, y) => { root.viewer-document-preview-pointer(root.model.instance-id, p, x, y); }
                     }
                 }
 

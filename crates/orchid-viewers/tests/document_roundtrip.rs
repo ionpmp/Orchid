@@ -260,6 +260,48 @@ async fn selection_format_only_selected_span() {
     assert!(snap.preview_width_px > 0);
 }
 
+#[test]
+fn preview_pointer_selects_second_paragraph_for_bold() {
+    use orchid_viewers::document::layout::PREVIEW_PADDING;
+    use orchid_viewers::document::model::Document as Doc;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "First".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Second".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+        ],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    // Click into the second paragraph in preview coordinates.
+    viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 40.0);
+    viewer.toggle_style_all('b').unwrap();
+
+    let guard = viewer.document();
+    let doc = guard.as_ref().unwrap();
+    match &doc.blocks[0] {
+        Block::Paragraph(p) => assert!(!p.runs[0].style.bold, "first should stay plain"),
+        _ => panic!("p0"),
+    }
+    match &doc.blocks[1] {
+        Block::Paragraph(p) => assert!(p.runs[0].style.bold, "second should be bold"),
+        _ => panic!("p1"),
+    }
+}
+
 fn write_minimal_docx(path: &std::path::Path, document_xml: &[u8]) {
     use std::io::Write;
     let file = std::fs::File::create(path).unwrap();

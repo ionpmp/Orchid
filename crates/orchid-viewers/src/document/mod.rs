@@ -63,6 +63,8 @@ pub struct DocumentViewer {
     preview: Mutex<PreviewState>,
     source_mode: RwLock<bool>,
     selection: Mutex<Selection>,
+    /// Plain-text offset captured on preview pointer-down (drag selection).
+    preview_drag_anchor: Mutex<Option<usize>>,
 }
 
 impl std::fmt::Debug for DocumentViewer {
@@ -100,6 +102,7 @@ impl DocumentViewer {
                 anchor: Cursor::default(),
                 head: Cursor::default(),
             }),
+            preview_drag_anchor: Mutex::new(None),
         }
     }
 
@@ -134,6 +137,41 @@ impl DocumentViewer {
             return;
         };
         *self.selection.lock() = selection_from_plain_offsets(doc, anchor, head);
+    }
+
+    /// Handle a pointer event on the preview canvas (`0`=down, `1`=move, `2`=up).
+    ///
+    /// Coordinates are CSS pixels in the rendered preview image.
+    pub fn preview_pointer(&self, phase: u8, x: f32, y: f32) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let width = self.preview.lock().width;
+        let Some(offset) = self
+            .layout
+            .lock()
+            .hit_test_plain_offset(doc, width, x, y)
+        else {
+            return;
+        };
+        match phase {
+            0 => {
+                *self.preview_drag_anchor.lock() = Some(offset);
+                *self.selection.lock() = selection_from_plain_offsets(doc, offset, offset);
+            }
+            1 | 2 => {
+                let anchor = self
+                    .preview_drag_anchor
+                    .lock()
+                    .unwrap_or(offset);
+                *self.selection.lock() = selection_from_plain_offsets(doc, anchor, offset);
+                if phase == 2 {
+                    *self.preview_drag_anchor.lock() = None;
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Current selection.
@@ -430,15 +468,13 @@ fn style_at_cursor(doc: &Document, cursor: Cursor) -> Option<RunStyle> {
         .or_else(|| p.runs.first().map(|r| r.style.clone()))
 }
 
-fn effective_style_selection(doc: &Document, sel: Selection, source_mode: bool) -> Selection {
+fn effective_style_selection(doc: &Document, sel: Selection, _source_mode: bool) -> Selection {
     if !sel.is_collapsed() {
         return sel;
     }
-    if source_mode {
-        return expand_selection_to_paragraph(doc, sel.head);
-    }
-    // Preview mode has no caret yet — keep toolbar useful on the whole body.
-    expand_selection_to_document(doc)
+    // Collapsed caret (Source or Preview click) → style the whole paragraph so
+    // toolbar B/I/U / align / list remain one-click useful.
+    expand_selection_to_paragraph(doc, sel.head)
 }
 
 fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
@@ -474,45 +510,6 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
             run_idx: last,
             byte_offset: p.runs[last].text.len(),
         },
-    }
-}
-
-fn expand_selection_to_document(doc: &Document) -> Selection {
-    let mut first = None;
-    let mut last = Cursor::default();
-    for (bi, block) in doc.blocks.iter().enumerate() {
-        let Block::Paragraph(p) = block else {
-            continue;
-        };
-        if p.runs.is_empty() {
-            let c = Cursor {
-                block_idx: bi,
-                run_idx: 0,
-                byte_offset: 0,
-            };
-            if first.is_none() {
-                first = Some(c);
-            }
-            last = c;
-            continue;
-        }
-        if first.is_none() {
-            first = Some(Cursor {
-                block_idx: bi,
-                run_idx: 0,
-                byte_offset: 0,
-            });
-        }
-        let ri = p.runs.len() - 1;
-        last = Cursor {
-            block_idx: bi,
-            run_idx: ri,
-            byte_offset: p.runs[ri].text.len(),
-        };
-    }
-    Selection {
-        anchor: first.unwrap_or_default(),
-        head: last,
     }
 }
 

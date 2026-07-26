@@ -8,6 +8,8 @@ export component ViewerDocumentView inherits Rectangle {
     callback text-edited(string);
     callback selection-changed(int, int);
     callback viewport-changed(length);
+    /// Preview pointer: phase 0=down, 1=move, 2=up; x/y in preview image CSS pixels.
+    callback preview-pointer(int, float, float);
 
     background: transparent;
 
@@ -344,6 +346,20 @@ export component ViewerDocumentView inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         double-clicked => { root.action("toggle-source"); }
+                        pointer-event(e) => {
+                            if (e.button == PointerEventButton.left) {
+                                if (e.kind == PointerEventKind.down) {
+                                    root.preview-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
+                                } else if (e.kind == PointerEventKind.up) {
+                                    root.preview-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
+                                }
+                            }
+                        }
+                        moved => {
+                            if (self.pressed) {
+                                root.preview-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
+                            }
+                        }
                     }
                 }
             }
