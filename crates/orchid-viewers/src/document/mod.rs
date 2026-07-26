@@ -345,6 +345,122 @@ impl DocumentViewer {
         // Caret paint updates via snapshot selection cache.
     }
 
+    /// Move the caret by whole plain-text lines (`extend` keeps the anchor).
+    pub fn preview_move_vertical(&self, delta_lines: i32, extend: bool) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let sel = *self.selection.lock();
+        let plain = doc.plain_text();
+        let off = plain_offset_from_cursor(doc, sel.head);
+        let line_start = plain[..off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let col_chars = plain[line_start..off].chars().count();
+
+        let mut target_start = line_start;
+        if delta_lines < 0 {
+            for _ in 0..(-delta_lines as usize) {
+                if target_start == 0 {
+                    break;
+                }
+                let prev_nl = target_start - 1;
+                target_start = plain[..prev_nl].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            }
+        } else {
+            for _ in 0..(delta_lines as usize) {
+                match plain[target_start..].find('\n') {
+                    Some(rel) => target_start += rel + 1,
+                    None => break,
+                }
+            }
+        }
+
+        let line_end = plain[target_start..]
+            .find('\n')
+            .map(|i| target_start + i)
+            .unwrap_or(plain.len());
+        let mut new_off = line_end;
+        for (i, (byte_idx, _)) in plain[target_start..line_end].char_indices().enumerate() {
+            if i == col_chars {
+                new_off = target_start + byte_idx;
+                break;
+            }
+        }
+        let head = cursor_from_plain_offset(doc, new_off);
+        let anchor = if extend { sel.anchor } else { head };
+        *self.selection.lock() = Selection { anchor, head };
+    }
+
+    /// Plain text covered by the current selection (empty when collapsed).
+    #[must_use]
+    pub fn selected_plain_text(&self) -> String {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return String::new();
+        };
+        let sel = *self.selection.lock();
+        if sel.is_collapsed() {
+            return String::new();
+        }
+        let (start, end) = sel.normalized();
+        let a = plain_offset_from_cursor(doc, start);
+        let b = plain_offset_from_cursor(doc, end);
+        let plain = doc.plain_text();
+        plain.get(a..b).unwrap_or("").to_string()
+    }
+
+    /// Paste plain text at the caret, turning `\n` into paragraph breaks.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_paste_plain(&self, text: &str) -> Result<()> {
+        let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+        if normalized.is_empty() {
+            return Ok(());
+        }
+        let mut lines = normalized.split('\n');
+        let Some(first) = lines.next() else {
+            return Ok(());
+        };
+        if !first.is_empty() {
+            self.preview_insert_text(first)?;
+        } else if normalized.starts_with('\n') {
+            // Leading newline — still create a break below after empty first.
+        }
+        for line in lines {
+            self.preview_insert_paragraph_break()?;
+            if !line.is_empty() {
+                self.preview_insert_text(line)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Cut: return selected text and delete the selection.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn preview_cut_selection(&self) -> Result<String> {
+        let text = self.selected_plain_text();
+        if text.is_empty() {
+            return Ok(text);
+        }
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard
+            .as_mut()
+            .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        let at = self.delete_selection_if_needed(doc, sel)?;
+        *self.selection.lock() = Selection {
+            anchor: at,
+            head: at,
+        };
+        self.invalidate_preview();
+        Ok(text)
+    }
+
     /// Delete `sel` when non-empty; returns the caret where typing should continue.
     fn delete_selection_if_needed(&self, doc: &mut Document, sel: Selection) -> Result<Cursor> {
         if sel.is_collapsed() {

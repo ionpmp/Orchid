@@ -930,7 +930,9 @@ pub async fn document_preview_pointer(
 /// Document: keyboard input while the preview canvas has focus.
 ///
 /// Special keys are sent as tokens (`Backspace`, `Delete`, `Return`, `Left`,
-/// `Right`); otherwise `key` is inserted as literal text.
+/// `Right`, `Up`, `Down`); otherwise `key` is inserted as literal text.
+///
+/// Clipboard shortcuts (`c`/`x`/`v`) are handled in the UI layer (arboard).
 pub async fn document_preview_key(
     instance_id: Uuid,
     key: String,
@@ -975,11 +977,68 @@ pub async fn document_preview_key(
                     doc.preview_move_by_chars(1, shift);
                     Ok(())
                 }
+                "Up" => {
+                    doc.preview_move_vertical(-1, shift);
+                    Ok(())
+                }
+                "Down" => {
+                    doc.preview_move_vertical(1, shift);
+                    Ok(())
+                }
                 other if is_printable_preview_text(other) => doc.preview_insert_text(other),
                 _ => Ok(()),
             }
         };
         result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Document: plain text of the current preview selection (for clipboard copy).
+pub async fn document_preview_selection_text(instance_id: Uuid) -> WidgetResult<String> {
+    let inner = live_inner(instance_id)?;
+    let guard = inner.viewer.lock().await;
+    let Some(v) = guard.as_ref() else {
+        return Ok(String::new());
+    };
+    let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+        return Ok(String::new());
+    };
+    Ok(doc.selected_plain_text())
+}
+
+/// Document: cut selection; returns the removed text for the clipboard.
+pub async fn document_preview_cut(instance_id: Uuid) -> WidgetResult<String> {
+    let inner = live_inner(instance_id)?;
+    let text = {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(String::new());
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(String::new());
+        };
+        doc.preview_cut_selection()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+    };
+    inner.refresh_snapshot().await;
+    Ok(text)
+}
+
+/// Document: paste plain text at the preview caret.
+pub async fn document_preview_paste(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.preview_paste_plain(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
     inner.refresh_snapshot().await;
     Ok(())

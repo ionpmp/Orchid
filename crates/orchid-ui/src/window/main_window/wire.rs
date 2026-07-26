@@ -2180,6 +2180,75 @@ impl MainWindowController {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
                         let key = key.to_string();
+                        // Clipboard needs the UI-side arboard handle.
+                        if ctrl {
+                            let lower = key.to_ascii_lowercase();
+                            if lower == "c" || lower == "x" || lower == "v" {
+                                spawn::spawn_local_compat(async move {
+                                    let Some(_c) = tw.upgrade() else {
+                                        return;
+                                    };
+                                    match lower.as_str() {
+                                        "c" => {
+                                            match orchid_widgets::builtin::viewer::document_preview_selection_text(
+                                                inst,
+                                            )
+                                            .await
+                                            {
+                                                Ok(text) if !text.is_empty() => {
+                                                    if let Ok(cb) =
+                                                        crate::widgets::terminal::ArboardClipboard::new()
+                                                    {
+                                                        let _ = cb.copy(&text);
+                                                    }
+                                                }
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    warn!(?e, "viewer document copy");
+                                                }
+                                            }
+                                        }
+                                        "x" => {
+                                            match orchid_widgets::builtin::viewer::document_preview_cut(
+                                                inst,
+                                            )
+                                            .await
+                                            {
+                                                Ok(text) if !text.is_empty() => {
+                                                    if let Ok(cb) =
+                                                        crate::widgets::terminal::ArboardClipboard::new()
+                                                    {
+                                                        let _ = cb.copy(&text);
+                                                    }
+                                                }
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    warn!(?e, "viewer document cut");
+                                                }
+                                            }
+                                        }
+                                        "v" => {
+                                            let pasted = crate::widgets::terminal::ArboardClipboard::new()
+                                                .ok()
+                                                .and_then(|cb| cb.paste().ok())
+                                                .unwrap_or_default();
+                                            if pasted.is_empty() {
+                                                return;
+                                            }
+                                            if let Err(e) = orchid_widgets::builtin::viewer::document_preview_paste(
+                                                inst, pasted,
+                                            )
+                                            .await
+                                            {
+                                                warn!(?e, "viewer document paste");
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                });
+                                return;
+                            }
+                        }
                         viewer_spawn!(
                             tw,
                             inst,

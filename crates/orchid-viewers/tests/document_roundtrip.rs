@@ -261,6 +261,55 @@ async fn selection_format_only_selected_span() {
 }
 
 #[test]
+fn preview_paste_cut_and_vertical_move() {
+    use orchid_viewers::document::model::Document as Doc;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Alpha".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Beta".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+        ],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    viewer.set_selection_plain_offsets(0, 5); // "Alpha"
+    assert_eq!(viewer.selected_plain_text(), "Alpha");
+    let cut = viewer.preview_cut_selection().unwrap();
+    assert_eq!(cut, "Alpha");
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        // First paragraph emptied; plain text starts with newline then Beta.
+        assert!(doc.plain_text().contains("Beta"));
+        assert!(!doc.plain_text().contains("Alpha"));
+    }
+    viewer.set_selection_plain_offsets(0, 0);
+    viewer.preview_paste_plain("Hi\nThere").unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert!(doc.plain_text().starts_with("Hi\nThere"));
+    }
+    // Caret after "There"; move up should land on "Hi" line.
+    viewer.preview_move_vertical(-1, false);
+    let sel = viewer.selection();
+    assert_eq!(sel.head.block_idx, 0);
+}
+
+#[test]
 fn preview_typing_insert_backspace_and_return() {
     use orchid_viewers::document::model::Document as Doc;
 

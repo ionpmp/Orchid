@@ -355,6 +355,14 @@ export component ViewerDocumentView inherits Rectangle {
                         root.preview-key("Right", false, event.modifiers.shift);
                         return accept;
                     }
+                    if (event.text == Key.UpArrow) {
+                        root.preview-key("Up", false, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.DownArrow) {
+                        root.preview-key("Down", false, event.modifiers.shift);
+                        return accept;
+                    }
                     root.preview-key(event.text, false, event.modifiers.shift);
                     return accept;
                 }
