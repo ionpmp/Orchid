@@ -18,8 +18,8 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    cursor_from_plain_offset, paragraph_indices_in_selection, selection_from_plain_offsets, Cursor,
-    Selection,
+    cursor_from_plain_offset, paragraph_indices_in_selection, plain_offset_from_cursor,
+    selection_from_plain_offsets, Cursor, Selection,
 };
 pub use layout::{DEFAULT_PREVIEW_WIDTH, DocumentLayout};
 pub use model::{
@@ -37,6 +37,9 @@ struct PreviewState {
     width_px: u32,
     height_px: u32,
     valid: bool,
+    /// Plain-text selection baked into `bytes` (`start == end` → caret only).
+    sel_start: usize,
+    sel_end: usize,
 }
 
 impl Default for PreviewState {
@@ -47,6 +50,8 @@ impl Default for PreviewState {
             width_px: 0,
             height_px: 0,
             valid: false,
+            sel_start: 0,
+            sel_end: 0,
         }
     }
 }
@@ -642,14 +647,28 @@ impl Viewer for DocumentViewer {
         );
 
         let source_mode = *self.source_mode.read();
+        let (sel_start, sel_end) = {
+            let (a, b) = sel.normalized();
+            (
+                plain_offset_from_cursor(doc, a),
+                plain_offset_from_cursor(doc, b),
+            )
+        };
         let (preview_rgba, preview_width_px, preview_height_px) = {
             let mut prev = self.preview.lock();
-            if !prev.valid {
+            let sel_changed = prev.sel_start != sel_start || prev.sel_end != sel_end;
+            if !prev.valid || sel_changed {
                 let mut layout = self.layout.lock();
-                let (bytes, w, h) = layout.render_document(doc, prev.width);
+                let (bytes, w, h) = layout.render_document_with_selection(
+                    doc,
+                    prev.width,
+                    Some((sel_start, sel_end)),
+                );
                 prev.bytes = bytes;
                 prev.width_px = w;
                 prev.height_px = h;
+                prev.sel_start = sel_start;
+                prev.sel_end = sel_end;
                 prev.valid = true;
             }
             (

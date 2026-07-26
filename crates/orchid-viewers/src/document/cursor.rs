@@ -119,6 +119,51 @@ pub fn selection_from_plain_offsets(doc: &Document, anchor: usize, head: usize) 
     }
 }
 
+/// Map a [`Cursor`] back to a UTF-8 byte offset in [`Document::plain_text`].
+#[must_use]
+pub fn plain_offset_from_cursor(doc: &Document, cursor: Cursor) -> usize {
+    let mut offset = 0usize;
+    let mut emitted = false;
+    for (bi, block) in doc.blocks.iter().enumerate() {
+        match block {
+            Block::Paragraph(p) => {
+                if emitted {
+                    offset += 1;
+                }
+                emitted = true;
+                if bi == cursor.block_idx {
+                    let mut run_off = 0usize;
+                    for (ri, run) in p.runs.iter().enumerate() {
+                        if ri == cursor.run_idx {
+                            return offset + run_off + cursor.byte_offset.min(run.text.len());
+                        }
+                        run_off += run.text.len();
+                    }
+                    return offset + run_off;
+                }
+                offset += p.runs.iter().map(|r| r.text.len()).sum::<usize>();
+            }
+            Block::Table(t) => {
+                for row in &t.rows {
+                    for cell in &row.cells {
+                        for p in &cell.paragraphs {
+                            if emitted {
+                                offset += 1;
+                            }
+                            emitted = true;
+                            // Table paragraphs are not addressable by Cursor.block_idx today;
+                            // skip for offset accounting consistent with plain_text().
+                            offset += p.runs.iter().map(|r| r.text.len()).sum::<usize>();
+                        }
+                    }
+                }
+            }
+            Block::Image(_) => {}
+        }
+    }
+    offset
+}
+
 /// Indices of paragraph blocks touched by `selection` (inclusive).
 #[must_use]
 pub fn paragraph_indices_in_selection(doc: &Document, selection: Selection) -> Vec<usize> {
@@ -166,5 +211,34 @@ mod tests {
         let (start, end) = sel.normalized();
         assert_eq!(start.block_idx, 1);
         assert_eq!(end.block_idx, 2);
+    }
+
+    #[test]
+    fn plain_offset_round_trips() {
+        use crate::document::model::{Paragraph, Run, RunStyle};
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Hi".into(),
+                        style: RunStyle::default(),
+                    }],
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "there".into(),
+                        style: RunStyle::default(),
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            ..Default::default()
+        };
+        for off in [0usize, 1, 2, 3, 5, 8] {
+            let c = cursor_from_plain_offset(&doc, off);
+            let back = plain_offset_from_cursor(&doc, c);
+            assert_eq!(back, off.min(doc.plain_text().len()), "off={off}");
+        }
     }
 }

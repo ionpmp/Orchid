@@ -135,33 +135,79 @@ impl DocumentLayout {
     }
 
     /// Rasterise an entire document into an RGBA8 page image.
+    ///
+    /// `selection` is a plain-text UTF-8 byte range (`start == end` draws a caret).
     #[must_use]
     pub fn render_document(
         &mut self,
         doc: &Document,
         content_width: f32,
     ) -> (Arc<Vec<u8>>, u32, u32) {
+        self.render_document_with_selection(doc, content_width, None)
+    }
+
+    /// Like [`Self::render_document`], with optional selection / caret overlay.
+    #[must_use]
+    pub fn render_document_with_selection(
+        &mut self,
+        doc: &Document,
+        content_width: f32,
+        selection: Option<(usize, usize)>,
+    ) -> (Arc<Vec<u8>>, u32, u32) {
         let pad = PREVIEW_PADDING;
         let max_w = content_width.max(80.0);
-        let mut layouts: Vec<(Layout<ColorBrush>, f32)> = Vec::new();
-        let mut total_h = pad;
+        // Content-relative Y (padding applied at paint time) — must match hit-test.
+        let mut layouts: Vec<LaidBlock> = Vec::new();
+        let mut total_h = 0.0;
         let para_gap = 10.0;
+        let mut plain_offset = 0usize;
+        let mut emitted_text = false;
 
         for block in &doc.blocks {
             match block {
                 Block::Paragraph(p) => {
+                    if emitted_text {
+                        plain_offset += 1;
+                    }
+                    emitted_text = true;
+                    let body_len = p.plain_text().len();
+                    let prefix_len = list_prefix(p).len();
                     let layout = self.layout_paragraph(p, max_w);
                     let h = layout.height().max(16.0);
-                    layouts.push((layout, total_h));
+                    layouts.push(LaidBlock {
+                        layout,
+                        y0: total_h,
+                        plain_start: plain_offset,
+                        body_len,
+                        prefix_len,
+                        is_image: false,
+                        image_h: 0.0,
+                    });
+                    plain_offset += body_len;
                     total_h += h + para_gap;
                 }
                 Block::Table(t) => {
                     for row in &t.rows {
                         for cell in &row.cells {
                             for p in &cell.paragraphs {
+                                if emitted_text {
+                                    plain_offset += 1;
+                                }
+                                emitted_text = true;
+                                let body_len = p.plain_text().len();
+                                let prefix_len = list_prefix(p).len();
                                 let layout = self.layout_paragraph(p, max_w);
                                 let h = layout.height().max(14.0);
-                                layouts.push((layout, total_h));
+                                layouts.push(LaidBlock {
+                                    layout,
+                                    y0: total_h,
+                                    plain_start: plain_offset,
+                                    body_len,
+                                    prefix_len,
+                                    is_image: false,
+                                    image_h: 0.0,
+                                });
+                                plain_offset += body_len;
                                 total_h += h + 4.0;
                             }
                         }
@@ -169,10 +215,16 @@ impl DocumentLayout {
                     total_h += para_gap;
                 }
                 Block::Image(img) => {
-                    // Placeholder bar for inline images (full decode is Tier-2).
                     let h = (img.height_px.min(120) as f32).max(24.0);
-                    layouts.push((Layout::default(), total_h));
-                    let _ = h;
+                    layouts.push(LaidBlock {
+                        layout: Layout::default(),
+                        y0: total_h,
+                        plain_start: plain_offset,
+                        body_len: 0,
+                        prefix_len: 0,
+                        is_image: true,
+                        image_h: h,
+                    });
                     total_h += h + para_gap;
                 }
             }
@@ -182,12 +234,11 @@ impl DocumentLayout {
         }
 
         let width = (max_w + pad * 2.0).ceil() as u32;
-        let height = (total_h + pad)
+        let height = (total_h + pad * 2.0)
             .ceil()
             .clamp(64.0, MAX_PREVIEW_HEIGHT as f32) as u32;
         let mut pixels = vec![255u8; (width as usize) * (height as usize) * 4];
 
-        // Soft page border / margin cue.
         fill_rect(
             &mut pixels,
             width,
@@ -199,10 +250,60 @@ impl DocumentLayout {
             [250, 250, 252, 255],
         );
 
-        for (layout, y0) in &layouts {
-            if layout.len() == 0 {
-                // Image placeholder strip.
-                let y = (y0 + pad) as u32;
+        let (sel_lo, sel_hi) = match selection {
+            Some((a, b)) if a != b => (a.min(b), a.max(b)),
+            _ => (0, 0),
+        };
+        let caret_at = match selection {
+            Some((a, b)) if a == b => Some(a),
+            _ => None,
+        };
+
+        // Selection / caret under the glyphs.
+        for item in &layouts {
+            if item.is_image || item.layout.len() == 0 {
+                continue;
+            }
+            let origin_y = pad + item.y0;
+            if sel_hi > sel_lo {
+                let para_end = item.plain_start + item.body_len;
+                let i0 = sel_lo.max(item.plain_start);
+                let i1 = sel_hi.min(para_end);
+                if i0 < i1 {
+                    let layout_lo = item.prefix_len + (i0 - item.plain_start);
+                    let layout_hi = item.prefix_len + (i1 - item.plain_start);
+                    paint_selection_range(
+                        &item.layout,
+                        &mut pixels,
+                        width,
+                        height,
+                        pad,
+                        origin_y,
+                        layout_lo,
+                        layout_hi,
+                    );
+                }
+            }
+            if let Some(caret) = caret_at {
+                let para_end = item.plain_start + item.body_len;
+                if caret >= item.plain_start && caret <= para_end {
+                    let layout_idx = item.prefix_len + (caret - item.plain_start);
+                    paint_caret(
+                        &item.layout,
+                        &mut pixels,
+                        width,
+                        height,
+                        pad,
+                        origin_y,
+                        layout_idx,
+                    );
+                }
+            }
+        }
+
+        for item in &layouts {
+            if item.is_image {
+                let y = (pad + item.y0) as u32;
                 fill_rect(
                     &mut pixels,
                     width,
@@ -210,19 +311,22 @@ impl DocumentLayout {
                     pad as u32,
                     y,
                     (max_w as u32).saturating_sub(8),
-                    24,
+                    item.image_h.max(24.0) as u32,
                     [220, 220, 228, 255],
                 );
                 continue;
             }
+            if item.layout.len() == 0 {
+                continue;
+            }
             render_layout_at(
                 &mut self.scale_cx,
-                layout,
+                &item.layout,
                 &mut pixels,
                 width,
                 height,
                 pad,
-                pad + y0,
+                pad + item.y0,
             );
         }
 
@@ -338,6 +442,183 @@ fn cluster_to_body_index(
         ClusterSide::Right => range.end,
     };
     layout_idx.saturating_sub(prefix_len).min(body_len)
+}
+
+struct LaidBlock {
+    layout: Layout<ColorBrush>,
+    /// Content-relative top (excluding page padding).
+    y0: f32,
+    plain_start: usize,
+    body_len: usize,
+    prefix_len: usize,
+    is_image: bool,
+    image_h: f32,
+}
+
+const SELECTION_FILL: [u8; 4] = [147, 197, 253, 140]; // soft blue
+const CARET_FILL: [u8; 4] = [37, 99, 235, 220];
+
+fn paint_selection_range(
+    layout: &Layout<ColorBrush>,
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    origin_x: f32,
+    origin_y: f32,
+    layout_lo: usize,
+    layout_hi: usize,
+) {
+    if layout_lo >= layout_hi {
+        return;
+    }
+    for line in layout.lines() {
+        let metrics = line.metrics();
+        let line_top = origin_y + metrics.block_min_coord;
+        let line_h = (metrics.block_max_coord - metrics.block_min_coord)
+            .max(metrics.line_height)
+            .max(14.0);
+        for run in line.runs() {
+            for cluster in run.visual_clusters() {
+                let range = cluster.text_range();
+                let overlap_lo = range.start.max(layout_lo);
+                let overlap_hi = range.end.min(layout_hi);
+                if overlap_lo >= overlap_hi {
+                    continue;
+                }
+                let Some(x_off) = cluster.visual_offset() else {
+                    continue;
+                };
+                let advance = cluster.advance().max(1.0);
+                let frac_start = if range.end > range.start {
+                    (overlap_lo - range.start) as f32 / (range.end - range.start) as f32
+                } else {
+                    0.0
+                };
+                let frac_end = if range.end > range.start {
+                    (overlap_hi - range.start) as f32 / (range.end - range.start) as f32
+                } else {
+                    1.0
+                };
+                let x0 = origin_x + x_off + advance * frac_start;
+                let x1 = origin_x + x_off + advance * frac_end;
+                fill_rect_blend(
+                    pixels,
+                    buf_w,
+                    buf_h,
+                    x0.floor().max(0.0) as u32,
+                    line_top.floor().max(0.0) as u32,
+                    (x1 - x0).ceil().max(1.0) as u32,
+                    line_h.ceil().max(1.0) as u32,
+                    SELECTION_FILL,
+                );
+            }
+        }
+    }
+}
+
+fn paint_caret(
+    layout: &Layout<ColorBrush>,
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    origin_x: f32,
+    origin_y: f32,
+    layout_idx: usize,
+) {
+    let (cluster, side) = if let Some(c) = Cluster::from_byte_index(layout, layout_idx) {
+        (c, ClusterSide::Left)
+    } else if layout_idx > 0 {
+        if let Some(c) = Cluster::from_byte_index(layout, layout_idx - 1) {
+            (c, ClusterSide::Right)
+        } else {
+            // Empty / unmapped — caret at line start.
+            if let Some(line) = layout.lines().next() {
+                let metrics = line.metrics();
+                let x = origin_x + metrics.offset + metrics.inline_min_coord;
+                let y = origin_y + metrics.block_min_coord;
+                let h = (metrics.block_max_coord - metrics.block_min_coord)
+                    .max(metrics.line_height)
+                    .max(14.0);
+                fill_rect_blend(
+                    pixels,
+                    buf_w,
+                    buf_h,
+                    x.floor().max(0.0) as u32,
+                    y.floor().max(0.0) as u32,
+                    2,
+                    h.ceil().max(1.0) as u32,
+                    CARET_FILL,
+                );
+            }
+            return;
+        }
+    } else if let Some(line) = layout.lines().next() {
+        let metrics = line.metrics();
+        let x = origin_x + metrics.offset + metrics.inline_min_coord;
+        let y = origin_y + metrics.block_min_coord;
+        let h = (metrics.block_max_coord - metrics.block_min_coord)
+            .max(metrics.line_height)
+            .max(14.0);
+        fill_rect_blend(
+            pixels,
+            buf_w,
+            buf_h,
+            x.floor().max(0.0) as u32,
+            y.floor().max(0.0) as u32,
+            2,
+            h.ceil().max(1.0) as u32,
+            CARET_FILL,
+        );
+        return;
+    } else {
+        return;
+    };
+
+    let Some(x_off) = cluster.visual_offset() else {
+        return;
+    };
+    let line = cluster.line();
+    let metrics = line.metrics();
+    let x = origin_x
+        + x_off
+        + if side == ClusterSide::Right {
+            cluster.advance()
+        } else {
+            0.0
+        };
+    let y = origin_y + metrics.block_min_coord;
+    let h = (metrics.block_max_coord - metrics.block_min_coord)
+        .max(metrics.line_height)
+        .max(14.0);
+    fill_rect_blend(
+        pixels,
+        buf_w,
+        buf_h,
+        x.floor().max(0.0) as u32,
+        y.floor().max(0.0) as u32,
+        2,
+        h.ceil().max(1.0) as u32,
+        CARET_FILL,
+    );
+}
+
+fn fill_rect_blend(
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    rgba: [u8; 4],
+) {
+    let x1 = (x + w).min(buf_w);
+    let y1 = (y + h).min(buf_h);
+    for py in y..y1 {
+        for px in x..x1 {
+            blend_pixel(pixels, buf_w, px, py, rgba[0], rgba[1], rgba[2], rgba[3]);
+        }
+    }
 }
 
 fn list_prefix(p: &Paragraph) -> String {
@@ -775,5 +1056,29 @@ mod tests {
             .hit_test_plain_offset(&doc, 400.0, PREVIEW_PADDING + 2.0, PREVIEW_PADDING + 2.0)
             .unwrap();
         assert_eq!(offset, 0);
+    }
+
+    #[test]
+    fn selection_paint_tints_pixels() {
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Paragraph(sample_paragraph())],
+            ..Default::default()
+        };
+        let (plain, _, _) = dl.render_document(&doc, 400.0);
+        let (selected, w, h) =
+            dl.render_document_with_selection(&doc, 400.0, Some((0, 5)));
+        assert_eq!(plain.len(), selected.len());
+        assert!(
+            plain.as_slice() != selected.as_slice(),
+            "selection should change the preview pixels ({w}x{h})"
+        );
+        // Selection blue channel should appear somewhere.
+        assert!(
+            selected
+                .chunks_exact(4)
+                .any(|px| px[2] > px[0] && px[2] > 180),
+            "expected bluish selection tint"
+        );
     }
 }

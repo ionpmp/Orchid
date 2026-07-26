@@ -922,10 +922,8 @@ pub async fn document_preview_pointer(
             }
         }
     }
-    // Refresh toolbar accents after click / drag end; skip move spam.
-    if phase != 1 {
-        inner.refresh_snapshot().await;
-    }
+    // Refresh so caret / selection highlight tracks the pointer (incl. drag).
+    inner.refresh_snapshot().await;
     Ok(())
 }
 
