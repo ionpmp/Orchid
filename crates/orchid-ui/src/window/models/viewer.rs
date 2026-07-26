@@ -253,6 +253,10 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         list_kind: 0,
         can_undo: false,
         can_redo: false,
+        source_mode: false,
+        preview_image: Image::default(),
+        preview_width_px: 0,
+        preview_height_px: 0,
         save_label: locale.tr("viewer-document-save").into(),
         undo_label: locale.tr("viewer-document-undo").into(),
         redo_label: locale.tr("viewer-document-redo").into(),
@@ -265,6 +269,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         align_justify_label: locale.tr("viewer-document-align-justify").into(),
         list_bullet_label: locale.tr("viewer-document-list-bullet").into(),
         list_numbered_label: locale.tr("viewer-document-list-numbered").into(),
+        source_label: locale.tr("viewer-document-source").into(),
+        preview_label: locale.tr("viewer-document-preview").into(),
     }
 }
 
@@ -388,6 +394,11 @@ fn build_document_snapshot(
     model.list_kind = i32::from(s.list_kind);
     model.can_undo = s.can_undo;
     model.can_redo = s.can_redo;
+    model.source_mode = s.source_mode;
+    model.preview_width_px = s.preview_width_px as i32;
+    model.preview_height_px = s.preview_height_px as i32;
+    model.preview_image =
+        slint_image_from_rgba(&s.preview_rgba, s.preview_width_px, s.preview_height_px);
     model
 }
 

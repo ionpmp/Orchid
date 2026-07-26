@@ -273,6 +273,29 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
+                    width: max(64px, mode-label.preferred-width + 14px);
+                    height: 28px;
+                    background: tool-bg(model.source-mode, mode-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    mode-ta := TouchArea { clicked => { root.action("toggle-source"); } }
+                    mode-label := Text {
+                        text: model.source-mode ? model.source-label : model.preview-label;
+                        color: tool-btn(model.source-mode);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
                 Rectangle { horizontal-stretch: 1; }
 
                 if model.dirty || root.locally-dirty : Text {
@@ -289,7 +312,33 @@ export component ViewerDocumentView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            Flickable {
+            if !model.source-mode : Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: max(self.width, model.preview-width-px * 1px);
+                viewport-height: max(self.height, model.preview-height-px * 1px);
+
+                Rectangle {
+                    x: max(0px, (parent.width - self.width) / 2);
+                    width: model.preview-width-px * 1px;
+                    height: model.preview-height-px * 1px;
+                    background: #fafafc;
+
+                    Image {
+                        width: parent.width;
+                        height: parent.height;
+                        source: model.preview-image;
+                        image-fit: contain;
+                    }
+                    TouchArea {
+                        width: parent.width;
+                        height: parent.height;
+                        double-clicked => { root.action("toggle-source"); }
+                    }
+                }
+            }
+
+            if model.source-mode : Flickable {
                 width: parent.width;
                 height: parent.height;
                 viewport-width: self.width;

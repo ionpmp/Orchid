@@ -164,6 +164,7 @@ memmap2 = "0.9"
 # Document / OOXML (DOCX) viewer-editor
 quick-xml = "0.41"
 parley = "0.10"
+swash = "0.2.6"
 
 # i18n
 icu = "2.2"

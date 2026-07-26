@@ -138,8 +138,13 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.list_kind == b.list_kind
                 && a.can_undo == b.can_undo
                 && a.can_redo == b.can_redo
+                && a.source_mode == b.source_mode
+                && a.preview_width_px == b.preview_width_px
+                && a.preview_height_px == b.preview_height_px
                 && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
                     || a.plain_text.as_ref() == b.plain_text.as_ref())
+                && (std::sync::Arc::ptr_eq(&a.preview_rgba, &b.preview_rgba)
+                    || a.preview_rgba.as_slice() == b.preview_rgba.as_slice())
         }
         _ => false,
     }

@@ -840,6 +840,10 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "align-justify" => doc.set_alignment_all(Alignment::Justify),
                 "list-bullet" => doc.toggle_list_all(ListKind::Bullet),
                 "list-numbered" => doc.toggle_list_all(ListKind::Numbered),
+                "toggle-source" => {
+                    doc.set_source_mode(!doc.source_mode());
+                    Ok(())
+                }
                 _ => Ok(()),
             };
             result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;

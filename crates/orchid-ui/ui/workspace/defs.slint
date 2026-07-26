@@ -936,6 +936,10 @@ export struct ViewerDocumentModel {
     list-kind: int,
     can-undo: bool,
     can-redo: bool,
+    source-mode: bool,
+    preview-image: image,
+    preview-width-px: int,
+    preview-height-px: int,
     save-label: string,
     undo-label: string,
     redo-label: string,
@@ -948,6 +952,8 @@ export struct ViewerDocumentModel {
     align-justify-label: string,
     list-bullet-label: string,
     list-numbered-label: string,
+    source-label: string,
+    preview-label: string,
 }
 
 export struct ViewerEmptyModel {

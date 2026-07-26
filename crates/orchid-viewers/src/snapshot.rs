@@ -51,6 +51,12 @@ pub struct DocumentSnapshot {
     pub list_kind: u8,
     pub can_undo: bool,
     pub can_redo: bool,
+    /// Soft-rendered rich preview (RGBA8). Empty when unavailable.
+    pub preview_rgba: Arc<Vec<u8>>,
+    pub preview_width_px: u32,
+    pub preview_height_px: u32,
+    /// When true, the UI shows the plain-text editor instead of the preview.
+    pub source_mode: bool,
 }
 
 /// Image snapshot.

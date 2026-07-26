@@ -5603,6 +5603,7 @@ dependencies = [
  "resvg",
  "ropey",
  "serde",
+ "swash",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",

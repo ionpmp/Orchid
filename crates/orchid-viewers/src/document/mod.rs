@@ -18,6 +18,7 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{Cursor, Selection};
+pub use layout::{DEFAULT_PREVIEW_WIDTH, DocumentLayout};
 pub use model::{
     Alignment, Block, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode, PageSetup,
     Paragraph, Run, RunStyle, Table, TableCell, TableRow,
@@ -27,6 +28,26 @@ pub use undo::{EditCommand, RunStylePatch, UndoStack};
 /// Soft ceiling for DOCX payloads accepted by the viewer (128 MiB).
 pub const DEFAULT_SIZE_LIMIT: u64 = 128 * 1024 * 1024;
 
+struct PreviewState {
+    width: f32,
+    bytes: Arc<Vec<u8>>,
+    width_px: u32,
+    height_px: u32,
+    valid: bool,
+}
+
+impl Default for PreviewState {
+    fn default() -> Self {
+        Self {
+            width: DEFAULT_PREVIEW_WIDTH,
+            bytes: Arc::new(Vec::new()),
+            width_px: 0,
+            height_px: 0,
+            valid: false,
+        }
+    }
+}
+
 /// Document viewer / editor for `.docx` (Office Open XML).
 pub struct DocumentViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
@@ -35,6 +56,9 @@ pub struct DocumentViewer {
     warnings: RwLock<Vec<String>>,
     registry: RwLock<Option<Arc<orchid_fs::FsProviderRegistry>>>,
     size_limit: u64,
+    layout: Mutex<DocumentLayout>,
+    preview: Mutex<PreviewState>,
+    source_mode: RwLock<bool>,
 }
 
 impl std::fmt::Debug for DocumentViewer {
@@ -65,6 +89,33 @@ impl DocumentViewer {
             warnings: RwLock::new(Vec::new()),
             registry: RwLock::new(None),
             size_limit: DEFAULT_SIZE_LIMIT,
+            layout: Mutex::new(DocumentLayout::new()),
+            preview: Mutex::new(PreviewState::default()),
+            source_mode: RwLock::new(false),
+        }
+    }
+
+    fn invalidate_preview(&self) {
+        self.preview.lock().valid = false;
+    }
+
+    /// Toggle plain-text source editor vs rich preview.
+    pub fn set_source_mode(&self, source: bool) {
+        *self.source_mode.write() = source;
+    }
+
+    /// Whether the UI should show the plain-text editor.
+    #[must_use]
+    pub fn source_mode(&self) -> bool {
+        *self.source_mode.read()
+    }
+
+    /// Set the content width used for preview layout (CSS pixels).
+    pub fn set_preview_width(&self, width: f32) {
+        let mut prev = self.preview.lock();
+        if (prev.width - width).abs() > 0.5 {
+            prev.width = width.max(120.0);
+            prev.valid = false;
         }
     }
 
@@ -91,6 +142,7 @@ impl DocumentViewer {
             .as_mut()
             .ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().push(doc, cmd)?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -101,6 +153,7 @@ impl DocumentViewer {
             .as_mut()
             .ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().undo(doc)?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -111,6 +164,7 @@ impl DocumentViewer {
             .as_mut()
             .ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().redo(doc)?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -147,6 +201,7 @@ impl DocumentViewer {
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -188,6 +243,7 @@ impl DocumentViewer {
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -210,6 +266,7 @@ impl DocumentViewer {
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -232,6 +289,7 @@ impl DocumentViewer {
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
         Ok(())
     }
 
@@ -371,6 +429,8 @@ impl Viewer for DocumentViewer {
             *self.registry.write() = Some(registry);
             *self.undo.lock() = UndoStack::new();
             *self.warnings.write() = Vec::new();
+            *self.preview.lock() = PreviewState::default();
+            *self.source_mode.write() = false;
             return Ok(());
         };
 
@@ -388,6 +448,8 @@ impl Viewer for DocumentViewer {
         *self.registry.write() = Some(registry);
         *self.undo.lock() = UndoStack::new();
         *self.warnings.write() = Vec::new();
+        *self.preview.lock() = PreviewState::default();
+        *self.source_mode.write() = false;
         Ok(())
     }
 
@@ -397,6 +459,8 @@ impl Viewer for DocumentViewer {
         *self.registry.write() = None;
         *self.undo.lock() = UndoStack::new();
         *self.warnings.write() = Vec::new();
+        *self.preview.lock() = PreviewState::default();
+        *self.source_mode.write() = false;
         Ok(())
     }
 
@@ -441,6 +505,24 @@ impl Viewer for DocumentViewer {
             } else {
                 (false, false, false, 0, 0)
             };
+
+        let source_mode = *self.source_mode.read();
+        let (preview_rgba, preview_width_px, preview_height_px) = {
+            let mut prev = self.preview.lock();
+            if !prev.valid {
+                let mut layout = self.layout.lock();
+                let (bytes, w, h) = layout.render_document(doc, prev.width);
+                prev.bytes = bytes;
+                prev.width_px = w;
+                prev.height_px = h;
+                prev.valid = true;
+            }
+            (
+                Arc::clone(&prev.bytes),
+                prev.width_px,
+                prev.height_px,
+            )
+        };
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -456,6 +538,10 @@ impl Viewer for DocumentViewer {
             list_kind,
             can_undo,
             can_redo,
+            preview_rgba,
+            preview_width_px,
+            preview_height_px,
+            source_mode,
         })
     }
 

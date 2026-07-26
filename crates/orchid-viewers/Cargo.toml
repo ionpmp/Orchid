@@ -51,6 +51,7 @@ dashmap.workspace = true
 pdfium-render.workspace = true
 quick-xml.workspace = true
 parley.workspace = true
+swash.workspace = true
 zip.workspace = true
 
 orchid-core.workspace = true

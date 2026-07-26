@@ -526,6 +526,9 @@ viewer-document-align-right = R
 viewer-document-align-justify = J
 viewer-document-list-bullet = •
 viewer-document-list-numbered = 1.
+
+viewer-document-source = Fuente
+viewer-document-preview = Vista previa
 viewer-text-line-ending-lf = LF
 viewer-text-line-ending-crlf = CRLF
 viewer-encoding-big5 = Big5
