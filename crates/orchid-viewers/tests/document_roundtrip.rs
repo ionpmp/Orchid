@@ -67,8 +67,14 @@ async fn roundtrip_styles_align_lists() {
     assert_eq!(loaded.blocks.len(), 3);
     match &loaded.blocks[0] {
         Block::Paragraph(p) => {
-            assert!(p.runs.iter().any(|r| r.style.bold && r.text.contains("Bold")));
-            assert!(p.runs.iter().any(|r| r.style.italic && r.text.contains("italic")));
+            assert!(p
+                .runs
+                .iter()
+                .any(|r| r.style.bold && r.text.contains("Bold")));
+            assert!(p
+                .runs
+                .iter()
+                .any(|r| r.style.italic && r.text.contains("italic")));
         }
         _ => panic!("p0"),
     }
@@ -241,7 +247,12 @@ async fn selection_format_only_selected_span() {
                 .filter(|r| r.style.bold)
                 .map(|r| r.text.as_str())
                 .collect();
-            let plain: String = p.runs.iter().filter(|r| !r.style.bold).map(|r| r.text.as_str()).collect();
+            let plain: String = p
+                .runs
+                .iter()
+                .filter(|r| !r.style.bold)
+                .map(|r| r.text.as_str())
+                .collect();
             assert!(bold.contains("world"), "bold={bold:?}");
             assert!(plain.contains("Hello"), "plain={plain:?}");
         }
@@ -351,6 +362,79 @@ fn preview_typing_insert_backspace_and_return() {
         let doc = guard.as_ref().unwrap();
         assert_eq!(doc.plain_text(), "Hi\nYo");
     }
+}
+
+#[test]
+fn preview_select_all_home_end_and_font_color() {
+    use orchid_viewers::document::model::Document as Doc;
+    use orchid_viewers::ViewerSnapshot;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Hello".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "World".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+        ],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    viewer.set_selection_plain_offsets(2, 2);
+    viewer.preview_select_all();
+    assert_eq!(viewer.selected_plain_text(), "Hello\nWorld");
+
+    viewer.set_selection_plain_offsets(8, 8); // in "World"
+    viewer.preview_move_line_boundary(false, false);
+    assert_eq!(viewer.selection().head.block_idx, 1);
+    assert_eq!(viewer.selection().head.byte_offset, 0);
+    viewer.preview_move_line_boundary(true, false);
+    assert_eq!(viewer.selection().head.byte_offset, 5);
+
+    viewer.preview_move_document_boundary(false, false);
+    assert_eq!(viewer.selection().head.block_idx, 0);
+    assert_eq!(viewer.selection().head.byte_offset, 0);
+    viewer.preview_move_document_boundary(true, false);
+    assert_eq!(viewer.selection().head.block_idx, 1);
+    assert_eq!(viewer.selection().head.byte_offset, 5);
+
+    viewer.set_selection_plain_offsets(0, 5); // "Hello"
+    viewer.bump_font_size_selection(1).unwrap();
+    viewer.set_color_selection([0xdc, 0x26, 0x26]).unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.runs[0].style.font_size_pt, Some(16.0));
+                assert_eq!(p.runs[0].style.color, Some([0xdc, 0x26, 0x26]));
+            }
+            _ => panic!("p0"),
+        }
+        match &doc.blocks[1] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.font_size_pt.is_none());
+                assert!(p.runs[0].style.color.is_none());
+            }
+            _ => panic!("p1"),
+        }
+    }
+    viewer.set_selection_plain_offsets(0, 0);
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("snapshot");
+    };
+    assert_eq!(snap.font_size_pt, 16.0);
+    assert_eq!(snap.color_rgb, 0x00dc_2626);
 }
 
 #[test]

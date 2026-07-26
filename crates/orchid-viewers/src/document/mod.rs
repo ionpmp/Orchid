@@ -21,7 +21,7 @@ pub use cursor::{
     cursor_from_plain_offset, paragraph_indices_in_selection, plain_offset_from_cursor,
     selection_from_plain_offsets, Cursor, Selection,
 };
-pub use layout::{DEFAULT_PREVIEW_WIDTH, DocumentLayout};
+pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
     Alignment, Block, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode, PageSetup,
     Paragraph, Run, RunStyle, Table, TableCell, TableRow,
@@ -153,11 +153,7 @@ impl DocumentViewer {
             return;
         };
         let width = self.preview.lock().width;
-        let Some(offset) = self
-            .layout
-            .lock()
-            .hit_test_plain_offset(doc, width, x, y)
-        else {
+        let Some(offset) = self.layout.lock().hit_test_plain_offset(doc, width, x, y) else {
             return;
         };
         match phase {
@@ -166,10 +162,7 @@ impl DocumentViewer {
                 *self.selection.lock() = selection_from_plain_offsets(doc, offset, offset);
             }
             1 | 2 => {
-                let anchor = self
-                    .preview_drag_anchor
-                    .lock()
-                    .unwrap_or(offset);
+                let anchor = self.preview_drag_anchor.lock().unwrap_or(offset);
                 *self.selection.lock() = selection_from_plain_offsets(doc, anchor, offset);
                 if phase == 2 {
                     *self.preview_drag_anchor.lock() = None;
@@ -189,9 +182,7 @@ impl DocumentViewer {
             return Ok(());
         }
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         let at = self.delete_selection_if_needed(doc, sel)?;
         self.undo.lock().push(
@@ -221,9 +212,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
     pub fn preview_insert_paragraph_break(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         let at = self.delete_selection_if_needed(doc, sel)?;
         let next = split_paragraph_blocks(doc, at)?;
@@ -250,9 +239,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`].
     pub fn preview_delete_backward(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         if !sel.is_collapsed() {
             let at = self.delete_selection_if_needed(doc, sel)?;
@@ -286,9 +273,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`].
     pub fn preview_delete_forward(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         if !sel.is_collapsed() {
             let at = self.delete_selection_if_needed(doc, sel)?;
@@ -448,9 +433,7 @@ impl DocumentViewer {
             return Ok(text);
         }
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         let at = self.delete_selection_if_needed(doc, sel)?;
         *self.selection.lock() = Selection {
@@ -459,6 +442,102 @@ impl DocumentViewer {
         };
         self.invalidate_preview();
         Ok(text)
+    }
+
+    /// Select the entire document body.
+    pub fn preview_select_all(&self) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let len = doc.plain_text().len();
+        *self.selection.lock() = selection_from_plain_offsets(doc, 0, len);
+    }
+
+    /// Move to the start (`to_end = false`) or end of the current plain-text line.
+    pub fn preview_move_line_boundary(&self, to_end: bool, extend: bool) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let sel = *self.selection.lock();
+        let plain = doc.plain_text();
+        let off = plain_offset_from_cursor(doc, sel.head);
+        let line_start = plain[..off].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let line_end = plain[line_start..]
+            .find('\n')
+            .map(|i| line_start + i)
+            .unwrap_or(plain.len());
+        let new_off = if to_end { line_end } else { line_start };
+        let head = cursor_from_plain_offset(doc, new_off);
+        let anchor = if extend { sel.anchor } else { head };
+        *self.selection.lock() = Selection { anchor, head };
+    }
+
+    /// Move to the start (`to_end = false`) or end of the document.
+    pub fn preview_move_document_boundary(&self, to_end: bool, extend: bool) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let sel = *self.selection.lock();
+        let new_off = if to_end { doc.plain_text().len() } else { 0 };
+        let head = cursor_from_plain_offset(doc, new_off);
+        let anchor = if extend { sel.anchor } else { head };
+        *self.selection.lock() = Selection { anchor, head };
+    }
+
+    /// Apply a style patch to the effective selection (collapsed → whole paragraph).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn apply_style_patch_selection(&self, patch: RunStylePatch) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        self.undo.lock().push(
+            doc,
+            EditCommand::SetRunStyle {
+                range: sel,
+                style: patch,
+            },
+        )?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Step font size up (`direction > 0`) or down on the selection.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_font_size_selection(&self, direction: i32) -> Result<()> {
+        let current = {
+            let doc_guard = self.document.read();
+            let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let sel = *self.selection.lock();
+            style_at_cursor(doc, sel.normalized().0)
+                .and_then(|s| s.font_size_pt)
+                .unwrap_or(DEFAULT_FONT_SIZE_PT)
+        };
+        let next = next_font_size(current, direction);
+        self.apply_style_patch_selection(RunStylePatch {
+            font_size_pt: Some(Some(next)),
+            ..Default::default()
+        })
+    }
+
+    /// Set run colour on the selection.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_color_selection(&self, rgb: [u8; 3]) -> Result<()> {
+        self.apply_style_patch_selection(RunStylePatch {
+            color: Some(Some(rgb)),
+            ..Default::default()
+        })
     }
 
     /// Delete `sel` when non-empty; returns the caret where typing should continue.
@@ -511,9 +590,7 @@ impl DocumentViewer {
     /// invalid range, or [`ViewerError::DocumentNotOpen`] when nothing is loaded.
     pub fn apply(&self, cmd: EditCommand) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().push(doc, cmd)?;
         self.invalidate_preview();
         Ok(())
@@ -522,9 +599,7 @@ impl DocumentViewer {
     /// Undo the last edit.
     pub fn undo(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().undo(doc)?;
         self.invalidate_preview();
         Ok(())
@@ -533,9 +608,7 @@ impl DocumentViewer {
     /// Redo the last undone edit.
     pub fn redo(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().redo(doc)?;
         self.invalidate_preview();
         Ok(())
@@ -563,9 +636,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`] when nothing is loaded.
     pub fn replace_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         // Skip no-op pushes so typing churn does not stack identical bodies.
         let next = plain_text_to_blocks_preserving(doc, text);
         if doc.blocks == next {
@@ -598,9 +669,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`].
     pub fn toggle_style_selection(&self, which: char) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
         let style_at = style_at_cursor(doc, sel.normalized().0);
         let currently_on = style_at
@@ -644,9 +713,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`].
     pub fn set_alignment_all(&self, alignment: Alignment) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
         let indices = paragraph_indices_in_selection(doc, sel);
         if indices.is_empty() {
@@ -672,9 +739,7 @@ impl DocumentViewer {
     /// [`ViewerError::DocumentNotOpen`].
     pub fn set_list_all(&self, kind: ListKind) -> Result<()> {
         let mut doc_guard = self.document.write();
-        let doc = doc_guard
-            .as_mut()
-            .ok_or(ViewerError::DocumentNotOpen)?;
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
         let indices = paragraph_indices_in_selection(doc, sel);
         if indices.is_empty() {
@@ -703,7 +768,8 @@ impl DocumentViewer {
         let current = {
             let doc_guard = self.document.read();
             let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
-            let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+            let sel =
+                effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
             let indices = paragraph_indices_in_selection(doc, sel);
             indices
                 .first()
@@ -822,6 +888,28 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
             run_idx: last,
             byte_offset: p.runs[last].text.len(),
         },
+    }
+}
+
+const DEFAULT_FONT_SIZE_PT: f32 = 14.0;
+const FONT_SIZE_STEPS: &[f32] = &[
+    9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0,
+];
+
+fn next_font_size(current: f32, direction: i32) -> f32 {
+    if direction < 0 {
+        FONT_SIZE_STEPS
+            .iter()
+            .rev()
+            .find(|&&s| s < current - 0.01)
+            .copied()
+            .unwrap_or(FONT_SIZE_STEPS[0])
+    } else {
+        FONT_SIZE_STEPS
+            .iter()
+            .find(|&&s| s > current + 0.01)
+            .copied()
+            .unwrap_or(*FONT_SIZE_STEPS.last().unwrap_or(&DEFAULT_FONT_SIZE_PT))
     }
 }
 
@@ -1008,10 +1096,8 @@ impl Viewer for DocumentViewer {
                     limit: self.size_limit,
                 });
             }
-            let tmp = std::env::temp_dir().join(format!(
-                "orchid-docx-{}.docx",
-                uuid::Uuid::new_v4()
-            ));
+            let tmp =
+                std::env::temp_dir().join(format!("orchid-docx-{}.docx", uuid::Uuid::new_v4()));
             tokio::fs::write(&tmp, &bytes).await?;
             let doc = Document::from_docx(&tmp).await?;
             let _ = tokio::fs::remove_file(&tmp).await;
@@ -1093,10 +1179,16 @@ impl Viewer for DocumentViewer {
             Some(Block::Paragraph(p)) => Some(p),
             _ => first_paragraph(doc),
         };
-        let (bold, italic, underline, alignment, list_kind) = (
+        let (bold, italic, underline, font_size_pt, color_rgb, alignment, list_kind) = (
             style.as_ref().is_some_and(|s| s.bold),
             style.as_ref().is_some_and(|s| s.italic),
             style.as_ref().is_some_and(|s| s.underline),
+            style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
+            style
+                .as_ref()
+                .and_then(|s| s.color)
+                .map(|[r, g, b]| (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
+                .unwrap_or(0),
             match para.map(|p| p.alignment).unwrap_or_default() {
                 Alignment::Left => 0,
                 Alignment::Center => 1,
@@ -1135,11 +1227,7 @@ impl Viewer for DocumentViewer {
                 prev.sel_end = sel_end;
                 prev.valid = true;
             }
-            (
-                Arc::clone(&prev.bytes),
-                prev.width_px,
-                prev.height_px,
-            )
+            (Arc::clone(&prev.bytes), prev.width_px, prev.height_px)
         };
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
@@ -1152,6 +1240,8 @@ impl Viewer for DocumentViewer {
             bold,
             italic,
             underline,
+            font_size_pt,
+            color_rgb,
             alignment,
             list_kind,
             can_undo,

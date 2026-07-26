@@ -180,6 +180,106 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
+                    background: tool-bg(false, fs-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fs-ta := TouchArea { clicked => { root.action("font-smaller"); } }
+                    Text {
+                        text: model.font-smaller-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: max(28px, size-label.preferred-width + 8px);
+                    height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    size-label := Text {
+                        text: model.font-size-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, fl-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fl-ta := TouchArea { clicked => { root.action("font-larger"); } }
+                    Text {
+                        text: model.font-larger-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Colour swatches: compare against decimal `0xRRGGBB` values.
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 3px;
+                    y: (parent.height - self.height) / 2;
+                    background: #111111;
+                    border-width: model.color-rgb == 1118481 || model.color-rgb == 0 ? 2px : 1px;
+                    border-color: model.color-rgb == 1118481 || model.color-rgb == 0
+                        ? Theme.accent-brand : Theme.border-default;
+                    TouchArea { clicked => { root.action("color-111111"); } }
+                }
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 3px;
+                    y: (parent.height - self.height) / 2;
+                    background: #dc2626;
+                    border-width: model.color-rgb == 14423142 ? 2px : 1px;
+                    border-color: model.color-rgb == 14423142
+                        ? Theme.accent-brand : Theme.border-default;
+                    TouchArea { clicked => { root.action("color-dc2626"); } }
+                }
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 3px;
+                    y: (parent.height - self.height) / 2;
+                    background: #2563eb;
+                    border-width: model.color-rgb == 2442219 ? 2px : 1px;
+                    border-color: model.color-rgb == 2442219
+                        ? Theme.accent-brand : Theme.border-default;
+                    TouchArea { clicked => { root.action("color-2563eb"); } }
+                }
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 3px;
+                    y: (parent.height - self.height) / 2;
+                    background: #16a34a;
+                    border-width: model.color-rgb == 1483594 ? 2px : 1px;
+                    border-color: model.color-rgb == 1483594
+                        ? Theme.accent-brand : Theme.border-default;
+                    TouchArea { clicked => { root.action("color-16a34a"); } }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
                     background: tool-bg(model.alignment == 0, al-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -331,6 +431,14 @@ export component ViewerDocumentView inherits Rectangle {
                 height: parent.height;
 
                 key-pressed(event) => {
+                    if (event.text == Key.Home) {
+                        root.preview-key("Home", event.modifiers.control, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.End) {
+                        root.preview-key("End", event.modifiers.control, event.modifiers.shift);
+                        return accept;
+                    }
                     if (event.modifiers.control) {
                         root.preview-key(event.text, true, event.modifiers.shift);
                         return accept;

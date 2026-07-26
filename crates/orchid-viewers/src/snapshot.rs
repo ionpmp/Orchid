@@ -41,10 +41,14 @@ pub struct DocumentSnapshot {
     /// Non-fatal warnings (e.g. unsupported OOXML features).
     pub warnings: Vec<String>,
     pub info_text: String,
-    /// Aggregate style of the first paragraph's first run (toolbar accents).
+    /// Aggregate style at the selection caret (toolbar accents).
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
+    /// Font size in points at the caret (`0` = document default).
+    pub font_size_pt: f32,
+    /// Text colour as `0x00RRGGBB` (`0` = theme/default).
+    pub color_rgb: u32,
     /// 0=left, 1=center, 2=right, 3=justify.
     pub alignment: u8,
     /// 0=none, 1=bullet, 2=numbered.

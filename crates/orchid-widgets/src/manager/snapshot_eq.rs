@@ -134,6 +134,8 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.bold == b.bold
                 && a.italic == b.italic
                 && a.underline == b.underline
+                && a.font_size_pt.to_bits() == b.font_size_pt.to_bits()
+                && a.color_rgb == b.color_rgb
                 && a.alignment == b.alignment
                 && a.list_kind == b.list_kind
                 && a.can_undo == b.can_undo

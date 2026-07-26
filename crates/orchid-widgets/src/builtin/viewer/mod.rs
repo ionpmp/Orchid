@@ -834,6 +834,8 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "bold" => doc.toggle_style_all('b'),
                 "italic" => doc.toggle_style_all('i'),
                 "underline" => doc.toggle_style_all('u'),
+                "font-smaller" => doc.bump_font_size_selection(-1),
+                "font-larger" => doc.bump_font_size_selection(1),
                 "align-left" => doc.set_alignment_all(Alignment::Left),
                 "align-center" => doc.set_alignment_all(Alignment::Center),
                 "align-right" => doc.set_alignment_all(Alignment::Right),
@@ -843,6 +845,13 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "toggle-source" => {
                     doc.set_source_mode(!doc.source_mode());
                     Ok(())
+                }
+                color if color.starts_with("color-") => {
+                    if let Some(rgb) = parse_toolbar_color(&color["color-".len()..]) {
+                        doc.set_color_selection(rgb)
+                    } else {
+                        Ok(())
+                    }
                 }
                 _ => Ok(()),
             };
@@ -870,11 +879,7 @@ pub async fn document_push_edit(instance_id: Uuid, text: String) -> WidgetResult
 }
 
 /// Document: update selection from Source `TextInput` UTF-8 byte offsets.
-pub async fn document_set_selection(
-    instance_id: Uuid,
-    anchor: i32,
-    head: i32,
-) -> WidgetResult<()> {
+pub async fn document_set_selection(instance_id: Uuid, anchor: i32, head: i32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
         let guard = inner.viewer.lock().await;
@@ -956,6 +961,18 @@ pub async fn document_preview_key(
         }
         let result = if ctrl {
             match key.as_str() {
+                "a" | "A" => {
+                    doc.preview_select_all();
+                    Ok(())
+                }
+                "Home" => {
+                    doc.preview_move_document_boundary(false, shift);
+                    Ok(())
+                }
+                "End" => {
+                    doc.preview_move_document_boundary(true, shift);
+                    Ok(())
+                }
                 "b" | "B" => doc.toggle_style_all('b'),
                 "i" | "I" => doc.toggle_style_all('i'),
                 "u" | "U" => doc.toggle_style_all('u'),
@@ -969,6 +986,14 @@ pub async fn document_preview_key(
                 "Backspace" => doc.preview_delete_backward(),
                 "Delete" => doc.preview_delete_forward(),
                 "Return" => doc.preview_insert_paragraph_break(),
+                "Home" => {
+                    doc.preview_move_line_boundary(false, shift);
+                    Ok(())
+                }
+                "End" => {
+                    doc.preview_move_line_boundary(true, shift);
+                    Ok(())
+                }
                 "Left" => {
                     doc.preview_move_by_chars(-1, shift);
                     Ok(())
@@ -1048,9 +1073,20 @@ fn is_printable_preview_text(key: &str) -> bool {
     if key.is_empty() {
         return false;
     }
-    !key.chars().any(|c| {
-        c.is_control() || ('\u{f700}'..='\u{f7ff}').contains(&c) || c == '\u{7f}'
-    })
+    !key.chars()
+        .any(|c| c.is_control() || ('\u{f700}'..='\u{f7ff}').contains(&c) || c == '\u{7f}')
+}
+
+/// Parse a toolbar colour token (`RRGGBB` hex) into RGB bytes.
+fn parse_toolbar_color(hex: &str) -> Option<[u8; 3]> {
+    let hex = hex.trim();
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some([r, g, b])
 }
 
 #[async_trait]

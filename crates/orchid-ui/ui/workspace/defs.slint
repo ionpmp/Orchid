@@ -930,6 +930,12 @@ export struct ViewerDocumentModel {
     bold: bool,
     italic: bool,
     underline: bool,
+    /// Font size in points at the caret (`0` = default).
+    font-size-pt: float,
+    /// Display label for the caret font size (e.g. "14").
+    font-size-label: string,
+    /// Text colour as `0x00RRGGBB` (`0` = default/theme).
+    color-rgb: int,
     /// 0=left, 1=center, 2=right, 3=justify.
     alignment: int,
     /// 0=none, 1=bullet, 2=numbered.
@@ -946,6 +952,8 @@ export struct ViewerDocumentModel {
     bold-label: string,
     italic-label: string,
     underline-label: string,
+    font-smaller-label: string,
+    font-larger-label: string,
     align-left-label: string,
     align-center-label: string,
     align-right-label: string,

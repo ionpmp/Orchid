@@ -249,6 +249,9 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         bold: false,
         italic: false,
         underline: false,
+        font_size_pt: 0.0,
+        font_size_label: SharedString::from("14"),
+        color_rgb: 0,
         alignment: 0,
         list_kind: 0,
         can_undo: false,
@@ -263,6 +266,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         bold_label: locale.tr("viewer-document-bold").into(),
         italic_label: locale.tr("viewer-document-italic").into(),
         underline_label: locale.tr("viewer-document-underline").into(),
+        font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
+        font_larger_label: locale.tr("viewer-document-font-larger").into(),
         align_left_label: locale.tr("viewer-document-align-left").into(),
         align_center_label: locale.tr("viewer-document-align-center").into(),
         align_right_label: locale.tr("viewer-document-align-right").into(),
@@ -390,6 +395,13 @@ fn build_document_snapshot(
     model.bold = s.bold;
     model.italic = s.italic;
     model.underline = s.underline;
+    model.font_size_pt = s.font_size_pt;
+    model.font_size_label = if s.font_size_pt > 0.0 {
+        format!("{}", s.font_size_pt.round() as i32).into()
+    } else {
+        SharedString::from("14")
+    };
+    model.color_rgb = s.color_rgb as i32;
     model.alignment = i32::from(s.alignment);
     model.list_kind = i32::from(s.list_kind);
     model.can_undo = s.can_undo;
