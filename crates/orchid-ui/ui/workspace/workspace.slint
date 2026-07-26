@@ -209,6 +209,8 @@ export component WorkspaceView inherits Rectangle {
 
     callback viewer-document-action(string, string);
     callback viewer-document-text-edited(string, string);
+    callback viewer-document-selection-changed(string, int, int);
+    callback viewer-document-viewport-changed(string, length);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -580,6 +582,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-text-scroll(id, d) => { root.viewer-text-scroll(id, d); }
                     viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
                     viewer-document-text-edited(id, t) => { root.viewer-document-text-edited(id, t); }
+                    viewer-document-selection-changed(id, a, h) => { root.viewer-document-selection-changed(id, a, h); }
+                    viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
                     fm-pane-clicked(fm_id, p) => { root.fm-pane-clicked(fm_id, p); }
@@ -702,6 +706,8 @@ export component WorkspaceView inherits Rectangle {
             viewer-text-scroll(id, d) => { root.viewer-text-scroll(id, d); }
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
             viewer-document-text-edited(id, t) => { root.viewer-document-text-edited(id, t); }
+            viewer-document-selection-changed(id, a, h) => { root.viewer-document-selection-changed(id, a, h); }
+            viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
         }
 
         for w[i] in root.workspace.floating-widgets: Rectangle {

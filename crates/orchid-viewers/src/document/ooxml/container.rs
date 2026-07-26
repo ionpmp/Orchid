@@ -12,7 +12,9 @@ use crate::document::model::Document;
 use crate::document::ooxml::document_xml::{
     parse_document_xml, parse_relationships, write_document_xml,
 };
-use crate::document::ooxml::numbering::parse_numbering_xml;
+use crate::document::ooxml::numbering::{
+    assign_orchid_list_ids, document_uses_lists, parse_numbering_xml, write_numbering_xml,
+};
 use crate::document::ooxml::styles::parse_styles_xml;
 use crate::error::{Result, ViewerError};
 
@@ -130,6 +132,12 @@ pub async fn save_document(doc: &Document, output_path: &Path) -> Result<()> {
 }
 
 fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
+    let mut doc = doc.clone();
+    let uses_lists = document_uses_lists(&doc);
+    if uses_lists {
+        assign_orchid_list_ids(&mut doc);
+    }
+
     let tmp = tmp_path(output_path);
     {
         let file = File::create(&tmp)?;
@@ -137,21 +145,21 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         let opts = SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
 
-        let document_xml = write_document_xml(doc)?;
+        let document_xml = write_document_xml(&doc)?;
         zip.start_file("word/document.xml", opts)
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
         zip.write_all(&document_xml)?;
 
-        // Content types / rels — prefer originals, else minimal stubs.
-        if let Some(ref ct) = doc.content_types {
-            zip.start_file("[Content_Types].xml", opts)
-                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-            zip.write_all(ct)?;
-        } else {
-            zip.start_file("[Content_Types].xml", opts)
-                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-            zip.write_all(MINIMAL_CONTENT_TYPES.as_bytes())?;
+        let mut content_types = doc
+            .content_types
+            .clone()
+            .unwrap_or_else(|| MINIMAL_CONTENT_TYPES.as_bytes().to_vec());
+        if uses_lists {
+            content_types = ensure_numbering_content_type(&content_types);
         }
+        zip.start_file("[Content_Types].xml", opts)
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        zip.write_all(&content_types)?;
 
         if let Some(ref rels) = doc.package_rels {
             zip.start_file("_rels/.rels", opts)
@@ -168,6 +176,26 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         written.insert("[Content_Types].xml".to_string());
         written.insert("_rels/.rels".to_string());
 
+        if uses_lists {
+            let numbering = write_numbering_xml();
+            zip.start_file("word/numbering.xml", opts)
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+            zip.write_all(&numbering)?;
+            written.insert("word/numbering.xml".to_string());
+        }
+
+        let mut document_rels = doc
+            .document_rels
+            .clone()
+            .unwrap_or_else(|| MINIMAL_DOCUMENT_RELS.as_bytes().to_vec());
+        if uses_lists {
+            document_rels = ensure_numbering_document_rel(&document_rels);
+        }
+        zip.start_file("word/_rels/document.xml.rels", opts)
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        zip.write_all(&document_rels)?;
+        written.insert("word/_rels/document.xml.rels".to_string());
+
         for (name, bytes) in &doc.retained_parts {
             if written.contains(name) {
                 continue;
@@ -176,19 +204,6 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             zip.write_all(bytes)?;
             written.insert(name.clone());
-        }
-
-        // Ensure document rels exist.
-        if !written.contains("word/_rels/document.xml.rels") {
-            if let Some(ref rels) = doc.document_rels {
-                zip.start_file("word/_rels/document.xml.rels", opts)
-                    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-                zip.write_all(rels)?;
-            } else {
-                zip.start_file("word/_rels/document.xml.rels", opts)
-                    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-                zip.write_all(MINIMAL_DOCUMENT_RELS.as_bytes())?;
-            }
         }
 
         zip.finish()
@@ -200,6 +215,59 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         ViewerError::Io(e)
     })?;
     Ok(())
+}
+
+fn ensure_numbering_content_type(bytes: &[u8]) -> Vec<u8> {
+    let s = String::from_utf8_lossy(bytes);
+    if s.contains("/word/numbering.xml") {
+        return bytes.to_vec();
+    }
+    let injection = r#"  <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+"#;
+    if let Some(idx) = s.rfind("</Types>") {
+        let mut out = String::with_capacity(s.len() + injection.len());
+        out.push_str(&s[..idx]);
+        out.push_str(injection);
+        out.push_str(&s[idx..]);
+        out.into_bytes()
+    } else {
+        bytes.to_vec()
+    }
+}
+
+fn ensure_numbering_document_rel(bytes: &[u8]) -> Vec<u8> {
+    let s = String::from_utf8_lossy(bytes);
+    if s.contains("relationships/numbering") || s.contains("Target=\"numbering.xml\"") {
+        return bytes.to_vec();
+    }
+    let rid = next_relationship_id(&s);
+    let injection = format!(
+        r#"  <Relationship Id="{rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+"#
+    );
+    if let Some(idx) = s.rfind("</Relationships>") {
+        let mut out = String::with_capacity(s.len() + injection.len());
+        out.push_str(&s[..idx]);
+        out.push_str(&injection);
+        out.push_str(&s[idx..]);
+        out.into_bytes()
+    } else {
+        bytes.to_vec()
+    }
+}
+
+fn next_relationship_id(rels_xml: &str) -> String {
+    let mut max = 0u32;
+    for (i, piece) in rels_xml.split("Id=\"rId").enumerate() {
+        if i == 0 {
+            continue;
+        }
+        let digits: String = piece.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digits.parse::<u32>() {
+            max = max.max(n);
+        }
+    }
+    format!("rId{}", max + 1)
 }
 
 fn tmp_path(output: &Path) -> PathBuf {

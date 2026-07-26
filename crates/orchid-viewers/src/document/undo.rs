@@ -264,20 +264,9 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             Ok(EditCommand::InsertText { at: start, text })
         }
         EditCommand::SetRunStyle { range, style } => {
-            let (start, _) = range.normalized();
-            let Block::Paragraph(p) = doc
-                .blocks
-                .get(start.block_idx)
-                .ok_or(ViewerError::EditOutOfBounds)?
-            else {
-                return Err(ViewerError::EditOutOfBounds);
-            };
-            let previous = p.clone();
+            let previous = doc.blocks.clone();
             apply_set_run_style(doc, *range, style)?;
-            Ok(EditCommand::ReplaceParagraph {
-                paragraph_idx: start.block_idx,
-                previous,
-            })
+            Ok(EditCommand::ReplaceBlocks { blocks: previous })
         }
         EditCommand::SetAlignment {
             paragraph_idx,
@@ -310,6 +299,7 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             };
             let previous = p.clone();
             p.list = *kind;
+            p.num_id = crate::document::ooxml::numbering::num_id_for_kind(*kind);
             Ok(EditCommand::ReplaceParagraph {
                 paragraph_idx: *paragraph_idx,
                 previous,
@@ -508,22 +498,121 @@ fn apply_delete_range(doc: &mut Document, start: Cursor, end: Cursor) -> Result<
 
 fn apply_set_run_style(doc: &mut Document, range: Selection, patch: &RunStylePatch) -> Result<()> {
     let (start, end) = range.normalized();
-    if start.block_idx != end.block_idx {
+    if start.block_idx > end.block_idx || end.block_idx >= doc.blocks.len() {
         return Err(ViewerError::EditOutOfBounds);
     }
-    let Block::Paragraph(p) = doc
-        .blocks
-        .get_mut(start.block_idx)
-        .ok_or(ViewerError::EditOutOfBounds)?
-    else {
+    for bi in start.block_idx..=end.block_idx {
+        let Block::Paragraph(p) = doc
+            .blocks
+            .get_mut(bi)
+            .ok_or(ViewerError::EditOutOfBounds)?
+        else {
+            continue;
+        };
+        if p.runs.is_empty() {
+            p.runs.push(Run {
+                text: String::new(),
+                style: RunStyle::default(),
+            });
+        }
+        let (run_start, byte_start) = if bi == start.block_idx {
+            (start.run_idx, start.byte_offset)
+        } else {
+            (0, 0)
+        };
+        let (run_end, byte_end) = if bi == end.block_idx {
+            (end.run_idx, end.byte_offset)
+        } else {
+            let last = p.runs.len().saturating_sub(1);
+            let end_off = p.runs.get(last).map(|r| r.text.len()).unwrap_or(0);
+            (last, end_off)
+        };
+        if bi == start.block_idx && bi == end.block_idx && run_start == run_end && byte_start == byte_end
+        {
+            // Collapsed: style the run under the caret.
+            let idx = run_start.min(p.runs.len().saturating_sub(1));
+            if let Some(run) = p.runs.get_mut(idx) {
+                patch.apply_to(&mut run.style);
+            }
+            continue;
+        }
+        apply_style_to_paragraph_range(p, run_start, byte_start, run_end, byte_end, patch)?;
+    }
+    Ok(())
+}
+
+fn apply_style_to_paragraph_range(
+    p: &mut Paragraph,
+    run_start: usize,
+    byte_start: usize,
+    run_end: usize,
+    byte_end: usize,
+    patch: &RunStylePatch,
+) -> Result<()> {
+    if run_start >= p.runs.len() || run_end >= p.runs.len() {
         return Err(ViewerError::EditOutOfBounds);
-    };
-    for idx in start.run_idx..=end.run_idx {
+    }
+    // Split end first so indices for the start split stay valid when in the same run.
+    let mut end_run = run_end;
+    let mut end_byte = byte_end;
+    if end_byte > 0 && end_byte < p.runs[end_run].text.len() {
+        split_run_at(p, end_run, end_byte)?;
+        // Styled portion stays in `end_run`; the right half is end_run+1.
+    } else if end_byte == 0 && end_run > run_start {
+        // Selection ends at the start of this run — exclude it.
+        end_run = end_run.saturating_sub(1);
+        end_byte = p.runs[end_run].text.len();
+    }
+
+    let mut start_run = run_start;
+    if byte_start > 0 && byte_start < p.runs[start_run].text.len() {
+        start_run = split_run_at(p, start_run, byte_start)?;
+        if end_run >= run_start {
+            end_run += 1;
+        }
+    } else if byte_start >= p.runs[start_run].text.len() && byte_start > 0 {
+        start_run = start_run.saturating_add(1);
+    }
+
+    if start_run >= p.runs.len() {
+        return Ok(());
+    }
+    let last = end_run.min(p.runs.len().saturating_sub(1));
+    for idx in start_run..=last {
         if let Some(run) = p.runs.get_mut(idx) {
             patch.apply_to(&mut run.style);
         }
     }
+    let _ = end_byte;
     Ok(())
+}
+
+/// Split `p.runs[run_idx]` at `byte_offset`; returns index of the right-hand run.
+fn split_run_at(p: &mut Paragraph, run_idx: usize, byte_offset: usize) -> Result<usize> {
+    let run = p
+        .runs
+        .get_mut(run_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?;
+    if byte_offset == 0 {
+        return Ok(run_idx);
+    }
+    if byte_offset >= run.text.len() {
+        return Ok(run_idx + 1);
+    }
+    if !run.text.is_char_boundary(byte_offset) {
+        return Err(ViewerError::EditOutOfBounds);
+    }
+    let right_text = run.text[byte_offset..].to_string();
+    run.text.truncate(byte_offset);
+    let style = run.style.clone();
+    p.runs.insert(
+        run_idx + 1,
+        Run {
+            text: right_text,
+            style,
+        },
+    );
+    Ok(run_idx + 1)
 }
 
 fn extract_text(doc: &Document, start: Cursor, end: Cursor) -> Result<String> {
@@ -638,6 +727,57 @@ mod tests {
         match &doc.blocks[0] {
             Block::Paragraph(p) => assert!(!p.runs[0].style.bold),
             _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn partial_run_bold_splits() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor {
+                            block_idx: 0,
+                            run_idx: 0,
+                            byte_offset: 1,
+                        },
+                        head: Cursor {
+                            block_idx: 0,
+                            run_idx: 0,
+                            byte_offset: 4,
+                        },
+                    },
+                    style: RunStylePatch {
+                        bold: Some(true),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs.len() >= 2);
+                assert!(!p.runs[0].style.bold);
+                assert_eq!(p.runs[0].text, "H");
+                assert!(p.runs[1].style.bold);
+                assert_eq!(p.runs[1].text, "ell");
+                if p.runs.len() > 2 {
+                    assert!(!p.runs[2].style.bold);
+                    assert_eq!(p.runs[2].text, "o");
+                }
+            }
+            _ => panic!("paragraph"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.plain_text(), "Hello");
+                assert!(p.runs.iter().all(|r| !r.style.bold));
+            }
+            _ => panic!("paragraph"),
         }
     }
 

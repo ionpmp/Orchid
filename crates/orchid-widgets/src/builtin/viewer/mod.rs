@@ -869,6 +869,43 @@ pub async fn document_push_edit(instance_id: Uuid, text: String) -> WidgetResult
     Ok(())
 }
 
+/// Document: update selection from Source `TextInput` UTF-8 byte offsets.
+pub async fn document_set_selection(
+    instance_id: Uuid,
+    anchor: i32,
+    head: i32,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
+                doc.set_selection_plain_offsets(anchor.max(0) as usize, head.max(0) as usize);
+            }
+        }
+    }
+    // Selection changes do not need a full snapshot rebuild for caret-only moves;
+    // toolbar accents update on the next format/edit refresh.
+    Ok(())
+}
+
+/// Document: set preview layout width from the Slint viewport (CSS pixels).
+pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
+                // Leave room for page padding inside the preview image.
+                let content = (width_px - 56.0).max(160.0);
+                doc.set_preview_width(content);
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 #[async_trait]
 impl Widget for ViewerWidget {
     fn type_id(&self) -> &'static str {

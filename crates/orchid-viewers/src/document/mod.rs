@@ -17,7 +17,10 @@ use crate::error::{Result, ViewerError};
 use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
-pub use cursor::{Cursor, Selection};
+pub use cursor::{
+    cursor_from_plain_offset, paragraph_indices_in_selection, selection_from_plain_offsets, Cursor,
+    Selection,
+};
 pub use layout::{DEFAULT_PREVIEW_WIDTH, DocumentLayout};
 pub use model::{
     Alignment, Block, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode, PageSetup,
@@ -59,6 +62,7 @@ pub struct DocumentViewer {
     layout: Mutex<DocumentLayout>,
     preview: Mutex<PreviewState>,
     source_mode: RwLock<bool>,
+    selection: Mutex<Selection>,
 }
 
 impl std::fmt::Debug for DocumentViewer {
@@ -92,6 +96,10 @@ impl DocumentViewer {
             layout: Mutex::new(DocumentLayout::new()),
             preview: Mutex::new(PreviewState::default()),
             source_mode: RwLock::new(false),
+            selection: Mutex::new(Selection {
+                anchor: Cursor::default(),
+                head: Cursor::default(),
+            }),
         }
     }
 
@@ -117,6 +125,21 @@ impl DocumentViewer {
             prev.width = width.max(120.0);
             prev.valid = false;
         }
+    }
+
+    /// Update the active selection from plain-text UTF-8 byte offsets.
+    pub fn set_selection_plain_offsets(&self, anchor: usize, head: usize) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        *self.selection.lock() = selection_from_plain_offsets(doc, anchor, head);
+    }
+
+    /// Current selection.
+    #[must_use]
+    pub fn selection(&self) -> Selection {
+        *self.selection.lock()
     }
 
     /// Borrow the loaded document model (for tests / UI commands).
@@ -205,17 +228,32 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Toggle a boolean character style on every run in the document.
+    /// Toggle a boolean character style on the current selection.
+    ///
+    /// Collapsed selection styles the run under the caret. Non-empty selection
+    /// styles the covered text (runs are split at boundaries).
     ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn toggle_style_all(&self, which: char) -> Result<()> {
+        // Kept name for widget API compatibility; scope is selection-aware.
+        self.toggle_style_selection(which)
+    }
+
+    /// Selection-scoped character style toggle.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_style_selection(&self, which: char) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard
             .as_mut()
             .ok_or(ViewerError::DocumentNotOpen)?;
-        let currently_on = first_run_style(doc)
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let style_at = style_at_cursor(doc, sel.normalized().0);
+        let currently_on = style_at
             .map(|s| match which {
                 'b' => s.bold,
                 'i' => s.italic,
@@ -238,16 +276,18 @@ impl DocumentViewer {
             },
             _ => return Ok(()),
         };
-        let mut next = doc.blocks.clone();
-        apply_style_patch_all_blocks(&mut next, &patch);
-        self.undo
-            .lock()
-            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.undo.lock().push(
+            doc,
+            EditCommand::SetRunStyle {
+                range: sel,
+                style: patch,
+            },
+        )?;
         self.invalidate_preview();
         Ok(())
     }
 
-    /// Set alignment on every paragraph block.
+    /// Set alignment on paragraphs touched by the selection.
     ///
     /// # Errors
     ///
@@ -257,9 +297,14 @@ impl DocumentViewer {
         let doc = doc_guard
             .as_mut()
             .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let indices = paragraph_indices_in_selection(doc, sel);
+        if indices.is_empty() {
+            return Ok(());
+        }
         let mut next = doc.blocks.clone();
-        for block in &mut next {
-            if let Block::Paragraph(p) = block {
+        for bi in indices {
+            if let Some(Block::Paragraph(p)) = next.get_mut(bi) {
                 p.alignment = alignment;
             }
         }
@@ -270,7 +315,7 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Set list kind on every paragraph block.
+    /// Set list kind on paragraphs touched by the selection.
     ///
     /// # Errors
     ///
@@ -280,10 +325,16 @@ impl DocumentViewer {
         let doc = doc_guard
             .as_mut()
             .ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let indices = paragraph_indices_in_selection(doc, sel);
+        if indices.is_empty() {
+            return Ok(());
+        }
         let mut next = doc.blocks.clone();
-        for block in &mut next {
-            if let Block::Paragraph(p) = block {
+        for bi in indices {
+            if let Some(Block::Paragraph(p)) = next.get_mut(bi) {
                 p.list = kind;
+                p.num_id = crate::document::ooxml::numbering::num_id_for_kind(kind);
             }
         }
         self.undo
@@ -293,19 +344,25 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Toggle bullet or numbered list on every paragraph (off when already that kind).
+    /// Toggle bullet or numbered list on selected paragraphs.
     ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn toggle_list_all(&self, kind: ListKind) -> Result<()> {
-        let current = self
-            .document
-            .read()
-            .as_ref()
-            .and_then(first_paragraph)
-            .map(|p| p.list)
-            .unwrap_or(ListKind::None);
+        let current = {
+            let doc_guard = self.document.read();
+            let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+            let indices = paragraph_indices_in_selection(doc, sel);
+            indices
+                .first()
+                .and_then(|bi| match doc.blocks.get(*bi) {
+                    Some(Block::Paragraph(p)) => Some(p.list),
+                    _ => None,
+                })
+                .unwrap_or(ListKind::None)
+        };
         let next = if current == kind {
             ListKind::None
         } else {
@@ -363,31 +420,99 @@ fn first_paragraph(doc: &Document) -> Option<&Paragraph> {
     })
 }
 
-fn first_run_style(doc: &Document) -> Option<&RunStyle> {
-    first_paragraph(doc).and_then(|p| p.runs.first().map(|r| &r.style))
+fn style_at_cursor(doc: &Document, cursor: Cursor) -> Option<RunStyle> {
+    let Block::Paragraph(p) = doc.blocks.get(cursor.block_idx)? else {
+        return None;
+    };
+    p.runs
+        .get(cursor.run_idx)
+        .map(|r| r.style.clone())
+        .or_else(|| p.runs.first().map(|r| r.style.clone()))
 }
 
-fn apply_style_patch_all_blocks(blocks: &mut [Block], patch: &RunStylePatch) {
-    for block in blocks {
-        match block {
-            Block::Paragraph(p) => {
-                for run in &mut p.runs {
-                    patch.apply_to(&mut run.style);
-                }
+fn effective_style_selection(doc: &Document, sel: Selection, source_mode: bool) -> Selection {
+    if !sel.is_collapsed() {
+        return sel;
+    }
+    if source_mode {
+        return expand_selection_to_paragraph(doc, sel.head);
+    }
+    // Preview mode has no caret yet — keep toolbar useful on the whole body.
+    expand_selection_to_document(doc)
+}
+
+fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
+    let Some(Block::Paragraph(p)) = doc.blocks.get(cursor.block_idx) else {
+        return Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+    };
+    if p.runs.is_empty() {
+        return Selection {
+            anchor: Cursor {
+                block_idx: cursor.block_idx,
+                run_idx: 0,
+                byte_offset: 0,
+            },
+            head: Cursor {
+                block_idx: cursor.block_idx,
+                run_idx: 0,
+                byte_offset: 0,
+            },
+        };
+    }
+    let last = p.runs.len() - 1;
+    Selection {
+        anchor: Cursor {
+            block_idx: cursor.block_idx,
+            run_idx: 0,
+            byte_offset: 0,
+        },
+        head: Cursor {
+            block_idx: cursor.block_idx,
+            run_idx: last,
+            byte_offset: p.runs[last].text.len(),
+        },
+    }
+}
+
+fn expand_selection_to_document(doc: &Document) -> Selection {
+    let mut first = None;
+    let mut last = Cursor::default();
+    for (bi, block) in doc.blocks.iter().enumerate() {
+        let Block::Paragraph(p) = block else {
+            continue;
+        };
+        if p.runs.is_empty() {
+            let c = Cursor {
+                block_idx: bi,
+                run_idx: 0,
+                byte_offset: 0,
+            };
+            if first.is_none() {
+                first = Some(c);
             }
-            Block::Table(t) => {
-                for row in &mut t.rows {
-                    for cell in &mut row.cells {
-                        for p in &mut cell.paragraphs {
-                            for run in &mut p.runs {
-                                patch.apply_to(&mut run.style);
-                            }
-                        }
-                    }
-                }
-            }
-            Block::Image(_) => {}
+            last = c;
+            continue;
         }
+        if first.is_none() {
+            first = Some(Cursor {
+                block_idx: bi,
+                run_idx: 0,
+                byte_offset: 0,
+            });
+        }
+        let ri = p.runs.len() - 1;
+        last = Cursor {
+            block_idx: bi,
+            run_idx: ri,
+            byte_offset: p.runs[ri].text.len(),
+        };
+    }
+    Selection {
+        anchor: first.unwrap_or_default(),
+        head: last,
     }
 }
 
@@ -431,6 +556,10 @@ impl Viewer for DocumentViewer {
             *self.warnings.write() = Vec::new();
             *self.preview.lock() = PreviewState::default();
             *self.source_mode.write() = false;
+            *self.selection.lock() = Selection {
+                anchor: Cursor::default(),
+                head: Cursor::default(),
+            };
             return Ok(());
         };
 
@@ -450,6 +579,10 @@ impl Viewer for DocumentViewer {
         *self.warnings.write() = Vec::new();
         *self.preview.lock() = PreviewState::default();
         *self.source_mode.write() = false;
+        *self.selection.lock() = Selection {
+            anchor: Cursor::default(),
+            head: Cursor::default(),
+        };
         Ok(())
     }
 
@@ -461,6 +594,10 @@ impl Viewer for DocumentViewer {
         *self.warnings.write() = Vec::new();
         *self.preview.lock() = PreviewState::default();
         *self.source_mode.write() = false;
+        *self.selection.lock() = Selection {
+            anchor: Cursor::default(),
+            head: Cursor::default(),
+        };
         Ok(())
     }
 
@@ -483,28 +620,29 @@ impl Viewer for DocumentViewer {
         let warnings = self.warnings.read().clone();
         let plain_text = doc.plain_text();
         let block_count = doc.blocks.len() as u32;
-        let (bold, italic, underline, alignment, list_kind) =
-            if let Some(p) = first_paragraph(doc) {
-                let style = p.runs.first().map(|r| &r.style);
-                (
-                    style.is_some_and(|s| s.bold),
-                    style.is_some_and(|s| s.italic),
-                    style.is_some_and(|s| s.underline),
-                    match p.alignment {
-                        Alignment::Left => 0,
-                        Alignment::Center => 1,
-                        Alignment::Right => 2,
-                        Alignment::Justify => 3,
-                    },
-                    match p.list {
-                        ListKind::None => 0,
-                        ListKind::Bullet => 1,
-                        ListKind::Numbered => 2,
-                    },
-                )
-            } else {
-                (false, false, false, 0, 0)
-            };
+        let sel = *self.selection.lock();
+        let caret = sel.normalized().0;
+        let style = style_at_cursor(doc, caret);
+        let para = match doc.blocks.get(caret.block_idx) {
+            Some(Block::Paragraph(p)) => Some(p),
+            _ => first_paragraph(doc),
+        };
+        let (bold, italic, underline, alignment, list_kind) = (
+            style.as_ref().is_some_and(|s| s.bold),
+            style.as_ref().is_some_and(|s| s.italic),
+            style.as_ref().is_some_and(|s| s.underline),
+            match para.map(|p| p.alignment).unwrap_or_default() {
+                Alignment::Left => 0,
+                Alignment::Center => 1,
+                Alignment::Right => 2,
+                Alignment::Justify => 3,
+            },
+            match para.map(|p| p.list).unwrap_or_default() {
+                ListKind::None => 0,
+                ListKind::Bullet => 1,
+                ListKind::Numbered => 2,
+            },
+        );
 
         let source_mode = *self.source_mode.read();
         let (preview_rgba, preview_width_px, preview_height_px) = {

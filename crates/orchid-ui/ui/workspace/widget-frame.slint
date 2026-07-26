@@ -246,6 +246,8 @@ export component WidgetFrame inherits Rectangle {
 
     callback viewer-document-action(string, string);
     callback viewer-document-text-edited(string, string);
+    callback viewer-document-selection-changed(string, int, int);
+    callback viewer-document-viewport-changed(string, length);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-pane-clicked(string, int);
@@ -884,6 +886,8 @@ export component WidgetFrame inherits Rectangle {
 
                         document-action(a) => { root.viewer-document-action(root.model.instance-id, a); }
                         document-text-edited(t) => { root.viewer-document-text-edited(root.model.instance-id, t); }
+                        document-selection-changed(a, h) => { root.viewer-document-selection-changed(root.model.instance-id, a, h); }
+                        document-viewport-changed(w) => { root.viewer-document-viewport-changed(root.model.instance-id, w); }
                     }
                 }
 

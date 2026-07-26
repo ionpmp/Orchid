@@ -2124,6 +2124,38 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_document_selection_changed({
+            move |id, anchor, head| {
+                if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                    spawn::spawn_local_compat(async move {
+                        if let Err(e) = orchid_widgets::builtin::viewer::document_set_selection(
+                            inst, anchor, head,
+                        )
+                        .await
+                        {
+                            warn!(?e, "viewer document selection");
+                        }
+                    });
+                }
+            }
+        });
+        self.window.on_viewer_document_viewport_changed({
+            let t = t.clone();
+            move |id, width| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::document_set_viewport_width(
+                                inst, width
+                            )
+                        );
+                    }
+                }
+            }
+        });
 
         self.window.on_fm_sidebar_clicked({
             let t = t.clone();

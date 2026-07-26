@@ -6,12 +6,15 @@ export component ViewerDocumentView inherits Rectangle {
 
     callback action(string);
     callback text-edited(string);
+    callback selection-changed(int, int);
+    callback viewport-changed(length);
 
     background: transparent;
 
     property <string> draft-text: model.plain-text;
     property <bool> locally-dirty: false;
     property <string> last-path: "";
+    property <length> last-viewport-w: 0px;
 
     changed model => {
         if root.last-path != model.path-display {
@@ -312,6 +315,13 @@ export component ViewerDocumentView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
+            changed width => {
+                if (self.width != root.last-viewport-w && self.width > 0) {
+                    root.last-viewport-w = self.width;
+                    root.viewport-changed(self.width);
+                }
+            }
+
             if !model.source-mode : Flickable {
                 width: parent.width;
                 height: parent.height;
@@ -358,6 +368,12 @@ export component ViewerDocumentView inherits Rectangle {
                         color: Theme.text-primary;
                         font-family: Theme.font-family-sans;
                         font-size: Theme.font-size-md;
+                        cursor-position-changed(pos) => {
+                            root.selection-changed(
+                                self.cursor-position-byte-offset,
+                                self.anchor-position-byte-offset
+                            );
+                        }
                         key-pressed(event) => {
                             if (event.modifiers.control
                                 && !event.modifiers.shift
@@ -421,6 +437,10 @@ export component ViewerDocumentView inherits Rectangle {
                             root.draft-text = self.text;
                             root.locally-dirty = true;
                             root.text-edited(self.text);
+                            root.selection-changed(
+                                self.cursor-position-byte-offset,
+                                self.anchor-position-byte-offset
+                            );
                         }
                     }
                 }

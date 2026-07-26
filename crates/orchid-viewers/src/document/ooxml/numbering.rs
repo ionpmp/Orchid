@@ -1,12 +1,17 @@
-//! Parse `word/numbering.xml` into list-kind lookups.
+//! Parse / serialise `word/numbering.xml` into list-kind lookups.
 
 use std::collections::HashMap;
 
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
-use crate::document::model::ListKind;
+use crate::document::model::{Block, Document, ListKind};
 use crate::error::{Result, ViewerError};
+
+/// Orchid default `numId` for bulleted paragraphs.
+pub const ORCHID_BULLET_NUM_ID: u32 = 1;
+/// Orchid default `numId` for numbered paragraphs.
+pub const ORCHID_NUMBERED_NUM_ID: u32 = 2;
 
 /// Mapping from `numId` → list kind (level 0).
 #[derive(Debug, Clone, Default)]
@@ -25,6 +30,83 @@ impl NumberingDefs {
             .unwrap_or(ListKind::None)
     }
 }
+
+/// Map a list kind to Orchid's fixed OOXML `numId`.
+#[must_use]
+pub fn num_id_for_kind(kind: ListKind) -> Option<u32> {
+    match kind {
+        ListKind::None => None,
+        ListKind::Bullet => Some(ORCHID_BULLET_NUM_ID),
+        ListKind::Numbered => Some(ORCHID_NUMBERED_NUM_ID),
+    }
+}
+
+/// Whether any paragraph uses a list marker.
+#[must_use]
+pub fn document_uses_lists(doc: &Document) -> bool {
+    doc.blocks.iter().any(|b| match b {
+        Block::Paragraph(p) => p.list != ListKind::None,
+        Block::Table(t) => t.rows.iter().any(|r| {
+            r.cells
+                .iter()
+                .any(|c| c.paragraphs.iter().any(|p| p.list != ListKind::None))
+        }),
+        _ => false,
+    })
+}
+
+/// Assign Orchid `numId` values from [`ListKind`] before serialising.
+pub fn assign_orchid_list_ids(doc: &mut Document) {
+    for block in &mut doc.blocks {
+        match block {
+            Block::Paragraph(p) => {
+                p.num_id = num_id_for_kind(p.list);
+            }
+            Block::Table(t) => {
+                for row in &mut t.rows {
+                    for cell in &mut row.cells {
+                        for p in &mut cell.paragraphs {
+                            p.num_id = num_id_for_kind(p.list);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Minimal `word/numbering.xml` with bullet=`1` and decimal=`2`.
+#[must_use]
+pub fn write_numbering_xml() -> Vec<u8> {
+    ORCHID_NUMBERING_XML.as_bytes().to_vec()
+}
+
+const ORCHID_NUMBERING_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="0">
+    <w:nsid w:val="A1B2C301"/>
+    <w:multiLevelType w:val="hybridMultilevel"/>
+    <w:lvl w:ilvl="0">
+      <w:start w:val="1"/>
+      <w:numFmt w:val="bullet"/>
+      <w:lvlText w:val="•"/>
+      <w:lvlJc w:val="left"/>
+    </w:lvl>
+  </w:abstractNum>
+  <w:abstractNum w:abstractNumId="1">
+    <w:nsid w:val="A1B2C302"/>
+    <w:multiLevelType w:val="hybridMultilevel"/>
+    <w:lvl w:ilvl="0">
+      <w:start w:val="1"/>
+      <w:numFmt w:val="decimal"/>
+      <w:lvlText w:val="%1."/>
+      <w:lvlJc w:val="left"/>
+    </w:lvl>
+  </w:abstractNum>
+  <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+  <w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
+</w:numbering>"#;
 
 /// Parse numbering.xml.
 ///
@@ -173,5 +255,12 @@ mod tests {
         assert_eq!(defs.kind_of(1), ListKind::Bullet);
         assert_eq!(defs.kind_of(2), ListKind::Numbered);
         assert_eq!(defs.kind_of(99), ListKind::None);
+    }
+
+    #[test]
+    fn orchid_numbering_roundtrips_parse() {
+        let defs = parse_numbering_xml(&write_numbering_xml()).unwrap();
+        assert_eq!(defs.kind_of(ORCHID_BULLET_NUM_ID), ListKind::Bullet);
+        assert_eq!(defs.kind_of(ORCHID_NUMBERED_NUM_ID), ListKind::Numbered);
     }
 }

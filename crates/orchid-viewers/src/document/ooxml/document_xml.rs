@@ -563,7 +563,10 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
         writer
             .write_event(Event::Empty(ilvl))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-        if let Some(id) = p.num_id {
+        let id = p.num_id.or_else(|| {
+            crate::document::ooxml::numbering::num_id_for_kind(p.list)
+        });
+        if let Some(id) = id {
             let mut num = BytesStart::new("w:numId");
             num.push_attribute(("w:val", id.to_string().as_str()));
             writer
