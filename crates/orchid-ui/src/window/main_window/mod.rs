@@ -58,8 +58,8 @@ use super::models::{
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
     empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
     empty_terminal_cells, empty_viewer_model, empty_weather_model, locale_display_name,
-    patch_processes_model, theme_display_name, widget_has_settings, FileManagerOverlays,
-    PasswordAddDialogOverlay,
+    patch_processes_model, patch_system_model, theme_display_name, widget_has_settings,
+    FileManagerOverlays, PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
@@ -1376,18 +1376,43 @@ impl MainWindowController {
             .expect("workspace widgets must be VecModel-backed");
         let mut need_floating_sync = false;
         for id in &unique {
-            // Floating viewers live in a separate model; patch content in place
+            // Floating windows live in a separate model; patch content in place
             // when possible, otherwise rebuild the floating overlay.
             if self.is_floating_window(*id) {
-                if !self.try_patch_viewer_row(
+                let Ok(iref) = self.widget_manager.get_instance(*id) else {
+                    need_floating_sync = true;
+                    continue;
+                };
+                if iref.type_id == orchid_widgets::builtin::processes::TYPE_ID
+                    && self.try_patch_processes_row(
+                        &self.workspace_floating_widgets,
+                        *id,
+                        None,
+                        None,
+                    )
+                {
+                    continue;
+                }
+                if iref.type_id == orchid_widgets::builtin::system::TYPE_ID
+                    && self.try_patch_system_row(
+                        &self.workspace_floating_widgets,
+                        *id,
+                        None,
+                        None,
+                    )
+                {
+                    continue;
+                }
+                if self.try_patch_viewer_row(
                     &self.workspace_floating_widgets,
                     *id,
                     None,
                     None,
                     true,
                 ) {
-                    need_floating_sync = true;
+                    continue;
                 }
+                need_floating_sync = true;
                 continue;
             }
             let Some((idx, pl)) = snap
@@ -1428,10 +1453,21 @@ impl MainWindowController {
             {
                 continue;
             }
-            // Processes: avoid rebuilding every sibling model + all Slint rows
-            // from scratch on each sample.
+            // Processes / System: keep nested ModelRc list handles alive so
+            // Slint `for` rows see live samples (replacing the parent model
+            // froze CPU % and process rows after the window-manager work).
             if iref.type_id == orchid_widgets::builtin::processes::TYPE_ID
                 && self.try_patch_processes_row(
+                    &self.workspace_widgets,
+                    *id,
+                    Some(bounds),
+                    Some(idx as i32),
+                )
+            {
+                continue;
+            }
+            if iref.type_id == orchid_widgets::builtin::system::TYPE_ID
+                && self.try_patch_system_row(
                     &self.workspace_widgets,
                     *id,
                     Some(bounds),
@@ -1456,6 +1492,65 @@ impl MainWindowController {
             self.sync_floating_widgets_model();
         }
         Ok(())
+    }
+
+    /// Patch an existing system frame row without replacing nested ModelRcs.
+    fn try_patch_system_row(
+        &self,
+        model: &ModelRc<WidgetFrameModel>,
+        id: Uuid,
+        bounds: Option<PixelBounds>,
+        z_order: Option<i32>,
+    ) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let orchid_widgets::WidgetPayload::SystemIndicators(p) = &ws.payload else {
+            return false;
+        };
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+            return false;
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            patch_system_model(&mut row.system, p, &self.locale);
+            let mut need_frame = false;
+            if let Some(b) = bounds {
+                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                    row.x = b.x;
+                    row.y = b.y;
+                    row.width = b.width;
+                    row.height = b.height;
+                    need_frame = true;
+                }
+            }
+            if let Some(z) = z_order {
+                if row.z_order != z {
+                    row.z_order = z;
+                    need_frame = true;
+                }
+            }
+            let title: slint::SharedString = ws.title.clone().into();
+            if row.title != title {
+                row.title = title;
+                need_frame = true;
+            }
+            if need_frame {
+                let (group_id, group_tabs) = self.build_group_tab_models(id);
+                row.group_id = group_id;
+                row.group_tabs = group_tabs;
+                v.set_row_data(r, row);
+            }
+            return true;
+        }
+        false
     }
 
     /// Patch an existing processes frame row without rebuilding sibling models.
@@ -2815,13 +2910,14 @@ impl MainWindowController {
                 .map(|s| s.title.clone())
                 .filter(|t| !t.is_empty())
                 .unwrap_or_else(|| inst.type_id.clone());
-            let state = inst.window_state().unwrap_or(orchid_storage::WindowState::Normal);
+            let state = inst
+                .window_state()
+                .unwrap_or(orchid_storage::WindowState::Normal);
             items.push(WindowTaskbarItem {
                 instance_id: inst.id.to_string().into(),
                 title: title.into(),
                 type_id: inst.type_id.clone().into(),
-                is_active: top == Some(inst.id)
-                    && state != orchid_storage::WindowState::Minimized,
+                is_active: top == Some(inst.id) && state != orchid_storage::WindowState::Minimized,
                 is_minimized: state == orchid_storage::WindowState::Minimized,
             });
         }
@@ -2936,7 +3032,11 @@ impl MainWindowController {
         let bounds = c.default_floating_bounds();
         for _ in 0..50 {
             if c.widget_manager.get_instance(id).is_ok() {
-                if c.widget_manager.undock_to_floating(id, bounds).await.is_ok() {
+                if c.widget_manager
+                    .undock_to_floating(id, bounds)
+                    .await
+                    .is_ok()
+                {
                     break;
                 }
             }

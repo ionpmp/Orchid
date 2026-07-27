@@ -1,5 +1,5 @@
 use orchid_i18n::LocaleManager;
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{Model, ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{SystemIndicatorEntry, SystemModel};
 
@@ -21,24 +21,50 @@ pub(crate) fn build_system_model(
     p: &orchid_widgets::SystemPayload,
     locale: &LocaleManager,
 ) -> SystemModel {
+    SystemModel {
+        indicators: ModelRc::new(VecModel::from(indicator_entries(p, locale))),
+    }
+}
+
+/// Update an existing [`SystemModel`] in place (keep the same `ModelRc`s).
+///
+/// Replacing `indicators` with a fresh `ModelRc` on every sample leaves Slint
+/// bound to the old list handle, so CPU/memory text looks frozen.
+pub(crate) fn patch_system_model(
+    model: &mut SystemModel,
+    p: &orchid_widgets::SystemPayload,
+    locale: &LocaleManager,
+) {
+    sync_system_indicators(&model.indicators, indicator_entries(p, locale));
+}
+
+fn indicator_entries(
+    p: &orchid_widgets::SystemPayload,
+    locale: &LocaleManager,
+) -> Vec<SystemIndicatorEntry> {
     if p.is_loading {
-        return empty_system_model(locale);
+        return vec![SystemIndicatorEntry {
+            label: locale.tr("system-loading").into(),
+            value_text: SharedString::new(),
+            percent: -1.0,
+            icon: SharedString::new(),
+            status: 0,
+            status_hint: SharedString::new(),
+            segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
+        }];
     }
     if p.indicators.is_empty() {
-        return SystemModel {
-            indicators: ModelRc::new(VecModel::from(vec![SystemIndicatorEntry {
-                label: locale.tr("system-empty").into(),
-                value_text: SharedString::new(),
-                percent: -1.0,
-                icon: SharedString::new(),
-                status: 0,
-                status_hint: SharedString::new(),
-                segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
-            }])),
-        };
+        return vec![SystemIndicatorEntry {
+            label: locale.tr("system-empty").into(),
+            value_text: SharedString::new(),
+            percent: -1.0,
+            icon: SharedString::new(),
+            status: 0,
+            status_hint: SharedString::new(),
+            segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
+        }];
     }
-    let indicators: Vec<SystemIndicatorEntry> = p
-        .indicators
+    p.indicators
         .iter()
         .map(|i| {
             let label = system_indicator_label(i, locale);
@@ -63,10 +89,64 @@ pub(crate) fn build_system_model(
                 segments: ModelRc::new(VecModel::from(segments)),
             }
         })
-        .collect();
+        .collect()
+}
 
-    SystemModel {
-        indicators: ModelRc::new(VecModel::from(indicators)),
+fn sync_system_indicators(model: &ModelRc<SystemIndicatorEntry>, new_rows: Vec<SystemIndicatorEntry>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<SystemIndicatorEntry>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, new_row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            let Some(mut old) = v.row_data(i) else {
+                v.set_row_data(i, new_row);
+                continue;
+            };
+            sync_f32_segments(&old.segments, segment_values(&new_row.segments));
+            old.label = new_row.label;
+            old.value_text = new_row.value_text;
+            old.percent = new_row.percent;
+            old.icon = new_row.icon;
+            old.status = new_row.status;
+            old.status_hint = new_row.status_hint;
+            // Keep `old.segments` ModelRc — only its rows were synced above.
+            v.set_row_data(i, old);
+        } else {
+            v.push(new_row);
+        }
+    }
+}
+
+fn segment_values(model: &ModelRc<f32>) -> Vec<f32> {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<f32>>() else {
+        return Vec::new();
+    };
+    (0..v.row_count())
+        .filter_map(|i| v.row_data(i))
+        .collect()
+}
+
+fn sync_f32_segments(model: &ModelRc<f32>, new_rows: Vec<f32>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<f32>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if (old - row).abs() <= f32::EPSILON {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
     }
 }
 

@@ -679,10 +679,10 @@ fn matches_query(hay: &str, query: &str) -> bool {
         .contains(&query.to_ascii_lowercase())
 }
 
-/// Cap rows sent to Slint. ListView virtualizes paint; keep a high enough
-/// ceiling that a typical desktop process table is complete while still
-/// bounding worst-case sort/serialize cost on the sample worker.
-const MAX_PROCESS_ROWS: usize = 500;
+/// Cap rows sent to Slint. ListView virtualizes paint; keep the ceiling high
+/// enough for a full Windows desktop process table (often 400–800+ rows).
+/// When truncated, the status line shows `processes-truncated`.
+const MAX_PROCESS_ROWS: usize = 10_000;
 
 /// Build process rows for the UI. Returns `(rows, matched_before_cap)`.
 fn build_process_rows(

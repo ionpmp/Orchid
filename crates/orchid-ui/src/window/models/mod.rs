@@ -46,7 +46,7 @@ pub(crate) use settings::{
     build_settings_fields, build_settings_sections, locale_display_name, settings_section_id,
     settings_section_index, theme_display_name, SETTINGS_SECTION_IDS,
 };
-pub(crate) use system::{build_system_model, empty_system_model};
+pub(crate) use system::{build_system_model, empty_system_model, patch_system_model};
 pub(crate) use terminal::{
     blank_terminal, build_terminal_divider_models, build_terminal_tab_models,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
