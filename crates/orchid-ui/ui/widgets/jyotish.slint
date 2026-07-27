@@ -4,6 +4,7 @@ import {
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishYearRowModel, JyotishAntarRowModel,
     JyotishRectifyModel,
 } from "../workspace/defs.slint";
+import { SearchField } from "search-field.slint";
 
 component NavBtn inherits TouchArea {
     in property <string> glyph;
@@ -55,6 +56,55 @@ component PillBtn inherits Rectangle {
         vertical-alignment: center;
         wrap: no-wrap;
         overflow: elide;
+    }
+}
+
+/// Compact ± stepper row for birth date / time / UTC offset.
+component ProfileStepper inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value-text;
+    in property <string> empty-text;
+    in property <int> small-step: 1;
+    in property <int> large-step: 30;
+    callback nudge(int);
+
+    spacing: 4px;
+    alignment: center;
+
+    Text {
+        text: root.label;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+        min-width: 52px;
+    }
+    PillBtn {
+        label: "«";
+        clicked => { root.nudge(-root.large-step); }
+    }
+    PillBtn {
+        label: "−";
+        clicked => { root.nudge(-root.small-step); }
+    }
+    Text {
+        text: root.value-text == "" ? root.empty-text : root.value-text;
+        color: root.value-text == "" ? Theme.text-tertiary : Theme.text-primary;
+        font-size: Theme.font-size-sm;
+        font-family: Theme.font-family-mono;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        min-width: 88px;
+        horizontal-stretch: 1;
+        wrap: no-wrap;
+        overflow: elide;
+    }
+    PillBtn {
+        label: "+";
+        clicked => { root.nudge(root.small-step); }
+    }
+    PillBtn {
+        label: "»";
+        clicked => { root.nudge(root.large-step); }
     }
 }
 
@@ -149,14 +199,14 @@ export component JyotishView inherits Rectangle {
     callback set-profile-gender(int);
     callback search-birth-places(string);
     callback set-birth-place(string, float, float);
+    callback nudge-profile-date(int);
+    callback nudge-profile-time(int);
+    callback nudge-profile-offset(int);
     callback upsert-profile(int, string, int, string, string, int, string, float, float);
 
     property <int> draft-event-kind: 0;
     property <int> draft-event-year: 2000;
     property <string> draft-profile-name;
-    property <string> draft-profile-date;
-    property <string> draft-profile-time;
-    property <string> draft-profile-offset;
 
     background: transparent;
 
@@ -1137,32 +1187,11 @@ export component JyotishView inherits Rectangle {
                     wrap: word-wrap;
                 }
 
-                Rectangle {
-                    height: 32px;
-                    background: Theme.surface-base;
-                    border-radius: Theme.radius-md;
-
-                    search-input := TextInput {
-                        x: 8px; y: 4px;
-                        width: parent.width - 16px;
-                        height: parent.height - 8px;
-                        text: model.search-query;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        single-line: true;
-                        edited => {
-                            root.search-cities(self.text);
-                        }
-                    }
-                    if model.search-query == "" : Text {
-                        x: 8px; y: 4px;
-                        width: parent.width - 16px;
-                        height: parent.height - 8px;
-                        text: model.search-placeholder;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
+                SearchField {
+                    query: model.search-query;
+                    placeholder: model.search-placeholder;
+                    edited(q) => { root.search-cities(q); }
+                    escape-pressed => { root.close-cities(); }
                 }
 
                 if model.cities.length > 0 : Flickable {
@@ -1438,9 +1467,6 @@ export component JyotishView inherits Rectangle {
                                         edit-ta := TouchArea {
                                             clicked => {
                                                 root.draft-profile-name = profile.name;
-                                                root.draft-profile-date = "";
-                                                root.draft-profile-time = "";
-                                                root.draft-profile-offset = "";
                                                 root.begin-edit-profile(i);
                                             }
                                         }
@@ -1479,9 +1505,6 @@ export component JyotishView inherits Rectangle {
                         label: model.profiles-add-label;
                         clicked => {
                             root.draft-profile-name = "";
-                            root.draft-profile-date = "";
-                            root.draft-profile-time = "";
-                            root.draft-profile-offset = "0";
                             root.begin-add-profile();
                         }
                     }
@@ -1503,19 +1526,22 @@ export component JyotishView inherits Rectangle {
                         background: Theme.surface-base;
                         border-radius: Theme.radius-md;
                         name-input := TextInput {
-                            x: 8px; y: 4px;
+                            x: 8px;
+                            y: 0px;
                             width: parent.width - 16px;
-                            height: parent.height - 8px;
+                            height: parent.height;
                             text: root.draft-profile-name == "" && model.profile-edit-name != "" ? model.profile-edit-name : root.draft-profile-name;
                             color: Theme.text-primary;
                             font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
                             single-line: true;
                             edited => { root.draft-profile-name = self.text; }
                         }
                         if name-input.text == "" : Text {
-                            x: 8px; y: 4px;
+                            x: 8px;
+                            y: 0px;
                             width: parent.width - 16px;
-                            height: parent.height - 8px;
+                            height: parent.height;
                             text: model.profile-name-placeholder;
                             color: Theme.text-tertiary;
                             font-size: Theme.font-size-sm;
@@ -1533,111 +1559,66 @@ export component JyotishView inherits Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        height: 32px;
-                        background: Theme.surface-base;
-                        border-radius: Theme.radius-md;
-                        date-input := TextInput {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: root.draft-profile-date == "" && model.profile-edit-date != "" ? model.profile-edit-date : root.draft-profile-date;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            single-line: true;
-                            edited => { root.draft-profile-date = self.text; }
-                        }
-                        if date-input.text == "" : Text {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.profile-date-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
+                    ProfileStepper {
+                        label: model.profile-date-label;
+                        value-text: model.profile-edit-date;
+                        empty-text: model.profile-date-placeholder;
+                        small-step: 1;
+                        large-step: 30;
+                        nudge(d) => { root.nudge-profile-date(d); }
+                    }
+
+                    ProfileStepper {
+                        label: model.profile-time-label;
+                        value-text: model.profile-edit-time;
+                        empty-text: model.profile-time-placeholder;
+                        small-step: 15;
+                        large-step: 60;
+                        nudge(d) => { root.nudge-profile-time(d); }
+                    }
+
+                    ProfileStepper {
+                        label: model.profile-offset-label;
+                        value-text: model.profile-edit-offset-text;
+                        empty-text: model.profile-offset-placeholder;
+                        small-step: 30;
+                        large-step: 60;
+                        nudge(d) => { root.nudge-profile-offset(d); }
                     }
 
                     Rectangle {
-                        height: 32px;
-                        background: Theme.surface-base;
+                        height: 28px;
+                        background: Theme.surface-raised;
                         border-radius: Theme.radius-md;
-                        time-input := TextInput {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: root.draft-profile-time == "" && model.profile-edit-time != "" ? model.profile-edit-time : root.draft-profile-time;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            single-line: true;
-                            edited => { root.draft-profile-time = self.text; }
-                        }
-                        if time-input.text == "" : Text {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.profile-time-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 6px;
+                            Text {
+                                text: model.profile-place-placeholder;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: model.profile-edit-place-name == "" ? "-" : model.profile-edit-place-name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.weight-medium;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
                         }
                     }
 
-                    Rectangle {
-                        height: 32px;
-                        background: Theme.surface-base;
-                        border-radius: Theme.radius-md;
-                        offset-input := TextInput {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: root.draft-profile-offset == "" ? "" + model.profile-edit-offset : root.draft-profile-offset;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            single-line: true;
-                            edited => { root.draft-profile-offset = self.text; }
-                        }
-                        if offset-input.text == "" : Text {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.profile-offset-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Text {
-                        text: model.profile-place-placeholder + ": " + (model.profile-edit-place-name == "" ? "-" : model.profile-edit-place-name);
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        wrap: word-wrap;
-                    }
-
-                    Rectangle {
-                        height: 32px;
-                        background: Theme.surface-base;
-                        border-radius: Theme.radius-md;
-                        place-search := TextInput {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.profile-search-query;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            single-line: true;
-                            edited => { root.search-birth-places(self.text); }
-                        }
-                        if model.profile-search-query == "" : Text {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.profile-place-search-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
+                    SearchField {
+                        query: model.profile-search-query;
+                        placeholder: model.profile-place-search-placeholder;
+                        edited(q) => { root.search-birth-places(q); }
                     }
 
                     if model.profile-search-busy : Text {
@@ -1708,17 +1689,14 @@ export component JyotishView inherits Rectangle {
                                     model.profile-edit-index,
                                     name-input.text == "" ? model.profile-edit-name : name-input.text,
                                     model.profile-edit-gender,
-                                    date-input.text == "" ? model.profile-edit-date : date-input.text,
-                                    time-input.text == "" ? model.profile-edit-time : time-input.text,
-                                    offset-input.text == "" ? model.profile-edit-offset : Math.round(offset-input.text.to-float()),
+                                    model.profile-edit-date,
+                                    model.profile-edit-time,
+                                    model.profile-edit-offset,
                                     "",
                                     0,
                                     0
                                 );
                                 root.draft-profile-name = "";
-                                root.draft-profile-date = "";
-                                root.draft-profile-time = "";
-                                root.draft-profile-offset = "";
                             }
                         }
                     }

@@ -119,6 +119,9 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-set-profile-gender(string, int);
     callback jyotish-search-birth-places(string, string);
     callback jyotish-set-birth-place(string, string, float, float);
+    callback jyotish-nudge-profile-date(string, int);
+    callback jyotish-nudge-profile-time(string, int);
+    callback jyotish-nudge-profile-offset(string, int);
     callback jyotish-upsert-profile(string, int, string, int, string, string, int, string, float, float);
 
     // Clock
@@ -685,6 +688,9 @@ export component WidgetFrame inherits Rectangle {
                     set-birth-place(name, lat, lon) => {
                         root.jyotish-set-birth-place(root.model.instance-id, name, lat, lon);
                     }
+                    nudge-profile-date(d) => { root.jyotish-nudge-profile-date(root.model.instance-id, d); }
+                    nudge-profile-time(m) => { root.jyotish-nudge-profile-time(root.model.instance-id, m); }
+                    nudge-profile-offset(m) => { root.jyotish-nudge-profile-offset(root.model.instance-id, m); }
                     upsert-profile(index, name, gender, date, time, offset, place, lat, lon) => {
                         root.jyotish-upsert-profile(
                             root.model.instance-id, index, name, gender, date, time, offset, place, lat, lon

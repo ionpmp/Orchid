@@ -17,7 +17,9 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Duration as ChronoDuration, NaiveDate, NaiveTime, Utc, Weekday};
+use chrono::{
+    DateTime, Datelike, Duration as ChronoDuration, NaiveDate, NaiveTime, Timelike, Utc, Weekday,
+};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use tracing::warn;
@@ -1288,6 +1290,33 @@ impl JyotishHandle {
         self.publish();
     }
 
+    fn nudge_profile_date(&self, days: i32) {
+        let mut ui = self.ui.write();
+        let base = NaiveDate::parse_from_str(&ui.profile_edit_date, "%Y-%m-%d")
+            .ok()
+            .unwrap_or_else(|| chrono::Local::now().date_naive());
+        let next = base + ChronoDuration::days(i64::from(days));
+        ui.profile_edit_date = next.format("%Y-%m-%d").to_string();
+        drop(ui);
+        self.publish();
+    }
+
+    fn nudge_profile_time(&self, minutes: i32) {
+        let mut ui = self.ui.write();
+        let (h, m) = parse_hh_mm(&ui.profile_edit_time).unwrap_or((12, 0));
+        let total = (h as i32 * 60 + m as i32 + minutes).rem_euclid(24 * 60);
+        ui.profile_edit_time = format!("{:02}:{:02}", total / 60, total % 60);
+        drop(ui);
+        self.publish();
+    }
+
+    fn nudge_profile_offset(&self, minutes: i32) {
+        let mut ui = self.ui.write();
+        ui.profile_edit_offset = (ui.profile_edit_offset + minutes).clamp(-14 * 60, 14 * 60);
+        drop(ui);
+        self.publish();
+    }
+
     fn upsert_profile(
         &self,
         index: Option<usize>,
@@ -1420,6 +1449,11 @@ impl JyotishHandle {
             );
         });
     }
+}
+
+fn parse_hh_mm(text: &str) -> Option<(u32, u32)> {
+    let t = NaiveTime::parse_from_str(text.trim(), "%H:%M").ok()?;
+    Some((t.hour(), t.minute()))
 }
 
 fn birth_datetime_utc(cfg: &JyotishConfig) -> Option<DateTime<Utc>> {
@@ -1938,6 +1972,27 @@ pub fn set_profile_draft_gender(instance_id: Uuid, gender: u8) {
 pub fn set_draft_birth_place(instance_id: Uuid, name: String, latitude: f64, longitude: f64) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
         h.set_draft_birth_place(name, latitude, longitude);
+    }
+}
+
+/// Nudge the draft birth date by whole days (empty draft starts at today).
+pub fn nudge_profile_date(instance_id: Uuid, days: i32) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.nudge_profile_date(days);
+    }
+}
+
+/// Nudge the draft birth time by minutes (empty draft starts at 12:00).
+pub fn nudge_profile_time(instance_id: Uuid, minutes: i32) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.nudge_profile_time(minutes);
+    }
+}
+
+/// Nudge the draft UTC offset by minutes (clamped to ±14h).
+pub fn nudge_profile_offset(instance_id: Uuid, minutes: i32) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.nudge_profile_offset(minutes);
     }
 }
 

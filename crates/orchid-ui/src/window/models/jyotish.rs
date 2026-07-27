@@ -26,6 +26,18 @@ const WINDOW_KEYS: [&str; 4] = [
     "jyotish-rectify-window-unknown",
 ];
 
+fn format_utc_offset(minutes: i32) -> String {
+    let sign = if minutes < 0 { '-' } else { '+' };
+    let abs = minutes.unsigned_abs();
+    let h = abs / 60;
+    let m = abs % 60;
+    if m == 0 {
+        format!("UTC{sign}{h}")
+    } else {
+        format!("UTC{sign}{h}:{m:02}")
+    }
+}
+
 pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
     JyotishModel {
         date_text: SharedString::new(),
@@ -62,6 +74,7 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         profile_edit_date: SharedString::new(),
         profile_edit_time: SharedString::new(),
         profile_edit_offset: 0,
+        profile_edit_offset_text: format_utc_offset(0).into(),
         profile_edit_place_name: SharedString::new(),
         profiles_title: locale.tr("jyotish-profiles-title").into(),
         profiles_hint: locale.tr("jyotish-profiles-hint").into(),
@@ -73,8 +86,11 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         profiles_cancel_label: locale.tr("jyotish-profiles-cancel").into(),
         profiles_empty_label: locale.tr("jyotish-profiles-empty").into(),
         profile_name_placeholder: locale.tr("jyotish-profile-name-placeholder").into(),
+        profile_date_label: locale.tr("jyotish-profile-date-label").into(),
         profile_date_placeholder: locale.tr("jyotish-profile-date-placeholder").into(),
+        profile_time_label: locale.tr("jyotish-profile-time-label").into(),
         profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
+        profile_offset_label: locale.tr("jyotish-profile-offset-label").into(),
         profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
         profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
         profile_place_search_placeholder: locale
@@ -363,6 +379,7 @@ pub(crate) fn build_jyotish_model(
         profile_edit_date: p.profile_edit_date.clone().into(),
         profile_edit_time: p.profile_edit_time.clone().into(),
         profile_edit_offset: p.profile_edit_offset,
+        profile_edit_offset_text: format_utc_offset(p.profile_edit_offset).into(),
         profile_edit_place_name: p.profile_edit_place_name.clone().into(),
         profiles_title: locale.tr("jyotish-profiles-title").into(),
         profiles_hint: locale.tr("jyotish-profiles-hint").into(),
@@ -374,8 +391,11 @@ pub(crate) fn build_jyotish_model(
         profiles_cancel_label: locale.tr("jyotish-profiles-cancel").into(),
         profiles_empty_label: locale.tr("jyotish-profiles-empty").into(),
         profile_name_placeholder: locale.tr("jyotish-profile-name-placeholder").into(),
+        profile_date_label: locale.tr("jyotish-profile-date-label").into(),
         profile_date_placeholder: locale.tr("jyotish-profile-date-placeholder").into(),
+        profile_time_label: locale.tr("jyotish-profile-time-label").into(),
         profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
+        profile_offset_label: locale.tr("jyotish-profile-offset-label").into(),
         profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
         profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
         profile_place_search_placeholder: locale

@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { SearchField } from "search-field.slint";
 import { ClockModel } from "../workspace/defs.slint";
 
 export component ClockView inherits Rectangle {
@@ -255,39 +256,11 @@ export component ClockView inherits Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        height: 32px;
-                        background: Theme.surface-base;
-                        border-radius: Theme.radius-md;
-
-                        search-input := TextInput {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.search-query;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            single-line: true;
-                            edited => {
-                                root.search-cities(self.text);
-                            }
-                            key-pressed(event) => {
-                                if (event.text == Key.Escape) {
-                                    root.close-cities();
-                                    return accept;
-                                }
-                                return reject;
-                            }
-                        }
-                        if model.search-query == "" : Text {
-                            x: 8px; y: 4px;
-                            width: parent.width - 16px;
-                            height: parent.height - 8px;
-                            text: model.search-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
+                    search-input := SearchField {
+                        query: model.search-query;
+                        placeholder: model.search-placeholder;
+                        edited(q) => { root.search-cities(q); }
+                        escape-pressed => { root.close-cities(); }
                     }
 
                     if model.cities.length > 1 : Flickable {

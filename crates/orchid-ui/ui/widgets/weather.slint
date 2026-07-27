@@ -1,5 +1,6 @@
 import { Theme } from "../theme_global.slint";
 import { WeatherModel } from "../workspace/defs.slint";
+import { SearchField } from "search-field.slint";
 
 export component WeatherView inherits Rectangle {
     in property <WeatherModel> model;
@@ -371,32 +372,11 @@ export component WeatherView inherits Rectangle {
                     }
                 }
 
-                Rectangle {
-                    height: 32px;
-                    background: Theme.surface-base;
-                    border-radius: Theme.radius-md;
-
-                    search-input := TextInput {
-                        x: 8px; y: 4px;
-                        width: parent.width - 16px;
-                        height: parent.height - 8px;
-                        text: model.search-query;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        single-line: true;
-                        edited => {
-                            root.search-cities(self.text);
-                        }
-                    }
-                    if model.search-query == "" : Text {
-                        x: 8px; y: 4px;
-                        width: parent.width - 16px;
-                        height: parent.height - 8px;
-                        text: model.search-placeholder;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
+                SearchField {
+                    query: model.search-query;
+                    placeholder: model.search-placeholder;
+                    edited(q) => { root.search-cities(q); }
+                    escape-pressed => { root.close-cities(); }
                 }
 
                 if model.cities.length > 0 : Flickable {

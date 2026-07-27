@@ -940,6 +940,30 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_jyotish_nudge_profile_date({
+            let t = t.clone();
+            move |id, days| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_nudge_profile_date(&id, days);
+                }
+            }
+        });
+        self.window.on_jyotish_nudge_profile_time({
+            let t = t.clone();
+            move |id, minutes| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_nudge_profile_time(&id, minutes);
+                }
+            }
+        });
+        self.window.on_jyotish_nudge_profile_offset({
+            let t = t.clone();
+            move |id, minutes| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_nudge_profile_offset(&id, minutes);
+                }
+            }
+        });
         self.window.on_jyotish_upsert_profile({
             let t = t.clone();
             move |id, index, name, gender, date, time, offset, place, lat, lon| {

@@ -1,0 +1,75 @@
+import { Theme } from "../theme_global.slint";
+
+/// Shared single-line search field with a placeholder that follows the
+/// *input* text (not a possibly-stale model binding). When `query` is cleared
+/// from outside (e.g. after picking a city), the draft resets so leftover
+/// glyphs do not stack on top of the placeholder.
+export component SearchField inherits Rectangle {
+    in property <string> query;
+    in property <string> placeholder;
+    in property <length> field-height: 32px;
+    callback edited(string);
+    callback escape-pressed();
+
+    height: root.field-height;
+    background: Theme.surface-base;
+    border-radius: Theme.radius-md;
+    forward-focus: input;
+
+    property <string> draft: root.query;
+    property <string> synced: root.query;
+
+    changed query => {
+        if root.query != root.synced {
+            root.draft = root.query;
+            root.synced = root.query;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 100%;
+            background: transparent;
+
+            if input.text == "" : Text {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                text: root.placeholder;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                wrap: no-wrap;
+                overflow: elide;
+            }
+
+            input := TextInput {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                text: root.draft;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                single-line: true;
+                edited => {
+                    root.draft = self.text;
+                    root.edited(self.text);
+                }
+                key-pressed(event) => {
+                    if (event.text == Key.Escape) {
+                        root.escape-pressed();
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+        }
+    }
+}

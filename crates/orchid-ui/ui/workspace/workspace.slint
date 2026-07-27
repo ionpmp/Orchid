@@ -98,6 +98,9 @@ export component WorkspaceView inherits Rectangle {
     callback jyotish-set-profile-gender(string, int);
     callback jyotish-search-birth-places(string, string);
     callback jyotish-set-birth-place(string, string, float, float);
+    callback jyotish-nudge-profile-date(string, int);
+    callback jyotish-nudge-profile-time(string, int);
+    callback jyotish-nudge-profile-offset(string, int);
     callback jyotish-upsert-profile(string, int, string, int, string, string, int, string, float, float);
     callback clock-open-cities(string);
     callback clock-close-cities(string);
@@ -468,6 +471,9 @@ export component WorkspaceView inherits Rectangle {
                     jyotish-set-birth-place(id, name, lat, lon) => {
                         root.jyotish-set-birth-place(id, name, lat, lon);
                     }
+                    jyotish-nudge-profile-date(id, d) => { root.jyotish-nudge-profile-date(id, d); }
+                    jyotish-nudge-profile-time(id, m) => { root.jyotish-nudge-profile-time(id, m); }
+                    jyotish-nudge-profile-offset(id, m) => { root.jyotish-nudge-profile-offset(id, m); }
                     jyotish-upsert-profile(id, index, name, gender, date, time, offset, place, lat, lon) => {
                         root.jyotish-upsert-profile(
                             id, index, name, gender, date, time, offset, place, lat, lon

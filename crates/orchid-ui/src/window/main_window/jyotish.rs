@@ -488,6 +488,39 @@ impl MainWindowController {
             f64::from(lat),
             f64::from(lon),
         );
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_nudge_profile_date(self: &Arc<Self>, id: &SharedString, days: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::nudge_profile_date(inst, days);
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_nudge_profile_time(
+        self: &Arc<Self>,
+        id: &SharedString,
+        minutes: i32,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::nudge_profile_time(inst, minutes);
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_nudge_profile_offset(
+        self: &Arc<Self>,
+        id: &SharedString,
+        minutes: i32,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::nudge_profile_offset(inst, minutes);
+        self.refresh_jyotish(inst);
     }
 
     pub(super) fn on_jyotish_upsert_profile(
