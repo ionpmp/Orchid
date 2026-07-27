@@ -251,6 +251,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         underline: false,
         font_size_pt: 0.0,
         font_size_label: SharedString::from("14"),
+        font_family: SharedString::new(),
+        font_family_label: locale.tr("viewer-document-font-default").into(),
         color_rgb: 0,
         alignment: 0,
         list_kind: 0,
@@ -268,6 +270,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         underline_label: locale.tr("viewer-document-underline").into(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),
+        font_family_prev_label: locale.tr("viewer-document-font-prev").into(),
+        font_family_next_label: locale.tr("viewer-document-font-next").into(),
         align_left_label: locale.tr("viewer-document-align-left").into(),
         align_center_label: locale.tr("viewer-document-align-center").into(),
         align_right_label: locale.tr("viewer-document-align-right").into(),
@@ -400,6 +404,12 @@ fn build_document_snapshot(
         format!("{}", s.font_size_pt.round() as i32).into()
     } else {
         SharedString::from("14")
+    };
+    model.font_family = s.font_family.clone().into();
+    model.font_family_label = if s.font_family.is_empty() {
+        locale.tr("viewer-document-font-default").into()
+    } else {
+        s.font_family.clone().into()
     };
     model.color_rgb = s.color_rgb as i32;
     model.alignment = i32::from(s.alignment);

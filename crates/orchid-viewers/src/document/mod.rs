@@ -656,6 +656,38 @@ impl DocumentViewer {
         })
     }
 
+    /// Set font family on the selection.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_font_family_selection(&self, family: &str) -> Result<()> {
+        let family = family.trim();
+        if family.is_empty() {
+            return Ok(());
+        }
+        self.apply_style_patch_selection(RunStylePatch {
+            font_family: Some(Some(family.to_string())),
+            ..Default::default()
+        })
+    }
+
+    /// Cycle font family presets on the selection (`direction > 0` → next).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_font_family_selection(&self, direction: i32) -> Result<()> {
+        let current = {
+            let doc_guard = self.document.read();
+            let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let sel = *self.selection.lock();
+            style_at_cursor(doc, sel.normalized().0).and_then(|s| s.font_family)
+        };
+        let next = next_font_family(current.as_deref(), direction);
+        self.set_font_family_selection(next)
+    }
+
     /// Delete `sel` when non-empty; returns the caret where typing should continue.
     fn delete_selection_if_needed(&self, doc: &mut Document, sel: Selection) -> Result<Cursor> {
         if sel.is_collapsed() {
@@ -866,6 +898,9 @@ impl DocumentViewer {
             if let Some(Block::Paragraph(p)) = next.get_mut(bi) {
                 p.list = kind;
                 p.num_id = crate::document::ooxml::numbering::num_id_for_kind(kind);
+                if kind == ListKind::None {
+                    p.list_level = 0;
+                }
             }
         }
         self.undo
@@ -902,7 +937,70 @@ impl DocumentViewer {
         };
         self.set_list_all(next)
     }
+
+    /// Indent (`delta > 0`) or outdent list paragraphs in the selection.
+    ///
+    /// Outdenting past level 0 clears the list. Non-list paragraphs are skipped.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_list_level_selection(&self, delta: i32) -> Result<()> {
+        if delta == 0 {
+            return Ok(());
+        }
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let indices = paragraph_indices_in_selection(doc, sel);
+        if indices.is_empty() {
+            return Ok(());
+        }
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for bi in indices {
+            let Some(Block::Paragraph(p)) = next.get_mut(bi) else {
+                continue;
+            };
+            if p.list == ListKind::None {
+                continue;
+            }
+            let level = i32::from(p.list_level);
+            if delta > 0 {
+                let new_level = (level + delta).clamp(0, i32::from(MAX_LIST_LEVEL)) as u8;
+                if new_level != p.list_level {
+                    p.list_level = new_level;
+                    changed = true;
+                }
+            } else {
+                let new_level = level + delta;
+                if new_level < 0 {
+                    p.list = ListKind::None;
+                    p.list_level = 0;
+                    p.num_id = crate::document::ooxml::numbering::num_id_for_kind(ListKind::None);
+                    changed = true;
+                } else {
+                    let new_level = new_level as u8;
+                    if new_level != p.list_level {
+                        p.list_level = new_level;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
 }
+
+/// Maximum Word-compatible list indent level (`w:ilvl` 0..=8).
+const MAX_LIST_LEVEL: u8 = 8;
 
 fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
@@ -1012,6 +1110,15 @@ const FONT_SIZE_STEPS: &[f32] = &[
     9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0,
 ];
 
+/// Common Windows-friendly families exposed by the document toolbar.
+const FONT_FAMILY_PRESETS: &[&str] = &[
+    "Segoe UI",
+    "Calibri",
+    "Arial",
+    "Times New Roman",
+    "Consolas",
+];
+
 fn next_font_size(current: f32, direction: i32) -> f32 {
     if direction < 0 {
         FONT_SIZE_STEPS
@@ -1026,6 +1133,43 @@ fn next_font_size(current: f32, direction: i32) -> f32 {
             .find(|&&s| s > current + 0.01)
             .copied()
             .unwrap_or(*FONT_SIZE_STEPS.last().unwrap_or(&DEFAULT_FONT_SIZE_PT))
+    }
+}
+
+fn next_font_family(current: Option<&str>, direction: i32) -> &'static str {
+    let n = FONT_FAMILY_PRESETS.len() as i32;
+    if n == 0 {
+        return "Segoe UI";
+    }
+    let idx = current
+        .and_then(|c| {
+            FONT_FAMILY_PRESETS
+                .iter()
+                .position(|p| p.eq_ignore_ascii_case(c))
+        })
+        .map(|i| i as i32)
+        .unwrap_or(if direction < 0 { 0 } else { -1 });
+    let next = if direction < 0 {
+        (idx - 1 + n) % n
+    } else {
+        (idx + 1) % n
+    };
+    FONT_FAMILY_PRESETS[next as usize]
+}
+
+/// Map a toolbar slug (`segoe-ui`) to a preset family name.
+pub fn resolve_font_family_slug(slug: &str) -> Option<&'static str> {
+    let key = slug.trim().to_ascii_lowercase().replace(' ', "-");
+    match key.as_str() {
+        "segoe-ui" | "segoe" => Some("Segoe UI"),
+        "calibri" => Some("Calibri"),
+        "arial" => Some("Arial"),
+        "times-new-roman" | "times" | "tnr" => Some("Times New Roman"),
+        "consolas" | "mono" => Some("Consolas"),
+        _ => FONT_FAMILY_PRESETS
+            .iter()
+            .copied()
+            .find(|p| p.eq_ignore_ascii_case(slug.trim())),
     }
 }
 
@@ -1430,11 +1574,15 @@ impl Viewer for DocumentViewer {
             Some(Block::Paragraph(p)) => Some(p),
             _ => first_paragraph(doc),
         };
-        let (bold, italic, underline, font_size_pt, color_rgb, alignment, list_kind) = (
+        let (bold, italic, underline, font_size_pt, font_family, color_rgb, alignment, list_kind) = (
             style.as_ref().is_some_and(|s| s.bold),
             style.as_ref().is_some_and(|s| s.italic),
             style.as_ref().is_some_and(|s| s.underline),
             style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
+            style
+                .as_ref()
+                .and_then(|s| s.font_family.clone())
+                .unwrap_or_default(),
             style
                 .as_ref()
                 .and_then(|s| s.color)
@@ -1492,6 +1640,7 @@ impl Viewer for DocumentViewer {
             italic,
             underline,
             font_size_pt,
+            font_family,
             color_rgb,
             alignment,
             list_kind,

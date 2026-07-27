@@ -836,12 +836,16 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "underline" => doc.toggle_style_all('u'),
                 "font-smaller" => doc.bump_font_size_selection(-1),
                 "font-larger" => doc.bump_font_size_selection(1),
+                "font-family-prev" => doc.bump_font_family_selection(-1),
+                "font-family-next" => doc.bump_font_family_selection(1),
                 "align-left" => doc.set_alignment_all(Alignment::Left),
                 "align-center" => doc.set_alignment_all(Alignment::Center),
                 "align-right" => doc.set_alignment_all(Alignment::Right),
                 "align-justify" => doc.set_alignment_all(Alignment::Justify),
                 "list-bullet" => doc.toggle_list_all(ListKind::Bullet),
                 "list-numbered" => doc.toggle_list_all(ListKind::Numbered),
+                "list-indent" => doc.bump_list_level_selection(1),
+                "list-outdent" => doc.bump_list_level_selection(-1),
                 "toggle-source" => {
                     doc.set_source_mode(!doc.source_mode());
                     Ok(())
@@ -849,6 +853,15 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 color if color.starts_with("color-") => {
                     if let Some(rgb) = parse_toolbar_color(&color["color-".len()..]) {
                         doc.set_color_selection(rgb)
+                    } else {
+                        Ok(())
+                    }
+                }
+                family if family.starts_with("font-family-") => {
+                    let slug = &family["font-family-".len()..];
+                    if let Some(name) = orchid_viewers::document::resolve_font_family_slug(slug)
+                    {
+                        doc.set_font_family_selection(name)
                     } else {
                         Ok(())
                     }
@@ -997,6 +1010,8 @@ pub async fn document_preview_key(
                 "Backspace" => doc.preview_delete_backward(),
                 "Delete" => doc.preview_delete_forward(),
                 "Return" => doc.preview_insert_paragraph_break(),
+                "Tab" if shift => doc.bump_list_level_selection(-1),
+                "Tab" => doc.bump_list_level_selection(1),
                 "Home" => {
                     doc.preview_move_line_boundary(false, shift);
                     Ok(())

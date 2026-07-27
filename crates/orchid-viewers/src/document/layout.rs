@@ -44,6 +44,8 @@ impl Default for ColorBrush {
 pub const DEFAULT_PREVIEW_WIDTH: f32 = 720.0;
 /// Padding around the page content.
 pub const PREVIEW_PADDING: f32 = 28.0;
+/// Extra left inset per list indent level (`w:ilvl`).
+pub const LIST_INDENT_PX: f32 = 24.0;
 /// Cap rendered page height so huge docs stay interactive.
 pub const MAX_PREVIEW_HEIGHT: u32 = 4096;
 
@@ -172,11 +174,13 @@ impl DocumentLayout {
                     emitted_text = true;
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
-                    let layout = self.layout_paragraph(p, max_w);
+                    let indent = list_indent_px(p);
+                    let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
                     let h = layout.height().max(16.0);
                     layouts.push(LaidBlock {
                         layout,
                         y0: total_h,
+                        indent_px: indent,
                         plain_start: plain_offset,
                         body_len,
                         prefix_len,
@@ -196,11 +200,13 @@ impl DocumentLayout {
                                 emitted_text = true;
                                 let body_len = p.plain_text().len();
                                 let prefix_len = list_prefix(p).len();
-                                let layout = self.layout_paragraph(p, max_w);
+                                let indent = list_indent_px(p);
+                                let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
                                 let h = layout.height().max(14.0);
                                 layouts.push(LaidBlock {
                                     layout,
                                     y0: total_h,
+                                    indent_px: indent,
                                     plain_start: plain_offset,
                                     body_len,
                                     prefix_len,
@@ -219,6 +225,7 @@ impl DocumentLayout {
                     layouts.push(LaidBlock {
                         layout: Layout::default(),
                         y0: total_h,
+                        indent_px: 0.0,
                         plain_start: plain_offset,
                         body_len: 0,
                         prefix_len: 0,
@@ -264,6 +271,7 @@ impl DocumentLayout {
             if item.is_image || item.layout.len() == 0 {
                 continue;
             }
+            let origin_x = pad + item.indent_px;
             let origin_y = pad + item.y0;
             if sel_hi > sel_lo {
                 let para_end = item.plain_start + item.body_len;
@@ -277,7 +285,7 @@ impl DocumentLayout {
                         &mut pixels,
                         width,
                         height,
-                        pad,
+                        origin_x,
                         origin_y,
                         layout_lo,
                         layout_hi,
@@ -293,7 +301,7 @@ impl DocumentLayout {
                         &mut pixels,
                         width,
                         height,
-                        pad,
+                        origin_x,
                         origin_y,
                         layout_idx,
                     );
@@ -325,7 +333,7 @@ impl DocumentLayout {
                 &mut pixels,
                 width,
                 height,
-                pad,
+                pad + item.indent_px,
                 pad + item.y0,
             );
         }
@@ -367,13 +375,14 @@ impl DocumentLayout {
                     emitted_text = true;
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
-                    let layout = self.layout_paragraph(p, max_w);
+                    let indent = list_indent_px(p);
+                    let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
                     let y1 = total_h + h + para_gap;
                     if local_y >= y0 && local_y < y1 {
                         let ly = (local_y - y0).max(0.0);
-                        let lx = local_x.clamp(0.0, max_w);
+                        let lx = (local_x - indent).clamp(0.0, (max_w - indent).max(40.0));
                         let body_idx = cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
                         return Some(plain_offset + body_idx);
                     }
@@ -390,15 +399,17 @@ impl DocumentLayout {
                                 emitted_text = true;
                                 let body_len = p.plain_text().len();
                                 let prefix_len = list_prefix(p).len();
-                                let layout = self.layout_paragraph(p, max_w);
+                                let indent = list_indent_px(p);
+                                let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
                                 let h = layout.height().max(14.0);
                                 let y0 = total_h;
                                 let y1 = total_h + h + 4.0;
                                 if local_y >= y0 && local_y < y1 {
                                     let ly = (local_y - y0).max(0.0);
-                                    let lx = local_x.clamp(0.0, max_w);
-                                    let body_idx =
-                                        cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
+                                    let lx = (local_x - indent).clamp(0.0, (max_w - indent).max(40.0));
+                                    let body_idx = cluster_to_body_index(
+                                        &layout, lx, ly, prefix_len, body_len,
+                                    );
                                     return Some(plain_offset + body_idx);
                                 }
                                 plain_offset += body_len;
@@ -448,6 +459,8 @@ struct LaidBlock {
     layout: Layout<ColorBrush>,
     /// Content-relative top (excluding page padding).
     y0: f32,
+    /// Extra left inset for list indent level.
+    indent_px: f32,
     plain_start: usize,
     body_len: usize,
     prefix_len: usize,
@@ -629,6 +642,14 @@ fn list_prefix(p: &Paragraph) -> String {
     }
 }
 
+fn list_indent_px(p: &Paragraph) -> f32 {
+    if p.list == ListKind::None {
+        0.0
+    } else {
+        f32::from(p.list_level) * LIST_INDENT_PX
+    }
+}
+
 fn parley_alignment(a: Alignment) -> ParleyAlignment {
     match a {
         Alignment::Left => ParleyAlignment::Left,
@@ -723,7 +744,9 @@ fn render_layout_at(
         for item in line.items() {
             match item {
                 PositionedLayoutItem::GlyphRun(glyph_run) => {
-                    render_glyph_run(scale_cx, &glyph_run, pixels, width, height, origin_x, origin_y);
+                    render_glyph_run(
+                        scale_cx, &glyph_run, pixels, width, height, origin_x, origin_y,
+                    );
                 }
                 PositionedLayoutItem::InlineBox(_) => {}
             }
@@ -836,8 +859,7 @@ fn render_glyph(
     ])
     .format(Format::Alpha)
     .offset(offset)
-    .render(scaler, glyph_id)
-    else {
+    .render(scaler, glyph_id) else {
         return;
     };
 
@@ -857,14 +879,7 @@ fn render_glyph(
                         let alpha = rendered.data[i];
                         if alpha > 0 {
                             blend_pixel(
-                                pixels,
-                                buf_w,
-                                x as u32,
-                                y as u32,
-                                brush.r,
-                                brush.g,
-                                brush.b,
-                                alpha,
+                                pixels, buf_w, x as u32, y as u32, brush.r, brush.g, brush.b, alpha,
                             );
                         }
                     }
@@ -881,14 +896,7 @@ fn render_glyph(
                     let y = base_y + row as i32;
                     if x >= 0 && y >= 0 && (y as u32) < buf_h && (x as u32) < buf_w {
                         blend_pixel(
-                            pixels,
-                            buf_w,
-                            x as u32,
-                            y as u32,
-                            px[0],
-                            px[1],
-                            px[2],
-                            px[3],
+                            pixels, buf_w, x as u32, y as u32, px[0], px[1], px[2], px[3],
                         );
                     }
                 }
@@ -898,16 +906,7 @@ fn render_glyph(
     }
 }
 
-fn blend_pixel(
-    pixels: &mut [u8],
-    buf_w: u32,
-    x: u32,
-    y: u32,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-) {
+fn blend_pixel(pixels: &mut [u8], buf_w: u32, x: u32, y: u32, r: u8, g: u8, b: u8, a: u8) {
     if a == 0 {
         return;
     }
@@ -1066,8 +1065,7 @@ mod tests {
             ..Default::default()
         };
         let (plain, _, _) = dl.render_document(&doc, 400.0);
-        let (selected, w, h) =
-            dl.render_document_with_selection(&doc, 400.0, Some((0, 5)));
+        let (selected, w, h) = dl.render_document_with_selection(&doc, 400.0, Some((0, 5)));
         assert_eq!(plain.len(), selected.len());
         assert!(
             plain.as_slice() != selected.as_slice(),

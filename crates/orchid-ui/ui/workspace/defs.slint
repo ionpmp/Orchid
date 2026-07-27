@@ -940,6 +940,10 @@ export struct ViewerDocumentModel {
     font-size-pt: float,
     /// Display label for the caret font size (e.g. "14").
     font-size-label: string,
+    /// Font family at the caret (empty = default).
+    font-family: string,
+    /// Display label for the caret font family.
+    font-family-label: string,
     /// Text colour as `0x00RRGGBB` (`0` = default/theme).
     color-rgb: int,
     /// 0=left, 1=center, 2=right, 3=justify.
@@ -960,6 +964,8 @@ export struct ViewerDocumentModel {
     underline-label: string,
     font-smaller-label: string,
     font-larger-label: string,
+    font-family-prev-label: string,
+    font-family-next-label: string,
     align-left-label: string,
     align-center-label: string,
     align-right-label: string,

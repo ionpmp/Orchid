@@ -47,6 +47,8 @@ pub struct DocumentSnapshot {
     pub underline: bool,
     /// Font size in points at the caret (`0` = document default).
     pub font_size_pt: f32,
+    /// Font family at the caret (empty = document default).
+    pub font_family: String,
     /// Text colour as `0x00RRGGBB` (`0` = theme/default).
     pub color_rgb: u32,
     /// 0=left, 1=center, 2=right, 3=justify.
