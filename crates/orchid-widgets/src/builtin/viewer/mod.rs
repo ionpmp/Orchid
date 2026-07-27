@@ -911,7 +911,8 @@ pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> Wi
     Ok(())
 }
 
-/// Document: pointer on the preview canvas (`phase`: 0=down, 1=move, 2=up).
+/// Document: pointer on the preview canvas
+/// (`phase`: 0=down, 1=move, 2=up, 3=double-click word select).
 pub async fn document_preview_pointer(
     instance_id: Uuid,
     phase: i32,
@@ -923,7 +924,7 @@ pub async fn document_preview_pointer(
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
-                doc.preview_pointer(phase.clamp(0, 2) as u8, x, y);
+                doc.preview_pointer(phase.clamp(0, 3) as u8, x, y);
             }
         }
     }

@@ -144,7 +144,8 @@ impl DocumentViewer {
         *self.selection.lock() = selection_from_plain_offsets(doc, anchor, head);
     }
 
-    /// Handle a pointer event on the preview canvas (`0`=down, `1`=move, `2`=up).
+    /// Handle a pointer event on the preview canvas
+    /// (`0`=down, `1`=move, `2`=up, `3`=double-click word select).
     ///
     /// Coordinates are CSS pixels in the rendered preview image.
     pub fn preview_pointer(&self, phase: u8, x: f32, y: f32) {
@@ -168,8 +169,26 @@ impl DocumentViewer {
                     *self.preview_drag_anchor.lock() = None;
                 }
             }
+            3 => {
+                *self.preview_drag_anchor.lock() = None;
+                let plain = doc.plain_text();
+                let (start, end) = word_range_at(&plain, offset);
+                *self.selection.lock() = selection_from_plain_offsets(doc, start, end);
+            }
             _ => {}
         }
+    }
+
+    /// Select the word (or whitespace run) at a plain-text byte offset.
+    pub fn preview_select_word_at_offset(&self, offset: usize) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let plain = doc.plain_text();
+        let (start, end) = word_range_at(&plain, offset);
+        *self.preview_drag_anchor.lock() = None;
+        *self.selection.lock() = selection_from_plain_offsets(doc, start, end);
     }
 
     /// Insert `text` at the preview caret (replacing a non-empty selection).
@@ -1068,6 +1087,71 @@ fn prev_word_boundary(text: &str, offset: usize) -> usize {
         off = prev;
     }
     off
+}
+
+/// Inclusive-exclusive byte range of the word (or whitespace run) at `offset`.
+fn word_range_at(text: &str, offset: usize) -> (usize, usize) {
+    if text.is_empty() {
+        return (0, 0);
+    }
+    let mut probe = offset.min(text.len());
+    if probe == text.len() {
+        probe = prev_char_boundary(text, probe);
+    } else if let Some(c) = text[probe..].chars().next() {
+        if c.is_whitespace() && probe > 0 {
+            // Prefer the preceding token when the click lands on trailing space.
+            let prev = prev_char_boundary(text, probe);
+            if let Some(pc) = text[prev..probe].chars().next() {
+                if !pc.is_whitespace() {
+                    probe = prev;
+                }
+            }
+        }
+    }
+
+    let Some(c) = text[probe..].chars().next() else {
+        return (text.len(), text.len());
+    };
+    let class_word = !c.is_whitespace() && is_word_char(c);
+    let class_ws = c.is_whitespace();
+
+    let mut start = probe;
+    while start > 0 {
+        let prev = prev_char_boundary(text, start);
+        let Some(pc) = text[prev..start].chars().next() else {
+            break;
+        };
+        let same = if class_ws {
+            pc.is_whitespace()
+        } else if class_word {
+            is_word_char(pc)
+        } else {
+            !pc.is_whitespace() && !is_word_char(pc)
+        };
+        if !same {
+            break;
+        }
+        start = prev;
+    }
+
+    let mut end = next_char_boundary(text, probe);
+    while end < text.len() {
+        let Some(nc) = text[end..].chars().next() else {
+            break;
+        };
+        let same = if class_ws {
+            nc.is_whitespace()
+        } else if class_word {
+            is_word_char(nc)
+        } else {
+            !nc.is_whitespace() && !is_word_char(nc)
+        };
+        if !same {
+            break;
+        }
+        end = next_char_boundary(text, end);
+    }
+    (start, end)
 }
 
 /// Byte offset of the next word boundary (Windows-style Ctrl+Right).

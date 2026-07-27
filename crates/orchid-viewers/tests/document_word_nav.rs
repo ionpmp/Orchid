@@ -43,3 +43,38 @@ fn preview_word_move_and_word_delete() {
         assert_eq!(doc.plain_text(), "Hello ");
     }
 }
+
+#[test]
+fn preview_select_word_at_offset() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "Hello brave world".into(),
+                style: RunStyle::default(),
+            }],
+            ..Default::default()
+        })],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    // Mid-"brave" → select whole word.
+    viewer.preview_select_word_at_offset(8);
+    assert_eq!(viewer.selected_plain_text(), "brave");
+    // On the space after "Hello" → snap into preceding word.
+    viewer.preview_select_word_at_offset(5);
+    assert_eq!(viewer.selected_plain_text(), "Hello");
+    // Punctuation run.
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "Hi!!! there".into(),
+                style: RunStyle::default(),
+            }],
+            ..Default::default()
+        })],
+        ..Default::default()
+    });
+    viewer.preview_select_word_at_offset(3);
+    assert_eq!(viewer.selected_plain_text(), "!!!");
+}
