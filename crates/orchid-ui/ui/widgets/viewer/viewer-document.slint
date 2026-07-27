@@ -439,36 +439,36 @@ export component ViewerDocumentView inherits Rectangle {
                         root.preview-key("End", event.modifiers.control, event.modifiers.shift);
                         return accept;
                     }
+                    if (event.text == Key.LeftArrow) {
+                        root.preview-key("Left", event.modifiers.control, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.RightArrow) {
+                        root.preview-key("Right", event.modifiers.control, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.UpArrow) {
+                        root.preview-key("Up", event.modifiers.control, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.DownArrow) {
+                        root.preview-key("Down", event.modifiers.control, event.modifiers.shift);
+                        return accept;
+                    }
+                    if (event.text == Key.Backspace) {
+                        root.preview-key("Backspace", event.modifiers.control, false);
+                        return accept;
+                    }
+                    if (event.text == Key.Delete) {
+                        root.preview-key("Delete", event.modifiers.control, false);
+                        return accept;
+                    }
                     if (event.modifiers.control) {
                         root.preview-key(event.text, true, event.modifiers.shift);
                         return accept;
                     }
-                    if (event.text == Key.Backspace) {
-                        root.preview-key("Backspace", false, false);
-                        return accept;
-                    }
-                    if (event.text == Key.Delete) {
-                        root.preview-key("Delete", false, false);
-                        return accept;
-                    }
                     if (event.text == Key.Return) {
                         root.preview-key("Return", false, false);
-                        return accept;
-                    }
-                    if (event.text == Key.LeftArrow) {
-                        root.preview-key("Left", false, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.RightArrow) {
-                        root.preview-key("Right", false, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.UpArrow) {
-                        root.preview-key("Up", false, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.DownArrow) {
-                        root.preview-key("Down", false, event.modifiers.shift);
                         return accept;
                     }
                     root.preview-key(event.text, false, event.modifiers.shift);

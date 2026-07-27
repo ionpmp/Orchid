@@ -330,6 +330,103 @@ impl DocumentViewer {
         // Caret paint updates via snapshot selection cache.
     }
 
+    /// Move the caret by whole words (`extend` keeps the anchor).
+    pub fn preview_move_by_words(&self, delta: i32, extend: bool) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return;
+        };
+        let sel = *self.selection.lock();
+        let plain = doc.plain_text();
+        let mut off = plain_offset_from_cursor(doc, sel.head);
+        if delta < 0 {
+            for _ in 0..(-delta as usize) {
+                if off == 0 {
+                    break;
+                }
+                off = prev_word_boundary(&plain, off);
+            }
+        } else {
+            for _ in 0..(delta as usize) {
+                if off >= plain.len() {
+                    break;
+                }
+                off = next_word_boundary(&plain, off);
+            }
+        }
+        let head = cursor_from_plain_offset(doc, off);
+        let anchor = if extend { sel.anchor } else { head };
+        *self.selection.lock() = Selection { anchor, head };
+    }
+
+    /// Delete the selection, or the word before the caret if collapsed.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn preview_delete_word_backward(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        if !sel.is_collapsed() {
+            let at = self.delete_selection_if_needed(doc, sel)?;
+            *self.selection.lock() = Selection {
+                anchor: at,
+                head: at,
+            };
+            self.invalidate_preview();
+            return Ok(());
+        }
+        let head_off = plain_offset_from_cursor(doc, sel.head);
+        if head_off == 0 {
+            return Ok(());
+        }
+        let plain = doc.plain_text();
+        let prev = prev_word_boundary(&plain, head_off);
+        let range = selection_from_plain_offsets(doc, prev, head_off);
+        let at = self.delete_selection_if_needed(doc, range)?;
+        *self.selection.lock() = Selection {
+            anchor: at,
+            head: at,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Delete the selection, or the word after the caret if collapsed.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn preview_delete_word_forward(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        if !sel.is_collapsed() {
+            let at = self.delete_selection_if_needed(doc, sel)?;
+            *self.selection.lock() = Selection {
+                anchor: at,
+                head: at,
+            };
+            self.invalidate_preview();
+            return Ok(());
+        }
+        let head_off = plain_offset_from_cursor(doc, sel.head);
+        let plain = doc.plain_text();
+        if head_off >= plain.len() {
+            return Ok(());
+        }
+        let next = next_word_boundary(&plain, head_off);
+        let range = selection_from_plain_offsets(doc, head_off, next);
+        let at = self.delete_selection_if_needed(doc, range)?;
+        *self.selection.lock() = Selection {
+            anchor: at,
+            head: at,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Move the caret by whole plain-text lines (`extend` keeps the anchor).
     pub fn preview_move_vertical(&self, delta_lines: i32, extend: bool) {
         let doc_guard = self.document.read();
@@ -933,6 +1030,76 @@ fn next_char_boundary(text: &str, offset: usize) -> usize {
         i += 1;
     }
     i
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Byte offset of the previous word boundary (Windows-style Ctrl+Left).
+fn prev_word_boundary(text: &str, offset: usize) -> usize {
+    let mut off = offset.min(text.len());
+    while off > 0 {
+        let prev = prev_char_boundary(text, off);
+        let Some(c) = text[prev..off].chars().next() else {
+            break;
+        };
+        if !c.is_whitespace() {
+            break;
+        }
+        off = prev;
+    }
+    if off == 0 {
+        return 0;
+    }
+    let prev = prev_char_boundary(text, off);
+    let Some(c) = text[prev..off].chars().next() else {
+        return 0;
+    };
+    let word = is_word_char(c);
+    while off > 0 {
+        let prev = prev_char_boundary(text, off);
+        let Some(c) = text[prev..off].chars().next() else {
+            break;
+        };
+        if c.is_whitespace() || is_word_char(c) != word {
+            break;
+        }
+        off = prev;
+    }
+    off
+}
+
+/// Byte offset of the next word boundary (Windows-style Ctrl+Right).
+fn next_word_boundary(text: &str, offset: usize) -> usize {
+    let mut off = offset.min(text.len());
+    if off >= text.len() {
+        return text.len();
+    }
+    if let Some(c) = text[off..].chars().next() {
+        if !c.is_whitespace() {
+            let word = is_word_char(c);
+            while off < text.len() {
+                let Some(c) = text[off..].chars().next() else {
+                    break;
+                };
+                if c.is_whitespace() || is_word_char(c) != word {
+                    break;
+                }
+                off = next_char_boundary(text, off);
+            }
+        }
+    }
+    while off < text.len() {
+        let Some(c) = text[off..].chars().next() else {
+            break;
+        };
+        if !c.is_whitespace() {
+            break;
+        }
+        off = next_char_boundary(text, off);
+    }
+    off
 }
 
 fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {

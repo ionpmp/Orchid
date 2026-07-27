@@ -973,6 +973,16 @@ pub async fn document_preview_key(
                     doc.preview_move_document_boundary(true, shift);
                     Ok(())
                 }
+                "Left" => {
+                    doc.preview_move_by_words(-1, shift);
+                    Ok(())
+                }
+                "Right" => {
+                    doc.preview_move_by_words(1, shift);
+                    Ok(())
+                }
+                "Backspace" => doc.preview_delete_word_backward(),
+                "Delete" => doc.preview_delete_word_forward(),
                 "b" | "B" => doc.toggle_style_all('b'),
                 "i" | "I" => doc.toggle_style_all('i'),
                 "u" | "U" => doc.toggle_style_all('u'),
