@@ -8,11 +8,15 @@ pub(crate) fn empty_moon_model(locale: &LocaleManager) -> MoonModel {
         phase_label: locale.tr("moon-loading").into(),
         phase_icon: SharedString::new(),
         illumination: SharedString::new(),
+        illumination_fraction: 0.0,
         values: ModelRc::new(VecModel::default()),
     }
 }
 
-pub(crate) fn build_moon_model(p: &orchid_widgets::MoonPayload, locale: &LocaleManager) -> MoonModel {
+pub(crate) fn build_moon_model(
+    p: &orchid_widgets::MoonPayload,
+    locale: &LocaleManager,
+) -> MoonModel {
     let phase_label = if p.is_loading {
         locale.tr("moon-loading")
     } else {
@@ -136,6 +140,10 @@ pub(crate) fn build_moon_model(p: &orchid_widgets::MoonPayload, locale: &LocaleM
         phase_label: phase_label.into(),
         phase_icon: p.phase_icon.into(),
         illumination: illumination.into(),
+        illumination_fraction: p
+            .illumination_percent
+            .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
+            .unwrap_or(0.0),
         values: ModelRc::new(VecModel::from(values)),
     }
 }

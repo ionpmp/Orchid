@@ -1,22 +1,70 @@
 import { Theme } from "../theme_global.slint";
 import { MoonModel } from "../workspace/defs.slint";
 
+/// Geometric moon disk. Lit face + offset shade circle (clipped) yields the phase.
+component MoonPhaseDisk inherits Rectangle {
+    in property <string> phase-icon;
+    in property <float> illumination-fraction;
+
+    private property <length> disk: 72px;
+    private property <float> frac: max(0.0, min(1.0, illumination-fraction));
+    private property <bool> waxing:
+        phase-icon == "moon-new" ||
+        phase-icon == "moon-waxing-crescent" ||
+        phase-icon == "moon-first-quarter" ||
+        phase-icon == "moon-waxing-gibbous" ||
+        phase-icon == "moon-full";
+    // Shade center moves from concentric (new) to ±2R off-disk (full).
+    private property <length> shade-x: waxing ? -disk * 2.0 * frac : disk * 2.0 * frac;
+
+    private property <color> moon-lit: #f2e8d5;
+    private property <color> moon-shade: #2a2a35;
+    private property <color> mare: #00000028;
+
+    width: disk;
+    height: disk;
+
+    Rectangle {
+        width: disk;
+        height: disk;
+        border-radius: disk / 2;
+        clip: true;
+        background: moon-lit;
+        border-width: 1px;
+        border-color: Theme.border-default;
+
+        // Soft maria under the shade so only the lit face shows them.
+        if frac > 0.25 : Rectangle {
+            x: disk * 0.28;
+            y: disk * 0.30;
+            width: disk * 0.22;
+            height: disk * 0.18;
+            border-radius: disk * 0.11;
+            background: mare;
+        }
+        if frac > 0.25 : Rectangle {
+            x: disk * 0.48;
+            y: disk * 0.52;
+            width: disk * 0.16;
+            height: disk * 0.14;
+            border-radius: disk * 0.08;
+            background: mare;
+        }
+
+        // Unlit portion — same-size disk whose offset sets the terminator.
+        Rectangle {
+            x: shade-x;
+            y: 0;
+            width: disk;
+            height: disk;
+            border-radius: disk / 2;
+            background: moon-shade;
+        }
+    }
+}
+
 export component MoonView inherits Rectangle {
     in property <MoonModel> model;
-
-    // ASCII/BMP glyphs — color emoji missing in Slint's default Windows font.
-    pure function moon-icon-glyph(name: string) -> string {
-        return
-            name == "moon-new" ? "o" :
-            name == "moon-waxing-crescent" ? ")" :
-            name == "moon-first-quarter" ? "D" :
-            name == "moon-waxing-gibbous" ? ")" :
-            name == "moon-full" ? "O" :
-            name == "moon-waning-gibbous" ? "(" :
-            name == "moon-last-quarter" ? "C" :
-            name == "moon-waning-crescent" ? "(" :
-            "o";
-    }
 
     background: transparent;
 
@@ -25,11 +73,12 @@ export component MoonView inherits Rectangle {
         spacing: 12px;
         alignment: start;
 
-        if model.phase-icon != "" : Text {
-            text: moon-icon-glyph(model.phase-icon);
-            color: Theme.text-primary;
-            font-size: 64px;
-            horizontal-alignment: center;
+        if model.phase-icon != "" : HorizontalLayout {
+            alignment: center;
+            MoonPhaseDisk {
+                phase-icon: model.phase-icon;
+                illumination-fraction: model.illumination-fraction;
+            }
         }
 
         Text {

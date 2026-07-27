@@ -139,6 +139,8 @@ export struct MoonModel {
     phase-label: string,
     phase-icon: string,
     illumination: string,
+    /// Lit fraction of the disk, 0..1 (for the phase drawing).
+    illumination-fraction: float,
     values: [MoonValueEntry],
 }
 
