@@ -79,11 +79,31 @@ pub fn parse_document_xml(
                 } else if in_body {
                     match local.as_str() {
                         "p" => {
-                            let p = parse_paragraph(&mut reader, &mut buf, styles, numbering)?;
-                            blocks.push(Block::Paragraph(p));
+                            let (p, images) = parse_paragraph(
+                                &mut reader,
+                                &mut buf,
+                                styles,
+                                numbering,
+                                rels,
+                                media,
+                            )?;
+                            let has_text = p.runs.iter().any(|r| !r.text.is_empty());
+                            if has_text || images.is_empty() {
+                                blocks.push(Block::Paragraph(p));
+                            }
+                            for img in images {
+                                blocks.push(Block::Image(img));
+                            }
                         }
                         "tbl" => {
-                            let t = parse_table(&mut reader, &mut buf, styles, numbering)?;
+                            let t = parse_table(
+                                &mut reader,
+                                &mut buf,
+                                styles,
+                                numbering,
+                                rels,
+                                media,
+                            )?;
                             blocks.push(Block::Table(t));
                         }
                         "sectPr" => {
@@ -124,10 +144,6 @@ pub fn parse_document_xml(
         buf.clear();
     }
 
-    // Resolve drawings that were stored as paragraphs with image placeholders —
-    // images inside runs are handled in parse_paragraph via media lookup.
-    let _ = (rels, media);
-
     Ok((blocks, page_setup, unsupported))
 }
 
@@ -136,7 +152,9 @@ fn parse_paragraph(
     buf: &mut Vec<u8>,
     styles: &StyleDefaults,
     numbering: &NumberingDefs,
-) -> Result<Paragraph> {
+    rels: &Relationships,
+    media: &HashMap<String, Vec<u8>>,
+) -> Result<(Paragraph, Vec<InlineImage>)> {
     let mut p = Paragraph {
         runs: Vec::new(),
         alignment: Alignment::Left,
@@ -145,6 +163,7 @@ fn parse_paragraph(
         num_id: None,
         unsupported: Vec::new(),
     };
+    let mut images = Vec::new();
     let mut in_p_pr = false;
     let mut in_r = false;
     let mut in_t = false;
@@ -191,8 +210,9 @@ fn parse_paragraph(
                         in_t = true;
                     }
                     "drawing" if in_r => {
-                        // Skip drawing subtree for now (images as separate blocks handled later).
-                        skip_to_end(reader, buf, "drawing")?;
+                        if let Some(img) = parse_drawing_image(reader, buf, rels, media)? {
+                            images.push(img);
+                        }
                     }
                     "br" if in_r => {
                         if let Some(ref mut run) = current_run {
@@ -258,7 +278,7 @@ fn parse_paragraph(
                             p.runs.push(run);
                         }
                     }
-                    "p" => return Ok(p),
+                    "p" => return Ok((p, images)),
                     _ => {}
                 }
             }
@@ -272,6 +292,85 @@ fn parse_paragraph(
         }
         buf.clear();
     }
+}
+
+/// EMUs → CSS pixels at 96 DPI (`emu * 96 / 914400`).
+fn emu_to_css_px(emu: u64) -> u32 {
+    ((emu.saturating_mul(96)) / 914_400).max(1) as u32
+}
+
+fn media_part_path(target: &str) -> String {
+    let t = target.replace('\\', "/");
+    if t.starts_with("word/") {
+        t
+    } else {
+        format!("word/{t}")
+    }
+}
+
+/// Walk a `w:drawing` subtree and resolve the embedded blip to package media.
+fn parse_drawing_image(
+    reader: &mut Reader<&[u8]>,
+    buf: &mut Vec<u8>,
+    rels: &Relationships,
+    media: &HashMap<String, Vec<u8>>,
+) -> Result<Option<InlineImage>> {
+    let mut embed: Option<String> = None;
+    let mut extent: Option<(u64, u64)> = None;
+    loop {
+        match reader.read_event_into(buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                let local = local_name(e.name().as_ref());
+                match local.as_str() {
+                    "blip" => {
+                        if let Some(id) = attr_val(&e, "embed") {
+                            embed = Some(id);
+                        }
+                    }
+                    "extent" => {
+                        let cx = attr_val(&e, "cx").and_then(|s| s.parse::<u64>().ok());
+                        let cy = attr_val(&e, "cy").and_then(|s| s.parse::<u64>().ok());
+                        if let (Some(cx), Some(cy)) = (cx, cy) {
+                            extent = Some((cx, cy));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::End(e)) => {
+                if local_name(e.name().as_ref()) == "drawing" {
+                    break;
+                }
+            }
+            Ok(Event::Eof) => {
+                return Err(ViewerError::DocumentParse(
+                    "unexpected EOF inside drawing".into(),
+                ));
+            }
+            Err(e) => {
+                return Err(ViewerError::DocumentParse(format!("drawing: {e}")));
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    let Some(r_id) = embed else {
+        return Ok(None);
+    };
+    let Some(target) = rels.get(&r_id) else {
+        return Ok(None);
+    };
+    let part_path = media_part_path(target);
+    let Some(bytes) = media.get(&part_path).cloned() else {
+        return Ok(None);
+    };
+    let mut img = image_from_part(&part_path, bytes, Some(r_id));
+    if let Some((cx, cy)) = extent {
+        img.width_px = emu_to_css_px(cx);
+        img.height_px = emu_to_css_px(cy);
+    }
+    Ok(Some(img))
 }
 
 fn parse_r_pr_into(
@@ -336,6 +435,8 @@ fn parse_table(
     buf: &mut Vec<u8>,
     styles: &StyleDefaults,
     numbering: &NumberingDefs,
+    rels: &Relationships,
+    media: &HashMap<String, Vec<u8>>,
 ) -> Result<Table> {
     let mut table = Table::default();
     let mut current_row: Option<TableRow> = None;
@@ -349,7 +450,9 @@ fn parse_table(
                     "tr" => current_row = Some(TableRow::default()),
                     "tc" => current_cell = Some(TableCell::default()),
                     "p" => {
-                        let p = parse_paragraph(reader, buf, styles, numbering)?;
+                        // Cell model is paragraph-only; drawings in cells are skipped for Tier-1.
+                        let (p, _images) =
+                            parse_paragraph(reader, buf, styles, numbering, rels, media)?;
                         if let Some(ref mut cell) = current_cell {
                             cell.paragraphs.push(p);
                         }
@@ -509,18 +612,9 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
         match block {
             Block::Paragraph(p) => write_paragraph(&mut writer, p)?,
             Block::Table(t) => write_table(&mut writer, t)?,
-            Block::Image(img) => {
-                // Represent as a paragraph with a text placeholder; full drawing
-                // markup is complex — keep media via retained parts / rels.
-                let mut p = Paragraph::default();
-                p.runs.push(Run {
-                    text: format!(
-                        "[image:{}]",
-                        img.part_path.as_deref().unwrap_or("embedded")
-                    ),
-                    style: RunStyle::default(),
-                });
-                write_paragraph(&mut writer, &p)?;
+            Block::Image(_) => {
+                // Full `w:drawing` rewrite is out of scope. Skip the block so
+                // plain-text round-trips stay stable; media remains in retained parts.
             }
         }
     }
@@ -563,9 +657,9 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
         writer
             .write_event(Event::Empty(ilvl))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-        let id = p.num_id.or_else(|| {
-            crate::document::ooxml::numbering::num_id_for_kind(p.list)
-        });
+        let id = p
+            .num_id
+            .or_else(|| crate::document::ooxml::numbering::num_id_for_kind(p.list));
         if let Some(id) = id {
             let mut num = BytesStart::new("w:numId");
             num.push_attribute(("w:val", id.to_string().as_str()));
@@ -585,10 +679,7 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
         write_run(writer, run)?;
     }
     for node in &p.unsupported {
-        writer
-            .get_mut()
-            .get_mut()
-            .extend_from_slice(&node.raw_xml);
+        writer.get_mut().get_mut().extend_from_slice(&node.raw_xml);
     }
     writer
         .write_event(Event::End(BytesEnd::new("w:p")))
@@ -760,35 +851,6 @@ fn attr_val(e: &BytesStart<'_>, key: &str) -> Option<String> {
         }
     }
     None
-}
-
-fn skip_to_end(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>, name: &str) -> Result<()> {
-    let mut depth = 1i32;
-    loop {
-        match reader.read_event_into(buf) {
-            Ok(Event::Start(e)) => {
-                if local_name(e.name().as_ref()) == name {
-                    depth += 1;
-                }
-            }
-            Ok(Event::End(e)) => {
-                if local_name(e.name().as_ref()) == name {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Ok(());
-                    }
-                }
-            }
-            Ok(Event::Eof) => {
-                return Err(ViewerError::DocumentParse(format!(
-                    "unexpected EOF skipping {name}"
-                )));
-            }
-            Err(e) => return Err(ViewerError::DocumentParse(e.to_string())),
-            _ => {}
-        }
-        buf.clear();
-    }
 }
 
 fn capture_element(
@@ -968,6 +1030,76 @@ mod tests {
                 assert_eq!(t.rows[1].cells[1].paragraphs[0].plain_text(), "D");
             }
             _ => panic!("expected table"),
+        }
+    }
+
+    #[test]
+    fn parse_inline_drawing_to_image_block() {
+        let mut png = Vec::new();
+        {
+            let img = image::RgbaImage::from_pixel(4, 2, image::Rgba([10, 20, 30, 255]));
+            img.write_to(
+                &mut std::io::Cursor::new(&mut png),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        }
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                    xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+                    xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>Before</w:t></w:r></w:p>
+            <w:p>
+              <w:r>
+                <w:drawing>
+                  <wp:inline>
+                    <wp:extent cx="914400" cy="457200"/>
+                    <a:graphic>
+                      <a:graphicData>
+                        <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                          <pic:blipFill>
+                            <a:blip r:embed="rId7"/>
+                          </pic:blipFill>
+                        </pic:pic>
+                      </a:graphicData>
+                    </a:graphic>
+                  </wp:inline>
+                </w:drawing>
+              </w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let mut rels = Relationships::new();
+        rels.insert("rId7".into(), "media/dot.png".into());
+        let mut media = HashMap::new();
+        media.insert("word/media/dot.png".into(), png.clone());
+        let (blocks, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &rels,
+            &media,
+        )
+        .unwrap();
+        assert_eq!(blocks.len(), 2);
+        match &blocks[0] {
+            Block::Paragraph(p) => assert_eq!(p.plain_text(), "Before"),
+            _ => panic!("expected text paragraph"),
+        }
+        match &blocks[1] {
+            Block::Image(img) => {
+                assert_eq!(img.bytes, png);
+                assert_eq!(img.width_px, 96); // 914400 EMU → 96 CSS px @ 96dpi
+                assert_eq!(img.height_px, 48);
+                assert_eq!(img.r_id.as_deref(), Some("rId7"));
+                assert_eq!(
+                    img.part_path.as_deref(),
+                    Some("word/media/dot.png")
+                );
+            }
+            _ => panic!("expected image block"),
         }
     }
 }

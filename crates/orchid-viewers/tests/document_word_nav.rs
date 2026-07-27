@@ -81,6 +81,46 @@ fn preview_select_word_at_offset() {
 }
 
 #[test]
+fn preview_triple_click_selects_paragraph() {
+    use orchid_viewers::document::layout::PREVIEW_PADDING;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "First paragraph here".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Second line".into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }),
+        ],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    let x = PREVIEW_PADDING + 8.0;
+    let y = PREVIEW_PADDING + 8.0;
+
+    // Explicit phase 4 (triple-click).
+    viewer.preview_pointer(4, x, y);
+    assert_eq!(viewer.selected_plain_text(), "First paragraph here");
+
+    // Multi-click downs: 1 caret → 2 word → 3 paragraph.
+    viewer.preview_pointer(0, x, y);
+    viewer.preview_pointer(0, x, y);
+    assert_eq!(viewer.selected_plain_text(), "First");
+    viewer.preview_pointer(0, x, y);
+    assert_eq!(viewer.selected_plain_text(), "First paragraph here");
+}
+
+#[test]
 fn preview_font_family_cycle_and_set() {
     use orchid_viewers::ViewerSnapshot;
 

@@ -186,6 +186,8 @@ impl DocumentLayout {
                         prefix_len,
                         is_image: false,
                         image_h: 0.0,
+                        image_w: 0,
+                        image_rgba: None,
                     });
                     plain_offset += body_len;
                     total_h += h + para_gap;
@@ -212,6 +214,8 @@ impl DocumentLayout {
                                     prefix_len,
                                     is_image: false,
                                     image_h: 0.0,
+                                    image_w: 0,
+                                    image_rgba: None,
                                 });
                                 plain_offset += body_len;
                                 total_h += h + 4.0;
@@ -221,7 +225,8 @@ impl DocumentLayout {
                     total_h += para_gap;
                 }
                 Block::Image(img) => {
-                    let h = (img.height_px.min(120) as f32).max(24.0);
+                    let (rgba, w, h_px) = prepare_preview_image(img, max_w);
+                    let h = (h_px as f32).max(24.0);
                     layouts.push(LaidBlock {
                         layout: Layout::default(),
                         y0: total_h,
@@ -231,6 +236,8 @@ impl DocumentLayout {
                         prefix_len: 0,
                         is_image: true,
                         image_h: h,
+                        image_w: w,
+                        image_rgba: rgba,
                     });
                     total_h += h + para_gap;
                 }
@@ -312,16 +319,28 @@ impl DocumentLayout {
         for item in &layouts {
             if item.is_image {
                 let y = (pad + item.y0) as u32;
-                fill_rect(
-                    &mut pixels,
-                    width,
-                    height,
-                    pad as u32,
-                    y,
-                    (max_w as u32).saturating_sub(8),
-                    item.image_h.max(24.0) as u32,
-                    [220, 220, 228, 255],
-                );
+                let x = pad as u32;
+                let box_h = item.image_h.max(24.0) as u32;
+                if let (Some(rgba), true) = (&item.image_rgba, item.image_w > 0) {
+                    blit_rgba(
+                        &mut pixels,
+                        (width, height),
+                        (x, y),
+                        (item.image_w, box_h.max(1)),
+                        rgba,
+                    );
+                } else {
+                    fill_rect(
+                        &mut pixels,
+                        width,
+                        height,
+                        x,
+                        y,
+                        (max_w as u32).saturating_sub(8).max(24),
+                        box_h,
+                        [220, 220, 228, 255],
+                    );
+                }
                 continue;
             }
             if item.layout.len() == 0 {
@@ -420,7 +439,8 @@ impl DocumentLayout {
                     total_h += para_gap;
                 }
                 Block::Image(img) => {
-                    let h = (img.height_px.min(120) as f32).max(24.0);
+                    let (_, h_px) = preview_image_display_size(img, max_w);
+                    let h = (h_px as f32).max(24.0);
                     let y0 = total_h;
                     let y1 = total_h + h + para_gap;
                     if local_y >= y0 && local_y < y1 {
@@ -466,6 +486,98 @@ struct LaidBlock {
     prefix_len: usize,
     is_image: bool,
     image_h: f32,
+    image_w: u32,
+    image_rgba: Option<Vec<u8>>,
+}
+
+const MAX_PREVIEW_IMAGE_H: u32 = 240;
+
+fn preview_image_display_size(
+    img: &crate::document::model::InlineImage,
+    max_w: f32,
+) -> (u32, u32) {
+    let mut disp_w = img.width_px;
+    let mut disp_h = img.height_px;
+    if disp_w == 0 || disp_h == 0 {
+        if let Ok(decoded) = image::load_from_memory(&img.bytes) {
+            if disp_w == 0 {
+                disp_w = decoded.width();
+            }
+            if disp_h == 0 {
+                disp_h = decoded.height();
+            }
+        } else {
+            return (24, 24);
+        }
+    }
+    disp_w = disp_w.max(1);
+    disp_h = disp_h.max(1);
+    if disp_w as f32 > max_w && max_w > 1.0 {
+        let scale = max_w / disp_w as f32;
+        disp_w = max_w as u32;
+        disp_h = ((disp_h as f32) * scale).max(1.0) as u32;
+    }
+    if disp_h > MAX_PREVIEW_IMAGE_H {
+        let scale = MAX_PREVIEW_IMAGE_H as f32 / disp_h as f32;
+        disp_h = MAX_PREVIEW_IMAGE_H;
+        disp_w = ((disp_w as f32) * scale).max(1.0) as u32;
+    }
+    (disp_w, disp_h)
+}
+
+/// Decode + scale an inline image for the preview canvas.
+fn prepare_preview_image(
+    img: &crate::document::model::InlineImage,
+    max_w: f32,
+) -> (Option<Vec<u8>>, u32, u32) {
+    let (disp_w, disp_h) = preview_image_display_size(img, max_w);
+    let Ok(decoded) = image::load_from_memory(&img.bytes) else {
+        return (None, disp_w, disp_h);
+    };
+    let rgba = decoded.to_rgba8();
+    let (src_w, src_h) = rgba.dimensions();
+    if disp_w == src_w && disp_h == src_h {
+        return (Some(rgba.into_raw()), disp_w, disp_h);
+    }
+    let resized = image::imageops::resize(
+        &rgba,
+        disp_w,
+        disp_h,
+        image::imageops::FilterType::Triangle,
+    );
+    (Some(resized.into_raw()), disp_w, disp_h)
+}
+
+fn blit_rgba(
+    pixels: &mut [u8],
+    buf: (u32, u32),
+    dest: (u32, u32),
+    src_size: (u32, u32),
+    rgba: &[u8],
+) {
+    let (buf_w, buf_h) = buf;
+    let (x, y) = dest;
+    let (src_w, src_h) = src_size;
+    let copy_h = src_h.min(buf_h.saturating_sub(y));
+    let copy_w = src_w.min(buf_w.saturating_sub(x));
+    for row in 0..copy_h {
+        for col in 0..copy_w {
+            let si = ((row as usize) * (src_w as usize) + (col as usize)) * 4;
+            if si + 3 >= rgba.len() {
+                return;
+            }
+            blend_pixel(
+                pixels,
+                buf_w,
+                x + col,
+                y + row,
+                rgba[si],
+                rgba[si + 1],
+                rgba[si + 2],
+                rgba[si + 3],
+            );
+        }
+    }
 }
 
 const SELECTION_FILL: [u8; 4] = [147, 197, 253, 140]; // soft blue

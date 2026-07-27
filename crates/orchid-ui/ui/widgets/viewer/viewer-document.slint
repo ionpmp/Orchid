@@ -8,7 +8,7 @@ export component ViewerDocumentView inherits Rectangle {
     callback text-edited(string);
     callback selection-changed(int, int);
     callback viewport-changed(length);
-    /// Preview pointer: phase 0=down, 1=move, 2=up, 3=double-click word; x/y CSS px.
+    /// Preview pointer: phase 0=down, 1=move, 2=up, 3=double-click word, 4=triple-click paragraph; x/y CSS px.
     callback preview-pointer(int, float, float);
     /// Preview key: token or literal text, plus ctrl/shift.
     callback preview-key(string, bool, bool);
@@ -513,7 +513,7 @@ export component ViewerDocumentView inherits Rectangle {
                         root.preview-key("Delete", event.modifiers.control, false);
                         return accept;
                     }
-                    if (event.text == Key.Tab || event.text == "\t") {
+                    if (event.text == Key.Tab) {
                         root.preview-key("Tab", false, event.modifiers.shift);
                         return accept;
                     }

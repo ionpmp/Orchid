@@ -9,6 +9,7 @@ pub mod undo;
 use std::any::Any;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
@@ -70,7 +71,27 @@ pub struct DocumentViewer {
     selection: Mutex<Selection>,
     /// Plain-text offset captured on preview pointer-down (drag selection).
     preview_drag_anchor: Mutex<Option<usize>>,
+    /// Multi-click tracking for word (2×) / paragraph (3×) select.
+    preview_click: Mutex<PreviewClickState>,
 }
+
+struct PreviewClickState {
+    count: u8,
+    last_at: Option<Instant>,
+    last_offset: usize,
+}
+
+impl Default for PreviewClickState {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            last_at: None,
+            last_offset: 0,
+        }
+    }
+}
+
+const MULTI_CLICK_GAP: Duration = Duration::from_millis(500);
 
 impl std::fmt::Debug for DocumentViewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -108,6 +129,7 @@ impl DocumentViewer {
                 head: Cursor::default(),
             }),
             preview_drag_anchor: Mutex::new(None),
+            preview_click: Mutex::new(PreviewClickState::default()),
         }
     }
 
@@ -145,9 +167,11 @@ impl DocumentViewer {
     }
 
     /// Handle a pointer event on the preview canvas
-    /// (`0`=down, `1`=move, `2`=up, `3`=double-click word select).
+    /// (`0`=down, `1`=move, `2`=up, `3`=double-click word select,
+    /// `4`=triple-click paragraph select).
     ///
     /// Coordinates are CSS pixels in the rendered preview image.
+    /// Rapid successive downs also advance multi-click (2→word, 3→paragraph).
     pub fn preview_pointer(&self, phase: u8, x: f32, y: f32) {
         let doc_guard = self.document.read();
         let Some(doc) = doc_guard.as_ref() else {
@@ -159,11 +183,35 @@ impl DocumentViewer {
         };
         match phase {
             0 => {
-                *self.preview_drag_anchor.lock() = Some(offset);
-                *self.selection.lock() = selection_from_plain_offsets(doc, offset, offset);
+                let count = self.note_preview_click(offset);
+                match count {
+                    1 => {
+                        *self.preview_drag_anchor.lock() = Some(offset);
+                        *self.selection.lock() =
+                            selection_from_plain_offsets(doc, offset, offset);
+                    }
+                    2 => {
+                        *self.preview_drag_anchor.lock() = None;
+                        let plain = doc.plain_text();
+                        let (start, end) = word_range_at(&plain, offset);
+                        *self.selection.lock() =
+                            selection_from_plain_offsets(doc, start, end);
+                    }
+                    _ => {
+                        *self.preview_drag_anchor.lock() = None;
+                        let cursor = cursor_from_plain_offset(doc, offset);
+                        *self.selection.lock() = expand_selection_to_paragraph(doc, cursor);
+                        // Next down starts a new multi-click sequence.
+                        self.reset_preview_click();
+                    }
+                }
             }
             1 | 2 => {
-                let anchor = self.preview_drag_anchor.lock().unwrap_or(offset);
+                let anchor = *self.preview_drag_anchor.lock();
+                let Some(anchor) = anchor else {
+                    // Multi-click selection: ignore drag/up so word/paragraph stays.
+                    return;
+                };
                 *self.selection.lock() = selection_from_plain_offsets(doc, anchor, offset);
                 if phase == 2 {
                     *self.preview_drag_anchor.lock() = None;
@@ -171,12 +219,45 @@ impl DocumentViewer {
             }
             3 => {
                 *self.preview_drag_anchor.lock() = None;
+                self.sync_preview_click_count(2, offset);
                 let plain = doc.plain_text();
                 let (start, end) = word_range_at(&plain, offset);
                 *self.selection.lock() = selection_from_plain_offsets(doc, start, end);
             }
+            4 => {
+                *self.preview_drag_anchor.lock() = None;
+                let cursor = cursor_from_plain_offset(doc, offset);
+                *self.selection.lock() = expand_selection_to_paragraph(doc, cursor);
+                self.reset_preview_click();
+            }
             _ => {}
         }
+    }
+
+    fn note_preview_click(&self, offset: usize) -> u8 {
+        let now = Instant::now();
+        let mut state = self.preview_click.lock();
+        let contiguous = state.last_at.is_some_and(|t| now.duration_since(t) <= MULTI_CLICK_GAP)
+            && offset.abs_diff(state.last_offset) <= 2;
+        state.count = if contiguous {
+            state.count.saturating_add(1).max(1)
+        } else {
+            1
+        };
+        state.last_at = Some(now);
+        state.last_offset = offset;
+        state.count
+    }
+
+    fn sync_preview_click_count(&self, count: u8, offset: usize) {
+        let mut state = self.preview_click.lock();
+        state.count = count;
+        state.last_at = Some(Instant::now());
+        state.last_offset = offset;
+    }
+
+    fn reset_preview_click(&self) {
+        *self.preview_click.lock() = PreviewClickState::default();
     }
 
     /// Select the word (or whitespace run) at a plain-text byte offset.

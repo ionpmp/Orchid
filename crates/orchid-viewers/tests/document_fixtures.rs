@@ -167,16 +167,22 @@ fn inline_image_opens_and_keeps_text() {
     let plain = doc.plain_text();
     assert!(plain.contains("Inline Image Fixture"), "{plain}");
     assert!(plain.contains("End of document"), "{plain}");
-    // Tier-1 may still skip drawings into Block::Image; prefer image block when present,
-    // otherwise require the media part to be retained for round-trip.
-    let has_image_block = doc.blocks.iter().any(|b| matches!(b, Block::Image(_)));
-    let has_media = doc
-        .retained_parts
+    let img = doc
+        .blocks
         .iter()
-        .any(|(path, bytes)| path.contains("media/") && !bytes.is_empty());
+        .find_map(|b| match b {
+            Block::Image(img) => Some(img),
+            _ => None,
+        })
+        .expect("expected Block::Image from w:drawing");
+    assert!(!img.bytes.is_empty(), "image bytes empty");
+    assert!(img.width_px > 0 && img.height_px > 0, "missing display size");
     assert!(
-        has_image_block || has_media,
-        "expected an image block or retained media part"
+        img.part_path
+            .as_deref()
+            .is_some_and(|p| p.contains("media/")),
+        "expected media part path, got {:?}",
+        img.part_path
     );
 }
 
