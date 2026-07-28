@@ -1,16 +1,49 @@
 //! Cursor and selection over a [`Document`](super::model::Document).
 
-use crate::document::model::{Block, Document};
+use crate::document::model::{Block, Document, Paragraph};
+
+/// Path to a paragraph inside a [`Block::Table`](super::model::Block::Table).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CellPath {
+    /// Row index (top-to-bottom).
+    pub row: usize,
+    /// Column index (left-to-right).
+    pub col: usize,
+    /// Index into [`TableCell::paragraphs`](super::model::TableCell::paragraphs).
+    pub para_idx: usize,
+}
 
 /// Position inside the document body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Cursor {
     /// Index into [`Document::blocks`](super::model::Document::blocks).
     pub block_idx: usize,
-    /// Index into the paragraph's `runs` (ignored for non-paragraph blocks).
+    /// When `Some`, this cursor addresses a paragraph inside a table at `block_idx`.
+    /// When `None`, `block_idx` must be a top-level [`Block::Paragraph`].
+    pub cell: Option<CellPath>,
+    /// Index into the paragraph's `runs`.
     pub run_idx: usize,
     /// UTF-8 byte offset inside the run's text.
     pub byte_offset: usize,
+}
+
+impl Cursor {
+    /// Cursor in a top-level body paragraph.
+    #[must_use]
+    pub const fn at(block_idx: usize, run_idx: usize, byte_offset: usize) -> Self {
+        Self {
+            block_idx,
+            cell: None,
+            run_idx,
+            byte_offset,
+        }
+    }
+
+    /// Whether `self` and `other` address the same paragraph (body or cell).
+    #[must_use]
+    pub fn same_paragraph(self, other: Self) -> bool {
+        self.block_idx == other.block_idx && self.cell == other.cell
+    }
 }
 
 /// A half-open selection from `anchor` to `head`.
@@ -40,72 +73,163 @@ impl Selection {
     }
 }
 
+/// Borrow the paragraph addressed by `cursor`.
+#[must_use]
+pub fn paragraph_ref(doc: &Document, cursor: Cursor) -> Option<&Paragraph> {
+    match cursor.cell {
+        None => match doc.blocks.get(cursor.block_idx)? {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        },
+        Some(path) => {
+            let Block::Table(t) = doc.blocks.get(cursor.block_idx)? else {
+                return None;
+            };
+            t.rows
+                .get(path.row)?
+                .cells
+                .get(path.col)?
+                .paragraphs
+                .get(path.para_idx)
+        }
+    }
+}
+
+/// Mutably borrow the paragraph addressed by `cursor`.
+pub fn paragraph_mut(doc: &mut Document, cursor: Cursor) -> Option<&mut Paragraph> {
+    match cursor.cell {
+        None => match doc.blocks.get_mut(cursor.block_idx)? {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        },
+        Some(path) => {
+            let Block::Table(t) = doc.blocks.get_mut(cursor.block_idx)? else {
+                return None;
+            };
+            t.rows
+                .get_mut(path.row)?
+                .cells
+                .get_mut(path.col)?
+                .paragraphs
+                .get_mut(path.para_idx)
+        }
+    }
+}
+
+fn para_len(p: &Paragraph) -> usize {
+    p.runs.iter().map(|r| r.text.len()).sum()
+}
+
+fn cursor_in_para(
+    block_idx: usize,
+    cell: Option<CellPath>,
+    p: &Paragraph,
+    mut remaining: usize,
+) -> Cursor {
+    if p.runs.is_empty() {
+        return Cursor {
+            block_idx,
+            cell,
+            run_idx: 0,
+            byte_offset: 0,
+        };
+    }
+    for (ri, run) in p.runs.iter().enumerate() {
+        if remaining <= run.text.len() {
+            return Cursor {
+                block_idx,
+                cell,
+                run_idx: ri,
+                byte_offset: remaining,
+            };
+        }
+        remaining -= run.text.len();
+    }
+    let last = p.runs.len() - 1;
+    Cursor {
+        block_idx,
+        cell,
+        run_idx: last,
+        byte_offset: p.runs[last].text.len(),
+    }
+}
+
+fn end_of_para(block_idx: usize, cell: Option<CellPath>, p: &Paragraph) -> Cursor {
+    if p.runs.is_empty() {
+        return Cursor {
+            block_idx,
+            cell,
+            run_idx: 0,
+            byte_offset: 0,
+        };
+    }
+    let last = p.runs.len() - 1;
+    Cursor {
+        block_idx,
+        cell,
+        run_idx: last,
+        byte_offset: p.runs[last].text.len(),
+    }
+}
+
 /// Map a UTF-8 byte offset in [`Document::plain_text`] into a [`Cursor`].
 ///
-/// Paragraphs are joined with a single `\n` (matching `plain_text()`).
+/// Paragraphs (body and table-cell) are joined with a single `\n` (matching `plain_text()`).
 #[must_use]
 pub fn cursor_from_plain_offset(doc: &Document, mut offset: usize) -> Cursor {
     if doc.blocks.is_empty() {
         return Cursor::default();
     }
+    let mut emitted = false;
+    let mut last_end = Cursor::default();
     for (bi, block) in doc.blocks.iter().enumerate() {
-        let Block::Paragraph(p) = block else {
-            continue;
-        };
-        let para_len: usize = p.runs.iter().map(|r| r.text.len()).sum();
-        if offset <= para_len {
-            let mut remaining = offset;
-            if p.runs.is_empty() {
-                return Cursor {
-                    block_idx: bi,
-                    run_idx: 0,
-                    byte_offset: 0,
-                };
-            }
-            for (ri, run) in p.runs.iter().enumerate() {
-                if remaining <= run.text.len() {
-                    return Cursor {
-                        block_idx: bi,
-                        run_idx: ri,
-                        byte_offset: remaining,
-                    };
+        match block {
+            Block::Paragraph(p) => {
+                if emitted {
+                    if offset == 0 {
+                        return last_end;
+                    }
+                    offset -= 1;
                 }
-                remaining -= run.text.len();
+                emitted = true;
+                let len = para_len(p);
+                if offset <= len {
+                    return cursor_in_para(bi, None, p, offset);
+                }
+                offset -= len;
+                last_end = end_of_para(bi, None, p);
             }
-            let last = p.runs.len() - 1;
-            return Cursor {
-                block_idx: bi,
-                run_idx: last,
-                byte_offset: p.runs[last].text.len(),
-            };
-        }
-        offset -= para_len;
-        // Separator `\n` between paragraphs.
-        if bi + 1 < doc.blocks.len() {
-            if offset == 0 {
-                // Caret sits on the newline → end of this paragraph.
-                let last = p.runs.len().saturating_sub(1);
-                let byte_offset = p.runs.get(last).map(|r| r.text.len()).unwrap_or(0);
-                return Cursor {
-                    block_idx: bi,
-                    run_idx: last,
-                    byte_offset,
-                };
+            Block::Table(t) => {
+                for (ri, row) in t.rows.iter().enumerate() {
+                    for (ci, cell) in row.cells.iter().enumerate() {
+                        for (pi, p) in cell.paragraphs.iter().enumerate() {
+                            let path = Some(CellPath {
+                                row: ri,
+                                col: ci,
+                                para_idx: pi,
+                            });
+                            if emitted {
+                                if offset == 0 {
+                                    return last_end;
+                                }
+                                offset -= 1;
+                            }
+                            emitted = true;
+                            let len = para_len(p);
+                            if offset <= len {
+                                return cursor_in_para(bi, path, p, offset);
+                            }
+                            offset -= len;
+                            last_end = end_of_para(bi, path, p);
+                        }
+                    }
+                }
             }
-            offset -= 1;
+            Block::Image(_) => {}
         }
     }
-    // Past the end → last paragraph end.
-    for bi in (0..doc.blocks.len()).rev() {
-        if let Block::Paragraph(p) = &doc.blocks[bi] {
-            let last = p.runs.len().saturating_sub(1);
-            let byte_offset = p.runs.get(last).map(|r| r.text.len()).unwrap_or(0);
-            return Cursor {
-                block_idx: bi,
-                run_idx: last,
-                byte_offset,
-            };
-        }
+    if emitted {
+        return last_end;
     }
     Cursor::default()
 }
@@ -131,29 +255,28 @@ pub fn plain_offset_from_cursor(doc: &Document, cursor: Cursor) -> usize {
                     offset += 1;
                 }
                 emitted = true;
-                if bi == cursor.block_idx {
-                    let mut run_off = 0usize;
-                    for (ri, run) in p.runs.iter().enumerate() {
-                        if ri == cursor.run_idx {
-                            return offset + run_off + cursor.byte_offset.min(run.text.len());
-                        }
-                        run_off += run.text.len();
-                    }
-                    return offset + run_off;
+                if bi == cursor.block_idx && cursor.cell.is_none() {
+                    return offset + offset_in_para(p, cursor);
                 }
-                offset += p.runs.iter().map(|r| r.text.len()).sum::<usize>();
+                offset += para_len(p);
             }
             Block::Table(t) => {
-                for row in &t.rows {
-                    for cell in &row.cells {
-                        for p in &cell.paragraphs {
+                for (ri, row) in t.rows.iter().enumerate() {
+                    for (ci, cell) in row.cells.iter().enumerate() {
+                        for (pi, p) in cell.paragraphs.iter().enumerate() {
                             if emitted {
                                 offset += 1;
                             }
                             emitted = true;
-                            // Table paragraphs are not addressable by Cursor.block_idx today;
-                            // skip for offset accounting consistent with plain_text().
-                            offset += p.runs.iter().map(|r| r.text.len()).sum::<usize>();
+                            let path = CellPath {
+                                row: ri,
+                                col: ci,
+                                para_idx: pi,
+                            };
+                            if bi == cursor.block_idx && cursor.cell == Some(path) {
+                                return offset + offset_in_para(p, cursor);
+                            }
+                            offset += para_len(p);
                         }
                     }
                 }
@@ -164,10 +287,26 @@ pub fn plain_offset_from_cursor(doc: &Document, cursor: Cursor) -> usize {
     offset
 }
 
-/// Indices of paragraph blocks touched by `selection` (inclusive).
+fn offset_in_para(p: &Paragraph, cursor: Cursor) -> usize {
+    let mut run_off = 0usize;
+    for (ri, run) in p.runs.iter().enumerate() {
+        if ri == cursor.run_idx {
+            return run_off + cursor.byte_offset.min(run.text.len());
+        }
+        run_off += run.text.len();
+    }
+    run_off
+}
+
+/// Indices of **top-level** paragraph blocks touched by `selection` (inclusive).
+///
+/// Table cell paragraphs are not included (align/list still body-only).
 #[must_use]
 pub fn paragraph_indices_in_selection(doc: &Document, selection: Selection) -> Vec<usize> {
     let (start, end) = selection.normalized();
+    if start.cell.is_some() || end.cell.is_some() {
+        return Vec::new();
+    }
     let mut out = Vec::new();
     for bi in start.block_idx..=end.block_idx.min(doc.blocks.len().saturating_sub(1)) {
         if matches!(doc.blocks.get(bi), Some(Block::Paragraph(_))) {
@@ -179,13 +318,27 @@ pub fn paragraph_indices_in_selection(doc: &Document, selection: Selection) -> V
 
 fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
     use std::cmp::Ordering;
-    match (
-        a.block_idx.cmp(&b.block_idx),
-        a.run_idx.cmp(&b.run_idx),
-        a.byte_offset.cmp(&b.byte_offset),
-    ) {
-        (Ordering::Less, _, _) | (_, Ordering::Less, _) | (_, _, Ordering::Less) => -1,
-        (Ordering::Greater, _, _) | (_, Ordering::Greater, _) | (_, _, Ordering::Greater) => 1,
+    match a.block_idx.cmp(&b.block_idx) {
+        Ordering::Less => return -1,
+        Ordering::Greater => return 1,
+        Ordering::Equal => {}
+    }
+    match (a.cell, b.cell) {
+        (None, None) => {}
+        (None, Some(_)) => return -1,
+        (Some(_), None) => return 1,
+        (Some(ca), Some(cb)) => match (ca.row.cmp(&cb.row), ca.col.cmp(&cb.col), ca.para_idx.cmp(&cb.para_idx))
+        {
+            (Ordering::Less, _, _) | (_, Ordering::Less, _) | (_, _, Ordering::Less) => return -1,
+            (Ordering::Greater, _, _) | (_, Ordering::Greater, _) | (_, _, Ordering::Greater) => {
+                return 1;
+            }
+            _ => {}
+        },
+    }
+    match (a.run_idx.cmp(&b.run_idx), a.byte_offset.cmp(&b.byte_offset)) {
+        (Ordering::Less, _) | (_, Ordering::Less) => -1,
+        (Ordering::Greater, _) | (_, Ordering::Greater) => 1,
         _ => 0,
     }
 }
@@ -193,20 +346,29 @@ fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document::model::{Paragraph, Run, RunStyle, Table, TableCell, TableRow};
+
+    fn para(text: &str) -> Paragraph {
+        Paragraph {
+            runs: vec![Run {
+                text: text.into(),
+                style: RunStyle::default(),
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn cell(text: &str) -> TableCell {
+        TableCell {
+            paragraphs: vec![para(text)],
+        }
+    }
 
     #[test]
     fn normalized_swaps_backwards_selection() {
         let sel = Selection {
-            anchor: Cursor {
-                block_idx: 2,
-                run_idx: 0,
-                byte_offset: 5,
-            },
-            head: Cursor {
-                block_idx: 1,
-                run_idx: 0,
-                byte_offset: 0,
-            },
+            anchor: Cursor::at(2, 0, 5),
+            head: Cursor::at(1, 0, 0),
         };
         let (start, end) = sel.normalized();
         assert_eq!(start.block_idx, 1);
@@ -215,23 +377,10 @@ mod tests {
 
     #[test]
     fn plain_offset_round_trips() {
-        use crate::document::model::{Paragraph, Run, RunStyle};
         let doc = Document {
             blocks: vec![
-                Block::Paragraph(Paragraph {
-                    runs: vec![Run {
-                        text: "Hi".into(),
-                        style: RunStyle::default(),
-                    }],
-                    ..Default::default()
-                }),
-                Block::Paragraph(Paragraph {
-                    runs: vec![Run {
-                        text: "there".into(),
-                        style: RunStyle::default(),
-                    }],
-                    ..Default::default()
-                }),
+                Block::Paragraph(para("Hi")),
+                Block::Paragraph(para("there")),
             ],
             ..Default::default()
         };
@@ -240,5 +389,94 @@ mod tests {
             let back = plain_offset_from_cursor(&doc, c);
             assert_eq!(back, off.min(doc.plain_text().len()), "off={off}");
         }
+    }
+
+    #[test]
+    fn table_cells_round_trip_plain_offsets() {
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![cell("A"), cell("B")],
+                    },
+                    TableRow {
+                        cells: vec![cell("C"), cell("D")],
+                    },
+                ],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        assert_eq!(doc.plain_text(), "A\nB\nC\nD");
+        for off in 0..=doc.plain_text().len() {
+            let c = cursor_from_plain_offset(&doc, off);
+            assert!(c.cell.is_some(), "off={off} should be in a cell");
+            assert_eq!(plain_offset_from_cursor(&doc, c), off, "off={off}");
+        }
+        let in_b = cursor_from_plain_offset(&doc, 2); // start of "B"
+        assert_eq!(
+            in_b.cell,
+            Some(CellPath {
+                row: 0,
+                col: 1,
+                para_idx: 0
+            })
+        );
+    }
+
+    #[test]
+    fn body_after_table_maps_correctly() {
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(para("Hi")),
+                Block::Table(Table {
+                    rows: vec![TableRow {
+                        cells: vec![cell("X")],
+                    }],
+                    ..Default::default()
+                }),
+                Block::Paragraph(para("Lo")),
+            ],
+            ..Default::default()
+        };
+        // "Hi\nX\nLo" → offset of 'L' is 5
+        assert_eq!(doc.plain_text(), "Hi\nX\nLo");
+        let c = cursor_from_plain_offset(&doc, 5);
+        assert_eq!(c.block_idx, 2);
+        assert!(c.cell.is_none());
+        assert_eq!(c.byte_offset, 0);
+        assert_eq!(plain_offset_from_cursor(&doc, c), 5);
+    }
+
+    #[test]
+    fn cmp_orders_cells_in_same_table() {
+        let a = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 0,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        let b = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 1,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        assert!(cmp_cursor(a, b) < 0);
+        let sel = Selection {
+            anchor: b,
+            head: a,
+        };
+        let (start, end) = sel.normalized();
+        assert_eq!(start.cell.map(|c| c.col), Some(0));
+        assert_eq!(end.cell.map(|c| c.col), Some(1));
     }
 }

@@ -1,6 +1,6 @@
 //! Edit commands and undo/redo for the document model.
 
-use crate::document::cursor::{Cursor, Selection};
+use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
     Alignment, Block, Document, InlineImage, ListKind, Paragraph, Run, RunStyle, TableCell,
     TableRow,
@@ -247,6 +247,7 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             apply_insert_text(doc, *at, text)?;
             let end = Cursor {
                 block_idx: at.block_idx,
+                cell: at.cell,
                 run_idx: at.run_idx,
                 byte_offset: at.byte_offset + text.len(),
             };
@@ -426,13 +427,7 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
 }
 
 fn apply_insert_text(doc: &mut Document, at: Cursor, text: &str) -> Result<()> {
-    let Block::Paragraph(p) = doc
-        .blocks
-        .get_mut(at.block_idx)
-        .ok_or(ViewerError::EditOutOfBounds)?
-    else {
-        return Err(ViewerError::EditOutOfBounds);
-    };
+    let p = paragraph_mut(doc, at).ok_or(ViewerError::EditOutOfBounds)?;
     if p.runs.is_empty() {
         p.runs.push(Run {
             text: text.to_string(),
@@ -452,16 +447,10 @@ fn apply_insert_text(doc: &mut Document, at: Cursor, text: &str) -> Result<()> {
 }
 
 fn apply_delete_range(doc: &mut Document, start: Cursor, end: Cursor) -> Result<()> {
-    if start.block_idx != end.block_idx {
+    if !start.same_paragraph(end) {
         return Err(ViewerError::EditOutOfBounds);
     }
-    let Block::Paragraph(p) = doc
-        .blocks
-        .get_mut(start.block_idx)
-        .ok_or(ViewerError::EditOutOfBounds)?
-    else {
-        return Err(ViewerError::EditOutOfBounds);
-    };
+    let p = paragraph_mut(doc, start).ok_or(ViewerError::EditOutOfBounds)?;
     if start.run_idx == end.run_idx {
         let run = p
             .runs
@@ -498,14 +487,17 @@ fn apply_delete_range(doc: &mut Document, start: Cursor, end: Cursor) -> Result<
 
 fn apply_set_run_style(doc: &mut Document, range: Selection, patch: &RunStylePatch) -> Result<()> {
     let (start, end) = range.normalized();
+    if start.same_paragraph(end) {
+        return apply_set_run_style_one_para(doc, start, end, patch);
+    }
+    if start.cell.is_some() || end.cell.is_some() {
+        return Err(ViewerError::EditOutOfBounds);
+    }
     if start.block_idx > end.block_idx || end.block_idx >= doc.blocks.len() {
         return Err(ViewerError::EditOutOfBounds);
     }
     for bi in start.block_idx..=end.block_idx {
-        let Block::Paragraph(p) = doc
-            .blocks
-            .get_mut(bi)
-            .ok_or(ViewerError::EditOutOfBounds)?
+        let Block::Paragraph(p) = doc.blocks.get_mut(bi).ok_or(ViewerError::EditOutOfBounds)?
         else {
             continue;
         };
@@ -527,9 +519,11 @@ fn apply_set_run_style(doc: &mut Document, range: Selection, patch: &RunStylePat
             let end_off = p.runs.get(last).map(|r| r.text.len()).unwrap_or(0);
             (last, end_off)
         };
-        if bi == start.block_idx && bi == end.block_idx && run_start == run_end && byte_start == byte_end
+        if bi == start.block_idx
+            && bi == end.block_idx
+            && run_start == run_end
+            && byte_start == byte_end
         {
-            // Collapsed: style the run under the caret.
             let idx = run_start.min(p.runs.len().saturating_sub(1));
             if let Some(run) = p.runs.get_mut(idx) {
                 patch.apply_to(&mut run.style);
@@ -539,6 +533,33 @@ fn apply_set_run_style(doc: &mut Document, range: Selection, patch: &RunStylePat
         apply_style_to_paragraph_range(p, run_start, byte_start, run_end, byte_end, patch)?;
     }
     Ok(())
+}
+
+fn apply_set_run_style_one_para(
+    doc: &mut Document,
+    start: Cursor,
+    end: Cursor,
+    patch: &RunStylePatch,
+) -> Result<()> {
+    let p = paragraph_mut(doc, start).ok_or(ViewerError::EditOutOfBounds)?;
+    if p.runs.is_empty() {
+        p.runs.push(Run {
+            text: String::new(),
+            style: RunStyle::default(),
+        });
+    }
+    let run_start = start.run_idx;
+    let byte_start = start.byte_offset;
+    let run_end = end.run_idx;
+    let byte_end = end.byte_offset;
+    if run_start == run_end && byte_start == byte_end {
+        let idx = run_start.min(p.runs.len().saturating_sub(1));
+        if let Some(run) = p.runs.get_mut(idx) {
+            patch.apply_to(&mut run.style);
+        }
+        return Ok(());
+    }
+    apply_style_to_paragraph_range(p, run_start, byte_start, run_end, byte_end, patch)
 }
 
 fn apply_style_to_paragraph_range(
@@ -616,16 +637,10 @@ fn split_run_at(p: &mut Paragraph, run_idx: usize, byte_offset: usize) -> Result
 }
 
 fn extract_text(doc: &Document, start: Cursor, end: Cursor) -> Result<String> {
-    if start.block_idx != end.block_idx {
+    if !start.same_paragraph(end) {
         return Err(ViewerError::EditOutOfBounds);
     }
-    let Block::Paragraph(p) = doc
-        .blocks
-        .get(start.block_idx)
-        .ok_or(ViewerError::EditOutOfBounds)?
-    else {
-        return Err(ViewerError::EditOutOfBounds);
-    };
+    let p = paragraph_ref(doc, start).ok_or(ViewerError::EditOutOfBounds)?;
     if start.run_idx == end.run_idx {
         let run = p
             .runs
@@ -680,11 +695,7 @@ mod tests {
             .push(
                 &mut doc,
                 EditCommand::InsertText {
-                    at: Cursor {
-                        block_idx: 0,
-                        run_idx: 0,
-                        byte_offset: 5,
-                    },
+                    at: Cursor::at(0, 0, 5),
                     text: "!".into(),
                 },
             )
@@ -706,11 +717,7 @@ mod tests {
                 EditCommand::SetRunStyle {
                     range: Selection {
                         anchor: Cursor::default(),
-                        head: Cursor {
-                            block_idx: 0,
-                            run_idx: 0,
-                            byte_offset: 5,
-                        },
+                        head: Cursor::at(0, 0, 5),
                     },
                     style: RunStylePatch {
                         bold: Some(true),
@@ -739,16 +746,8 @@ mod tests {
                 &mut doc,
                 EditCommand::SetRunStyle {
                     range: Selection {
-                        anchor: Cursor {
-                            block_idx: 0,
-                            run_idx: 0,
-                            byte_offset: 1,
-                        },
-                        head: Cursor {
-                            block_idx: 0,
-                            run_idx: 0,
-                            byte_offset: 4,
-                        },
+                        anchor: Cursor::at(0, 0, 1),
+                        head: Cursor::at(0, 0, 4),
                     },
                     style: RunStylePatch {
                         bold: Some(true),
@@ -779,6 +778,138 @@ mod tests {
             }
             _ => panic!("paragraph"),
         }
+    }
+
+    #[test]
+    fn insert_text_in_table_cell_undo() {
+        use crate::document::cursor::CellPath;
+        use crate::document::model::Table;
+
+        let mut doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![
+                        TableCell {
+                            paragraphs: vec![Paragraph {
+                                runs: vec![Run {
+                                    text: "A".into(),
+                                    style: RunStyle::default(),
+                                }],
+                                ..Default::default()
+                            }],
+                        },
+                        TableCell {
+                            paragraphs: vec![Paragraph {
+                                runs: vec![Run {
+                                    text: "B".into(),
+                                    style: RunStyle::default(),
+                                }],
+                                ..Default::default()
+                            }],
+                        },
+                    ],
+                }],
+                unsupported: vec![],
+            })],
+            ..Default::default()
+        };
+        let mut stack = UndoStack::new();
+        let at = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 0,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 1,
+        };
+        stack
+            .push(
+                &mut doc,
+                EditCommand::InsertText {
+                    at,
+                    text: "!".into(),
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells[0].paragraphs[0].plain_text(), "A!");
+                assert_eq!(t.rows[0].cells[1].paragraphs[0].plain_text(), "B");
+            }
+            _ => panic!("table"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells[0].paragraphs[0].plain_text(), "A");
+            }
+            _ => panic!("table"),
+        }
+    }
+
+    #[test]
+    fn delete_across_cells_is_rejected() {
+        use crate::document::cursor::CellPath;
+        use crate::document::model::Table;
+
+        let mut doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![
+                        TableCell {
+                            paragraphs: vec![Paragraph {
+                                runs: vec![Run {
+                                    text: "A".into(),
+                                    style: RunStyle::default(),
+                                }],
+                                ..Default::default()
+                            }],
+                        },
+                        TableCell {
+                            paragraphs: vec![Paragraph {
+                                runs: vec![Run {
+                                    text: "B".into(),
+                                    style: RunStyle::default(),
+                                }],
+                                ..Default::default()
+                            }],
+                        },
+                    ],
+                }],
+                unsupported: vec![],
+            })],
+            ..Default::default()
+        };
+        let err = apply_command(
+            &mut doc,
+            &EditCommand::DeleteRange {
+                range: Selection {
+                    anchor: Cursor {
+                        block_idx: 0,
+                        cell: Some(CellPath {
+                            row: 0,
+                            col: 0,
+                            para_idx: 0,
+                        }),
+                        run_idx: 0,
+                        byte_offset: 0,
+                    },
+                    head: Cursor {
+                        block_idx: 0,
+                        cell: Some(CellPath {
+                            row: 0,
+                            col: 1,
+                            para_idx: 0,
+                        }),
+                        run_idx: 0,
+                        byte_offset: 1,
+                    },
+                },
+            },
+        );
+        assert!(err.is_err());
     }
 
     #[test]
@@ -840,11 +971,7 @@ mod tests {
             .push(
                 &mut doc,
                 EditCommand::InsertImage {
-                    at: Cursor {
-                        block_idx: 1,
-                        run_idx: 0,
-                        byte_offset: 0,
-                    },
+                    at: Cursor::at(1, 0, 0),
                     image: InlineImage {
                         bytes: vec![1, 2, 3],
                         format: ImageFormat::Png,
@@ -870,11 +997,7 @@ mod tests {
             .push(
                 &mut doc,
                 EditCommand::InsertText {
-                    at: Cursor {
-                        block_idx: 0,
-                        run_idx: 0,
-                        byte_offset: 5,
-                    },
+                    at: Cursor::at(0, 0, 5),
                     text: " world".into(),
                 },
             )
@@ -885,11 +1008,7 @@ mod tests {
                 EditCommand::SetRunStyle {
                     range: Selection {
                         anchor: Cursor::default(),
-                        head: Cursor {
-                            block_idx: 0,
-                            run_idx: 0,
-                            byte_offset: 5,
-                        },
+                        head: Cursor::at(0, 0, 5),
                     },
                     style: RunStylePatch {
                         bold: Some(true),
@@ -920,11 +1039,7 @@ mod tests {
             .push(
                 &mut doc,
                 EditCommand::InsertText {
-                    at: Cursor {
-                        block_idx: 0,
-                        run_idx: 0,
-                        byte_offset: 0,
-                    },
+                    at: Cursor::at(0, 0, 0),
                     text: "X".into(),
                 },
             )

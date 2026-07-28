@@ -19,8 +19,8 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    cursor_from_plain_offset, paragraph_indices_in_selection, plain_offset_from_cursor,
-    selection_from_plain_offsets, Cursor, Selection,
+    cursor_from_plain_offset, paragraph_indices_in_selection, paragraph_mut, paragraph_ref,
+    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
@@ -294,6 +294,7 @@ impl DocumentViewer {
         )?;
         let caret = Cursor {
             block_idx: at.block_idx,
+            cell: at.cell,
             run_idx: at.run_idx,
             byte_offset: at.byte_offset + text.len(),
         };
@@ -310,20 +311,20 @@ impl DocumentViewer {
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    /// Enter inside a table cell is not supported yet (`EditOutOfBounds`).
     pub fn preview_insert_paragraph_break(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         let at = self.delete_selection_if_needed(doc, sel)?;
+        if at.cell.is_some() {
+            return Err(ViewerError::EditOutOfBounds);
+        }
         let next = split_paragraph_blocks(doc, at)?;
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
-        let caret = Cursor {
-            block_idx: at.block_idx + 1,
-            run_idx: 0,
-            byte_offset: 0,
-        };
+        let caret = Cursor::at(at.block_idx + 1, 0, 0);
         *self.selection.lock() = Selection {
             anchor: caret,
             head: caret,
@@ -775,7 +776,7 @@ impl DocumentViewer {
             return Ok(sel.head);
         }
         let (start, end) = sel.normalized();
-        if start.block_idx == end.block_idx {
+        if start.same_paragraph(end) {
             self.undo.lock().push(
                 doc,
                 EditCommand::DeleteRange {
@@ -786,6 +787,10 @@ impl DocumentViewer {
                 },
             )?;
             return Ok(start);
+        }
+        // Cross-cell / body↔table multi-delete is not supported in Tier-1.
+        if start.cell.is_some() || end.cell.is_some() {
+            return Err(ViewerError::EditOutOfBounds);
         }
         let next = delete_multi_paragraph(doc, start, end)?;
         self.undo
@@ -1132,9 +1137,7 @@ fn first_paragraph(doc: &Document) -> Option<&Paragraph> {
 }
 
 fn style_at_cursor(doc: &Document, cursor: Cursor) -> Option<RunStyle> {
-    let Block::Paragraph(p) = doc.blocks.get(cursor.block_idx)? else {
-        return None;
-    };
+    let p = paragraph_ref(doc, cursor)?;
     p.runs
         .get(cursor.run_idx)
         .map(|r| r.style.clone())
@@ -1151,35 +1154,35 @@ fn effective_style_selection(doc: &Document, sel: Selection, _source_mode: bool)
 }
 
 fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
-    let Some(Block::Paragraph(p)) = doc.blocks.get(cursor.block_idx) else {
+    let Some(p) = paragraph_ref(doc, cursor) else {
         return Selection {
             anchor: cursor,
             head: cursor,
         };
     };
     if p.runs.is_empty() {
+        let c = Cursor {
+            block_idx: cursor.block_idx,
+            cell: cursor.cell,
+            run_idx: 0,
+            byte_offset: 0,
+        };
         return Selection {
-            anchor: Cursor {
-                block_idx: cursor.block_idx,
-                run_idx: 0,
-                byte_offset: 0,
-            },
-            head: Cursor {
-                block_idx: cursor.block_idx,
-                run_idx: 0,
-                byte_offset: 0,
-            },
+            anchor: c,
+            head: c,
         };
     }
     let last = p.runs.len() - 1;
     Selection {
         anchor: Cursor {
             block_idx: cursor.block_idx,
+            cell: cursor.cell,
             run_idx: 0,
             byte_offset: 0,
         },
         head: Cursor {
             block_idx: cursor.block_idx,
+            cell: cursor.cell,
             run_idx: last,
             byte_offset: p.runs[last].text.len(),
         },
@@ -1651,10 +1654,7 @@ impl Viewer for DocumentViewer {
         let sel = *self.selection.lock();
         let caret = sel.normalized().0;
         let style = style_at_cursor(doc, caret);
-        let para = match doc.blocks.get(caret.block_idx) {
-            Some(Block::Paragraph(p)) => Some(p),
-            _ => first_paragraph(doc),
-        };
+        let para = paragraph_ref(doc, caret).or_else(|| first_paragraph(doc));
         let (bold, italic, underline, font_size_pt, font_family, color_rgb, alignment, list_kind) = (
             style.as_ref().is_some_and(|s| s.bold),
             style.as_ref().is_some_and(|s| s.italic),
