@@ -44,6 +44,17 @@ impl Cursor {
     pub fn same_paragraph(self, other: Self) -> bool {
         self.block_idx == other.block_idx && self.cell == other.cell
     }
+
+    /// Whether both cursors are inside the same table cell (any paragraphs).
+    #[must_use]
+    pub fn same_cell(self, other: Self) -> bool {
+        match (self.cell, other.cell) {
+            (Some(a), Some(b)) => {
+                self.block_idx == other.block_idx && a.row == b.row && a.col == b.col
+            }
+            _ => false,
+        }
+    }
 }
 
 /// A half-open selection from `anchor` to `head`.

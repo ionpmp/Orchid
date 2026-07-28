@@ -308,23 +308,25 @@ impl DocumentViewer {
 
     /// Insert a paragraph break at the preview caret.
     ///
+    /// Inside a table cell this splits that cell's paragraph list (not body blocks).
+    ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
-    /// Enter inside a table cell is not supported yet (`EditOutOfBounds`).
     pub fn preview_insert_paragraph_break(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         let at = self.delete_selection_if_needed(doc, sel)?;
-        if at.cell.is_some() {
-            return Err(ViewerError::EditOutOfBounds);
-        }
-        let next = split_paragraph_blocks(doc, at)?;
+        let (next, caret) = if at.cell.is_some() {
+            split_cell_paragraph(doc, at)?
+        } else {
+            let blocks = split_paragraph_blocks(doc, at)?;
+            (blocks, Cursor::at(at.block_idx + 1, 0, 0))
+        };
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
-        let caret = Cursor::at(at.block_idx + 1, 0, 0);
         *self.selection.lock() = Selection {
             anchor: caret,
             head: caret,
@@ -358,7 +360,7 @@ impl DocumentViewer {
         let plain = doc.plain_text();
         let prev = prev_char_boundary(&plain, head_off);
         let range = selection_from_plain_offsets(doc, prev, head_off);
-        let at = self.delete_selection_if_needed(doc, range)?;
+        let at = self.delete_or_move_across_cells(doc, range)?;
         *self.selection.lock() = Selection {
             anchor: at,
             head: at,
@@ -392,13 +394,25 @@ impl DocumentViewer {
         }
         let next = next_char_boundary(&plain, head_off);
         let range = selection_from_plain_offsets(doc, head_off, next);
-        let at = self.delete_selection_if_needed(doc, range)?;
+        let at = self.delete_or_move_across_cells(doc, range)?;
         *self.selection.lock() = Selection {
             anchor: at,
             head: at,
         };
         self.invalidate_preview();
         Ok(())
+    }
+
+    /// Delete `range`, or when it would cross cells just move the caret (no merge).
+    fn delete_or_move_across_cells(&self, doc: &mut Document, range: Selection) -> Result<Cursor> {
+        let (start, end) = range.normalized();
+        if !start.same_paragraph(end)
+            && (start.cell.is_some() || end.cell.is_some())
+            && !start.same_cell(end)
+        {
+            return Ok(start);
+        }
+        self.delete_selection_if_needed(doc, range)
     }
 
     /// Move the caret by `delta` Unicode scalars (`extend` keeps the anchor).
@@ -786,6 +800,13 @@ impl DocumentViewer {
                     },
                 },
             )?;
+            return Ok(start);
+        }
+        if start.same_cell(end) {
+            let next = delete_multi_cell_paragraph(doc, start, end)?;
+            self.undo
+                .lock()
+                .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
             return Ok(start);
         }
         // Cross-cell / body↔table multi-delete is not supported in Tier-1.
@@ -1414,14 +1435,7 @@ fn next_word_boundary(text: &str, offset: usize) -> usize {
     off
 }
 
-fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
-    let Block::Paragraph(p) = doc
-        .blocks
-        .get(at.block_idx)
-        .ok_or(ViewerError::EditOutOfBounds)?
-    else {
-        return Err(ViewerError::EditOutOfBounds);
-    };
+fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
     let mut left_runs = Vec::new();
     let mut right_runs = Vec::new();
     if p.runs.is_empty() {
@@ -1463,6 +1477,18 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
                 .unwrap_or_default(),
         });
     }
+    (left_runs, right_runs)
+}
+
+fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
+    let Block::Paragraph(p) = doc
+        .blocks
+        .get(at.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let (left_runs, right_runs) = split_runs_at(p, at);
     let left = Paragraph {
         runs: left_runs,
         alignment: p.alignment,
@@ -1482,6 +1508,161 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
     let mut blocks = doc.blocks.clone();
     blocks[at.block_idx] = Block::Paragraph(left);
     blocks.insert(at.block_idx + 1, Block::Paragraph(right));
+    Ok(blocks)
+}
+
+fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Cursor)> {
+    let path = at.cell.ok_or(ViewerError::EditOutOfBounds)?;
+    let Block::Table(t) = doc
+        .blocks
+        .get(at.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let p = t
+        .rows
+        .get(path.row)
+        .ok_or(ViewerError::EditOutOfBounds)?
+        .cells
+        .get(path.col)
+        .ok_or(ViewerError::EditOutOfBounds)?
+        .paragraphs
+        .get(path.para_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?;
+    let (left_runs, right_runs) = split_runs_at(p, at);
+    let left = Paragraph {
+        runs: left_runs,
+        alignment: p.alignment,
+        list: p.list,
+        list_level: p.list_level,
+        num_id: p.num_id,
+        unsupported: p.unsupported.clone(),
+    };
+    let right = Paragraph {
+        runs: right_runs,
+        alignment: p.alignment,
+        list: ListKind::None,
+        list_level: 0,
+        num_id: None,
+        unsupported: Vec::new(),
+    };
+    let mut blocks = doc.blocks.clone();
+    let Block::Table(t) = blocks
+        .get_mut(at.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let cell = t
+        .rows
+        .get_mut(path.row)
+        .ok_or(ViewerError::EditOutOfBounds)?
+        .cells
+        .get_mut(path.col)
+        .ok_or(ViewerError::EditOutOfBounds)?;
+    cell.paragraphs[path.para_idx] = left;
+    cell.paragraphs.insert(path.para_idx + 1, right);
+    let caret = Cursor {
+        block_idx: at.block_idx,
+        cell: Some(CellPath {
+            row: path.row,
+            col: path.col,
+            para_idx: path.para_idx + 1,
+        }),
+        run_idx: 0,
+        byte_offset: 0,
+    };
+    Ok((blocks, caret))
+}
+
+fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<Vec<Block>> {
+    if !start.same_cell(end) {
+        return Err(ViewerError::EditOutOfBounds);
+    }
+    let path = start.cell.ok_or(ViewerError::EditOutOfBounds)?;
+    let end_path = end.cell.ok_or(ViewerError::EditOutOfBounds)?;
+    let Block::Table(t) = doc
+        .blocks
+        .get(start.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let paras = &t
+        .rows
+        .get(path.row)
+        .ok_or(ViewerError::EditOutOfBounds)?
+        .cells
+        .get(path.col)
+        .ok_or(ViewerError::EditOutOfBounds)?
+        .paragraphs;
+    if path.para_idx >= paras.len() || end_path.para_idx >= paras.len() {
+        return Err(ViewerError::EditOutOfBounds);
+    }
+    let start_p = &paras[path.para_idx];
+    let end_p = &paras[end_path.para_idx];
+
+    let mut merged_runs = Vec::new();
+    for (ri, run) in start_p.runs.iter().enumerate() {
+        if ri < start.run_idx {
+            merged_runs.push(run.clone());
+        } else if ri == start.run_idx {
+            merged_runs.push(Run {
+                text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
+                style: run.style.clone(),
+            });
+        }
+    }
+    for (ri, run) in end_p.runs.iter().enumerate() {
+        if ri > end.run_idx {
+            merged_runs.push(run.clone());
+        } else if ri == end.run_idx {
+            merged_runs.push(Run {
+                text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
+                style: run.style.clone(),
+            });
+        }
+    }
+    merged_runs.retain(|r| !r.text.is_empty());
+    if merged_runs.is_empty() {
+        merged_runs.push(Run {
+            text: String::new(),
+            style: RunStyle::default(),
+        });
+    }
+    let merged = Paragraph {
+        runs: merged_runs,
+        alignment: start_p.alignment,
+        list: start_p.list,
+        list_level: start_p.list_level,
+        num_id: start_p.num_id,
+        unsupported: start_p.unsupported.clone(),
+    };
+    let mut new_paras = Vec::with_capacity(paras.len());
+    for (pi, p) in paras.iter().enumerate() {
+        if pi < path.para_idx || pi > end_path.para_idx {
+            new_paras.push((*p).clone());
+        } else if pi == path.para_idx {
+            new_paras.push(merged.clone());
+        }
+    }
+
+    let mut blocks = doc.blocks.clone();
+    let Block::Table(t) = blocks
+        .get_mut(start.block_idx)
+        .ok_or(ViewerError::EditOutOfBounds)?
+    else {
+        return Err(ViewerError::EditOutOfBounds);
+    };
+    let cell = t
+        .rows
+        .get_mut(path.row)
+        .ok_or(ViewerError::EditOutOfBounds)?
+        .cells
+        .get_mut(path.col)
+        .ok_or(ViewerError::EditOutOfBounds)?;
+    cell.paragraphs = new_paras;
     Ok(blocks)
 }
 

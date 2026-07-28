@@ -4,7 +4,6 @@ use orchid_viewers::document::model::{
     Block, Document as Doc, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use orchid_viewers::document::{cursor_from_plain_offset, DocumentViewer};
-use orchid_viewers::Viewer;
 
 fn table_2x2() -> Doc {
     fn cell(text: &str) -> TableCell {
@@ -50,6 +49,17 @@ fn table_2x2() -> Doc {
     }
 }
 
+fn cell_paras(doc: &Doc, row: usize, col: usize) -> Vec<String> {
+    match &doc.blocks[1] {
+        Block::Table(t) => t.rows[row].cells[col]
+            .paragraphs
+            .iter()
+            .map(|p| p.plain_text())
+            .collect(),
+        _ => panic!("expected table"),
+    }
+}
+
 #[test]
 fn type_into_table_cell_keeps_neighbors() {
     let viewer = DocumentViewer::new();
@@ -67,15 +77,10 @@ fn type_into_table_cell_keeps_neighbors() {
 
     let guard = viewer.document();
     let doc = guard.as_ref().unwrap();
-    match &doc.blocks[1] {
-        Block::Table(t) => {
-            assert_eq!(t.rows[0].cells[0].paragraphs[0].plain_text(), "R1C1!");
-            assert_eq!(t.rows[0].cells[1].paragraphs[0].plain_text(), "R1C2");
-            assert_eq!(t.rows[1].cells[0].paragraphs[0].plain_text(), "R2C1");
-            assert_eq!(t.rows[1].cells[1].paragraphs[0].plain_text(), "R2C2");
-        }
-        _ => panic!("expected table"),
-    }
+    assert_eq!(cell_paras(doc, 0, 0), vec!["R1C1!".to_string()]);
+    assert_eq!(cell_paras(doc, 0, 1), vec!["R1C2".to_string()]);
+    assert_eq!(cell_paras(doc, 1, 0), vec!["R2C1".to_string()]);
+    assert_eq!(cell_paras(doc, 1, 1), vec!["R2C2".to_string()]);
     match &doc.blocks[0] {
         Block::Paragraph(p) => assert_eq!(p.plain_text(), "Before"),
         _ => panic!("p0"),
@@ -87,7 +92,7 @@ fn type_into_table_cell_keeps_neighbors() {
 }
 
 #[test]
-fn enter_in_table_cell_is_rejected() {
+fn enter_splits_table_cell_paragraph() {
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(table_2x2());
     viewer.set_source_mode(false);
@@ -95,9 +100,98 @@ fn enter_in_table_cell_is_rejected() {
         let guard = viewer.document();
         guard.as_ref().unwrap().plain_text()
     };
-    let off = plain.find("R2C2").expect("R2C2");
+    // Split after "R2" inside "R2C2".
+    let off = plain.find("R2C2").expect("R2C2") + 2;
     viewer.set_selection_plain_offsets(off, off);
-    assert!(viewer.preview_insert_paragraph_break().is_err());
+    viewer.preview_insert_paragraph_break().unwrap();
+
+    let guard = viewer.document();
+    let doc = guard.as_ref().unwrap();
+    assert_eq!(
+        cell_paras(doc, 1, 1),
+        vec!["R2".to_string(), "C2".to_string()]
+    );
+    assert_eq!(cell_paras(doc, 0, 0), vec!["R1C1".to_string()]);
+    let caret = viewer.selection().head;
+    assert_eq!(caret.cell.map(|c| c.para_idx), Some(1));
+    assert_eq!(caret.byte_offset, 0);
+}
+
+#[test]
+fn backspace_joins_table_cell_paragraphs() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C1").expect("R1C1") + 2;
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_insert_paragraph_break().unwrap();
+    {
+        let guard = viewer.document();
+        assert_eq!(
+            cell_paras(guard.as_ref().unwrap(), 0, 0),
+            vec!["R1".to_string(), "C1".to_string()]
+        );
+    }
+    // Caret is at start of second para — Backspace joins.
+    viewer.preview_delete_backward().unwrap();
+    let guard = viewer.document();
+    assert_eq!(
+        cell_paras(guard.as_ref().unwrap(), 0, 0),
+        vec!["R1C1".to_string()]
+    );
+}
+
+#[test]
+fn paste_multiline_into_table_cell() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C2").expect("R1C2") + "R1C2".len();
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_paste_plain("\nline2\nline3").unwrap();
+    let guard = viewer.document();
+    assert_eq!(
+        cell_paras(guard.as_ref().unwrap(), 0, 1),
+        vec![
+            "R1C2".to_string(),
+            "line2".to_string(),
+            "line3".to_string()
+        ]
+    );
+    assert_eq!(
+        cell_paras(guard.as_ref().unwrap(), 0, 0),
+        vec!["R1C1".to_string()]
+    );
+}
+
+#[test]
+fn backspace_at_cell_start_moves_without_merging_neighbor() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C2").expect("R1C2");
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_delete_backward().unwrap();
+    let guard = viewer.document();
+    let doc = guard.as_ref().unwrap();
+    assert_eq!(cell_paras(doc, 0, 0), vec!["R1C1".to_string()]);
+    assert_eq!(cell_paras(doc, 0, 1), vec!["R1C2".to_string()]);
+    // Caret moved to end of previous cell.
+    let caret = viewer.selection().head;
+    assert_eq!(caret.cell.map(|c| (c.row, c.col)), Some((0, 0)));
+    assert_eq!(caret.byte_offset, 4);
 }
 
 #[test]
