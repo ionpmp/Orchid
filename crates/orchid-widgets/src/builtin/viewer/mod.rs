@@ -912,6 +912,33 @@ pub async fn document_find(instance_id: Uuid, query: String, forward: bool) -> W
     Ok(())
 }
 
+/// Document: replace current find match, or all matches when `all` is true.
+pub async fn document_replace(
+    instance_id: Uuid,
+    query: String,
+    replacement: String,
+    all: bool,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
+                if all {
+                    doc.preview_replace_all(&query, &replacement)
+                        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                } else {
+                    let _ = doc
+                        .preview_replace_current(&query, &replacement)
+                        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                }
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Document: update selection from Source `TextInput` UTF-8 byte offsets.
 pub async fn document_set_selection(instance_id: Uuid, anchor: i32, head: i32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

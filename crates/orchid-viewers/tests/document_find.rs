@@ -99,3 +99,34 @@ fn find_backward_and_empty_query() {
     assert!(!viewer.preview_find("zzz-missing", true));
     assert_eq!(viewer.find_match_status(), (0, 0));
 }
+
+#[test]
+fn replace_current_and_all() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_source_mode(false);
+    viewer.set_selection_plain_offsets(0, 0);
+
+    assert!(viewer.preview_replace_current("hello", "Hi").unwrap());
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    assert!(plain.contains("Hi"));
+    assert_eq!(plain.to_lowercase().matches("hello").count(), 2);
+
+    assert_eq!(viewer.preview_replace_all("hello", "X").unwrap(), 2);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    assert!(!plain.to_lowercase().contains("hello"));
+    assert!(plain.contains('X'));
+    assert!(viewer.can_undo());
+    viewer.undo().unwrap();
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    assert_eq!(plain.to_lowercase().matches("hello").count(), 2);
+}

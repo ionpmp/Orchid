@@ -237,6 +237,98 @@ impl DocumentViewer {
         )
     }
 
+    /// Replace the current find match with `replacement`, then advance to the next.
+    ///
+    /// When the selection is not already a case-insensitive match for `query`,
+    /// finds the next match first. Empty queries are ignored.
+    ///
+    /// # Errors
+    ///
+    /// Propagates edit errors from insert/delete.
+    pub fn preview_replace_current(&self, query: &str, replacement: &str) -> Result<bool> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(false);
+        }
+        let selected = self.selected_plain_text();
+        if selected.to_lowercase() != q.to_lowercase() && !self.preview_find(q, true) {
+            return Ok(false);
+        }
+        self.preview_insert_text(replacement)?;
+        let _ = self.preview_find(q, true);
+        Ok(true)
+    }
+
+    /// Replace every non-overlapping case-insensitive match of `query`.
+    ///
+    /// Uses a single undo step. Returns the number of replacements performed.
+    ///
+    /// # Errors
+    ///
+    /// Propagates edit errors.
+    pub fn preview_replace_all(&self, query: &str, replacement: &str) -> Result<usize> {
+        use crate::document::undo::{apply_command, EditCommand};
+
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(0);
+        }
+        let q_lower = q.to_lowercase();
+        let q_bytes = q_lower.len();
+        if q_bytes == 0 {
+            return Ok(0);
+        }
+
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let plain_lower = doc.plain_text().to_lowercase();
+        let starts = non_overlapping_match_starts(&plain_lower, &q_lower);
+        if starts.is_empty() {
+            drop(doc_guard);
+            *self.find_match_index.lock() = 0;
+            *self.find_match_count.lock() = 0;
+            *self.find_gen.lock() += 1;
+            self.invalidate_preview();
+            return Ok(0);
+        }
+
+        let count = starts.len();
+        let previous = doc.blocks.clone();
+        for &start in starts.iter().rev() {
+            let end = start + q_bytes;
+            let range = selection_from_plain_offsets(doc, start, end);
+            apply_command(doc, &EditCommand::DeleteRange { range })?;
+            let at = selection_from_plain_offsets(doc, start, start).head;
+            if !replacement.is_empty() {
+                apply_command(
+                    doc,
+                    &EditCommand::InsertText {
+                        at,
+                        text: replacement.to_string(),
+                    },
+                )?;
+            }
+        }
+        // Snapshot the mutated body, restore the original, then push one undoable swap.
+        let new_blocks = std::mem::replace(&mut doc.blocks, previous);
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: new_blocks })?;
+        drop(doc_guard);
+
+        let caret_off = {
+            let guard = self.document.read();
+            guard
+                .as_ref()
+                .map(|d| d.plain_text().len())
+                .unwrap_or(0)
+        };
+        self.set_selection_plain_offsets(caret_off, caret_off);
+        let _ = self.preview_find(q, true);
+        self.invalidate_preview();
+        Ok(count)
+    }
+
     fn invalidate_preview(&self) {
         self.preview.lock().valid = false;
     }

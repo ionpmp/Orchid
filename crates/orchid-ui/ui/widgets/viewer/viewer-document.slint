@@ -14,6 +14,8 @@ export component ViewerDocumentView inherits Rectangle {
     callback preview-key(string, bool, bool);
     /// Find next (`true`) / previous (`false`) match for the local query.
     callback find-request(string, bool);
+    /// Replace current (`all=false`) or all matches (`all=true`).
+    callback replace-request(string, string, bool);
 
     background: transparent;
 
@@ -23,6 +25,7 @@ export component ViewerDocumentView inherits Rectangle {
     property <length> last-viewport-w: 0px;
     property <bool> find-open: false;
     property <string> find-query: "";
+    property <string> replace-query: "";
 
     changed model => {
         if root.last-path != model.path-display {
@@ -595,125 +598,225 @@ export component ViewerDocumentView inherits Rectangle {
         }
 
         Rectangle {
-            height: root.find-open ? 34px : 0px;
+            height: root.find-open ? 68px : 0px;
             clip: true;
             background: Theme.surface-raised;
 
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                alignment: center;
+            VerticalLayout {
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 4px;
 
-                Text {
-                    text: model.find-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
-                }
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: center;
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 26px;
-                    background: Theme.surface-base;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-
-                    if find-input.text == "" : Text {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text: model.find-placeholder;
-                        color: Theme.text-tertiary;
+                    Text {
+                        text: model.find-label;
+                        color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }
 
-                    find-input := TextInput {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text <=> root.find-query;
-                        single-line: true;
-                        color: Theme.text-primary;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 26px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+
+                        if find-input.text == "" : Text {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: model.find-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+
+                        find-input := TextInput {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text <=> root.find-query;
+                            single-line: true;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-sans;
+                            vertical-alignment: center;
+                            key-pressed(event) => {
+                                if (event.text == Key.Return) {
+                                    root.find-request(root.find-query, !event.modifiers.shift);
+                                    return accept;
+                                }
+                                if (event.text == Key.Escape) {
+                                    root.find-open = false;
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 28px;
+                        height: 26px;
+                        background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        find-prev-ta := TouchArea {
+                            clicked => { root.find-request(root.find-query, false); }
+                        }
+                        Text {
+                            text: "↑";
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 28px;
+                        height: 26px;
+                        background: find-next-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        find-next-ta := TouchArea {
+                            clicked => { root.find-request(root.find-query, true); }
+                        }
+                        Text {
+                            text: "↓";
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Text {
+                        min-width: 36px;
+                        text: root.find-query == "" ? ""
+                            : model.find-match-count <= 0 ? model.find-no-match-label
+                            : "\{model.find-match-index}/\{model.find-match-count}";
+                        color: model.find-match-count <= 0 && root.find-query != ""
+                            ? Theme.text-tertiary : Theme.text-secondary;
                         font-size: Theme.font-size-sm;
-                        font-family: Theme.font-family-sans;
                         vertical-alignment: center;
-                        key-pressed(event) => {
-                            if (event.text == Key.Return) {
-                                root.find-request(root.find-query, !event.modifiers.shift);
-                                return accept;
-                            }
-                            if (event.text == Key.Escape) {
-                                root.find-open = false;
-                                return accept;
-                            }
-                            return reject;
+                        horizontal-alignment: center;
+                    }
+
+                    Rectangle {
+                        width: 28px;
+                        height: 26px;
+                        background: find-close-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        find-close-ta := TouchArea {
+                            clicked => { root.find-open = false; }
+                        }
+                        Text {
+                            text: "×";
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
                         }
                     }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 26px;
-                    background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    find-prev-ta := TouchArea {
-                        clicked => { root.find-request(root.find-query, false); }
-                    }
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: center;
+
                     Text {
-                        text: "↑";
-                        color: Theme.text-primary;
+                        text: model.replace-label;
+                        color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
                         vertical-alignment: center;
                     }
-                }
 
-                Rectangle {
-                    width: 28px;
-                    height: 26px;
-                    background: find-next-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    find-next-ta := TouchArea {
-                        clicked => { root.find-request(root.find-query, true); }
-                    }
-                    Text {
-                        text: "↓";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 26px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
 
-                Text {
-                    min-width: 36px;
-                    text: root.find-query == "" ? ""
-                        : model.find-match-count <= 0 ? model.find-no-match-label
-                        : "\{model.find-match-index}/\{model.find-match-count}";
-                    color: model.find-match-count <= 0 && root.find-query != ""
-                        ? Theme.text-tertiary : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
-                }
+                        if replace-input.text == "" : Text {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: model.replace-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
 
-                Rectangle {
-                    width: 28px;
-                    height: 26px;
-                    background: find-close-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    find-close-ta := TouchArea {
-                        clicked => { root.find-open = false; }
+                        replace-input := TextInput {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text <=> root.replace-query;
+                            single-line: true;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-sans;
+                            vertical-alignment: center;
+                            key-pressed(event) => {
+                                if (event.text == Key.Return) {
+                                    root.replace-request(root.find-query, root.replace-query, false);
+                                    return accept;
+                                }
+                                if (event.text == Key.Escape) {
+                                    root.find-open = false;
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
                     }
-                    Text {
-                        text: "×";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+
+                    Rectangle {
+                        width: max(52px, replace-one-label.preferred-width + 12px);
+                        height: 26px;
+                        background: replace-one-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        replace-one-ta := TouchArea {
+                            clicked => {
+                                root.replace-request(root.find-query, root.replace-query, false);
+                            }
+                        }
+                        replace-one-label := Text {
+                            text: model.replace-one-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        width: max(40px, replace-all-label.preferred-width + 12px);
+                        height: 26px;
+                        background: replace-all-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        replace-all-ta := TouchArea {
+                            clicked => {
+                                root.replace-request(root.find-query, root.replace-query, true);
+                            }
+                        }
+                        replace-all-label := Text {
+                            text: model.replace-all-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }
