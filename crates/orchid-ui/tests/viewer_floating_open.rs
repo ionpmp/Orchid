@@ -73,6 +73,41 @@ async fn reopen_same_path_reuses_viewer() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn viewer_created_without_undock_stays_on_grid() {
+    let tmp = TempDir::new().expect("temp dir");
+    let src = tmp.path().join("grid.docx");
+    // Plain text is enough: catalog Document uses sample docx, but placement is independent of format.
+    let mut f = std::fs::File::create(&src).expect("create");
+    writeln!(f, "on grid").expect("write");
+
+    let app = boot_with_workspace(&tmp).await;
+    let ws = app.workspace_manager().active().expect("active").id;
+    let path = FsPath::from_local(&src).expect("fs path");
+    let id = app
+        .widget_manager()
+        .create(orchid_widgets::CreateWidgetRequest {
+            type_id: orchid_widgets::builtin::viewer::TYPE_ID.into(),
+            workspace_id: ws,
+            position: None,
+            size: Some(orchid_storage::WidgetSize::Medium),
+            initial_lifecycle: None,
+            config_bytes: None,
+        })
+        .await
+        .expect("create viewer");
+    orchid_widgets::builtin::viewer::open_path(id, path)
+        .await
+        .expect("open");
+    assert!(
+        !app.widget_manager()
+            .get_instance(id)
+            .unwrap()
+            .is_windowed(),
+        "catalog Document path must leave the viewer on the canvas grid"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn dock_clears_floating_bounds() {
     let tmp = TempDir::new().expect("temp dir");
     let src = tmp.path().join("dock.txt");

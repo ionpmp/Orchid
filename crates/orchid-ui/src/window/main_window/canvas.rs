@@ -620,9 +620,7 @@ impl MainWindowController {
             // Snap zones when not docking to a free grid cell.
             if let Some(snap) = c.snap_bounds_for_pointer(new_x + start.width * 0.5, new_y) {
                 if let Err(e) = match snap.kind {
-                    SnapKind::Maximize => {
-                        wm.maximize_window(u, c.maximized_window_bounds()).await
-                    }
+                    SnapKind::Maximize => wm.maximize_window(u, c.maximized_window_bounds()).await,
                     SnapKind::LeftHalf | SnapKind::RightHalf => {
                         wm.set_floating_bounds(u, snap.bounds).await
                     }
@@ -1221,6 +1219,63 @@ impl MainWindowController {
                 }
             }
             if let Some(c) = t.upgrade() {
+                c.schedule_rebuild();
+            }
+        });
+    }
+
+    /// Dock a floating window onto the canvas grid (auto-place into a free cell).
+    pub(super) fn on_widget_dock(self: &Arc<Self>, id: &SharedString) {
+        let Ok(u) = Uuid::parse_str(id.as_str()) else {
+            return;
+        };
+        if !self.is_windowed(u) {
+            return;
+        }
+        let Ok(w) = self.workspace_manager.active() else {
+            return;
+        };
+        let wm = self.widget_manager.clone();
+        let le = self.layout_engine.clone();
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            let Ok(inst) = wm.get_instance(u) else {
+                return;
+            };
+            if !inst.is_windowed() {
+                return;
+            }
+            // Prefer min size when docking so Large floating viewers fit the grid.
+            let preferred = MainWindowController::minimal_widget_size(&wm, &inst.type_id);
+            let all =
+                MainWindowController::docked_instances(&wm.instances_for_workspace(w.id));
+            let pos = match le.auto_place_excluding_with_growth(w.id, preferred, &all, u) {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!(?e, "dock: no free cell");
+                    if let Some(c) = t.upgrade() {
+                        c.push_notification(
+                            &c.locale.tr("window-dock-failed-title"),
+                            &c.locale.tr("window-dock-failed-body"),
+                            1,
+                        );
+                    }
+                    return;
+                }
+            };
+            if let Err(e) = wm.resize(u, preferred).await {
+                warn!(?e, "dock: resize");
+            }
+            if let Err(e) = wm.move_to(u, pos).await {
+                warn!(?e, "dock: move_to");
+                return;
+            }
+            if let Err(e) = wm.dock_to_grid(u).await {
+                warn!(?e, "dock: dock_to_grid");
+                return;
+            }
+            if let Some(c) = t.upgrade() {
+                c.floating_z_stack.lock().retain(|id| *id != u);
                 c.schedule_rebuild();
             }
         });

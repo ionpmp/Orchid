@@ -100,11 +100,14 @@ pub struct CellImage {
 }
 
 /// One cell in a table.
+///
+/// Paragraphs hold editable text; [`Self::images`] are anchored after a paragraph
+/// index and are selectable/deletable via the preview cell-image cursor.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TableCell {
     /// Paragraphs inside the cell.
     pub paragraphs: Vec<Paragraph>,
-    /// Images parsed from `w:drawing` in cell paragraphs (preview-only; not cursor-addressable).
+    /// Images parsed from `w:drawing` in cell paragraphs (click/delete/arrow navigable).
     pub images: Vec<CellImage>,
 }
 

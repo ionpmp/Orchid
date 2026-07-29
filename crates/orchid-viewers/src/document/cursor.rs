@@ -2,15 +2,32 @@
 
 use crate::document::model::{Block, Document, Paragraph};
 
-/// Path to a paragraph inside a [`Block::Table`](super::model::Block::Table).
+/// Path to a paragraph or cell image inside a [`Block::Table`](super::model::Block::Table).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CellPath {
     /// Row index (top-to-bottom).
     pub row: usize,
     /// Column index (left-to-right).
     pub col: usize,
-    /// Index into [`TableCell::paragraphs`](super::model::TableCell::paragraphs).
+    /// Index into [`TableCell::paragraphs`](super::model::TableCell::paragraphs), or
+    /// [`CellImage::after_paragraph`](super::model::CellImage::after_paragraph) when
+    /// [`Self::image_idx`] is set.
     pub para_idx: usize,
+    /// Index into [`TableCell::images`](super::model::TableCell::images); `None` = paragraph.
+    pub image_idx: Option<usize>,
+}
+
+impl CellPath {
+    /// Paragraph cursor inside a table cell.
+    #[must_use]
+    pub const fn new(row: usize, col: usize, para_idx: usize) -> Self {
+        Self {
+            row,
+            col,
+            para_idx,
+            image_idx: None,
+        }
+    }
 }
 
 /// Position inside the document body.
@@ -39,7 +56,29 @@ impl Cursor {
         }
     }
 
-    /// Whether `self` and `other` address the same paragraph (body or cell).
+    /// Cursor on a table-cell image (`para_idx` = `after_paragraph`).
+    #[must_use]
+    pub const fn on_cell_image(
+        block_idx: usize,
+        row: usize,
+        col: usize,
+        after_paragraph: usize,
+        image_idx: usize,
+    ) -> Self {
+        Self {
+            block_idx,
+            cell: Some(CellPath {
+                row,
+                col,
+                para_idx: after_paragraph,
+                image_idx: Some(image_idx),
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        }
+    }
+
+    /// Whether `self` and `other` address the same paragraph or cell image.
     #[must_use]
     pub fn same_paragraph(self, other: Self) -> bool {
         self.block_idx == other.block_idx && self.cell == other.cell
@@ -219,11 +258,7 @@ pub fn cursor_from_plain_offset(doc: &Document, mut offset: usize) -> Cursor {
                 for (ri, row) in t.rows.iter().enumerate() {
                     for (ci, cell) in row.cells.iter().enumerate() {
                         for (pi, p) in cell.paragraphs.iter().enumerate() {
-                            let path = Some(CellPath {
-                                row: ri,
-                                col: ci,
-                                para_idx: pi,
-                            });
+                            let path = Some(CellPath::new(ri, ci, pi));
                             if emitted {
                                 if offset == 0 {
                                     return last_end;
@@ -279,20 +314,37 @@ pub fn plain_offset_from_cursor(doc: &Document, cursor: Cursor) -> usize {
             Block::Table(t) => {
                 for (ri, row) in t.rows.iter().enumerate() {
                     for (ci, cell) in row.cells.iter().enumerate() {
+                        let cell_start = offset;
                         for (pi, p) in cell.paragraphs.iter().enumerate() {
                             if emitted {
                                 offset += 1;
                             }
                             emitted = true;
-                            let path = CellPath {
-                                row: ri,
-                                col: ci,
-                                para_idx: pi,
-                            };
-                            if bi == cursor.block_idx && cursor.cell == Some(path) {
-                                return offset + offset_in_para(p, cursor);
+                            if bi == cursor.block_idx {
+                                if let Some(cpath) = cursor.cell {
+                                    if cpath.row == ri
+                                        && cpath.col == ci
+                                        && cpath.para_idx == pi
+                                    {
+                                        if cpath.image_idx.is_some() {
+                                            return offset + para_len(p);
+                                        }
+                                        return offset + offset_in_para(p, cursor);
+                                    }
+                                }
                             }
                             offset += para_len(p);
+                        }
+                        if bi == cursor.block_idx {
+                            if let Some(cpath) = cursor.cell {
+                                if cpath.row == ri
+                                    && cpath.col == ci
+                                    && cpath.image_idx.is_some()
+                                    && cell.paragraphs.is_empty()
+                                {
+                                    return cell_start;
+                                }
+                            }
                         }
                     }
                 }
@@ -336,11 +388,7 @@ pub fn paragraph_cursors_in_selection(doc: &Document, selection: Selection) -> V
         return (lo..=hi)
             .map(|para_idx| Cursor {
                 block_idx: start.block_idx,
-                cell: Some(CellPath {
-                    row: path.row,
-                    col: path.col,
-                    para_idx,
-                }),
+                cell: Some(CellPath::new(path.row, path.col, para_idx)),
                 run_idx: 0,
                 byte_offset: 0,
             })
@@ -400,14 +448,240 @@ pub fn adjacent_cell_cursor(doc: &Document, cursor: Cursor, forward: bool) -> Op
     let (row, col) = cells[next_idx];
     Some(Cursor {
         block_idx: cursor.block_idx,
-        cell: Some(CellPath {
-            row,
-            col,
-            para_idx: 0,
-        }),
+        cell: Some(CellPath::new(row, col, 0)),
         run_idx: 0,
         byte_offset: 0,
     })
+}
+
+/// Whether `cursor` addresses a body [`Block::Image`] or a table-cell image.
+#[must_use]
+pub fn is_image_cursor(doc: &Document, cursor: Cursor) -> bool {
+    if cursor
+        .cell
+        .is_some_and(|path| path.image_idx.is_some())
+    {
+        return true;
+    }
+    if cursor.cell.is_none() {
+        return matches!(
+            doc.blocks.get(cursor.block_idx),
+            Some(Block::Image(_))
+        );
+    }
+    false
+}
+
+/// Step among paragraphs and cell images in document order within one cell.
+#[must_use]
+pub fn adjacent_in_cell(doc: &Document, cursor: Cursor, forward: bool) -> Option<Cursor> {
+    let path = cursor.cell?;
+    let Block::Table(t) = doc.blocks.get(cursor.block_idx)? else {
+        return None;
+    };
+    let cell = t.rows.get(path.row)?.cells.get(path.col)?;
+
+    if let Some(image_idx) = path.image_idx {
+        if forward {
+            if image_idx + 1 < cell.images.len()
+                && cell.images[image_idx + 1].after_paragraph == path.para_idx
+            {
+                return Some(Cursor::on_cell_image(
+                    cursor.block_idx,
+                    path.row,
+                    path.col,
+                    path.para_idx,
+                    image_idx + 1,
+                ));
+            }
+            let next_para = path.para_idx + 1;
+            if next_para < cell.paragraphs.len() {
+                return Some(Cursor {
+                    block_idx: cursor.block_idx,
+                    cell: Some(CellPath::new(path.row, path.col, next_para)),
+                    run_idx: 0,
+                    byte_offset: 0,
+                });
+            }
+            return first_orphan_image_after(cursor, cell, path.para_idx);
+        }
+        if image_idx > 0 && cell.images[image_idx - 1].after_paragraph == path.para_idx {
+            return Some(Cursor::on_cell_image(
+                cursor.block_idx,
+                path.row,
+                path.col,
+                path.para_idx,
+                image_idx - 1,
+            ));
+        }
+        return end_of_cell_paragraph(cursor, cell, path.para_idx);
+    }
+
+    let p = cell.paragraphs.get(path.para_idx)?;
+    let at_end = cursor_at_end_of_para(p, cursor);
+    let at_start = cursor.run_idx == 0 && cursor.byte_offset == 0;
+
+    if forward && at_end {
+        if let Some((idx, _)) = cell
+            .images
+            .iter()
+            .enumerate()
+            .find(|(_, img)| img.after_paragraph == path.para_idx)
+        {
+            return Some(Cursor::on_cell_image(
+                cursor.block_idx,
+                path.row,
+                path.col,
+                path.para_idx,
+                idx,
+            ));
+        }
+        if path.para_idx + 1 < cell.paragraphs.len() {
+            return Some(Cursor {
+                block_idx: cursor.block_idx,
+                cell: Some(CellPath::new(path.row, path.col, path.para_idx + 1)),
+                run_idx: 0,
+                byte_offset: 0,
+            });
+        }
+        return first_orphan_image_after(cursor, cell, path.para_idx);
+    }
+
+    if !forward && at_start {
+        if let Some(idx) = last_image_after_paragraph(cell, path.para_idx.saturating_sub(1)) {
+            return Some(Cursor::on_cell_image(
+                cursor.block_idx,
+                path.row,
+                path.col,
+                path.para_idx.saturating_sub(1),
+                idx,
+            ));
+        }
+        if path.para_idx > 0 {
+            let prev = path.para_idx - 1;
+            let prev_p = cell.paragraphs.get(prev)?;
+            return Some(end_of_para(
+                cursor.block_idx,
+                Some(CellPath::new(path.row, path.col, prev)),
+                prev_p,
+            ));
+        }
+    }
+
+    None
+}
+
+fn cursor_at_end_of_para(p: &Paragraph, cursor: Cursor) -> bool {
+    if p.runs.is_empty() {
+        return true;
+    }
+    let last = p.runs.len() - 1;
+    cursor.run_idx == last && cursor.byte_offset >= p.runs[last].text.len()
+}
+
+fn last_image_after_paragraph(
+    cell: &crate::document::model::TableCell,
+    after: usize,
+) -> Option<usize> {
+    cell.images
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(idx, img)| (img.after_paragraph == after).then_some(idx))
+}
+
+fn first_orphan_image_after(
+    cursor: Cursor,
+    cell: &crate::document::model::TableCell,
+    after: usize,
+) -> Option<Cursor> {
+    let path = cursor.cell?;
+    let last = cell.paragraphs.len().saturating_sub(1);
+    if after < last {
+        return None;
+    }
+    let (idx, img) = cell
+        .images
+        .iter()
+        .enumerate()
+        .find(|(_, img)| img.after_paragraph > last)?;
+    Some(Cursor::on_cell_image(
+        cursor.block_idx,
+        path.row,
+        path.col,
+        img.after_paragraph,
+        idx,
+    ))
+}
+
+fn end_of_cell_paragraph(
+    cursor: Cursor,
+    cell: &crate::document::model::TableCell,
+    after_paragraph: usize,
+) -> Option<Cursor> {
+    let path = cursor.cell?;
+    if after_paragraph < cell.paragraphs.len() {
+        let p = cell.paragraphs.get(after_paragraph)?;
+        return Some(end_of_para(
+            cursor.block_idx,
+            Some(CellPath::new(path.row, path.col, after_paragraph)),
+            p,
+        ));
+    }
+    if cell.paragraphs.is_empty() {
+        return Some(Cursor {
+            block_idx: cursor.block_idx,
+            cell: Some(CellPath::new(path.row, path.col, 0)),
+            run_idx: 0,
+            byte_offset: 0,
+        });
+    }
+    None
+}
+
+fn cmp_cell_path(a: CellPath, b: CellPath) -> i8 {
+    use std::cmp::Ordering;
+    match (a.row.cmp(&b.row), a.col.cmp(&b.col)) {
+        (Ordering::Less, _) | (_, Ordering::Less) => return -1,
+        (Ordering::Greater, _) | (_, Ordering::Greater) => return 1,
+        _ => {}
+    }
+    let a_img = a.image_idx.is_some();
+    let b_img = b.image_idx.is_some();
+    match (a_img, b_img) {
+        (false, false) => match a.para_idx.cmp(&b.para_idx) {
+            Ordering::Less => -1,
+            Ordering::Greater => 1,
+            Ordering::Equal => 0,
+        },
+        (true, true) => match a.para_idx.cmp(&b.para_idx) {
+            Ordering::Less => -1,
+            Ordering::Greater => 1,
+            Ordering::Equal => match a.image_idx.cmp(&b.image_idx) {
+                Ordering::Less => -1,
+                Ordering::Greater => 1,
+                Ordering::Equal => 0,
+            },
+        },
+        (false, true) => {
+            if a.para_idx < b.para_idx {
+                -1
+            } else if a.para_idx > b.para_idx {
+                1
+            } else {
+                -1
+            }
+        }
+        (true, false) => {
+            if a.para_idx < b.para_idx {
+                -1
+            } else if a.para_idx > b.para_idx {
+                1
+            } else {
+                1
+            }
+        }
+    }
 }
 
 fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
@@ -421,14 +695,15 @@ fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
         (None, None) => {}
         (None, Some(_)) => return -1,
         (Some(_), None) => return 1,
-        (Some(ca), Some(cb)) => match (ca.row.cmp(&cb.row), ca.col.cmp(&cb.col), ca.para_idx.cmp(&cb.para_idx))
-        {
-            (Ordering::Less, _, _) | (_, Ordering::Less, _) | (_, _, Ordering::Less) => return -1,
-            (Ordering::Greater, _, _) | (_, Ordering::Greater, _) | (_, _, Ordering::Greater) => {
-                return 1;
-            }
+        (Some(ca), Some(cb)) => match cmp_cell_path(ca, cb) {
+            -1 => return -1,
+            1 => return 1,
             _ => {}
         },
+    }
+    if a.cell.is_some_and(|c| c.image_idx.is_some()) || b.cell.is_some_and(|c| c.image_idx.is_some())
+    {
+        return 0;
     }
     match (a.run_idx.cmp(&b.run_idx), a.byte_offset.cmp(&b.byte_offset)) {
         (Ordering::Less, _) | (_, Ordering::Less) => -1,
@@ -508,11 +783,7 @@ mod tests {
         let in_b = cursor_from_plain_offset(&doc, 2); // start of "B"
         assert_eq!(
             in_b.cell,
-            Some(CellPath {
-                row: 0,
-                col: 1,
-                para_idx: 0
-            })
+            Some(CellPath::new(0, 1, 0))
         );
     }
 
@@ -558,11 +829,7 @@ mod tests {
         };
         let a = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 0,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 0, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -598,21 +865,13 @@ mod tests {
         };
         let start = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 0,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 0, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
         let end = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 0,
-                para_idx: 1,
-            }),
+            cell: Some(CellPath::new(0, 0, 1)),
             run_idx: 0,
             byte_offset: 1,
         };
@@ -629,11 +888,7 @@ mod tests {
 
         let other_cell = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 1,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 1, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -651,21 +906,13 @@ mod tests {
     fn cmp_orders_cells_in_same_table() {
         let a = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 0,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 0, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
         let b = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 1,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 1, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -677,5 +924,47 @@ mod tests {
         let (start, end) = sel.normalized();
         assert_eq!(start.cell.map(|c| c.col), Some(0));
         assert_eq!(end.cell.map(|c| c.col), Some(1));
+    }
+
+    #[test]
+    fn cmp_orders_paragraph_before_cell_image() {
+        use crate::document::model::{CellImage, ImageFormat, InlineImage};
+
+        let para_cursor = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath::new(0, 0, 0)),
+            run_idx: 0,
+            byte_offset: 1,
+        };
+        let image_cursor = Cursor::on_cell_image(0, 0, 0, 0, 0);
+        assert!(cmp_cursor(para_cursor, image_cursor) < 0);
+        assert!(cmp_cursor(image_cursor, para_cursor) > 0);
+
+        let p = para("Hi");
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        paragraphs: vec![p.clone()],
+                        images: vec![CellImage {
+                            after_paragraph: 0,
+                            image: InlineImage {
+                                bytes: vec![],
+                                format: ImageFormat::Png,
+                                width_px: 1,
+                                height_px: 1,
+                                r_id: None,
+                                part_path: None,
+                            },
+                        }],
+                    }],
+                }],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let end_para = end_of_para(0, Some(CellPath::new(0, 0, 0)), &p);
+        let next = adjacent_in_cell(&doc, end_para, true).unwrap();
+        assert_eq!(next, image_cursor);
     }
 }

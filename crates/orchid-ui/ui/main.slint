@@ -106,6 +106,7 @@ export component MainWindow inherits Window {
     callback widget-drag-ended(string);
     callback widget-activate(string);
     callback widget-undock-clicked(string);
+    callback widget-dock-clicked(string);
     callback widget-minimize-clicked(string);
     callback widget-maximize-clicked(string);
     callback window-taskbar-activate(string);
@@ -506,6 +507,7 @@ export component MainWindow inherits Window {
             widget-drag-ended(id) => { root.widget-drag-ended(id); }
             widget-activate(id) => { root.widget-activate(id); }
             widget-undock-clicked(id) => { root.widget-undock-clicked(id); }
+            widget-dock-clicked(id) => { root.widget-dock-clicked(id); }
             widget-minimize-clicked(id) => { root.widget-minimize-clicked(id); }
             widget-maximize-clicked(id) => { root.widget-maximize-clicked(id); }
             window-taskbar-activate(id) => { root.window-taskbar-activate(id); }

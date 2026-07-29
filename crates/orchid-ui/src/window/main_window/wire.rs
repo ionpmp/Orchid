@@ -38,6 +38,11 @@ impl MainWindowController {
                     let canvas_size_mismatch = c.sync_canvas_size_from_winit();
                     if canvas_size_mismatch {
                         c.update_gesture_bounds();
+                        // Widgets that were sleeping because they sat outside the old
+                        // (smaller) viewport can become visible again after a resize/
+                        // maximize; re-check now instead of leaving them frozen until
+                        // some unrelated widget-driven rebuild happens to run.
+                        c.schedule_visibility_sync();
                         if c.config.read().appearance.density == orchid_storage::Density::Hybrid {
                             let _ = c.apply_theme();
                         }
@@ -384,6 +389,14 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     c.on_widget_undock(&id);
+                }
+            }
+        });
+        self.window.on_widget_dock_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_widget_dock(&id);
                 }
             }
         });

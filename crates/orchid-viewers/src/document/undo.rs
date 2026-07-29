@@ -2,8 +2,8 @@
 
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
-    Alignment, Block, Document, InlineImage, ListKind, Paragraph, Run, RunStyle, Table, TableCell,
-    TableRow,
+    Alignment, Block, CellImage, Document, InlineImage, ListKind, Paragraph, Run, RunStyle, Table,
+    TableCell, TableRow,
 };
 use crate::error::{Result, ViewerError};
 
@@ -84,6 +84,30 @@ pub enum EditCommand {
         at: Cursor,
         /// Image payload.
         image: InlineImage,
+    },
+    /// Insert an image inside a table cell.
+    InsertCellImage {
+        /// Block index of the table.
+        table_idx: usize,
+        /// Row index.
+        row: usize,
+        /// Column index.
+        col: usize,
+        /// Index in [`TableCell::images`].
+        image_idx: usize,
+        /// Image payload.
+        image: CellImage,
+    },
+    /// Remove a cell image (inverse stores the removed image).
+    RemoveCellImage {
+        /// Block index of the table.
+        table_idx: usize,
+        /// Row index.
+        row: usize,
+        /// Column index.
+        col: usize,
+        /// Index in [`TableCell::images`].
+        image_idx: usize,
     },
     /// Restore a previous paragraph (inverse helper).
     ReplaceParagraph {
@@ -479,6 +503,68 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             let idx = at.block_idx.min(doc.blocks.len());
             doc.blocks.insert(idx, Block::Image(image.clone()));
             Ok(EditCommand::RemoveBlock { block_idx: idx })
+        }
+        EditCommand::InsertCellImage {
+            table_idx,
+            row,
+            col,
+            image_idx,
+            image,
+        } => {
+            let Block::Table(t) = doc
+                .blocks
+                .get_mut(*table_idx)
+                .ok_or(ViewerError::EditOutOfBounds)?
+            else {
+                return Err(ViewerError::EditOutOfBounds);
+            };
+            let cell = t
+                .rows
+                .get_mut(*row)
+                .ok_or(ViewerError::EditOutOfBounds)?
+                .cells
+                .get_mut(*col)
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            let idx = (*image_idx).min(cell.images.len());
+            cell.images.insert(idx, image.clone());
+            Ok(EditCommand::RemoveCellImage {
+                table_idx: *table_idx,
+                row: *row,
+                col: *col,
+                image_idx: idx,
+            })
+        }
+        EditCommand::RemoveCellImage {
+            table_idx,
+            row,
+            col,
+            image_idx,
+        } => {
+            let Block::Table(t) = doc
+                .blocks
+                .get_mut(*table_idx)
+                .ok_or(ViewerError::EditOutOfBounds)?
+            else {
+                return Err(ViewerError::EditOutOfBounds);
+            };
+            let cell = t
+                .rows
+                .get_mut(*row)
+                .ok_or(ViewerError::EditOutOfBounds)?
+                .cells
+                .get_mut(*col)
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            if *image_idx >= cell.images.len() {
+                return Err(ViewerError::EditOutOfBounds);
+            }
+            let removed = cell.images.remove(*image_idx);
+            Ok(EditCommand::InsertCellImage {
+                table_idx: *table_idx,
+                row: *row,
+                col: *col,
+                image_idx: *image_idx,
+                image: removed,
+            })
         }
         EditCommand::ReplaceParagraph {
             paragraph_idx,
@@ -921,11 +1007,7 @@ mod tests {
         let mut stack = UndoStack::new();
         let at = Cursor {
             block_idx: 0,
-            cell: Some(CellPath {
-                row: 0,
-                col: 0,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 0, 0)),
             run_idx: 0,
             byte_offset: 1,
         };
@@ -989,21 +1071,13 @@ mod tests {
                 range: Selection {
                     anchor: Cursor {
                         block_idx: 0,
-                        cell: Some(CellPath {
-                            row: 0,
-                            col: 0,
-                            para_idx: 0,
-                        }),
+                        cell: Some(CellPath::new(0, 0, 0)),
                         run_idx: 0,
                         byte_offset: 0,
                     },
                     head: Cursor {
                         block_idx: 0,
-                        cell: Some(CellPath {
-                            row: 0,
-                            col: 1,
-                            para_idx: 0,
-                        }),
+                        cell: Some(CellPath::new(0, 1, 0)),
                         run_idx: 0,
                         byte_offset: 1,
                     },
@@ -1215,5 +1289,69 @@ mod tests {
             stack.undo(&mut doc).unwrap();
         }
         assert_eq!(doc, original);
+    }
+
+    #[test]
+    fn remove_cell_image_undo_restores() {
+        use crate::document::cursor::CellPath;
+        use crate::document::model::{CellImage, ImageFormat, InlineImage, Table};
+
+        let image = CellImage {
+            after_paragraph: 0,
+            image: InlineImage {
+                bytes: vec![1, 2, 3],
+                format: ImageFormat::Png,
+                width_px: 4,
+                height_px: 4,
+                r_id: None,
+                part_path: None,
+            },
+        };
+        let mut doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        paragraphs: vec![Paragraph {
+                            runs: vec![Run {
+                                text: "Hi".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }],
+                        images: vec![image.clone()],
+                    }],
+                }],
+                unsupported: vec![],
+            })],
+            ..Default::default()
+        };
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::RemoveCellImage {
+                    table_idx: 0,
+                    row: 0,
+                    col: 0,
+                    image_idx: 0,
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => assert!(t.rows[0].cells[0].images.is_empty()),
+            _ => panic!("table"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => assert_eq!(t.rows[0].cells[0].images, vec![image]),
+            _ => panic!("table"),
+        }
+        let cursor = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath::new(0, 0, 0)),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        assert!(paragraph_ref(&doc, cursor).is_some());
     }
 }

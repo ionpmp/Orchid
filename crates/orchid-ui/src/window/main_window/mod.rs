@@ -1125,8 +1125,7 @@ impl MainWindowController {
 
     fn spawn_add_widget(self: &Arc<Self>, type_id: &str, placement: AddWidgetPlacement) {
         if type_id == "document-editor" {
-            let _ = placement;
-            self.spawn_open_document_editor();
+            self.spawn_open_document_editor(placement);
             return;
         }
         if !is_known_widget_type(type_id) {
@@ -2997,8 +2996,8 @@ impl MainWindowController {
         }
     }
 
-    /// Create a sample `.docx` under [`Self::documents_dir`] and open it in a floating viewer.
-    fn spawn_open_document_editor(self: &Arc<Self>) {
+    /// Create a sample `.docx` under [`Self::documents_dir`] and open it docked on the canvas.
+    fn spawn_open_document_editor(self: &Arc<Self>, placement: AddWidgetPlacement) {
         let ctrl = Arc::downgrade(self);
         let documents_dir = self.documents_dir.clone();
         spawn::spawn_local(async move {
@@ -3019,11 +3018,88 @@ impl MainWindowController {
                 }
             };
             if let Err(e) =
-                Self::open_in_viewer_for_controller(ctrl, fs_path, true).await
+                Self::open_document_editor_on_canvas(ctrl, fs_path, placement).await
             {
-                warn!(?e, "document editor: open viewer");
+                warn!(?e, "document editor: open on canvas");
             }
         });
+    }
+
+    /// Open a document in a new viewer widget placed on the workspace grid (not floating).
+    async fn open_document_editor_on_canvas(
+        ctrl: std::sync::Weak<MainWindowController>,
+        path: orchid_fs::FsPath,
+        placement: AddWidgetPlacement,
+    ) -> Result<(Uuid, bool)> {
+        let Some(c) = ctrl.upgrade() else {
+            return Err(UiError::Slint("controller gone".into()));
+        };
+        let ws_id = c
+            .workspace_manager
+            .active()
+            .map_err(|e| UiError::Slint(format!("no active workspace: {e}")))?
+            .id;
+
+        let viewer_ids: Vec<Uuid> = c
+            .widget_manager
+            .instances_for_workspace(ws_id)
+            .into_iter()
+            .filter(|i| i.type_id == orchid_widgets::builtin::viewer::TYPE_ID)
+            .map(|i| i.id)
+            .collect();
+
+        if let Some(existing) =
+            orchid_widgets::builtin::viewer::find_instance_for_path(&viewer_ids, &path)
+        {
+            c.recent_files.touch(&path, Some(&c.bus));
+            c.focus_viewer(existing);
+            return Ok((existing, false));
+        }
+
+        let size = Self::minimal_widget_size(
+            &c.widget_manager,
+            orchid_widgets::builtin::viewer::TYPE_ID,
+        );
+        let id = c
+            .widget_manager
+            .create(orchid_widgets::CreateWidgetRequest {
+                type_id: orchid_widgets::builtin::viewer::TYPE_ID.into(),
+                workspace_id: ws_id,
+                position: None,
+                size: Some(size),
+                initial_lifecycle: None,
+                config_bytes: None,
+            })
+            .await
+            .map_err(|e| UiError::Slint(format!("viewer create: {e}")))?;
+
+        match placement {
+            AddWidgetPlacement::AutoSlot => {
+                Self::move_new_widget_to_free_slot(
+                    &c.layout_engine,
+                    &c.widget_manager,
+                    ws_id,
+                    id,
+                )
+                .await;
+            }
+            AddWidgetPlacement::CanvasPoint {
+                content_x,
+                content_y,
+            } => {
+                c.place_widget_at_canvas_point(ws_id, id, size, content_x, content_y)
+                    .await;
+            }
+        }
+
+        orchid_widgets::builtin::viewer::open_path(id, path.clone())
+            .await
+            .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+        c.recent_files.touch(&path, Some(&c.bus));
+        if let Some(c2) = ctrl.upgrade() {
+            c2.schedule_rebuild();
+        }
+        Ok((id, true))
     }
 
     async fn open_in_viewer_for_controller(

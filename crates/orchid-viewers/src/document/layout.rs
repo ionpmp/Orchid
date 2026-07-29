@@ -14,6 +14,7 @@ use swash::scale::{Render, ScaleContext, Scaler, Source, StrikeWith};
 use swash::zeno::{Format, Vector};
 use swash::FontRef;
 
+use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{Alignment, Block, Document, ListKind, Paragraph, Table};
 
 /// Brush colour for styled runs (RGBA).
@@ -308,6 +309,26 @@ impl DocumentLayout {
                 let y = (pad + item.y0) as u32;
                 let x = (pad + item.x0) as u32;
                 let box_h = item.image_h.max(24.0) as u32;
+                let box_w = if item.image_w > 0 {
+                    item.image_w
+                } else {
+                    (max_w as u32)
+                        .saturating_sub(item.x0 as u32)
+                        .saturating_sub(8)
+                        .max(24)
+                };
+                if caret_at == Some(item.plain_start) {
+                    fill_rect(
+                        &mut pixels,
+                        width,
+                        height,
+                        x.saturating_sub(1),
+                        y.saturating_sub(1),
+                        box_w.saturating_add(2),
+                        box_h.saturating_add(2),
+                        [180, 210, 255, 255],
+                    );
+                }
                 if let (Some(rgba), true) = (&item.image_rgba, item.image_w > 0) {
                     blit_rgba(
                         &mut pixels,
@@ -350,17 +371,17 @@ impl DocumentLayout {
         (Arc::new(pixels), width, height)
     }
 
-    /// Map a point in preview-image CSS pixels to a UTF-8 offset in [`Document::plain_text`].
+    /// Map a point in preview-image CSS pixels to a document [`Cursor`].
     ///
     /// Coordinates are relative to the top-left of the rendered page (including padding).
     #[must_use]
-    pub fn hit_test_plain_offset(
+    pub fn hit_test_cursor(
         &mut self,
         doc: &Document,
         content_width: f32,
         x: f32,
         y: f32,
-    ) -> Option<usize> {
+    ) -> Option<Cursor> {
         let pad = PREVIEW_PADDING;
         let max_w = content_width.max(80.0);
         let local_x = x - pad;
@@ -372,10 +393,10 @@ impl DocumentLayout {
         let mut emitted_text = false;
 
         if local_y < 0.0 {
-            return Some(0);
+            return Some(Cursor::default());
         }
 
-        for block in &doc.blocks {
+        for (bi, block) in doc.blocks.iter().enumerate() {
             match block {
                 Block::Paragraph(p) => {
                     if emitted_text {
@@ -393,13 +414,15 @@ impl DocumentLayout {
                         let ly = (local_y - y0).max(0.0);
                         let lx = (local_x - indent).clamp(0.0, (max_w - indent).max(40.0));
                         let body_idx = cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
-                        return Some(plain_offset + body_idx);
+                        return Some(cursor_from_plain_offset(doc, plain_offset + body_idx));
                     }
                     plain_offset += body_len;
                     total_h += h + para_gap;
                 }
                 Block::Table(t) => {
-                    if let Some(offset) = self.hit_test_table(
+                    if let Some(cursor) = self.hit_test_table_cursor(
+                        doc,
+                        bi,
                         t,
                         max_w,
                         local_x,
@@ -408,7 +431,7 @@ impl DocumentLayout {
                         &mut plain_offset,
                         &mut emitted_text,
                     ) {
-                        return Some(offset);
+                        return Some(cursor);
                     }
                     total_h += para_gap;
                 }
@@ -418,7 +441,7 @@ impl DocumentLayout {
                     let y0 = total_h;
                     let y1 = total_h + h + para_gap;
                     if local_y >= y0 && local_y < y1 {
-                        return Some(plain_offset);
+                        return Some(Cursor::at(bi, 0, 0));
                     }
                     total_h += h + para_gap;
                 }
@@ -427,7 +450,22 @@ impl DocumentLayout {
                 break;
             }
         }
-        Some(plain_offset)
+        Some(cursor_from_plain_offset(doc, plain_offset))
+    }
+
+    /// Map a point in preview-image CSS pixels to a UTF-8 offset in [`Document::plain_text`].
+    ///
+    /// Coordinates are relative to the top-left of the rendered page (including padding).
+    #[must_use]
+    pub fn hit_test_plain_offset(
+        &mut self,
+        doc: &Document,
+        content_width: f32,
+        x: f32,
+        y: f32,
+    ) -> Option<usize> {
+        self.hit_test_cursor(doc, content_width, x, y)
+            .map(|cursor| plain_offset_from_cursor(doc, cursor))
     }
 
     /// Lay out a table as an equal-width column grid; appends [`LaidBlock`]s and returns geometry.
@@ -535,8 +573,10 @@ impl DocumentLayout {
     }
 
     /// Hit-test inside a table grid; advances `total_h` / plain offsets like layout.
-    fn hit_test_table(
+    fn hit_test_table_cursor(
         &mut self,
+        doc: &Document,
+        block_idx: usize,
         t: &Table,
         max_w: f32,
         local_x: f32,
@@ -544,11 +584,11 @@ impl DocumentLayout {
         total_h: &mut f32,
         plain_offset: &mut usize,
         emitted_text: &mut bool,
-    ) -> Option<usize> {
+    ) -> Option<Cursor> {
         let ncols = table_column_count(t);
         let cell_w = max_w / ncols as f32;
 
-        for row in &t.rows {
+        for (row_idx, row) in t.rows.iter().enumerate() {
             let row_y0 = *total_h;
             let mut cell_items: Vec<Vec<CellItemLayout>> = Vec::with_capacity(ncols);
             let mut max_content_h = 0.0f32;
@@ -582,15 +622,14 @@ impl DocumentLayout {
                 let x0 = col as f32 * cell_w + TABLE_CELL_PAD;
                 let items = &cell_items[col];
                 if items.is_empty() {
-                    return Some(
-                        cell_items
-                            .iter()
-                            .take(col)
-                            .flatten()
-                            .last()
-                            .map(|p| p.plain_start() + p.body_len())
-                            .unwrap_or(*plain_offset),
-                    );
+                    let offset = cell_items
+                        .iter()
+                        .take(col)
+                        .flatten()
+                        .last()
+                        .map(|p| p.plain_start() + p.body_len())
+                        .unwrap_or(*plain_offset);
+                    return Some(cursor_from_plain_offset(doc, offset));
                 }
                 let mut y = row_y0 + TABLE_CELL_PAD;
                 for (i, item) in items.iter().enumerate() {
@@ -598,7 +637,17 @@ impl DocumentLayout {
                     let last = i + 1 == items.len();
                     if local_y < y1 || last {
                         return match item {
-                            CellItemLayout::Image { plain_start, .. } => Some(*plain_start),
+                            CellItemLayout::Image {
+                                image_idx,
+                                after_paragraph,
+                                ..
+                            } => Some(Cursor::on_cell_image(
+                                block_idx,
+                                row_idx,
+                                col,
+                                *after_paragraph,
+                                *image_idx,
+                            )),
                             CellItemLayout::Para {
                                 layout,
                                 plain_start,
@@ -618,7 +667,7 @@ impl DocumentLayout {
                                     *prefix_len,
                                     *body_len,
                                 );
-                                Some(plain_start + body_idx)
+                                Some(cursor_from_plain_offset(doc, plain_start + body_idx))
                             }
                         };
                     }
@@ -640,11 +689,13 @@ impl DocumentLayout {
     ) -> Vec<CellItemLayout> {
         let mut items = Vec::new();
         if cell.paragraphs.is_empty() {
-            for cell_img in &cell.images {
+            for (image_idx, cell_img) in cell.images.iter().enumerate() {
                 let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
                 let h = (h_px as f32).max(24.0);
                 items.push(CellItemLayout::Image {
                     plain_start: *plain_offset,
+                    image_idx,
+                    after_paragraph: cell_img.after_paragraph,
                     height: h,
                     image_w: w,
                     image_rgba: rgba,
@@ -674,15 +725,16 @@ impl DocumentLayout {
             });
             *plain_offset += body_len;
             let after_text = *plain_offset;
-            for cell_img in cell
-                .images
-                .iter()
-                .filter(|ci| ci.after_paragraph == pi)
-            {
+            for (image_idx, cell_img) in cell.images.iter().enumerate() {
+                if cell_img.after_paragraph != pi {
+                    continue;
+                }
                 let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
                 let ih = (h_px as f32).max(24.0);
                 items.push(CellItemLayout::Image {
                     plain_start: after_text,
+                    image_idx,
+                    after_paragraph: pi,
                     height: ih,
                     image_w: w,
                     image_rgba: rgba,
@@ -691,15 +743,16 @@ impl DocumentLayout {
         }
         // Orphan images (bad indices) go at the end.
         let last = cell.paragraphs.len().saturating_sub(1);
-        for cell_img in cell
-            .images
-            .iter()
-            .filter(|ci| ci.after_paragraph > last)
-        {
+        for (image_idx, cell_img) in cell.images.iter().enumerate() {
+            if cell_img.after_paragraph <= last {
+                continue;
+            }
             let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
             let ih = (h_px as f32).max(24.0);
             items.push(CellItemLayout::Image {
                 plain_start: *plain_offset,
+                image_idx,
+                after_paragraph: cell_img.after_paragraph,
                 height: ih,
                 image_w: w,
                 image_rgba: rgba,
@@ -811,6 +864,10 @@ enum CellItemLayout {
     Image {
         /// Caret offset when the image is clicked (end of preceding text).
         plain_start: usize,
+        /// Index into [`TableCell::images`](crate::document::model::TableCell::images).
+        image_idx: usize,
+        /// Paragraph after which this image is anchored.
+        after_paragraph: usize,
         height: f32,
         image_w: u32,
         image_rgba: Option<Vec<u8>>,
@@ -1688,10 +1745,63 @@ mod tests {
         };
         let (bytes, w, h) = dl.render_document(&doc, 400.0);
         assert!(w > 100 && h > 40);
-        // Solid red-ish pixels from the cell image (not just glyph ink).
         assert!(
             bytes.chunks_exact(4).any(|px| px[0] > 180 && px[1] < 80 && px[2] < 80),
             "expected red cell-image pixels in {w}x{h} preview"
+        );
+    }
+
+    #[test]
+    fn table_cell_image_hit_test_selects_image_cursor() {
+        let mut png = Vec::new();
+        {
+            let img = image::RgbaImage::from_pixel(8, 8, image::Rgba([220, 30, 30, 255]));
+            img.write_to(
+                &mut std::io::Cursor::new(&mut png),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        }
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        paragraphs: vec![Paragraph {
+                            runs: vec![Run {
+                                text: "Pic".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }],
+                        images: vec![CellImage {
+                            after_paragraph: 0,
+                            image: InlineImage {
+                                bytes: png,
+                                format: ImageFormat::Png,
+                                width_px: 8,
+                                height_px: 8,
+                                r_id: None,
+                                part_path: None,
+                            },
+                        }],
+                    }],
+                }],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let content_w = 400.0;
+        // Click below the paragraph where the cell image is laid out.
+        let x = PREVIEW_PADDING + content_w * 0.25;
+        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 28.0;
+        let cursor = dl
+            .hit_test_cursor(&doc, content_w, x, y)
+            .expect("hit");
+        assert_eq!(
+            cursor.cell.and_then(|c| c.image_idx),
+            Some(0),
+            "expected cell image cursor"
         );
     }
 }

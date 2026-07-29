@@ -38,6 +38,8 @@ export component WidgetFrame inherits Rectangle {
     callback activated();
     /// Undock a grid widget into a floating window.
     callback undock-clicked();
+    /// Dock a floating window back onto the canvas grid.
+    callback dock-clicked();
     /// Minimize a floating window to the taskbar.
     callback minimize-clicked();
     /// Toggle maximize / restore for a floating window.
@@ -393,7 +395,10 @@ export component WidgetFrame inherits Rectangle {
 
             HorizontalLayout {
                 padding-left: 12px;
-                padding-right: model.has-settings ? 64px : 36px;
+                // Floating chrome: close + max + min + dock (+ settings). Grid: close + undock (+ settings).
+                padding-right: model.is-floating
+                    ? (model.has-settings ? 132px : 108px)
+                    : (model.has-settings ? 80px : 56px);
                 alignment: start;
                 spacing: 8px;
 
@@ -410,7 +415,7 @@ export component WidgetFrame inherits Rectangle {
             }
         }
 
-        // Window chrome buttons (right → left: close, max, min / undock, settings).
+        // Window chrome buttons (right → left: close, max, min, dock / undock, settings).
         close-area := TouchArea {
             x: parent.width - 32px;
             y: 4px;
@@ -473,6 +478,27 @@ export component WidgetFrame inherits Rectangle {
             }
         }
 
+        dock-area := TouchArea {
+            visible: model.is-floating;
+            enabled: model.is-floating;
+            x: parent.width - 104px;
+            y: 4px;
+            width: 24px;
+            height: 24px;
+            clicked => { root.dock-clicked(); }
+            Rectangle {
+                background: dock-area.has-hover ? Theme.surface-raised : transparent;
+                border-radius: Theme.radius-md;
+                Text {
+                    text: "▣";
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
         undock-area := TouchArea {
             visible: !model.is-floating;
             enabled: !model.is-floating;
@@ -498,7 +524,7 @@ export component WidgetFrame inherits Rectangle {
             visible: model.has-settings;
             enabled: model.has-settings;
             x: model.is-floating
-                ? (parent.width - 104px)
+                ? (parent.width - 128px)
                 : (parent.width - 80px);
             y: 4px;
             width: 24px;

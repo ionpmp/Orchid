@@ -20,9 +20,10 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    adjacent_cell_cursor, cursor_from_plain_offset, paragraph_cursors_in_selection,
-    paragraph_indices_in_selection, paragraph_mut, paragraph_mut_in_blocks, paragraph_ref,
-    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
+    adjacent_cell_cursor, adjacent_in_cell, cursor_from_plain_offset, is_image_cursor,
+    paragraph_cursors_in_selection, paragraph_indices_in_selection, paragraph_mut,
+    paragraph_mut_in_blocks, paragraph_ref, plain_offset_from_cursor, selection_from_plain_offsets,
+    CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
@@ -374,17 +375,32 @@ impl DocumentViewer {
             return;
         };
         let width = self.preview.lock().width;
-        let Some(offset) = self.layout.lock().hit_test_plain_offset(doc, width, x, y) else {
+        let Some(cursor) = self.layout.lock().hit_test_cursor(doc, width, x, y) else {
             return;
         };
+        let offset = plain_offset_from_cursor(doc, cursor);
+        let on_image = is_image_cursor(doc, cursor);
         match phase {
             0 => {
                 let count = self.note_preview_click(offset);
                 match count {
                     1 => {
                         *self.preview_drag_anchor.lock() = Some(offset);
-                        *self.selection.lock() =
-                            selection_from_plain_offsets(doc, offset, offset);
+                        *self.selection.lock() = if on_image {
+                            Selection {
+                                anchor: cursor,
+                                head: cursor,
+                            }
+                        } else {
+                            selection_from_plain_offsets(doc, offset, offset)
+                        };
+                    }
+                    2 if on_image => {
+                        *self.preview_drag_anchor.lock() = None;
+                        *self.selection.lock() = Selection {
+                            anchor: cursor,
+                            head: cursor,
+                        };
                     }
                     2 => {
                         *self.preview_drag_anchor.lock() = None;
@@ -393,9 +409,16 @@ impl DocumentViewer {
                         *self.selection.lock() =
                             selection_from_plain_offsets(doc, start, end);
                     }
+                    _ if on_image => {
+                        *self.preview_drag_anchor.lock() = None;
+                        *self.selection.lock() = Selection {
+                            anchor: cursor,
+                            head: cursor,
+                        };
+                        self.reset_preview_click();
+                    }
                     _ => {
                         *self.preview_drag_anchor.lock() = None;
-                        let cursor = cursor_from_plain_offset(doc, offset);
                         *self.selection.lock() = expand_selection_to_paragraph(doc, cursor);
                         // Next down starts a new multi-click sequence.
                         self.reset_preview_click();
@@ -549,6 +572,15 @@ impl DocumentViewer {
             self.invalidate_preview();
             return Ok(());
         }
+        if is_image_cursor(doc, sel.head) {
+            let caret = self.delete_image_cursor(doc, sel.head, false)?;
+            *self.selection.lock() = Selection {
+                anchor: caret,
+                head: caret,
+            };
+            self.invalidate_preview();
+            return Ok(());
+        }
         let head_off = plain_offset_from_cursor(doc, sel.head);
         if head_off == 0 {
             return Ok(());
@@ -579,6 +611,15 @@ impl DocumentViewer {
             *self.selection.lock() = Selection {
                 anchor: at,
                 head: at,
+            };
+            self.invalidate_preview();
+            return Ok(());
+        }
+        if is_image_cursor(doc, sel.head) {
+            let caret = self.delete_image_cursor(doc, sel.head, true)?;
+            *self.selection.lock() = Selection {
+                anchor: caret,
+                head: caret,
             };
             self.invalidate_preview();
             return Ok(());
@@ -646,10 +687,9 @@ impl DocumentViewer {
         width_px: u32,
         height_px: u32,
     ) -> Result<()> {
-        use crate::document::model::ImageFormat;
+        use crate::document::model::{CellImage, ImageFormat};
 
         let head = self.selection.lock().head;
-        let at_block = head.block_idx.saturating_add(1);
         let format = infer::get(&bytes)
             .map(|k| ImageFormat::from_extension(k.extension()))
             .unwrap_or(ImageFormat::Png);
@@ -660,16 +700,57 @@ impl DocumentViewer {
         } else {
             (width_px, height_px)
         };
+        let inline = InlineImage {
+            bytes,
+            format,
+            width_px,
+            height_px,
+            r_id: None,
+            part_path: None,
+        };
+
+        if let Some(path) = head.cell {
+            let after_paragraph = path.para_idx;
+            let image_idx = {
+                let guard = self.document.read();
+                let doc = guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+                let Block::Table(t) = doc.blocks.get(head.block_idx).ok_or(ViewerError::EditOutOfBounds)? else {
+                    return Err(ViewerError::EditOutOfBounds);
+                };
+                t.rows
+                    .get(path.row)
+                    .and_then(|r| r.cells.get(path.col))
+                    .map(|c| c.images.len())
+                    .ok_or(ViewerError::EditOutOfBounds)?
+            };
+            self.apply(EditCommand::InsertCellImage {
+                table_idx: head.block_idx,
+                row: path.row,
+                col: path.col,
+                image_idx,
+                image: CellImage {
+                    after_paragraph,
+                    image: inline,
+                },
+            })?;
+            let cursor = Cursor::on_cell_image(
+                head.block_idx,
+                path.row,
+                path.col,
+                after_paragraph,
+                image_idx,
+            );
+            *self.selection.lock() = Selection {
+                anchor: cursor,
+                head: cursor,
+            };
+            return Ok(());
+        }
+
+        let at_block = head.block_idx.saturating_add(1);
         self.apply(EditCommand::InsertImage {
             at: Cursor::at(at_block, 0, 0),
-            image: crate::document::model::InlineImage {
-                bytes,
-                format,
-                width_px,
-                height_px,
-                r_id: None,
-                part_path: None,
-            },
+            image: inline,
         })?;
         let image_idx = {
             let guard = self.document.read();
@@ -710,11 +791,7 @@ impl DocumentViewer {
         };
         let cursor = Cursor {
             block_idx: table_idx,
-            cell: Some(CellPath {
-                row: 0,
-                col: 0,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(0, 0, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -734,11 +811,7 @@ impl DocumentViewer {
         })?;
         let cursor = Cursor {
             block_idx: table_idx,
-            cell: Some(CellPath {
-                row: row + 1,
-                col,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(row + 1, col, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -767,11 +840,7 @@ impl DocumentViewer {
             .unwrap_or(0);
         let cursor = Cursor {
             block_idx: table_idx,
-            cell: Some(CellPath {
-                row: new_row,
-                col,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(new_row, col, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -791,11 +860,7 @@ impl DocumentViewer {
         })?;
         let cursor = Cursor {
             block_idx: table_idx,
-            cell: Some(CellPath {
-                row,
-                col: col + 1,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(row, col + 1, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -828,11 +893,7 @@ impl DocumentViewer {
         );
         let cursor = Cursor {
             block_idx: table_idx,
-            cell: Some(CellPath {
-                row,
-                col: new_col,
-                para_idx: 0,
-            }),
+            cell: Some(CellPath::new(row, new_col, 0)),
             run_idx: 0,
             byte_offset: 0,
         };
@@ -841,6 +902,41 @@ impl DocumentViewer {
             head: cursor,
         };
         Ok(())
+    }
+
+    fn delete_image_cursor(
+        &self,
+        doc: &mut Document,
+        cursor: Cursor,
+        forward: bool,
+    ) -> Result<Cursor> {
+        if let Some(path) = cursor.cell {
+            if let Some(image_idx) = path.image_idx {
+                self.undo.lock().push(
+                    doc,
+                    EditCommand::RemoveCellImage {
+                        table_idx: cursor.block_idx,
+                        row: path.row,
+                        col: path.col,
+                        image_idx,
+                    },
+                )?;
+                return Ok(adjacent_in_cell(doc, cursor, forward).unwrap_or_else(|| {
+                    fallback_cell_caret(doc, cursor, !forward)
+                }));
+            }
+        }
+        self.undo.lock().push(
+            doc,
+            EditCommand::RemoveBlock {
+                block_idx: cursor.block_idx,
+            },
+        )?;
+        Ok(Cursor::at(
+            cursor.block_idx.min(doc.blocks.len().saturating_sub(1)),
+            0,
+            0,
+        ))
     }
 
     fn table_cell_context(&self) -> Result<(usize, usize, usize)> {
@@ -868,6 +964,26 @@ impl DocumentViewer {
             return;
         };
         let sel = *self.selection.lock();
+        if delta.abs() == 1 && !extend {
+            let forward = delta > 0;
+            if is_image_cursor(doc, sel.head) {
+                if let Some(next) = step_image_aware(doc, sel.head, forward) {
+                    *self.selection.lock() = Selection {
+                        anchor: next,
+                        head: next,
+                    };
+                    return;
+                }
+            } else if let Some(next) = step_image_aware(doc, sel.head, forward) {
+                if next != sel.head {
+                    *self.selection.lock() = Selection {
+                        anchor: next,
+                        head: next,
+                    };
+                    return;
+                }
+            }
+        }
         let plain = doc.plain_text();
         let mut off = plain_offset_from_cursor(doc, sel.head);
         if delta < 0 {
@@ -1569,6 +1685,103 @@ impl DocumentViewer {
 /// Maximum Word-compatible list indent level (`w:ilvl` 0..=8).
 const MAX_LIST_LEVEL: u8 = 8;
 
+fn step_image_aware(doc: &Document, cursor: Cursor, forward: bool) -> Option<Cursor> {
+    if is_image_cursor(doc, cursor) {
+        if cursor.cell.is_some() {
+            return adjacent_in_cell(doc, cursor, forward);
+        }
+        let bi = cursor.block_idx;
+        if forward && bi + 1 < doc.blocks.len() {
+            return Some(Cursor::at(bi + 1, 0, 0));
+        }
+        if !forward && bi > 0 {
+            return end_of_block_cursor(doc, bi - 1);
+        }
+        return None;
+    }
+    let path = cursor.cell?;
+    if path.image_idx.is_some() {
+        return None;
+    }
+    let p = paragraph_ref(doc, cursor)?;
+    let at_end = if p.runs.is_empty() {
+        true
+    } else {
+        let last = p.runs.len() - 1;
+        cursor.run_idx == last && cursor.byte_offset >= p.runs[last].text.len()
+    };
+    let at_start = cursor.run_idx == 0 && cursor.byte_offset == 0;
+    if forward && at_end {
+        return adjacent_in_cell(doc, cursor, true);
+    }
+    if !forward && at_start {
+        return adjacent_in_cell(doc, cursor, false);
+    }
+    None
+}
+
+fn end_of_block_cursor(doc: &Document, block_idx: usize) -> Option<Cursor> {
+    match doc.blocks.get(block_idx)? {
+        Block::Paragraph(p) => Some(end_of_paragraph_cursor(
+            Cursor {
+                block_idx,
+                cell: None,
+                run_idx: 0,
+                byte_offset: 0,
+            },
+            p,
+        )),
+        Block::Table(_) => Some(Cursor {
+            block_idx,
+            cell: Some(CellPath::new(0, 0, 0)),
+            run_idx: 0,
+            byte_offset: 0,
+        }),
+        Block::Image(_) => Some(Cursor::at(block_idx, 0, 0)),
+    }
+}
+
+fn end_of_paragraph_cursor(cursor: Cursor, p: &Paragraph) -> Cursor {
+    if p.runs.is_empty() {
+        return Cursor {
+            block_idx: cursor.block_idx,
+            cell: cursor.cell,
+            run_idx: 0,
+            byte_offset: 0,
+        };
+    }
+    let last = p.runs.len() - 1;
+    Cursor {
+        block_idx: cursor.block_idx,
+        cell: cursor.cell,
+        run_idx: last,
+        byte_offset: p.runs[last].text.len(),
+    }
+}
+
+fn fallback_cell_caret(doc: &Document, cursor: Cursor, backward: bool) -> Cursor {
+    let Some(path) = cursor.cell else {
+        return cursor;
+    };
+    if backward {
+        let para_cursor = Cursor {
+            block_idx: cursor.block_idx,
+            cell: Some(CellPath::new(path.row, path.col, path.para_idx)),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        if let Some(p) = paragraph_ref(doc, para_cursor) {
+            return end_of_paragraph_cursor(para_cursor, p);
+        }
+    }
+    Cursor {
+        block_idx: cursor.block_idx,
+        cell: Some(CellPath::new(path.row, path.col, 0)),
+        run_idx: 0,
+        byte_offset: 0,
+    }
+}
+
 fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
     let lines: Vec<&str> = if normalized.is_empty() {
@@ -2025,11 +2238,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
     cell.paragraphs.insert(path.para_idx + 1, right);
     let caret = Cursor {
         block_idx: at.block_idx,
-        cell: Some(CellPath {
-            row: path.row,
-            col: path.col,
-            para_idx: path.para_idx + 1,
-        }),
+        cell: Some(CellPath::new(path.row, path.col, path.para_idx + 1)),
         run_idx: 0,
         byte_offset: 0,
     };

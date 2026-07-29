@@ -25,6 +25,7 @@ export component WorkspaceView inherits Rectangle {
     callback widget-drag-ended(string);
     callback widget-activate(string);
     callback widget-undock-clicked(string);
+    callback widget-dock-clicked(string);
     callback widget-minimize-clicked(string);
     callback widget-maximize-clicked(string);
     callback window-taskbar-activate(string);
@@ -392,6 +393,7 @@ export component WorkspaceView inherits Rectangle {
                     drag-moved(dx, dy) => { root.widget-drag-moved(w.instance-id, dx, dy); }
                     drag-ended => { root.widget-drag-ended(w.instance-id); }
                     undock-clicked => { root.widget-undock-clicked(w.instance-id); }
+                    dock-clicked => { root.widget-dock-clicked(w.instance-id); }
                     minimize-clicked => { root.widget-minimize-clicked(w.instance-id); }
                     maximize-clicked => { root.widget-maximize-clicked(w.instance-id); }
                     resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
@@ -688,6 +690,7 @@ export component WorkspaceView inherits Rectangle {
             drag-ended => { root.widget-drag-ended(w.instance-id); }
             activated => { root.widget-activate(w.instance-id); }
             undock-clicked => { root.widget-undock-clicked(w.instance-id); }
+            dock-clicked => { root.widget-dock-clicked(w.instance-id); }
             minimize-clicked => { root.widget-minimize-clicked(w.instance-id); }
             maximize-clicked => { root.widget-maximize-clicked(w.instance-id); }
             resize-started(c, px, py) => { root.widget-resize-started(w.instance-id, c, px, py); }
