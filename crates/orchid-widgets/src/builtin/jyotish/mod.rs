@@ -13,13 +13,16 @@ pub mod rectify;
 pub mod score;
 pub mod transitions;
 
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{
-    DateTime, Datelike, Duration as ChronoDuration, NaiveDate, NaiveTime, Timelike, Utc, Weekday,
+    DateTime, Datelike, Duration as ChronoDuration, LocalResult, NaiveDate, NaiveTime, Timelike,
+    Utc, Weekday,
 };
+use chrono_tz::Tz;
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use tracing::warn;
@@ -30,8 +33,9 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
     JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
-    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileEntry,
-    JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
+    JyotishProfileEntry, JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit,
+    JyotishYearSummary,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -146,6 +150,11 @@ struct JyotishUiState {
     profile_edit_time: String,
     profile_edit_offset: i32,
     profile_edit_place: JyotishLocation,
+    /// IANA tz from the last selected geocoding hit (drives UTC on date changes).
+    profile_edit_timezone: String,
+    /// Visible month in the draft birth-date calendar.
+    profile_cal_year: i32,
+    profile_cal_month: u32,
 }
 
 /// Session cache for the pinned Current location row.
@@ -189,14 +198,104 @@ fn cities_and_search(
     let search_results = ui
         .search_results
         .iter()
-        .map(|h| JyotishSearchHit {
-            name: h.name.clone(),
-            detail: h.detail.clone(),
-            latitude: h.latitude,
-            longitude: h.longitude,
-        })
+        .map(geocoding_to_search_hit)
         .collect();
     (cities, search_results, active_city_index)
+}
+
+fn geocoding_to_search_hit(h: &GeocodingHit) -> JyotishSearchHit {
+    JyotishSearchHit {
+        name: h.name.clone(),
+        detail: h.detail.clone(),
+        latitude: h.latitude,
+        longitude: h.longitude,
+        timezone: h.timezone.clone().unwrap_or_default(),
+    }
+}
+
+fn format_place_coords(place: &JyotishLocation) -> String {
+    if place.name.trim().is_empty() {
+        String::new()
+    } else {
+        format!("{:.2}°, {:.2}°", place.latitude, place.longitude)
+    }
+}
+
+fn draft_birth_date(ui: &JyotishUiState) -> NaiveDate {
+    NaiveDate::parse_from_str(&ui.profile_edit_date, "%Y-%m-%d")
+        .ok()
+        .unwrap_or_else(|| chrono::Local::now().date_naive())
+}
+
+fn sync_profile_cal_month(ui: &mut JyotishUiState) {
+    let date = draft_birth_date(ui);
+    ui.profile_cal_year = date.year();
+    ui.profile_cal_month = date.month();
+}
+
+fn apply_profile_timezone_offset(ui: &mut JyotishUiState) {
+    let Ok(tz) = Tz::from_str(ui.profile_edit_timezone.trim()) else {
+        return;
+    };
+    let date = draft_birth_date(ui);
+    let Some(noon) = date.and_hms_opt(12, 0, 0) else {
+        return;
+    };
+    let offset_mins = match noon.and_local_timezone(tz) {
+        LocalResult::Single(dt) | LocalResult::Ambiguous(dt, _) => {
+            ((dt.naive_local() - dt.naive_utc()).num_minutes()) as i32
+        }
+        LocalResult::None => return,
+    };
+    ui.profile_edit_offset = offset_mins.clamp(-14 * 60, 14 * 60);
+}
+
+fn profile_cal_view(
+    ui: &JyotishUiState,
+) -> (
+    &'static str,
+    i32,
+    u8,
+    Vec<JyotishProfileCalCell>,
+) {
+    let year = if ui.profile_cal_year == 0 {
+        chrono::Local::now().year()
+    } else {
+        ui.profile_cal_year
+    };
+    let month = if ui.profile_cal_month == 0 {
+        chrono::Local::now().month()
+    } else {
+        ui.profile_cal_month
+    };
+    let first = NaiveDate::from_ymd_opt(year, month, 1)
+        .unwrap_or_else(|| chrono::Local::now().date_naive());
+    let first_weekday = first.weekday().num_days_from_monday() as u8;
+    let days_in_month = {
+        let (ny, nm) = if month == 12 {
+            (year + 1, 1)
+        } else {
+            (year, month + 1)
+        };
+        NaiveDate::from_ymd_opt(ny, nm, 1)
+            .unwrap_or(first)
+            .pred_opt()
+            .unwrap_or(first)
+            .day()
+    };
+    let selected = NaiveDate::parse_from_str(&ui.profile_edit_date, "%Y-%m-%d").ok();
+    let today = chrono::Local::now().date_naive();
+    let cells = (1..=days_in_month)
+        .map(|day| {
+            let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or(first);
+            JyotishProfileCalCell {
+                day: day as u8,
+                is_selected: selected == Some(date),
+                is_today: date == today,
+            }
+        })
+        .collect();
+    (month_key(month), year, first_weekday, cells)
 }
 
 struct JyotishHandle {
@@ -702,6 +801,12 @@ impl JyotishHandle {
         let ui = self.ui.read().clone();
         let current = self.current_loc.read().clone();
         let (cities, search_results, active_city_index) = cities_and_search(&cfg, &ui, &current);
+        let (
+            profile_cal_month_key,
+            profile_cal_year,
+            profile_cal_first_weekday,
+            profile_cal_cells,
+        ) = profile_cal_view(&ui);
 
         JyotishPayload {
             date_text,
@@ -728,6 +833,11 @@ impl JyotishHandle {
             profile_edit_time: ui.profile_edit_time.clone(),
             profile_edit_offset: ui.profile_edit_offset,
             profile_edit_place_name: ui.profile_edit_place.name.clone(),
+            profile_edit_place_coords: profile_place_coords(&ui),
+            profile_cal_month_key,
+            profile_cal_year,
+            profile_cal_first_weekday,
+            profile_cal_cells,
             ayanamsa_key: cfg.ayanamsa.ftl_key(),
             ayanamsa_deg_text: format!("{:.2}°", data.ayanamsa_deg),
             day_offset: cfg.day_offset,
@@ -1256,6 +1366,8 @@ impl JyotishHandle {
             ui.profile_edit_offset = 0;
             ui.profile_edit_place = default_place;
         }
+        ui.profile_edit_timezone.clear();
+        sync_profile_cal_month(&mut ui);
         drop(ui);
         self.publish();
     }
@@ -1276,13 +1388,21 @@ impl JyotishHandle {
         self.publish();
     }
 
-    fn set_draft_birth_place(&self, name: String, latitude: f64, longitude: f64) {
+    fn set_draft_birth_place(
+        &self,
+        name: String,
+        latitude: f64,
+        longitude: f64,
+        timezone: String,
+    ) {
         let mut ui = self.ui.write();
         ui.profile_edit_place = JyotishLocation {
             name,
             latitude,
             longitude,
         };
+        ui.profile_edit_timezone = timezone.trim().to_string();
+        apply_profile_timezone_offset(&mut ui);
         ui.profile_search_query.clear();
         ui.profile_search_results.clear();
         ui.profile_search_busy = false;
@@ -1290,13 +1410,44 @@ impl JyotishHandle {
         self.publish();
     }
 
-    fn nudge_profile_date(&self, days: i32) {
+    fn nav_profile_cal(&self, delta_months: i32) {
         let mut ui = self.ui.write();
-        let base = NaiveDate::parse_from_str(&ui.profile_edit_date, "%Y-%m-%d")
-            .ok()
-            .unwrap_or_else(|| chrono::Local::now().date_naive());
-        let next = base + ChronoDuration::days(i64::from(days));
-        ui.profile_edit_date = next.format("%Y-%m-%d").to_string();
+        if ui.profile_cal_year == 0 || ui.profile_cal_month == 0 {
+            sync_profile_cal_month(&mut ui);
+        }
+        let mut month = i32::try_from(ui.profile_cal_month).unwrap_or(1) + delta_months;
+        let mut year = ui.profile_cal_year;
+        while month < 1 {
+            month += 12;
+            year -= 1;
+        }
+        while month > 12 {
+            month -= 12;
+            year += 1;
+        }
+        // Keep the picker in a reasonable civil range for birth charts.
+        year = year.clamp(1800, 2100);
+        ui.profile_cal_year = year;
+        ui.profile_cal_month = month as u32;
+        drop(ui);
+        self.publish();
+    }
+
+    fn set_profile_cal_day(&self, day: i32) {
+        if !(1..=31).contains(&day) {
+            return;
+        }
+        let mut ui = self.ui.write();
+        if ui.profile_cal_year == 0 || ui.profile_cal_month == 0 {
+            sync_profile_cal_month(&mut ui);
+        }
+        let Some(date) =
+            NaiveDate::from_ymd_opt(ui.profile_cal_year, ui.profile_cal_month, day as u32)
+        else {
+            return;
+        };
+        ui.profile_edit_date = date.format("%Y-%m-%d").to_string();
+        apply_profile_timezone_offset(&mut ui);
         drop(ui);
         self.publish();
     }
@@ -1312,6 +1463,7 @@ impl JyotishHandle {
 
     fn nudge_profile_offset(&self, minutes: i32) {
         let mut ui = self.ui.write();
+        ui.profile_edit_timezone.clear();
         ui.profile_edit_offset = (ui.profile_edit_offset + minutes).clamp(-14 * 60, 14 * 60);
         drop(ui);
         self.publish();
@@ -1484,13 +1636,12 @@ fn profiles_for_payload(cfg: &JyotishConfig) -> Vec<JyotishProfileEntry> {
 fn profile_search_hits(ui: &JyotishUiState) -> Vec<JyotishSearchHit> {
     ui.profile_search_results
         .iter()
-        .map(|h| JyotishSearchHit {
-            name: h.name.clone(),
-            detail: h.detail.clone(),
-            latitude: h.latitude,
-            longitude: h.longitude,
-        })
+        .map(geocoding_to_search_hit)
         .collect()
+}
+
+fn profile_place_coords(ui: &JyotishUiState) -> String {
+    format_place_coords(&ui.profile_edit_place)
 }
 
 fn resync_rectify_from_active_profile(cfg: &JyotishConfig, session: &mut RectifySession) {
@@ -1968,17 +2119,30 @@ pub fn set_profile_draft_gender(instance_id: Uuid, gender: u8) {
     }
 }
 
-/// Set the draft birth place from a geocoding hit.
-pub fn set_draft_birth_place(instance_id: Uuid, name: String, latitude: f64, longitude: f64) {
+/// Set the draft birth place from a geocoding hit (fills UTC from `timezone` when valid).
+pub fn set_draft_birth_place(
+    instance_id: Uuid,
+    name: String,
+    latitude: f64,
+    longitude: f64,
+    timezone: String,
+) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
-        h.set_draft_birth_place(name, latitude, longitude);
+        h.set_draft_birth_place(name, latitude, longitude, timezone);
     }
 }
 
-/// Nudge the draft birth date by whole days (empty draft starts at today).
-pub fn nudge_profile_date(instance_id: Uuid, days: i32) {
+/// Shift the draft birth-date calendar by whole months (◀◀ = −12).
+pub fn nav_profile_cal(instance_id: Uuid, delta_months: i32) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
-        h.nudge_profile_date(days);
+        h.nav_profile_cal(delta_months);
+    }
+}
+
+/// Pick a day in the visible draft birth-date calendar month.
+pub fn set_profile_cal_day(instance_id: Uuid, day: i32) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.set_profile_cal_day(day);
     }
 }
 
@@ -2275,6 +2439,12 @@ fn loading_payload(
     current: &CurrentLocState,
 ) -> JyotishPayload {
     let (cities, search_results, active_city_index) = cities_and_search(cfg, ui, current);
+    let (
+        profile_cal_month_key,
+        profile_cal_year,
+        profile_cal_first_weekday,
+        profile_cal_cells,
+    ) = profile_cal_view(ui);
     JyotishPayload {
         date_text: String::new(),
         location_name: if cfg.use_current {
@@ -2308,6 +2478,11 @@ fn loading_payload(
         profile_edit_time: ui.profile_edit_time.clone(),
         profile_edit_offset: ui.profile_edit_offset,
         profile_edit_place_name: ui.profile_edit_place.name.clone(),
+        profile_edit_place_coords: profile_place_coords(ui),
+        profile_cal_month_key,
+        profile_cal_year,
+        profile_cal_first_weekday,
+        profile_cal_cells,
         ayanamsa_key: cfg.ayanamsa.ftl_key(),
         ayanamsa_deg_text: String::new(),
         day_offset: cfg.day_offset,
@@ -2828,5 +3003,61 @@ mod search_tests {
         let session = h.rectify.read();
         let s = session.as_ref().expect("session");
         assert_eq!(s.birth_year(), 1990);
+    }
+
+    #[test]
+    fn birth_place_fills_coords_and_utc_from_timezone() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        h.begin_edit_profile(None);
+        h.set_profile_cal_day(15);
+        h.set_draft_birth_place(
+            "Delhi".into(),
+            28.6139,
+            77.2090,
+            "Asia/Kolkata".into(),
+        );
+        let ui = h.ui.read().clone();
+        assert_eq!(ui.profile_edit_place.name, "Delhi");
+        assert!((ui.profile_edit_place.latitude - 28.6139).abs() < 1e-6);
+        assert_eq!(ui.profile_edit_offset, 330);
+        assert!(!profile_place_coords(&ui).is_empty());
+    }
+
+    #[test]
+    fn profile_calendar_pick_sets_iso_date() {
+        let bus = test_bus();
+        let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
+        let id = Uuid::new_v4();
+        let _widget = JyotishWidget::new(
+            id,
+            JyotishConfig::default(),
+            test_provider(),
+            reqwest::Client::new(),
+            bus,
+            orchid_config,
+        );
+        let h = JYOTISH_LIVE.get(&id).expect("live handle");
+        h.begin_edit_profile(None);
+        {
+            let mut ui = h.ui.write();
+            ui.profile_cal_year = 1990;
+            ui.profile_cal_month = 6;
+        }
+        h.set_profile_cal_day(15);
+        assert_eq!(h.ui.read().profile_edit_date, "1990-06-15");
+        h.nav_profile_cal(1);
+        assert_eq!(h.ui.read().profile_cal_month, 7);
+        assert_eq!(h.ui.read().profile_cal_year, 1990);
     }
 }

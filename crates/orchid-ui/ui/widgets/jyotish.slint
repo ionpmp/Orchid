@@ -2,7 +2,7 @@ import { Theme } from "../theme_global.slint";
 import {
     JyotishModel, JyotishPanchangaRow, JyotishPlanetEntry, JyotishDayChipModel,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishYearRowModel, JyotishAntarRowModel,
-    JyotishRectifyModel,
+    JyotishProfileCalCell, JyotishRectifyModel,
 } from "../workspace/defs.slint";
 import { SearchField } from "search-field.slint";
 
@@ -59,7 +59,7 @@ component PillBtn inherits Rectangle {
     }
 }
 
-/// Compact ± stepper row for birth date / time / UTC offset.
+/// Compact ± stepper row for birth time / UTC offset.
 component ProfileStepper inherits HorizontalLayout {
     in property <string> label;
     in property <string> value-text;
@@ -105,6 +105,97 @@ component ProfileStepper inherits HorizontalLayout {
     PillBtn {
         label: "»";
         clicked => { root.nudge(root.large-step); }
+    }
+}
+
+/// Month grid for picking a birth date.
+component ProfileDateCal inherits VerticalLayout {
+    in property <string> label;
+    in property <string> selected-text;
+    in property <string> empty-text;
+    in property <string> title;
+    in property <int> first-weekday;
+    in property <[string]> weekday-headers;
+    in property <[JyotishProfileCalCell]> cells;
+    callback nav(int);
+    callback pick-day(int);
+
+    spacing: 6px;
+
+    Text {
+        text: root.label;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+    }
+
+    Text {
+        text: root.selected-text == "" ? root.empty-text : root.selected-text;
+        color: root.selected-text == "" ? Theme.text-tertiary : Theme.text-primary;
+        font-size: Theme.font-size-sm;
+        font-family: Theme.font-family-mono;
+    }
+
+    HorizontalLayout {
+        spacing: 4px;
+        alignment: center;
+        PillBtn { label: "«"; clicked => { root.nav(-12); } }
+        PillBtn { label: "◀"; clicked => { root.nav(-1); } }
+        Text {
+            text: root.title;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            font-weight: Theme.weight-semibold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            wrap: no-wrap;
+            overflow: elide;
+        }
+        PillBtn { label: "▶"; clicked => { root.nav(1); } }
+        PillBtn { label: "»"; clicked => { root.nav(12); } }
+    }
+
+    HorizontalLayout {
+        spacing: 2px;
+        height: 16px;
+        for wd[i] in root.weekday-headers : Text {
+            horizontal-stretch: 1;
+            text: wd;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+    }
+
+    GridLayout {
+        spacing: 2px;
+        for pad in root.first-weekday : Rectangle {
+            row: pad / 7;
+            col: mod(pad, 7);
+            height: 26px;
+        }
+        for cell[j] in root.cells : Rectangle {
+            row: (j + root.first-weekday) / 7;
+            col: mod(j + root.first-weekday, 7);
+            height: 26px;
+            border-radius: Theme.radius-md;
+            background: cell.is-selected ? Theme.accent-brand :
+                (cal-day-ta.has-hover ? Theme.surface-raised : transparent);
+            border-width: !cell.is-selected && cell.is-today ? 1px : 0;
+            border-color: Theme.border-default;
+            cal-day-ta := TouchArea {
+                clicked => { root.pick-day(cell.day); }
+            }
+            Text {
+                width: 100%; height: 100%;
+                text: cell.day;
+                color: cell.is-selected ? Theme.surface-base : Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-weight: cell.is-selected || cell.is-today ? Theme.weight-semibold : Theme.weight-regular;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
     }
 }
 
@@ -198,8 +289,9 @@ export component JyotishView inherits Rectangle {
     callback cancel-edit-profile();
     callback set-profile-gender(int);
     callback search-birth-places(string);
-    callback set-birth-place(string, float, float);
-    callback nudge-profile-date(int);
+    callback set-birth-place(string, float, float, string);
+    callback nav-profile-cal(int);
+    callback set-profile-cal-day(int);
     callback nudge-profile-time(int);
     callback nudge-profile-offset(int);
     callback upsert-profile(int, string, int, string, string, int, string, float, float);
@@ -1559,13 +1651,16 @@ export component JyotishView inherits Rectangle {
                         }
                     }
 
-                    ProfileStepper {
+                    ProfileDateCal {
                         label: model.profile-date-label;
-                        value-text: model.profile-edit-date;
+                        selected-text: model.profile-edit-date;
                         empty-text: model.profile-date-placeholder;
-                        small-step: 1;
-                        large-step: 30;
-                        nudge(d) => { root.nudge-profile-date(d); }
+                        title: model.profile-cal-title;
+                        first-weekday: model.profile-cal-first-weekday;
+                        weekday-headers: model.weekday-headers;
+                        cells: model.profile-cal-cells;
+                        nav(d) => { root.nav-profile-cal(d); }
+                        pick-day(d) => { root.set-profile-cal-day(d); }
                     }
 
                     ProfileStepper {
@@ -1587,28 +1682,41 @@ export component JyotishView inherits Rectangle {
                     }
 
                     Rectangle {
-                        height: 28px;
+                        height: model.profile-edit-place-coords == "" ? 28px : 42px;
                         background: Theme.surface-raised;
                         border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border-default;
-                        HorizontalLayout {
+                        VerticalLayout {
                             padding-left: 8px;
                             padding-right: 8px;
-                            spacing: 6px;
-                            Text {
-                                text: model.profile-place-placeholder;
-                                color: Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                vertical-alignment: center;
+                            padding-top: 4px;
+                            padding-bottom: 4px;
+                            spacing: 2px;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text {
+                                    text: model.profile-place-placeholder;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: model.profile-edit-place-name == "" ? "-" : model.profile-edit-place-name;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: Theme.weight-medium;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                }
                             }
-                            Text {
-                                text: model.profile-edit-place-name == "" ? "-" : model.profile-edit-place-name;
-                                color: Theme.text-primary;
+                            if model.profile-edit-place-coords != "" : Text {
+                                text: model.profile-edit-place-coords;
+                                color: Theme.text-tertiary;
                                 font-size: Theme.font-size-sm;
-                                font-weight: Theme.weight-medium;
-                                vertical-alignment: center;
-                                horizontal-stretch: 1;
+                                font-family: Theme.font-family-mono;
                                 wrap: no-wrap;
                                 overflow: elide;
                             }
@@ -1647,7 +1755,7 @@ export component JyotishView inherits Rectangle {
                                 border-radius: Theme.radius-md;
                                 place-hit-ta := TouchArea {
                                     clicked => {
-                                        root.set-birth-place(hit.name, hit.latitude, hit.longitude);
+                                        root.set-birth-place(hit.name, hit.latitude, hit.longitude, hit.timezone);
                                     }
                                 }
                                 VerticalLayout {

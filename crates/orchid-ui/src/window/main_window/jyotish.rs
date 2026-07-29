@@ -478,6 +478,7 @@ impl MainWindowController {
         name: &SharedString,
         lat: f32,
         lon: f32,
+        timezone: &SharedString,
     ) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
@@ -487,15 +488,32 @@ impl MainWindowController {
             name.to_string(),
             f64::from(lat),
             f64::from(lon),
+            timezone.to_string(),
         );
         self.refresh_jyotish(inst);
     }
 
-    pub(super) fn on_jyotish_nudge_profile_date(self: &Arc<Self>, id: &SharedString, days: i32) {
+    pub(super) fn on_jyotish_nav_profile_cal(
+        self: &Arc<Self>,
+        id: &SharedString,
+        delta_months: i32,
+    ) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
         };
-        orchid_widgets::builtin::jyotish::nudge_profile_date(inst, days);
+        orchid_widgets::builtin::jyotish::nav_profile_cal(inst, delta_months);
+        self.refresh_jyotish(inst);
+    }
+
+    pub(super) fn on_jyotish_set_profile_cal_day(
+        self: &Arc<Self>,
+        id: &SharedString,
+        day: i32,
+    ) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_profile_cal_day(inst, day);
         self.refresh_jyotish(inst);
     }
 

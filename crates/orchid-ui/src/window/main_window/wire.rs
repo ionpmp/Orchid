@@ -934,17 +934,25 @@ impl MainWindowController {
         });
         self.window.on_jyotish_set_birth_place({
             let t = t.clone();
-            move |id, name, lat, lon| {
+            move |id, name, lat, lon, tz| {
                 if let Some(c) = t.upgrade() {
-                    c.on_jyotish_set_birth_place(&id, &name, lat, lon);
+                    c.on_jyotish_set_birth_place(&id, &name, lat, lon, &tz);
                 }
             }
         });
-        self.window.on_jyotish_nudge_profile_date({
+        self.window.on_jyotish_nav_profile_cal({
             let t = t.clone();
-            move |id, days| {
+            move |id, delta| {
                 if let Some(c) = t.upgrade() {
-                    c.on_jyotish_nudge_profile_date(&id, days);
+                    c.on_jyotish_nav_profile_cal(&id, delta);
+                }
+            }
+        });
+        self.window.on_jyotish_set_profile_cal_day({
+            let t = t.clone();
+            move |id, day| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_set_profile_cal_day(&id, day);
                 }
             }
         });

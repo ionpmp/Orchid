@@ -118,8 +118,9 @@ export component WidgetFrame inherits Rectangle {
     callback jyotish-cancel-edit-profile(string);
     callback jyotish-set-profile-gender(string, int);
     callback jyotish-search-birth-places(string, string);
-    callback jyotish-set-birth-place(string, string, float, float);
-    callback jyotish-nudge-profile-date(string, int);
+    callback jyotish-set-birth-place(string, string, float, float, string);
+    callback jyotish-nav-profile-cal(string, int);
+    callback jyotish-set-profile-cal-day(string, int);
     callback jyotish-nudge-profile-time(string, int);
     callback jyotish-nudge-profile-offset(string, int);
     callback jyotish-upsert-profile(string, int, string, int, string, string, int, string, float, float);
@@ -686,10 +687,11 @@ export component WidgetFrame inherits Rectangle {
                     cancel-edit-profile => { root.jyotish-cancel-edit-profile(root.model.instance-id); }
                     set-profile-gender(g) => { root.jyotish-set-profile-gender(root.model.instance-id, g); }
                     search-birth-places(q) => { root.jyotish-search-birth-places(root.model.instance-id, q); }
-                    set-birth-place(name, lat, lon) => {
-                        root.jyotish-set-birth-place(root.model.instance-id, name, lat, lon);
+                    set-birth-place(name, lat, lon, tz) => {
+                        root.jyotish-set-birth-place(root.model.instance-id, name, lat, lon, tz);
                     }
-                    nudge-profile-date(d) => { root.jyotish-nudge-profile-date(root.model.instance-id, d); }
+                    nav-profile-cal(d) => { root.jyotish-nav-profile-cal(root.model.instance-id, d); }
+                    set-profile-cal-day(d) => { root.jyotish-set-profile-cal-day(root.model.instance-id, d); }
                     nudge-profile-time(m) => { root.jyotish-nudge-profile-time(root.model.instance-id, m); }
                     nudge-profile-offset(m) => { root.jyotish-nudge-profile-offset(root.model.instance-id, m); }
                     upsert-profile(index, name, gender, date, time, offset, place, lat, lon) => {

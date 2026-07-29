@@ -31,7 +31,7 @@ pub use file_manager::{
 };
 pub use jyotish::{
     JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
-    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
     JyotishProfileEntry, JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit,
     JyotishYearSummary,
 };

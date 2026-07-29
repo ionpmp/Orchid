@@ -161,6 +161,13 @@ export struct JyotishSearchHit {
     detail: string,
     latitude: float,
     longitude: float,
+    timezone: string,
+}
+
+export struct JyotishProfileCalCell {
+    day: int,
+    is-selected: bool,
+    is-today: bool,
 }
 
 export struct JyotishPanchangaRow {
@@ -299,6 +306,10 @@ export struct JyotishModel {
     profile-edit-offset: int,
     profile-edit-offset-text: string,
     profile-edit-place-name: string,
+    profile-edit-place-coords: string,
+    profile-cal-title: string,
+    profile-cal-first-weekday: int,
+    profile-cal-cells: [JyotishProfileCalCell],
     profiles-title: string,
     profiles-hint: string,
     profiles-close-label: string,

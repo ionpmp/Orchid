@@ -5,8 +5,8 @@ use slint::{ModelRc, SharedString, VecModel};
 use crate::slint_generated::{
     JyotishAntarRowModel, JyotishCityEntry, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
-    JyotishProfileEntry, JyotishRectifyCandidateModel, JyotishRectifyModel, JyotishSearchHit,
-    JyotishYearRowModel,
+    JyotishProfileCalCell, JyotishProfileEntry, JyotishRectifyCandidateModel, JyotishRectifyModel,
+    JyotishSearchHit, JyotishYearRowModel,
 };
 
 const WEEKDAY_KEYS: [&str; 7] = [
@@ -76,6 +76,10 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         profile_edit_offset: 0,
         profile_edit_offset_text: format_utc_offset(0).into(),
         profile_edit_place_name: SharedString::new(),
+        profile_edit_place_coords: SharedString::new(),
+        profile_cal_title: SharedString::new(),
+        profile_cal_first_weekday: 0,
+        profile_cal_cells: ModelRc::new(VecModel::default()),
         profiles_title: locale.tr("jyotish-profiles-title").into(),
         profiles_hint: locale.tr("jyotish-profiles-hint").into(),
         profiles_close_label: locale.tr("jyotish-profiles-close").into(),
@@ -203,7 +207,12 @@ pub(crate) fn build_jyotish_model(
         m.profile_edit_date = p.profile_edit_date.clone().into();
         m.profile_edit_time = p.profile_edit_time.clone().into();
         m.profile_edit_offset = p.profile_edit_offset;
+        m.profile_edit_offset_text = format_utc_offset(p.profile_edit_offset).into();
         m.profile_edit_place_name = p.profile_edit_place_name.clone().into();
+        m.profile_edit_place_coords = p.profile_edit_place_coords.clone().into();
+        m.profile_cal_title = profile_cal_title(p, locale).into();
+        m.profile_cal_first_weekday = i32::from(p.profile_cal_first_weekday);
+        m.profile_cal_cells = ModelRc::new(VecModel::from(profile_cal_cells(p)));
         return m;
     }
 
@@ -381,6 +390,10 @@ pub(crate) fn build_jyotish_model(
         profile_edit_offset: p.profile_edit_offset,
         profile_edit_offset_text: format_utc_offset(p.profile_edit_offset).into(),
         profile_edit_place_name: p.profile_edit_place_name.clone().into(),
+        profile_edit_place_coords: p.profile_edit_place_coords.clone().into(),
+        profile_cal_title: profile_cal_title(p, locale).into(),
+        profile_cal_first_weekday: i32::from(p.profile_cal_first_weekday),
+        profile_cal_cells: ModelRc::new(VecModel::from(profile_cal_cells(p))),
         profiles_title: locale.tr("jyotish-profiles-title").into(),
         profiles_hint: locale.tr("jyotish-profiles-hint").into(),
         profiles_close_label: locale.tr("jyotish-profiles-close").into(),
@@ -532,6 +545,22 @@ fn jyotish_profile_search_hits(p: &orchid_widgets::JyotishPayload) -> Vec<Jyotis
             detail: h.detail.clone().into(),
             latitude: h.latitude as f32,
             longitude: h.longitude as f32,
+            timezone: h.timezone.clone().into(),
+        })
+        .collect()
+}
+
+fn profile_cal_title(p: &orchid_widgets::JyotishPayload, locale: &LocaleManager) -> String {
+    format!("{} {}", locale.tr(p.profile_cal_month_key), p.profile_cal_year)
+}
+
+fn profile_cal_cells(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileCalCell> {
+    p.profile_cal_cells
+        .iter()
+        .map(|c| JyotishProfileCalCell {
+            day: i32::from(c.day),
+            is_selected: c.is_selected,
+            is_today: c.is_today,
         })
         .collect()
 }
@@ -566,6 +595,7 @@ fn jyotish_search_hits(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishSearchH
             detail: h.detail.clone().into(),
             latitude: h.latitude as f32,
             longitude: h.longitude as f32,
+            timezone: h.timezone.clone().into(),
         })
         .collect()
 }

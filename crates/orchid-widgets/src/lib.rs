@@ -40,7 +40,7 @@ pub use widget::payloads::{
     CalcHistoryRow, CalculatorPayload, CalendarDayCell, CalendarEventRow, CalendarPayload,
     ClockCityView, ClockPayload, ClockSearchHit, EntryPayload, FileManagerPayload, FmViewMode,
     IndicatorStatus, JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip,
-    JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow,
+    JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
     JyotishProfileEntry, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary, ManagedFolderSidebarPayload,
     MediaPlayerPayload, MoonPayload, NetworkMountPayload, NotesPayload, NotesTabRow, PanePayload,
     PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload, ProcessGroup,

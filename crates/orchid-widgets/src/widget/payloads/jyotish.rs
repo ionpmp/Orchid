@@ -33,6 +33,17 @@ pub struct JyotishSearchHit {
     pub latitude: f64,
     /// WGS84 longitude.
     pub longitude: f64,
+    /// IANA timezone id when the geocoder provides one.
+    pub timezone: String,
+}
+
+/// One day cell in the birth-profile date calendar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct JyotishProfileCalCell {
+    pub day: u8,
+    pub is_selected: bool,
+    pub is_today: bool,
 }
 
 /// One graha (planet) row for the sidereal table.
@@ -241,6 +252,14 @@ pub struct JyotishPayload {
     pub profile_edit_time: String,
     pub profile_edit_offset: i32,
     pub profile_edit_place_name: String,
+    /// Formatted draft birth-place coordinates (empty when unset).
+    pub profile_edit_place_coords: String,
+    /// Month key for the draft date calendar (`jyotish-month-N`).
+    pub profile_cal_month_key: &'static str,
+    pub profile_cal_year: i32,
+    /// Monday-based padding before day 1 (0..=6).
+    pub profile_cal_first_weekday: u8,
+    pub profile_cal_cells: Vec<JyotishProfileCalCell>,
     pub ayanamsa_key: &'static str,
     pub ayanamsa_deg_text: String,
     pub day_offset: i32,
