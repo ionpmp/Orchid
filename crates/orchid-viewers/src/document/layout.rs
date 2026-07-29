@@ -14,7 +14,7 @@ use swash::scale::{Render, ScaleContext, Scaler, Source, StrikeWith};
 use swash::zeno::{Format, Vector};
 use swash::FontRef;
 
-use crate::document::model::{Alignment, Block, Document, ListKind, Paragraph};
+use crate::document::model::{Alignment, Block, Document, ListKind, Paragraph, Table};
 
 /// Brush colour for styled runs (RGBA).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -160,6 +160,7 @@ impl DocumentLayout {
         let max_w = content_width.max(80.0);
         // Content-relative Y (padding applied at paint time) — must match hit-test.
         let mut layouts: Vec<LaidBlock> = Vec::new();
+        let mut grids: Vec<TableGridGeom> = Vec::new();
         let mut total_h = 0.0;
         let para_gap = 10.0;
         let mut plain_offset = 0usize;
@@ -180,6 +181,7 @@ impl DocumentLayout {
                     layouts.push(LaidBlock {
                         layout,
                         y0: total_h,
+                        x0: 0.0,
                         indent_px: indent,
                         plain_start: plain_offset,
                         body_len,
@@ -193,35 +195,15 @@ impl DocumentLayout {
                     total_h += h + para_gap;
                 }
                 Block::Table(t) => {
-                    for row in &t.rows {
-                        for cell in &row.cells {
-                            for p in &cell.paragraphs {
-                                if emitted_text {
-                                    plain_offset += 1;
-                                }
-                                emitted_text = true;
-                                let body_len = p.plain_text().len();
-                                let prefix_len = list_prefix(p).len();
-                                let indent = list_indent_px(p);
-                                let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
-                                let h = layout.height().max(14.0);
-                                layouts.push(LaidBlock {
-                                    layout,
-                                    y0: total_h,
-                                    indent_px: indent,
-                                    plain_start: plain_offset,
-                                    body_len,
-                                    prefix_len,
-                                    is_image: false,
-                                    image_h: 0.0,
-                                    image_w: 0,
-                                    image_rgba: None,
-                                });
-                                plain_offset += body_len;
-                                total_h += h + 4.0;
-                            }
-                        }
-                    }
+                    let grid = self.append_table_grid(
+                        t,
+                        max_w,
+                        &mut total_h,
+                        &mut plain_offset,
+                        &mut emitted_text,
+                        &mut layouts,
+                    );
+                    grids.push(grid);
                     total_h += para_gap;
                 }
                 Block::Image(img) => {
@@ -230,6 +212,7 @@ impl DocumentLayout {
                     layouts.push(LaidBlock {
                         layout: Layout::default(),
                         y0: total_h,
+                        x0: 0.0,
                         indent_px: 0.0,
                         plain_start: plain_offset,
                         body_len: 0,
@@ -264,6 +247,10 @@ impl DocumentLayout {
             [250, 250, 252, 255],
         );
 
+        for grid in &grids {
+            paint_table_grid(&mut pixels, width, height, pad, grid);
+        }
+
         let (sel_lo, sel_hi) = match selection {
             Some((a, b)) if a != b => (a.min(b), a.max(b)),
             _ => (0, 0),
@@ -278,7 +265,7 @@ impl DocumentLayout {
             if item.is_image || item.layout.len() == 0 {
                 continue;
             }
-            let origin_x = pad + item.indent_px;
+            let origin_x = pad + item.x0 + item.indent_px;
             let origin_y = pad + item.y0;
             if sel_hi > sel_lo {
                 let para_end = item.plain_start + item.body_len;
@@ -352,7 +339,7 @@ impl DocumentLayout {
                 &mut pixels,
                 width,
                 height,
-                pad + item.indent_px,
+                pad + item.x0 + item.indent_px,
                 pad + item.y0,
             );
         }
@@ -409,32 +396,16 @@ impl DocumentLayout {
                     total_h += h + para_gap;
                 }
                 Block::Table(t) => {
-                    for row in &t.rows {
-                        for cell in &row.cells {
-                            for p in &cell.paragraphs {
-                                if emitted_text {
-                                    plain_offset += 1;
-                                }
-                                emitted_text = true;
-                                let body_len = p.plain_text().len();
-                                let prefix_len = list_prefix(p).len();
-                                let indent = list_indent_px(p);
-                                let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
-                                let h = layout.height().max(14.0);
-                                let y0 = total_h;
-                                let y1 = total_h + h + 4.0;
-                                if local_y >= y0 && local_y < y1 {
-                                    let ly = (local_y - y0).max(0.0);
-                                    let lx = (local_x - indent).clamp(0.0, (max_w - indent).max(40.0));
-                                    let body_idx = cluster_to_body_index(
-                                        &layout, lx, ly, prefix_len, body_len,
-                                    );
-                                    return Some(plain_offset + body_idx);
-                                }
-                                plain_offset += body_len;
-                                total_h += h + 4.0;
-                            }
-                        }
+                    if let Some(offset) = self.hit_test_table(
+                        t,
+                        max_w,
+                        local_x,
+                        local_y,
+                        &mut total_h,
+                        &mut plain_offset,
+                        &mut emitted_text,
+                    ) {
+                        return Some(offset);
                     }
                     total_h += para_gap;
                 }
@@ -454,6 +425,251 @@ impl DocumentLayout {
             }
         }
         Some(plain_offset)
+    }
+
+    /// Lay out a table as an equal-width column grid; appends [`LaidBlock`]s and returns geometry.
+    fn append_table_grid(
+        &mut self,
+        t: &Table,
+        max_w: f32,
+        total_h: &mut f32,
+        plain_offset: &mut usize,
+        emitted_text: &mut bool,
+        layouts: &mut Vec<LaidBlock>,
+    ) -> TableGridGeom {
+        let ncols = table_column_count(t);
+        let cell_w = max_w / ncols as f32;
+        let table_y0 = *total_h;
+        let mut row_heights = Vec::with_capacity(t.rows.len());
+
+        for row in &t.rows {
+            let row_y0 = *total_h;
+            let mut cell_paras: Vec<Vec<CellParaLayout>> = Vec::with_capacity(ncols);
+            let mut max_content_h = 0.0f32;
+
+            for ci in 0..ncols {
+                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
+                let mut paras = Vec::new();
+                let mut content_h = 0.0f32;
+                if let Some(cell) = row.cells.get(ci) {
+                    for p in &cell.paragraphs {
+                        if *emitted_text {
+                            *plain_offset += 1;
+                        }
+                        *emitted_text = true;
+                        let body_len = p.plain_text().len();
+                        let prefix_len = list_prefix(p).len();
+                        let indent = list_indent_px(p);
+                        let layout = self.layout_paragraph(p, (inner_w - indent).max(12.0));
+                        let h = layout.height().max(14.0);
+                        paras.push(CellParaLayout {
+                            layout,
+                            plain_start: *plain_offset,
+                            body_len,
+                            prefix_len,
+                            indent_px: indent,
+                            height: h,
+                        });
+                        *plain_offset += body_len;
+                        content_h += h + TABLE_CELL_PARA_GAP;
+                    }
+                }
+                if content_h > 0.0 {
+                    content_h -= TABLE_CELL_PARA_GAP;
+                }
+                max_content_h = max_content_h.max(content_h);
+                cell_paras.push(paras);
+            }
+
+            let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
+            for (ci, paras) in cell_paras.into_iter().enumerate() {
+                let x0 = ci as f32 * cell_w + TABLE_CELL_PAD;
+                let mut y = row_y0 + TABLE_CELL_PAD;
+                for para in paras {
+                    let h = para.height;
+                    layouts.push(LaidBlock {
+                        layout: para.layout,
+                        y0: y,
+                        x0,
+                        indent_px: para.indent_px,
+                        plain_start: para.plain_start,
+                        body_len: para.body_len,
+                        prefix_len: para.prefix_len,
+                        is_image: false,
+                        image_h: 0.0,
+                        image_w: 0,
+                        image_rgba: None,
+                    });
+                    y += h + TABLE_CELL_PARA_GAP;
+                }
+            }
+            *total_h += row_h;
+            row_heights.push(row_h);
+        }
+
+        TableGridGeom {
+            y0: table_y0,
+            width: max_w,
+            height: *total_h - table_y0,
+            ncols,
+            row_heights,
+        }
+    }
+
+    /// Hit-test inside a table grid; advances `total_h` / plain offsets like layout.
+    fn hit_test_table(
+        &mut self,
+        t: &Table,
+        max_w: f32,
+        local_x: f32,
+        local_y: f32,
+        total_h: &mut f32,
+        plain_offset: &mut usize,
+        emitted_text: &mut bool,
+    ) -> Option<usize> {
+        let ncols = table_column_count(t);
+        let cell_w = max_w / ncols as f32;
+
+        for row in &t.rows {
+            let row_y0 = *total_h;
+            let mut cell_paras: Vec<Vec<CellParaLayout>> = Vec::with_capacity(ncols);
+            let mut max_content_h = 0.0f32;
+
+            for ci in 0..ncols {
+                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
+                let mut paras = Vec::new();
+                let mut content_h = 0.0f32;
+                if let Some(cell) = row.cells.get(ci) {
+                    for p in &cell.paragraphs {
+                        if *emitted_text {
+                            *plain_offset += 1;
+                        }
+                        *emitted_text = true;
+                        let body_len = p.plain_text().len();
+                        let prefix_len = list_prefix(p).len();
+                        let indent = list_indent_px(p);
+                        let layout = self.layout_paragraph(p, (inner_w - indent).max(12.0));
+                        let h = layout.height().max(14.0);
+                        paras.push(CellParaLayout {
+                            layout,
+                            plain_start: *plain_offset,
+                            body_len,
+                            prefix_len,
+                            indent_px: indent,
+                            height: h,
+                        });
+                        *plain_offset += body_len;
+                        content_h += h + TABLE_CELL_PARA_GAP;
+                    }
+                }
+                if content_h > 0.0 {
+                    content_h -= TABLE_CELL_PARA_GAP;
+                }
+                max_content_h = max_content_h.max(content_h);
+                cell_paras.push(paras);
+            }
+
+            let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
+            let row_y1 = row_y0 + row_h;
+            if local_y >= row_y0 && local_y < row_y1 {
+                let col = if local_x < 0.0 {
+                    0
+                } else {
+                    ((local_x / cell_w).floor() as usize).min(ncols.saturating_sub(1))
+                };
+                let x0 = col as f32 * cell_w + TABLE_CELL_PAD;
+                let paras = &cell_paras[col];
+                if paras.is_empty() {
+                    return Some(
+                        cell_paras
+                            .iter()
+                            .take(col)
+                            .flatten()
+                            .last()
+                            .map(|p| p.plain_start + p.body_len)
+                            .unwrap_or(*plain_offset),
+                    );
+                }
+                let mut y = row_y0 + TABLE_CELL_PAD;
+                for (i, para) in paras.iter().enumerate() {
+                    let y1 = y + para.height + TABLE_CELL_PARA_GAP;
+                    let last = i + 1 == paras.len();
+                    if local_y < y1 || last {
+                        let ly = (local_y - y).max(0.0);
+                        let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
+                        let lx = (local_x - x0 - para.indent_px)
+                            .clamp(0.0, (inner_w - para.indent_px).max(12.0));
+                        let body_idx = cluster_to_body_index(
+                            &para.layout,
+                            lx,
+                            ly,
+                            para.prefix_len,
+                            para.body_len,
+                        );
+                        return Some(para.plain_start + body_idx);
+                    }
+                    y = y1;
+                }
+            }
+            *total_h = row_y1;
+        }
+
+        None
+    }
+}
+
+fn table_column_count(t: &Table) -> usize {
+    t.rows.iter().map(|r| r.cells.len()).max().unwrap_or(1).max(1)
+}
+
+fn paint_table_grid(
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    pad: f32,
+    grid: &TableGridGeom,
+) {
+    let x = (pad + 0.0).round() as u32;
+    let y = (pad + grid.y0).round() as u32;
+    let w = grid.width.ceil().max(1.0) as u32;
+    let h = grid.height.ceil().max(1.0) as u32;
+    let cell_w = grid.width / grid.ncols as f32;
+
+    // Outer box.
+    fill_rect(pixels, buf_w, buf_h, x, y, w, 1, TABLE_GRID_COLOR);
+    fill_rect(
+        pixels,
+        buf_w,
+        buf_h,
+        x,
+        y.saturating_add(h.saturating_sub(1)),
+        w,
+        1,
+        TABLE_GRID_COLOR,
+    );
+    fill_rect(pixels, buf_w, buf_h, x, y, 1, h, TABLE_GRID_COLOR);
+    fill_rect(
+        pixels,
+        buf_w,
+        buf_h,
+        x.saturating_add(w.saturating_sub(1)),
+        y,
+        1,
+        h,
+        TABLE_GRID_COLOR,
+    );
+
+    for c in 1..grid.ncols {
+        let vx = (pad + c as f32 * cell_w).round() as u32;
+        fill_rect(pixels, buf_w, buf_h, vx, y, 1, h, TABLE_GRID_COLOR);
+    }
+
+    let mut yy = y;
+    for (i, rh) in grid.row_heights.iter().enumerate() {
+        if i > 0 {
+            fill_rect(pixels, buf_w, buf_h, x, yy, w, 1, TABLE_GRID_COLOR);
+        }
+        yy = yy.saturating_add(rh.ceil().max(1.0) as u32);
     }
 }
 
@@ -479,6 +695,8 @@ struct LaidBlock {
     layout: Layout<ColorBrush>,
     /// Content-relative top (excluding page padding).
     y0: f32,
+    /// Content-relative left (table cells offset into their column).
+    x0: f32,
     /// Extra left inset for list indent level.
     indent_px: f32,
     plain_start: usize,
@@ -489,6 +707,27 @@ struct LaidBlock {
     image_w: u32,
     image_rgba: Option<Vec<u8>>,
 }
+
+struct CellParaLayout {
+    layout: Layout<ColorBrush>,
+    plain_start: usize,
+    body_len: usize,
+    prefix_len: usize,
+    indent_px: f32,
+    height: f32,
+}
+
+struct TableGridGeom {
+    y0: f32,
+    width: f32,
+    height: f32,
+    ncols: usize,
+    row_heights: Vec<f32>,
+}
+
+const TABLE_CELL_PAD: f32 = 4.0;
+const TABLE_CELL_PARA_GAP: f32 = 2.0;
+const TABLE_GRID_COLOR: [u8; 4] = [180, 180, 188, 255];
 
 const MAX_PREVIEW_IMAGE_H: u32 = 240;
 
@@ -1067,7 +1306,7 @@ fn fill_rect(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::model::{Run, RunStyle};
+    use crate::document::model::{Run, RunStyle, Table, TableCell, TableRow};
 
     fn sample_paragraph() -> Paragraph {
         Paragraph {
@@ -1189,6 +1428,97 @@ mod tests {
                 .chunks_exact(4)
                 .any(|px| px[2] > px[0] && px[2] > 180),
             "expected bluish selection tint"
+        );
+    }
+
+    fn cell(text: &str) -> TableCell {
+        TableCell {
+            paragraphs: vec![Paragraph {
+                runs: vec![Run {
+                    text: text.into(),
+                    style: RunStyle::default(),
+                }],
+                ..Default::default()
+            }],
+        }
+    }
+
+    fn table_2x2_doc() -> Document {
+        Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![cell("AA"), cell("BB")],
+                    },
+                    TableRow {
+                        cells: vec![cell("CC"), cell("DD")],
+                    },
+                ],
+                ..Default::default()
+            })],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn table_grid_paints_vertical_border() {
+        let mut dl = DocumentLayout::new();
+        let doc = table_2x2_doc();
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 40);
+        // Mid-column hairline at pad + content_w/2.
+        let vx = (PREVIEW_PADDING + content_w / 2.0).round() as u32;
+        let vy = (PREVIEW_PADDING + 8.0).round() as u32;
+        let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
+        assert!(
+            bytes[i] == TABLE_GRID_COLOR[0]
+                && bytes[i + 1] == TABLE_GRID_COLOR[1]
+                && bytes[i + 2] == TABLE_GRID_COLOR[2],
+            "expected grid border at ({vx},{vy}) got rgba({},{},{},{})",
+            bytes[i],
+            bytes[i + 1],
+            bytes[i + 2],
+            bytes[i + 3]
+        );
+    }
+
+    #[test]
+    fn table_hit_test_right_column() {
+        let mut dl = DocumentLayout::new();
+        let doc = table_2x2_doc();
+        let plain = doc.plain_text();
+        let bb = plain.find("BB").expect("BB");
+        let content_w = 400.0;
+        // Click near the left edge of the right column, top row.
+        let x = PREVIEW_PADDING + content_w * 0.75;
+        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
+        let offset = dl
+            .hit_test_plain_offset(&doc, content_w, x, y)
+            .unwrap();
+        assert!(
+            offset >= bb && offset <= bb + "BB".len(),
+            "offset={offset} expected in BB at {bb}..{}; plain={plain:?}",
+            bb + "BB".len()
+        );
+    }
+
+    #[test]
+    fn table_hit_test_left_column() {
+        let mut dl = DocumentLayout::new();
+        let doc = table_2x2_doc();
+        let plain = doc.plain_text();
+        let aa = plain.find("AA").expect("AA");
+        let content_w = 400.0;
+        let x = PREVIEW_PADDING + content_w * 0.25;
+        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
+        let offset = dl
+            .hit_test_plain_offset(&doc, content_w, x, y)
+            .unwrap();
+        assert!(
+            offset >= aa && offset <= aa + "AA".len(),
+            "offset={offset} expected in AA at {aa}..{}",
+            aa + "AA".len()
         );
     }
 }

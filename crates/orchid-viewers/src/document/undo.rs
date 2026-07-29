@@ -57,6 +57,20 @@ pub enum EditCommand {
         /// Row index to remove.
         row_idx: usize,
     },
+    /// Insert an empty column into a table.
+    InsertTableColumn {
+        /// Block index of the table.
+        table_idx: usize,
+        /// Column index to insert at.
+        at_col: usize,
+    },
+    /// Delete a table column.
+    DeleteTableColumn {
+        /// Block index of the table.
+        table_idx: usize,
+        /// Column index to remove.
+        col_idx: usize,
+    },
     /// Insert an image as a new block at `at.block_idx`.
     InsertImage {
         /// Insertion cursor (block index used).
@@ -96,6 +110,15 @@ pub enum EditCommand {
         at_row: usize,
         /// Saved row.
         row: TableRow,
+    },
+    /// Re-insert a table column (inverse of delete).
+    RestoreTableColumn {
+        /// Block index of the table.
+        table_idx: usize,
+        /// Column index.
+        at_col: usize,
+        /// Saved cell per row (`None` when that row had no cell at the index).
+        cells: Vec<Option<TableCell>>,
     },
 }
 
@@ -337,7 +360,7 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             else {
                 return Err(ViewerError::EditOutOfBounds);
             };
-            if *row_idx >= t.rows.len() {
+            if t.rows.len() <= 1 || *row_idx >= t.rows.len() {
                 return Err(ViewerError::EditOutOfBounds);
             }
             let row = t.rows.remove(*row_idx);
@@ -364,6 +387,84 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             Ok(EditCommand::DeleteTableRow {
                 table_idx: *table_idx,
                 row_idx: idx,
+            })
+        }
+        EditCommand::InsertTableColumn { table_idx, at_col } => {
+            let Block::Table(t) = doc
+                .blocks
+                .get_mut(*table_idx)
+                .ok_or(ViewerError::EditOutOfBounds)?
+            else {
+                return Err(ViewerError::EditOutOfBounds);
+            };
+            if t.rows.is_empty() {
+                return Err(ViewerError::EditOutOfBounds);
+            }
+            let at = *at_col;
+            for row in &mut t.rows {
+                let i = at.min(row.cells.len());
+                row.cells.insert(
+                    i,
+                    TableCell {
+                        paragraphs: vec![Paragraph::default()],
+                    },
+                );
+            }
+            Ok(EditCommand::DeleteTableColumn {
+                table_idx: *table_idx,
+                col_idx: at,
+            })
+        }
+        EditCommand::DeleteTableColumn { table_idx, col_idx } => {
+            let Block::Table(t) = doc
+                .blocks
+                .get_mut(*table_idx)
+                .ok_or(ViewerError::EditOutOfBounds)?
+            else {
+                return Err(ViewerError::EditOutOfBounds);
+            };
+            let max_cols = t.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
+            if max_cols <= 1 || *col_idx >= max_cols {
+                return Err(ViewerError::EditOutOfBounds);
+            }
+            let mut cells = Vec::with_capacity(t.rows.len());
+            for row in &mut t.rows {
+                if *col_idx < row.cells.len() {
+                    cells.push(Some(row.cells.remove(*col_idx)));
+                } else {
+                    cells.push(None);
+                }
+            }
+            Ok(EditCommand::RestoreTableColumn {
+                table_idx: *table_idx,
+                at_col: *col_idx,
+                cells,
+            })
+        }
+        EditCommand::RestoreTableColumn {
+            table_idx,
+            at_col,
+            cells,
+        } => {
+            let Block::Table(t) = doc
+                .blocks
+                .get_mut(*table_idx)
+                .ok_or(ViewerError::EditOutOfBounds)?
+            else {
+                return Err(ViewerError::EditOutOfBounds);
+            };
+            if cells.len() != t.rows.len() {
+                return Err(ViewerError::EditOutOfBounds);
+            }
+            for (row, cell) in t.rows.iter_mut().zip(cells.iter()) {
+                if let Some(cell) = cell {
+                    let i = (*at_col).min(row.cells.len());
+                    row.cells.insert(i, cell.clone());
+                }
+            }
+            Ok(EditCommand::DeleteTableColumn {
+                table_idx: *table_idx,
+                col_idx: *at_col,
             })
         }
         EditCommand::InsertImage { at, image } => {
@@ -959,6 +1060,63 @@ mod tests {
         stack.undo(&mut doc).unwrap();
         match &doc.blocks[0] {
             Block::Table(t) => assert_eq!(t.rows.len(), 2),
+            _ => panic!("table"),
+        }
+    }
+
+    #[test]
+    fn insert_table_column_undo() {
+        let mut doc = Document {
+            blocks: vec![Block::Table(crate::document::model::Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![
+                            TableCell {
+                                paragraphs: vec![Paragraph::default()],
+                            },
+                            TableCell {
+                                paragraphs: vec![Paragraph::default()],
+                            },
+                        ],
+                    },
+                    TableRow {
+                        cells: vec![
+                            TableCell {
+                                paragraphs: vec![Paragraph::default()],
+                            },
+                            TableCell {
+                                paragraphs: vec![Paragraph::default()],
+                            },
+                        ],
+                    },
+                ],
+                unsupported: vec![],
+            })],
+            ..Default::default()
+        };
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::InsertTableColumn {
+                    table_idx: 0,
+                    at_col: 1,
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells.len(), 3);
+                assert_eq!(t.rows[1].cells.len(), 3);
+            }
+            _ => panic!("table"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells.len(), 2);
+                assert_eq!(t.rows[1].cells.len(), 2);
+            }
             _ => panic!("table"),
         }
     }

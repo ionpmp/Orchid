@@ -333,6 +333,92 @@ fn tab_navigates_table_cells() {
 }
 
 #[test]
+fn insert_row_below_caret() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C1").expect("R1C1");
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_insert_table_row().unwrap();
+    let guard = viewer.document();
+    match &guard.as_ref().unwrap().blocks[1] {
+        Block::Table(t) => {
+            assert_eq!(t.rows.len(), 3);
+            assert_eq!(t.rows[1].cells[0].paragraphs[0].plain_text(), "");
+            assert_eq!(t.rows[2].cells[0].paragraphs[0].plain_text(), "R2C1");
+        }
+        _ => panic!("table"),
+    }
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((1, 0))
+    );
+}
+
+#[test]
+fn insert_column_right_of_caret() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C1").expect("R1C1");
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_insert_table_column().unwrap();
+    let guard = viewer.document();
+    match &guard.as_ref().unwrap().blocks[1] {
+        Block::Table(t) => {
+            assert_eq!(t.rows[0].cells.len(), 3);
+            assert_eq!(t.rows[0].cells[1].paragraphs[0].plain_text(), "");
+            assert_eq!(t.rows[0].cells[2].paragraphs[0].plain_text(), "R1C2");
+        }
+        _ => panic!("table"),
+    }
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((0, 1))
+    );
+}
+
+#[test]
+fn delete_row_and_column_refuse_last() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R2C2").expect("R2C2");
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_delete_table_row().unwrap();
+    {
+        let guard = viewer.document();
+        match &guard.as_ref().unwrap().blocks[1] {
+            Block::Table(t) => assert_eq!(t.rows.len(), 1),
+            _ => panic!("table"),
+        }
+    }
+    assert!(viewer.preview_delete_table_row().is_err());
+
+    viewer.preview_delete_table_column().unwrap();
+    {
+        let guard = viewer.document();
+        match &guard.as_ref().unwrap().blocks[1] {
+            Block::Table(t) => assert_eq!(t.rows[0].cells.len(), 1),
+            _ => panic!("table"),
+        }
+    }
+    assert!(viewer.preview_delete_table_column().is_err());
+}
+
+#[test]
 fn tab_outside_table_does_not_move_cells() {
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(table_2x2());

@@ -438,6 +438,77 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, tr-ins.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tr-ins := TouchArea { clicked => { root.action("table-row-insert"); } }
+                    Text {
+                        text: model.table-row-insert-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, tr-del.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tr-del := TouchArea { clicked => { root.action("table-row-delete"); } }
+                    Text {
+                        text: model.table-row-delete-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, tc-ins.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tc-ins := TouchArea { clicked => { root.action("table-col-insert"); } }
+                    Text {
+                        text: model.table-col-insert-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, tc-del.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tc-del := TouchArea { clicked => { root.action("table-col-delete"); } }
+                    Text {
+                        text: model.table-col-delete-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
                     width: max(64px, mode-label.preferred-width + 14px);
                     height: 28px;
                     background: tool-bg(model.source-mode, mode-ta.has-hover);

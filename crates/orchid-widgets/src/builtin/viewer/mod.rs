@@ -846,6 +846,10 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "list-numbered" => doc.toggle_list_all(ListKind::Numbered),
                 "list-indent" => doc.bump_list_level_selection(1),
                 "list-outdent" => doc.bump_list_level_selection(-1),
+                "table-row-insert" => doc.preview_insert_table_row(),
+                "table-row-delete" => doc.preview_delete_table_row(),
+                "table-col-insert" => doc.preview_insert_table_column(),
+                "table-col-delete" => doc.preview_delete_table_column(),
                 "toggle-source" => {
                     doc.set_source_mode(!doc.source_mode());
                     Ok(())

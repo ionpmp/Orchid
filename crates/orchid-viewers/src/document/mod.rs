@@ -437,6 +437,142 @@ impl DocumentViewer {
         true
     }
 
+    /// Insert an empty row below the caret's table cell.
+    pub fn preview_insert_table_row(&self) -> Result<()> {
+        let (table_idx, row, col) = self.table_cell_context()?;
+        self.apply(EditCommand::InsertTableRow {
+            table_idx,
+            at_row: row + 1,
+        })?;
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath {
+                row: row + 1,
+                col,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
+    /// Delete the caret's table row (refuses when it is the only row).
+    pub fn preview_delete_table_row(&self) -> Result<()> {
+        let (table_idx, row, col) = self.table_cell_context()?;
+        self.apply(EditCommand::DeleteTableRow {
+            table_idx,
+            row_idx: row,
+        })?;
+        let new_row = self
+            .document
+            .read()
+            .as_ref()
+            .and_then(|d| match d.blocks.get(table_idx) {
+                Some(Block::Table(t)) if !t.rows.is_empty() => Some(row.min(t.rows.len() - 1)),
+                _ => None,
+            })
+            .unwrap_or(0);
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath {
+                row: new_row,
+                col,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
+    /// Insert an empty column to the right of the caret's table cell.
+    pub fn preview_insert_table_column(&self) -> Result<()> {
+        let (table_idx, row, col) = self.table_cell_context()?;
+        self.apply(EditCommand::InsertTableColumn {
+            table_idx,
+            at_col: col + 1,
+        })?;
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath {
+                row,
+                col: col + 1,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
+    /// Delete the caret's table column (refuses when it is the only column).
+    pub fn preview_delete_table_column(&self) -> Result<()> {
+        let (table_idx, row, col) = self.table_cell_context()?;
+        self.apply(EditCommand::DeleteTableColumn {
+            table_idx,
+            col_idx: col,
+        })?;
+        let new_col = col.min(
+            self.document
+                .read()
+                .as_ref()
+                .and_then(|d| match d.blocks.get(table_idx) {
+                    Some(Block::Table(t)) => t
+                        .rows
+                        .first()
+                        .map(|r| r.cells.len().saturating_sub(1)),
+                    _ => None,
+                })
+                .unwrap_or(0),
+        );
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath {
+                row,
+                col: new_col,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
+    fn table_cell_context(&self) -> Result<(usize, usize, usize)> {
+        let head = self.selection.lock().head;
+        let Some(cell) = head.cell else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        let doc_guard = self.document.read();
+        let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+        match doc.blocks.get(head.block_idx) {
+            Some(Block::Table(t))
+                if cell.row < t.rows.len()
+                    && cell.col < t.rows[cell.row].cells.len() =>
+            {
+                Ok((head.block_idx, cell.row, cell.col))
+            }
+            _ => Err(ViewerError::EditOutOfBounds),
+        }
+    }
+
     /// Move the caret by `delta` Unicode scalars (`extend` keeps the anchor).
     pub fn preview_move_by_chars(&self, delta: i32, extend: bool) {
         let doc_guard = self.document.read();
