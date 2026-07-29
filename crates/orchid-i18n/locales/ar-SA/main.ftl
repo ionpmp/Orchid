@@ -535,6 +535,7 @@ viewer-document-align-right = R
 viewer-document-align-justify = J
 viewer-document-list-bullet = •
 viewer-document-list-numbered = 1.
+viewer-document-image-insert = Img
 viewer-document-table-insert = T+
 viewer-document-table-row-insert = R+
 viewer-document-table-row-delete = R−

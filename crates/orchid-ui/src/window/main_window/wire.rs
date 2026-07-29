@@ -2121,6 +2121,26 @@ impl MainWindowController {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
                         let action = action.to_string();
+                        if action == "image-insert" {
+                            spawn::spawn_local_compat(async move {
+                                let pasted = crate::widgets::terminal::ArboardClipboard::new()
+                                    .ok()
+                                    .and_then(|cb| cb.paste_image_png().ok())
+                                    .flatten();
+                                let Some((bytes, w, h)) = pasted else {
+                                    warn!("viewer document image-insert: no clipboard image");
+                                    return;
+                                };
+                                if let Err(e) = orchid_widgets::builtin::viewer::document_preview_insert_image(
+                                    inst, bytes, w, h,
+                                )
+                                .await
+                                {
+                                    warn!(?e, "viewer document image-insert");
+                                }
+                            });
+                            return;
+                        }
                         viewer_spawn!(
                             tw,
                             inst,
@@ -2268,9 +2288,23 @@ impl MainWindowController {
                                             }
                                         }
                                         "v" => {
-                                            let pasted = crate::widgets::terminal::ArboardClipboard::new()
-                                                .ok()
-                                                .and_then(|cb| cb.paste().ok())
+                                            let cb = crate::widgets::terminal::ArboardClipboard::new().ok();
+                                            if let Some((bytes, w, h)) = cb
+                                                .as_ref()
+                                                .and_then(|c| c.paste_image_png().ok())
+                                                .flatten()
+                                            {
+                                                if let Err(e) = orchid_widgets::builtin::viewer::document_preview_insert_image(
+                                                    inst, bytes, w, h,
+                                                )
+                                                .await
+                                                {
+                                                    warn!(?e, "viewer document paste image");
+                                                }
+                                                return;
+                                            }
+                                            let pasted = cb
+                                                .and_then(|c| c.paste().ok())
                                                 .unwrap_or_default();
                                             if pasted.is_empty() {
                                                 return;

@@ -278,6 +278,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         align_justify_label: locale.tr("viewer-document-align-justify").into(),
         list_bullet_label: locale.tr("viewer-document-list-bullet").into(),
         list_numbered_label: locale.tr("viewer-document-list-numbered").into(),
+        image_insert_label: locale.tr("viewer-document-image-insert").into(),
         table_insert_label: locale.tr("viewer-document-table-insert").into(),
         table_row_insert_label: locale.tr("viewer-document-table-row-insert").into(),
         table_row_delete_label: locale.tr("viewer-document-table-row-delete").into(),

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
-use crate::document::model::Document;
+use crate::document::model::{Block, Document, ImageFormat, InlineImage};
 use crate::document::ooxml::document_xml::{
     parse_document_xml, parse_relationships, write_document_xml,
 };
@@ -137,13 +137,14 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
     if uses_lists {
         assign_orchid_list_ids(&mut doc);
     }
+    prepare_document_images(&mut doc);
 
     let tmp = tmp_path(output_path);
     {
         let file = File::create(&tmp)?;
         let mut zip = ZipWriter::new(file);
-        let opts = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let opts =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         let document_xml = write_document_xml(&doc)?;
         zip.start_file("word/document.xml", opts)
@@ -215,6 +216,220 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         ViewerError::Io(e)
     })?;
     Ok(())
+}
+
+/// Allocate `word/media/*` parts + document relationships for every inline image.
+fn prepare_document_images(doc: &mut Document) {
+    #[derive(Clone, Copy)]
+    enum Loc {
+        Body(usize),
+        Cell {
+            block: usize,
+            row: usize,
+            col: usize,
+            img: usize,
+        },
+    }
+
+    let mut locs = Vec::new();
+    for (bi, block) in doc.blocks.iter().enumerate() {
+        match block {
+            Block::Image(_) => locs.push(Loc::Body(bi)),
+            Block::Table(t) => {
+                for (ri, row) in t.rows.iter().enumerate() {
+                    for (ci, cell) in row.cells.iter().enumerate() {
+                        for ii in 0..cell.images.len() {
+                            locs.push(Loc::Cell {
+                                block: bi,
+                                row: ri,
+                                col: ci,
+                                img: ii,
+                            });
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if locs.is_empty() {
+        return;
+    }
+
+    let mut retained = std::mem::take(&mut doc.retained_parts);
+    let mut rels = String::from_utf8_lossy(
+        doc.document_rels
+            .as_deref()
+            .unwrap_or(MINIMAL_DOCUMENT_RELS.as_bytes()),
+    )
+    .into_owned();
+    let mut content_types = String::from_utf8_lossy(
+        doc.content_types
+            .as_deref()
+            .unwrap_or(MINIMAL_CONTENT_TYPES.as_bytes()),
+    )
+    .into_owned();
+    let mut media_n = next_media_index(&retained);
+
+    for loc in locs {
+        let mut img = match loc {
+            Loc::Body(bi) => match &doc.blocks[bi] {
+                Block::Image(img) => img.clone(),
+                _ => continue,
+            },
+            Loc::Cell {
+                block,
+                row,
+                col,
+                img,
+            } => match &doc.blocks[block] {
+                Block::Table(t) => t.rows[row].cells[col].images[img].image.clone(),
+                _ => continue,
+            },
+        };
+        ensure_image_package_parts(
+            &mut img,
+            &mut retained,
+            &mut rels,
+            &mut content_types,
+            &mut media_n,
+        );
+        match loc {
+            Loc::Body(bi) => {
+                if let Block::Image(slot) = &mut doc.blocks[bi] {
+                    *slot = img;
+                }
+            }
+            Loc::Cell {
+                block,
+                row,
+                col,
+                img: ii,
+            } => {
+                if let Block::Table(t) = &mut doc.blocks[block] {
+                    t.rows[row].cells[col].images[ii].image = img;
+                }
+            }
+        }
+    }
+
+    doc.retained_parts = retained;
+    doc.document_rels = Some(rels.into_bytes());
+    doc.content_types = Some(content_types.into_bytes());
+}
+
+fn next_media_index(retained: &[(String, Vec<u8>)]) -> u32 {
+    let mut max = 0u32;
+    for (name, _) in retained {
+        let Some(file) = name.rsplit('/').next() else {
+            continue;
+        };
+        let Some(stem) = file.strip_prefix("image") else {
+            continue;
+        };
+        let digits: String = stem.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digits.parse::<u32>() {
+            max = max.max(n);
+        }
+    }
+    max
+}
+
+fn image_extension(format: ImageFormat) -> &'static str {
+    match format {
+        ImageFormat::Png => "png",
+        ImageFormat::Jpeg => "jpeg",
+        ImageFormat::Gif => "gif",
+        ImageFormat::Bmp => "bmp",
+        ImageFormat::Other => "bin",
+    }
+}
+
+fn image_content_type(ext: &str) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpeg" | "jpg" => "image/jpeg",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => "application/octet-stream",
+    }
+}
+
+fn ensure_image_package_parts(
+    img: &mut InlineImage,
+    retained: &mut Vec<(String, Vec<u8>)>,
+    rels: &mut String,
+    content_types: &mut String,
+    media_n: &mut u32,
+) {
+    let ext = image_extension(img.format);
+    let (part_path, new_part) = match img.part_path.clone() {
+        Some(p) if p.starts_with("word/media/") => {
+            if let Some((_, bytes)) = retained.iter_mut().find(|(n, _)| *n == p) {
+                *bytes = img.bytes.clone();
+            } else {
+                retained.push((p.clone(), img.bytes.clone()));
+            }
+            (p, false)
+        }
+        _ => {
+            *media_n += 1;
+            let p = format!("word/media/image{media_n}.{ext}");
+            retained.push((p.clone(), img.bytes.clone()));
+            (p, true)
+        }
+    };
+    let target = part_path
+        .strip_prefix("word/")
+        .unwrap_or(part_path.as_str());
+    // Fresh media parts always get a new rId so Target cannot point at a stale path.
+    let rid = if new_part {
+        let id = next_relationship_id(rels);
+        inject_image_relationship(rels, &id, target);
+        id
+    } else {
+        match img.r_id.clone() {
+            Some(id) if rels.contains(&format!("Id=\"{id}\"")) => id,
+            _ => {
+                let id = next_relationship_id(rels);
+                inject_image_relationship(rels, &id, target);
+                id
+            }
+        }
+    };
+    ensure_default_content_type(content_types, ext, image_content_type(ext));
+    if matches!(img.format, ImageFormat::Other) {
+        img.format = ImageFormat::from_extension(ext);
+    }
+    img.part_path = Some(part_path);
+    img.r_id = Some(rid);
+}
+
+fn inject_image_relationship(rels_xml: &mut String, rid: &str, target: &str) {
+    if rels_xml.contains(&format!("Id=\"{rid}\"")) {
+        return;
+    }
+    let injection = format!(
+        r#"  <Relationship Id="{rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="{target}"/>
+"#
+    );
+    if let Some(idx) = rels_xml.rfind("</Relationships>") {
+        rels_xml.insert_str(idx, &injection);
+    }
+}
+
+fn ensure_default_content_type(types_xml: &mut String, ext: &str, content_type: &str) {
+    let needle = format!("Extension=\"{ext}\"");
+    if types_xml.contains(&needle) {
+        return;
+    }
+    let injection = format!(
+        r#"  <Default Extension="{ext}" ContentType="{content_type}"/>
+"#
+    );
+    if let Some(idx) = types_xml.rfind("</Types>") {
+        types_xml.insert_str(idx, &injection);
+    }
 }
 
 fn ensure_numbering_content_type(bytes: &[u8]) -> Vec<u8> {
@@ -295,7 +510,7 @@ const MINIMAL_DOCUMENT_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" stan
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::model::{Block, Paragraph, Run, RunStyle};
+    use crate::document::model::{Paragraph, Run, RunStyle};
     use std::io::Write;
 
     fn write_minimal_docx(path: &Path, document_xml: &[u8]) {
@@ -360,6 +575,61 @@ mod tests {
                 assert!(p.runs[0].style.italic);
             }
             _ => panic!("paragraph"),
+        }
+    }
+
+    #[test]
+    fn save_and_reopen_inline_image() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("img.docx");
+        let mut png = Vec::new();
+        {
+            let img = image::RgbaImage::from_pixel(8, 4, image::Rgba([1, 2, 3, 255]));
+            img.write_to(
+                &mut std::io::Cursor::new(&mut png),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        }
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Caption".into(),
+                        style: RunStyle::default(),
+                    }],
+                    ..Default::default()
+                }),
+                Block::Image(InlineImage {
+                    bytes: png.clone(),
+                    format: ImageFormat::Png,
+                    width_px: 8,
+                    height_px: 4,
+                    r_id: None,
+                    part_path: None,
+                }),
+            ],
+            ..Default::default()
+        };
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        assert_eq!(loaded.blocks.len(), 2);
+        match &loaded.blocks[0] {
+            Block::Paragraph(p) => assert_eq!(p.plain_text(), "Caption"),
+            _ => panic!("paragraph"),
+        }
+        match &loaded.blocks[1] {
+            Block::Image(img) => {
+                assert_eq!(img.bytes, png);
+                assert_eq!(img.width_px, 8);
+                assert_eq!(img.height_px, 4);
+                assert!(img.r_id.is_some());
+                assert!(img
+                    .part_path
+                    .as_deref()
+                    .is_some_and(|p| p.starts_with("word/media/")));
+            }
+            _ => panic!("image"),
         }
     }
 }

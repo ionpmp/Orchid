@@ -50,6 +50,33 @@ impl ArboardClipboard {
     pub fn paste(&self) -> Result<String, arboard::Error> {
         self.inner.lock().get_text()
     }
+
+    /// Read an image from the clipboard as PNG bytes + pixel size.
+    ///
+    /// Returns `Ok(None)` when the clipboard has no image.
+    pub fn paste_image_png(&self) -> Result<Option<(Vec<u8>, u32, u32)>, arboard::Error> {
+        let img = match self.inner.lock().get_image() {
+            Ok(img) => img,
+            Err(arboard::Error::ContentNotAvailable) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        let width = img.width as u32;
+        let height = img.height as u32;
+        let Some(rgba) = image::RgbaImage::from_raw(width, height, img.bytes.into_owned()) else {
+            return Ok(None);
+        };
+        let mut png = Vec::new();
+        if rgba
+            .write_to(
+                &mut std::io::Cursor::new(&mut png),
+                image::ImageFormat::Png,
+            )
+            .is_err()
+        {
+            return Ok(None);
+        }
+        Ok(Some((png, width, height)))
+    }
 }
 
 #[async_trait]

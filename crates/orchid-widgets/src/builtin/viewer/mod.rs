@@ -847,6 +847,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "list-indent" => doc.bump_list_level_selection(1),
                 "list-outdent" => doc.bump_list_level_selection(-1),
                 "table-insert" => doc.preview_insert_table(2, 2),
+                // "image-insert" is handled in the UI layer (clipboard bytes).
                 "table-row-insert" => doc.preview_insert_table_row(),
                 "table-row-delete" => doc.preview_delete_table_row(),
                 "table-col-insert" => doc.preview_insert_table_column(),
@@ -1123,6 +1124,29 @@ pub async fn document_preview_paste(instance_id: Uuid, text: String) -> WidgetRe
             return Ok(());
         };
         doc.preview_paste_plain(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Document: insert a PNG/JPEG/… image block after the caret (from clipboard or toolbar).
+pub async fn document_preview_insert_image(
+    instance_id: Uuid,
+    bytes: Vec<u8>,
+    width_px: u32,
+    height_px: u32,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.preview_insert_image(bytes, width_px, height_px)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
     inner.refresh_snapshot().await;

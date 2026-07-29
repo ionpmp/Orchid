@@ -608,6 +608,18 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
         "xmlns:r",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
     ));
+    doc_start.push_attribute((
+        "xmlns:wp",
+        "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+    ));
+    doc_start.push_attribute((
+        "xmlns:a",
+        "http://schemas.openxmlformats.org/drawingml/2006/main",
+    ));
+    doc_start.push_attribute((
+        "xmlns:pic",
+        "http://schemas.openxmlformats.org/drawingml/2006/picture",
+    ));
     writer
         .write_event(Event::Start(doc_start))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -615,20 +627,23 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
         .write_event(Event::Start(BytesStart::new("w:body")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
 
+    let mut drawing_id = 1u32;
     for block in &doc.blocks {
         match block {
             Block::Paragraph(p) => write_paragraph(&mut writer, p)?,
-            Block::Table(t) => write_table(&mut writer, t)?,
-            Block::Image(_) => {
-                // Full `w:drawing` rewrite is out of scope. Skip the block so
-                // plain-text round-trips stay stable; media remains in retained parts.
+            Block::Table(t) => write_table(&mut writer, t, &mut drawing_id)?,
+            Block::Image(img) => {
+                write_image_paragraph(&mut writer, img, &mut drawing_id)?;
             }
         }
     }
 
     for node in &doc.unsupported {
         // Best-effort: write raw XML bytes as-is.
-        let _ = writer.get_mut().get_mut().extend_from_slice(&node.raw_xml);
+        let cursor = writer.get_mut();
+        cursor.get_mut().extend_from_slice(&node.raw_xml);
+        let end = cursor.get_ref().len() as u64;
+        cursor.set_position(end);
     }
 
     write_sect_pr(&mut writer, &doc.page_setup)?;
@@ -759,7 +774,11 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
     Ok(())
 }
 
-fn write_table(writer: &mut Writer<Cursor<Vec<u8>>>, t: &Table) -> Result<()> {
+fn write_table(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    t: &Table,
+    drawing_id: &mut u32,
+) -> Result<()> {
     writer
         .write_event(Event::Start(BytesStart::new("w:tbl")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -773,9 +792,15 @@ fn write_table(writer: &mut Writer<Cursor<Vec<u8>>>, t: &Table) -> Result<()> {
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             if cell.paragraphs.is_empty() {
                 write_paragraph(writer, &Paragraph::default())?;
+                for ci in cell.images.iter().filter(|c| c.after_paragraph == 0) {
+                    write_image_paragraph(writer, &ci.image, drawing_id)?;
+                }
             } else {
-                for p in &cell.paragraphs {
+                for (i, p) in cell.paragraphs.iter().enumerate() {
                     write_paragraph(writer, p)?;
+                    for ci in cell.images.iter().filter(|c| c.after_paragraph == i) {
+                        write_image_paragraph(writer, &ci.image, drawing_id)?;
+                    }
                 }
             }
             writer
@@ -789,6 +814,42 @@ fn write_table(writer: &mut Writer<Cursor<Vec<u8>>>, t: &Table) -> Result<()> {
     writer
         .write_event(Event::End(BytesEnd::new("w:tbl")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
+fn css_px_to_emu(px: u32) -> u64 {
+    u64::from(px.max(1)).saturating_mul(914_400) / 96
+}
+
+fn write_image_paragraph(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    img: &InlineImage,
+    drawing_id: &mut u32,
+) -> Result<()> {
+    let Some(rid) = img.r_id.as_deref() else {
+        return Err(ViewerError::DocumentSave(
+            "image missing relationship id before save".into(),
+        ));
+    };
+    let cx = css_px_to_emu(img.width_px);
+    let cy = css_px_to_emu(img.height_px);
+    let id = *drawing_id;
+    *drawing_id = drawing_id.saturating_add(1);
+    let name = img
+        .part_path
+        .as_deref()
+        .and_then(|p| p.rsplit('/').next())
+        .unwrap_or("image");
+    // Minimal wp:inline drawing Word/LibreOffice accept.
+    let xml = format!(
+        r#"<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{cx}" cy="{cy}"/><wp:docPr id="{id}" name="{name}"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="{name}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="{rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#
+    );
+    // Append via the underlying `Vec` then seek: `Cursor` position is not
+    // advanced by `Vec::extend`, and later `Writer` events would overwrite us.
+    let cursor = writer.get_mut();
+    cursor.get_mut().extend_from_slice(xml.as_bytes());
+    let end = cursor.get_ref().len() as u64;
+    cursor.set_position(end);
     Ok(())
 }
 

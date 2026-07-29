@@ -497,6 +497,62 @@ impl DocumentViewer {
         true
     }
 
+    /// Insert an inline image block after the caret's block.
+    ///
+    /// Codec is sniffed from `bytes` (defaults to PNG). Pixel size is decoded
+    /// when `width_px`/`height_px` are zero.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_insert_image(
+        &self,
+        bytes: Vec<u8>,
+        width_px: u32,
+        height_px: u32,
+    ) -> Result<()> {
+        use crate::document::model::ImageFormat;
+
+        let head = self.selection.lock().head;
+        let at_block = head.block_idx.saturating_add(1);
+        let format = infer::get(&bytes)
+            .map(|k| ImageFormat::from_extension(k.extension()))
+            .unwrap_or(ImageFormat::Png);
+        let (width_px, height_px) = if width_px == 0 || height_px == 0 {
+            image::load_from_memory(&bytes)
+                .map(|img| (img.width(), img.height()))
+                .unwrap_or((width_px.max(1), height_px.max(1)))
+        } else {
+            (width_px, height_px)
+        };
+        self.apply(EditCommand::InsertImage {
+            at: Cursor::at(at_block, 0, 0),
+            image: crate::document::model::InlineImage {
+                bytes,
+                format,
+                width_px,
+                height_px,
+                r_id: None,
+                part_path: None,
+            },
+        })?;
+        let image_idx = {
+            let guard = self.document.read();
+            let doc = guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let idx = at_block.min(doc.blocks.len().saturating_sub(1));
+            match doc.blocks.get(idx) {
+                Some(Block::Image(_)) => idx,
+                _ => return Err(ViewerError::EditOutOfBounds),
+            }
+        };
+        let cursor = Cursor::at(image_idx, 0, 0);
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
     /// Insert an empty `rows`×`cols` table after the caret's block (clamped 1..=20).
     ///
     /// Places the caret in the new table's top-left cell.
