@@ -2197,6 +2197,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_document_find_request({
+            let t = t.clone();
+            move |id, query, forward| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let query = query.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::document_find(inst, query, forward)
+                        );
+                    }
+                }
+            }
+        });
         self.window.on_viewer_document_preview_key({
             let t = t.clone();
             move |id, key, ctrl, shift| {

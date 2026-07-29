@@ -216,6 +216,7 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-document-viewport-changed(string, length);
     callback viewer-document-preview-pointer(string, int, float, float);
     callback viewer-document-preview-key(string, string, bool, bool);
+    callback viewer-document-find-request(string, string, bool);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -594,6 +595,7 @@ export component WorkspaceView inherits Rectangle {
                     viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
                     viewer-document-preview-pointer(id, p, x, y) => { root.viewer-document-preview-pointer(id, p, x, y); }
                     viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
+                    viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
                     fm-pane-clicked(fm_id, p) => { root.fm-pane-clicked(fm_id, p); }
@@ -720,6 +722,7 @@ export component WorkspaceView inherits Rectangle {
             viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
             viewer-document-preview-pointer(id, p, x, y) => { root.viewer-document-preview-pointer(id, p, x, y); }
             viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
+            viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
         }
 
         for w[i] in root.workspace.floating-widgets: Rectangle {

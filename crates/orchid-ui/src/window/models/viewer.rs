@@ -284,6 +284,15 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         table_col_delete_label: locale.tr("viewer-document-table-col-delete").into(),
         source_label: locale.tr("viewer-document-source").into(),
         preview_label: locale.tr("viewer-document-preview").into(),
+        find_label: locale.tr("viewer-document-find").into(),
+        find_placeholder: locale.tr("viewer-document-find-placeholder").into(),
+        tip_find: locale.tr("viewer-document-tip-find").into(),
+        tip_find_next: locale.tr("viewer-document-tip-find-next").into(),
+        tip_find_prev: locale.tr("viewer-document-tip-find-prev").into(),
+        tip_find_close: locale.tr("viewer-document-tip-find-close").into(),
+        find_gen: 0,
+        find_anchor: 0,
+        find_cursor: 0,
     }
 }
 
@@ -425,6 +434,9 @@ fn build_document_snapshot(
     model.preview_height_px = s.preview_height_px as i32;
     model.preview_image =
         slint_image_from_rgba(&s.preview_rgba, s.preview_width_px, s.preview_height_px);
+    model.find_gen = s.find_gen;
+    model.find_anchor = s.find_anchor;
+    model.find_cursor = s.find_cursor;
     model
 }
 

@@ -63,6 +63,12 @@ pub struct DocumentSnapshot {
     pub preview_height_px: u32,
     /// When true, the UI shows the plain-text editor instead of the preview.
     pub source_mode: bool,
+    /// Bumped when find selects a match (Slint syncs source-mode selection).
+    pub find_gen: i32,
+    /// Find selection anchor (UTF-8 byte offset in [`Self::plain_text`]).
+    pub find_anchor: i32,
+    /// Find selection head (UTF-8 byte offset in [`Self::plain_text`]).
+    pub find_cursor: i32,
 }
 
 /// Image snapshot.

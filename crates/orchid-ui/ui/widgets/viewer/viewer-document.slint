@@ -12,6 +12,8 @@ export component ViewerDocumentView inherits Rectangle {
     callback preview-pointer(int, float, float);
     /// Preview key: token or literal text, plus ctrl/shift.
     callback preview-key(string, bool, bool);
+    /// Find next (`true`) / previous (`false`) match for the local query.
+    callback find-request(string, bool);
 
     background: transparent;
 
@@ -19,6 +21,9 @@ export component ViewerDocumentView inherits Rectangle {
     property <bool> locally-dirty: false;
     property <string> last-path: "";
     property <length> last-viewport-w: 0px;
+    property <bool> find-open: false;
+    property <string> find-query: "";
+    property <int> last-find-gen: -1;
 
     changed model => {
         if root.last-path != model.path-display {
@@ -29,6 +34,9 @@ export component ViewerDocumentView inherits Rectangle {
             root.locally-dirty = model.dirty;
         } else {
             root.locally-dirty = true;
+        }
+        if model.find-gen != root.last-find-gen {
+            root.last-find-gen = model.find-gen;
         }
     }
 
@@ -509,6 +517,29 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(44px, find-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(root.find-open, find-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    find-ta := TouchArea {
+                        clicked => {
+                            root.find-open = !root.find-open;
+                            if (root.find-open) {
+                                find-input.focus();
+                            }
+                        }
+                    }
+                    find-btn-label := Text {
+                        text: model.find-label;
+                        color: tool-btn(root.find-open);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: max(64px, mode-label.preferred-width + 14px);
                     height: 28px;
                     background: tool-bg(model.source-mode, mode-ta.has-hover);
@@ -536,6 +567,121 @@ export component ViewerDocumentView inherits Rectangle {
         }
 
         Rectangle {
+            height: root.find-open ? 34px : 0px;
+            clip: true;
+            background: Theme.surface-raised;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: center;
+
+                Text {
+                    text: model.find-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 26px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    if find-input.text == "" : Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text: model.find-placeholder;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    find-input := TextInput {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text <=> root.find-query;
+                        single-line: true;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-sans;
+                        vertical-alignment: center;
+                        key-pressed(event) => {
+                            if (event.text == Key.Return) {
+                                root.find-request(root.find-query, !event.modifiers.shift);
+                                return accept;
+                            }
+                            if (event.text == Key.Escape) {
+                                root.find-open = false;
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 26px;
+                    background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    find-prev-ta := TouchArea {
+                        clicked => { root.find-request(root.find-query, false); }
+                    }
+                    Text {
+                        text: "↑";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 26px;
+                    background: find-next-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    find-next-ta := TouchArea {
+                        clicked => { root.find-request(root.find-query, true); }
+                    }
+                    Text {
+                        text: "↓";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 26px;
+                    background: find-close-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    find-close-ta := TouchArea {
+                        clicked => { root.find-open = false; }
+                    }
+                    Text {
+                        text: "×";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if root.find-open : Rectangle { height: 1px; background: Theme.border-default; }
+
+        Rectangle {
             background: Theme.surface-base;
             vertical-stretch: 1;
             clip: true;
@@ -552,6 +698,19 @@ export component ViewerDocumentView inherits Rectangle {
                 height: parent.height;
 
                 key-pressed(event) => {
+                    if (event.modifiers.control
+                        && !event.modifiers.alt
+                        && (event.text == "f" || event.text == "F"))
+                    {
+                        root.find-open = true;
+                        find-input.focus();
+                        return accept;
+                    }
+                    if (event.text == Key.F3) {
+                        root.find-open = true;
+                        root.find-request(root.find-query, !event.modifiers.shift);
+                        return accept;
+                    }
                     if (event.text == Key.Home) {
                         root.preview-key("Home", event.modifiers.control, event.modifiers.shift);
                         return accept;
@@ -672,6 +831,20 @@ export component ViewerDocumentView inherits Rectangle {
                             );
                         }
                         key-pressed(event) => {
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "f" || event.text == "F"))
+                            {
+                                root.find-open = true;
+                                find-input.focus();
+                                return accept;
+                            }
+                            if (event.text == Key.F3) {
+                                root.find-open = true;
+                                root.find-request(root.find-query, !event.modifiers.shift);
+                                return accept;
+                            }
                             if (event.modifiers.control
                                 && !event.modifiers.shift
                                 && !event.modifiers.alt

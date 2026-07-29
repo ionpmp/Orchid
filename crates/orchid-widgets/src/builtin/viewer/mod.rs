@@ -895,6 +895,21 @@ pub async fn document_push_edit(instance_id: Uuid, text: String) -> WidgetResult
     Ok(())
 }
 
+/// Document: find next/previous match in plain text (case-insensitive).
+pub async fn document_find(instance_id: Uuid, query: String, forward: bool) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
+                let _ = doc.preview_find(&query, forward);
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Document: update selection from Source `TextInput` UTF-8 byte offsets.
 pub async fn document_set_selection(instance_id: Uuid, anchor: i32, head: i32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

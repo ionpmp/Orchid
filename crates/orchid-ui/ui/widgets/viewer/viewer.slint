@@ -46,6 +46,7 @@ export component ViewerView inherits Rectangle {
     callback document-viewport-changed(length);
     callback document-preview-pointer(int, float, float);
     callback document-preview-key(string, bool, bool);
+    callback document-find-request(string, bool);
 
     background: transparent;
 
@@ -145,5 +146,6 @@ export component ViewerView inherits Rectangle {
         viewport-changed(w) => { root.document-viewport-changed(w); }
         preview-pointer(p, x, y) => { root.document-preview-pointer(p, x, y); }
         preview-key(k, c, s) => { root.document-preview-key(k, c, s); }
+        find-request(q, fwd) => { root.document-find-request(q, fwd); }
     }
 }

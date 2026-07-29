@@ -76,6 +76,10 @@ pub struct DocumentViewer {
     preview_drag_anchor: Mutex<Option<usize>>,
     /// Multi-click tracking for word (2×) / paragraph (3×) select.
     preview_click: Mutex<PreviewClickState>,
+    /// Bumped when [`Self::preview_find`] selects a match.
+    find_gen: Mutex<i32>,
+    find_anchor: Mutex<i32>,
+    find_cursor: Mutex<i32>,
 }
 
 struct PreviewClickState {
@@ -133,7 +137,61 @@ impl DocumentViewer {
             }),
             preview_drag_anchor: Mutex::new(None),
             preview_click: Mutex::new(PreviewClickState::default()),
+            find_gen: Mutex::new(0),
+            find_anchor: Mutex::new(0),
+            find_cursor: Mutex::new(0),
         }
+    }
+
+    /// Find the next / previous case-insensitive match in plain text.
+    ///
+    /// Selects the match (preview highlight / source offsets) and returns `true`
+    /// when found. Empty queries are ignored.
+    pub fn preview_find(&self, query: &str, forward: bool) -> bool {
+        let q = query.trim();
+        if q.is_empty() {
+            return false;
+        }
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return false;
+        };
+        let plain = doc.plain_text();
+        let plain_lower = plain.to_lowercase();
+        let q_lower = q.to_lowercase();
+        let q_bytes = q_lower.len();
+        if q_bytes == 0 || plain_lower.is_empty() {
+            return false;
+        }
+
+        let sel = *self.selection.lock();
+        let (norm_a, norm_b) = sel.normalized();
+        let sel_lo = plain_offset_from_cursor(doc, norm_a);
+        let sel_hi = plain_offset_from_cursor(doc, norm_b);
+
+        let found = if forward {
+            let start = sel_hi.min(plain_lower.len());
+            plain_lower[start..]
+                .find(&q_lower)
+                .map(|rel| start + rel)
+                .or_else(|| plain_lower.find(&q_lower))
+        } else {
+            let end = sel_lo.min(plain_lower.len());
+            plain_lower[..end]
+                .rfind(&q_lower)
+                .or_else(|| plain_lower.rfind(&q_lower))
+        };
+
+        let Some(byte_start) = found else {
+            return false;
+        };
+        let byte_end = (byte_start + q_bytes).min(plain.len());
+        *self.selection.lock() = selection_from_plain_offsets(doc, byte_start, byte_end);
+        *self.find_anchor.lock() = byte_start as i32;
+        *self.find_cursor.lock() = byte_end as i32;
+        *self.find_gen.lock() += 1;
+        self.invalidate_preview();
+        true
     }
 
     fn invalidate_preview(&self) {
@@ -984,6 +1042,21 @@ impl DocumentViewer {
     #[must_use]
     pub fn selection(&self) -> Selection {
         *self.selection.lock()
+    }
+
+    /// Active selection as UTF-8 byte offsets in [`Document::plain_text`].
+    #[must_use]
+    pub fn selection_plain_offsets(&self) -> (usize, usize) {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return (0, 0);
+        };
+        let sel = *self.selection.lock();
+        let (a, b) = sel.normalized();
+        (
+            plain_offset_from_cursor(doc, a),
+            plain_offset_from_cursor(doc, b),
+        )
     }
 
     /// Borrow the loaded document model (for tests / UI commands).
@@ -2071,6 +2144,9 @@ impl Viewer for DocumentViewer {
             preview_width_px,
             preview_height_px,
             source_mode,
+            find_gen: *self.find_gen.lock(),
+            find_anchor: *self.find_anchor.lock(),
+            find_cursor: *self.find_cursor.lock(),
         })
     }
 
