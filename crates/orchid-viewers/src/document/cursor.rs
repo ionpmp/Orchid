@@ -370,6 +370,46 @@ pub fn paragraph_indices_in_selection(doc: &Document, selection: Selection) -> V
         .collect()
 }
 
+/// Move to the next (`forward`) or previous table cell in row-major order.
+///
+/// Returns `None` when `cursor` is not in a table cell, or when there is no
+/// further cell in that direction. The caret lands at the start of the target
+/// cell's first paragraph.
+#[must_use]
+pub fn adjacent_cell_cursor(doc: &Document, cursor: Cursor, forward: bool) -> Option<Cursor> {
+    let path = cursor.cell?;
+    let Block::Table(t) = doc.blocks.get(cursor.block_idx)? else {
+        return None;
+    };
+    let mut cells = Vec::new();
+    for (ri, row) in t.rows.iter().enumerate() {
+        for (ci, cell) in row.cells.iter().enumerate() {
+            if !cell.paragraphs.is_empty() {
+                cells.push((ri, ci));
+            }
+        }
+    }
+    let idx = cells
+        .iter()
+        .position(|&(r, c)| r == path.row && c == path.col)?;
+    let next_idx = if forward {
+        idx.checked_add(1).filter(|&i| i < cells.len())?
+    } else {
+        idx.checked_sub(1)?
+    };
+    let (row, col) = cells[next_idx];
+    Some(Cursor {
+        block_idx: cursor.block_idx,
+        cell: Some(CellPath {
+            row,
+            col,
+            para_idx: 0,
+        }),
+        run_idx: 0,
+        byte_offset: 0,
+    })
+}
+
 fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
     use std::cmp::Ordering;
     match a.block_idx.cmp(&b.block_idx) {
@@ -500,6 +540,48 @@ mod tests {
         assert!(c.cell.is_none());
         assert_eq!(c.byte_offset, 0);
         assert_eq!(plain_offset_from_cursor(&doc, c), 5);
+    }
+
+    #[test]
+    fn adjacent_cell_wraps_rows() {
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![cell("A"), cell("B")],
+                    },
+                    TableRow {
+                        cells: vec![cell("C"), cell("D")],
+                    },
+                ],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let a = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 0,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        let b = adjacent_cell_cursor(&doc, a, true).unwrap();
+        assert_eq!(b.cell.map(|c| (c.row, c.col)), Some((0, 1)));
+        let c = adjacent_cell_cursor(&doc, b, true).unwrap();
+        assert_eq!(c.cell.map(|c| (c.row, c.col)), Some((1, 0)));
+        let d = adjacent_cell_cursor(&doc, c, true).unwrap();
+        assert_eq!(d.cell.map(|c| (c.row, c.col)), Some((1, 1)));
+        assert!(adjacent_cell_cursor(&doc, d, true).is_none());
+        assert_eq!(
+            adjacent_cell_cursor(&doc, d, false)
+                .unwrap()
+                .cell
+                .map(|c| (c.row, c.col)),
+            Some((1, 0))
+        );
     }
 
     #[test]

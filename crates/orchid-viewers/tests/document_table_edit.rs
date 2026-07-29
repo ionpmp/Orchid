@@ -288,6 +288,66 @@ fn align_both_paragraphs_in_same_cell() {
 }
 
 #[test]
+fn tab_navigates_table_cells() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C1").expect("R1C1");
+    viewer.set_selection_plain_offsets(off, off);
+    assert!(viewer.preview_move_table_cell(true));
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((0, 1))
+    );
+    assert!(viewer.preview_move_table_cell(true));
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((1, 0))
+    );
+    assert!(viewer.preview_move_table_cell(true));
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((1, 1))
+    );
+    // Last cell — no further move.
+    assert!(!viewer.preview_move_table_cell(true));
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((1, 1))
+    );
+    assert!(viewer.preview_move_table_cell(false));
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((1, 0))
+    );
+    // Neighbors unchanged.
+    let guard = viewer.document();
+    assert_eq!(
+        cell_paras(guard.as_ref().unwrap(), 0, 0),
+        vec!["R1C1".to_string()]
+    );
+}
+
+#[test]
+fn tab_outside_table_does_not_move_cells() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("Before").expect("Before");
+    viewer.set_selection_plain_offsets(off, off);
+    assert!(!viewer.preview_move_table_cell(true));
+    assert!(viewer.selection().head.cell.is_none());
+}
+
+#[test]
 fn body_after_table_still_editable() {
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(table_2x2());

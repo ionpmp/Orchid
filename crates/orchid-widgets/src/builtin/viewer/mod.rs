@@ -1010,8 +1010,22 @@ pub async fn document_preview_key(
                 "Backspace" => doc.preview_delete_backward(),
                 "Delete" => doc.preview_delete_forward(),
                 "Return" => doc.preview_insert_paragraph_break(),
-                "Tab" if shift => doc.bump_list_level_selection(-1),
-                "Tab" => doc.bump_list_level_selection(1),
+                "Tab" if shift => {
+                    if doc.selection().head.cell.is_some() {
+                        let _ = doc.preview_move_table_cell(false);
+                        Ok(())
+                    } else {
+                        doc.bump_list_level_selection(-1)
+                    }
+                }
+                "Tab" => {
+                    if doc.selection().head.cell.is_some() {
+                        let _ = doc.preview_move_table_cell(true);
+                        Ok(())
+                    } else {
+                        doc.bump_list_level_selection(1)
+                    }
+                }
                 "Home" => {
                     doc.preview_move_line_boundary(false, shift);
                     Ok(())

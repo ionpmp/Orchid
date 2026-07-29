@@ -19,9 +19,9 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    cursor_from_plain_offset, paragraph_cursors_in_selection, paragraph_indices_in_selection,
-    paragraph_mut, paragraph_mut_in_blocks, paragraph_ref, plain_offset_from_cursor,
-    selection_from_plain_offsets, CellPath, Cursor, Selection,
+    adjacent_cell_cursor, cursor_from_plain_offset, paragraph_cursors_in_selection,
+    paragraph_indices_in_selection, paragraph_mut, paragraph_mut_in_blocks, paragraph_ref,
+    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
@@ -414,6 +414,27 @@ impl DocumentViewer {
             return Ok(start);
         }
         self.delete_selection_if_needed(doc, range)
+    }
+
+    /// Move the caret to the next (`forward`) or previous table cell.
+    ///
+    /// Returns `true` when the caret moved. Outside a table (or at the edge)
+    /// returns `false` without changing selection.
+    pub fn preview_move_table_cell(&self, forward: bool) -> bool {
+        let doc_guard = self.document.read();
+        let Some(doc) = doc_guard.as_ref() else {
+            return false;
+        };
+        let head = self.selection.lock().head;
+        let Some(next) = adjacent_cell_cursor(doc, head, forward) else {
+            return false;
+        };
+        *self.selection.lock() = Selection {
+            anchor: next,
+            head: next,
+        };
+        self.invalidate_preview();
+        true
     }
 
     /// Move the caret by `delta` Unicode scalars (`extend` keeps the anchor).
