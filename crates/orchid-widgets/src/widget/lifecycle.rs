@@ -77,7 +77,7 @@ impl LifecycleController {
                 to: target,
             },
         );
-        debug!(instance_id = %instance.id, ?from, ?target, "lifecycle transition");
+        debug!(instance_id = %instance.id, type_id = %instance.type_id, ?from, ?target, "lifecycle transition");
         Ok(())
     }
 
