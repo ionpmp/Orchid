@@ -59,6 +59,9 @@ widget-password-desc = 访问您的密码数据库
 widget-viewer-name = 查看器
 widget-viewer-desc = 查看图片、文档、源文件和压缩包
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = 晴朗
 weather-condition-partly-cloudy = 局部多云
@@ -818,6 +821,7 @@ dock-widget-search = 搜索
 dock-widget-media = 媒体
 dock-widget-password = 密码
 dock-widget-viewer = 查看器
+dock-widget-document-editor = Document
 dock-widget-fm = 文件
 
 viewer-no-file = 未打开文件

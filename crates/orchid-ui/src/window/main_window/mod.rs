@@ -219,6 +219,8 @@ pub struct MainWindowController {
     palette_candidates: ModelRc<SearchCandidateEntry>,
     settings: Arc<RwLock<SettingsUiState>>,
     config_file_path: PathBuf,
+    /// Directory for Document Editor untitled `.docx` files (`data/documents`).
+    documents_dir: PathBuf,
     settings_sections: ModelRc<SettingsSectionEntry>,
     settings_fields: ModelRc<SettingsFieldRow>,
     navigation: Arc<RwLock<NavigationUiState>>,
@@ -303,6 +305,7 @@ impl MainWindowController {
         locale: Arc<LocaleManager>,
         config: Arc<RwLock<OrchidConfig>>,
         config_file_path: PathBuf,
+        documents_dir: PathBuf,
         recent_files: Arc<RecentFilesStore>,
         password_vault: Arc<orchid_crypto::PasswordVault>,
         fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
@@ -522,6 +525,7 @@ impl MainWindowController {
             palette_candidates,
             settings: Arc::new(RwLock::new(SettingsUiState::default())),
             config_file_path,
+            documents_dir,
             settings_sections,
             settings_fields,
             navigation: Arc::new(RwLock::new(NavigationUiState::default())),
@@ -637,6 +641,7 @@ impl MainWindowController {
         g.set_dock_widget_media(mgr.tr("dock-widget-media").into());
         g.set_dock_widget_password(mgr.tr("dock-widget-password").into());
         g.set_dock_widget_viewer(mgr.tr("dock-widget-viewer").into());
+        g.set_dock_widget_document_editor(mgr.tr("dock-widget-document-editor").into());
         g.set_dock_widget_fm(mgr.tr("dock-widget-fm").into());
         g.set_widget_terminal_desc(mgr.tr("widget-terminal-desc").into());
         g.set_widget_weather_desc(mgr.tr("widget-weather-desc").into());
@@ -654,6 +659,7 @@ impl MainWindowController {
         g.set_widget_media_desc(mgr.tr("widget-media-desc").into());
         g.set_widget_password_desc(mgr.tr("widget-password-desc").into());
         g.set_widget_viewer_desc(mgr.tr("widget-viewer-desc").into());
+        g.set_widget_document_editor_desc(mgr.tr("widget-document-editor-desc").into());
         g.set_widget_fm_desc(mgr.tr("widget-fm-desc").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
         g.set_widget_settings_tooltip(mgr.tr("widget-settings-tooltip").into());
@@ -1118,6 +1124,11 @@ impl MainWindowController {
     }
 
     fn spawn_add_widget(self: &Arc<Self>, type_id: &str, placement: AddWidgetPlacement) {
+        if type_id == "document-editor" {
+            let _ = placement;
+            self.spawn_open_document_editor();
+            return;
+        }
         if !is_known_widget_type(type_id) {
             warn!(type_id, "unknown widget type");
             return;
@@ -2986,6 +2997,35 @@ impl MainWindowController {
         }
     }
 
+    /// Create a sample `.docx` under [`Self::documents_dir`] and open it in a floating viewer.
+    fn spawn_open_document_editor(self: &Arc<Self>) {
+        let ctrl = Arc::downgrade(self);
+        let documents_dir = self.documents_dir.clone();
+        spawn::spawn_local(async move {
+            if let Err(e) = tokio::fs::create_dir_all(&documents_dir).await {
+                warn!(?e, "document editor: create documents dir");
+                return;
+            }
+            let path = next_untitled_docx_path(&documents_dir);
+            if let Err(e) = orchid_viewers::create_sample_docx(&path).await {
+                warn!(?e, path = %path.display(), "document editor: write sample docx");
+                return;
+            }
+            let fs_path = match orchid_fs::FsPath::from_local(&path) {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!(?e, path = %path.display(), "document editor: FsPath");
+                    return;
+                }
+            };
+            if let Err(e) =
+                Self::open_in_viewer_for_controller(ctrl, fs_path, true).await
+            {
+                warn!(?e, "document editor: open viewer");
+            }
+        });
+    }
+
     async fn open_in_viewer_for_controller(
         ctrl: std::sync::Weak<MainWindowController>,
         path: orchid_fs::FsPath,
@@ -3120,6 +3160,7 @@ fn is_known_widget_type(type_id: &str) -> bool {
             | "media-player"
             | "password-manager"
             | "viewer"
+            | "document-editor"
             | "file-manager"
     )
 }
@@ -3144,6 +3185,7 @@ fn apply_catalog_row_visibility(
     g.set_show_media(visible_ids.contains("media"));
     g.set_show_password(visible_ids.contains("password"));
     g.set_show_viewer(visible_ids.contains("viewer"));
+    g.set_show_document_editor(visible_ids.contains("document-editor"));
     g.set_show_file_manager(visible_ids.contains("file-manager"));
 }
 
@@ -3179,6 +3221,7 @@ fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> SharedStrin
         "media" => "widget-media-desc",
         "password" => "widget-password-desc",
         "viewer" => "widget-viewer-desc",
+        "document-editor" => "widget-document-editor-desc",
         "file-manager" => "widget-fm-desc",
         _ => return SharedString::new(),
     };
@@ -3284,6 +3327,12 @@ fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             icon: "viewer".into(),
         },
         DockWidgetType {
+            type_id: "document-editor".into(),
+            label: locale.tr("dock-widget-document-editor").into(),
+            description: dock_widget_description(locale, "document-editor"),
+            icon: "document".into(),
+        },
+        DockWidgetType {
             type_id: "file-manager".into(),
             label: locale.tr("dock-widget-fm").into(),
             description: dock_widget_description(locale, "file-manager"),
@@ -3309,9 +3358,30 @@ fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> SharedString 
         "media-player" | "media" => locale.tr("dock-widget-media").into(),
         "password-manager" | "password" => locale.tr("dock-widget-password").into(),
         "viewer" => locale.tr("dock-widget-viewer").into(),
+        "document-editor" => locale.tr("dock-widget-document-editor").into(),
         "file-manager" => locale.tr("dock-widget-fm").into(),
         _ => locale.tr("widget-title-terminal").into(),
     }
+}
+
+fn next_untitled_docx_path(dir: &std::path::Path) -> std::path::PathBuf {
+    let first = dir.join("Untitled.docx");
+    if !first.exists() {
+        return first;
+    }
+    for n in 2..10_000 {
+        let candidate = dir.join(format!("Untitled-{n}.docx"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    dir.join(format!(
+        "Untitled-{}.docx",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    ))
 }
 
 #[allow(clippy::type_complexity)]

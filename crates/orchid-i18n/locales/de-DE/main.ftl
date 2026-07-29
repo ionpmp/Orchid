@@ -59,6 +59,9 @@ widget-password-desc = Zugriff auf Ihre Passwortdatenbank
 widget-viewer-name = Betrachter
 widget-viewer-desc = Bilder, Dokumente, Quelldateien und Archive anzeigen
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = Klar
 weather-condition-partly-cloudy = Teilweise bewÃ¶lkt
@@ -818,6 +821,7 @@ dock-widget-search = Suche
 dock-widget-media = Medien
 dock-widget-password = PasswÃ¶rter
 dock-widget-viewer = Betrachter
+dock-widget-document-editor = Document
 dock-widget-fm = Dateien
 
 viewer-no-file = Keine Datei geÃ¶ffnet

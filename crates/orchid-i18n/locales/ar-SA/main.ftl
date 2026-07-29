@@ -59,6 +59,9 @@ widget-password-desc = الوصول إلى قاعدة بيانات كلمات ا
 widget-viewer-name = العارض
 widget-viewer-desc = عرض الصور والمستندات وملفات المصدر والأرشيفات
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = صافٍ
 weather-condition-partly-cloudy = غائم جزئيًا
@@ -819,6 +822,7 @@ dock-widget-search = البحث
 dock-widget-media = الوسائط
 dock-widget-password = كلمات المرور
 dock-widget-viewer = العارض
+dock-widget-document-editor = Document
 dock-widget-fm = الملفات
 
 viewer-no-file = لا يوجد ملف مفتوح

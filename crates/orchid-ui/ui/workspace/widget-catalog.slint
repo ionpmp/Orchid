@@ -318,6 +318,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             card-visible: WidgetCatalog.show-viewer;
                             pick(id) => { root.pick(id); }
                         }
+                        CatalogCard {
+                            type-id: "document-editor"; glyph: "D"; label: Strings.dock-widget-document-editor;
+                            description: Strings.widget-document-editor-desc;
+                            card-visible: WidgetCatalog.show-document-editor;
+                            pick(id) => { root.pick(id); }
+                        }
                     }
                     HorizontalLayout {
                         spacing: 8px;
@@ -451,6 +457,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             card-visible: WidgetCatalog.show-viewer;
                             pick(id) => { root.pick(id); }
                         }
+                        CatalogCard {
+                            type-id: "document-editor"; glyph: "D"; label: Strings.dock-widget-document-editor;
+                            description: Strings.widget-document-editor-desc;
+                            card-visible: WidgetCatalog.show-document-editor;
+                            pick(id) => { root.pick(id); }
+                        }
                     }
                     HorizontalLayout {
                         spacing: 8px;
@@ -506,6 +518,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "viewer"; glyph: "V"; label: Strings.dock-widget-viewer;
                             description: Strings.widget-viewer-desc;
                             card-visible: WidgetCatalog.show-viewer;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "document-editor"; glyph: "D"; label: Strings.dock-widget-document-editor;
+                            description: Strings.widget-document-editor-desc;
+                            card-visible: WidgetCatalog.show-document-editor;
                             pick(id) => { root.pick(id); }
                         }
                     }

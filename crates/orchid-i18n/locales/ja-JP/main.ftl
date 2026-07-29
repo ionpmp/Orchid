@@ -59,6 +59,9 @@ widget-password-desc = パスワードデータベースにアクセス
 widget-viewer-name = ビューア
 widget-viewer-desc = 画像、ドキュメント、ソースファイル、アーカイブを表示
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = 快晴
 weather-condition-partly-cloudy = 晴れ時々曇り
@@ -818,6 +821,7 @@ dock-widget-search = 検索
 dock-widget-media = メディア
 dock-widget-password = パスワード
 dock-widget-viewer = ビューア
+dock-widget-document-editor = Document
 dock-widget-fm = ファイル
 
 viewer-no-file = ファイルが開かれていません

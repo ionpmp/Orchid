@@ -54,6 +54,9 @@ widget-password-desc = Доступ к базе паролей
 widget-viewer-name = Просмотрщик
 widget-viewer-desc = Просмотр изображений, документов, кода и архивов
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = Ясно
 weather-condition-partly-cloudy = Переменная облачность
@@ -822,6 +825,7 @@ dock-widget-search = Поиск
 dock-widget-media = Медиа
 dock-widget-password = Пароли
 dock-widget-viewer = Просмотрщик
+dock-widget-document-editor = Document
 dock-widget-fm = Файлы
 
 viewer-no-file = Файл не открыт

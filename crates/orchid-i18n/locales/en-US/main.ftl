@@ -186,6 +186,9 @@ widget-password-desc = Access your password database
 widget-viewer-name = Viewer
 widget-viewer-desc = View images, documents, source files, and archives
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = Clear
 weather-condition-partly-cloudy = Partly cloudy
@@ -1107,6 +1110,7 @@ dock-widget-search = Search
 dock-widget-media = Media
 dock-widget-password = Passwords
 dock-widget-viewer = Viewer
+dock-widget-document-editor = Document
 dock-widget-fm = Files
 
 viewer-no-file = No file open

@@ -846,6 +846,7 @@ impl OrchidApp {
             self.locale.clone(),
             self.config.clone(),
             self.paths.config_file.clone(),
+            self.paths.data_dir.join("documents"),
             self.recent_files.clone(),
             self.password_vault.clone(),
             self.fm_passphrase_vault.clone(),

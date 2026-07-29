@@ -4,6 +4,7 @@ pub mod cursor;
 pub mod layout;
 pub mod model;
 pub mod ooxml;
+pub mod sample;
 pub mod undo;
 
 use std::any::Any;
@@ -28,6 +29,7 @@ pub use model::{
     Alignment, Block, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode, PageSetup,
     Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
+pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
 
 /// Soft ceiling for DOCX payloads accepted by the viewer (128 MiB).

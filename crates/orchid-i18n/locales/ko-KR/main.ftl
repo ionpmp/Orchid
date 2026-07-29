@@ -59,6 +59,9 @@ widget-password-desc = 비밀번호 데이터베이스에 액세스
 widget-viewer-name = 뷰어
 widget-viewer-desc = 이미지, 문서, 소스 파일 및 아카이브 보기
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = 맑음
 weather-condition-partly-cloudy = 구름 조금
@@ -818,6 +821,7 @@ dock-widget-search = 검색
 dock-widget-media = 미디어
 dock-widget-password = 비밀번호
 dock-widget-viewer = 뷰어
+dock-widget-document-editor = Document
 dock-widget-fm = 파일
 
 viewer-no-file = 열린 파일 없음

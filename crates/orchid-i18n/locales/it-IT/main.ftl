@@ -59,6 +59,9 @@ widget-password-desc = Accedi al database delle password
 widget-viewer-name = Visualizzatore
 widget-viewer-desc = Visualizza immagini, documenti, file sorgente e archivi
 
+widget-document-editor-name = Document Editor
+widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
+
 # ---- Weather ----
 weather-condition-clear = Sereno
 weather-condition-partly-cloudy = Parzialmente nuvoloso
@@ -818,6 +821,7 @@ dock-widget-search = Ricerca
 dock-widget-media = Media
 dock-widget-password = Password
 dock-widget-viewer = Visualizzatore
+dock-widget-document-editor = Document
 dock-widget-fm = File
 
 viewer-no-file = Nessun file aperto
