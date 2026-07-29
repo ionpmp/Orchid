@@ -417,6 +417,40 @@ fn delete_row_and_column_refuse_last() {
 }
 
 #[test]
+fn insert_table_after_caret_block() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("Before").expect("Before") + "Before".len();
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_insert_table(2, 3).unwrap();
+    let guard = viewer.document();
+    let doc = guard.as_ref().unwrap();
+    assert_eq!(doc.blocks.len(), 4);
+    match &doc.blocks[1] {
+        Block::Table(t) => {
+            assert_eq!(t.rows.len(), 2);
+            assert_eq!(t.rows[0].cells.len(), 3);
+            assert_eq!(t.rows[0].cells[0].paragraphs[0].plain_text(), "");
+        }
+        _ => panic!("expected new table at block 1"),
+    }
+    match &doc.blocks[2] {
+        Block::Table(_) => {}
+        _ => panic!("original table shifted to block 2"),
+    }
+    assert_eq!(
+        viewer.selection().head.cell.map(|c| (c.row, c.col)),
+        Some((0, 0))
+    );
+    assert_eq!(viewer.selection().head.block_idx, 1);
+}
+
+#[test]
 fn tab_outside_table_does_not_move_cells() {
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(table_2x2());

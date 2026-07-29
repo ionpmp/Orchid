@@ -2,7 +2,7 @@
 
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
-    Alignment, Block, Document, InlineImage, ListKind, Paragraph, Run, RunStyle, TableCell,
+    Alignment, Block, Document, InlineImage, ListKind, Paragraph, Run, RunStyle, Table, TableCell,
     TableRow,
 };
 use crate::error::{Result, ViewerError};
@@ -42,6 +42,13 @@ pub enum EditCommand {
         paragraph_idx: usize,
         /// Desired list kind.
         kind: ListKind,
+    },
+    /// Insert a new table block at `at_block`.
+    InsertTable {
+        /// Block index to insert at (existing blocks shift right).
+        at_block: usize,
+        /// Table payload.
+        table: Table,
     },
     /// Insert an empty row into a table.
     InsertTableRow {
@@ -328,6 +335,11 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 paragraph_idx: *paragraph_idx,
                 previous,
             })
+        }
+        EditCommand::InsertTable { at_block, table } => {
+            let idx = (*at_block).min(doc.blocks.len());
+            doc.blocks.insert(idx, Block::Table(table.clone()));
+            Ok(EditCommand::RemoveBlock { block_idx: idx })
         }
         EditCommand::InsertTableRow { table_idx, at_row } => {
             let Block::Table(t) = doc
@@ -999,6 +1011,31 @@ mod tests {
             },
         );
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn insert_table_undo() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::InsertTable {
+                    at_block: 1,
+                    table: crate::document::model::Table::empty(2, 2),
+                },
+            )
+            .unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        match &doc.blocks[1] {
+            Block::Table(t) => {
+                assert_eq!(t.rows.len(), 2);
+                assert_eq!(t.rows[0].cells.len(), 2);
+            }
+            _ => panic!("table"),
+        }
+        stack.undo(&mut doc).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
     }
 
     #[test]

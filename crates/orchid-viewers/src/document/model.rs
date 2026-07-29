@@ -135,6 +135,25 @@ pub struct Table {
     pub unsupported: Vec<OpaqueXmlNode>,
 }
 
+impl Table {
+    /// Empty `rows`×`cols` grid of blank paragraphs (each dimension clamped to 1..=20).
+    #[must_use]
+    pub fn empty(rows: usize, cols: usize) -> Self {
+        let rows = rows.clamp(1, 20);
+        let cols = cols.clamp(1, 20);
+        Self {
+            rows: (0..rows)
+                .map(|_| TableRow {
+                    cells: (0..cols)
+                        .map(|_| TableCell::from_paragraphs(vec![Paragraph::default()]))
+                        .collect(),
+                })
+                .collect(),
+            unsupported: Vec::new(),
+        }
+    }
+}
+
 /// Image codec for inline images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {

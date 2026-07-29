@@ -497,6 +497,43 @@ impl DocumentViewer {
         true
     }
 
+    /// Insert an empty `rows`×`cols` table after the caret's block (clamped 1..=20).
+    ///
+    /// Places the caret in the new table's top-left cell.
+    pub fn preview_insert_table(&self, rows: usize, cols: usize) -> Result<()> {
+        let head = self.selection.lock().head;
+        let at_block = head.block_idx.saturating_add(1);
+        self.apply(EditCommand::InsertTable {
+            at_block,
+            table: crate::document::model::Table::empty(rows, cols),
+        })?;
+        // Insert clamps to `min(at_block, len)` before push; after apply that index holds the table.
+        let table_idx = {
+            let guard = self.document.read();
+            let doc = guard.as_ref().ok_or(ViewerError::EditOutOfBounds)?;
+            let idx = at_block.min(doc.blocks.len().saturating_sub(1));
+            match doc.blocks.get(idx) {
+                Some(Block::Table(_)) => idx,
+                _ => return Err(ViewerError::EditOutOfBounds),
+            }
+        };
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath {
+                row: 0,
+                col: 0,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
     /// Insert an empty row below the caret's table cell.
     pub fn preview_insert_table_row(&self) -> Result<()> {
         let (table_idx, row, col) = self.table_cell_context()?;

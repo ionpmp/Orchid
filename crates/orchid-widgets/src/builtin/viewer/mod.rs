@@ -846,6 +846,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "list-numbered" => doc.toggle_list_all(ListKind::Numbered),
                 "list-indent" => doc.bump_list_level_selection(1),
                 "list-outdent" => doc.bump_list_level_selection(-1),
+                "table-insert" => doc.preview_insert_table(2, 2),
                 "table-row-insert" => doc.preview_insert_table_row(),
                 "table-row-delete" => doc.preview_delete_table_row(),
                 "table-col-insert" => doc.preview_insert_table_column(),

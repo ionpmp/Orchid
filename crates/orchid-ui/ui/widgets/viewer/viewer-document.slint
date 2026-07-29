@@ -23,7 +23,6 @@ export component ViewerDocumentView inherits Rectangle {
     property <length> last-viewport-w: 0px;
     property <bool> find-open: false;
     property <string> find-query: "";
-    property <int> last-find-gen: -1;
 
     changed model => {
         if root.last-path != model.path-display {
@@ -34,9 +33,6 @@ export component ViewerDocumentView inherits Rectangle {
             root.locally-dirty = model.dirty;
         } else {
             root.locally-dirty = true;
-        }
-        if model.find-gen != root.last-find-gen {
-            root.last-find-gen = model.find-gen;
         }
     }
 
@@ -448,6 +444,22 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
+                    background: tool-bg(false, t-ins.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    t-ins := TouchArea { clicked => { root.action("table-insert"); } }
+                    Text {
+                        text: model.table-insert-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
                     background: tool-bg(false, tr-ins.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -809,6 +821,16 @@ export component ViewerDocumentView inherits Rectangle {
                 height: parent.height;
                 viewport-width: self.width;
                 viewport-height: max(self.height, edit-pad.preferred-height);
+
+                // `changed` only works on this element's properties — mirror find-gen locally.
+                property <int> sync-find-gen: model.find-gen;
+                init => {
+                    edit-input.set-selection-offsets(model.find-anchor, model.find-cursor);
+                }
+                changed sync-find-gen => {
+                    edit-input.set-selection-offsets(model.find-anchor, model.find-cursor);
+                    edit-input.focus();
+                }
 
                 edit-pad := HorizontalLayout {
                     padding-left: 12px;
