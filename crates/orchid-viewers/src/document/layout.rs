@@ -479,7 +479,7 @@ impl DocumentLayout {
         layouts: &mut Vec<LaidBlock>,
     ) -> TableGridGeom {
         let ncols = table_column_count(t);
-        let cell_w = max_w / ncols as f32;
+        let col_widths = table_column_widths_px(t, max_w, ncols);
         let table_y0 = *total_h;
         let mut row_heights = Vec::with_capacity(t.rows.len());
 
@@ -489,6 +489,7 @@ impl DocumentLayout {
             let mut max_content_h = 0.0f32;
 
             for ci in 0..ncols {
+                let cell_w = col_widths[ci];
                 let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
                 let items = if let Some(cell) = row.cells.get(ci) {
                     self.layout_cell_items(cell, inner_w, plain_offset, emitted_text)
@@ -507,8 +508,10 @@ impl DocumentLayout {
             }
 
             let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
+            let mut x_cursor = 0.0f32;
             for (ci, items) in cell_items.into_iter().enumerate() {
-                let x0 = ci as f32 * cell_w + TABLE_CELL_PAD;
+                let cell_w = col_widths[ci];
+                let x0 = x_cursor + TABLE_CELL_PAD;
                 let mut y = row_y0 + TABLE_CELL_PAD;
                 for item in items {
                     let h = item.height();
@@ -558,6 +561,7 @@ impl DocumentLayout {
                     }
                     y += h + TABLE_CELL_PARA_GAP;
                 }
+                x_cursor += cell_w;
             }
             *total_h += row_h;
             row_heights.push(row_h);
@@ -568,6 +572,7 @@ impl DocumentLayout {
             width: max_w,
             height: *total_h - table_y0,
             ncols,
+            col_widths,
             row_heights,
         }
     }
@@ -586,7 +591,7 @@ impl DocumentLayout {
         emitted_text: &mut bool,
     ) -> Option<Cursor> {
         let ncols = table_column_count(t);
-        let cell_w = max_w / ncols as f32;
+        let col_widths = table_column_widths_px(t, max_w, ncols);
 
         for (row_idx, row) in t.rows.iter().enumerate() {
             let row_y0 = *total_h;
@@ -594,6 +599,7 @@ impl DocumentLayout {
             let mut max_content_h = 0.0f32;
 
             for ci in 0..ncols {
+                let cell_w = col_widths[ci];
                 let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
                 let items = if let Some(cell) = row.cells.get(ci) {
                     self.layout_cell_items(cell, inner_w, plain_offset, emitted_text)
@@ -614,12 +620,9 @@ impl DocumentLayout {
             let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
             let row_y1 = row_y0 + row_h;
             if local_y >= row_y0 && local_y < row_y1 {
-                let col = if local_x < 0.0 {
-                    0
-                } else {
-                    ((local_x / cell_w).floor() as usize).min(ncols.saturating_sub(1))
-                };
-                let x0 = col as f32 * cell_w + TABLE_CELL_PAD;
+                let col = column_index_at_x(&col_widths, local_x);
+                let x0 = col_widths.iter().take(col).sum::<f32>() + TABLE_CELL_PAD;
+                let cell_w = col_widths[col];
                 let items = &cell_items[col];
                 if items.is_empty() {
                     let offset = cell_items
@@ -766,6 +769,47 @@ fn table_column_count(t: &Table) -> usize {
     t.rows.iter().map(|r| r.cells.len()).max().unwrap_or(1).max(1)
 }
 
+/// Pixel widths for each column. Falls back to equal split when `column_widths_twips`
+/// is empty, all-zero, or length-mismatched vs `ncols`.
+fn table_column_widths_px(t: &Table, max_w: f32, ncols: usize) -> Vec<f32> {
+    let equal = || (0..ncols).map(|_| max_w / ncols as f32).collect();
+    if ncols == 0 {
+        return Vec::new();
+    }
+    if t.column_widths_twips.is_empty() {
+        return equal();
+    }
+    let mut twips: Vec<u32> = t.column_widths_twips.iter().copied().take(ncols).collect();
+    while twips.len() < ncols {
+        twips.push(twips.last().copied().unwrap_or(1).max(1));
+    }
+    let sum: u64 = twips.iter().map(|&w| u64::from(w.max(1))).sum();
+    if sum == 0 {
+        return equal();
+    }
+    twips
+        .iter()
+        .map(|&w| max_w * (w.max(1) as f32) / sum as f32)
+        .collect()
+}
+
+fn column_index_at_x(col_widths: &[f32], local_x: f32) -> usize {
+    if col_widths.is_empty() {
+        return 0;
+    }
+    if local_x < 0.0 {
+        return 0;
+    }
+    let mut x = 0.0f32;
+    for (i, &w) in col_widths.iter().enumerate() {
+        x += w;
+        if local_x < x || i + 1 == col_widths.len() {
+            return i;
+        }
+    }
+    col_widths.len().saturating_sub(1)
+}
+
 fn paint_table_grid(
     pixels: &mut [u8],
     buf_w: u32,
@@ -777,7 +821,6 @@ fn paint_table_grid(
     let y = (pad + grid.y0).round() as u32;
     let w = grid.width.ceil().max(1.0) as u32;
     let h = grid.height.ceil().max(1.0) as u32;
-    let cell_w = grid.width / grid.ncols as f32;
 
     // Outer box.
     fill_rect(pixels, buf_w, buf_h, x, y, w, 1, TABLE_GRID_COLOR);
@@ -803,8 +846,10 @@ fn paint_table_grid(
         TABLE_GRID_COLOR,
     );
 
-    for c in 1..grid.ncols {
-        let vx = (pad + c as f32 * cell_w).round() as u32;
+    let mut x_cursor = 0.0f32;
+    for c in 0..grid.ncols.saturating_sub(1) {
+        x_cursor += grid.col_widths.get(c).copied().unwrap_or(0.0);
+        let vx = (pad + x_cursor).round() as u32;
         fill_rect(pixels, buf_w, buf_h, vx, y, 1, h, TABLE_GRID_COLOR);
     }
 
@@ -900,6 +945,7 @@ struct TableGridGeom {
     width: f32,
     height: f32,
     ncols: usize,
+    col_widths: Vec<f32>,
     row_heights: Vec<f32>,
 }
 
@@ -1658,6 +1704,71 @@ mod tests {
             bytes[i + 1],
             bytes[i + 2],
             bytes[i + 3]
+        );
+    }
+
+    #[test]
+    fn uneven_column_widths_shift_vertical_border() {
+        let mut dl = DocumentLayout::new();
+        let mut doc = table_2x2_doc();
+        if let Block::Table(t) = &mut doc.blocks[0] {
+            t.column_widths_twips = vec![2000, 6000];
+        }
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 40);
+        // 1:3 split → border at 25% of content width, not 50%.
+        let vx = (PREVIEW_PADDING + content_w * 0.25).round() as u32;
+        let vy = (PREVIEW_PADDING + 8.0).round() as u32;
+        let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
+        assert!(
+            bytes[i] == TABLE_GRID_COLOR[0]
+                && bytes[i + 1] == TABLE_GRID_COLOR[1]
+                && bytes[i + 2] == TABLE_GRID_COLOR[2],
+            "expected uneven grid border at ({vx},{vy}) got rgba({},{},{},{})",
+            bytes[i],
+            bytes[i + 1],
+            bytes[i + 2],
+            bytes[i + 3]
+        );
+        // Equal-split midpoint should not be a vertical border.
+        let mid = (PREVIEW_PADDING + content_w / 2.0).round() as u32;
+        let mi = ((vy as usize) * (w as usize) + (mid as usize)) * 4;
+        assert!(
+            !(bytes[mi] == TABLE_GRID_COLOR[0]
+                && bytes[mi + 1] == TABLE_GRID_COLOR[1]
+                && bytes[mi + 2] == TABLE_GRID_COLOR[2]),
+            "midpoint should not be a column border for 1:3 widths"
+        );
+    }
+
+    #[test]
+    fn uneven_column_hit_test_uses_widths() {
+        let mut dl = DocumentLayout::new();
+        let mut doc = table_2x2_doc();
+        if let Block::Table(t) = &mut doc.blocks[0] {
+            t.column_widths_twips = vec![2000, 6000];
+        }
+        let plain = doc.plain_text();
+        let aa = plain.find("AA").expect("AA");
+        let bb = plain.find("BB").expect("BB");
+        let content_w = 400.0;
+        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
+        // 20% into table → narrow left column.
+        let left = dl
+            .hit_test_plain_offset(&doc, content_w, PREVIEW_PADDING + content_w * 0.2, y)
+            .unwrap();
+        assert!(
+            left >= aa && left <= aa + "AA".len(),
+            "left hit offset={left} expected AA"
+        );
+        // 70% into table → wide right column.
+        let right = dl
+            .hit_test_plain_offset(&doc, content_w, PREVIEW_PADDING + content_w * 0.7, y)
+            .unwrap();
+        assert!(
+            right >= bb && right <= bb + "BB".len(),
+            "right hit offset={right} expected BB"
         );
     }
 

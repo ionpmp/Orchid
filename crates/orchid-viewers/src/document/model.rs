@@ -134,6 +134,10 @@ pub struct TableRow {
 pub struct Table {
     /// Rows top-to-bottom.
     pub rows: Vec<TableRow>,
+    /// Per-column preferred widths in twips (`w:tblGrid` / `w:gridCol/@w:w`).
+    ///
+    /// Empty means equal-width columns in the preview (inserted blank tables).
+    pub column_widths_twips: Vec<u32>,
     /// Unsupported elements (e.g. merge markers) preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }
@@ -152,6 +156,7 @@ impl Table {
                         .collect(),
                 })
                 .collect(),
+            column_widths_twips: Vec::new(),
             unsupported: Vec::new(),
         }
     }

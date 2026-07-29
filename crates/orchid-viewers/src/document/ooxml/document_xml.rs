@@ -442,6 +442,8 @@ fn parse_table(
     let mut table = Table::default();
     let mut current_row: Option<TableRow> = None;
     let mut current_cell: Option<TableCell> = None;
+    // First-row `w:tcW` widths used when `w:tblGrid` is absent.
+    let mut tcw_fallback: Vec<u32> = Vec::new();
 
     loop {
         match reader.read_event_into(buf) {
@@ -450,6 +452,18 @@ fn parse_table(
                 match local.as_str() {
                     "tr" => current_row = Some(TableRow::default()),
                     "tc" => current_cell = Some(TableCell::default()),
+                    "gridCol" => {
+                        if let Some(w) = parse_grid_col_width(&e) {
+                            table.column_widths_twips.push(w);
+                        }
+                    }
+                    "tcW" => {
+                        if table.rows.is_empty() {
+                            if let Some(w) = parse_tc_width_dxa(&e) {
+                                tcw_fallback.push(w);
+                            }
+                        }
+                    }
                     "p" => {
                         let (p, images) =
                             parse_paragraph(reader, buf, styles, numbering, rels, media)?;
@@ -479,15 +493,30 @@ fn parse_table(
             }
             Ok(Event::Empty(e)) => {
                 let local = local_name(e.name().as_ref());
-                if matches!(local.as_str(), "vMerge" | "gridSpan") {
-                    tracing::warn!(
-                        element = local.as_str(),
-                        "table cell merge not supported in Tier 1"
-                    );
-                    table.unsupported.push(OpaqueXmlNode {
-                        position_hint: format!("w:tbl/w:{local}"),
-                        raw_xml: format!("<w:{local}/>").into_bytes(),
-                    });
+                match local.as_str() {
+                    "gridCol" => {
+                        if let Some(w) = parse_grid_col_width(&e) {
+                            table.column_widths_twips.push(w);
+                        }
+                    }
+                    "tcW" => {
+                        if table.rows.is_empty() {
+                            if let Some(w) = parse_tc_width_dxa(&e) {
+                                tcw_fallback.push(w);
+                            }
+                        }
+                    }
+                    "vMerge" | "gridSpan" => {
+                        tracing::warn!(
+                            element = local.as_str(),
+                            "table cell merge not supported in Tier 1"
+                        );
+                        table.unsupported.push(OpaqueXmlNode {
+                            position_hint: format!("w:tbl/w:{local}"),
+                            raw_xml: format!("<w:{local}/>").into_bytes(),
+                        });
+                    }
+                    _ => {}
                 }
             }
             Ok(Event::End(e)) => {
@@ -505,7 +534,12 @@ fn parse_table(
                             table.rows.push(row);
                         }
                     }
-                    "tbl" => return Ok(table),
+                    "tbl" => {
+                        if table.column_widths_twips.is_empty() && !tcw_fallback.is_empty() {
+                            table.column_widths_twips = tcw_fallback;
+                        }
+                        return Ok(table);
+                    }
                     _ => {}
                 }
             }
@@ -774,6 +808,18 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
     Ok(())
 }
 
+fn parse_grid_col_width(e: &BytesStart<'_>) -> Option<u32> {
+    attr_val(e, "w").and_then(|v| v.parse().ok()).filter(|&w| w > 0)
+}
+
+fn parse_tc_width_dxa(e: &BytesStart<'_>) -> Option<u32> {
+    let typ = attr_val(e, "type").unwrap_or_else(|| "dxa".into());
+    if typ != "dxa" {
+        return None;
+    }
+    attr_val(e, "w").and_then(|v| v.parse().ok()).filter(|&w| w > 0)
+}
+
 fn write_table(
     writer: &mut Writer<Cursor<Vec<u8>>>,
     t: &Table,
@@ -782,14 +828,43 @@ fn write_table(
     writer
         .write_event(Event::Start(BytesStart::new("w:tbl")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if !t.column_widths_twips.is_empty() {
+        writer
+            .write_event(Event::Start(BytesStart::new("w:tblGrid")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        for &w in &t.column_widths_twips {
+            let mut grid_col = BytesStart::new("w:gridCol");
+            grid_col.push_attribute(("w:w", w.to_string().as_str()));
+            writer
+                .write_event(Event::Empty(grid_col))
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        }
+        writer
+            .write_event(Event::End(BytesEnd::new("w:tblGrid")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     for row in &t.rows {
         writer
             .write_event(Event::Start(BytesStart::new("w:tr")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-        for cell in &row.cells {
+        for (ci, cell) in row.cells.iter().enumerate() {
             writer
                 .write_event(Event::Start(BytesStart::new("w:tc")))
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+            if let Some(&w) = t.column_widths_twips.get(ci) {
+                writer
+                    .write_event(Event::Start(BytesStart::new("w:tcPr")))
+                    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                let mut tc_w = BytesStart::new("w:tcW");
+                tc_w.push_attribute(("w:w", w.to_string().as_str()));
+                tc_w.push_attribute(("w:type", "dxa"));
+                writer
+                    .write_event(Event::Empty(tc_w))
+                    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                writer
+                    .write_event(Event::End(BytesEnd::new("w:tcPr")))
+                    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+            }
             if cell.paragraphs.is_empty() {
                 write_paragraph(writer, &Paragraph::default())?;
                 for ci in cell.images.iter().filter(|c| c.after_paragraph == 0) {
@@ -1096,7 +1171,114 @@ mod tests {
                 assert_eq!(t.rows[0].cells.len(), 2);
                 assert_eq!(t.rows[0].cells[0].paragraphs[0].plain_text(), "A");
                 assert_eq!(t.rows[1].cells[1].paragraphs[0].plain_text(), "D");
+                assert!(t.column_widths_twips.is_empty());
             }
+            _ => panic!("expected table"),
+        }
+    }
+
+    #[test]
+    fn parse_table_uneven_tbl_grid() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:tbl>
+              <w:tblGrid>
+                <w:gridCol w:w="2000"/>
+                <w:gridCol w:w="6000"/>
+              </w:tblGrid>
+              <w:tr>
+                <w:tc><w:p><w:r><w:t>Narrow</w:t></w:r></w:p></w:tc>
+                <w:tc><w:p><w:r><w:t>Wide</w:t></w:r></w:p></w:tc>
+              </w:tr>
+            </w:tbl>
+          </w:body>
+        </w:document>"#;
+        let (blocks, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Table(t) => assert_eq!(t.column_widths_twips, vec![2000, 6000]),
+            _ => panic!("expected table"),
+        }
+    }
+
+    #[test]
+    fn parse_table_tcw_fallback_when_no_grid() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:tbl>
+              <w:tr>
+                <w:tc>
+                  <w:tcPr><w:tcW w:w="1500" w:type="dxa"/></w:tcPr>
+                  <w:p><w:r><w:t>A</w:t></w:r></w:p>
+                </w:tc>
+                <w:tc>
+                  <w:tcPr><w:tcW w:w="4500" w:type="dxa"/></w:tcPr>
+                  <w:p><w:r><w:t>B</w:t></w:r></w:p>
+                </w:tc>
+              </w:tr>
+            </w:tbl>
+          </w:body>
+        </w:document>"#;
+        let (blocks, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Table(t) => assert_eq!(t.column_widths_twips, vec![1500, 4500]),
+            _ => panic!("expected table"),
+        }
+    }
+
+    #[test]
+    fn write_table_preserves_column_widths() {
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![
+                        TableCell::from_paragraphs(vec![Paragraph {
+                            runs: vec![Run {
+                                text: "A".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }]),
+                        TableCell::from_paragraphs(vec![Paragraph {
+                            runs: vec![Run {
+                                text: "B".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }]),
+                    ],
+                }],
+                column_widths_twips: vec![2000, 6000],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let (blocks, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Table(t) => assert_eq!(t.column_widths_twips, vec![2000, 6000]),
             _ => panic!("expected table"),
         }
     }

@@ -150,6 +150,8 @@ pub enum EditCommand {
         at_col: usize,
         /// Saved cell per row (`None` when that row had no cell at the index).
         cells: Vec<Option<TableCell>>,
+        /// Saved `column_widths_twips` entry when the table had explicit widths.
+        width_twips: Option<u32>,
     },
 }
 
@@ -442,6 +444,16 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                     TableCell::from_paragraphs(vec![Paragraph::default()]),
                 );
             }
+            if !t.column_widths_twips.is_empty() {
+                let i = at.min(t.column_widths_twips.len());
+                let neighbor = t
+                    .column_widths_twips
+                    .get(i.saturating_sub(1))
+                    .or_else(|| t.column_widths_twips.first())
+                    .copied()
+                    .unwrap_or(2880);
+                t.column_widths_twips.insert(i, neighbor);
+            }
             Ok(EditCommand::DeleteTableColumn {
                 table_idx: *table_idx,
                 col_idx: at,
@@ -467,16 +479,23 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                     cells.push(None);
                 }
             }
+            let width_twips = if *col_idx < t.column_widths_twips.len() {
+                Some(t.column_widths_twips.remove(*col_idx))
+            } else {
+                None
+            };
             Ok(EditCommand::RestoreTableColumn {
                 table_idx: *table_idx,
                 at_col: *col_idx,
                 cells,
+                width_twips,
             })
         }
         EditCommand::RestoreTableColumn {
             table_idx,
             at_col,
             cells,
+            width_twips,
         } => {
             let Block::Table(t) = doc
                 .blocks
@@ -493,6 +512,10 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                     let i = (*at_col).min(row.cells.len());
                     row.cells.insert(i, cell.clone());
                 }
+            }
+            if let Some(w) = *width_twips {
+                let i = (*at_col).min(t.column_widths_twips.len());
+                t.column_widths_twips.insert(i, w);
             }
             Ok(EditCommand::DeleteTableColumn {
                 table_idx: *table_idx,
@@ -1000,7 +1023,7 @@ mod tests {
                             }]),
                     ],
                 }],
-                unsupported: vec![],
+                ..Default::default()
             })],
             ..Default::default()
         };
@@ -1061,7 +1084,7 @@ mod tests {
                             }]),
                     ],
                 }],
-                unsupported: vec![],
+                ..Default::default()
             })],
             ..Default::default()
         };
@@ -1130,7 +1153,7 @@ mod tests {
                         ],
                     },
                 ],
-                unsupported: vec![],
+                ..Default::default()
             })],
             ..Default::default()
         };
@@ -1156,6 +1179,55 @@ mod tests {
     }
 
     #[test]
+    fn insert_table_column_keeps_width_list() {
+        let mut doc = Document {
+            blocks: vec![Block::Table(crate::document::model::Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                        ],
+                    },
+                    TableRow {
+                        cells: vec![
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                        ],
+                    },
+                ],
+                column_widths_twips: vec![2000, 6000],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::InsertTableColumn {
+                    table_idx: 0,
+                    at_col: 1,
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells.len(), 3);
+                assert_eq!(t.column_widths_twips.len(), 3);
+                assert_eq!(t.column_widths_twips[0], 2000);
+                assert_eq!(t.column_widths_twips[2], 6000);
+            }
+            _ => panic!("table"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(t) => assert_eq!(t.column_widths_twips, vec![2000, 6000]),
+            _ => panic!("table"),
+        }
+    }
+
+    #[test]
     fn insert_table_column_undo() {
         let mut doc = Document {
             blocks: vec![Block::Table(crate::document::model::Table {
@@ -1173,7 +1245,7 @@ mod tests {
                         ],
                     },
                 ],
-                unsupported: vec![],
+                ..Default::default()
             })],
             ..Default::default()
         };
@@ -1321,7 +1393,7 @@ mod tests {
                         images: vec![image.clone()],
                     }],
                 }],
-                unsupported: vec![],
+                ..Default::default()
             })],
             ..Default::default()
         };
