@@ -19,8 +19,9 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    cursor_from_plain_offset, paragraph_indices_in_selection, paragraph_mut, paragraph_ref,
-    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
+    cursor_from_plain_offset, paragraph_cursors_in_selection, paragraph_indices_in_selection,
+    paragraph_mut, paragraph_mut_in_blocks, paragraph_ref, plain_offset_from_cursor,
+    selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
@@ -961,7 +962,7 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Set alignment on paragraphs touched by the selection.
+    /// Set alignment on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
     ///
@@ -970,13 +971,13 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
-        let indices = paragraph_indices_in_selection(doc, sel);
-        if indices.is_empty() {
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
             return Ok(());
         }
         let mut next = doc.blocks.clone();
-        for bi in indices {
-            if let Some(Block::Paragraph(p)) = next.get_mut(bi) {
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
                 p.alignment = alignment;
             }
         }
@@ -987,7 +988,7 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Set list kind on paragraphs touched by the selection.
+    /// Set list kind on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
     ///
@@ -996,13 +997,13 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
-        let indices = paragraph_indices_in_selection(doc, sel);
-        if indices.is_empty() {
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
             return Ok(());
         }
         let mut next = doc.blocks.clone();
-        for bi in indices {
-            if let Some(Block::Paragraph(p)) = next.get_mut(bi) {
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
                 p.list = kind;
                 p.num_id = crate::document::ooxml::numbering::num_id_for_kind(kind);
                 if kind == ListKind::None {
@@ -1028,13 +1029,11 @@ impl DocumentViewer {
             let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
             let sel =
                 effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
-            let indices = paragraph_indices_in_selection(doc, sel);
-            indices
+            let cursors = paragraph_cursors_in_selection(doc, sel);
+            cursors
                 .first()
-                .and_then(|bi| match doc.blocks.get(*bi) {
-                    Some(Block::Paragraph(p)) => Some(p.list),
-                    _ => None,
-                })
+                .and_then(|c| paragraph_ref(doc, *c))
+                .map(|p| p.list)
                 .unwrap_or(ListKind::None)
         };
         let next = if current == kind {
@@ -1048,6 +1047,7 @@ impl DocumentViewer {
     /// Indent (`delta > 0`) or outdent list paragraphs in the selection.
     ///
     /// Outdenting past level 0 clears the list. Non-list paragraphs are skipped.
+    /// Works for body paragraphs and paragraphs inside one table cell.
     ///
     /// # Errors
     ///
@@ -1059,14 +1059,14 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
-        let indices = paragraph_indices_in_selection(doc, sel);
-        if indices.is_empty() {
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
             return Ok(());
         }
         let mut next = doc.blocks.clone();
         let mut changed = false;
-        for bi in indices {
-            let Some(Block::Paragraph(p)) = next.get_mut(bi) else {
+        for cursor in cursors {
+            let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) else {
                 continue;
             };
             if p.list == ListKind::None {

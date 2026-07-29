@@ -1,7 +1,8 @@
 //! Table cell cursor / typing for the DOCX preview.
 
 use orchid_viewers::document::model::{
-    Block, Document as Doc, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
+    Alignment, Block, Document as Doc, ListKind, Paragraph, Run, RunStyle, Table, TableCell,
+    TableRow,
 };
 use orchid_viewers::document::{cursor_from_plain_offset, DocumentViewer};
 
@@ -192,6 +193,98 @@ fn backspace_at_cell_start_moves_without_merging_neighbor() {
     let caret = viewer.selection().head;
     assert_eq!(caret.cell.map(|c| (c.row, c.col)), Some((0, 0)));
     assert_eq!(caret.byte_offset, 4);
+}
+
+#[test]
+fn align_and_list_in_table_cell() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R1C1").expect("R1C1");
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.set_alignment_all(Alignment::Center).unwrap();
+    viewer.toggle_list_all(ListKind::Bullet).unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        match &doc.blocks[1] {
+            Block::Table(t) => {
+                let p = &t.rows[0].cells[0].paragraphs[0];
+                assert_eq!(p.alignment, Alignment::Center);
+                assert_eq!(p.list, ListKind::Bullet);
+                assert_eq!(t.rows[0].cells[1].paragraphs[0].alignment, Alignment::Left);
+                assert_eq!(t.rows[0].cells[1].paragraphs[0].list, ListKind::None);
+            }
+            _ => panic!("table"),
+        }
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.alignment, Alignment::Left);
+                assert_eq!(p.list, ListKind::None);
+            }
+            _ => panic!("p0"),
+        }
+    }
+    viewer.bump_list_level_selection(1).unwrap();
+    {
+        let guard = viewer.document();
+        match &guard.as_ref().unwrap().blocks[1] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells[0].paragraphs[0].list_level, 1);
+            }
+            _ => panic!("table"),
+        }
+    }
+    viewer.bump_list_level_selection(-1).unwrap();
+    viewer.bump_list_level_selection(-1).unwrap(); // clear list
+    let guard = viewer.document();
+    match &guard.as_ref().unwrap().blocks[1] {
+        Block::Table(t) => {
+            let p = &t.rows[0].cells[0].paragraphs[0];
+            assert_eq!(p.list, ListKind::None);
+            assert_eq!(p.list_level, 0);
+            assert_eq!(p.alignment, Alignment::Center);
+        }
+        _ => panic!("table"),
+    }
+}
+
+#[test]
+fn align_both_paragraphs_in_same_cell() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(table_2x2());
+    viewer.set_source_mode(false);
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let off = plain.find("R2C2").expect("R2C2") + 2;
+    viewer.set_selection_plain_offsets(off, off);
+    viewer.preview_insert_paragraph_break().unwrap();
+    // Select both paragraphs of the split cell ("R2\nC2" — last occurrence).
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let start = plain.rfind("R2\nC2").expect("R2\\nC2");
+    let end = start + "R2\nC2".len();
+    viewer.set_selection_plain_offsets(start, end);
+    viewer.set_alignment_all(Alignment::Right).unwrap();
+    let guard = viewer.document();
+    match &guard.as_ref().unwrap().blocks[1] {
+        Block::Table(t) => {
+            let cell = &t.rows[1].cells[1];
+            assert_eq!(cell.paragraphs.len(), 2);
+            assert_eq!(cell.paragraphs[0].alignment, Alignment::Right);
+            assert_eq!(cell.paragraphs[1].alignment, Alignment::Right);
+            assert_eq!(t.rows[1].cells[0].paragraphs[0].alignment, Alignment::Left);
+        }
+        _ => panic!("table"),
+    }
 }
 
 #[test]

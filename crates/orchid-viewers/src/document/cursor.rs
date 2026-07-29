@@ -108,13 +108,18 @@ pub fn paragraph_ref(doc: &Document, cursor: Cursor) -> Option<&Paragraph> {
 
 /// Mutably borrow the paragraph addressed by `cursor`.
 pub fn paragraph_mut(doc: &mut Document, cursor: Cursor) -> Option<&mut Paragraph> {
+    paragraph_mut_in_blocks(&mut doc.blocks, cursor)
+}
+
+/// Mutably borrow a paragraph inside a blocks slice (body or table cell).
+pub fn paragraph_mut_in_blocks(blocks: &mut [Block], cursor: Cursor) -> Option<&mut Paragraph> {
     match cursor.cell {
-        None => match doc.blocks.get_mut(cursor.block_idx)? {
+        None => match blocks.get_mut(cursor.block_idx)? {
             Block::Paragraph(p) => Some(p),
             _ => None,
         },
         Some(path) => {
-            let Block::Table(t) = doc.blocks.get_mut(cursor.block_idx)? else {
+            let Block::Table(t) = blocks.get_mut(cursor.block_idx)? else {
                 return None;
             };
             t.rows
@@ -309,22 +314,60 @@ fn offset_in_para(p: &Paragraph, cursor: Cursor) -> usize {
     run_off
 }
 
-/// Indices of **top-level** paragraph blocks touched by `selection` (inclusive).
+/// Cursors addressing paragraphs touched by `selection` (body or same-cell).
 ///
-/// Table cell paragraphs are not included (align/list still body-only).
+/// Cross-cell and body↔table selections return an empty list.
 #[must_use]
-pub fn paragraph_indices_in_selection(doc: &Document, selection: Selection) -> Vec<usize> {
+pub fn paragraph_cursors_in_selection(doc: &Document, selection: Selection) -> Vec<Cursor> {
     let (start, end) = selection.normalized();
+    if start.same_cell(end) {
+        let Some(path) = start.cell else {
+            return Vec::new();
+        };
+        let Some(Block::Table(t)) = doc.blocks.get(start.block_idx) else {
+            return Vec::new();
+        };
+        let Some(cell) = t.rows.get(path.row).and_then(|r| r.cells.get(path.col)) else {
+            return Vec::new();
+        };
+        let lo = path.para_idx.min(end.cell.map(|c| c.para_idx).unwrap_or(path.para_idx));
+        let hi = path.para_idx.max(end.cell.map(|c| c.para_idx).unwrap_or(path.para_idx));
+        let hi = hi.min(cell.paragraphs.len().saturating_sub(1));
+        return (lo..=hi)
+            .map(|para_idx| Cursor {
+                block_idx: start.block_idx,
+                cell: Some(CellPath {
+                    row: path.row,
+                    col: path.col,
+                    para_idx,
+                }),
+                run_idx: 0,
+                byte_offset: 0,
+            })
+            .collect();
+    }
     if start.cell.is_some() || end.cell.is_some() {
         return Vec::new();
     }
     let mut out = Vec::new();
     for bi in start.block_idx..=end.block_idx.min(doc.blocks.len().saturating_sub(1)) {
         if matches!(doc.blocks.get(bi), Some(Block::Paragraph(_))) {
-            out.push(bi);
+            out.push(Cursor::at(bi, 0, 0));
         }
     }
     out
+}
+
+/// Indices of **top-level** paragraph blocks touched by `selection` (inclusive).
+///
+/// Cell paragraphs are omitted; prefer [`paragraph_cursors_in_selection`] for edits.
+#[must_use]
+pub fn paragraph_indices_in_selection(doc: &Document, selection: Selection) -> Vec<usize> {
+    paragraph_cursors_in_selection(doc, selection)
+        .into_iter()
+        .filter(|c| c.cell.is_none())
+        .map(|c| c.block_idx)
+        .collect()
 }
 
 fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
@@ -457,6 +500,73 @@ mod tests {
         assert!(c.cell.is_none());
         assert_eq!(c.byte_offset, 0);
         assert_eq!(plain_offset_from_cursor(&doc, c), 5);
+    }
+
+    #[test]
+    fn paragraph_cursors_same_cell_and_rejects_cross_cell() {
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![
+                        TableCell {
+                            paragraphs: vec![para("A"), para("B")],
+                        },
+                        cell("C"),
+                    ],
+                }],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let start = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 0,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        let end = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 0,
+                para_idx: 1,
+            }),
+            run_idx: 0,
+            byte_offset: 1,
+        };
+        let cursors = paragraph_cursors_in_selection(
+            &doc,
+            Selection {
+                anchor: start,
+                head: end,
+            },
+        );
+        assert_eq!(cursors.len(), 2);
+        assert_eq!(cursors[0].cell.map(|c| c.para_idx), Some(0));
+        assert_eq!(cursors[1].cell.map(|c| c.para_idx), Some(1));
+
+        let other_cell = Cursor {
+            block_idx: 0,
+            cell: Some(CellPath {
+                row: 0,
+                col: 1,
+                para_idx: 0,
+            }),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        let cross = paragraph_cursors_in_selection(
+            &doc,
+            Selection {
+                anchor: start,
+                head: other_cell,
+            },
+        );
+        assert!(cross.is_empty());
     }
 
     #[test]
