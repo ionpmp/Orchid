@@ -688,6 +688,18 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
+                Text {
+                    min-width: 36px;
+                    text: root.find-query == "" ? ""
+                        : model.find-match-count <= 0 ? model.find-no-match-label
+                        : "\{model.find-match-index}/\{model.find-match-count}";
+                    color: model.find-match-count <= 0 && root.find-query != ""
+                        ? Theme.text-tertiary : Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+
                 Rectangle {
                     width: 28px;
                     height: 26px;

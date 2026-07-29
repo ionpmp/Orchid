@@ -69,6 +69,10 @@ pub struct DocumentSnapshot {
     pub find_anchor: i32,
     /// Find selection head (UTF-8 byte offset in [`Self::plain_text`]).
     pub find_cursor: i32,
+    /// 1-based index of the current find match (`0` when none).
+    pub find_match_index: i32,
+    /// Total non-overlapping matches for the last find query.
+    pub find_match_count: i32,
 }
 
 /// Image snapshot.

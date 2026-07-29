@@ -56,6 +56,7 @@ fn find_forward_wraps_case_insensitive() {
     };
     let first = plain.to_lowercase().find("hello").unwrap();
     assert_eq!(viewer.selection_plain_offsets(), (first, first + 5));
+    assert_eq!(viewer.find_match_status(), (1, 3));
 
     assert!(viewer.preview_find("hello", true));
     let second = plain.to_lowercase()[first + 5..]
@@ -63,6 +64,7 @@ fn find_forward_wraps_case_insensitive() {
         .map(|rel| first + 5 + rel)
         .unwrap();
     assert_eq!(viewer.selection_plain_offsets(), (second, second + 5));
+    assert_eq!(viewer.find_match_status(), (2, 3));
 
     assert!(viewer.preview_find("hello", true));
     let third = plain.to_lowercase()[second + 5..]
@@ -70,10 +72,12 @@ fn find_forward_wraps_case_insensitive() {
         .map(|rel| second + 5 + rel)
         .unwrap();
     assert_eq!(viewer.selection_plain_offsets(), (third, third + 5));
+    assert_eq!(viewer.find_match_status(), (3, 3));
 
     // Wrap to first.
     assert!(viewer.preview_find("hello", true));
     assert_eq!(viewer.selection_plain_offsets(), (first, first + 5));
+    assert_eq!(viewer.find_match_status(), (1, 3));
 }
 
 #[test]
@@ -93,4 +97,5 @@ fn find_backward_and_empty_query() {
 
     assert!(!viewer.preview_find("   ", true));
     assert!(!viewer.preview_find("zzz-missing", true));
+    assert_eq!(viewer.find_match_status(), (0, 0));
 }

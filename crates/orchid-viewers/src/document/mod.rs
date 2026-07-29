@@ -76,10 +76,14 @@ pub struct DocumentViewer {
     preview_drag_anchor: Mutex<Option<usize>>,
     /// Multi-click tracking for word (2×) / paragraph (3×) select.
     preview_click: Mutex<PreviewClickState>,
-    /// Bumped when [`Self::preview_find`] selects a match.
+    /// Bumped when [`Self::preview_find`] selects a match (or reports no match).
     find_gen: Mutex<i32>,
     find_anchor: Mutex<i32>,
     find_cursor: Mutex<i32>,
+    /// 1-based index of the current find match (`0` when none).
+    find_match_index: Mutex<i32>,
+    /// Total non-overlapping matches for the last query (`0` when none).
+    find_match_count: Mutex<i32>,
 }
 
 struct PreviewClickState {
@@ -140,13 +144,17 @@ impl DocumentViewer {
             find_gen: Mutex::new(0),
             find_anchor: Mutex::new(0),
             find_cursor: Mutex::new(0),
+            find_match_index: Mutex::new(0),
+            find_match_count: Mutex::new(0),
         }
     }
 
     /// Find the next / previous case-insensitive match in plain text.
     ///
     /// Selects the match (preview highlight / source offsets) and returns `true`
-    /// when found. Empty queries are ignored.
+    /// when found. Empty queries are ignored. On a miss, clears the match
+    /// status (`0/0`) and still bumps [`Self::find_gen`] so the UI can show
+    /// "no match".
     pub fn preview_find(&self, query: &str, forward: bool) -> bool {
         let q = query.trim();
         if q.is_empty() {
@@ -161,6 +169,18 @@ impl DocumentViewer {
         let q_lower = q.to_lowercase();
         let q_bytes = q_lower.len();
         if q_bytes == 0 || plain_lower.is_empty() {
+            *self.find_match_index.lock() = 0;
+            *self.find_match_count.lock() = 0;
+            *self.find_gen.lock() += 1;
+            return false;
+        }
+
+        let starts = non_overlapping_match_starts(&plain_lower, &q_lower);
+        let match_count = starts.len() as i32;
+        if starts.is_empty() {
+            *self.find_match_index.lock() = 0;
+            *self.find_match_count.lock() = 0;
+            *self.find_gen.lock() += 1;
             return false;
         }
 
@@ -171,27 +191,50 @@ impl DocumentViewer {
 
         let found = if forward {
             let start = sel_hi.min(plain_lower.len());
-            plain_lower[start..]
-                .find(&q_lower)
-                .map(|rel| start + rel)
-                .or_else(|| plain_lower.find(&q_lower))
+            starts
+                .iter()
+                .copied()
+                .find(|&s| s >= start)
+                .or_else(|| starts.first().copied())
         } else {
             let end = sel_lo.min(plain_lower.len());
-            plain_lower[..end]
-                .rfind(&q_lower)
-                .or_else(|| plain_lower.rfind(&q_lower))
+            starts
+                .iter()
+                .rev()
+                .copied()
+                .find(|&s| s + q_bytes <= end)
+                .or_else(|| starts.last().copied())
         };
 
         let Some(byte_start) = found else {
+            *self.find_match_index.lock() = 0;
+            *self.find_match_count.lock() = 0;
+            *self.find_gen.lock() += 1;
             return false;
         };
         let byte_end = (byte_start + q_bytes).min(plain.len());
+        let match_index = starts
+            .iter()
+            .position(|&s| s == byte_start)
+            .map(|i| (i + 1) as i32)
+            .unwrap_or(0);
         *self.selection.lock() = selection_from_plain_offsets(doc, byte_start, byte_end);
         *self.find_anchor.lock() = byte_start as i32;
         *self.find_cursor.lock() = byte_end as i32;
+        *self.find_match_index.lock() = match_index;
+        *self.find_match_count.lock() = match_count;
         *self.find_gen.lock() += 1;
         self.invalidate_preview();
         true
+    }
+
+    /// Current find status: `(1-based index, total)` — `(0, 0)` when no match.
+    #[must_use]
+    pub fn find_match_status(&self) -> (i32, i32) {
+        (
+            *self.find_match_index.lock(),
+            *self.find_match_count.lock(),
+        )
     }
 
     fn invalidate_preview(&self) {
@@ -2240,6 +2283,8 @@ impl Viewer for DocumentViewer {
             find_gen: *self.find_gen.lock(),
             find_anchor: *self.find_anchor.lock(),
             find_cursor: *self.find_cursor.lock(),
+            find_match_index: *self.find_match_index.lock(),
+            find_match_count: *self.find_match_count.lock(),
         })
     }
 
@@ -2295,4 +2340,24 @@ impl DocumentViewer {
     pub fn path_clone(&self) -> Option<orchid_fs::FsPath> {
         self.path.read().clone()
     }
+}
+
+/// Non-overlapping UTF-8 byte starts of `needle` inside `haystack`.
+fn non_overlapping_match_starts(haystack: &str, needle: &str) -> Vec<usize> {
+    if needle.is_empty() || haystack.is_empty() {
+        return Vec::new();
+    }
+    let mut starts = Vec::new();
+    let mut pos = 0;
+    while pos <= haystack.len() {
+        match haystack[pos..].find(needle) {
+            Some(rel) => {
+                let abs = pos + rel;
+                starts.push(abs);
+                pos = abs + needle.len();
+            }
+            None => break,
+        }
+    }
+    starts
 }

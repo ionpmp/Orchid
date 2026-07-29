@@ -813,6 +813,7 @@ viewer-document-table-col-insert = C+
 viewer-document-table-col-delete = C−
 viewer-document-find = Find
 viewer-document-find-placeholder = Find in document…
+viewer-document-find-no-match = No match
 viewer-document-tip-find = Find (Ctrl+F)
 viewer-document-tip-find-next = Find next
 viewer-document-tip-find-prev = Find previous
