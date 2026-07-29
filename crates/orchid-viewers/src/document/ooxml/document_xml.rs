@@ -8,7 +8,8 @@ use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::document::model::{
-    Alignment, Block, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode, PageSetup,
+    Alignment, Block, CellImage, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode,
+    PageSetup,
     Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
@@ -450,11 +451,17 @@ fn parse_table(
                     "tr" => current_row = Some(TableRow::default()),
                     "tc" => current_cell = Some(TableCell::default()),
                     "p" => {
-                        // Cell model is paragraph-only; drawings in cells are skipped for Tier-1.
-                        let (p, _images) =
+                        let (p, images) =
                             parse_paragraph(reader, buf, styles, numbering, rels, media)?;
                         if let Some(ref mut cell) = current_cell {
                             cell.paragraphs.push(p);
+                            let after = cell.paragraphs.len().saturating_sub(1);
+                            for image in images {
+                                cell.images.push(CellImage {
+                                    after_paragraph: after,
+                                    image,
+                                });
+                            }
                         }
                     }
                     "vMerge" | "gridSpan" => {
@@ -1100,6 +1107,79 @@ mod tests {
                 );
             }
             _ => panic!("expected image block"),
+        }
+    }
+
+    #[test]
+    fn parse_drawing_inside_table_cell() {
+        let mut png = Vec::new();
+        {
+            let img = image::RgbaImage::from_pixel(4, 2, image::Rgba([200, 40, 40, 255]));
+            img.write_to(
+                &mut std::io::Cursor::new(&mut png),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        }
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                    xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+                    xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <w:body>
+            <w:tbl>
+              <w:tr>
+                <w:tc>
+                  <w:p><w:r><w:t>Caption</w:t></w:r></w:p>
+                  <w:p>
+                    <w:r>
+                      <w:drawing>
+                        <wp:inline>
+                          <wp:extent cx="457200" cy="457200"/>
+                          <a:graphic>
+                            <a:graphicData>
+                              <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                                <pic:blipFill>
+                                  <a:blip r:embed="rId9"/>
+                                </pic:blipFill>
+                              </pic:pic>
+                            </a:graphicData>
+                          </a:graphic>
+                        </wp:inline>
+                      </w:drawing>
+                    </w:r>
+                  </w:p>
+                </w:tc>
+                <w:tc>
+                  <w:p><w:r><w:t>Right</w:t></w:r></w:p>
+                </w:tc>
+              </w:tr>
+            </w:tbl>
+          </w:body>
+        </w:document>"#;
+        let mut rels = Relationships::new();
+        rels.insert("rId9".into(), "media/cell.png".into());
+        let mut media = HashMap::new();
+        media.insert("word/media/cell.png".into(), png.clone());
+        let (blocks, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &rels,
+            &media,
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Table(t) => {
+                let cell = &t.rows[0].cells[0];
+                assert_eq!(cell.paragraphs.len(), 2);
+                assert_eq!(cell.paragraphs[0].plain_text(), "Caption");
+                assert_eq!(cell.images.len(), 1);
+                assert_eq!(cell.images[0].after_paragraph, 1);
+                assert_eq!(cell.images[0].image.bytes, png);
+                assert!(t.rows[0].cells[1].images.is_empty());
+            }
+            _ => panic!("expected table"),
         }
     }
 }

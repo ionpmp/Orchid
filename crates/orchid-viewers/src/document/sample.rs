@@ -9,15 +9,13 @@ use crate::document::ooxml::container::save_document;
 use crate::error::Result;
 
 fn cell(text: &str) -> TableCell {
-    TableCell {
-        paragraphs: vec![Paragraph {
-            runs: vec![Run {
-                text: text.into(),
-                style: RunStyle::default(),
-            }],
-            ..Default::default()
+    TableCell::from_paragraphs(vec![Paragraph {
+        runs: vec![Run {
+            text: text.into(),
+            style: RunStyle::default(),
         }],
-    }
+        ..Default::default()
+    }])
 }
 
 fn para(text: &str) -> Paragraph {

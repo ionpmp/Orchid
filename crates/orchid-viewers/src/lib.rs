@@ -19,8 +19,8 @@ pub mod viewer_trait;
 pub use archive::ArchiveViewer;
 pub use dispatch::{kind_for, select_viewer, ViewerKind};
 pub use document::{
-    create_sample_docx, sample_document, Alignment, Block, Document, DocumentViewer, EditCommand,
-    ListKind, UndoStack as DocumentUndoStack,
+    create_sample_docx, sample_document, Alignment, Block, CellImage, Document, DocumentViewer,
+    EditCommand, ListKind, UndoStack as DocumentUndoStack,
 };
 pub use error::{Result, ViewerError};
 pub use image::{

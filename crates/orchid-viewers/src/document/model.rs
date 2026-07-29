@@ -90,11 +90,33 @@ impl Paragraph {
     }
 }
 
+/// An image inside a table cell, anchored after a paragraph.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CellImage {
+    /// Index into [`TableCell::paragraphs`] after which this image is drawn.
+    pub after_paragraph: usize,
+    /// Image payload.
+    pub image: InlineImage,
+}
+
 /// One cell in a table.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TableCell {
     /// Paragraphs inside the cell.
     pub paragraphs: Vec<Paragraph>,
+    /// Images parsed from `w:drawing` in cell paragraphs (preview-only; not cursor-addressable).
+    pub images: Vec<CellImage>,
+}
+
+impl TableCell {
+    /// Cell with paragraphs and no images.
+    #[must_use]
+    pub fn from_paragraphs(paragraphs: Vec<Paragraph>) -> Self {
+        Self {
+            paragraphs,
+            images: Vec::new(),
+        }
+    }
 }
 
 /// One row in a table.
@@ -103,7 +125,6 @@ pub struct TableRow {
     /// Cells left-to-right.
     pub cells: Vec<TableCell>,
 }
-
 
 /// A simple table (no cell merges in Tier 1).
 #[derive(Debug, Clone, PartialEq, Default)]

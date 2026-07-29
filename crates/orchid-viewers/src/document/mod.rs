@@ -26,8 +26,8 @@ pub use cursor::{
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode, PageSetup,
-    Paragraph, Run, RunStyle, Table, TableCell, TableRow,
+    Alignment, Block, CellImage, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode,
+    PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};

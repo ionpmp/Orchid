@@ -306,7 +306,7 @@ impl DocumentLayout {
         for item in &layouts {
             if item.is_image {
                 let y = (pad + item.y0) as u32;
-                let x = pad as u32;
+                let x = (pad + item.x0) as u32;
                 let box_h = item.image_h.max(24.0) as u32;
                 if let (Some(rgba), true) = (&item.image_rgba, item.image_w > 0) {
                     blit_rgba(
@@ -323,7 +323,10 @@ impl DocumentLayout {
                         height,
                         x,
                         y,
-                        (max_w as u32).saturating_sub(8).max(24),
+                        (max_w as u32)
+                            .saturating_sub(item.x0 as u32)
+                            .saturating_sub(8)
+                            .max(24),
                         box_h,
                         [220, 220, 228, 255],
                     );
@@ -444,62 +447,77 @@ impl DocumentLayout {
 
         for row in &t.rows {
             let row_y0 = *total_h;
-            let mut cell_paras: Vec<Vec<CellParaLayout>> = Vec::with_capacity(ncols);
+            let mut cell_items: Vec<Vec<CellItemLayout>> = Vec::with_capacity(ncols);
             let mut max_content_h = 0.0f32;
 
             for ci in 0..ncols {
                 let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                let mut paras = Vec::new();
-                let mut content_h = 0.0f32;
-                if let Some(cell) = row.cells.get(ci) {
-                    for p in &cell.paragraphs {
-                        if *emitted_text {
-                            *plain_offset += 1;
-                        }
-                        *emitted_text = true;
-                        let body_len = p.plain_text().len();
-                        let prefix_len = list_prefix(p).len();
-                        let indent = list_indent_px(p);
-                        let layout = self.layout_paragraph(p, (inner_w - indent).max(12.0));
-                        let h = layout.height().max(14.0);
-                        paras.push(CellParaLayout {
-                            layout,
-                            plain_start: *plain_offset,
-                            body_len,
-                            prefix_len,
-                            indent_px: indent,
-                            height: h,
-                        });
-                        *plain_offset += body_len;
-                        content_h += h + TABLE_CELL_PARA_GAP;
-                    }
-                }
+                let items = if let Some(cell) = row.cells.get(ci) {
+                    self.layout_cell_items(cell, inner_w, plain_offset, emitted_text)
+                } else {
+                    Vec::new()
+                };
+                let mut content_h: f32 = items
+                    .iter()
+                    .map(|i| i.height() + TABLE_CELL_PARA_GAP)
+                    .sum();
                 if content_h > 0.0 {
                     content_h -= TABLE_CELL_PARA_GAP;
                 }
                 max_content_h = max_content_h.max(content_h);
-                cell_paras.push(paras);
+                cell_items.push(items);
             }
 
             let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
-            for (ci, paras) in cell_paras.into_iter().enumerate() {
+            for (ci, items) in cell_items.into_iter().enumerate() {
                 let x0 = ci as f32 * cell_w + TABLE_CELL_PAD;
                 let mut y = row_y0 + TABLE_CELL_PAD;
-                for para in paras {
-                    let h = para.height;
-                    layouts.push(LaidBlock {
-                        layout: para.layout,
-                        y0: y,
-                        x0,
-                        indent_px: para.indent_px,
-                        plain_start: para.plain_start,
-                        body_len: para.body_len,
-                        prefix_len: para.prefix_len,
-                        is_image: false,
-                        image_h: 0.0,
-                        image_w: 0,
-                        image_rgba: None,
-                    });
+                for item in items {
+                    let h = item.height();
+                    match item {
+                        CellItemLayout::Para {
+                            layout,
+                            plain_start,
+                            body_len,
+                            prefix_len,
+                            indent_px,
+                            ..
+                        } => {
+                            layouts.push(LaidBlock {
+                                layout,
+                                y0: y,
+                                x0,
+                                indent_px,
+                                plain_start,
+                                body_len,
+                                prefix_len,
+                                is_image: false,
+                                image_h: 0.0,
+                                image_w: 0,
+                                image_rgba: None,
+                            });
+                        }
+                        CellItemLayout::Image {
+                            plain_start,
+                            image_w,
+                            image_rgba,
+                            ..
+                        } => {
+                            layouts.push(LaidBlock {
+                                layout: Layout::default(),
+                                y0: y,
+                                x0,
+                                indent_px: 0.0,
+                                plain_start,
+                                body_len: 0,
+                                prefix_len: 0,
+                                is_image: true,
+                                image_h: h,
+                                image_w,
+                                image_rgba,
+                            });
+                        }
+                    }
                     y += h + TABLE_CELL_PARA_GAP;
                 }
             }
@@ -532,41 +550,25 @@ impl DocumentLayout {
 
         for row in &t.rows {
             let row_y0 = *total_h;
-            let mut cell_paras: Vec<Vec<CellParaLayout>> = Vec::with_capacity(ncols);
+            let mut cell_items: Vec<Vec<CellItemLayout>> = Vec::with_capacity(ncols);
             let mut max_content_h = 0.0f32;
 
             for ci in 0..ncols {
                 let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                let mut paras = Vec::new();
-                let mut content_h = 0.0f32;
-                if let Some(cell) = row.cells.get(ci) {
-                    for p in &cell.paragraphs {
-                        if *emitted_text {
-                            *plain_offset += 1;
-                        }
-                        *emitted_text = true;
-                        let body_len = p.plain_text().len();
-                        let prefix_len = list_prefix(p).len();
-                        let indent = list_indent_px(p);
-                        let layout = self.layout_paragraph(p, (inner_w - indent).max(12.0));
-                        let h = layout.height().max(14.0);
-                        paras.push(CellParaLayout {
-                            layout,
-                            plain_start: *plain_offset,
-                            body_len,
-                            prefix_len,
-                            indent_px: indent,
-                            height: h,
-                        });
-                        *plain_offset += body_len;
-                        content_h += h + TABLE_CELL_PARA_GAP;
-                    }
-                }
+                let items = if let Some(cell) = row.cells.get(ci) {
+                    self.layout_cell_items(cell, inner_w, plain_offset, emitted_text)
+                } else {
+                    Vec::new()
+                };
+                let mut content_h: f32 = items
+                    .iter()
+                    .map(|i| i.height() + TABLE_CELL_PARA_GAP)
+                    .sum();
                 if content_h > 0.0 {
                     content_h -= TABLE_CELL_PARA_GAP;
                 }
                 max_content_h = max_content_h.max(content_h);
-                cell_paras.push(paras);
+                cell_items.push(items);
             }
 
             let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
@@ -578,35 +580,47 @@ impl DocumentLayout {
                     ((local_x / cell_w).floor() as usize).min(ncols.saturating_sub(1))
                 };
                 let x0 = col as f32 * cell_w + TABLE_CELL_PAD;
-                let paras = &cell_paras[col];
-                if paras.is_empty() {
+                let items = &cell_items[col];
+                if items.is_empty() {
                     return Some(
-                        cell_paras
+                        cell_items
                             .iter()
                             .take(col)
                             .flatten()
                             .last()
-                            .map(|p| p.plain_start + p.body_len)
+                            .map(|p| p.plain_start() + p.body_len())
                             .unwrap_or(*plain_offset),
                     );
                 }
                 let mut y = row_y0 + TABLE_CELL_PAD;
-                for (i, para) in paras.iter().enumerate() {
-                    let y1 = y + para.height + TABLE_CELL_PARA_GAP;
-                    let last = i + 1 == paras.len();
+                for (i, item) in items.iter().enumerate() {
+                    let y1 = y + item.height() + TABLE_CELL_PARA_GAP;
+                    let last = i + 1 == items.len();
                     if local_y < y1 || last {
-                        let ly = (local_y - y).max(0.0);
-                        let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                        let lx = (local_x - x0 - para.indent_px)
-                            .clamp(0.0, (inner_w - para.indent_px).max(12.0));
-                        let body_idx = cluster_to_body_index(
-                            &para.layout,
-                            lx,
-                            ly,
-                            para.prefix_len,
-                            para.body_len,
-                        );
-                        return Some(para.plain_start + body_idx);
+                        return match item {
+                            CellItemLayout::Image { plain_start, .. } => Some(*plain_start),
+                            CellItemLayout::Para {
+                                layout,
+                                plain_start,
+                                body_len,
+                                prefix_len,
+                                indent_px,
+                                ..
+                            } => {
+                                let ly = (local_y - y).max(0.0);
+                                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
+                                let lx = (local_x - x0 - indent_px)
+                                    .clamp(0.0, (inner_w - indent_px).max(12.0));
+                                let body_idx = cluster_to_body_index(
+                                    layout,
+                                    lx,
+                                    ly,
+                                    *prefix_len,
+                                    *body_len,
+                                );
+                                Some(plain_start + body_idx)
+                            }
+                        };
                     }
                     y = y1;
                 }
@@ -615,6 +629,83 @@ impl DocumentLayout {
         }
 
         None
+    }
+
+    fn layout_cell_items(
+        &mut self,
+        cell: &crate::document::model::TableCell,
+        inner_w: f32,
+        plain_offset: &mut usize,
+        emitted_text: &mut bool,
+    ) -> Vec<CellItemLayout> {
+        let mut items = Vec::new();
+        if cell.paragraphs.is_empty() {
+            for cell_img in &cell.images {
+                let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
+                let h = (h_px as f32).max(24.0);
+                items.push(CellItemLayout::Image {
+                    plain_start: *plain_offset,
+                    height: h,
+                    image_w: w,
+                    image_rgba: rgba,
+                });
+            }
+            return items;
+        }
+
+        for (pi, p) in cell.paragraphs.iter().enumerate() {
+            if *emitted_text {
+                *plain_offset += 1;
+            }
+            *emitted_text = true;
+            let body_len = p.plain_text().len();
+            let prefix_len = list_prefix(p).len();
+            let indent = list_indent_px(p);
+            let layout = self.layout_paragraph(p, (inner_w - indent).max(12.0));
+            let h = layout.height().max(14.0);
+            let plain_start = *plain_offset;
+            items.push(CellItemLayout::Para {
+                layout,
+                plain_start,
+                body_len,
+                prefix_len,
+                indent_px: indent,
+                height: h,
+            });
+            *plain_offset += body_len;
+            let after_text = *plain_offset;
+            for cell_img in cell
+                .images
+                .iter()
+                .filter(|ci| ci.after_paragraph == pi)
+            {
+                let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
+                let ih = (h_px as f32).max(24.0);
+                items.push(CellItemLayout::Image {
+                    plain_start: after_text,
+                    height: ih,
+                    image_w: w,
+                    image_rgba: rgba,
+                });
+            }
+        }
+        // Orphan images (bad indices) go at the end.
+        let last = cell.paragraphs.len().saturating_sub(1);
+        for cell_img in cell
+            .images
+            .iter()
+            .filter(|ci| ci.after_paragraph > last)
+        {
+            let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
+            let ih = (h_px as f32).max(24.0);
+            items.push(CellItemLayout::Image {
+                plain_start: *plain_offset,
+                height: ih,
+                image_w: w,
+                image_rgba: rgba,
+            });
+        }
+        items
     }
 }
 
@@ -708,13 +799,43 @@ struct LaidBlock {
     image_rgba: Option<Vec<u8>>,
 }
 
-struct CellParaLayout {
-    layout: Layout<ColorBrush>,
-    plain_start: usize,
-    body_len: usize,
-    prefix_len: usize,
-    indent_px: f32,
-    height: f32,
+enum CellItemLayout {
+    Para {
+        layout: Layout<ColorBrush>,
+        plain_start: usize,
+        body_len: usize,
+        prefix_len: usize,
+        indent_px: f32,
+        height: f32,
+    },
+    Image {
+        /// Caret offset when the image is clicked (end of preceding text).
+        plain_start: usize,
+        height: f32,
+        image_w: u32,
+        image_rgba: Option<Vec<u8>>,
+    },
+}
+
+impl CellItemLayout {
+    fn height(&self) -> f32 {
+        match self {
+            Self::Para { height, .. } | Self::Image { height, .. } => *height,
+        }
+    }
+
+    fn plain_start(&self) -> usize {
+        match self {
+            Self::Para { plain_start, .. } | Self::Image { plain_start, .. } => *plain_start,
+        }
+    }
+
+    fn body_len(&self) -> usize {
+        match self {
+            Self::Para { body_len, .. } => *body_len,
+            Self::Image { .. } => 0,
+        }
+    }
 }
 
 struct TableGridGeom {
@@ -1306,7 +1427,9 @@ fn fill_rect(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::model::{Run, RunStyle, Table, TableCell, TableRow};
+    use crate::document::model::{
+        CellImage, ImageFormat, InlineImage, Run, RunStyle, Table, TableCell, TableRow,
+    };
 
     fn sample_paragraph() -> Paragraph {
         Paragraph {
@@ -1432,15 +1555,13 @@ mod tests {
     }
 
     fn cell(text: &str) -> TableCell {
-        TableCell {
-            paragraphs: vec![Paragraph {
-                runs: vec![Run {
-                    text: text.into(),
-                    style: RunStyle::default(),
-                }],
-                ..Default::default()
+        TableCell::from_paragraphs(vec![Paragraph {
+            runs: vec![Run {
+                text: text.into(),
+                style: RunStyle::default(),
             }],
-        }
+            ..Default::default()
+        }])
     }
 
     fn table_2x2_doc() -> Document {
@@ -1519,6 +1640,58 @@ mod tests {
             offset >= aa && offset <= aa + "AA".len(),
             "offset={offset} expected in AA at {aa}..{}",
             aa + "AA".len()
+        );
+    }
+
+    #[test]
+    fn table_cell_image_appears_in_preview() {
+        let mut png = Vec::new();
+        {
+            let img = image::RgbaImage::from_pixel(8, 8, image::Rgba([220, 30, 30, 255]));
+            img.write_to(
+                &mut std::io::Cursor::new(&mut png),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        }
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![TableRow {
+                    cells: vec![
+                        TableCell {
+                            paragraphs: vec![Paragraph {
+                                runs: vec![Run {
+                                    text: "Pic".into(),
+                                    style: RunStyle::default(),
+                                }],
+                                ..Default::default()
+                            }],
+                            images: vec![CellImage {
+                                after_paragraph: 0,
+                                image: InlineImage {
+                                    bytes: png,
+                                    format: ImageFormat::Png,
+                                    width_px: 8,
+                                    height_px: 8,
+                                    r_id: None,
+                                    part_path: None,
+                                },
+                            }],
+                        },
+                        cell("Right"),
+                    ],
+                }],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let (bytes, w, h) = dl.render_document(&doc, 400.0);
+        assert!(w > 100 && h > 40);
+        // Solid red-ish pixels from the cell image (not just glyph ink).
+        assert!(
+            bytes.chunks_exact(4).any(|px| px[0] > 180 && px[1] < 80 && px[2] < 80),
+            "expected red cell-image pixels in {w}x{h} preview"
         );
     }
 }

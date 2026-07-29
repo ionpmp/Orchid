@@ -340,9 +340,7 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             let cols = t.rows.first().map(|r| r.cells.len()).unwrap_or(1).max(1);
             let row = TableRow {
                 cells: (0..cols)
-                    .map(|_| TableCell {
-                        paragraphs: vec![Paragraph::default()],
-                    })
+                    .map(|_| TableCell::from_paragraphs(vec![Paragraph::default()]))
                     .collect(),
             };
             let idx = (*at_row).min(t.rows.len());
@@ -405,9 +403,7 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 let i = at.min(row.cells.len());
                 row.cells.insert(
                     i,
-                    TableCell {
-                        paragraphs: vec![Paragraph::default()],
-                    },
+                    TableCell::from_paragraphs(vec![Paragraph::default()]),
                 );
             }
             Ok(EditCommand::DeleteTableColumn {
@@ -890,24 +886,20 @@ mod tests {
             blocks: vec![Block::Table(Table {
                 rows: vec![TableRow {
                     cells: vec![
-                        TableCell {
-                            paragraphs: vec![Paragraph {
+                        TableCell::from_paragraphs(vec![Paragraph {
                                 runs: vec![Run {
                                     text: "A".into(),
                                     style: RunStyle::default(),
                                 }],
                                 ..Default::default()
-                            }],
-                        },
-                        TableCell {
-                            paragraphs: vec![Paragraph {
+                            }]),
+                        TableCell::from_paragraphs(vec![Paragraph {
                                 runs: vec![Run {
                                     text: "B".into(),
                                     style: RunStyle::default(),
                                 }],
                                 ..Default::default()
-                            }],
-                        },
+                            }]),
                     ],
                 }],
                 unsupported: vec![],
@@ -959,24 +951,20 @@ mod tests {
             blocks: vec![Block::Table(Table {
                 rows: vec![TableRow {
                     cells: vec![
-                        TableCell {
-                            paragraphs: vec![Paragraph {
+                        TableCell::from_paragraphs(vec![Paragraph {
                                 runs: vec![Run {
                                     text: "A".into(),
                                     style: RunStyle::default(),
                                 }],
                                 ..Default::default()
-                            }],
-                        },
-                        TableCell {
-                            paragraphs: vec![Paragraph {
+                            }]),
+                        TableCell::from_paragraphs(vec![Paragraph {
                                 runs: vec![Run {
                                     text: "B".into(),
                                     style: RunStyle::default(),
                                 }],
                                 ..Default::default()
-                            }],
-                        },
+                            }]),
                     ],
                 }],
                 unsupported: vec![],
@@ -1020,22 +1008,14 @@ mod tests {
                 rows: vec![
                     TableRow {
                         cells: vec![
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
                         ],
                     },
                     TableRow {
                         cells: vec![
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
                         ],
                     },
                 ],
@@ -1071,22 +1051,14 @@ mod tests {
                 rows: vec![
                     TableRow {
                         cells: vec![
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
                         ],
                     },
                     TableRow {
                         cells: vec![
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
-                            TableCell {
-                                paragraphs: vec![Paragraph::default()],
-                            },
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
+                            TableCell::from_paragraphs(vec![Paragraph::default()]),
                         ],
                     },
                 ],

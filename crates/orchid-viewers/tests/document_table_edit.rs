@@ -8,15 +8,13 @@ use orchid_viewers::document::{cursor_from_plain_offset, DocumentViewer};
 
 fn table_2x2() -> Doc {
     fn cell(text: &str) -> TableCell {
-        TableCell {
-            paragraphs: vec![Paragraph {
-                runs: vec![Run {
-                    text: text.into(),
-                    style: RunStyle::default(),
-                }],
-                ..Default::default()
+        TableCell::from_paragraphs(vec![Paragraph {
+            runs: vec![Run {
+                text: text.into(),
+                style: RunStyle::default(),
             }],
-        }
+            ..Default::default()
+        }])
     }
     Doc {
         blocks: vec![

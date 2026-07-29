@@ -453,9 +453,7 @@ mod tests {
     }
 
     fn cell(text: &str) -> TableCell {
-        TableCell {
-            paragraphs: vec![para(text)],
-        }
+        TableCell::from_paragraphs(vec![para(text)])
     }
 
     #[test]
@@ -590,9 +588,7 @@ mod tests {
             blocks: vec![Block::Table(Table {
                 rows: vec![TableRow {
                     cells: vec![
-                        TableCell {
-                            paragraphs: vec![para("A"), para("B")],
-                        },
+                        TableCell::from_paragraphs(vec![para("A"), para("B")]),
                         cell("C"),
                     ],
                 }],
