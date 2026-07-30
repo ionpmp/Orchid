@@ -60,3 +60,14 @@ Gestures are invisible. This is the central problem of touch-first interfaces. S
 - **Content over chrome.** Minimum UI frames and panels.
 - **Semantic tokens, not colors.** `accent.brand`, not "blue".
 - **System typography.** Segoe UI Variable on Windows 11, Segoe UI on Windows 10.
+
+## Current shell surfaces (pre-alpha)
+
+These are implemented today and should stay consistent with the principles above:
+
+- **Workspace canvas** — 16×10 grid, widget frames, group tab stacks, dock
+- **In-app window manager** — floating overlays, edge snap, taskbar, Ctrl+Tab
+- **Floating / docked viewers** — images, PDF, text, archives, DOCX editor
+- **Overlays** — command palette, settings, notifications, onboarding, hints
+
+Roadmap status: [`ROADMAP.md`](ROADMAP.md). Recent product notes: [`CHANGELOG.md`](../CHANGELOG.md).

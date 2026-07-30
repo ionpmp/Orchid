@@ -50,7 +50,10 @@ see [`docs/BUILDING.md`](docs/BUILDING.md) (including `pdfium.dll` for PDF).
 ## Roadmap & architecture
 
 - Backlog: [`docs/ROADMAP.md`](docs/ROADMAP.md) (`[x]` / `[~]` / `[ ]`)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md) (Keep a Changelog; update Unreleased)
 - Crate map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Doc index: [`docs/README.md`](docs/README.md)
+- Repo: https://github.com/ionpmp/Orchid
 
 ## Scope hygiene
 

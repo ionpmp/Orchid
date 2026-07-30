@@ -2,6 +2,10 @@
 
 Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 
+Last synced with `main` as of **2026-07-30**. Narrative release notes:
+[`CHANGELOG.md`](../CHANGELOG.md). Spec for the future native container:
+[`ORCHID_FORMAT.md`](ORCHID_FORMAT.md).
+
 ## MVP (v0.1) — 6–8 months
 
 ### Core
@@ -56,15 +60,17 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Widget: Moon (astronomy)
 - [x] Widget: System indicators
 - [x] Widget: Processes — Task Manager–style processes / services / startup / users (no Performance graphs)
-- [x] Widget: Calculator — standard + scientific modes, history, memory, DEG/RAD/GRAD, keyboard input
+- [x] Widget: Calculator — standard + scientific modes, history, memory, DEG/RAD/GRAD, keyboard input, `=expr` universal-search
+- [x] Widget: World clock — multi-city list, IANA zones, relative offsets, reorder, GPS/IP “Local” label, settings persistence
 - [x] Widget: Notes — tabbed local scratchpad with wrap/mono/font settings and find
-- [x] Widget: Calendar — local month grid + day agenda CRUD, upcoming strip, settings, universal search
+- [x] Widget: Calendar — local month grid + day agenda CRUD, upcoming strip, jump-to-date, color filter, default duration, duplicate, year jump, settings, universal search
 - [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [x] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [x] Widget: Media player (audio/video)
 - [x] Widget: RSS feed
 - [x] Widget: Password manager — unlock UI (passphrase + Hello), search, copy, TOTP, add entry; lock vault button + command
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout
+- [x] Widget: Jyotish — see Additional / Jyotish module below
 
 ### Viewers
 - [x] Floating open — new documents open in a viewport-relative floating overlay above the canvas; reopening the same path focuses the existing viewer (group tab + scroll when docked); header-drag onto a free grid slot docks to the canvas
@@ -72,7 +78,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [~] PDF (pdfium) — Pdfium-backed viewer with page navigation (toolbar + PageUp/Down/←/→ when focused), go-to-page input, fit width/page with active-mode highlight, zoom, toolbar hover hints, viewport re-fit; action failures (page/zoom/fit/viewport) surface as localized notifications; requires bundled `pdfium.dll`
 - [~] Text with syntax highlighting (Tree-sitter) — grammars for rust/python/toml/json/markdown/javascript/typescript/tsx/yaml/go/bash/html/css/c/cpp/java/ruby/sql/php/kotlin; MVP edit mode (toggle, multiline edit, save via toolbar/Ctrl+S with hover hints, dirty ●, localized line count + LF/CRLF); read-only virtualized scroll (Flickable → text_scroll + viewport-sized window)
 - [~] Archives (ZIP, 7z, TAR, TAR.GZ, TAR.XZ) — browse + preview + extract selected/all; localized toolbar header + status strip (format/count + extract feedback); navigate/select/extract failures notify; TAR.XZ via `xz2`
-- [~] Document editor (DOCX) — Tier-1 rich text model + OOXML read/write (fonts/bold/italic/underline/color, alignment, lists via `numbering.xml`/`numId`, simple tables with cell-paragraph cursor/typing (Enter split / Backspace join, align/list/indent, Tab/Shift+Tab cell nav, insert table / insert/delete row/col via toolbar), column grid preview from `tblGrid`/`tcW` (equal-width when absent) + hairline borders + column-aware hit-test, `w:drawing` inside cells → preview blit + click/delete/arrow cell-image cursor, page setup, body inline `w:drawing` → `Block::Image` with OOXML write + media/rels on save; insert via toolbar **Img** / Ctrl+V clipboard image); `DocumentViewer` + dispatch before ZIP-archive; Slint document surface (`kind=7`) with toolbar + Preview/Source toggle; parley+swash RGBA preview canvas with click/drag/double-click-word/triple-click-paragraph selection, caret paint, keyboard typing (insert/delete/return/arrows/word-jump/Home/End/Ctrl+A), clipboard copy/cut/paste (text + image), and inline-image blit; selection-scoped B/I/U + font size/family/color + align/list (Tab/Shift+Tab indent) on selected paragraphs; viewport-driven preview width; plain `TextInput` source mode; undo/redo; catalog **Document** launcher writes a sample `.docx` under `data/documents/` and opens a viewer docked on the canvas (floating chrome has dock ▣; FM/`open_in_viewer` stays floating); in-document Find/Replace (Ctrl+F / F3) with next/prev over plain text, `n/m` match status, replace current/all, and Source mode caret sync; Tantivy DOCX extractor; Word/LibreOffice fixtures under `tests/fixtures/docx/` + parse/round-trip tests
+- [~] Document editor (DOCX) — Tier-1 rich text model + OOXML read/write (fonts/bold/italic/underline/strikethrough/highlight/color, alignment, lists via `numbering.xml`/`numId`, simple tables with cell-paragraph cursor/typing (Enter split / Backspace join, align/list/indent, Tab/Shift+Tab cell nav, insert table / insert/delete row/col via toolbar), column grid preview from `tblGrid`/`tcW` (equal-width when absent) + hairline borders + column-aware hit-test, `w:drawing` inside cells → preview blit + click/delete/arrow cell-image cursor, page setup, body inline `w:drawing` → `Block::Image` with OOXML write + media/rels on save; insert via toolbar **Img** / Ctrl+V clipboard image); `DocumentViewer` + dispatch before ZIP-archive; Slint document surface (`kind=7`) with toolbar + Preview/Source toggle; parley+swash RGBA preview canvas with click/drag/double-click-word/triple-click-paragraph selection, caret paint, keyboard typing (insert/delete/return/arrows/word-jump/Home/End/Ctrl+A), clipboard copy/cut/paste (text + image), and inline-image blit; selection-scoped B/I/U/S/H + font size/family/color + align/list (Tab/Shift+Tab indent) on selected paragraphs; viewport-driven preview width; plain `TextInput` source mode; undo/redo; catalog **Document** launcher writes a sample `.docx` under `data/documents/` and opens a viewer docked on the canvas (floating chrome has dock ▣; FM/`open_in_viewer` stays floating); in-document Find/Replace (Ctrl+F / F3) with next/prev over plain text, `n/m` match status, replace current/all, and Source mode caret sync; Tantivy DOCX extractor; Word/LibreOffice fixtures under `tests/fixtures/docx/` + parse/round-trip tests
 
 ### Security
 - [~] Password manager (KDBX4 format, custom UX) — unlock/lock UI + Hello; KDBX4 R/W, groups/entries/TOTP; `privacy.vault_auto_lock_seconds` idle lock (default 300s)
@@ -102,7 +108,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started.
 - [x] Onboarding tour, hint mode — four-step first-run overlay; `Win+?` hint overlays; persisted `[onboarding]` config
 
 ### Additional
-- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog) + personal day scores, monthly/yearly forecast, life retrospective, birth-time rectification; Phase A trust layer (limb end-times, now/day scores, Rahu/Yama/Gulika, golden fixtures, disclaimer); Phase B score transparency (factor deltas/strength, narrative modes, anti-repeat advice); Phase C dashas/life (pratyantar + now strip, year→antar expand, gochara soft tint, rectify maha/antar/pratyantar scoring); Phase D usable rectify wizard (progress/back/draft, event validation, top-N score breakdown, refine pass, place resync); Phase E UI polish (a11y dots/tooltips, month selection+legend, empty location, year aggregate cache); Phase F i18n/tone (real UI translations for 9 locales, Sanskrit glossary keepers, Fluent placeholder audit, CONTRIBUTING note); Phase G product surfaces (day-color/Rahu Kalam notifications, day/week clipboard export, universal-search keyword source, [`docs/jyotish.md`](jyotish.md)); Phase H engineering (norm360/tara/dasha property tests, month color-cache reuse guard, slim closed-rectify UI model, `show_rahukalam` / `enable_personal` settings)
+- [x] Jyotish module — Vedic panchanga widget (tithi/nakshatra/yoga/karana/vara + grahas, Lahiri/KP/Raman ayanamsa; opt-in via catalog) + personal day scores, monthly/yearly forecast, life retrospective, birth-time rectification; Phase A trust layer (limb end-times, now/day scores, Rahu/Yama/Gulika, golden fixtures, disclaimer); Phase B score transparency (factor deltas/strength, narrative modes, anti-repeat advice); Phase C dashas/life (pratyantar + now strip, year→antar expand, gochara soft tint, rectify maha/antar/pratyantar scoring); Phase D usable rectify wizard (progress/back/draft, event validation, top-N score breakdown, refine pass, place resync); Phase E UI polish (a11y dots/tooltips, month selection+legend, empty location, year aggregate cache); Phase F i18n/tone (real UI translations for 9 locales, Sanskrit glossary keepers, Fluent placeholder audit, CONTRIBUTING note); Phase G product surfaces (day-color/Rahu Kalam notifications, day/week clipboard export, universal-search keyword source, [`docs/jyotish.md`](jyotish.md)); Phase H engineering (norm360/tara/dasha property tests, month color-cache reuse guard, slim closed-rectify UI model, `show_rahukalam` / `enable_personal` settings); post-H product polish (multi-location city search, pin Current location via GPS/IP, birth profiles with separate birth place, birth-date calendar + place UTC fill, richer localized Day summaries/advice)
 
 ## v1.x — 9–18 months
 

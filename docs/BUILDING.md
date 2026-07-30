@@ -30,8 +30,8 @@ The `orchid-app` build script copies this DLL next to `orchid.exe` under `target
 ## Cloning
 
 ```bash
-git clone https://github.com/PLACEHOLDER_ORG/orchid.git
-cd orchid
+git clone https://github.com/ionpmp/Orchid.git
+cd Orchid
 ```
 
 ## Building
@@ -58,12 +58,29 @@ cargo run --release
 cargo test --workspace
 ```
 
+Targeted crates while iterating:
+
+```bash
+cargo test -p orchid-viewers
+cargo test -p orchid-widgets
+cargo test -p orchid-search
+cargo test -p orchid-i18n
+```
+
+After changing Fluent keys, keep locale parity:
+
+```bash
+python scripts/i18n_sync_keys.py
+```
+
 ## Linting
 
 ```bash
 cargo fmt --all
 cargo clippy --all-targets --all-features -- -D warnings
 ```
+
+CI runs the same checks on Windows — see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
 ## Troubleshooting
 

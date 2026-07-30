@@ -21,11 +21,13 @@ Be respectful. We are building a product for a diverse audience and expect the s
 
 ### Submit Code
 
-1. Fork the repository
+1. Fork the repository ([ionpmp/Orchid](https://github.com/ionpmp/Orchid))
 2. Create a branch: `git checkout -b feat/my-feature` or `fix/issue-123`
 3. Write code following the guidelines below
 4. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`
-5. Open a Pull Request describing your changes
+5. For user-visible work, update [`CHANGELOG.md`](../CHANGELOG.md) under
+   **Unreleased** (Added / Changed / Fixed / Security)
+6. Open a Pull Request describing your changes
 
 ## Code Standards
 

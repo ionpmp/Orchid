@@ -25,6 +25,16 @@ Widget framework for Orchid. Provides:
 * **Commands** — `build_command_set(...)` produces every widget /
   workspace / group command ready to register on a
   `CommandRegistry`.
+* **Window placement** — per-instance `WindowPlacement` (grid or floating)
+  for the in-app window manager in `orchid-ui`.
+
+### Built-in widgets (`builtin/`)
+
+Terminal, file manager, weather, moon, system, processes, calculator, world
+clock, notes, calendar, Jyotish, media, RSS, recent files, universal search,
+password manager, viewer (bridges to `orchid-viewers`).
+
+Product checklist: [`docs/ROADMAP.md`](../../docs/ROADMAP.md).
 
 ## Stability
 

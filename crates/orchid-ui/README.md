@@ -31,10 +31,13 @@ includes 39 exported components and 8 shared globals (47 Slint units total):
   to detach)
 - **Overlays** — `CommandPalettePanel`, `SettingsPanel`, `WorkspacePanel`,
   `NotificationCenter`
+- **Window manager** — per-widget grid or floating placement; undock / dock,
+  minimize / maximize / restore, edge snap, in-app taskbar, Ctrl+Tab
 - **Built-in widgets** — terminal (tabs + split view), weather, moon, system,
-  RSS, recent files, universal search, media player, password manager, viewer
-  (image flip/rotate/fit + viewport re-fit, localized status strips, PDF go-to-page + fit re-render, text edit + Ctrl+S,
-  archive extract + localized status), file manager (panes, sidebar, dialogs, …)
+  processes, calculator, world clock, notes, calendar, Jyotish, RSS, recent
+  files, universal search, media player, password manager, file manager
+  (panes, sidebar, dialogs, …), viewer (image / PDF / text / archive / **DOCX**
+  Preview+Source with Find/Replace; floating or canvas-docked)
 
 Every component reads design tokens from the shared [`Theme`] global and user
 strings from [`Strings`] (populated from `orchid-i18n`).
