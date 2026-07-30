@@ -9,7 +9,7 @@ use quick_xml::writer::Writer;
 
 use crate::document::model::{
     Alignment, Block, CellImage, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode,
-    PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
+    PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
 use crate::document::ooxml::styles::StyleDefaults;
@@ -495,15 +495,15 @@ fn parse_table(
                             }
                         }
                     }
-                    "vMerge" | "gridSpan" => {
-                        tracing::warn!(
-                            element = local.as_str(),
-                            "table cell merge not supported in Tier 1; preserving as opaque"
-                        );
-                        table.unsupported.push(OpaqueXmlNode {
-                            position_hint: format!("w:tbl/w:{local}"),
-                            raw_xml: format!("<w:{local}/>").into_bytes(),
-                        });
+                    "gridSpan" => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_grid_span(&e, cell);
+                        }
+                    }
+                    "vMerge" => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_v_merge(&e, cell);
+                        }
                     }
                     _ => {}
                 }
@@ -523,15 +523,15 @@ fn parse_table(
                             }
                         }
                     }
-                    "vMerge" | "gridSpan" => {
-                        tracing::warn!(
-                            element = local.as_str(),
-                            "table cell merge not supported in Tier 1"
-                        );
-                        table.unsupported.push(OpaqueXmlNode {
-                            position_hint: format!("w:tbl/w:{local}"),
-                            raw_xml: format!("<w:{local}/>").into_bytes(),
-                        });
+                    "gridSpan" => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_grid_span(&e, cell);
+                        }
+                    }
+                    "vMerge" => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_v_merge(&e, cell);
+                        }
                     }
                     _ => {}
                 }
@@ -876,6 +876,24 @@ fn write_text_element(writer: &mut Writer<Cursor<Vec<u8>>>, text: &str) -> Resul
     Ok(())
 }
 
+fn apply_grid_span(e: &BytesStart<'_>, cell: &mut TableCell) {
+    let span = attr_val(e, "val")
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(1);
+    if span > 1 {
+        cell.grid_span = Some(span);
+    }
+}
+
+fn apply_v_merge(e: &BytesStart<'_>, cell: &mut TableCell) {
+    let val = attr_val(e, "val").unwrap_or_default();
+    cell.v_merge = Some(match val.as_str() {
+        "restart" => VMerge::Restart,
+        // Bare `<w:vMerge/>` and explicit `continue` both mean continuation.
+        _ => VMerge::Continue,
+    });
+}
+
 fn parse_grid_col_width(e: &BytesStart<'_>) -> Option<u32> {
     attr_val(e, "w")
         .and_then(|v| v.parse().ok())
@@ -923,16 +941,40 @@ fn write_table(
             writer
                 .write_event(Event::Start(BytesStart::new("w:tc")))
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-            if let Some(&w) = t.column_widths_twips.get(ci) {
+            let width = t.column_widths_twips.get(ci).copied();
+            let need_tc_pr =
+                width.is_some() || cell.grid_span.is_some() || cell.v_merge.is_some();
+            if need_tc_pr {
                 writer
                     .write_event(Event::Start(BytesStart::new("w:tcPr")))
                     .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-                let mut tc_w = BytesStart::new("w:tcW");
-                tc_w.push_attribute(("w:w", w.to_string().as_str()));
-                tc_w.push_attribute(("w:type", "dxa"));
-                writer
-                    .write_event(Event::Empty(tc_w))
-                    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                if let Some(w) = width {
+                    let mut tc_w = BytesStart::new("w:tcW");
+                    tc_w.push_attribute(("w:w", w.to_string().as_str()));
+                    tc_w.push_attribute(("w:type", "dxa"));
+                    writer
+                        .write_event(Event::Empty(tc_w))
+                        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                }
+                if let Some(span) = cell.grid_span.filter(|&s| s > 1) {
+                    let mut gs = BytesStart::new("w:gridSpan");
+                    gs.push_attribute(("w:val", span.to_string().as_str()));
+                    writer
+                        .write_event(Event::Empty(gs))
+                        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                }
+                if let Some(vm) = cell.v_merge {
+                    let mut vm_el = BytesStart::new("w:vMerge");
+                    match vm {
+                        VMerge::Restart => {
+                            vm_el.push_attribute(("w:val", "restart"));
+                        }
+                        VMerge::Continue => {}
+                    }
+                    writer
+                        .write_event(Event::Empty(vm_el))
+                        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                }
                 writer
                     .write_event(Event::End(BytesEnd::new("w:tcPr")))
                     .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -1320,6 +1362,86 @@ mod tests {
                 assert!(p.runs[1].style.subscript);
             }
             _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn parse_and_write_grid_span_v_merge() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:tbl>
+              <w:tr>
+                <w:tc>
+                  <w:tcPr>
+                    <w:gridSpan w:val="2"/>
+                    <w:vMerge w:val="restart"/>
+                  </w:tcPr>
+                  <w:p><w:r><w:t>Span</w:t></w:r></w:p>
+                </w:tc>
+              </w:tr>
+              <w:tr>
+                <w:tc>
+                  <w:tcPr><w:vMerge/></w:tcPr>
+                  <w:p><w:r><w:t></w:t></w:r></w:p>
+                </w:tc>
+              </w:tr>
+            </w:tbl>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells[0].grid_span, Some(2));
+                assert_eq!(t.rows[0].cells[0].v_merge, Some(VMerge::Restart));
+                assert_eq!(t.rows[0].cells[0].paragraphs[0].plain_text(), "Span");
+                assert_eq!(t.rows[1].cells[0].v_merge, Some(VMerge::Continue));
+                assert!(t.unsupported.is_empty());
+            }
+            _ => panic!("expected table"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:gridSpan") && text.contains("w:val=\"2\""),
+            "missing gridSpan: {text}"
+        );
+        assert!(
+            text.contains("w:val=\"restart\""),
+            "missing vMerge restart: {text}"
+        );
+        assert!(
+            text.contains("<w:vMerge/>") || text.contains("<w:vMerge />"),
+            "missing bare vMerge continue: {text}"
+        );
+        let (blocks2, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Table(t) => {
+                assert_eq!(t.rows[0].cells[0].grid_span, Some(2));
+                assert_eq!(t.rows[0].cells[0].v_merge, Some(VMerge::Restart));
+                assert_eq!(t.rows[1].cells[0].v_merge, Some(VMerge::Continue));
+            }
+            _ => panic!("expected table"),
         }
     }
 

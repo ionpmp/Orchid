@@ -1597,6 +1597,7 @@ mod tests {
                             ..Default::default()
                         }],
                         images: vec![image.clone()],
+                        ..Default::default()
                     }],
                 }],
                 ..Default::default()

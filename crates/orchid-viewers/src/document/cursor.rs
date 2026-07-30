@@ -322,10 +322,7 @@ pub fn plain_offset_from_cursor(doc: &Document, cursor: Cursor) -> usize {
                             emitted = true;
                             if bi == cursor.block_idx {
                                 if let Some(cpath) = cursor.cell {
-                                    if cpath.row == ri
-                                        && cpath.col == ci
-                                        && cpath.para_idx == pi
-                                    {
+                                    if cpath.row == ri && cpath.col == ci && cpath.para_idx == pi {
                                         if cpath.image_idx.is_some() {
                                             return offset + para_len(p);
                                         }
@@ -382,8 +379,12 @@ pub fn paragraph_cursors_in_selection(doc: &Document, selection: Selection) -> V
         let Some(cell) = t.rows.get(path.row).and_then(|r| r.cells.get(path.col)) else {
             return Vec::new();
         };
-        let lo = path.para_idx.min(end.cell.map(|c| c.para_idx).unwrap_or(path.para_idx));
-        let hi = path.para_idx.max(end.cell.map(|c| c.para_idx).unwrap_or(path.para_idx));
+        let lo = path
+            .para_idx
+            .min(end.cell.map(|c| c.para_idx).unwrap_or(path.para_idx));
+        let hi = path
+            .para_idx
+            .max(end.cell.map(|c| c.para_idx).unwrap_or(path.para_idx));
         let hi = hi.min(cell.paragraphs.len().saturating_sub(1));
         return (lo..=hi)
             .map(|para_idx| Cursor {
@@ -457,17 +458,11 @@ pub fn adjacent_cell_cursor(doc: &Document, cursor: Cursor, forward: bool) -> Op
 /// Whether `cursor` addresses a body [`Block::Image`] or a table-cell image.
 #[must_use]
 pub fn is_image_cursor(doc: &Document, cursor: Cursor) -> bool {
-    if cursor
-        .cell
-        .is_some_and(|path| path.image_idx.is_some())
-    {
+    if cursor.cell.is_some_and(|path| path.image_idx.is_some()) {
         return true;
     }
     if cursor.cell.is_none() {
-        return matches!(
-            doc.blocks.get(cursor.block_idx),
-            Some(Block::Image(_))
-        );
+        return matches!(doc.blocks.get(cursor.block_idx), Some(Block::Image(_)));
     }
     false
 }
@@ -675,8 +670,6 @@ fn cmp_cell_path(a: CellPath, b: CellPath) -> i8 {
         (true, false) => {
             if a.para_idx < b.para_idx {
                 -1
-            } else if a.para_idx > b.para_idx {
-                1
             } else {
                 1
             }
@@ -701,7 +694,8 @@ fn cmp_cursor(a: Cursor, b: Cursor) -> i8 {
             _ => {}
         },
     }
-    if a.cell.is_some_and(|c| c.image_idx.is_some()) || b.cell.is_some_and(|c| c.image_idx.is_some())
+    if a.cell.is_some_and(|c| c.image_idx.is_some())
+        || b.cell.is_some_and(|c| c.image_idx.is_some())
     {
         return 0;
     }
@@ -781,10 +775,7 @@ mod tests {
             assert_eq!(plain_offset_from_cursor(&doc, c), off, "off={off}");
         }
         let in_b = cursor_from_plain_offset(&doc, 2); // start of "B"
-        assert_eq!(
-            in_b.cell,
-            Some(CellPath::new(0, 1, 0))
-        );
+        assert_eq!(in_b.cell, Some(CellPath::new(0, 1, 0)));
     }
 
     #[test]
@@ -917,10 +908,7 @@ mod tests {
             byte_offset: 0,
         };
         assert!(cmp_cursor(a, b) < 0);
-        let sel = Selection {
-            anchor: b,
-            head: a,
-        };
+        let sel = Selection { anchor: b, head: a };
         let (start, end) = sel.normalized();
         assert_eq!(start.cell.map(|c| c.col), Some(0));
         assert_eq!(end.cell.map(|c| c.col), Some(1));
@@ -957,6 +945,7 @@ mod tests {
                                 part_path: None,
                             },
                         }],
+                        ..Default::default()
                     }],
                 }],
                 ..Default::default()

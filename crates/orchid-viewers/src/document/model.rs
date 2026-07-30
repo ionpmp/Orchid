@@ -107,16 +107,32 @@ pub struct CellImage {
     pub image: InlineImage,
 }
 
+/// Vertical merge state for a table cell (`w:vMerge`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VMerge {
+    /// First cell of a vertical merge (`w:val="restart"`).
+    Restart,
+    /// Continuation of a vertical merge (bare `<w:vMerge/>` or `continue`).
+    #[default]
+    Continue,
+}
+
 /// One cell in a table.
 ///
 /// Paragraphs hold editable text; [`Self::images`] are anchored after a paragraph
 /// index and are selectable/deletable via the preview cell-image cursor.
+/// [`Self::grid_span`] / [`Self::v_merge`] are preserved for OOXML round-trip;
+/// the Tier-1 preview still lays out one grid slot per cell.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TableCell {
     /// Paragraphs inside the cell.
     pub paragraphs: Vec<Paragraph>,
     /// Images parsed from `w:drawing` in cell paragraphs (click/delete/arrow navigable).
     pub images: Vec<CellImage>,
+    /// Horizontal span in grid columns (`w:gridSpan/@w:val`). `None` means 1.
+    pub grid_span: Option<u32>,
+    /// Vertical merge (`w:vMerge`). `None` means not merged.
+    pub v_merge: Option<VMerge>,
 }
 
 impl TableCell {
@@ -126,6 +142,8 @@ impl TableCell {
         Self {
             paragraphs,
             images: Vec::new(),
+            grid_span: None,
+            v_merge: None,
         }
     }
 }
@@ -137,7 +155,10 @@ pub struct TableRow {
     pub cells: Vec<TableCell>,
 }
 
-/// A simple table (no cell merges in Tier 1).
+/// A table of cells.
+///
+/// Cell `gridSpan` / `vMerge` attrs are round-tripped on [`TableCell`]; the
+/// Tier-1 preview does not yet render spanning geometry.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Table {
     /// Rows top-to-bottom.
@@ -146,7 +167,7 @@ pub struct Table {
     ///
     /// Empty means equal-width columns in the preview (inserted blank tables).
     pub column_widths_twips: Vec<u32>,
-    /// Unsupported elements (e.g. merge markers) preserved for round-trip.
+    /// Unsupported elements preserved for round-trip (non-merge leftovers).
     pub unsupported: Vec<OpaqueXmlNode>,
 }
 

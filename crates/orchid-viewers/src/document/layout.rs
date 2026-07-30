@@ -1880,6 +1880,7 @@ mod tests {
                                     part_path: None,
                                 },
                             }],
+                            ..Default::default()
                         },
                         cell("Right"),
                     ],
@@ -1929,6 +1930,7 @@ mod tests {
                                 part_path: None,
                             },
                         }],
+                        ..Default::default()
                     }],
                 }],
                 ..Default::default()
