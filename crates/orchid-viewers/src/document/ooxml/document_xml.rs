@@ -835,17 +835,43 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
         .write_event(Event::End(BytesEnd::new("w:rPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
 
+    // Soft line breaks are `\n` in the model (from `w:br` on read). Emit them as
+    // empty `<w:br/>` elements rather than embedding newlines inside `<w:t>`.
+    let normalized = run.text.replace("\r\n", "\n").replace('\r', "\n");
+    let parts: Vec<&str> = normalized.split('\n').collect();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            writer
+                .write_event(Event::Empty(BytesStart::new("w:br")))
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        }
+        if part.is_empty() {
+            if parts.len() == 1 {
+                write_text_element(writer, "")?;
+            }
+            continue;
+        }
+        write_text_element(writer, part)?;
+    }
     writer
-        .write_event(Event::Start(BytesStart::new("w:t")))
+        .write_event(Event::End(BytesEnd::new("w:r")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
+fn write_text_element(writer: &mut Writer<Cursor<Vec<u8>>>, text: &str) -> Result<()> {
+    let mut t = BytesStart::new("w:t");
+    if text.starts_with(' ') || text.ends_with(' ') || text.contains('\t') {
+        t.push_attribute(("xml:space", "preserve"));
+    }
+    writer
+        .write_event(Event::Start(t))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     writer
-        .write_event(Event::Text(BytesText::new(&run.text)))
+        .write_event(Event::Text(BytesText::new(text)))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     writer
         .write_event(Event::End(BytesEnd::new("w:t")))
-        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-    writer
-        .write_event(Event::End(BytesEnd::new("w:r")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(())
 }
@@ -1293,6 +1319,58 @@ mod tests {
                 assert!(p.runs[0].style.superscript);
                 assert!(p.runs[1].style.subscript);
             }
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn parse_and_write_soft_break() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:t>Line one</w:t>
+                <w:br/>
+                <w:t>Line two</w:t>
+              </w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => assert_eq!(p.plain_text(), "Line one\nLine two"),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:br") && !text.contains(">Line one\nLine two<"),
+            "soft break should serialize as w:br, not a newline in w:t: {text}"
+        );
+        let (blocks2, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => assert_eq!(p.plain_text(), "Line one\nLine two"),
             _ => panic!("expected paragraph"),
         }
     }

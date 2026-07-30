@@ -1064,6 +1064,7 @@ pub async fn document_preview_key(
             match key.as_str() {
                 "Backspace" => doc.preview_delete_backward(),
                 "Delete" => doc.preview_delete_forward(),
+                "Return" if shift => doc.preview_insert_soft_break(),
                 "Return" => doc.preview_insert_paragraph_break(),
                 "Tab" if shift => {
                     if doc.selection().head.cell.is_some() {

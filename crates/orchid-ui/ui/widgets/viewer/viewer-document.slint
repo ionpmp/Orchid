@@ -959,7 +959,8 @@ export component ViewerDocumentView inherits Rectangle {
                         return accept;
                     }
                     if (event.text == Key.Return) {
-                        root.preview-key("Return", false, false);
+                        // Shift+Enter → soft line break; Enter → new paragraph.
+                        root.preview-key("Return", false, event.modifiers.shift);
                         return accept;
                     }
                     root.preview-key(event.text, false, event.modifiers.shift);

@@ -511,6 +511,15 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Insert a soft line break (`w:br` / `\n` within the current paragraph).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_insert_soft_break(&self) -> Result<()> {
+        self.preview_insert_text("\n")
+    }
+
     /// Insert a paragraph break at the preview caret.
     ///
     /// Inside a table cell this splits that cell's paragraph list (not body blocks).
