@@ -777,7 +777,11 @@ fn media_payload_eq(a: &MediaPlayerPayload, b: &MediaPlayerPayload) -> bool {
         && a.duration_secs == b.duration_secs
         && a.progress_fraction.to_bits() == b.progress_fraction.to_bits()
         && a.is_playing == b.is_playing
-        && a.thumbnail_base64 == b.thumbnail_base64
+        && match (&a.thumbnail_bytes, &b.thumbnail_bytes) {
+            (None, None) => true,
+            (Some(x), Some(y)) => std::sync::Arc::ptr_eq(x, y) || x.as_ref() == y.as_ref(),
+            _ => false,
+        }
 }
 
 fn password_entry_eq(a: &PasswordEntryView, b: &PasswordEntryView) -> bool {

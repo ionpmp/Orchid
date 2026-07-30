@@ -164,6 +164,10 @@ pub struct RunStylePatch {
     pub italic: Option<bool>,
     /// Set underline.
     pub underline: Option<bool>,
+    /// Set strikethrough.
+    pub strikethrough: Option<bool>,
+    /// Set highlight.
+    pub highlight: Option<bool>,
     /// Set colour (`Some(None)` clears).
     pub color: Option<Option<[u8; 3]>>,
     /// Set font family.
@@ -183,6 +187,12 @@ impl RunStylePatch {
         }
         if let Some(v) = self.underline {
             style.underline = v;
+        }
+        if let Some(v) = self.strikethrough {
+            style.strikethrough = v;
+        }
+        if let Some(v) = self.highlight {
+            style.highlight = v;
         }
         if let Some(ref c) = self.color {
             style.color = *c;
@@ -439,10 +449,8 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             let at = *at_col;
             for row in &mut t.rows {
                 let i = at.min(row.cells.len());
-                row.cells.insert(
-                    i,
-                    TableCell::from_paragraphs(vec![Paragraph::default()]),
-                );
+                row.cells
+                    .insert(i, TableCell::from_paragraphs(vec![Paragraph::default()]));
             }
             if !t.column_widths_twips.is_empty() {
                 let i = at.min(t.column_widths_twips.len());
@@ -956,6 +964,66 @@ mod tests {
     }
 
     #[test]
+    fn set_highlight_then_undo() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor::default(),
+                        head: Cursor::at(0, 0, 5),
+                    },
+                    style: RunStylePatch {
+                        highlight: Some(true),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.highlight),
+            _ => panic!("expected paragraph"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => assert!(!p.runs[0].style.highlight),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn set_strikethrough_then_undo() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor::default(),
+                        head: Cursor::at(0, 0, 5),
+                    },
+                    style: RunStylePatch {
+                        strikethrough: Some(true),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => assert!(!p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
     fn partial_run_bold_splits() {
         let mut doc = doc_with_hello();
         let mut stack = UndoStack::new();
@@ -1008,19 +1076,19 @@ mod tests {
                 rows: vec![TableRow {
                     cells: vec![
                         TableCell::from_paragraphs(vec![Paragraph {
-                                runs: vec![Run {
-                                    text: "A".into(),
-                                    style: RunStyle::default(),
-                                }],
-                                ..Default::default()
-                            }]),
+                            runs: vec![Run {
+                                text: "A".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }]),
                         TableCell::from_paragraphs(vec![Paragraph {
-                                runs: vec![Run {
-                                    text: "B".into(),
-                                    style: RunStyle::default(),
-                                }],
-                                ..Default::default()
-                            }]),
+                            runs: vec![Run {
+                                text: "B".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }]),
                     ],
                 }],
                 ..Default::default()
@@ -1069,19 +1137,19 @@ mod tests {
                 rows: vec![TableRow {
                     cells: vec![
                         TableCell::from_paragraphs(vec![Paragraph {
-                                runs: vec![Run {
-                                    text: "A".into(),
-                                    style: RunStyle::default(),
-                                }],
-                                ..Default::default()
-                            }]),
+                            runs: vec![Run {
+                                text: "A".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }]),
                         TableCell::from_paragraphs(vec![Paragraph {
-                                runs: vec![Run {
-                                    text: "B".into(),
-                                    style: RunStyle::default(),
-                                }],
-                                ..Default::default()
-                            }]),
+                            runs: vec![Run {
+                                text: "B".into(),
+                                style: RunStyle::default(),
+                            }],
+                            ..Default::default()
+                        }]),
                     ],
                 }],
                 ..Default::default()

@@ -322,15 +322,16 @@ impl Widget for TerminalWidget {
     }
 
     fn snapshot(&self) -> Option<WidgetSnapshot> {
-        let mut layout = self.deps.layouts.lock().get(&self.instance_id)?.clone();
-        sync_tab_titles(&mut layout, &self.deps.sessions);
-        self.deps
-            .layouts
-            .lock()
-            .insert(self.instance_id, layout.clone());
-        let focused = layout.focused_session()?;
+        // Update tab titles in-place under a single lock, then take a cheap
+        // layout snapshot — avoid cloning the whole `LayoutRoot` twice.
+        let (focused, snap) = {
+            let mut layouts = self.deps.layouts.lock();
+            let layout = layouts.get_mut(&self.instance_id)?;
+            sync_tab_titles(layout, &self.deps.sessions);
+            let focused = layout.focused_session()?;
+            (focused, layout.snapshot())
+        };
         let palette = self.deps.palette.read().clone();
-        let snap = layout.snapshot();
         let active_tab = snap
             .tabs
             .get(snap.active_tab)
@@ -339,19 +340,24 @@ impl Widget for TerminalWidget {
         let multi_pane = active_tab > 1;
         let mut panes = Vec::new();
         let mut dividers = Vec::new();
+        let mut focused_pane_idx: Option<usize> = None;
         if let Some(tab_snap) = snap.tabs.get(snap.active_tab) {
             for pane_snap in &tab_snap.panes {
                 let sid = pane_snap.session;
                 if let Ok(session) = self.deps.sessions.get(sid) {
                     let grid = session.emulator.snapshot();
                     let pane_terminal = grid_to_payload(&grid, &palette);
+                    let is_focused = tab_snap.focused == Some(sid);
+                    if is_focused {
+                        focused_pane_idx = Some(panes.len());
+                    }
                     panes.push(TerminalPanePayload {
                         session_id: sid.to_string(),
                         left: pane_snap.bounds.left,
                         top: pane_snap.bounds.top,
                         right: pane_snap.bounds.right,
                         bottom: pane_snap.bounds.bottom,
-                        is_focused: tab_snap.focused == Some(sid),
+                        is_focused,
                         show_close: multi_pane,
                         cols: pane_terminal.cols,
                         rows: pane_terminal.rows,
@@ -360,6 +366,8 @@ impl Widget for TerminalWidget {
                         cursor_row: pane_terminal.cursor_row,
                         cursor_visible: pane_terminal.cursor_visible,
                         content_generation: pane_terminal.content_generation,
+                        dirty_lines: pane_terminal.dirty_lines,
+                        full_redraw: pane_terminal.full_redraw,
                     });
                 }
             }
@@ -384,8 +392,30 @@ impl Widget for TerminalWidget {
         let Ok(session) = self.deps.sessions.get(focused) else {
             return None;
         };
-        let grid = session.emulator.snapshot();
-        let mut terminal = grid_to_payload(&grid, &palette);
+        // Reuse the focused pane's already-snapshotted metadata when panes are
+        // populated — avoid a second `emulator.snapshot()`. Root `cells` stay
+        // empty; Slint paints from `panes[*].cells`.
+        let mut terminal = if let Some(idx) = focused_pane_idx {
+            let p = &panes[idx];
+            TerminalPayload {
+                cols: p.cols,
+                rows: p.rows,
+                cells: Vec::new(),
+                cursor_col: p.cursor_col,
+                cursor_row: p.cursor_row,
+                cursor_visible: p.cursor_visible,
+                content_generation: p.content_generation,
+                dirty_lines: p.dirty_lines.clone(),
+                full_redraw: p.full_redraw,
+                tabs: Vec::new(),
+                active_tab: 0,
+                panes: Vec::new(),
+                dividers: Vec::new(),
+            }
+        } else {
+            let grid = session.emulator.snapshot();
+            grid_to_payload(&grid, &palette)
+        };
         terminal.tabs = snap
             .tabs
             .iter()
@@ -520,7 +550,7 @@ fn grid_to_payload(
     let rows = grid.rows;
     let mut cells = Vec::with_capacity((cols as usize) * (rows as usize));
     for line in &grid.lines {
-        for cell in &line.cells {
+        for cell in line.cells.iter() {
             let mut fg = resolve_color(cell.fg, palette, ColorRole::Foreground);
             let mut bg = resolve_color(cell.bg, palette, ColorRole::Background);
             if cell.flags.contains(CellFlags::INVERSE) {
@@ -555,6 +585,8 @@ fn grid_to_payload(
         cursor_row: grid.cursor.row,
         cursor_visible: grid.cursor.visible,
         content_generation: grid.content_generation,
+        dirty_lines: grid.dirty_lines.clone(),
+        full_redraw: grid.full_redraw,
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),

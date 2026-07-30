@@ -1,58 +1,47 @@
+use std::cell::RefCell;
+use std::sync::Arc;
+
 use orchid_i18n::LocaleManager;
 use slint::{Image, SharedString};
 
 use crate::slint_generated::MediaModel;
 
-fn base64_decode(input: &str) -> std::result::Result<Vec<u8>, ()> {
-    fn val(b: u8) -> Option<u8> {
-        match b {
-            b'A'..=b'Z' => Some(b - b'A'),
-            b'a'..=b'z' => Some(b - b'a' + 26),
-            b'0'..=b'9' => Some(b - b'0' + 52),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
+thread_local! {
+    /// UI-thread cache of the last decoded media thumbnail by `Arc` pointer
+    /// identity so a 500ms poll that reuses the same bytes does not re-decode.
+    static THUMB_CACHE: RefCell<Option<(usize, Image)>> = const { RefCell::new(None) };
+}
+
+fn thumb_image_cached(bytes: Option<&Arc<[u8]>>) -> (bool, Image) {
+    let Some(bytes) = bytes else {
+        THUMB_CACHE.with(|c| *c.borrow_mut() = None);
+        return (false, Image::default());
+    };
+    let ptr = Arc::as_ptr(bytes) as *const u8 as usize;
+    if let Some(img) = THUMB_CACHE.with(|c| {
+        c.borrow()
+            .as_ref()
+            .and_then(|(p, img)| (*p == ptr).then(|| img.clone()))
+    }) {
+        return (true, img);
     }
+    let Some(img) = decode_thumb_image(bytes.as_ref()) else {
+        THUMB_CACHE.with(|c| *c.borrow_mut() = None);
+        return (false, Image::default());
+    };
+    THUMB_CACHE.with(|c| *c.borrow_mut() = Some((ptr, img.clone())));
+    (true, img)
+}
 
-    let bytes: Vec<u8> = input
-        .bytes()
-        .filter(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
-        .collect();
-
-    if bytes.is_empty() {
-        return Ok(Vec::new());
+fn decode_thumb_image(bytes: &[u8]) -> Option<Image> {
+    let dyn_img = image::load_from_memory(bytes).ok()?;
+    let rgba = dyn_img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    if w == 0 || h == 0 {
+        return None;
     }
-    if bytes.len() % 4 != 0 {
-        return Err(());
-    }
-
-    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
-        let a = val(chunk[0]).ok_or(())?;
-        let b = val(chunk[1]).ok_or(())?;
-        let c = if chunk[2] == b'=' {
-            0
-        } else {
-            val(chunk[2]).ok_or(())?
-        };
-        let d = if chunk[3] == b'=' {
-            0
-        } else {
-            val(chunk[3]).ok_or(())?
-        };
-
-        let n = ((a as u32) << 18) | ((b as u32) << 12) | ((c as u32) << 6) | (d as u32);
-        out.push((n >> 16) as u8);
-        if chunk[2] != b'=' {
-            out.push((n >> 8) as u8);
-        }
-        if chunk[3] != b'=' {
-            out.push(n as u8);
-        }
-    }
-
-    Ok(out)
+    let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_raw(), w, h);
+    Some(Image::from_rgba8(buf))
 }
 
 pub(crate) fn empty_media_model(locale: &LocaleManager) -> MediaModel {
@@ -72,23 +61,30 @@ pub(crate) fn empty_media_model(locale: &LocaleManager) -> MediaModel {
     }
 }
 
-pub(crate) fn build_media_model(p: &orchid_widgets::MediaPlayerPayload, locale: &LocaleManager) -> MediaModel {
-    let (has_thumb, thumb_img) = p
-        .thumbnail_base64
-        .as_ref()
-        .and_then(|b64| {
-            let bytes = base64_decode(b64).ok()?;
-            let dyn_img = image::load_from_memory(&bytes).ok()?;
-            let rgba = dyn_img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            if w == 0 || h == 0 {
-                return None;
-            }
-            let buf =
-                slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_raw(), w, h);
-            Some((true, Image::from_rgba8(buf)))
-        })
-        .unwrap_or((false, Image::default()));
+pub(crate) fn build_media_model(
+    p: &orchid_widgets::MediaPlayerPayload,
+    locale: &LocaleManager,
+) -> MediaModel {
+    let (has_thumb, thumb_img) = thumb_image_cached(p.thumbnail_bytes.as_ref());
+    fill_media_model(p, locale, has_thumb, thumb_img)
+}
+
+/// Patch an existing [`MediaModel`] in place (no nested list models to preserve).
+pub(crate) fn patch_media_model(
+    model: &mut MediaModel,
+    p: &orchid_widgets::MediaPlayerPayload,
+    locale: &LocaleManager,
+) {
+    let (has_thumb, thumb_img) = thumb_image_cached(p.thumbnail_bytes.as_ref());
+    *model = fill_media_model(p, locale, has_thumb, thumb_img);
+}
+
+fn fill_media_model(
+    p: &orchid_widgets::MediaPlayerPayload,
+    locale: &LocaleManager,
+    has_thumb: bool,
+    thumb_img: Image,
+) -> MediaModel {
     let empty_state_text = if p.is_loading {
         locale.tr("media-loading").into()
     } else if p.is_unsupported {
@@ -122,7 +118,7 @@ fn format_media_duration(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use orchid_i18n::{LocaleManager, default_language};
+    use orchid_i18n::{default_language, LocaleManager};
 
     fn test_locale() -> LocaleManager {
         LocaleManager::new(default_language(), None).expect("locale")
@@ -139,7 +135,7 @@ mod tests {
             duration_secs: 60,
             progress_fraction: 0.5,
             is_playing: true,
-            thumbnail_base64: None,
+            thumbnail_bytes: None,
             ..Default::default()
         }
     }

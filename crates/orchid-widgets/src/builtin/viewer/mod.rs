@@ -834,6 +834,8 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "bold" => doc.toggle_style_all('b'),
                 "italic" => doc.toggle_style_all('i'),
                 "underline" => doc.toggle_style_all('u'),
+                "strikethrough" | "strike" => doc.toggle_style_all('s'),
+                "highlight" => doc.toggle_style_all('h'),
                 "font-smaller" => doc.bump_font_size_selection(-1),
                 "font-larger" => doc.bump_font_size_selection(1),
                 "font-family-prev" => doc.bump_font_family_selection(-1),
@@ -865,8 +867,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 }
                 family if family.starts_with("font-family-") => {
                     let slug = &family["font-family-".len()..];
-                    if let Some(name) = orchid_viewers::document::resolve_font_family_slug(slug)
-                    {
+                    if let Some(name) = orchid_viewers::document::resolve_font_family_slug(slug) {
                         doc.set_font_family_selection(name)
                     } else {
                         Ok(())
@@ -1048,6 +1049,8 @@ pub async fn document_preview_key(
                 "b" | "B" => doc.toggle_style_all('b'),
                 "i" | "I" => doc.toggle_style_all('i'),
                 "u" | "U" => doc.toggle_style_all('u'),
+                "x" | "X" if shift => doc.toggle_style_all('s'),
+                "h" | "H" if shift => doc.toggle_style_all('h'),
                 "z" | "Z" if shift => doc.redo(),
                 "z" | "Z" => doc.undo(),
                 "y" | "Y" => doc.redo(),

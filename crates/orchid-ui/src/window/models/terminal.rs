@@ -111,6 +111,9 @@ pub(crate) fn default_terminal_divider_models() -> ModelRc<TerminalDividerModel>
     ModelRc::new(VecModel::default())
 }
 
+/// Build a root [`TerminalPayload`] view of a pane without cloning cell data when
+/// the caller only needs metadata (rasterization should use `&p.cells` directly).
+#[allow(dead_code)] // retained for debugging / future cell-based paint paths
 pub(crate) fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPayload {
     TerminalPayload {
         cols: p.cols,
@@ -120,6 +123,8 @@ pub(crate) fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPaylo
         cursor_row: p.cursor_row,
         cursor_visible: p.cursor_visible,
         content_generation: p.content_generation,
+        dirty_lines: p.dirty_lines.clone(),
+        full_redraw: p.full_redraw,
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),

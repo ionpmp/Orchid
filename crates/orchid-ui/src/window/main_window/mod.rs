@@ -58,8 +58,9 @@ use super::models::{
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
     empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
     empty_terminal_cells, empty_viewer_model, empty_weather_model, locale_display_name,
-    patch_processes_model, patch_system_model, theme_display_name, widget_has_settings,
-    FileManagerOverlays, PasswordAddDialogOverlay,
+    patch_calculator_model, patch_clock_model, patch_media_model, patch_password_model,
+    patch_processes_model, patch_recent_files_model, patch_search_model, patch_system_model,
+    theme_display_name, widget_has_settings, FileManagerOverlays, PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
@@ -151,6 +152,8 @@ pub struct MainWindowController {
     /// Last (cols, rows) applied to each terminal from [`Self::on_terminal_viewport`], to avoid
     /// resize+rebuild storms when `set_workspace` re-lays out the same pixel viewport.
     last_terminal_viewport_pty: Arc<Mutex<HashMap<Uuid, (u16, u16)>>>,
+    /// Retained terminal bitmaps keyed by pane session id (or `"root"`), for dirty-line patches.
+    terminal_raster_cache: Mutex<HashMap<String, Option<terminal_raster::RetainedRaster>>>,
     /// Stable Slint `ModelRc`s for the workspace and widget lists. Replacing the whole
     /// `ModelRc` on every tick re-instantiated every `for` item and dropped keyboard focus
     /// on the terminal's `TextInput` (see `terminal-view.slint`); we only mutate these via
@@ -488,6 +491,7 @@ impl MainWindowController {
             config_reload_pending,
             last_window_scale: parking_lot::Mutex::new(0.0),
             last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
+            terminal_raster_cache: Mutex::new(HashMap::new()),
             workspace_workspaces,
             workspace_widgets,
             workspace_floating_widgets,
@@ -1404,12 +1408,7 @@ impl MainWindowController {
                     continue;
                 }
                 if iref.type_id == orchid_widgets::builtin::system::TYPE_ID
-                    && self.try_patch_system_row(
-                        &self.workspace_floating_widgets,
-                        *id,
-                        None,
-                        None,
-                    )
+                    && self.try_patch_system_row(&self.workspace_floating_widgets, *id, None, None)
                 {
                     continue;
                 }
@@ -1419,6 +1418,15 @@ impl MainWindowController {
                     None,
                     None,
                     true,
+                ) {
+                    continue;
+                }
+                if self.try_patch_common_content_row(
+                    &self.workspace_floating_widgets,
+                    *id,
+                    iref.type_id.as_str(),
+                    None,
+                    None,
                 ) {
                     continue;
                 }
@@ -1484,6 +1492,15 @@ impl MainWindowController {
                     Some(idx as i32),
                 )
             {
+                continue;
+            }
+            if self.try_patch_common_content_row(
+                &self.workspace_widgets,
+                *id,
+                iref.type_id.as_str(),
+                Some(bounds),
+                Some(idx as i32),
+            ) {
                 continue;
             }
             let new_row = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
@@ -1696,6 +1713,132 @@ impl MainWindowController {
         false
     }
 
+    /// In-place content patch for high-frequency widgets (clock / media / password /
+    /// search / recent / calculator). Keeps nested `ModelRc` handles alive.
+    fn try_patch_common_content_row(
+        &self,
+        model: &ModelRc<WidgetFrameModel>,
+        id: Uuid,
+        type_id: &str,
+        bounds: Option<PixelBounds>,
+        z_order: Option<i32>,
+    ) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+            return false;
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            let patched = match (type_id, &ws.payload) {
+                (
+                    orchid_widgets::builtin::clock::TYPE_ID,
+                    orchid_widgets::WidgetPayload::Clock(p),
+                ) => {
+                    patch_clock_model(&mut row.clock, p, &self.locale);
+                    true
+                }
+                (
+                    orchid_widgets::builtin::media::TYPE_ID,
+                    orchid_widgets::WidgetPayload::MediaPlayer(p),
+                ) => {
+                    patch_media_model(&mut row.media, p, &self.locale);
+                    true
+                }
+                (
+                    orchid_widgets::builtin::password::TYPE_ID,
+                    orchid_widgets::WidgetPayload::PasswordManager(p),
+                ) => {
+                    let toast = self.password_toasts.read().get(&id).cloned();
+                    let autofocus = self
+                        .password_autofocus_pending
+                        .read()
+                        .get(&id)
+                        .copied()
+                        .unwrap_or(false);
+                    if autofocus {
+                        self.password_autofocus_pending.write().remove(&id);
+                    }
+                    let add_dialog = self
+                        .password_add_dialogs
+                        .read()
+                        .get(&id)
+                        .cloned()
+                        .unwrap_or_default();
+                    patch_password_model(
+                        &mut row.password,
+                        p,
+                        toast,
+                        autofocus,
+                        add_dialog,
+                        &self.locale,
+                    );
+                    true
+                }
+                (
+                    orchid_widgets::builtin::search::TYPE_ID,
+                    orchid_widgets::WidgetPayload::UniversalSearch(p),
+                ) => {
+                    let selected = self.search_selection.read().get(&id).copied().unwrap_or(-1);
+                    let request_autofocus = matches!(
+                        *self.search_autofocus_pending.lock(),
+                        Some(pending) if pending == id
+                    );
+                    patch_search_model(
+                        &mut row.search,
+                        p,
+                        &self.locale,
+                        selected,
+                        request_autofocus,
+                    );
+                    true
+                }
+                (
+                    orchid_widgets::builtin::recent_files::TYPE_ID,
+                    orchid_widgets::WidgetPayload::RecentFiles(p),
+                ) => {
+                    patch_recent_files_model(&mut row.recent_files, p);
+                    true
+                }
+                (
+                    orchid_widgets::builtin::calculator::TYPE_ID,
+                    orchid_widgets::WidgetPayload::Calculator(p),
+                ) => {
+                    patch_calculator_model(&mut row.calculator, p, &self.locale);
+                    true
+                }
+                _ => false,
+            };
+            if !patched {
+                return false;
+            }
+            if let Some(b) = bounds {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
+            }
+            if let Some(z) = z_order {
+                row.z_order = z;
+            }
+            row.title = ws.title.clone().into();
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+            return true;
+        }
+        false
+    }
+
     fn build_widget_frame_for_placed(
         &self,
         pl: &PlacedWidget,
@@ -1735,21 +1878,7 @@ impl MainWindowController {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
                 WidgetPayload::Terminal(t) => {
-                    let img = if let Some(ref f) = self.mono_font {
-                        let size_md = self.theme.current().tokens.typography.size_md;
-                        let acc = self.theme.current().tokens.color.accent_brand;
-                        let ccol = [acc.r, acc.g, acc.b, acc.a];
-                        let cw = self.font_metrics.cell_width_px as u32;
-                        let ch = self.font_metrics.cell_height_px as u32;
-                        let scale = self.window.window().scale_factor();
-                        let glyph_fb = self.mono_font_glyph_fallback.as_ref();
-                        terminal_raster::render_terminal(
-                            t, f, glyph_fb, size_md, cw, ch, scale, ccol,
-                        )
-                        .unwrap_or_default()
-                    } else {
-                        Image::default()
-                    };
+                    let img = self.raster_terminal_payload(t);
                     (
                         tstr,
                         i32::from(t.cols),
@@ -3017,9 +3146,7 @@ impl MainWindowController {
                     return;
                 }
             };
-            if let Err(e) =
-                Self::open_document_editor_on_canvas(ctrl, fs_path, placement).await
-            {
+            if let Err(e) = Self::open_document_editor_on_canvas(ctrl, fs_path, placement).await {
                 warn!(?e, "document editor: open on canvas");
             }
         });
@@ -3056,10 +3183,8 @@ impl MainWindowController {
             return Ok((existing, false));
         }
 
-        let size = Self::minimal_widget_size(
-            &c.widget_manager,
-            orchid_widgets::builtin::viewer::TYPE_ID,
-        );
+        let size =
+            Self::minimal_widget_size(&c.widget_manager, orchid_widgets::builtin::viewer::TYPE_ID);
         let id = c
             .widget_manager
             .create(orchid_widgets::CreateWidgetRequest {
@@ -3075,13 +3200,8 @@ impl MainWindowController {
 
         match placement {
             AddWidgetPlacement::AutoSlot => {
-                Self::move_new_widget_to_free_slot(
-                    &c.layout_engine,
-                    &c.widget_manager,
-                    ws_id,
-                    id,
-                )
-                .await;
+                Self::move_new_widget_to_free_slot(&c.layout_engine, &c.widget_manager, ws_id, id)
+                    .await;
             }
             AddWidgetPlacement::CanvasPoint {
                 content_x,
@@ -3147,14 +3267,13 @@ impl MainWindowController {
 
         let bounds = c.default_floating_bounds();
         for _ in 0..50 {
-            if c.widget_manager.get_instance(id).is_ok() {
-                if c.widget_manager
+            if c.widget_manager.get_instance(id).is_ok()
+                && c.widget_manager
                     .undock_to_floating(id, bounds)
                     .await
                     .is_ok()
-                {
-                    break;
-                }
+            {
+                break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }

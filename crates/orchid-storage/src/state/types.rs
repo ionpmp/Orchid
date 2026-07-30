@@ -77,10 +77,11 @@ pub enum WindowState {
 }
 
 /// Per-instance placement: canvas grid slot or overlapping floating window.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Encode, Decode)]
 #[serde(rename_all = "kebab-case")]
 pub enum WindowPlacement {
     /// Participates in the workspace grid (collision, snap).
+    #[default]
     Grid,
     /// Free-pixel overlay above the canvas.
     Floating {
@@ -91,12 +92,6 @@ pub enum WindowPlacement {
         /// Normal / maximized / minimized.
         state: WindowState,
     },
-}
-
-impl Default for WindowPlacement {
-    fn default() -> Self {
-        Self::Grid
-    }
 }
 
 impl WindowPlacement {

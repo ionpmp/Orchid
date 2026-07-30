@@ -9,8 +9,7 @@ use quick_xml::writer::Writer;
 
 use crate::document::model::{
     Alignment, Block, CellImage, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode,
-    PageSetup,
-    Paragraph, Run, RunStyle, Table, TableCell, TableRow,
+    PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
 use crate::document::ooxml::styles::StyleDefaults;
@@ -97,14 +96,8 @@ pub fn parse_document_xml(
                             }
                         }
                         "tbl" => {
-                            let t = parse_table(
-                                &mut reader,
-                                &mut buf,
-                                styles,
-                                numbering,
-                                rels,
-                                media,
-                            )?;
+                            let t =
+                                parse_table(&mut reader, &mut buf, styles, numbering, rels, media)?;
                             blocks.push(Block::Table(t));
                         }
                         "sectPr" => {
@@ -409,6 +402,13 @@ fn apply_r_pr_attr(local: &str, e: &BytesStart<'_>, style: &mut RunStyle) {
         "u" => {
             let val = attr_val(e, "val").unwrap_or_else(|| "single".into());
             style.underline = val != "none";
+        }
+        "strike" | "dstrike" => {
+            style.strikethrough = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
+        }
+        "highlight" => {
+            let val = attr_val(e, "val").unwrap_or_default();
+            style.highlight = !val.is_empty() && val != "none";
         }
         "color" => {
             if let Some(val) = attr_val(e, "val") {
@@ -767,6 +767,18 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
             .write_event(Event::Empty(u))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if run.style.strikethrough {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:strike")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if run.style.highlight {
+        let mut hl = BytesStart::new("w:highlight");
+        hl.push_attribute(("w:val", "yellow"));
+        writer
+            .write_event(Event::Empty(hl))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if let Some([r, g, b]) = run.style.color {
         let mut c = BytesStart::new("w:color");
         c.push_attribute(("w:val", format!("{r:02X}{g:02X}{b:02X}").as_str()));
@@ -809,7 +821,9 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
 }
 
 fn parse_grid_col_width(e: &BytesStart<'_>) -> Option<u32> {
-    attr_val(e, "w").and_then(|v| v.parse().ok()).filter(|&w| w > 0)
+    attr_val(e, "w")
+        .and_then(|v| v.parse().ok())
+        .filter(|&w| w > 0)
 }
 
 fn parse_tc_width_dxa(e: &BytesStart<'_>) -> Option<u32> {
@@ -817,7 +831,9 @@ fn parse_tc_width_dxa(e: &BytesStart<'_>) -> Option<u32> {
     if typ != "dxa" {
         return None;
     }
-    attr_val(e, "w").and_then(|v| v.parse().ok()).filter(|&w| w > 0)
+    attr_val(e, "w")
+        .and_then(|v| v.parse().ok())
+        .filter(|&w| w > 0)
 }
 
 fn write_table(
@@ -1099,6 +1115,96 @@ mod tests {
     }
 
     #[test]
+    fn parse_and_write_highlight() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:rPr><w:highlight w:val="yellow"/></w:rPr>
+                <w:t>Marked</w:t>
+              </w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.highlight),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:highlight") && text.contains("yellow"),
+            "serialized XML missing highlight: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_strikethrough() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:rPr><w:strike/></w:rPr>
+                <w:t>Gone</w:t>
+              </w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:strike"),
+            "serialized XML missing strike: {text}"
+        );
+        let (blocks2, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
     fn write_round_trip_model() {
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -1288,11 +1394,8 @@ mod tests {
         let mut png = Vec::new();
         {
             let img = image::RgbaImage::from_pixel(4, 2, image::Rgba([10, 20, 30, 255]));
-            img.write_to(
-                &mut std::io::Cursor::new(&mut png),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
+            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
         }
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -1344,10 +1447,7 @@ mod tests {
                 assert_eq!(img.width_px, 96); // 914400 EMU → 96 CSS px @ 96dpi
                 assert_eq!(img.height_px, 48);
                 assert_eq!(img.r_id.as_deref(), Some("rId7"));
-                assert_eq!(
-                    img.part_path.as_deref(),
-                    Some("word/media/dot.png")
-                );
+                assert_eq!(img.part_path.as_deref(), Some("word/media/dot.png"));
             }
             _ => panic!("expected image block"),
         }
@@ -1358,11 +1458,8 @@ mod tests {
         let mut png = Vec::new();
         {
             let img = image::RgbaImage::from_pixel(4, 2, image::Rgba([200, 40, 40, 255]));
-            img.write_to(
-                &mut std::io::Cursor::new(&mut png),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
+            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
         }
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"

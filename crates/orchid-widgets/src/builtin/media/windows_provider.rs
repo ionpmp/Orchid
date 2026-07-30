@@ -8,8 +8,7 @@ use parking_lot::Mutex;
 use windows::core::HSTRING;
 use windows::Foundation::TimeSpan;
 use windows::Media::Control::{
-    GlobalSystemMediaTransportControlsSession,
-    GlobalSystemMediaTransportControlsSessionManager,
+    GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
     GlobalSystemMediaTransportControlsSessionMediaProperties,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
@@ -66,9 +65,7 @@ fn hstring_opt(s: HSTRING) -> Option<String> {
     }
 }
 
-fn session_open(
-    session: &GlobalSystemMediaTransportControlsSession,
-) -> Result<(), MediaError> {
+fn session_open(session: &GlobalSystemMediaTransportControlsSession) -> Result<(), MediaError> {
     let info = session
         .GetPlaybackInfo()
         .map_err(|e| MediaError::ControlFailed(e.to_string()))?;
@@ -86,11 +83,7 @@ fn session_snapshot() -> Option<MediaSession> {
     let session = manager.GetCurrentSession().ok()?;
     session_open(&session).ok()?;
 
-    let props = session
-        .TryGetMediaPropertiesAsync()
-        .ok()?
-        .join()
-        .ok()?;
+    let props = session.TryGetMediaPropertiesAsync().ok()?.join().ok()?;
     let timeline = session.GetTimelineProperties().ok()?;
     let info = session.GetPlaybackInfo().ok()?;
     let status = info.PlaybackStatus().ok()?;
@@ -100,14 +93,10 @@ fn session_snapshot() -> Option<MediaSession> {
         return None;
     }
 
-    let is_playing =
-        status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+    let is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
     let position = timespan_to_duration(timeline.Position().ok()?);
     let duration = timespan_to_duration(timeline.EndTime().ok()?);
-    let source_app = session
-        .SourceAppUserModelId()
-        .ok()
-        .and_then(hstring_opt);
+    let source_app = session.SourceAppUserModelId().ok().and_then(hstring_opt);
     let artist = props.Artist().ok().and_then(hstring_opt);
     let thumbnail_bytes = cached_thumbnail(&title, artist.as_deref(), &props);
 
@@ -181,7 +170,9 @@ fn run_bool_async(op: IAsyncOperation<bool>) -> Result<(), MediaError> {
     if ok {
         Ok(())
     } else {
-        Err(MediaError::ControlFailed("transport command rejected".into()))
+        Err(MediaError::ControlFailed(
+            "transport command rejected".into(),
+        ))
     }
 }
 

@@ -1,9 +1,7 @@
 //! Convert an emulator [`orchid_terminal::GridSnapshot`] into a renderer-agnostic
 //! representation. The Slint-specific adapter layer is built on top of this.
 
-use orchid_terminal::{
-    resolve_color, CellFlags, ColorRole, GridSnapshot, Rgba, TerminalPalette,
-};
+use orchid_terminal::{resolve_color, CellFlags, ColorRole, GridSnapshot, Rgba, TerminalPalette};
 
 /// Simplified cell tailored to what the Slint view expects. Keeping this
 /// type in a pure-Rust module lets us unit-test the conversion without a
@@ -80,6 +78,8 @@ fn blend(a: Rgba, b: Rgba, t: f32) -> Rgba {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use orchid_terminal::{Cell, CellColor, GridLine, TerminalPalette};
 
@@ -95,7 +95,7 @@ mod tests {
             .enumerate()
             .map(|(i, row)| GridLine {
                 line_number: i as i64,
-                cells: row,
+                cells: Arc::from(row),
             })
             .collect();
         GridSnapshot {
@@ -105,6 +105,9 @@ mod tests {
             scrollback_total: 0,
             lines,
             cursor: orchid_terminal::CursorState::default(),
+            content_generation: 1,
+            dirty_lines: (0..rows).collect(),
+            full_redraw: true,
         }
     }
 

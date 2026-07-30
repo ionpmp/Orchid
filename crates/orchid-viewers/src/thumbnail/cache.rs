@@ -73,26 +73,23 @@ impl ThumbnailCache {
     /// # Errors
     ///
     /// Propagates IO / encode errors.
-    pub async fn put(
-        &self,
-        key: &[u8; 32],
-        size: ThumbnailSize,
-        thumb: &Thumbnail,
-    ) -> Result<()> {
+    pub async fn put(&self, key: &[u8; 32], size: ThumbnailSize, thumb: &Thumbnail) -> Result<()> {
         let path = self.file_for(key, size);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await?;
         }
-        let rgba = Arc::try_unwrap(Arc::clone(&thumb.rgba)).unwrap_or_else(|a| (*a).clone());
+        // Encode from a borrowed slice so we do not force a full RGBA clone when
+        // the UI (or memory LRU) still holds the `Arc`.
+        let rgba = Arc::clone(&thumb.rgba);
         let w = thumb.width;
         let h = thumb.height;
         let bytes = tokio::task::spawn_blocking(move || {
-            let img = image::RgbaImage::from_raw(w, h, rgba)
-                .ok_or_else(|| ViewerError::ThumbnailFailed("invalid RGBA".into()))?;
-            let mut buf = std::io::Cursor::new(Vec::new());
-            img.write_to(&mut buf, image::ImageFormat::Png)
+            use image::ImageEncoder;
+            let mut buf = Vec::new();
+            image::codecs::png::PngEncoder::new(&mut buf)
+                .write_image(rgba.as_slice(), w, h, image::ExtendedColorType::Rgba8)
                 .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))?;
-            Ok::<_, ViewerError>(buf.into_inner())
+            Ok::<_, ViewerError>(buf)
         })
         .await
         .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))??;
@@ -106,7 +103,11 @@ impl ThumbnailCache {
     ///
     /// Propagates IO errors; missing files are not errors.
     pub async fn invalidate_prefix(&self, key: &[u8; 32]) -> Result<()> {
-        for size in [ThumbnailSize::Small, ThumbnailSize::Medium, ThumbnailSize::Large] {
+        for size in [
+            ThumbnailSize::Small,
+            ThumbnailSize::Medium,
+            ThumbnailSize::Large,
+        ] {
             let path = self.file_for(key, size);
             if fs::try_exists(&path).await.unwrap_or(false) {
                 let _ = fs::remove_file(path).await;
@@ -140,7 +141,11 @@ mod tests {
         };
         let key = [7u8; 32];
         cache.put(&key, ThumbnailSize::Small, &thumb).await.unwrap();
-        let got = cache.get(&key, ThumbnailSize::Small).await.unwrap().unwrap();
+        let got = cache
+            .get(&key, ThumbnailSize::Small)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(got.width, 4);
         assert_eq!(got.height, 4);
         assert_eq!(got.rgba.len(), rgba.len());
@@ -157,11 +162,19 @@ mod tests {
             height: 2,
         };
         let key = [3u8; 32];
-        for size in [ThumbnailSize::Small, ThumbnailSize::Medium, ThumbnailSize::Large] {
+        for size in [
+            ThumbnailSize::Small,
+            ThumbnailSize::Medium,
+            ThumbnailSize::Large,
+        ] {
             cache.put(&key, size, &thumb).await.unwrap();
         }
         cache.invalidate_prefix(&key).await.unwrap();
-        for size in [ThumbnailSize::Small, ThumbnailSize::Medium, ThumbnailSize::Large] {
+        for size in [
+            ThumbnailSize::Small,
+            ThumbnailSize::Medium,
+            ThumbnailSize::Large,
+        ] {
             assert!(cache.get(&key, size).await.unwrap().is_none());
         }
     }

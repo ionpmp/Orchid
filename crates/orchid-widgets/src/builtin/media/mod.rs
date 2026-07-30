@@ -358,7 +358,7 @@ fn session_to_payload(s: MediaSession, is_loading: bool) -> MediaPlayerPayload {
     } else {
         (position.as_secs_f32() / duration.as_secs_f32()).clamp(0.0, 1.0)
     };
-    let thumbnail_base64 = s.thumbnail_bytes.as_ref().map(|bytes| base64_encode(bytes));
+    let thumbnail_bytes = s.thumbnail_bytes.map(std::sync::Arc::<[u8]>::from);
     MediaPlayerPayload {
         has_session: true,
         is_loading,
@@ -370,42 +370,9 @@ fn session_to_payload(s: MediaSession, is_loading: bool) -> MediaPlayerPayload {
         duration_secs: duration.as_secs(),
         progress_fraction: fraction,
         is_playing: s.is_playing,
-        thumbnail_base64,
+        thumbnail_bytes,
         ..Default::default()
     }
-}
-
-/// Minimal RFC 4648 Base64 encoder for thumbnail payloads. Used only for
-/// the UI's `data:image/...;base64,...` URL. A dependency like `base64`
-/// would also work; rolling it by hand avoids an extra runtime dep.
-fn base64_encode(data: &[u8]) -> String {
-    const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    let mut i = 0;
-    while i + 3 <= data.len() {
-        let b = &data[i..i + 3];
-        let v = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | (b[2] as u32);
-        out.push(CHARSET[((v >> 18) & 0x3F) as usize] as char);
-        out.push(CHARSET[((v >> 12) & 0x3F) as usize] as char);
-        out.push(CHARSET[((v >> 6) & 0x3F) as usize] as char);
-        out.push(CHARSET[(v & 0x3F) as usize] as char);
-        i += 3;
-    }
-    let rem = data.len() - i;
-    if rem == 1 {
-        let v = (data[i] as u32) << 16;
-        out.push(CHARSET[((v >> 18) & 0x3F) as usize] as char);
-        out.push(CHARSET[((v >> 12) & 0x3F) as usize] as char);
-        out.push('=');
-        out.push('=');
-    } else if rem == 2 {
-        let v = ((data[i] as u32) << 16) | ((data[i + 1] as u32) << 8);
-        out.push(CHARSET[((v >> 18) & 0x3F) as usize] as char);
-        out.push(CHARSET[((v >> 12) & 0x3F) as usize] as char);
-        out.push(CHARSET[((v >> 6) & 0x3F) as usize] as char);
-        out.push('=');
-    }
-    out
 }
 
 /// Descriptor using a caller-supplied provider.
@@ -481,21 +448,13 @@ mod tests {
     }
 
     #[test]
-    fn base64_roundtrips_small_inputs() {
-        assert_eq!(base64_encode(b""), "");
-        assert_eq!(base64_encode(b"f"), "Zg==");
-        assert_eq!(base64_encode(b"fo"), "Zm8=");
-        assert_eq!(base64_encode(b"foo"), "Zm9v");
-        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
-    }
-
-    #[test]
     fn session_formatting_builds_fraction() {
         let session = MediaSession {
             title: "Song".into(),
             is_playing: true,
             position: Some(Duration::from_secs(30)),
             duration: Some(Duration::from_secs(90)),
+            thumbnail_bytes: Some(vec![1, 2, 3, 4]),
             ..Default::default()
         };
         let payload = session_to_payload(session, false);
@@ -503,6 +462,10 @@ mod tests {
         assert_eq!(payload.position_secs, 30);
         assert_eq!(payload.duration_secs, 90);
         assert!((payload.progress_fraction - 1.0 / 3.0).abs() < 1e-3);
+        assert_eq!(
+            payload.thumbnail_bytes.as_deref(),
+            Some([1u8, 2, 3, 4].as_slice())
+        );
     }
 
     #[test]

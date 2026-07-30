@@ -96,6 +96,10 @@ pub struct TerminalPayload {
     pub cursor_visible: bool,
     /// Monotonic content generation from the emulator (cheap equality).
     pub content_generation: u64,
+    /// Visible row indices that changed since the previous snapshot.
+    pub dirty_lines: Vec<u16>,
+    /// When true the entire grid must be re-rasterized.
+    pub full_redraw: bool,
     /// Tab strip entries for the Slint terminal chrome.
     pub tabs: Vec<TerminalTabPayload>,
     /// Active tab index in [`Self::tabs`].
@@ -137,6 +141,10 @@ pub struct TerminalPanePayload {
     pub cursor_visible: bool,
     /// Emulator content generation for this pane's grid.
     pub content_generation: u64,
+    /// Visible row indices that changed since the previous snapshot.
+    pub dirty_lines: Vec<u16>,
+    /// When true the entire pane grid must be re-rasterized.
+    pub full_redraw: bool,
 }
 
 /// Draggable divider between two terminal panes.

@@ -1,5 +1,11 @@
 //! Paragraph layout via `parley` + software rasterisation via `swash`.
 
+#![allow(
+    clippy::too_many_arguments,
+    clippy::large_enum_variant,
+    clippy::needless_range_loop
+)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -28,6 +34,8 @@ pub struct ColorBrush {
     pub b: u8,
     /// Alpha.
     pub a: u8,
+    /// When true, paint a yellow highlight behind the glyph run.
+    pub highlight: bool,
 }
 
 impl Default for ColorBrush {
@@ -37,9 +45,13 @@ impl Default for ColorBrush {
             g: 32,
             b: 32,
             a: 255,
+            highlight: false,
         }
     }
 }
+
+/// Word-style yellow highlight fill.
+const HIGHLIGHT_YELLOW: [u8; 4] = [255, 255, 0, 255];
 
 /// Default content width for the document preview (CSS pixels).
 pub const DEFAULT_PREVIEW_WIDTH: f32 = 720.0;
@@ -113,6 +125,9 @@ impl DocumentLayout {
             if run.style.underline {
                 builder.push(StyleProperty::Underline(true), offset..end);
             }
+            if run.style.strikethrough {
+                builder.push(StyleProperty::Strikethrough(true), offset..end);
+            }
             if let Some(pt) = run.style.font_size_pt {
                 builder.push(StyleProperty::FontSize(pt), offset..end);
             }
@@ -122,11 +137,15 @@ impl DocumentLayout {
                     offset..end,
                 );
             }
-            if let Some([r, g, b]) = run.style.color {
-                builder.push(
-                    StyleProperty::Brush(ColorBrush { r, g, b, a: 255 }),
-                    offset..end,
-                );
+            if run.style.highlight || run.style.color.is_some() {
+                let mut brush = ColorBrush::default();
+                if let Some([r, g, b]) = run.style.color {
+                    brush.r = r;
+                    brush.g = g;
+                    brush.b = b;
+                }
+                brush.highlight = run.style.highlight;
+                builder.push(StyleProperty::Brush(brush), offset..end);
             }
             offset = end;
         }
@@ -263,7 +282,7 @@ impl DocumentLayout {
 
         // Selection / caret under the glyphs.
         for item in &layouts {
-            if item.is_image || item.layout.len() == 0 {
+            if item.is_image || item.layout.is_empty() {
                 continue;
             }
             let origin_x = pad + item.x0 + item.indent_px;
@@ -354,7 +373,7 @@ impl DocumentLayout {
                 }
                 continue;
             }
-            if item.layout.len() == 0 {
+            if item.layout.is_empty() {
                 continue;
             }
             render_layout_at(
@@ -496,10 +515,8 @@ impl DocumentLayout {
                 } else {
                     Vec::new()
                 };
-                let mut content_h: f32 = items
-                    .iter()
-                    .map(|i| i.height() + TABLE_CELL_PARA_GAP)
-                    .sum();
+                let mut content_h: f32 =
+                    items.iter().map(|i| i.height() + TABLE_CELL_PARA_GAP).sum();
                 if content_h > 0.0 {
                     content_h -= TABLE_CELL_PARA_GAP;
                 }
@@ -606,10 +623,8 @@ impl DocumentLayout {
                 } else {
                     Vec::new()
                 };
-                let mut content_h: f32 = items
-                    .iter()
-                    .map(|i| i.height() + TABLE_CELL_PARA_GAP)
-                    .sum();
+                let mut content_h: f32 =
+                    items.iter().map(|i| i.height() + TABLE_CELL_PARA_GAP).sum();
                 if content_h > 0.0 {
                     content_h -= TABLE_CELL_PARA_GAP;
                 }
@@ -663,13 +678,8 @@ impl DocumentLayout {
                                 let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
                                 let lx = (local_x - x0 - indent_px)
                                     .clamp(0.0, (inner_w - indent_px).max(12.0));
-                                let body_idx = cluster_to_body_index(
-                                    layout,
-                                    lx,
-                                    ly,
-                                    *prefix_len,
-                                    *body_len,
-                                );
+                                let body_idx =
+                                    cluster_to_body_index(layout, lx, ly, *prefix_len, *body_len);
                                 Some(cursor_from_plain_offset(doc, plain_start + body_idx))
                             }
                         };
@@ -766,7 +776,12 @@ impl DocumentLayout {
 }
 
 fn table_column_count(t: &Table) -> usize {
-    t.rows.iter().map(|r| r.cells.len()).max().unwrap_or(1).max(1)
+    t.rows
+        .iter()
+        .map(|r| r.cells.len())
+        .max()
+        .unwrap_or(1)
+        .max(1)
 }
 
 /// Pixel widths for each column. Falls back to equal split when `column_widths_twips`
@@ -810,13 +825,7 @@ fn column_index_at_x(col_widths: &[f32], local_x: f32) -> usize {
     col_widths.len().saturating_sub(1)
 }
 
-fn paint_table_grid(
-    pixels: &mut [u8],
-    buf_w: u32,
-    buf_h: u32,
-    pad: f32,
-    grid: &TableGridGeom,
-) {
+fn paint_table_grid(pixels: &mut [u8], buf_w: u32, buf_h: u32, pad: f32, grid: &TableGridGeom) {
     let x = (pad + 0.0).round() as u32;
     let y = (pad + grid.y0).round() as u32;
     let w = grid.width.ceil().max(1.0) as u32;
@@ -955,10 +964,7 @@ const TABLE_GRID_COLOR: [u8; 4] = [180, 180, 188, 255];
 
 const MAX_PREVIEW_IMAGE_H: u32 = 240;
 
-fn preview_image_display_size(
-    img: &crate::document::model::InlineImage,
-    max_w: f32,
-) -> (u32, u32) {
+fn preview_image_display_size(img: &crate::document::model::InlineImage, max_w: f32) -> (u32, u32) {
     let mut disp_w = img.width_px;
     let mut disp_h = img.height_px;
     if disp_w == 0 || disp_h == 0 {
@@ -1002,12 +1008,8 @@ fn prepare_preview_image(
     if disp_w == src_w && disp_h == src_h {
         return (Some(rgba.into_raw()), disp_w, disp_h);
     }
-    let resized = image::imageops::resize(
-        &rgba,
-        disp_w,
-        disp_h,
-        image::imageops::FilterType::Triangle,
-    );
+    let resized =
+        image::imageops::resize(&rgba, disp_w, disp_h, image::imageops::FilterType::Triangle);
     (Some(resized.into_raw()), disp_w, disp_h)
 }
 
@@ -1347,6 +1349,17 @@ fn render_glyph_run(
     let font_size = run.font_size();
     let normalized_coords = run.normalized_coords();
 
+    if brush.highlight {
+        let metrics = run.metrics();
+        let x = (origin_x + glyph_run.offset()).floor().max(0.0) as u32;
+        let y = (origin_y + glyph_run.baseline() - metrics.ascent)
+            .floor()
+            .max(0.0) as u32;
+        let w = glyph_run.advance().ceil().max(1.0) as u32;
+        let h = (metrics.ascent + metrics.descent).ceil().max(1.0) as u32;
+        fill_rect(pixels, width, height, x, y, w, h, HIGHLIGHT_YELLOW);
+    }
+
     let Some(font_ref) = FontRef::from_index(font.data.as_ref(), font.index as usize) else {
         return;
     };
@@ -1377,6 +1390,23 @@ fn render_glyph_run(
     if let Some(decoration) = &style.underline {
         let offset = decoration.offset.unwrap_or(run_metrics.underline_offset);
         let size = decoration.size.unwrap_or(run_metrics.underline_size);
+        render_decoration(
+            pixels,
+            width,
+            height,
+            glyph_run,
+            decoration.brush,
+            offset,
+            size,
+            origin_x,
+            origin_y,
+        );
+    }
+    if let Some(decoration) = &style.strikethrough {
+        let offset = decoration
+            .offset
+            .unwrap_or(run_metrics.strikethrough_offset);
+        let size = decoration.size.unwrap_or(run_metrics.strikethrough_size);
         render_decoration(
             pixels,
             width,
@@ -1551,7 +1581,7 @@ mod tests {
     fn layout_paragraph_has_lines() {
         let mut dl = DocumentLayout::new();
         let layout = dl.layout_paragraph(&sample_paragraph(), 400.0);
-        assert!(layout.len() > 0);
+        assert!(!layout.is_empty());
     }
 
     #[test]
@@ -1782,9 +1812,7 @@ mod tests {
         // Click near the left edge of the right column, top row.
         let x = PREVIEW_PADDING + content_w * 0.75;
         let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
-        let offset = dl
-            .hit_test_plain_offset(&doc, content_w, x, y)
-            .unwrap();
+        let offset = dl.hit_test_plain_offset(&doc, content_w, x, y).unwrap();
         assert!(
             offset >= bb && offset <= bb + "BB".len(),
             "offset={offset} expected in BB at {bb}..{}; plain={plain:?}",
@@ -1801,9 +1829,7 @@ mod tests {
         let content_w = 400.0;
         let x = PREVIEW_PADDING + content_w * 0.25;
         let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
-        let offset = dl
-            .hit_test_plain_offset(&doc, content_w, x, y)
-            .unwrap();
+        let offset = dl.hit_test_plain_offset(&doc, content_w, x, y).unwrap();
         assert!(
             offset >= aa && offset <= aa + "AA".len(),
             "offset={offset} expected in AA at {aa}..{}",
@@ -1816,11 +1842,8 @@ mod tests {
         let mut png = Vec::new();
         {
             let img = image::RgbaImage::from_pixel(8, 8, image::Rgba([220, 30, 30, 255]));
-            img.write_to(
-                &mut std::io::Cursor::new(&mut png),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
+            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
         }
         let mut dl = DocumentLayout::new();
         let doc = Document {
@@ -1857,7 +1880,9 @@ mod tests {
         let (bytes, w, h) = dl.render_document(&doc, 400.0);
         assert!(w > 100 && h > 40);
         assert!(
-            bytes.chunks_exact(4).any(|px| px[0] > 180 && px[1] < 80 && px[2] < 80),
+            bytes
+                .chunks_exact(4)
+                .any(|px| px[0] > 180 && px[1] < 80 && px[2] < 80),
             "expected red cell-image pixels in {w}x{h} preview"
         );
     }
@@ -1867,11 +1892,8 @@ mod tests {
         let mut png = Vec::new();
         {
             let img = image::RgbaImage::from_pixel(8, 8, image::Rgba([220, 30, 30, 255]));
-            img.write_to(
-                &mut std::io::Cursor::new(&mut png),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
+            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
         }
         let mut dl = DocumentLayout::new();
         let doc = Document {
@@ -1906,9 +1928,7 @@ mod tests {
         // Click below the paragraph where the cell image is laid out.
         let x = PREVIEW_PADDING + content_w * 0.25;
         let y = PREVIEW_PADDING + TABLE_CELL_PAD + 28.0;
-        let cursor = dl
-            .hit_test_cursor(&doc, content_w, x, y)
-            .expect("hit");
+        let cursor = dl.hit_test_cursor(&doc, content_w, x, y).expect("hit");
         assert_eq!(
             cursor.cell.and_then(|c| c.image_idx),
             Some(0),

@@ -20,7 +20,7 @@ use crate::widgets::terminal::{
     focus_previous_pane, set_split_ratio, split_horizontal, split_vertical, switch_tab,
     switch_tab_relative,
 };
-use crate::window::models::{empty_terminal_cells, pane_payload_to_terminal};
+use crate::window::models::empty_terminal_cells;
 use crate::window::spawn;
 
 use super::MainWindowController;
@@ -72,6 +72,38 @@ impl MainWindowController {
     }
 
     pub(super) fn raster_terminal_payload(&self, t: &TerminalPayload) -> Image {
+        let cache_key = t
+            .panes
+            .iter()
+            .find(|p| p.is_focused)
+            .map(|p| p.session_id.clone())
+            .unwrap_or_else(|| "root".to_string());
+        self.raster_terminal_cells(
+            &cache_key,
+            t.cols,
+            t.rows,
+            &t.cells,
+            t.cursor_col,
+            t.cursor_row,
+            t.cursor_visible,
+            &t.dirty_lines,
+            t.full_redraw,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn raster_terminal_cells(
+        &self,
+        cache_key: &str,
+        cols: u16,
+        rows: u16,
+        cells: &[orchid_widgets::TerminalPayloadCell],
+        cursor_col: u16,
+        cursor_row: u16,
+        cursor_visible: bool,
+        dirty_lines: &[u16],
+        full_redraw: bool,
+    ) -> Image {
         if let Some(ref f) = self.mono_font {
             let size_md = self.theme.current().tokens.typography.size_md;
             let acc = self.theme.current().tokens.color.accent_brand;
@@ -80,8 +112,27 @@ impl MainWindowController {
             let ch = self.font_metrics.cell_height_px as u32;
             let scale = self.window.window().scale_factor();
             let glyph_fb = self.mono_font_glyph_fallback.as_ref();
-            terminal_raster::render_terminal(t, f, glyph_fb, size_md, cw, ch, scale, ccol)
-                .unwrap_or_default()
+            let mut cache = self.terminal_raster_cache.lock();
+            let retained = cache.entry(cache_key.to_string()).or_insert(None);
+            terminal_raster::render_terminal_cells_retained(
+                retained,
+                cols,
+                rows,
+                cells,
+                cursor_col,
+                cursor_row,
+                cursor_visible,
+                dirty_lines,
+                full_redraw,
+                f,
+                glyph_fb,
+                size_md,
+                cw,
+                ch,
+                scale,
+                ccol,
+            )
+            .unwrap_or_default()
         } else {
             Image::default()
         }
@@ -92,19 +143,6 @@ impl MainWindowController {
         t: &TerminalPayload,
     ) -> ModelRc<TerminalPaneModel> {
         let panes: Vec<TerminalPaneModel> = if t.panes.is_empty() {
-            let mini = TerminalPayload {
-                cols: t.cols,
-                rows: t.rows,
-                cells: t.cells.clone(),
-                cursor_col: t.cursor_col,
-                cursor_row: t.cursor_row,
-                cursor_visible: t.cursor_visible,
-                content_generation: t.content_generation,
-                tabs: Vec::new(),
-                active_tab: 0,
-                panes: Vec::new(),
-                dividers: Vec::new(),
-            };
             vec![TerminalPaneModel {
                 session_id: SharedString::new(),
                 left: 0.0,
@@ -116,7 +154,17 @@ impl MainWindowController {
                 cols: i32::from(t.cols),
                 rows: i32::from(t.rows),
                 cells: empty_terminal_cells(),
-                pixels: self.raster_terminal_payload(&mini),
+                pixels: self.raster_terminal_cells(
+                    "root",
+                    t.cols,
+                    t.rows,
+                    &t.cells,
+                    t.cursor_col,
+                    t.cursor_row,
+                    t.cursor_visible,
+                    &t.dirty_lines,
+                    t.full_redraw,
+                ),
                 cursor_col: i32::from(t.cursor_col),
                 cursor_row: i32::from(t.cursor_row),
                 cursor_visible: t.cursor_visible,
@@ -125,7 +173,11 @@ impl MainWindowController {
             t.panes
                 .iter()
                 .map(|p| {
-                    let mini = pane_payload_to_terminal(p);
+                    let key = if p.session_id.is_empty() {
+                        "root"
+                    } else {
+                        p.session_id.as_str()
+                    };
                     TerminalPaneModel {
                         session_id: p.session_id.clone().into(),
                         left: p.left,
@@ -137,7 +189,17 @@ impl MainWindowController {
                         cols: i32::from(p.cols),
                         rows: i32::from(p.rows),
                         cells: empty_terminal_cells(),
-                        pixels: self.raster_terminal_payload(&mini),
+                        pixels: self.raster_terminal_cells(
+                            key,
+                            p.cols,
+                            p.rows,
+                            &p.cells,
+                            p.cursor_col,
+                            p.cursor_row,
+                            p.cursor_visible,
+                            &p.dirty_lines,
+                            p.full_redraw,
+                        ),
                         cursor_col: i32::from(p.cursor_col),
                         cursor_row: i32::from(p.cursor_row),
                         cursor_visible: p.cursor_visible,

@@ -28,7 +28,7 @@ use crate::search::SearchMatch;
 
 pub use color::{resolve_color, xterm_256_color, CellColor, ColorRole, Rgba, TerminalPalette};
 pub use cursor::{CursorState, CursorStyle};
-pub use grid::{Cell, CellFlags, GridLine, GridSnapshot, ScrollPosition};
+pub use grid::{empty_row, Cell, CellFlags, GridLine, GridSnapshot, ScrollPosition};
 pub use selection::{GridPoint, Selection};
 
 /// Default retained scrollback lines.
@@ -73,11 +73,12 @@ impl TerminalEmulator {
     /// Feed bytes from the PTY into the emulator. Any response bytes the
     /// emulator wants to write back (DA1, DSR, ...) are returned; the caller
     /// must forward them to the PTY input.
+    ///
+    /// [`EmulatorState::content_generation`] is bumped only when a sequence
+    /// mutates the visible grid, cursor, or viewport — not for pure queries
+    /// (e.g. DSR cursor-position reports) or incomplete escape fragments.
     pub fn feed(&self, bytes: &[u8]) -> Vec<u8> {
         let mut state = self.inner.lock();
-        if !bytes.is_empty() {
-            state.bump_generation();
-        }
         let mut parser = state.parser.take().unwrap_or_default();
         let mut handler = Handler {
             state: &mut state,
@@ -178,35 +179,40 @@ struct EmulatorState {
     cols: u16,
     rows: u16,
     scrollback_cap: usize,
-    // Visible grid[row][col]
-    grid: Vec<Vec<Cell>>,
-    // Oldest-first scrollback (lines that have been pushed off the top).
-    scrollback: std::collections::VecDeque<Vec<Cell>>,
-    // Viewport offset: 0 = live tail; positive values pin the view further
-    // into scrollback.
+    /// Visible rows as shared slices — snapshot clones are refcount bumps.
+    /// Row-major flat storage is obtained by concatenating these; scroll uses
+    /// `rotate_left` / `rotate_right` on the region instead of `Vec::remove`/`insert`.
+    grid: Vec<Arc<[Cell]>>,
+    /// Oldest-first scrollback (lines that have been pushed off the top).
+    scrollback: std::collections::VecDeque<Arc<[Cell]>>,
+    /// Viewport offset: 0 = live tail; positive values pin the view further
+    /// into scrollback.
     viewport_offset: usize,
     cursor: CursorState,
-    // Current SGR state applied to newly emitted cells.
+    /// Current SGR state applied to newly emitted cells.
     current_fg: CellColor,
     current_bg: CellColor,
     current_flags: CellFlags,
-    // Reusable parser (owned so we can take / return to avoid borrow issues).
+    /// Reusable parser (owned so we can take / return to avoid borrow issues).
     parser: Option<vte::Parser>,
     title: String,
     cwd: Option<PathBuf>,
     selection: Option<Selection>,
-    // Scrollable region (DECSTBM). Zero-indexed, inclusive bounds.
+    /// Scrollable region (DECSTBM). Zero-indexed, inclusive bounds.
     scroll_top: u16,
     scroll_bottom: u16,
-    /// Bumped on feed / resize / scroll so UI equality can skip cell walks.
+    /// Bumped when grid / cursor / viewport change so UI equality can skip cell walks.
     content_generation: u64,
+    /// Per-visible-row dirty flags accumulated since the last snapshot.
+    dirty_lines: Vec<bool>,
+    /// Force a full raster on the next snapshot (resize, viewport scroll, …).
+    full_redraw: bool,
 }
 
 impl EmulatorState {
     fn new(cols: u16, rows: u16, scrollback_cap: usize) -> Self {
-        let grid = (0..rows)
-            .map(|_| vec![Cell::empty(); cols as usize])
-            .collect();
+        let cols_usize = cols as usize;
+        let grid = (0..rows).map(|_| empty_row(cols_usize)).collect();
         Self {
             cols,
             rows,
@@ -225,11 +231,44 @@ impl EmulatorState {
             scroll_top: 0,
             scroll_bottom: rows.saturating_sub(1),
             content_generation: 1,
+            dirty_lines: vec![true; rows as usize],
+            full_redraw: true,
         }
     }
 
     fn bump_generation(&mut self) {
         self.content_generation = self.content_generation.wrapping_add(1).max(1);
+    }
+
+    fn mark_dirty_row(&mut self, row: u16) {
+        if let Some(flag) = self.dirty_lines.get_mut(row as usize) {
+            *flag = true;
+        }
+    }
+
+    fn mark_dirty_range(&mut self, from: u16, to_inclusive: u16) {
+        let end = (to_inclusive as usize + 1).min(self.dirty_lines.len());
+        for flag in &mut self.dirty_lines[(from as usize).min(end)..end] {
+            *flag = true;
+        }
+    }
+
+    fn mark_full_redraw(&mut self) {
+        self.full_redraw = true;
+        self.dirty_lines.fill(true);
+    }
+
+    /// Copy-on-write mutate a single visible row.
+    fn with_row_mut(&mut self, row: usize, f: impl FnOnce(&mut [Cell])) {
+        let Some(existing) = self.grid.get(row).cloned() else {
+            return;
+        };
+        let mut owned = existing.as_ref().to_vec();
+        f(&mut owned);
+        self.grid[row] = Arc::from(owned);
+        if let Some(flag) = self.dirty_lines.get_mut(row) {
+            *flag = true;
+        }
     }
 
     fn resize(&mut self, cols: u16, rows: u16) {
@@ -238,18 +277,20 @@ impl EmulatorState {
         }
         self.bump_generation();
         let cols_usize = cols as usize;
-        // Resize each existing row.
+        // Resize each existing row (COW).
         for line in &mut self.grid {
-            if line.len() < cols_usize {
-                line.resize(cols_usize, Cell::empty());
-            } else if line.len() > cols_usize {
-                line.truncate(cols_usize);
+            let mut owned = line.as_ref().to_vec();
+            if owned.len() < cols_usize {
+                owned.resize(cols_usize, Cell::empty());
+            } else if owned.len() > cols_usize {
+                owned.truncate(cols_usize);
             }
+            *line = Arc::from(owned);
         }
         // Add or drop lines.
         if rows as usize > self.grid.len() {
             while (self.grid.len() as u16) < rows {
-                self.grid.push(vec![Cell::empty(); cols_usize]);
+                self.grid.push(empty_row(cols_usize));
             }
         } else {
             while (self.grid.len() as u16) > rows {
@@ -263,9 +304,11 @@ impl EmulatorState {
         self.scroll_bottom = rows.saturating_sub(1);
         self.cursor.col = self.cursor.col.min(cols.saturating_sub(1));
         self.cursor.row = self.cursor.row.min(rows.saturating_sub(1));
+        self.dirty_lines = vec![true; rows as usize];
+        self.mark_full_redraw();
     }
 
-    fn push_scrollback(&mut self, line: Vec<Cell>) {
+    fn push_scrollback(&mut self, line: Arc<[Cell]>) {
         if self.scrollback_cap == 0 {
             return;
         }
@@ -275,7 +318,7 @@ impl EmulatorState {
         self.scrollback.push_back(line);
     }
 
-    fn snapshot(&self) -> GridSnapshot {
+    fn snapshot(&mut self) -> GridSnapshot {
         let mut lines = Vec::with_capacity(self.rows as usize);
         // If viewport_offset > 0, show scrollback-ending-at-offset instead
         // of the live grid.
@@ -283,7 +326,7 @@ impl EmulatorState {
             for (i, row) in self.grid.iter().enumerate() {
                 lines.push(GridLine {
                     line_number: i as i64,
-                    cells: row.clone(),
+                    cells: Arc::clone(row),
                 });
             }
         } else {
@@ -292,20 +335,32 @@ impl EmulatorState {
             let total = self.scrollback.len() + self.grid.len();
             let bottom = total.saturating_sub(self.viewport_offset);
             let top = bottom.saturating_sub(self.rows as usize);
-            for (idx, abs) in (top..bottom).enumerate() {
-                let row: Vec<Cell> = if abs < self.scrollback.len() {
-                    self.scrollback[abs].clone()
+            for abs in top..bottom {
+                let row = if abs < self.scrollback.len() {
+                    Arc::clone(&self.scrollback[abs])
                 } else {
-                    self.grid[abs - self.scrollback.len()].clone()
+                    Arc::clone(&self.grid[abs - self.scrollback.len()])
                 };
                 let line_number = (abs as i64) - (self.scrollback.len() as i64);
-                let _ = idx;
                 lines.push(GridLine {
                     line_number,
                     cells: row,
                 });
             }
         }
+
+        let full_redraw = self.full_redraw || self.viewport_offset != 0;
+        let dirty_lines = if full_redraw {
+            (0..self.rows).collect()
+        } else {
+            self.dirty_lines
+                .iter()
+                .enumerate()
+                .filter_map(|(i, d)| d.then_some(i as u16))
+                .collect()
+        };
+        self.dirty_lines.fill(false);
+        self.full_redraw = false;
 
         GridSnapshot {
             cols: self.cols,
@@ -315,11 +370,14 @@ impl EmulatorState {
             lines,
             cursor: self.cursor,
             content_generation: self.content_generation,
+            dirty_lines,
+            full_redraw,
         }
     }
 
     fn scroll_to(&mut self, pos: ScrollPosition) {
         self.bump_generation();
+        self.mark_full_redraw();
         match pos {
             ScrollPosition::Top => {
                 self.viewport_offset = self.scrollback.len();
@@ -337,6 +395,7 @@ impl EmulatorState {
     fn scroll_by(&mut self, lines: i32) {
         if lines != 0 {
             self.bump_generation();
+            self.mark_full_redraw();
         }
         if lines > 0 {
             self.viewport_offset = self.viewport_offset.saturating_sub(lines as usize);
@@ -422,12 +481,12 @@ impl EmulatorState {
             let Some(line) = self.scrollback.get(idx) else {
                 return String::new();
             };
-            cells_to_string(line)
+            cells_to_string(line.as_ref())
         } else {
             let Some(line) = self.grid.get(row as usize) else {
                 return String::new();
             };
-            cells_to_string(line)
+            cells_to_string(line.as_ref())
         }
     }
 
@@ -445,7 +504,7 @@ impl EmulatorState {
         let mut out = Vec::new();
         // Scrollback first (negative line numbers).
         for (idx, line) in self.scrollback.iter().enumerate() {
-            let hay = cells_to_string(line);
+            let hay = cells_to_string(line.as_ref());
             let hay = if case_sensitive {
                 hay
             } else {
@@ -455,7 +514,7 @@ impl EmulatorState {
             push_matches(&mut out, &hay, needle, line_no);
         }
         for (idx, line) in self.grid.iter().enumerate() {
-            let hay = cells_to_string(line);
+            let hay = cells_to_string(line.as_ref());
             let hay = if case_sensitive {
                 hay
             } else {
@@ -477,71 +536,103 @@ impl EmulatorState {
         }
         let row = self.cursor.row as usize;
         let col = self.cursor.col as usize;
-        if let Some(line) = self.grid.get_mut(row) {
+        let fg = self.current_fg;
+        let bg = self.current_bg;
+        let flags = self.current_flags;
+        self.with_row_mut(row, |line| {
             if let Some(cell) = line.get_mut(col) {
                 cell.ch = ch;
-                cell.fg = self.current_fg;
-                cell.bg = self.current_bg;
-                cell.flags = self.current_flags;
+                cell.fg = fg;
+                cell.bg = bg;
+                cell.flags = flags;
             }
-        }
+        });
         self.cursor.col = self.cursor.col.saturating_add(1);
+        self.bump_generation();
     }
 
     fn line_feed(&mut self) {
         if self.cursor.row == self.scroll_bottom {
-            // Scroll the region up by one line.
-            if self.scroll_top == 0 {
-                let top = self.grid.remove(0);
-                self.push_scrollback(top);
-            } else {
-                self.grid.remove(self.scroll_top as usize);
+            // Scroll the region up by one line via rotate (O(rows) Arc moves,
+            // not O(rows) heap reallocations from remove/insert).
+            let top = self.scroll_top as usize;
+            let bot = self.scroll_bottom as usize;
+            if top == 0 {
+                let scrolled = Arc::clone(&self.grid[0]);
+                self.push_scrollback(scrolled);
             }
-            let fresh = vec![Cell::empty(); self.cols as usize];
-            let insert_at = self.scroll_bottom as usize;
-            if insert_at >= self.grid.len() {
-                self.grid.push(fresh);
-            } else {
-                self.grid.insert(insert_at, fresh);
+            if bot >= top && bot < self.grid.len() {
+                self.grid[top..=bot].rotate_left(1);
+                self.grid[bot] = empty_row(self.cols as usize);
+                self.mark_dirty_range(self.scroll_top, self.scroll_bottom);
             }
         } else {
+            let prev = self.cursor.row;
             self.cursor.row = self.cursor.row.saturating_add(1).min(self.rows - 1);
+            self.mark_dirty_row(prev);
+            self.mark_dirty_row(self.cursor.row);
         }
+        self.bump_generation();
     }
 
     fn reverse_line_feed(&mut self) {
         if self.cursor.row == self.scroll_top {
-            let insert_at = self.scroll_top as usize;
-            self.grid
-                .insert(insert_at, vec![Cell::empty(); self.cols as usize]);
-            // Remove the row that fell out the bottom of the region.
-            let remove_at = (self.scroll_bottom as usize + 1).min(self.grid.len() - 1);
-            self.grid.remove(remove_at);
+            let top = self.scroll_top as usize;
+            let bot = self.scroll_bottom as usize;
+            if bot >= top && bot < self.grid.len() {
+                self.grid[top..=bot].rotate_right(1);
+                self.grid[top] = empty_row(self.cols as usize);
+                self.mark_dirty_range(self.scroll_top, self.scroll_bottom);
+            }
         } else {
+            let prev = self.cursor.row;
             self.cursor.row = self.cursor.row.saturating_sub(1);
+            self.mark_dirty_row(prev);
+            self.mark_dirty_row(self.cursor.row);
         }
+        self.bump_generation();
     }
 
     fn carriage_return(&mut self) {
-        self.cursor.col = 0;
+        if self.cursor.col != 0 {
+            self.mark_dirty_row(self.cursor.row);
+            self.cursor.col = 0;
+            self.bump_generation();
+        }
     }
 
     fn backspace(&mut self) {
+        let prev = self.cursor.col;
         self.cursor.col = self.cursor.col.saturating_sub(1);
+        if self.cursor.col != prev {
+            self.mark_dirty_row(self.cursor.row);
+            self.bump_generation();
+        }
     }
 
     fn tab(&mut self) {
         // Standard 8-column tab stops.
         let next = ((self.cursor.col / 8) + 1) * 8;
-        self.cursor.col = next.min(self.cols.saturating_sub(1));
+        let col = next.min(self.cols.saturating_sub(1));
+        if col != self.cursor.col {
+            self.cursor.col = col;
+            self.mark_dirty_row(self.cursor.row);
+            self.bump_generation();
+        }
     }
 
     fn clear_row_range(&mut self, row: usize, from: usize, to: usize) {
-        if let Some(line) = self.grid.get_mut(row) {
-            for col in from..to.min(line.len()) {
-                line[col] = Cell::empty();
-            }
+        let cols = self.cols as usize;
+        let end = to.min(cols);
+        if from >= end {
+            return;
         }
+        self.with_row_mut(row, |line| {
+            for cell in line.iter_mut().take(end).skip(from) {
+                *cell = Cell::empty();
+            }
+        });
+        self.bump_generation();
     }
 
     fn erase_in_line(&mut self, mode: u16) {
@@ -583,33 +674,62 @@ impl EmulatorState {
     }
 
     fn cursor_up(&mut self, n: u16) {
-        self.cursor.row = self.cursor.row.saturating_sub(n).max(self.scroll_top);
+        let row = self.cursor.row.saturating_sub(n).max(self.scroll_top);
+        if row != self.cursor.row {
+            self.mark_dirty_row(self.cursor.row);
+            self.cursor.row = row;
+            self.mark_dirty_row(self.cursor.row);
+            self.bump_generation();
+        }
     }
 
     fn cursor_down(&mut self, n: u16) {
-        self.cursor.row = self
+        let row = self
             .cursor
             .row
             .saturating_add(n)
             .min(self.scroll_bottom)
             .min(self.rows.saturating_sub(1));
+        if row != self.cursor.row {
+            self.mark_dirty_row(self.cursor.row);
+            self.cursor.row = row;
+            self.mark_dirty_row(self.cursor.row);
+            self.bump_generation();
+        }
     }
 
     fn cursor_right(&mut self, n: u16) {
-        self.cursor.col = self
+        let col = self
             .cursor
             .col
             .saturating_add(n)
             .min(self.cols.saturating_sub(1));
+        if col != self.cursor.col {
+            self.mark_dirty_row(self.cursor.row);
+            self.cursor.col = col;
+            self.bump_generation();
+        }
     }
 
     fn cursor_left(&mut self, n: u16) {
-        self.cursor.col = self.cursor.col.saturating_sub(n);
+        let col = self.cursor.col.saturating_sub(n);
+        if col != self.cursor.col {
+            self.mark_dirty_row(self.cursor.row);
+            self.cursor.col = col;
+            self.bump_generation();
+        }
     }
 
     fn cursor_position(&mut self, row: u16, col: u16) {
-        self.cursor.row = row.saturating_sub(1).min(self.rows.saturating_sub(1));
-        self.cursor.col = col.saturating_sub(1).min(self.cols.saturating_sub(1));
+        let row = row.saturating_sub(1).min(self.rows.saturating_sub(1));
+        let col = col.saturating_sub(1).min(self.cols.saturating_sub(1));
+        if row != self.cursor.row || col != self.cursor.col {
+            self.mark_dirty_row(self.cursor.row);
+            self.cursor.row = row;
+            self.cursor.col = col;
+            self.mark_dirty_row(self.cursor.row);
+            self.bump_generation();
+        }
     }
 
     fn apply_sgr(&mut self, params: &Params) {
@@ -796,6 +916,8 @@ impl<'a> Perform for Handler<'a> {
                 self.state.current_bg = CellColor::Default;
                 self.state.current_flags = CellFlags::empty();
                 self.state.cursor = CursorState::default();
+                self.state.mark_full_redraw();
+                self.state.bump_generation();
             }
             b'M' => self.state.reverse_line_feed(),
             _ => {}

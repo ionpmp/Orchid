@@ -22,6 +22,10 @@ pub struct RunStyle {
     pub italic: bool,
     /// Single underline.
     pub underline: bool,
+    /// Single strikethrough.
+    pub strikethrough: bool,
+    /// Yellow highlight background (Word `w:highlight`).
+    pub highlight: bool,
     /// RGB colour (`None` = theme/default).
     pub color: Option<[u8; 3]>,
     /// Font family name.

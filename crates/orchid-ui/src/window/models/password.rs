@@ -1,5 +1,5 @@
 use orchid_i18n::LocaleManager;
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{Model, ModelRc, SharedString, VecModel};
 
 use super::super::errors::password_localized_error;
 use crate::slint_generated::{
@@ -14,7 +14,6 @@ pub(crate) struct PasswordAddDialogOverlay {
     pub generated_password: Option<String>,
     pub generation_seq: u32,
 }
-
 
 fn empty_password_detail() -> PasswordDetail {
     PasswordDetail {
@@ -72,90 +71,161 @@ pub(crate) fn build_password_model(
     add_dialog: PasswordAddDialogOverlay,
     locale: &LocaleManager,
 ) -> PasswordModel {
-    let entries: Vec<PasswordEntryItem> = p
-        .entries
-        .iter()
-        .map(|e| {
-            let tags: Vec<SharedString> = e.tags.iter().map(|t| t.clone().into()).collect();
-            PasswordEntryItem {
-                id: e.id.clone().into(),
-                title: e.title.clone().into(),
-                username: e.username.clone().into(),
-                url_host: e.url_host.clone().unwrap_or_default().into(),
-                has_totp: e.has_totp,
-                tags: ModelRc::new(VecModel::from(tags)),
-                color_label: e.color_label.clone().unwrap_or_default().into(),
-                modified: e.modified_text.clone().into(),
-            }
-        })
-        .collect();
+    let mut model = empty_password_model(locale);
+    patch_password_model(&mut model, p, toast, autofocus, add_dialog, locale);
+    model
+}
 
-    let selected = match &p.selected {
-        Some(d) => {
-            let tags: Vec<PasswordTagChip> = d
-                .tags
-                .iter()
-                .map(|t| PasswordTagChip {
-                    label: t.clone().into(),
-                })
-                .collect();
-            let totp_remaining = d.totp_remaining_seconds as i32;
-            let totp_remaining_label = if d.totp_code.as_deref().unwrap_or("").is_empty() {
-                SharedString::new()
-            } else {
-                locale
-                    .tr_args(
-                        "password-totp-remaining",
-                        &orchid_i18n::FluentArgs::new().with("s", totp_remaining.to_string()),
-                    )
-                    .into()
-            };
-            PasswordDetail {
-                has_selection: true,
-                id: d.id.clone().into(),
-                title: d.title.clone().into(),
-                username: d.username.clone().into(),
-                url: d.url.clone().unwrap_or_default().into(),
-                notes: d.notes.clone().unwrap_or_default().into(),
-                totp_code: d.totp_code.clone().unwrap_or_default().into(),
-                totp_remaining,
-                totp_remaining_label,
-                tags: ModelRc::new(VecModel::from(tags)),
-            }
-        }
-        None => empty_password_detail(),
-    };
+/// Update an existing [`PasswordModel`] in place, keeping list `ModelRc`s.
+pub(crate) fn patch_password_model(
+    model: &mut PasswordModel,
+    p: &orchid_widgets::PasswordManagerPayload,
+    toast: Option<(String, bool)>,
+    autofocus: bool,
+    add_dialog: PasswordAddDialogOverlay,
+    locale: &LocaleManager,
+) {
+    sync_entries(&model.entries, &p.entries);
+    patch_selected(&mut model.selected, p.selected.as_ref(), locale);
 
     let (toast_msg, toast_vis) = toast.unwrap_or((String::new(), false));
+    model.is_unlocked = p.is_unlocked;
+    model.lock_reason = p
+        .lock_reason
+        .as_deref()
+        .map(|r| password_localized_error(locale, r))
+        .unwrap_or_default()
+        .into();
+    model.biometric_available = p.biometric_available;
+    model.unlock_error = p
+        .unlock_error
+        .as_deref()
+        .map(|r| password_localized_error(locale, r))
+        .unwrap_or_default()
+        .into();
+    model.search_query = p.search_query.clone().into();
+    model.toast_message = toast_msg.into();
+    model.toast_visible = toast_vis;
+    model.request_autofocus = autofocus;
 
-    let mut dialog = empty_password_add_dialog(locale);
-    dialog.visible = add_dialog.visible;
-    dialog.error = add_dialog.error.unwrap_or_default().into();
-    dialog.request_autofocus = add_dialog.request_autofocus;
-    dialog.gen_password = add_dialog.generated_password.unwrap_or_default().into();
-    dialog.gen_seq = add_dialog.generation_seq as i32;
+    model.add_dialog.visible = add_dialog.visible;
+    model.add_dialog.error = add_dialog.error.unwrap_or_default().into();
+    model.add_dialog.request_autofocus = add_dialog.request_autofocus;
+    model.add_dialog.gen_password = add_dialog.generated_password.unwrap_or_default().into();
+    model.add_dialog.gen_seq = add_dialog.generation_seq as i32;
+}
 
-    PasswordModel {
-        is_unlocked: p.is_unlocked,
-        lock_reason: p
-            .lock_reason
-            .as_deref()
-            .map(|r| password_localized_error(locale, r))
-            .unwrap_or_default()
-            .into(),
-        biometric_available: p.biometric_available,
-        unlock_error: p
-            .unlock_error
-            .as_deref()
-            .map(|r| password_localized_error(locale, r))
-            .unwrap_or_default()
-            .into(),
-        entries: ModelRc::new(VecModel::from(entries)),
-        selected,
-        search_query: p.search_query.clone().into(),
-        toast_message: toast_msg.into(),
-        toast_visible: toast_vis,
-        request_autofocus: autofocus,
-        add_dialog: dialog,
+fn sync_entries(model: &ModelRc<PasswordEntryItem>, entries: &[orchid_widgets::PasswordEntryView]) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<PasswordEntryItem>>() else {
+        return;
+    };
+    while v.row_count() > entries.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, e) in entries.iter().enumerate() {
+        let tags: Vec<SharedString> = e.tags.iter().map(|t| t.clone().into()).collect();
+        let row = PasswordEntryItem {
+            id: e.id.clone().into(),
+            title: e.title.clone().into(),
+            username: e.username.clone().into(),
+            url_host: e.url_host.clone().unwrap_or_default().into(),
+            has_totp: e.has_totp,
+            tags: ModelRc::new(VecModel::from(tags)),
+            color_label: e.color_label.clone().unwrap_or_default().into(),
+            modified: e.modified_text.clone().into(),
+        };
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old.id == row.id
+                    && old.title == row.title
+                    && old.username == row.username
+                    && old.url_host == row.url_host
+                    && old.has_totp == row.has_totp
+                    && old.color_label == row.color_label
+                    && old.modified == row.modified
+                {
+                    // Tags rarely change on the 1Hz TOTP tick; skip full replace.
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
+}
+
+fn patch_selected(
+    selected: &mut PasswordDetail,
+    detail: Option<&orchid_widgets::PasswordEntryDetailView>,
+    locale: &LocaleManager,
+) {
+    let Some(d) = detail else {
+        if selected.has_selection {
+            let tags = selected.tags.clone();
+            *selected = empty_password_detail();
+            selected.tags = tags;
+            if let Some(v) = selected
+                .tags
+                .as_any()
+                .downcast_ref::<VecModel<PasswordTagChip>>()
+            {
+                while v.row_count() > 0 {
+                    v.remove(v.row_count() - 1);
+                }
+            }
+        }
+        return;
+    };
+    let totp_remaining = d.totp_remaining_seconds as i32;
+    let totp_remaining_label = if d.totp_code.as_deref().unwrap_or("").is_empty() {
+        SharedString::new()
+    } else {
+        locale
+            .tr_args(
+                "password-totp-remaining",
+                &orchid_i18n::FluentArgs::new().with("s", totp_remaining.to_string()),
+            )
+            .into()
+    };
+    selected.has_selection = true;
+    selected.id = d.id.clone().into();
+    selected.title = d.title.clone().into();
+    selected.username = d.username.clone().into();
+    selected.url = d.url.clone().unwrap_or_default().into();
+    selected.notes = d.notes.clone().unwrap_or_default().into();
+    selected.totp_code = d.totp_code.clone().unwrap_or_default().into();
+    selected.totp_remaining = totp_remaining;
+    selected.totp_remaining_label = totp_remaining_label;
+
+    let chips: Vec<PasswordTagChip> = d
+        .tags
+        .iter()
+        .map(|t| PasswordTagChip {
+            label: t.clone().into(),
+        })
+        .collect();
+    if let Some(v) = selected
+        .tags
+        .as_any()
+        .downcast_ref::<VecModel<PasswordTagChip>>()
+    {
+        while v.row_count() > chips.len() {
+            v.remove(v.row_count() - 1);
+        }
+        for (i, chip) in chips.into_iter().enumerate() {
+            if i < v.row_count() {
+                if let Some(old) = v.row_data(i) {
+                    if old.label == chip.label {
+                        continue;
+                    }
+                }
+                v.set_row_data(i, chip);
+            } else {
+                v.push(chip);
+            }
+        }
+    } else {
+        selected.tags = ModelRc::new(VecModel::from(chips));
     }
 }

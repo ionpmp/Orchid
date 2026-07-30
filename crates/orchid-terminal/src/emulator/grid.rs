@@ -1,5 +1,7 @@
 //! Cell / line / snapshot types used by the emulator and the UI renderer.
 
+use std::sync::Arc;
+
 use bitflags::bitflags;
 
 use crate::emulator::color::CellColor;
@@ -65,12 +67,15 @@ impl Default for Cell {
 }
 
 /// One line in the grid snapshot.
+///
+/// `cells` is an [`Arc`] so unchanged rows are refcount-cloned instead of
+/// deep-copied on every [`crate::TerminalEmulator::snapshot`].
 #[derive(Debug, Clone)]
 pub struct GridLine {
     /// Row (0 = top of visible area; negatives index into scrollback).
     pub line_number: i64,
     /// Cells from left to right.
-    pub cells: Vec<Cell>,
+    pub cells: Arc<[Cell]>,
 }
 
 /// Snapshot of the visible terminal grid at a point in time.
@@ -90,6 +95,15 @@ pub struct GridSnapshot {
     pub cursor: CursorState,
     /// Monotonic generation bumped whenever grid contents / viewport change.
     pub content_generation: u64,
+    /// Visible row indices that changed since the previous snapshot.
+    ///
+    /// Empty when [`Self::full_redraw`] is set (caller must repaint everything)
+    /// or when nothing changed (generation still advances for cursor-only
+    /// updates that also set dirty on the cursor row).
+    pub dirty_lines: Vec<u16>,
+    /// When true the entire visible grid must be re-rasterized (resize,
+    /// viewport scroll, first frame after open).
+    pub full_redraw: bool,
 }
 
 /// Where to position the viewport after a scroll operation.
@@ -99,4 +113,10 @@ pub enum ScrollPosition {
     Top,
     Bottom,
     Line(i64),
+}
+
+/// Build a blank row of `cols` empty cells, shared via [`Arc`].
+#[must_use]
+pub fn empty_row(cols: usize) -> Arc<[Cell]> {
+    Arc::from(vec![Cell::empty(); cols])
 }

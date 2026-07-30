@@ -178,6 +178,38 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.strikethrough, strike-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    strike-ta := TouchArea { clicked => { root.action("strikethrough"); } }
+                    Text {
+                        text: model.strikethrough-label;
+                        color: tool-btn(model.strikethrough);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.highlight, hl-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hl-ta := TouchArea { clicked => { root.action("highlight"); } }
+                    Text {
+                        text: model.highlight-label;
+                        color: tool-btn(model.highlight);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;
@@ -1052,6 +1084,22 @@ export component ViewerDocumentView inherits Rectangle {
                                 && (event.text == "u" || event.text == "U"))
                             {
                                 root.action("underline");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "x" || event.text == "X"))
+                            {
+                                root.action("strikethrough");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "h" || event.text == "H"))
+                            {
+                                root.action("highlight");
                                 return accept;
                             }
                             return reject;

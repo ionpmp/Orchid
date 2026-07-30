@@ -1,10 +1,10 @@
 //! Async byte streaming between the PTY and user code.
 
 use std::io::{Read, Write};
-use std::sync::Arc;
 use std::sync::mpsc as std_mpsc;
+use std::sync::Arc;
 
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
@@ -76,25 +76,40 @@ pub fn start_io(handle: Arc<PtyHandle>) -> Result<PtyIo> {
 
     let reader_handle = tokio::task::spawn_blocking(move || {
         let mut reader = reader;
-        let mut buf = vec![0u8; 8 * 1024];
+        // Growable buffer: reserve → read into spare capacity → freeze the
+        // written prefix. Remaining capacity is reused on the next iteration
+        // instead of allocating a fresh `Bytes` via `copy_from_slice`.
+        let mut buf = BytesMut::with_capacity(8 * 1024);
         loop {
-            match reader.read(&mut buf) {
-                Ok(0) => {
-                    debug!("pty reader hit EOF");
-                    break;
-                }
-                Ok(n) => {
-                    let chunk = Bytes::copy_from_slice(&buf[..n]);
-                    if bytes_tx.send(chunk).is_err() {
-                        debug!("pty reader: receiver dropped");
-                        break;
+            buf.reserve(8 * 1024);
+            let n = {
+                let spare = buf.spare_capacity_mut();
+                // SAFETY: `Read::read` initialises the first `n` bytes it
+                // reports; we only `advance_mut` by that count.
+                let read_buf = unsafe {
+                    std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), spare.len())
+                };
+                match reader.read(read_buf) {
+                    Ok(0) => {
+                        debug!("pty reader hit EOF");
+                        return;
+                    }
+                    Ok(n) => n,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(e) => {
+                        warn!(error = %e, "pty reader error");
+                        return;
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => {
-                    warn!(error = %e, "pty reader error");
-                    break;
-                }
+            };
+            // SAFETY: `n` bytes were written by `read` above.
+            unsafe {
+                buf.advance_mut(n);
+            }
+            let chunk = buf.split_to(n).freeze();
+            if bytes_tx.send(chunk).is_err() {
+                debug!("pty reader: receiver dropped");
+                break;
             }
         }
     });
@@ -102,10 +117,7 @@ pub fn start_io(handle: Arc<PtyHandle>) -> Result<PtyIo> {
     let writer_handle = tokio::task::spawn_blocking(move || {
         let mut writer = writer;
         while let Ok(chunk) = writer_rx.recv() {
-            if let Err(e) = writer
-                .write_all(&chunk)
-                .and_then(|()| writer.flush())
-            {
+            if let Err(e) = writer.write_all(&chunk).and_then(|()| writer.flush()) {
                 warn!(error = %e, "pty write failed");
                 break;
             }

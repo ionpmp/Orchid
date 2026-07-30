@@ -1,5 +1,7 @@
 //! Payload for the media-player widget.
 
+use std::sync::Arc;
+
 /// Render-ready media-player payload.
 #[derive(Debug, Clone, Default)]
 #[allow(missing_docs)]
@@ -15,7 +17,8 @@ pub struct MediaPlayerPayload {
     pub duration_secs: u64,
     pub progress_fraction: f32,
     pub is_playing: bool,
-    /// Base64-encoded thumbnail (`data:image/...` suffix omitted; the UI
-    /// attaches the appropriate prefix). `None` when no art is available.
-    pub thumbnail_base64: Option<String>,
+    /// Encoded thumbnail image bytes (JPEG/PNG/…), shared via [`Arc`] so the
+    /// UI can cache a decoded Slint `Image` by pointer identity without a
+    /// base64 round-trip on every poll.
+    pub thumbnail_bytes: Option<Arc<[u8]>>,
 }

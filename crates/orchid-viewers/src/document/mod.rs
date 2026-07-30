@@ -87,20 +87,11 @@ pub struct DocumentViewer {
     find_match_count: Mutex<i32>,
 }
 
+#[derive(Default)]
 struct PreviewClickState {
     count: u8,
     last_at: Option<Instant>,
     last_offset: usize,
-}
-
-impl Default for PreviewClickState {
-    fn default() -> Self {
-        Self {
-            count: 0,
-            last_at: None,
-            last_offset: 0,
-        }
-    }
 }
 
 const MULTI_CLICK_GAP: Duration = Duration::from_millis(500);
@@ -232,10 +223,7 @@ impl DocumentViewer {
     /// Current find status: `(1-based index, total)` — `(0, 0)` when no match.
     #[must_use]
     pub fn find_match_status(&self) -> (i32, i32) {
-        (
-            *self.find_match_index.lock(),
-            *self.find_match_count.lock(),
-        )
+        (*self.find_match_index.lock(), *self.find_match_count.lock())
     }
 
     /// Replace the current find match with `replacement`, then advance to the next.
@@ -319,10 +307,7 @@ impl DocumentViewer {
 
         let caret_off = {
             let guard = self.document.read();
-            guard
-                .as_ref()
-                .map(|d| d.plain_text().len())
-                .unwrap_or(0)
+            guard.as_ref().map(|d| d.plain_text().len()).unwrap_or(0)
         };
         self.set_selection_plain_offsets(caret_off, caret_off);
         let _ = self.preview_find(q, true);
@@ -406,8 +391,7 @@ impl DocumentViewer {
                         *self.preview_drag_anchor.lock() = None;
                         let plain = doc.plain_text();
                         let (start, end) = word_range_at(&plain, offset);
-                        *self.selection.lock() =
-                            selection_from_plain_offsets(doc, start, end);
+                        *self.selection.lock() = selection_from_plain_offsets(doc, start, end);
                     }
                     _ if on_image => {
                         *self.preview_drag_anchor.lock() = None;
@@ -456,7 +440,9 @@ impl DocumentViewer {
     fn note_preview_click(&self, offset: usize) -> u8 {
         let now = Instant::now();
         let mut state = self.preview_click.lock();
-        let contiguous = state.last_at.is_some_and(|t| now.duration_since(t) <= MULTI_CLICK_GAP)
+        let contiguous = state
+            .last_at
+            .is_some_and(|t| now.duration_since(t) <= MULTI_CLICK_GAP)
             && offset.abs_diff(state.last_offset) <= 2;
         state.count = if contiguous {
             state.count.saturating_add(1).max(1)
@@ -714,7 +700,11 @@ impl DocumentViewer {
             let image_idx = {
                 let guard = self.document.read();
                 let doc = guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
-                let Block::Table(t) = doc.blocks.get(head.block_idx).ok_or(ViewerError::EditOutOfBounds)? else {
+                let Block::Table(t) = doc
+                    .blocks
+                    .get(head.block_idx)
+                    .ok_or(ViewerError::EditOutOfBounds)?
+                else {
                     return Err(ViewerError::EditOutOfBounds);
                 };
                 t.rows
@@ -883,10 +873,9 @@ impl DocumentViewer {
                 .read()
                 .as_ref()
                 .and_then(|d| match d.blocks.get(table_idx) {
-                    Some(Block::Table(t)) => t
-                        .rows
-                        .first()
-                        .map(|r| r.cells.len().saturating_sub(1)),
+                    Some(Block::Table(t)) => {
+                        t.rows.first().map(|r| r.cells.len().saturating_sub(1))
+                    }
                     _ => None,
                 })
                 .unwrap_or(0),
@@ -921,9 +910,8 @@ impl DocumentViewer {
                         image_idx,
                     },
                 )?;
-                return Ok(adjacent_in_cell(doc, cursor, forward).unwrap_or_else(|| {
-                    fallback_cell_caret(doc, cursor, !forward)
-                }));
+                return Ok(adjacent_in_cell(doc, cursor, forward)
+                    .unwrap_or_else(|| fallback_cell_caret(doc, cursor, !forward)));
             }
         }
         self.undo.lock().push(
@@ -948,8 +936,7 @@ impl DocumentViewer {
         let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
         match doc.blocks.get(head.block_idx) {
             Some(Block::Table(t))
-                if cell.row < t.rows.len()
-                    && cell.col < t.rows[cell.row].cells.len() =>
+                if cell.row < t.rows.len() && cell.col < t.rows[cell.row].cells.len() =>
             {
                 Ok((head.block_idx, cell.row, cell.col))
             }
@@ -1404,7 +1391,6 @@ impl DocumentViewer {
     }
 
     /// Borrow the loaded document model (for tests / UI commands).
-    #[must_use]
     pub fn document(&self) -> parking_lot::RwLockReadGuard<'_, Option<Document>> {
         self.document.read()
     }
@@ -1509,6 +1495,8 @@ impl DocumentViewer {
                 'b' => s.bold,
                 'i' => s.italic,
                 'u' => s.underline,
+                's' => s.strikethrough,
+                'h' => s.highlight,
                 _ => false,
             })
             .unwrap_or(false);
@@ -1523,6 +1511,14 @@ impl DocumentViewer {
             },
             'u' => RunStylePatch {
                 underline: Some(!currently_on),
+                ..Default::default()
+            },
+            's' => RunStylePatch {
+                strikethrough: Some(!currently_on),
+                ..Default::default()
+            },
+            'h' => RunStylePatch {
+                highlight: Some(!currently_on),
                 ..Default::default()
             },
             _ => return Ok(()),
@@ -1861,10 +1857,7 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
             run_idx: 0,
             byte_offset: 0,
         };
-        return Selection {
-            anchor: c,
-            head: c,
-        };
+        return Selection { anchor: c, head: c };
     }
     let last = p.runs.len() - 1;
     Selection {
@@ -2505,10 +2498,23 @@ impl Viewer for DocumentViewer {
         let caret = sel.normalized().0;
         let style = style_at_cursor(doc, caret);
         let para = paragraph_ref(doc, caret).or_else(|| first_paragraph(doc));
-        let (bold, italic, underline, font_size_pt, font_family, color_rgb, alignment, list_kind) = (
+        let (
+            bold,
+            italic,
+            underline,
+            strikethrough,
+            highlight,
+            font_size_pt,
+            font_family,
+            color_rgb,
+            alignment,
+            list_kind,
+        ) = (
             style.as_ref().is_some_and(|s| s.bold),
             style.as_ref().is_some_and(|s| s.italic),
             style.as_ref().is_some_and(|s| s.underline),
+            style.as_ref().is_some_and(|s| s.strikethrough),
+            style.as_ref().is_some_and(|s| s.highlight),
             style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
             style
                 .as_ref()
@@ -2570,6 +2576,8 @@ impl Viewer for DocumentViewer {
             bold,
             italic,
             underline,
+            strikethrough,
+            highlight,
             font_size_pt,
             font_family,
             color_rgb,

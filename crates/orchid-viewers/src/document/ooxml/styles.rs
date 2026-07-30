@@ -38,14 +38,18 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                     "b" if in_r_pr => defaults.run.bold = true,
                     "i" if in_r_pr => defaults.run.italic = true,
                     "u" if in_r_pr => defaults.run.underline = true,
+                    "strike" | "dstrike" if in_r_pr => defaults.run.strikethrough = true,
+                    "highlight" if in_r_pr => {
+                        let val = attr_val(&e, "val").unwrap_or_default();
+                        defaults.run.highlight = !val.is_empty() && val != "none";
+                    }
                     "color" if in_r_pr => {
                         if let Some(val) = attr_val(&e, "val") {
                             defaults.run.color = parse_rgb(&val);
                         }
                     }
                     "rFonts" if in_r_pr => {
-                        if let Some(ascii) = attr_val(&e, "ascii")
-                            .or_else(|| attr_val(&e, "hAnsi"))
+                        if let Some(ascii) = attr_val(&e, "ascii").or_else(|| attr_val(&e, "hAnsi"))
                         {
                             defaults.run.font_family = Some(ascii);
                         }

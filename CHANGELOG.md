@@ -68,6 +68,12 @@ release yet.
 - Idle CPU, UI lag, FM listing/thumbnail cost, and cold-start work cut
   (virtualized lists, Arc listings, live dir watches, mmap thumbs, coalesced
   weather/RSS fetches, System/Processes live refresh).
+- **UI/render performance pass**: terminal glyph-cache `Arc` sharing, dirty-line
+  retained raster, `Arc<[Cell]>` grid rows + mutation-only generation bumps,
+  BytesMut PTY reads; in-place Slint model patches for clock / media / password
+  / search / recent / calculator (including floating frames); media thumbnails
+  pass `Arc<[u8]>` instead of base64; thumbnail service memory LRU, PNG encode
+  without RGBA unwrap-clone, and real in-flight coalescing.
 
 ### Fixed
 - System CPU sampling via `GetSystemTimes`; process-list refresh spikes.
