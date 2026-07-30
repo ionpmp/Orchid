@@ -168,6 +168,10 @@ pub struct RunStylePatch {
     pub strikethrough: Option<bool>,
     /// Set highlight.
     pub highlight: Option<bool>,
+    /// Set superscript (clears subscript when enabled).
+    pub superscript: Option<bool>,
+    /// Set subscript (clears superscript when enabled).
+    pub subscript: Option<bool>,
     /// Set colour (`Some(None)` clears).
     pub color: Option<Option<[u8; 3]>>,
     /// Set font family.
@@ -193,6 +197,18 @@ impl RunStylePatch {
         }
         if let Some(v) = self.highlight {
             style.highlight = v;
+        }
+        if let Some(v) = self.superscript {
+            style.superscript = v;
+            if v {
+                style.subscript = false;
+            }
+        }
+        if let Some(v) = self.subscript {
+            style.subscript = v;
+            if v {
+                style.superscript = false;
+            }
         }
         if let Some(ref c) = self.color {
             style.color = *c;
@@ -1019,6 +1035,57 @@ mod tests {
         stack.undo(&mut doc).unwrap();
         match &doc.blocks[0] {
             Block::Paragraph(p) => assert!(!p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn set_superscript_then_undo_and_clears_subscript() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor::default(),
+                        head: Cursor::at(0, 0, 5),
+                    },
+                    style: RunStylePatch {
+                        subscript: Some(true),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor::default(),
+                        head: Cursor::at(0, 0, 5),
+                    },
+                    style: RunStylePatch {
+                        superscript: Some(true),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.superscript);
+                assert!(!p.runs[0].style.subscript);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(!p.runs[0].style.superscript);
+                assert!(p.runs[0].style.subscript);
+            }
             _ => panic!("expected paragraph"),
         }
     }

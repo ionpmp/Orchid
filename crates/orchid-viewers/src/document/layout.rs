@@ -36,6 +36,8 @@ pub struct ColorBrush {
     pub a: u8,
     /// When true, paint a yellow highlight behind the glyph run.
     pub highlight: bool,
+    /// Extra baseline shift in CSS px (negative raises for superscript).
+    pub baseline_shift: f32,
 }
 
 impl Default for ColorBrush {
@@ -46,6 +48,7 @@ impl Default for ColorBrush {
             b: 32,
             a: 255,
             highlight: false,
+            baseline_shift: 0.0,
         }
     }
 }
@@ -128,8 +131,17 @@ impl DocumentLayout {
             if run.style.strikethrough {
                 builder.push(StyleProperty::Strikethrough(true), offset..end);
             }
-            if let Some(pt) = run.style.font_size_pt {
-                builder.push(StyleProperty::FontSize(pt), offset..end);
+            let base_pt = run.style.font_size_pt.unwrap_or(14.0);
+            let (effective_pt, baseline_shift) = if run.style.superscript {
+                (base_pt * 0.65, -base_pt * 0.4)
+            } else if run.style.subscript {
+                (base_pt * 0.65, base_pt * 0.2)
+            } else {
+                (base_pt, 0.0)
+            };
+            if run.style.font_size_pt.is_some() || run.style.superscript || run.style.subscript
+            {
+                builder.push(StyleProperty::FontSize(effective_pt), offset..end);
             }
             if let Some(ref family) = run.style.font_family {
                 builder.push(
@@ -137,7 +149,7 @@ impl DocumentLayout {
                     offset..end,
                 );
             }
-            if run.style.highlight || run.style.color.is_some() {
+            if run.style.highlight || run.style.color.is_some() || baseline_shift != 0.0 {
                 let mut brush = ColorBrush::default();
                 if let Some([r, g, b]) = run.style.color {
                     brush.r = r;
@@ -145,6 +157,7 @@ impl DocumentLayout {
                     brush.b = b;
                 }
                 brush.highlight = run.style.highlight;
+                brush.baseline_shift = baseline_shift;
                 builder.push(StyleProperty::Brush(brush), offset..end);
             }
             offset = end;
@@ -1341,9 +1354,9 @@ fn render_glyph_run(
     origin_y: f32,
 ) {
     let mut run_x = glyph_run.offset();
-    let run_y = glyph_run.baseline();
     let style = glyph_run.style();
     let brush = style.brush;
+    let run_y = glyph_run.baseline() + brush.baseline_shift;
     let run = glyph_run.run();
     let font = run.font();
     let font_size = run.font_size();
@@ -1352,9 +1365,7 @@ fn render_glyph_run(
     if brush.highlight {
         let metrics = run.metrics();
         let x = (origin_x + glyph_run.offset()).floor().max(0.0) as u32;
-        let y = (origin_y + glyph_run.baseline() - metrics.ascent)
-            .floor()
-            .max(0.0) as u32;
+        let y = (origin_y + run_y - metrics.ascent).floor().max(0.0) as u32;
         let w = glyph_run.advance().ceil().max(1.0) as u32;
         let h = (metrics.ascent + metrics.descent).ceil().max(1.0) as u32;
         fill_rect(pixels, width, height, x, y, w, h, HIGHLIGHT_YELLOW);

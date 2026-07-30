@@ -43,6 +43,20 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                         let val = attr_val(&e, "val").unwrap_or_default();
                         defaults.run.highlight = !val.is_empty() && val != "none";
                     }
+                    "vertAlign" if in_r_pr => {
+                        let val = attr_val(&e, "val").unwrap_or_default();
+                        match val.as_str() {
+                            "superscript" => {
+                                defaults.run.superscript = true;
+                                defaults.run.subscript = false;
+                            }
+                            "subscript" => {
+                                defaults.run.subscript = true;
+                                defaults.run.superscript = false;
+                            }
+                            _ => {}
+                        }
+                    }
                     "color" if in_r_pr => {
                         if let Some(val) = attr_val(&e, "val") {
                             defaults.run.color = parse_rgb(&val);

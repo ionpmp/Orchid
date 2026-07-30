@@ -26,6 +26,10 @@ pub struct RunStyle {
     pub strikethrough: bool,
     /// Yellow highlight background (Word `w:highlight`).
     pub highlight: bool,
+    /// Superscript (`w:vertAlign` = `superscript`). Mutually exclusive with [`Self::subscript`].
+    pub superscript: bool,
+    /// Subscript (`w:vertAlign` = `subscript`). Mutually exclusive with [`Self::superscript`].
+    pub subscript: bool,
     /// RGB colour (`None` = theme/default).
     pub color: Option<[u8; 3]>,
     /// Font family name.

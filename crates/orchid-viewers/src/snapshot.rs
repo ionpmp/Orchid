@@ -47,6 +47,8 @@ pub struct DocumentSnapshot {
     pub underline: bool,
     pub strikethrough: bool,
     pub highlight: bool,
+    pub superscript: bool,
+    pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).
     pub font_size_pt: f32,
     /// Font family at the caret (empty = document default).

@@ -1497,6 +1497,8 @@ impl DocumentViewer {
                 'u' => s.underline,
                 's' => s.strikethrough,
                 'h' => s.highlight,
+                '^' => s.superscript,
+                '_' => s.subscript,
                 _ => false,
             })
             .unwrap_or(false);
@@ -1519,6 +1521,16 @@ impl DocumentViewer {
             },
             'h' => RunStylePatch {
                 highlight: Some(!currently_on),
+                ..Default::default()
+            },
+            '^' => RunStylePatch {
+                superscript: Some(!currently_on),
+                subscript: if currently_on { None } else { Some(false) },
+                ..Default::default()
+            },
+            '_' => RunStylePatch {
+                subscript: Some(!currently_on),
+                superscript: if currently_on { None } else { Some(false) },
                 ..Default::default()
             },
             _ => return Ok(()),
@@ -2504,6 +2516,8 @@ impl Viewer for DocumentViewer {
             underline,
             strikethrough,
             highlight,
+            superscript,
+            subscript,
             font_size_pt,
             font_family,
             color_rgb,
@@ -2515,6 +2529,8 @@ impl Viewer for DocumentViewer {
             style.as_ref().is_some_and(|s| s.underline),
             style.as_ref().is_some_and(|s| s.strikethrough),
             style.as_ref().is_some_and(|s| s.highlight),
+            style.as_ref().is_some_and(|s| s.superscript),
+            style.as_ref().is_some_and(|s| s.subscript),
             style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
             style
                 .as_ref()
@@ -2578,6 +2594,8 @@ impl Viewer for DocumentViewer {
             underline,
             strikethrough,
             highlight,
+            superscript,
+            subscript,
             font_size_pt,
             font_family,
             color_rgb,

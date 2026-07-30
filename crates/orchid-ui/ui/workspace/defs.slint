@@ -949,6 +949,8 @@ export struct ViewerDocumentModel {
     underline: bool,
     strikethrough: bool,
     highlight: bool,
+    superscript: bool,
+    subscript: bool,
     /// Font size in points at the caret (`0` = default).
     font-size-pt: float,
     /// Display label for the caret font size (e.g. "14").
@@ -977,6 +979,8 @@ export struct ViewerDocumentModel {
     underline-label: string,
     strikethrough-label: string,
     highlight-label: string,
+    superscript-label: string,
+    subscript-label: string,
     font-smaller-label: string,
     font-larger-label: string,
     font-family-prev-label: string,

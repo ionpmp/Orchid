@@ -410,6 +410,23 @@ fn apply_r_pr_attr(local: &str, e: &BytesStart<'_>, style: &mut RunStyle) {
             let val = attr_val(e, "val").unwrap_or_default();
             style.highlight = !val.is_empty() && val != "none";
         }
+        "vertAlign" => {
+            let val = attr_val(e, "val").unwrap_or_default();
+            match val.as_str() {
+                "superscript" => {
+                    style.superscript = true;
+                    style.subscript = false;
+                }
+                "subscript" => {
+                    style.subscript = true;
+                    style.superscript = false;
+                }
+                _ => {
+                    style.superscript = false;
+                    style.subscript = false;
+                }
+            }
+        }
         "color" => {
             if let Some(val) = attr_val(e, "val") {
                 style.color = parse_rgb(&val);
@@ -777,6 +794,19 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
         hl.push_attribute(("w:val", "yellow"));
         writer
             .write_event(Event::Empty(hl))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if run.style.superscript {
+        let mut va = BytesStart::new("w:vertAlign");
+        va.push_attribute(("w:val", "superscript"));
+        writer
+            .write_event(Event::Empty(va))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    } else if run.style.subscript {
+        let mut va = BytesStart::new("w:vertAlign");
+        va.push_attribute(("w:val", "subscript"));
+        writer
+            .write_event(Event::Empty(va))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     if let Some([r, g, b]) = run.style.color {
@@ -1200,6 +1230,69 @@ mod tests {
         .unwrap();
         match &blocks2[0] {
             Block::Paragraph(p) => assert!(p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn parse_and_write_vert_align() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:rPr><w:vertAlign w:val="superscript"/></w:rPr>
+                <w:t>2</w:t>
+              </w:r>
+              <w:r>
+                <w:rPr><w:vertAlign w:val="subscript"/></w:rPr>
+                <w:t>n</w:t>
+              </w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.superscript);
+                assert!(!p.runs[0].style.subscript);
+                assert!(p.runs[1].style.subscript);
+                assert!(!p.runs[1].style.superscript);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("superscript") && text.contains("subscript"),
+            "serialized XML missing vertAlign: {text}"
+        );
+        let (blocks2, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.superscript);
+                assert!(p.runs[1].style.subscript);
+            }
             _ => panic!("expected paragraph"),
         }
     }

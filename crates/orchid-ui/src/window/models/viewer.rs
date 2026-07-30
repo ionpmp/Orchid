@@ -251,6 +251,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         underline: false,
         strikethrough: false,
         highlight: false,
+        superscript: false,
+        subscript: false,
         font_size_pt: 0.0,
         font_size_label: SharedString::from("14"),
         font_family: SharedString::new(),
@@ -272,6 +274,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         underline_label: locale.tr("viewer-document-underline").into(),
         strikethrough_label: locale.tr("viewer-document-strikethrough").into(),
         highlight_label: locale.tr("viewer-document-highlight").into(),
+        superscript_label: locale.tr("viewer-document-superscript").into(),
+        subscript_label: locale.tr("viewer-document-subscript").into(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),
         font_family_prev_label: locale.tr("viewer-document-font-prev").into(),
@@ -427,6 +431,8 @@ fn build_document_snapshot(
     model.underline = s.underline;
     model.strikethrough = s.strikethrough;
     model.highlight = s.highlight;
+    model.superscript = s.superscript;
+    model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;
     model.font_size_label = if s.font_size_pt > 0.0 {
         format!("{}", s.font_size_pt.round() as i32).into()

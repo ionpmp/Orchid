@@ -210,6 +210,38 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.superscript, super-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    super-ta := TouchArea { clicked => { root.action("superscript"); } }
+                    Text {
+                        text: model.superscript-label;
+                        color: tool-btn(model.superscript);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.subscript, sub-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sub-ta := TouchArea { clicked => { root.action("subscript"); } }
+                    Text {
+                        text: model.subscript-label;
+                        color: tool-btn(model.subscript);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;
@@ -1100,6 +1132,22 @@ export component ViewerDocumentView inherits Rectangle {
                                 && (event.text == "h" || event.text == "H"))
                             {
                                 root.action("highlight");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "=" || event.text == "+"))
+                            {
+                                root.action("superscript");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && event.text == "=")
+                            {
+                                root.action("subscript");
                                 return accept;
                             }
                             return reject;
