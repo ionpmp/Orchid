@@ -276,6 +276,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         highlight_label: locale.tr("viewer-document-highlight").into(),
         superscript_label: locale.tr("viewer-document-superscript").into(),
         subscript_label: locale.tr("viewer-document-subscript").into(),
+        clear_formatting_label: locale.tr("viewer-document-clear-formatting").into(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),
         font_family_prev_label: locale.tr("viewer-document-font-prev").into(),

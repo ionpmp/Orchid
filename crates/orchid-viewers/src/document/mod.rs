@@ -1277,6 +1277,18 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Clear character formatting on the effective selection (Ctrl+Space).
+    ///
+    /// Resets bold/italic/underline/strike/highlight/super/sub, colour, font family, and size.
+    /// Paragraph alignment and list markers are left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn clear_formatting_selection(&self) -> Result<()> {
+        self.apply_style_patch_selection(RunStylePatch::clear_character())
+    }
+
     /// Step font size up (`direction > 0`) or down on the selection.
     ///
     /// # Errors

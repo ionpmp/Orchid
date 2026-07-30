@@ -242,6 +242,22 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(28px, clear-fmt-label.preferred-width + 8px);
+                    height: 28px;
+                    background: tool-bg(false, clear-fmt-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    clear-fmt-ta := TouchArea { clicked => { root.action("clear-formatting"); } }
+                    clear-fmt-label := Text {
+                        text: model.clear-formatting-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;
@@ -1149,6 +1165,14 @@ export component ViewerDocumentView inherits Rectangle {
                                 && event.text == "=")
                             {
                                 root.action("subscript");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && !event.modifiers.shift
+                                && !event.modifiers.alt
+                                && event.text == " ")
+                            {
+                                root.action("clear-formatting");
                                 return accept;
                             }
                             return reject;

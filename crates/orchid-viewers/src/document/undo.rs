@@ -181,6 +181,23 @@ pub struct RunStylePatch {
 }
 
 impl RunStylePatch {
+    /// Patch that resets every character-style field to the document default.
+    #[must_use]
+    pub fn clear_character() -> Self {
+        Self {
+            bold: Some(false),
+            italic: Some(false),
+            underline: Some(false),
+            strikethrough: Some(false),
+            highlight: Some(false),
+            superscript: Some(false),
+            subscript: Some(false),
+            color: Some(None),
+            font_family: Some(None),
+            font_size_pt: Some(None),
+        }
+    }
+
     /// Apply this patch onto `style`.
     pub fn apply_to(&self, style: &mut RunStyle) {
         if let Some(v) = self.bold {
@@ -1035,6 +1052,60 @@ mod tests {
         stack.undo(&mut doc).unwrap();
         match &doc.blocks[0] {
             Block::Paragraph(p) => assert!(!p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn clear_character_formatting_then_undo() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor::default(),
+                        head: Cursor::at(0, 0, 5),
+                    },
+                    style: RunStylePatch {
+                        bold: Some(true),
+                        italic: Some(true),
+                        highlight: Some(true),
+                        color: Some(Some([255, 0, 0])),
+                        font_size_pt: Some(Some(18.0)),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetRunStyle {
+                    range: Selection {
+                        anchor: Cursor::default(),
+                        head: Cursor::at(0, 0, 5),
+                    },
+                    style: RunStylePatch::clear_character(),
+                },
+            )
+            .unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.runs[0].style, RunStyle::default());
+            }
+            _ => panic!("expected paragraph"),
+        }
+        stack.undo(&mut doc).unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.bold);
+                assert!(p.runs[0].style.italic);
+                assert!(p.runs[0].style.highlight);
+                assert_eq!(p.runs[0].style.color, Some([255, 0, 0]));
+                assert_eq!(p.runs[0].style.font_size_pt, Some(18.0));
+            }
             _ => panic!("expected paragraph"),
         }
     }

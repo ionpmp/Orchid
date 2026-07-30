@@ -801,6 +801,7 @@ viewer-document-strikethrough = S
 viewer-document-highlight = H
 viewer-document-superscript = x²
 viewer-document-subscript = x₂
+viewer-document-clear-formatting = Tx
 viewer-document-font-smaller = A−
 viewer-document-font-larger = A+
 viewer-document-font-prev = «
