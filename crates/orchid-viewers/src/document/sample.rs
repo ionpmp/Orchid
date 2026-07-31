@@ -13,6 +13,7 @@ fn cell(text: &str) -> TableCell {
         runs: vec![Run {
             text: text.into(),
             style: RunStyle::default(),
+            ..Default::default()
         }],
         ..Default::default()
     }])
@@ -23,6 +24,7 @@ fn para(text: &str) -> Paragraph {
         runs: vec![Run {
             text: text.into(),
             style: RunStyle::default(),
+            ..Default::default()
         }],
         ..Default::default()
     }
@@ -41,6 +43,7 @@ pub fn sample_document() -> Document {
                         font_size_pt: Some(18.0),
                         ..Default::default()
                     },
+                    ..Default::default()
                 }],
                 alignment: Alignment::Left,
                 ..Default::default()
@@ -52,7 +55,8 @@ pub fn sample_document() -> Document {
                 runs: vec![Run {
                     text: "Bullet item — Tab / Shift+Tab changes indent.".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),

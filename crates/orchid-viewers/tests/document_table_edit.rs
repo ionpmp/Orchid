@@ -12,7 +12,8 @@ fn table_2x2() -> Doc {
             runs: vec![Run {
                 text: text.into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         }])
     }
@@ -22,7 +23,8 @@ fn table_2x2() -> Doc {
                 runs: vec![Run {
                     text: "Before".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
             Block::Table(Table {
@@ -40,7 +42,8 @@ fn table_2x2() -> Doc {
                 runs: vec![Run {
                     text: "After".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],
@@ -159,11 +162,7 @@ fn paste_multiline_into_table_cell() {
     let guard = viewer.document();
     assert_eq!(
         cell_paras(guard.as_ref().unwrap(), 0, 1),
-        vec![
-            "R1C2".to_string(),
-            "line2".to_string(),
-            "line3".to_string()
-        ]
+        vec!["R1C2".to_string(), "line2".to_string(), "line3".to_string()]
     );
     assert_eq!(
         cell_paras(guard.as_ref().unwrap(), 0, 0),

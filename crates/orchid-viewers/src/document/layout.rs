@@ -125,7 +125,8 @@ impl DocumentLayout {
             if run.style.italic {
                 builder.push(StyleProperty::FontStyle(FontStyle::Italic), offset..end);
             }
-            if run.style.underline {
+            let is_link = run.hyperlink.is_some();
+            if run.style.underline || is_link {
                 builder.push(StyleProperty::Underline(true), offset..end);
             }
             if run.style.strikethrough {
@@ -149,9 +150,13 @@ impl DocumentLayout {
                     offset..end,
                 );
             }
-            if run.style.highlight || run.style.color.is_some() || baseline_shift != 0.0 {
+            // Word-default link blue when the run has no explicit colour.
+            const LINK_BLUE: [u8; 3] = [0x05, 0x63, 0xC1];
+            let link_color = is_link.then_some(LINK_BLUE);
+            let paint_color = run.style.color.or(link_color);
+            if run.style.highlight || paint_color.is_some() || baseline_shift != 0.0 {
                 let mut brush = ColorBrush::default();
-                if let Some([r, g, b]) = run.style.color {
+                if let Some([r, g, b]) = paint_color {
                     brush.r = r;
                     brush.g = g;
                     brush.b = b;
@@ -1583,6 +1588,7 @@ mod tests {
                     bold: true,
                     ..Default::default()
                 },
+                ..Default::default()
             }],
             ..Default::default()
         }
@@ -1640,14 +1646,16 @@ mod tests {
                     runs: vec![Run {
                         text: "First".into(),
                         style: RunStyle::default(),
-                    }],
+            ..Default::default()
+        }],
                     ..Default::default()
                 }),
                 Block::Paragraph(Paragraph {
                     runs: vec![Run {
                         text: "Second line here".into(),
                         style: RunStyle::default(),
-                    }],
+            ..Default::default()
+        }],
                     ..Default::default()
                 }),
             ],
@@ -1703,7 +1711,8 @@ mod tests {
             runs: vec![Run {
                 text: text.into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         }])
     }
@@ -1866,7 +1875,8 @@ mod tests {
                                 runs: vec![Run {
                                     text: "Pic".into(),
                                     style: RunStyle::default(),
-                                }],
+            ..Default::default()
+        }],
                                 ..Default::default()
                             }],
                             images: vec![CellImage {
@@ -1916,7 +1926,8 @@ mod tests {
                             runs: vec![Run {
                                 text: "Pic".into(),
                                 style: RunStyle::default(),
-                            }],
+            ..Default::default()
+        }],
                             ..Default::default()
                         }],
                         images: vec![CellImage {

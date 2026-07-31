@@ -8,8 +8,8 @@ use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::document::model::{
-    Alignment, Block, CellImage, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode,
-    PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
+    Alignment, Block, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
+    OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
 use crate::document::ooxml::styles::StyleDefaults;
@@ -162,6 +162,7 @@ fn parse_paragraph(
     let mut in_r = false;
     let mut in_t = false;
     let mut current_run: Option<Run> = None;
+    let mut active_link: Option<Hyperlink> = None;
 
     loop {
         match reader.read_event_into(buf) {
@@ -188,11 +189,15 @@ fn parse_paragraph(
                             }
                         }
                     }
+                    "hyperlink" => {
+                        active_link = resolve_hyperlink(&e, rels);
+                    }
                     "r" => {
                         in_r = true;
                         current_run = Some(Run {
                             text: String::new(),
                             style: styles.run.clone(),
+                            hyperlink: active_link.clone(),
                         });
                     }
                     "rPr" if in_r => {
@@ -272,6 +277,7 @@ fn parse_paragraph(
                             p.runs.push(run);
                         }
                     }
+                    "hyperlink" => active_link = None,
                     "p" => return Ok((p, images)),
                     _ => {}
                 }
@@ -748,8 +754,37 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
         .write_event(Event::End(BytesEnd::new("w:pPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
 
-    for run in &p.runs {
-        write_run(writer, run)?;
+    let mut i = 0;
+    while i < p.runs.len() {
+        if let Some(ref hl) = p.runs[i].hyperlink {
+            let url = hl.url.as_str();
+            let rid = hl.r_id.as_deref().unwrap_or("rId0");
+            let mut j = i + 1;
+            while j < p.runs.len()
+                && p.runs[j]
+                    .hyperlink
+                    .as_ref()
+                    .is_some_and(|h| h.url == url)
+            {
+                j += 1;
+            }
+            let mut start = BytesStart::new("w:hyperlink");
+            start.push_attribute(("r:id", rid));
+            start.push_attribute(("w:history", "1"));
+            writer
+                .write_event(Event::Start(start))
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+            for run in &p.runs[i..j] {
+                write_run(writer, run)?;
+            }
+            writer
+                .write_event(Event::End(BytesEnd::new("w:hyperlink")))
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+            i = j;
+        } else {
+            write_run(writer, &p.runs[i])?;
+            i += 1;
+        }
     }
     for node in &p.unsupported {
         writer.get_mut().get_mut().extend_from_slice(&node.raw_xml);
@@ -758,6 +793,19 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
         .write_event(Event::End(BytesEnd::new("w:p")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(())
+}
+
+fn resolve_hyperlink(e: &BytesStart<'_>, rels: &Relationships) -> Option<Hyperlink> {
+    let rid = attr_val(e, "id")?;
+    let url = rels.get(&rid)?.clone();
+    // Skip internal bookmark-only links (no Target / empty).
+    if url.is_empty() || url.starts_with('#') {
+        return None;
+    }
+    Some(Hyperlink {
+        url,
+        r_id: Some(rid),
+    })
 }
 
 fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
@@ -1366,6 +1414,71 @@ mod tests {
     }
 
     #[test]
+    fn parse_and_write_external_hyperlink() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p>
+              <w:hyperlink r:id="rId5" w:history="1">
+                <w:r>
+                  <w:rPr><w:u w:val="single"/><w:color w:val="0563C1"/></w:rPr>
+                  <w:t>Example</w:t>
+                </w:r>
+              </w:hyperlink>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let mut rels = Relationships::new();
+        rels.insert("rId5".into(), "https://example.com/".into());
+        let (blocks, page_setup, unsupported) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &rels,
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.plain_text(), "Example");
+                let hl = p.runs[0].hyperlink.as_ref().expect("hyperlink");
+                assert_eq!(hl.url, "https://example.com/");
+                assert_eq!(hl.r_id.as_deref(), Some("rId5"));
+                assert!(p.runs[0].style.underline);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:hyperlink") && text.contains("r:id=\"rId5\""),
+            "missing hyperlink wrapper: {text}"
+        );
+        let (blocks2, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &rels,
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => {
+                let hl = p.runs[0].hyperlink.as_ref().expect("hyperlink");
+                assert_eq!(hl.url, "https://example.com/");
+            }
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
     fn parse_and_write_grid_span_v_merge() {
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -1650,14 +1763,16 @@ mod tests {
                             runs: vec![Run {
                                 text: "A".into(),
                                 style: RunStyle::default(),
-                            }],
+            ..Default::default()
+        }],
                             ..Default::default()
                         }]),
                         TableCell::from_paragraphs(vec![Paragraph {
                             runs: vec![Run {
                                 text: "B".into(),
                                 style: RunStyle::default(),
-                            }],
+            ..Default::default()
+        }],
                             ..Default::default()
                         }]),
                     ],

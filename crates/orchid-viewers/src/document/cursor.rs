@@ -716,7 +716,8 @@ mod tests {
             runs: vec![Run {
                 text: text.into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         }
     }

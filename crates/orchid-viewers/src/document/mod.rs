@@ -27,8 +27,8 @@ pub use cursor::{
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, CellImage, Document, ImageFormat, InlineImage, ListKind, OpaqueXmlNode,
-    PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
+    Alignment, Block, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
+    OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
@@ -1832,7 +1832,8 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     runs: vec![Run {
                         text: line.to_string(),
                         style,
-                    }],
+            ..Default::default()
+        }],
                     alignment: prev.alignment,
                     list: prev.list,
                     list_level: prev.list_level,
@@ -1844,7 +1845,8 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     runs: vec![Run {
                         text: line.to_string(),
                         style: RunStyle::default(),
-                    }],
+            ..Default::default()
+        }],
                     ..Default::default()
                 })
             }
@@ -2138,10 +2140,7 @@ fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
     let mut left_runs = Vec::new();
     let mut right_runs = Vec::new();
     if p.runs.is_empty() {
-        left_runs.push(Run {
-            text: String::new(),
-            style: RunStyle::default(),
-        });
+        left_runs.push(Run::default());
     } else {
         for (ri, run) in p.runs.iter().enumerate() {
             if ri < at.run_idx {
@@ -2153,27 +2152,29 @@ fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
                 left_runs.push(Run {
                     text: run.text[..split].to_string(),
                     style: run.style.clone(),
+                    hyperlink: run.hyperlink.clone(),
                 });
                 right_runs.push(Run {
                     text: run.text[split..].to_string(),
                     style: run.style.clone(),
+                    hyperlink: run.hyperlink.clone(),
                 });
             }
         }
     }
     if left_runs.is_empty() {
-        left_runs.push(Run {
-            text: String::new(),
-            style: RunStyle::default(),
-        });
+        left_runs.push(Run::default());
     }
     if right_runs.is_empty() {
+        let style = left_runs
+            .last()
+            .map(|r| r.style.clone())
+            .unwrap_or_default();
+        let hyperlink = left_runs.last().and_then(|r| r.hyperlink.clone());
         right_runs.push(Run {
             text: String::new(),
-            style: left_runs
-                .last()
-                .map(|r| r.style.clone())
-                .unwrap_or_default(),
+            style,
+            hyperlink,
         });
     }
     (left_runs, right_runs)
@@ -2306,6 +2307,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
             merged_runs.push(Run {
                 text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
                 style: run.style.clone(),
+                hyperlink: run.hyperlink.clone(),
             });
         }
     }
@@ -2316,15 +2318,13 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
             merged_runs.push(Run {
                 text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
                 style: run.style.clone(),
+                hyperlink: run.hyperlink.clone(),
             });
         }
     }
     merged_runs.retain(|r| !r.text.is_empty());
     if merged_runs.is_empty() {
-        merged_runs.push(Run {
-            text: String::new(),
-            style: RunStyle::default(),
-        });
+        merged_runs.push(Run::default());
     }
     let merged = Paragraph {
         runs: merged_runs,
@@ -2385,6 +2385,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
             merged_runs.push(Run {
                 text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
                 style: run.style.clone(),
+                hyperlink: run.hyperlink.clone(),
             });
         }
     }
@@ -2395,15 +2396,13 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
             merged_runs.push(Run {
                 text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
                 style: run.style.clone(),
+                hyperlink: run.hyperlink.clone(),
             });
         }
     }
     merged_runs.retain(|r| !r.text.is_empty());
     if merged_runs.is_empty() {
-        merged_runs.push(Run {
-            text: String::new(),
-            style: RunStyle::default(),
-        });
+        merged_runs.push(Run::default());
     }
 
     let merged = Paragraph {

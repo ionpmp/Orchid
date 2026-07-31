@@ -6,11 +6,8 @@ use orchid_viewers::document::DocumentViewer;
 fn tiny_png() -> Vec<u8> {
     let mut png = Vec::new();
     let img = image::RgbaImage::from_pixel(6, 3, image::Rgba([9, 8, 7, 255]));
-    img.write_to(
-        &mut std::io::Cursor::new(&mut png),
-        image::ImageFormat::Png,
-    )
-    .unwrap();
+    img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
     png
 }
 
@@ -23,7 +20,8 @@ fn preview_insert_image_after_caret_block() {
                 runs: vec![orchid_viewers::document::model::Run {
                     text: "Hello".into(),
                     style: Default::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             },
         )],

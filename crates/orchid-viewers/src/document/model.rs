@@ -38,6 +38,15 @@ pub struct RunStyle {
     pub font_size_pt: Option<f32>,
 }
 
+/// External hyperlink resolved from `w:hyperlink` + document relationships.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hyperlink {
+    /// Target URL (`Relationship/@Target`, typically `TargetMode="External"`).
+    pub url: String,
+    /// Package relationship id (`rIdN`) when known; allocated on save if missing.
+    pub r_id: Option<String>,
+}
+
 /// A contiguous run of text with uniform style.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Run {
@@ -45,6 +54,8 @@ pub struct Run {
     pub text: String,
     /// Character style.
     pub style: RunStyle,
+    /// External hyperlink covering this run (`None` = plain text).
+    pub hyperlink: Option<Hyperlink>,
 }
 
 /// Paragraph alignment.
@@ -364,6 +375,7 @@ mod tests {
                     bold: true,
                     ..Default::default()
                 },
+                ..Default::default()
             }],
             ..Default::default()
         };
@@ -378,11 +390,13 @@ mod tests {
                 Run {
                     text: "Hello ".into(),
                     style: RunStyle::default(),
-                },
+            ..Default::default()
+        },
                 Run {
                     text: "world".into(),
                     style: RunStyle::default(),
-                },
+            ..Default::default()
+        },
             ],
             ..Default::default()
         };

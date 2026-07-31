@@ -25,7 +25,8 @@ async fn roundtrip_styles_align_lists() {
                     Run {
                         text: " and ".into(),
                         style: RunStyle::default(),
-                    },
+            ..Default::default()
+        },
                     Run {
                         text: "italic".into(),
                         style: RunStyle {
@@ -53,7 +54,8 @@ async fn roundtrip_styles_align_lists() {
                 runs: vec![Run {
                     text: "Right aligned".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 alignment: Alignment::Right,
                 ..Default::default()
             }),
@@ -103,7 +105,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Bullet one".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),
@@ -111,7 +114,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Bullet two".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),
@@ -119,7 +123,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Number one".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 list: ListKind::Numbered,
                 ..Default::default()
             }),
@@ -127,7 +132,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Plain".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],
@@ -176,14 +182,16 @@ fn list_toggle_in_memory() {
                 runs: vec![Run {
                     text: "Item".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Other".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],
@@ -282,14 +290,16 @@ fn preview_paste_cut_and_vertical_move() {
                 runs: vec![Run {
                     text: "Alpha".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Beta".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],
@@ -330,7 +340,8 @@ fn preview_typing_insert_backspace_and_return() {
             runs: vec![Run {
                 text: "Hi".into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         })],
         ..Default::default()
@@ -376,14 +387,16 @@ fn preview_select_all_home_end_and_font_color() {
                 runs: vec![Run {
                     text: "Hello".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "World".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],
@@ -449,14 +462,16 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
                 runs: vec![Run {
                     text: "First".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Second".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],

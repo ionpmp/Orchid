@@ -138,6 +138,7 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         assign_orchid_list_ids(&mut doc);
     }
     prepare_document_images(&mut doc);
+    prepare_document_hyperlinks(&mut doc);
 
     let tmp = tmp_path(output_path);
     {
@@ -316,6 +317,112 @@ fn prepare_document_images(doc: &mut Document) {
     doc.retained_parts = retained;
     doc.document_rels = Some(rels.into_bytes());
     doc.content_types = Some(content_types.into_bytes());
+}
+
+/// Ensure external hyperlink relationships exist and stamp `r_id` onto runs.
+fn prepare_document_hyperlinks(doc: &mut Document) {
+    let mut urls: Vec<String> = Vec::new();
+    for_each_run_mut(doc, |run| {
+        if let Some(ref hl) = run.hyperlink {
+            if !hl.url.is_empty() && !urls.iter().any(|u| u == &hl.url) {
+                urls.push(hl.url.clone());
+            }
+        }
+    });
+    if urls.is_empty() {
+        return;
+    }
+
+    let mut rels = String::from_utf8_lossy(
+        doc.document_rels
+            .as_deref()
+            .unwrap_or(MINIMAL_DOCUMENT_RELS.as_bytes()),
+    )
+    .into_owned();
+
+    let mut url_to_rid: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for url in &urls {
+        if let Some(existing) = find_hyperlink_rid(&rels, url) {
+            url_to_rid.insert(url.clone(), existing);
+            continue;
+        }
+        let rid = next_relationship_id(&rels);
+        inject_hyperlink_relationship(&mut rels, &rid, url);
+        url_to_rid.insert(url.clone(), rid);
+    }
+
+    for_each_run_mut(doc, |run| {
+        if let Some(ref mut hl) = run.hyperlink {
+            if let Some(rid) = url_to_rid.get(&hl.url) {
+                hl.r_id = Some(rid.clone());
+            }
+        }
+    });
+
+    doc.document_rels = Some(rels.into_bytes());
+}
+
+fn for_each_run_mut(doc: &mut Document, mut f: impl FnMut(&mut crate::document::model::Run)) {
+    for block in &mut doc.blocks {
+        match block {
+            Block::Paragraph(p) => {
+                for run in &mut p.runs {
+                    f(run);
+                }
+            }
+            Block::Table(t) => {
+                for row in &mut t.rows {
+                    for cell in &mut row.cells {
+                        for p in &mut cell.paragraphs {
+                            for run in &mut p.runs {
+                                f(run);
+                            }
+                        }
+                    }
+                }
+            }
+            Block::Image(_) => {}
+        }
+    }
+}
+
+fn find_hyperlink_rid(rels_xml: &str, url: &str) -> Option<String> {
+    // Prefer an existing hyperlink relationship with this Target.
+    for chunk in rels_xml.split("<Relationship ") {
+        if !chunk.contains("relationships/hyperlink") {
+            continue;
+        }
+        let target = attr_from_chunk(chunk, "Target")?;
+        if target == url {
+            return attr_from_chunk(chunk, "Id");
+        }
+    }
+    None
+}
+
+fn attr_from_chunk(chunk: &str, name: &str) -> Option<String> {
+    let key = format!("{name}=\"");
+    let start = chunk.find(&key)? + key.len();
+    let end = chunk[start..].find('"')? + start;
+    Some(chunk[start..end].to_string())
+}
+
+fn inject_hyperlink_relationship(rels_xml: &mut String, rid: &str, url: &str) {
+    if rels_xml.contains(&format!("Id=\"{rid}\"")) {
+        return;
+    }
+    let escaped = url
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;");
+    let injection = format!(
+        r#"  <Relationship Id="{rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="{escaped}" TargetMode="External"/>
+"#
+    );
+    if let Some(idx) = rels_xml.rfind("</Relationships>") {
+        rels_xml.insert_str(idx, &injection);
+    }
 }
 
 fn next_media_index(retained: &[(String, Vec<u8>)]) -> u32 {
@@ -562,6 +669,7 @@ mod tests {
                         italic: true,
                         ..Default::default()
                     },
+                    ..Default::default()
                 }],
                 ..Default::default()
             })],
@@ -579,17 +687,59 @@ mod tests {
     }
 
     #[test]
+    fn save_and_reopen_external_hyperlink() {
+        use crate::document::model::Hyperlink;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("link.docx");
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Example".into(),
+                    style: RunStyle::default(),
+                    hyperlink: Some(Hyperlink {
+                        url: "https://example.com/".into(),
+                        r_id: None,
+                    }),
+                }],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        save_document_sync(&doc, &path).unwrap();
+        let rels = {
+            let file = File::open(&path).unwrap();
+            let mut zip = ZipArchive::new(file).unwrap();
+            let mut part = zip.by_name("word/_rels/document.xml.rels").unwrap();
+            let mut s = String::new();
+            part.read_to_string(&mut s).unwrap();
+            s
+        };
+        assert!(
+            rels.contains("relationships/hyperlink")
+                && rels.contains("https://example.com/")
+                && rels.contains("TargetMode=\"External\""),
+            "document rels missing hyperlink: {rels}"
+        );
+        let loaded = open_document(&path).unwrap();
+        match &loaded.blocks[0] {
+            Block::Paragraph(p) => {
+                let hl = p.runs[0].hyperlink.as_ref().expect("hyperlink");
+                assert_eq!(hl.url, "https://example.com/");
+                assert!(hl.r_id.is_some());
+            }
+            _ => panic!("paragraph"),
+        }
+    }
+
+    #[test]
     fn save_and_reopen_inline_image() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("img.docx");
         let mut png = Vec::new();
         {
             let img = image::RgbaImage::from_pixel(8, 4, image::Rgba([1, 2, 3, 255]));
-            img.write_to(
-                &mut std::io::Cursor::new(&mut png),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
+            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
         }
         let doc = Document {
             blocks: vec![
@@ -597,7 +747,8 @@ mod tests {
                     runs: vec![Run {
                         text: "Caption".into(),
                         style: RunStyle::default(),
-                    }],
+            ..Default::default()
+        }],
                     ..Default::default()
                 }),
                 Block::Image(InlineImage {

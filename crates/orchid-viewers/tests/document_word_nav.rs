@@ -12,7 +12,8 @@ fn preview_word_move_and_word_delete() {
             runs: vec![Run {
                 text: "Hello brave world".into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         })],
         ..Default::default()
@@ -53,7 +54,8 @@ fn preview_select_word_at_offset() {
             runs: vec![Run {
                 text: "Hello brave world".into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         })],
         ..Default::default()
@@ -71,7 +73,8 @@ fn preview_select_word_at_offset() {
             runs: vec![Run {
                 text: "Hi!!! there".into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         })],
         ..Default::default()
@@ -91,14 +94,16 @@ fn preview_triple_click_selects_paragraph() {
                 runs: vec![Run {
                     text: "First paragraph here".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Second line".into(),
                     style: RunStyle::default(),
-                }],
+            ..Default::default()
+        }],
                 ..Default::default()
             }),
         ],
@@ -130,7 +135,8 @@ fn preview_font_family_cycle_and_set() {
             runs: vec![Run {
                 text: "Hello".into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             ..Default::default()
         })],
         ..Default::default()
@@ -175,7 +181,8 @@ fn preview_list_indent_outdent() {
             runs: vec![Run {
                 text: "Item".into(),
                 style: RunStyle::default(),
-            }],
+            ..Default::default()
+        }],
             list: ListKind::Bullet,
             list_level: 0,
             ..Default::default()
