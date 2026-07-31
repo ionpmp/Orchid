@@ -20,10 +20,10 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    adjacent_cell_cursor, adjacent_in_cell, cursor_from_plain_offset, is_image_cursor,
-    paragraph_cursors_in_selection, paragraph_indices_in_selection, paragraph_mut,
-    paragraph_mut_in_blocks, paragraph_ref, plain_offset_from_cursor, selection_from_plain_offsets,
-    CellPath, Cursor, Selection,
+    adjacent_cell_cursor, adjacent_in_cell, cursor_from_plain_offset, hyperlink_at_cursor,
+    is_image_cursor, is_safe_external_url, paragraph_cursors_in_selection,
+    paragraph_indices_in_selection, paragraph_mut, paragraph_mut_in_blocks, paragraph_ref,
+    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
@@ -85,6 +85,17 @@ pub struct DocumentViewer {
     find_match_index: Mutex<i32>,
     /// Total non-overlapping matches for the last query (`0` when none).
     find_match_count: Mutex<i32>,
+    /// Preview pointer is over an external hyperlink.
+    link_hover: Mutex<bool>,
+}
+
+/// Result of [`DocumentViewer::preview_pointer`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PreviewPointerOutcome {
+    /// Safe external URL to open (`http`/`https`/`mailto`); `None` if none.
+    pub open_url: Option<String>,
+    /// Whether the UI should refresh the document snapshot.
+    pub refresh: bool,
 }
 
 #[derive(Default)]
@@ -138,6 +149,7 @@ impl DocumentViewer {
             find_cursor: Mutex::new(0),
             find_match_index: Mutex::new(0),
             find_match_count: Mutex::new(0),
+            link_hover: Mutex::new(false),
         }
     }
 
@@ -350,19 +362,49 @@ impl DocumentViewer {
 
     /// Handle a pointer event on the preview canvas
     /// (`0`=down, `1`=move, `2`=up, `3`=double-click word select,
-    /// `4`=triple-click paragraph select).
+    /// `4`=triple-click paragraph select, `5`=hover hit-test).
     ///
     /// Coordinates are CSS pixels in the rendered preview image.
     /// Rapid successive downs also advance multi-click (2→word, 3→paragraph).
-    pub fn preview_pointer(&self, phase: u8, x: f32, y: f32) {
+    ///
+    /// When `ctrl` is true on phase `0` over a safe external hyperlink, returns
+    /// [`PreviewPointerOutcome::open_url`] and does not change the selection.
+    pub fn preview_pointer(&self, phase: u8, x: f32, y: f32, ctrl: bool) -> PreviewPointerOutcome {
         let doc_guard = self.document.read();
         let Some(doc) = doc_guard.as_ref() else {
-            return;
+            return self.clear_link_hover();
         };
+        // Hover leave / invalid coords clear the pointer affordance.
+        if phase == 5 && !(x.is_finite() && y.is_finite() && x >= 0.0 && y >= 0.0) {
+            return self.clear_link_hover();
+        }
         let width = self.preview.lock().width;
         let Some(cursor) = self.layout.lock().hit_test_cursor(doc, width, x, y) else {
-            return;
+            return self.clear_link_hover();
         };
+        let link_url = hyperlink_at_cursor(doc, cursor)
+            .map(|hl| hl.url.as_str())
+            .filter(|u| is_safe_external_url(u))
+            .map(str::to_owned);
+        let hover_changed = self.set_link_hover(link_url.is_some());
+
+        if phase == 5 {
+            return PreviewPointerOutcome {
+                open_url: None,
+                refresh: hover_changed,
+            };
+        }
+
+        // Ctrl+click opens the link without altering selection.
+        if phase == 0 && ctrl {
+            if let Some(url) = link_url {
+                return PreviewPointerOutcome {
+                    open_url: Some(url),
+                    refresh: hover_changed,
+                };
+            }
+        }
+
         let offset = plain_offset_from_cursor(doc, cursor);
         let on_image = is_image_cursor(doc, cursor);
         match phase {
@@ -413,7 +455,10 @@ impl DocumentViewer {
                 let anchor = *self.preview_drag_anchor.lock();
                 let Some(anchor) = anchor else {
                     // Multi-click selection: ignore drag/up so word/paragraph stays.
-                    return;
+                    return PreviewPointerOutcome {
+                        open_url: None,
+                        refresh: hover_changed,
+                    };
                 };
                 *self.selection.lock() = selection_from_plain_offsets(doc, anchor, offset);
                 if phase == 2 {
@@ -433,7 +478,32 @@ impl DocumentViewer {
                 *self.selection.lock() = expand_selection_to_paragraph(doc, cursor);
                 self.reset_preview_click();
             }
-            _ => {}
+            _ => {
+                return PreviewPointerOutcome {
+                    open_url: None,
+                    refresh: hover_changed,
+                };
+            }
+        }
+        PreviewPointerOutcome {
+            open_url: None,
+            refresh: true,
+        }
+    }
+
+    fn set_link_hover(&self, hovering: bool) -> bool {
+        let mut state = self.link_hover.lock();
+        if *state == hovering {
+            return false;
+        }
+        *state = hovering;
+        true
+    }
+
+    fn clear_link_hover(&self) -> PreviewPointerOutcome {
+        PreviewPointerOutcome {
+            open_url: None,
+            refresh: self.set_link_hover(false),
         }
     }
 
@@ -2632,6 +2702,7 @@ impl Viewer for DocumentViewer {
             find_cursor: *self.find_cursor.lock(),
             find_match_index: *self.find_match_index.lock(),
             find_match_count: *self.find_match_count.lock(),
+            link_hover: *self.link_hover.lock(),
         })
     }
 

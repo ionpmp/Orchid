@@ -77,6 +77,8 @@ pub struct DocumentSnapshot {
     pub find_match_index: i32,
     /// Total non-overlapping matches for the last find query.
     pub find_match_count: i32,
+    /// Preview pointer is over an external hyperlink (pointer cursor affordance).
+    pub link_hover: bool,
 }
 
 /// Image snapshot.

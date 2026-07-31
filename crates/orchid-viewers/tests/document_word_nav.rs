@@ -114,14 +114,14 @@ fn preview_triple_click_selects_paragraph() {
     let y = PREVIEW_PADDING + 8.0;
 
     // Explicit phase 4 (triple-click).
-    viewer.preview_pointer(4, x, y);
+    viewer.preview_pointer(4, x, y, false);
     assert_eq!(viewer.selected_plain_text(), "First paragraph here");
 
     // Multi-click downs: 1 caret → 2 word → 3 paragraph.
-    viewer.preview_pointer(0, x, y);
-    viewer.preview_pointer(0, x, y);
+    viewer.preview_pointer(0, x, y, false);
+    viewer.preview_pointer(0, x, y, false);
     assert_eq!(viewer.selected_plain_text(), "First");
-    viewer.preview_pointer(0, x, y);
+    viewer.preview_pointer(0, x, y, false);
     assert_eq!(viewer.selected_plain_text(), "First paragraph here");
 }
 

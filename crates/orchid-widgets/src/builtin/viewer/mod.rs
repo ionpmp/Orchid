@@ -977,24 +977,34 @@ pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> Wi
 }
 
 /// Document: pointer on the preview canvas
-/// (`phase`: 0=down, 1=move, 2=up, 3=double-click word select).
+/// (`phase`: 0=down, 1=move, 2=up, 3=double-click word select,
+/// 4=triple-click paragraph, 5=hover; `ctrl` opens hyperlinks on down).
 pub async fn document_preview_pointer(
     instance_id: Uuid,
     phase: i32,
     x: f32,
     y: f32,
+    ctrl: bool,
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
+    let mut outcome = orchid_viewers::document::PreviewPointerOutcome::default();
     {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
-                doc.preview_pointer(phase.clamp(0, 3) as u8, x, y);
+                outcome = doc.preview_pointer(phase.clamp(0, 5) as u8, x, y, ctrl);
             }
         }
     }
-    // Refresh so caret / selection highlight tracks the pointer (incl. drag).
-    inner.refresh_snapshot().await;
+    if let Some(url) = outcome.open_url.as_deref() {
+        if let Err(e) = opener::open(url) {
+            warn!(error = %e, %url, "failed to open document hyperlink");
+        }
+    }
+    // Refresh so caret / selection / link cursor tracks the pointer.
+    if outcome.refresh {
+        inner.refresh_snapshot().await;
+    }
     Ok(())
 }
 

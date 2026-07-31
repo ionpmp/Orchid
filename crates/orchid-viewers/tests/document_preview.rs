@@ -64,6 +64,7 @@ fn layout_respects_alignment_and_lists() {
                         bold: true,
                         ..Default::default()
                     },
+                    ..Default::default()
                 }],
                 alignment: Alignment::Center,
                 ..Default::default()

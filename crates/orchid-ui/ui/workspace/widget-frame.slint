@@ -254,7 +254,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-document-text-edited(string, string);
     callback viewer-document-selection-changed(string, int, int);
     callback viewer-document-viewport-changed(string, length);
-    callback viewer-document-preview-pointer(string, int, float, float);
+    callback viewer-document-preview-pointer(string, int, float, float, bool);
     callback viewer-document-preview-key(string, string, bool, bool);
     callback viewer-document-find-request(string, string, bool);
     callback viewer-document-replace-request(string, string, string, bool);
@@ -926,7 +926,7 @@ export component WidgetFrame inherits Rectangle {
                         document-text-edited(t) => { root.viewer-document-text-edited(root.model.instance-id, t); }
                         document-selection-changed(a, h) => { root.viewer-document-selection-changed(root.model.instance-id, a, h); }
                         document-viewport-changed(w) => { root.viewer-document-viewport-changed(root.model.instance-id, w); }
-                        document-preview-pointer(p, x, y) => { root.viewer-document-preview-pointer(root.model.instance-id, p, x, y); }
+                        document-preview-pointer(p, x, y, ctrl) => { root.viewer-document-preview-pointer(root.model.instance-id, p, x, y, ctrl); }
                         document-preview-key(k, c, s) => { root.viewer-document-preview-key(root.model.instance-id, k, c, s); }
                         document-find-request(q, fwd) => { root.viewer-document-find-request(root.model.instance-id, q, fwd); }
                         document-replace-request(q, r, all) => { root.viewer-document-replace-request(root.model.instance-id, q, r, all); }

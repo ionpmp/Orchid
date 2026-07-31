@@ -311,6 +311,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         find_cursor: 0,
         find_match_index: 0,
         find_match_count: 0,
+        link_hover: false,
     }
 }
 
@@ -461,6 +462,7 @@ fn build_document_snapshot(
     model.find_cursor = s.find_cursor;
     model.find_match_index = s.find_match_index;
     model.find_match_count = s.find_match_count;
+    model.link_hover = s.link_hover;
     model
 }
 

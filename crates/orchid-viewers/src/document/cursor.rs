@@ -1,6 +1,6 @@
 //! Cursor and selection over a [`Document`](super::model::Document).
 
-use crate::document::model::{Block, Document, Paragraph};
+use crate::document::model::{Block, Document, Hyperlink, Paragraph};
 
 /// Path to a paragraph or cell image inside a [`Block::Table`](super::model::Block::Table).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -465,6 +465,29 @@ pub fn is_image_cursor(doc: &Document, cursor: Cursor) -> bool {
         return matches!(doc.blocks.get(cursor.block_idx), Some(Block::Image(_)));
     }
     false
+}
+
+/// External hyperlink on the run under `cursor`, if any.
+#[must_use]
+pub fn hyperlink_at_cursor(doc: &Document, cursor: Cursor) -> Option<&Hyperlink> {
+    if is_image_cursor(doc, cursor) {
+        return None;
+    }
+    let p = paragraph_ref(doc, cursor)?;
+    p.runs.get(cursor.run_idx)?.hyperlink.as_ref()
+}
+
+/// Whether `url` is safe to open via the system handler (`http`/`https`/`mailto`).
+#[must_use]
+pub fn is_safe_external_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    lower.starts_with("https://")
+        || lower.starts_with("http://")
+        || lower.starts_with("mailto:")
 }
 
 /// Step among paragraphs and cell images in document order within one cell.
@@ -956,5 +979,42 @@ mod tests {
         let end_para = end_of_para(0, Some(CellPath::new(0, 0, 0)), &p);
         let next = adjacent_in_cell(&doc, end_para, true).unwrap();
         assert_eq!(next, image_cursor);
+    }
+
+    #[test]
+    fn hyperlink_at_cursor_and_safe_url() {
+        use crate::document::model::Hyperlink;
+
+        assert!(is_safe_external_url("https://example.com/a"));
+        assert!(is_safe_external_url("http://example.com"));
+        assert!(is_safe_external_url("mailto:a@b.c"));
+        assert!(!is_safe_external_url("javascript:alert(1)"));
+        assert!(!is_safe_external_url("file:///tmp/x"));
+        assert!(!is_safe_external_url(""));
+
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![
+                    Run {
+                        text: "see ".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    },
+                    Run {
+                        text: "link".into(),
+                        style: RunStyle::default(),
+                        hyperlink: Some(Hyperlink {
+                            url: "https://example.com".into(),
+                            r_id: Some("rId5".into()),
+                        }),
+                    },
+                ],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        assert!(hyperlink_at_cursor(&doc, Cursor::at(0, 0, 1)).is_none());
+        let hl = hyperlink_at_cursor(&doc, Cursor::at(0, 1, 0)).unwrap();
+        assert_eq!(hl.url, "https://example.com");
     }
 }

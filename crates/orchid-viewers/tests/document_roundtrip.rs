@@ -21,18 +21,20 @@ async fn roundtrip_styles_align_lists() {
                             bold: true,
                             ..Default::default()
                         },
+                        ..Default::default()
                     },
                     Run {
                         text: " and ".into(),
                         style: RunStyle::default(),
-            ..Default::default()
-        },
+                        ..Default::default()
+                    },
                     Run {
                         text: "italic".into(),
                         style: RunStyle {
                             italic: true,
                             ..Default::default()
                         },
+                        ..Default::default()
                     },
                 ],
                 alignment: Alignment::Left,
@@ -46,6 +48,7 @@ async fn roundtrip_styles_align_lists() {
                         color: Some([0xCC, 0x00, 0x00]),
                         ..Default::default()
                     },
+                    ..Default::default()
                 }],
                 alignment: Alignment::Center,
                 ..Default::default()
@@ -479,7 +482,7 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
     });
     viewer.set_source_mode(false);
     // Click into the second paragraph in preview coordinates.
-    viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 40.0);
+    viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 40.0, false);
     viewer.toggle_style_all('b').unwrap();
 
     let guard = viewer.document();
@@ -492,6 +495,83 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
         Block::Paragraph(p) => assert!(p.runs[0].style.bold, "second should be bold"),
         _ => panic!("p1"),
     }
+}
+
+#[test]
+fn preview_ctrl_click_opens_hyperlink_without_selection() {
+    use orchid_viewers::document::layout::PREVIEW_PADDING;
+    use orchid_viewers::document::model::{Document as Doc, Hyperlink};
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "Click me".into(),
+                style: RunStyle::default(),
+                hyperlink: Some(Hyperlink {
+                    url: "https://example.com/doc".into(),
+                    r_id: Some("rId9".into()),
+                }),
+            }],
+            ..Default::default()
+        })],
+        ..Default::default()
+    });
+    viewer.set_source_mode(false);
+    let before = viewer.selected_plain_text();
+    let outcome = viewer.preview_pointer(
+        0,
+        PREVIEW_PADDING + 8.0,
+        PREVIEW_PADDING + 8.0,
+        true,
+    );
+    assert_eq!(
+        outcome.open_url.as_deref(),
+        Some("https://example.com/doc")
+    );
+    assert_eq!(viewer.selected_plain_text(), before);
+
+    let blocked = viewer.preview_pointer(
+        0,
+        PREVIEW_PADDING + 8.0,
+        PREVIEW_PADDING + 8.0,
+        false,
+    );
+    assert!(blocked.open_url.is_none());
+
+    // Hover sets link_hover; leave clears it.
+    let _ = viewer.preview_pointer(5, -1.0, -1.0, false);
+    let hover = viewer.preview_pointer(5, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, false);
+    assert!(hover.refresh);
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("snapshot");
+    };
+    assert!(snap.link_hover);
+    let leave = viewer.preview_pointer(5, -1.0, -1.0, false);
+    assert!(leave.refresh);
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("snapshot");
+    };
+    assert!(!snap.link_hover);
+
+    // javascript: must not be offered for open.
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "bad".into(),
+                style: RunStyle::default(),
+                hyperlink: Some(Hyperlink {
+                    url: "javascript:alert(1)".into(),
+                    r_id: None,
+                }),
+            }],
+            ..Default::default()
+        })],
+        ..Default::default()
+    });
+    let unsafe_out =
+        viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, true);
+    assert!(unsafe_out.open_url.is_none());
 }
 
 fn write_minimal_docx(path: &std::path::Path, document_xml: &[u8]) {

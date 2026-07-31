@@ -2152,10 +2152,11 @@ impl MainWindowController {
                                     warn!("viewer document image-insert: no clipboard image");
                                     return;
                                 };
-                                if let Err(e) = orchid_widgets::builtin::viewer::document_preview_insert_image(
-                                    inst, bytes, w, h,
-                                )
-                                .await
+                                if let Err(e) =
+                                    orchid_widgets::builtin::viewer::document_preview_insert_image(
+                                        inst, bytes, w, h,
+                                    )
+                                    .await
                                 {
                                     warn!(?e, "viewer document image-insert");
                                 }
@@ -2223,7 +2224,7 @@ impl MainWindowController {
         });
         self.window.on_viewer_document_preview_pointer({
             let t = t.clone();
-            move |id, phase, x, y| {
+            move |id, phase, x, y, ctrl| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
@@ -2231,7 +2232,7 @@ impl MainWindowController {
                             tw,
                             inst,
                             orchid_widgets::builtin::viewer::document_preview_pointer(
-                                inst, phase, x, y
+                                inst, phase, x, y, ctrl
                             )
                         );
                     }

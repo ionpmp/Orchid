@@ -8,8 +8,8 @@ export component ViewerDocumentView inherits Rectangle {
     callback text-edited(string);
     callback selection-changed(int, int);
     callback viewport-changed(length);
-    /// Preview pointer: phase 0=down, 1=move, 2=up, 3=double-click word, 4=triple-click paragraph; x/y CSS px.
-    callback preview-pointer(int, float, float);
+    /// Preview pointer: phase 0=down, 1=move, 2=up, 3=double-click word, 4=triple-click paragraph, 5=hover; x/y CSS px; ctrl opens links.
+    callback preview-pointer(int, float, float, bool);
     /// Preview key: token or literal text, plus ctrl/shift.
     callback preview-key(string, bool, bool);
     /// Find next (`true`) / previous (`false`) match for the local query.
@@ -1004,23 +1004,39 @@ export component ViewerDocumentView inherits Rectangle {
                         TouchArea {
                             width: parent.width;
                             height: parent.height;
+                            mouse-cursor: model.link-hover ? MouseCursor.pointer : MouseCursor.default;
+                            changed has-hover => {
+                                if (!self.has-hover) {
+                                    root.preview-pointer(5, -1, -1, false);
+                                }
+                            }
+                            changed mouse-x => {
+                                if (self.has-hover && !self.pressed) {
+                                    root.preview-pointer(5, self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                }
+                            }
+                            changed mouse-y => {
+                                if (self.has-hover && !self.pressed) {
+                                    root.preview-pointer(5, self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                }
+                            }
                             double-clicked => {
                                 preview-keys.focus();
-                                root.preview-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px);
+                                root.preview-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false);
                             }
                             pointer-event(e) => {
                                 if (e.button == PointerEventButton.left) {
                                     if (e.kind == PointerEventKind.down) {
                                         preview-keys.focus();
-                                        root.preview-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
+                                        root.preview-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, e.modifiers.control);
                                     } else if (e.kind == PointerEventKind.up) {
-                                        root.preview-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
+                                        root.preview-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px, e.modifiers.control);
                                     }
                                 }
                             }
                             moved => {
                                 if (self.pressed) {
-                                    root.preview-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
+                                    root.preview-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, false);
                                 }
                             }
                         }
