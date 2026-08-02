@@ -258,6 +258,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-document-preview-key(string, string, bool, bool);
     callback viewer-document-find-request(string, string, bool);
     callback viewer-document-replace-request(string, string, string, bool);
+    callback viewer-document-link-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-pane-clicked(string, int);
@@ -307,6 +308,29 @@ export component WidgetFrame inherits Rectangle {
     callback fm-drop-on-current-dir(string, int);
     callback fm-entry-drag-scroll(string, int, length, length, length, length);
     callback fm-error-action(string, int);
+
+    pure function get-widget-icon(type-id: string) -> string {
+        return
+            type-id == "terminal" ? "💻" :
+            type-id == "weather" ? "🌤️" :
+            type-id == "moon" ? "🌙" :
+            type-id == "jyotish" ? "✨" :
+            type-id == "clock" ? "🕒" :
+            type-id == "system" ? "📊" :
+            type-id == "rss" ? "📰" :
+            type-id == "recent-files" ? "🕒" :
+            type-id == "search" || type-id == "universal-search" ? "🔍" :
+            type-id == "media" || type-id == "media-player" ? "🎵" :
+            type-id == "password" || type-id == "password-manager" ? "🔑" :
+            type-id == "viewer" ? "👁️" :
+            type-id == "document-editor" ? "📝" :
+            type-id == "file-manager" ? "📁" :
+            type-id == "processes" ? "📈" :
+            type-id == "calculator" ? "🧮" :
+            type-id == "notes" ? "🗒️" :
+            type-id == "calendar" ? "📅" :
+            "⚙️";
+    }
 
     background: Theme.surface-raised;
     border-width: model.placement-valid ? 1px : 2px;
@@ -401,6 +425,13 @@ export component WidgetFrame inherits Rectangle {
                     : (model.has-settings ? 80px : 56px);
                 alignment: start;
                 spacing: 8px;
+
+                Text {
+                    text: root.get-widget-icon(model.type-id);
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    vertical-alignment: center;
+                }
 
                 Text {
                     text: model.title;
@@ -930,6 +961,7 @@ export component WidgetFrame inherits Rectangle {
                         document-preview-key(k, c, s) => { root.viewer-document-preview-key(root.model.instance-id, k, c, s); }
                         document-find-request(q, fwd) => { root.viewer-document-find-request(root.model.instance-id, q, fwd); }
                         document-replace-request(q, r, all) => { root.viewer-document-replace-request(root.model.instance-id, q, r, all); }
+                        document-link-request(url) => { root.viewer-document-link-request(root.model.instance-id, url); }
                     }
                 }
 

@@ -220,6 +220,7 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-document-preview-key(string, string, bool, bool);
     callback viewer-document-find-request(string, string, bool);
     callback viewer-document-replace-request(string, string, string, bool);
+    callback viewer-document-link-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -300,8 +301,8 @@ export component WorkspaceView inherits Rectangle {
             interval: 1ms;
             running: root.workspace.canvas-scroll-gen != canvas.applied-scroll-gen;
             triggered => {
-                canvas-flick.viewport-x = root.workspace.canvas-scroll-x;
-                canvas-flick.viewport-y = root.workspace.canvas-scroll-y;
+                canvas-flick.viewport-x = -root.workspace.canvas-scroll-x;
+                canvas-flick.viewport-y = -root.workspace.canvas-scroll-y;
                 canvas.applied-scroll-gen = root.workspace.canvas-scroll-gen;
             }
         }
@@ -602,6 +603,7 @@ export component WorkspaceView inherits Rectangle {
                     viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
                     viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
                     viewer-document-replace-request(id, q, r, all) => { root.viewer-document-replace-request(id, q, r, all); }
+                    viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
                     fm-pane-clicked(fm_id, p) => { root.fm-pane-clicked(fm_id, p); }
@@ -731,6 +733,7 @@ export component WorkspaceView inherits Rectangle {
             viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
             viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
             viewer-document-replace-request(id, q, r, all) => { root.viewer-document-replace-request(id, q, r, all); }
+            viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
         }
 
         for w[i] in root.workspace.floating-widgets: Rectangle {

@@ -1094,7 +1094,7 @@ impl MainWindowController {
     }
 
     fn on_canvas_scrolled(self: &Arc<Self>, viewport_x: f32, viewport_y: f32) {
-        *self.canvas_scroll.lock() = (viewport_x, viewport_y);
+        *self.canvas_scroll.lock() = (-viewport_x, -viewport_y);
         self.schedule_visibility_sync();
     }
 

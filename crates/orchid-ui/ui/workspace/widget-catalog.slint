@@ -11,6 +11,29 @@ component CatalogCard inherits Rectangle {
     in property <bool> card-visible: true;
     callback pick(string);
 
+    pure function get-icon(type_id: string) -> string {
+        return
+            type_id == "terminal" ? "💻" :
+            type_id == "weather" ? "🌤️" :
+            type_id == "moon" ? "🌙" :
+            type_id == "jyotish" ? "✨" :
+            type_id == "clock" ? "🕒" :
+            type_id == "system" ? "📊" :
+            type_id == "rss" ? "📰" :
+            type_id == "recent-files" ? "🕒" :
+            type_id == "search" || type_id == "universal-search" ? "🔍" :
+            type_id == "media" || type_id == "media-player" ? "🎵" :
+            type_id == "password" || type_id == "password-manager" ? "🔑" :
+            type_id == "viewer" ? "👁️" :
+            type_id == "document-editor" ? "📝" :
+            type_id == "file-manager" ? "📁" :
+            type_id == "processes" ? "📈" :
+            type_id == "calculator" ? "🧮" :
+            type_id == "notes" ? "🗒️" :
+            type_id == "calendar" ? "📅" :
+            "⚙️";
+    }
+
     horizontal-stretch: 1;
     min-width: 220px;
     height: root.card-visible ? 88px : 0px;
@@ -20,6 +43,11 @@ component CatalogCard inherits Rectangle {
     border-width: 1px;
     border-color: card-ta.has-hover ? Theme.accent-brand : Theme.border-default;
     clip: true;
+
+    animate background, border-color {
+        duration: Theme.reduce-motion ? 0ms : 150ms;
+        easing: ease-out;
+    }
 
     card-ta := TouchArea {
         clicked => { root.pick(root.type-id); }
@@ -33,19 +61,23 @@ component CatalogCard inherits Rectangle {
         alignment: center;
 
         Rectangle {
-            width: 40px;
-            height: 40px;
-            background: Theme.accent-brand;
-            border-radius: 8px;
-            opacity: 0.92;
+            width: 44px;
+            height: 44px;
+            background: card-ta.has-hover ? Theme.accent-brand : Theme.surface-raised;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: card-ta.has-hover ? transparent : Theme.border-default;
+
+            animate background, border-color {
+                duration: Theme.reduce-motion ? 0ms : 150ms;
+                easing: ease-out;
+            }
 
             Text {
                 width: 100%;
                 height: 100%;
-                text: root.glyph;
-                color: #ffffff;
-                font-size: 15px;
-                font-weight: Theme.weight-semibold;
+                text: root.get-icon(root.type-id);
+                font-size: 22px;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }

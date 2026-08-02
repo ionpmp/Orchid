@@ -23,17 +23,18 @@ fn init_tracing() -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    std::env::set_var("SLINT_BACKEND", "winit-skia");
     init_tracing()?;
 
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "Orchid starting");
 
     let paths = OrchidPaths::resolve().context("failed to resolve Orchid paths")?;
 
-    // Small multi-thread runtime for async bootstrap work. The Slint
-    // event loop itself runs on the main thread, outside this runtime.
+    // Multi-thread runtime for async bootstrap + background indexing.
+    // The Slint event loop itself runs on the main thread, outside this runtime.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .worker_threads(2)
+        .worker_threads(4)
         .build()
         .context("failed to build tokio runtime")?;
 

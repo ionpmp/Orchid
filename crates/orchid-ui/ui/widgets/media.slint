@@ -202,7 +202,7 @@ export component MediaView inherits Rectangle {
                 }
 
                 Text {
-                    text: "<<";
+                    text: "⏮";
                     color: Theme.text-primary;
                     font-size: Theme.font-size-xl;
                     horizontal-alignment: center;
@@ -239,8 +239,8 @@ export component MediaView inherits Rectangle {
                 }
 
                 Text {
-                    text: model.is-playing ? "||" : ">";
-                    color: Theme.text-primary;
+                    text: model.is-playing ? "⏸" : "▶";
+                    color: #ffffff;
                     font-size: Theme.font-size-2xl;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -276,7 +276,7 @@ export component MediaView inherits Rectangle {
                 }
 
                 Text {
-                    text: ">>";
+                    text: "⏭";
                     color: Theme.text-primary;
                     font-size: Theme.font-size-xl;
                     horizontal-alignment: center;
