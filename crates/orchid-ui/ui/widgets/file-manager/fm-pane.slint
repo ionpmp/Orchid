@@ -170,6 +170,7 @@ export component FmPane inherits Rectangle {
     }
 
     VerticalLayout {
+        clip: false;
         spacing: 0;
 
         FmTabs {
@@ -182,6 +183,7 @@ export component FmPane inherits Rectangle {
         }
 
         if pane.tabs.length > pane.active-tab && pane.active-tab >= 0 : VerticalLayout {
+            clip: false;
             spacing: 0;
             vertical-stretch: 1;
 

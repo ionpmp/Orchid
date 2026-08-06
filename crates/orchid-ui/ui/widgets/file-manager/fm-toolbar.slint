@@ -15,8 +15,10 @@ export component FmToolbar inherits Rectangle {
     callback quick-filter-changed(string);
 
     background: Theme.surface-raised;
+    clip: false;
 
     HorizontalLayout {
+        clip: false;
         padding-left: 6px;
         padding-right: 6px;
         spacing: 4px;
@@ -233,15 +235,58 @@ export component FmToolbar inherits Rectangle {
             vm-ta := TouchArea {
                 clicked => { root.view-mode-cycle(); }
             }
-            Text {
-                text: tab.view-mode == 0 ? "▦"
-                    : tab.view-mode == 1 ? "≡"
-                    : tab.view-mode == 2 ? "☰"
-                    : "▢";
-                color: Theme.accent-brand;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            // Custom vector representation of the view mode
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+
+                // Mode 0: Icons (Grid of 2x2 squares)
+                if tab.view-mode == 0 : Rectangle {
+                    width: 100%; height: 100%;
+                    Rectangle { x: 0; y: 0; width: 7px; height: 7px; background: Theme.accent-brand; border-radius: 1px; }
+                    Rectangle { x: 9px; y: 0; width: 7px; height: 7px; background: Theme.accent-brand; border-radius: 1px; }
+                    Rectangle { x: 0; y: 9px; width: 7px; height: 7px; background: Theme.accent-brand; border-radius: 1px; }
+                    Rectangle { x: 9px; y: 9px; width: 7px; height: 7px; background: Theme.accent-brand; border-radius: 1px; }
+                }
+
+                // Mode 1: List (3 horizontal lines)
+                if tab.view-mode == 1 : Rectangle {
+                    width: 100%; height: 100%;
+                    Rectangle { x: 0; y: 2px; width: 16px; height: 2px; background: Theme.accent-brand; border-radius: 1px; }
+                    Rectangle { x: 0; y: 7px; width: 16px; height: 2px; background: Theme.accent-brand; border-radius: 1px; }
+                    Rectangle { x: 0; y: 12px; width: 16px; height: 2px; background: Theme.accent-brand; border-radius: 1px; }
+                }
+
+                // Mode 2: Details (3 lines with small squares on the left)
+                if tab.view-mode == 2 : Rectangle {
+                    width: 100%; height: 100%;
+                    // Row 1
+                    Rectangle { x: 0; y: 2px; width: 3px; height: 3px; background: Theme.accent-brand; border-radius: 0.5px; }
+                    Rectangle { x: 5px; y: 2px; width: 11px; height: 2px; background: Theme.accent-brand; border-radius: 1px; }
+                    // Row 2
+                    Rectangle { x: 0; y: 7px; width: 3px; height: 3px; background: Theme.accent-brand; border-radius: 0.5px; }
+                    Rectangle { x: 5px; y: 7px; width: 11px; height: 2px; background: Theme.accent-brand; border-radius: 1px; }
+                    // Row 3
+                    Rectangle { x: 0; y: 12px; width: 3px; height: 3px; background: Theme.accent-brand; border-radius: 0.5px; }
+                    Rectangle { x: 5px; y: 12px; width: 11px; height: 2px; background: Theme.accent-brand; border-radius: 1px; }
+                }
+
+                // Mode 3: Gallery (Large frame with small landscape inside)
+                if tab.view-mode == 3 : Rectangle {
+                    width: 100%; height: 100%;
+                    border-width: 1.5px;
+                    border-color: Theme.accent-brand;
+                    border-radius: 1px;
+                    background: transparent;
+                    Rectangle {
+                        x: 3px; y: 3px;
+                        width: 10px; height: 10px;
+                        background: Theme.accent-brand;
+                        border-radius: 0.5px;
+                    }
+                }
             }
 
             if vm-ta.has-hover : Rectangle {
