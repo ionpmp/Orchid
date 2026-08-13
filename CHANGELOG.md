@@ -82,6 +82,9 @@ release yet.
 - File-manager gallery / large-icon tiles no longer stretch 32×32 shell bitmaps;
   Windows jumbo (256px) association icons are used, and small glyphs stay at
   native size instead of melting across the tile.
+- File-manager drag-and-drop starts on the pressed entry (selection lag no
+  longer aborts the gesture) and dropping onto a file completes a move/copy
+  into the current folder instead of cancelling.
 - Floating viewer unsaved-close confirm; Clock move-city handlers; Jyotish
   profile date/time steppers and search field sync.
 - Fluent message IDs (hyphenated only); locale UTF-8 mojibake from early

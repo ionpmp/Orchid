@@ -47,6 +47,7 @@ export component FmEntryGrid inherits Rectangle {
     grid-flick := Flickable {
         width: parent.width;
         height: parent.height;
+        interactive: !root.drag-active;
         viewport-width: self.width;
         viewport-height: virtualized
             ? max(self.height, virtual-content-height)
@@ -194,13 +195,9 @@ export component FmEntryGrid inherits Rectangle {
                         } else {
                             root.entry-clicked(entry.path, e.modifiers.control);
                         }
-                        if (entry.is-selected) {
-                            root.pressing-path = entry.path;
-                            root.press-x = self.mouse-x;
-                            root.press-y = self.mouse-y;
-                        } else {
-                            root.pressing-path = "";
-                        }
+                        root.pressing-path = entry.path;
+                        root.press-x = self.mouse-x;
+                        root.press-y = self.mouse-y;
                     }
                     if (pressing-path != "" && e.kind == PointerEventKind.move) {
                         if (abs(self.mouse-x - press-x) >= drag-threshold
@@ -219,7 +216,7 @@ export component FmEntryGrid inherits Rectangle {
                     }
                     if (e.kind == PointerEventKind.up) {
                         if (drag-active && !entry.is-dir) {
-                            root.entry-drag-cancel();
+                            root.drop-on-current-dir();
                         }
                         root.pressing-path = "";
                     }

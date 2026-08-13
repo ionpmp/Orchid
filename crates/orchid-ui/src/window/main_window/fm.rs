@@ -745,7 +745,7 @@ impl MainWindowController {
         self: &Arc<Self>,
         fm_id: &SharedString,
         pane: i32,
-        _path: &SharedString,
+        path: &SharedString,
     ) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
@@ -753,7 +753,12 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         self.set_fm_focus(inst, p);
-        let paths = self.fm_selected_paths(inst, p);
+        let pressed = path.to_string();
+        let mut paths = self.fm_selected_paths(inst, p);
+        if !pressed.is_empty() && !paths.iter().any(|existing| existing == &pressed) {
+            // Selection snapshot can lag the pointer-down that started the gesture.
+            paths.push(pressed);
+        }
         if paths.is_empty() {
             return;
         }
