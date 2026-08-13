@@ -228,6 +228,7 @@ fn fm_entry_eq(a: &EntryPayload, b: &EntryPayload) -> bool {
         && a.thumbnail_key == b.thumbnail_key
         && a.thumbnail_width == b.thumbnail_width
         && a.thumbnail_height == b.thumbnail_height
+        && a.thumbnail_is_icon == b.thumbnail_is_icon
         && a.is_selected == b.is_selected
         && a.is_hidden == b.is_hidden
         && a.is_encrypted == b.is_encrypted

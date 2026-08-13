@@ -113,6 +113,8 @@ pub struct EntryPayload {
     pub thumbnail_rgba: Option<std::sync::Arc<Vec<u8>>>,
     pub thumbnail_width: u32,
     pub thumbnail_height: u32,
+    /// True when `thumbnail_*` is an OS association icon (not an image preview).
+    pub thumbnail_is_icon: bool,
     pub is_selected: bool,
     pub is_hidden: bool,
     pub is_encrypted: bool,

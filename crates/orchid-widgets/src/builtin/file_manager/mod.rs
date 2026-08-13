@@ -267,6 +267,18 @@ struct RefreshOpts {
 const SHELL_ICON_CACHE_CAP: usize = 1024;
 const THUMBNAIL_CACHE_CAP: usize = 256;
 
+fn shell_icon_size_for_mode(mode: ViewMode) -> orchid_fs::ShellIconSize {
+    match mode {
+        ViewMode::Gallery => orchid_fs::ShellIconSize::Jumbo,
+        ViewMode::Icons => orchid_fs::ShellIconSize::ExtraLarge,
+        ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::Small,
+    }
+}
+
+fn shell_icon_cache_key(path: &str, size: orchid_fs::ShellIconSize) -> String {
+    format!("{path}\x1e{}", size.pixels())
+}
+
 fn insert_capped_thumbnail(
     map: &mut HashMap<String, orchid_viewers::Thumbnail>,
     order: &mut VecDeque<String>,
@@ -439,9 +451,13 @@ impl FileManagerWidget {
             // state is async; keep a best-effort try_lock by spawning.
             let inner = Arc::clone(&self.inner);
             tokio::spawn(async move {
-                let mut state = inner.state.lock();
-                state.active_tab_mut().view_mode = mode;
+                let tab = {
+                    let mut state = inner.state.lock();
+                    state.active_tab_mut().view_mode = mode;
+                    state.active_tab().clone()
+                };
                 inner.publish_refresh();
+                inner.spawn_view_decorations(tab);
             });
         }
     }
@@ -1457,18 +1473,29 @@ impl FileManagerInner {
         Ok(())
     }
 
+    fn spawn_view_decorations(self: &Arc<Self>, tab: TabState) {
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            let Some(entries) = this.entries_by_tab.read().get(&tab.id).cloned() else {
+                return;
+            };
+            this.ensure_shell_icons(&tab, entries.as_slice()).await;
+            if config_for_mode(tab.view_mode, 1.0).show_thumbnails {
+                this.ensure_thumbnails(&tab, entries.as_slice()).await;
+            }
+        });
+    }
+
     async fn ensure_shell_icons(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
-        let size = match tab.view_mode {
-            ViewMode::Icons | ViewMode::Gallery => orchid_fs::ShellIconSize::Large,
-            ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::Small,
-        };
+        let size = shell_icon_size_for_mode(tab.view_mode);
 
         let mut pending = Vec::new();
         {
             let cache = self.shell_icon_rgba.read();
             for e in entries.iter().take(256) {
                 let path_key = e.path.as_str().to_string();
-                if cache.contains_key(&path_key) {
+                let cache_key = shell_icon_cache_key(&path_key, size);
+                if cache.contains_key(&cache_key) {
                     continue;
                 }
                 let path = e.path.clone();
@@ -1511,7 +1538,7 @@ impl FileManagerInner {
                     insert_capped_thumbnail(
                         &mut cache,
                         &mut order,
-                        path_key,
+                        shell_icon_cache_key(&path_key, size),
                         orchid_viewers::Thumbnail {
                             rgba: icon.rgba,
                             width: icon.width,
@@ -2116,25 +2143,34 @@ fn build_tab_payload(
         .copied()
         .map(|e| {
             let path_key = e.path.as_str();
+            let icon_size = shell_icon_size_for_mode(tab.view_mode);
+            let shell_key = shell_icon_cache_key(path_key, icon_size);
             // Prefer image previews; fall back to OS association icons.
-            let (has_thumbnail, thumbnail_rgba, thumbnail_width, thumbnail_height) =
-                if let Some(t) = thumb_cache.get(path_key) {
-                    (
-                        true,
-                        Some(std::sync::Arc::clone(&t.rgba)),
-                        t.width,
-                        t.height,
-                    )
-                } else if let Some(t) = shell_cache.get(path_key) {
-                    (
-                        true,
-                        Some(std::sync::Arc::clone(&t.rgba)),
-                        t.width,
-                        t.height,
-                    )
-                } else {
-                    (false, None, 0, 0)
-                };
+            let (
+                has_thumbnail,
+                thumbnail_rgba,
+                thumbnail_width,
+                thumbnail_height,
+                thumbnail_is_icon,
+            ) = if let Some(t) = thumb_cache.get(path_key) {
+                (
+                    true,
+                    Some(std::sync::Arc::clone(&t.rgba)),
+                    t.width,
+                    t.height,
+                    false,
+                )
+            } else if let Some(t) = shell_cache.get(&shell_key) {
+                (
+                    true,
+                    Some(std::sync::Arc::clone(&t.rgba)),
+                    t.width,
+                    t.height,
+                    true,
+                )
+            } else {
+                (false, None, 0, 0, false)
+            };
             let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
             EntryPayload {
                 path: path_key.to_string(),
@@ -2161,6 +2197,7 @@ fn build_tab_payload(
                 thumbnail_rgba,
                 thumbnail_width,
                 thumbnail_height,
+                thumbnail_is_icon,
                 is_selected: tab.selection.is_selected(path_key),
                 is_hidden: e.metadata.hidden,
                 is_encrypted: e.metadata.extended.is_encrypted,
@@ -3113,7 +3150,7 @@ pub async fn toggle_click_behavior(instance_id: Uuid) -> WidgetResult<()> {
 /// Cycle view mode for the active tab in `pane`.
 pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    {
+    let tab = {
         let mut state = inner.state.lock();
         let tab = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
@@ -3130,8 +3167,10 @@ pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
             ViewMode::Details => ViewMode::Gallery,
             ViewMode::Gallery => ViewMode::Icons,
         };
-    }
+        tab.clone()
+    };
     inner.publish_refresh();
+    inner.spawn_view_decorations(tab);
     Ok(())
 }
 

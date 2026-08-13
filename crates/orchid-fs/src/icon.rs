@@ -1,6 +1,7 @@
 //! OS shell file/folder icons for the file manager.
 //!
-//! On Windows this extracts association icons via `SHGetFileInfoW` and renders
+//! On Windows this extracts association icons via `SHGetFileInfoW` (16/32px)
+//! and `SHGetImageList` jumbo / extra-large lists (256/48px), then renders
 //! them to RGBA. Other platforms return `None` and keep the geometric UI fallback.
 
 use std::sync::Arc;
@@ -12,8 +13,12 @@ use crate::path::FsPath;
 pub enum ShellIconSize {
     /// 16×16 — list / details rows.
     Small,
-    /// 32×32 — icons / gallery tiles without image previews.
+    /// 32×32 — medium tiles / fallback when jumbo is unavailable.
     Large,
+    /// 48×48 — icons view (DPI-scaled via `SHIL_EXTRALARGE`).
+    ExtraLarge,
+    /// 256×256 — gallery / large icon tiles (`SHIL_JUMBO`).
+    Jumbo,
 }
 
 impl ShellIconSize {
@@ -23,6 +28,8 @@ impl ShellIconSize {
         match self {
             Self::Small => 16,
             Self::Large => 32,
+            Self::ExtraLarge => 48,
+            Self::Jumbo => 256,
         }
     }
 }
@@ -59,6 +66,61 @@ pub fn shell_icon(path: &FsPath, is_dir: bool, size: ShellIconSize) -> Option<Sh
     }
 }
 
+/// Tight-crop fully transparent padding, then pad to a square.
+///
+/// Windows jumbo image lists often leave a 32×32 glyph in the corner of a
+/// 256×256 canvas when the association has no high-resolution image. Stretching
+/// that padded bitmap looks like a tiny icon; stretching the cropped 32×32
+/// bitmap looks melted. Callers should display the cropped size without
+/// aggressive upscaling.
+fn crop_transparent(icon: ShellIcon) -> ShellIcon {
+    let w = icon.width as usize;
+    let h = icon.height as usize;
+    if w == 0 || h == 0 || icon.rgba.len() < w * h * 4 {
+        return icon;
+    }
+    let mut min_x = w;
+    let mut min_y = h;
+    let mut max_x = 0usize;
+    let mut max_y = 0usize;
+    for y in 0..h {
+        for x in 0..w {
+            if icon.rgba[(y * w + x) * 4 + 3] > 8 {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+    if min_x > max_x {
+        return icon;
+    }
+    min_x = min_x.saturating_sub(1);
+    min_y = min_y.saturating_sub(1);
+    max_x = (max_x + 1).min(w.saturating_sub(1));
+    max_y = (max_y + 1).min(h.saturating_sub(1));
+    let cw = max_x - min_x + 1;
+    let ch = max_y - min_y + 1;
+    if cw >= w.saturating_sub(2) && ch >= h.saturating_sub(2) {
+        return icon;
+    }
+    let side = cw.max(ch);
+    let mut out = vec![0u8; side * side * 4];
+    let ox = (side - cw) / 2;
+    let oy = (side - ch) / 2;
+    for row in 0..ch {
+        let src = ((min_y + row) * w + min_x) * 4;
+        let dst = ((oy + row) * side + ox) * 4;
+        out[dst..dst + cw * 4].copy_from_slice(&icon.rgba[src..src + cw * 4]);
+    }
+    ShellIcon {
+        rgba: Arc::new(out),
+        width: side as u32,
+        height: side as u32,
+    }
+}
+
 #[cfg(windows)]
 mod windows_impl {
     use std::ffi::c_void;
@@ -77,9 +139,10 @@ mod windows_impl {
     use windows::Win32::Storage::FileSystem::{
         FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_FLAGS_AND_ATTRIBUTES,
     };
+    use windows::Win32::UI::Controls::{IImageList, ILD_TRANSPARENT};
     use windows::Win32::UI::Shell::{
-        SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
-        SHGFI_USEFILEATTRIBUTES,
+        SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
+        SHGFI_SYSICONINDEX, SHGFI_USEFILEATTRIBUTES, SHIL_EXTRALARGE, SHIL_JUMBO,
     };
     use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, DrawIconEx, DI_NORMAL, HICON};
 
@@ -137,7 +200,9 @@ mod windows_impl {
             }
         }
         // Association-by-name for missing / remote / virtual entries.
-        let name = path.file_name().unwrap_or(if is_dir { "folder" } else { "file" });
+        let name = path
+            .file_name()
+            .unwrap_or(if is_dir { "folder" } else { "file" });
         Some(PathBuf::from(name))
     }
 
@@ -154,15 +219,86 @@ mod windows_impl {
     }
 
     unsafe fn extract_icon(path: &Path, is_dir: bool, size: ShellIconSize) -> Option<ShellIcon> {
-        let wide: Vec<u16> = path
-            .as_os_str()
+        match size {
+            ShellIconSize::ExtraLarge | ShellIconSize::Jumbo => {
+                extract_via_image_list(path, is_dir, size)
+                    .or_else(|| extract_via_file_info(path, is_dir, ShellIconSize::Large))
+            }
+            ShellIconSize::Small | ShellIconSize::Large => {
+                extract_via_file_info(path, is_dir, size)
+            }
+        }
+    }
+
+    fn path_wide(path: &Path) -> Vec<u16> {
+        path.as_os_str()
             .encode_wide()
             .chain(std::iter::once(0))
-            .collect();
+            .collect()
+    }
 
+    unsafe fn extract_via_image_list(
+        path: &Path,
+        is_dir: bool,
+        size: ShellIconSize,
+    ) -> Option<ShellIcon> {
+        let wide = path_wide(path);
+        let exists = path.exists();
+        let mut info = SHFILEINFOW::default();
+        let cb = mem::size_of::<SHFILEINFOW>() as u32;
+        let flags = if exists {
+            SHGFI_SYSICONINDEX
+        } else {
+            SHGFI_SYSICONINDEX | SHGFI_USEFILEATTRIBUTES
+        };
+        let attrs = if is_dir {
+            FILE_ATTRIBUTE_DIRECTORY
+        } else {
+            FILE_ATTRIBUTE_NORMAL
+        };
+        let ok = SHGetFileInfoW(
+            PCWSTR(wide.as_ptr()),
+            if exists {
+                FILE_FLAGS_AND_ATTRIBUTES(0)
+            } else {
+                attrs
+            },
+            Some(&mut info),
+            cb,
+            flags,
+        );
+        if ok == 0 {
+            return None;
+        }
+
+        let shil = match size {
+            ShellIconSize::ExtraLarge => SHIL_EXTRALARGE,
+            ShellIconSize::Jumbo => SHIL_JUMBO,
+            _ => return None,
+        };
+        let list: IImageList = SHGetImageList(shil as i32).ok()?;
+        let hicon = list.GetIcon(info.iIcon, ILD_TRANSPARENT.0).ok()?;
+        if hicon.is_invalid() {
+            return None;
+        }
+        let mut cx = 0i32;
+        let mut cy = 0i32;
+        let _ = list.GetIconSize(&mut cx, &mut cy);
+        let px = if cx > 0 { cx as u32 } else { size.pixels() };
+        let result = render_icon_rgba(hicon, px);
+        let _ = DestroyIcon(hicon);
+        result.map(super::crop_transparent)
+    }
+
+    unsafe fn extract_via_file_info(
+        path: &Path,
+        is_dir: bool,
+        size: ShellIconSize,
+    ) -> Option<ShellIcon> {
+        let wide = path_wide(path);
         let size_flag = match size {
             ShellIconSize::Small => SHGFI_SMALLICON,
-            ShellIconSize::Large => SHGFI_LARGEICON,
+            _ => SHGFI_LARGEICON,
         };
 
         let exists = path.exists();
@@ -227,8 +363,7 @@ mod windows_impl {
         };
 
         let mut bits: *mut c_void = std::ptr::null_mut();
-        let dib = match CreateDIBSection(Some(mem_dc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
-        {
+        let dib = match CreateDIBSection(Some(mem_dc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0) {
             Ok(h) => h,
             Err(_) => {
                 let _ = DeleteDC(mem_dc);
@@ -250,18 +385,7 @@ mod windows_impl {
             slice::from_raw_parts_mut(bits.cast::<u8>(), n).fill(0);
         }
 
-        let drew = DrawIconEx(
-            mem_dc,
-            0,
-            0,
-            hicon,
-            size,
-            size,
-            0,
-            None,
-            DI_NORMAL,
-        )
-        .is_ok();
+        let drew = DrawIconEx(mem_dc, 0, 0, hicon, size, size, 0, None, DI_NORMAL).is_ok();
 
         let icon = if drew {
             let n = (px * px) as usize;
@@ -320,10 +444,65 @@ mod windows_impl {
         #[test]
         fn extracts_extension_icon_without_path() {
             let path = FsPath::new("local:c:/does-not-exist/report.pdf").expect("path");
-            let icon = shell_icon(&path, false, ShellIconSize::Large)
-                .expect("pdf association icon");
+            let icon =
+                shell_icon(&path, false, ShellIconSize::Large).expect("pdf association icon");
             assert_eq!(icon.width, 32);
             assert_eq!(icon.rgba.len(), 32 * 32 * 4);
         }
+
+        #[test]
+        fn extracts_jumbo_system_icon() {
+            let windir = std::env::var_os("WINDIR").unwrap_or_else(|| r"C:\Windows".into());
+            let explorer = PathBuf::from(windir).join("explorer.exe");
+            if !explorer.exists() {
+                return;
+            }
+            let path = FsPath::from_local(&explorer).expect("local path");
+            let jumbo = shell_icon(&path, false, ShellIconSize::Jumbo)
+                .expect("explorer should have a jumbo shell icon");
+            assert!(jumbo.width >= 48, "jumbo cropped to {}px", jumbo.width);
+            assert_eq!(jumbo.rgba.len(), (jumbo.width * jumbo.height * 4) as usize);
+            assert!(jumbo.rgba.iter().any(|&b| b != 0));
+        }
+    }
+}
+
+#[cfg(test)]
+mod crop_tests {
+    use super::{crop_transparent, ShellIcon};
+    use std::sync::Arc;
+
+    #[test]
+    fn crop_strips_transparent_padding() {
+        let mut rgba = vec![0u8; 8 * 8 * 4];
+        // 2×2 opaque square at (1,1).
+        for (x, y) in [(1, 1), (2, 1), (1, 2), (2, 2)] {
+            let i = (y * 8 + x) * 4;
+            rgba[i] = 255;
+            rgba[i + 1] = 0;
+            rgba[i + 2] = 0;
+            rgba[i + 3] = 255;
+        }
+        let cropped = crop_transparent(ShellIcon {
+            rgba: Arc::new(rgba),
+            width: 8,
+            height: 8,
+        });
+        assert_eq!(cropped.width, 4);
+        assert_eq!(cropped.height, 4);
+        assert_eq!(cropped.rgba.len(), 4 * 4 * 4);
+        assert!(cropped.rgba.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn crop_keeps_full_canvas_when_filled() {
+        let rgba = vec![255u8; 4 * 4 * 4];
+        let cropped = crop_transparent(ShellIcon {
+            rgba: Arc::new(rgba),
+            width: 4,
+            height: 4,
+        });
+        assert_eq!(cropped.width, 4);
+        assert_eq!(cropped.height, 4);
     }
 }

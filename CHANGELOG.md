@@ -79,6 +79,9 @@ release yet.
 - System CPU sampling via `GetSystemTimes`; process-list refresh spikes.
 - FM Type labels for long extensions; delete-to-recycle / show-extensions;
   transfer and rename failure toasts.
+- File-manager gallery / large-icon tiles no longer stretch 32×32 shell bitmaps;
+  Windows jumbo (256px) association icons are used, and small glyphs stay at
+  native size instead of melting across the tile.
 - Floating viewer unsaved-close confirm; Clock move-city handlers; Jyotish
   profile date/time steppers and search field sync.
 - Fluent message IDs (hyphenated only); locale UTF-8 mojibake from early
