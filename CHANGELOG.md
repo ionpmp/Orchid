@@ -93,6 +93,8 @@ release yet.
   and shows only relevant actions (new folder / file, paste, select all).
 - File-manager context-menu icons render as geometric glyphs (the previous
   `action-*` ids were drawn as Text and do not exist in Slint's Windows font).
+- File-manager single-pane mode no longer shows the left navigation sidebar;
+  the listing uses the full widget width. Dual-pane still includes the sidebar.
 - Floating viewer unsaved-close confirm; Clock move-city handlers; Jyotish
   profile date/time steppers and search field sync.
 - Fluent message IDs (hyphenated only); locale UTF-8 mojibake from early

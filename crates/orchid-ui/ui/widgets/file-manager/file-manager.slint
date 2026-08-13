@@ -73,7 +73,8 @@ export component FileManagerView inherits Rectangle {
     HorizontalLayout {
         spacing: 0;
 
-        Rectangle {
+        // Navigation sidebar only in dual-pane. Single-pane is the listing alone.
+        if model.dual-pane : Rectangle {
             width: 180px;
             background: Theme.surface-base;
             border-color: Theme.border-default;
