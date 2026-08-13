@@ -319,7 +319,7 @@ fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
         items.push(item(
             "fs.new-file",
             "fm-action-new-file",
-            "action-new-folder",
+            "action-new-file",
             true,
         ));
     }

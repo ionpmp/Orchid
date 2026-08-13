@@ -91,6 +91,8 @@ release yet.
   place instead of remounting the widget (which made selection jump).
 - File-manager background right-click works on empty space and empty folders,
   and shows only relevant actions (new folder / file, paste, select all).
+- File-manager context-menu icons render as geometric glyphs (the previous
+  `action-*` ids were drawn as Text and do not exist in Slint's Windows font).
 - Floating viewer unsaved-close confirm; Clock move-city handlers; Jyotish
   profile date/time steppers and search field sync.
 - Fluent message IDs (hyphenated only); locale UTF-8 mojibake from early

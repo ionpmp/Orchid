@@ -273,3 +273,438 @@ export component FmSidebarIcon inherits Rectangle {
         }
     }
 }
+
+/// Context-menu action glyphs. Drawn with rectangles so they stay visible
+/// on Windows (Slint's default font has no emoji / many Unicode symbols).
+export component FmActionIcon inherits Rectangle {
+    in property <string> icon-id;
+    in property <length> icon-size: 14px;
+    in property <color> ink: Theme.text-primary;
+
+    width: icon-size;
+    height: icon-size;
+    background: transparent;
+
+    if icon-id == "action-open" || icon-id == "action-open-with" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.2;
+            y: parent.height * 0.22;
+            width: parent.width * 0.22;
+            height: parent.height * 0.56;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.38;
+            y: parent.height * 0.28;
+            width: parent.width * 0.42;
+            height: parent.height * 0.44;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "widget-viewer" || icon-id == "action-reveal" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.05;
+            y: parent.height * 0.32;
+            width: parent.width * 0.9;
+            height: parent.height * 0.36;
+            border-radius: parent.height;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.36;
+            y: parent.height * 0.36;
+            width: parent.width * 0.28;
+            height: parent.height * 0.28;
+            border-radius: parent.width;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "action-copy" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08;
+            y: parent.height * 0.22;
+            width: parent.width * 0.58;
+            height: parent.height * 0.7;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.32;
+            y: parent.height * 0.08;
+            width: parent.width * 0.58;
+            height: parent.height * 0.7;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: Theme.surface-raised;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-cut" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18;
+            y: parent.height * 0.42;
+            width: parent.width * 0.64;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.12;
+            y: parent.height * 0.12;
+            width: parent.width * 0.28;
+            height: parent.height * 0.28;
+            border-radius: parent.width;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.6;
+            y: parent.height * 0.6;
+            width: parent.width * 0.28;
+            height: parent.height * 0.28;
+            border-radius: parent.width;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+        }
+    }
+
+    if icon-id == "action-paste" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18;
+            y: parent.height * 0.18;
+            width: parent.width * 0.64;
+            height: parent.height * 0.74;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.32;
+            y: parent.height * 0.08;
+            width: parent.width * 0.36;
+            height: parent.height * 0.18;
+            background: root.ink;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-rename" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18;
+            y: parent.height * 0.72;
+            width: parent.width * 0.64;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28;
+            y: parent.height * 0.18;
+            width: 2px;
+            height: parent.height * 0.5;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28;
+            y: parent.height * 0.18;
+            width: parent.width * 0.42;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28;
+            y: parent.height * 0.42;
+            width: parent.width * 0.3;
+            height: 2px;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "action-delete" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22;
+            y: parent.height * 0.28;
+            width: parent.width * 0.56;
+            height: parent.height * 0.6;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.16;
+            y: parent.height * 0.18;
+            width: parent.width * 0.68;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.38;
+            y: parent.height * 0.08;
+            width: parent.width * 0.24;
+            height: parent.height * 0.14;
+            background: root.ink;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-tag" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12;
+            y: parent.height * 0.22;
+            width: parent.width * 0.55;
+            height: parent.height * 0.56;
+            background: root.ink;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.55;
+            y: parent.height * 0.28;
+            width: parent.width * 0.32;
+            height: parent.height * 0.44;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.22;
+            y: parent.height * 0.38;
+            width: parent.width * 0.16;
+            height: parent.height * 0.16;
+            border-radius: parent.width;
+            background: Theme.surface-raised;
+        }
+    }
+
+    if icon-id == "action-color" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.15;
+            y: parent.height * 0.15;
+            width: parent.width * 0.7;
+            height: parent.height * 0.7;
+            border-radius: parent.width;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "action-star" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.15;
+            y: parent.height * 0.38;
+            width: parent.width * 0.7;
+            height: parent.height * 0.24;
+            background: root.ink;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.38;
+            y: parent.height * 0.15;
+            width: parent.width * 0.24;
+            height: parent.height * 0.7;
+            background: root.ink;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-encrypt" || icon-id == "action-decrypt" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.3;
+            y: parent.height * 0.1;
+            width: parent.width * 0.4;
+            height: parent.height * 0.4;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: parent.width * 0.2;
+        }
+        Rectangle {
+            x: parent.width * 0.2;
+            y: parent.height * 0.4;
+            width: parent.width * 0.6;
+            height: parent.height * 0.45;
+            background: root.ink;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-managed" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12;
+            y: parent.height * 0.12;
+            width: parent.width * 0.76;
+            height: parent.height * 0.76;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 2px;
+        }
+        Rectangle {
+            x: parent.width * 0.28;
+            y: parent.height * 0.36;
+            width: parent.width * 0.44;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28;
+            y: parent.height * 0.56;
+            width: parent.width * 0.44;
+            height: 2px;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "action-select-all" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08;
+            y: parent.height * 0.08;
+            width: parent.width * 0.55;
+            height: parent.height * 0.55;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.36;
+            y: parent.height * 0.36;
+            width: parent.width * 0.55;
+            height: parent.height * 0.55;
+            background: root.ink;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-deselect" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18;
+            y: parent.height * 0.18;
+            width: parent.width * 0.64;
+            height: parent.height * 0.64;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-properties" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18;
+            y: parent.height * 0.18;
+            width: parent.width * 0.64;
+            height: parent.height * 0.64;
+            border-radius: parent.width;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.46;
+            y: parent.height * 0.28;
+            width: 2px;
+            height: parent.height * 0.16;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.46;
+            y: parent.height * 0.5;
+            width: 2px;
+            height: parent.height * 0.22;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "action-new-folder" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08;
+            y: parent.height * 0.18;
+            width: parent.width * 0.36;
+            height: parent.height * 0.16;
+            background: root.ink;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.08;
+            y: parent.height * 0.3;
+            width: parent.width * 0.84;
+            height: parent.height * 0.58;
+            background: root.ink;
+            border-radius: 1px;
+        }
+    }
+
+    if icon-id == "action-new-file" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22;
+            y: parent.height * 0.08;
+            width: parent.width * 0.56;
+            height: parent.height * 0.84;
+            border-width: 1.5px;
+            border-color: root.ink;
+            background: transparent;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.5;
+            y: parent.height * 0.08;
+            width: parent.width * 0.28;
+            height: parent.height * 0.22;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.34;
+            y: parent.height * 0.48;
+            width: parent.width * 0.32;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.46;
+            y: parent.height * 0.36;
+            width: 2px;
+            height: parent.height * 0.32;
+            background: root.ink;
+        }
+    }
+}
