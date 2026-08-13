@@ -62,6 +62,7 @@ impl TabState {
         self.history_forward.push(self.path.clone());
         self.path = prev;
         self.selection.clear();
+        self.scroll_position = 0.0;
         true
     }
 
@@ -73,6 +74,7 @@ impl TabState {
         self.history_back.push(self.path.clone());
         self.path = next;
         self.selection.clear();
+        self.scroll_position = 0.0;
         true
     }
 }
@@ -141,10 +143,7 @@ impl FileManagerState {
     pub fn active_pane(&self) -> &PaneState {
         match self.active_pane {
             ActivePane::Left => &self.left_pane,
-            ActivePane::Right => self
-                .right_pane
-                .as_ref()
-                .unwrap_or(&self.left_pane),
+            ActivePane::Right => self.right_pane.as_ref().unwrap_or(&self.left_pane),
         }
     }
 

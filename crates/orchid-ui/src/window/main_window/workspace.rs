@@ -1,44 +1,44 @@
 //! Workspace model rebuilding and frame patching handlers for [`MainWindowController`].
 
+use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Instant;
-use uuid::Uuid;
 use tracing::{debug, warn};
-use slint::{SharedString, ModelRc, ComponentHandle, Image, Model, VecModel};
+use uuid::Uuid;
 
 use orchid_i18n::LocaleManager;
-use orchid_storage::{WindowState, WidgetSize};
-use orchid_widgets::{SharedInstance, PlacedWidget, WidgetPayload};
+use orchid_storage::{WidgetSize, WindowState};
 use orchid_widgets::layout::{PixelBounds, ViewportSize};
+use orchid_widgets::{PlacedWidget, SharedInstance, WidgetPayload};
 
-use crate::slint_generated::{
-    AppState, WidgetFrameModel, WorkspaceSummary, WorkspaceModel, TerminalCellModel,
-    WeatherModel, MoonModel, JyotishModel, ClockModel, SystemModel, ProcessesModel,
-    CalculatorModel, NotesModel, CalendarModel, RssModel, SearchModel, MediaModel,
-    PasswordModel, ViewerModel, RecentFilesModel, FileManagerModel, SettingsFieldRow,
-    GroupTabModel,
-};
 use crate::error::{Result, UiError};
+use crate::slint_generated::{
+    AppState, CalculatorModel, CalendarModel, ClockModel, FileManagerModel, GroupTabModel,
+    JyotishModel, MediaModel, MoonModel, NotesModel, PasswordModel, ProcessesModel,
+    RecentFilesModel, RssModel, SearchModel, SettingsFieldRow, SystemModel, TerminalCellModel,
+    ViewerModel, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
+};
 use crate::window::models::{
     blank_terminal, build_calculator_model, build_calendar_model, build_clock_model,
     build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
     build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
-    build_rss_model, build_search_model, build_system_model, build_viewer_model, build_weather_model,
-    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_file_manager_model,
-    empty_jyotish_model, empty_media_model, empty_moon_model, empty_notes_model,
+    build_rss_model, build_search_model, build_system_model, build_terminal_divider_models,
+    build_terminal_tab_models, build_viewer_model, build_weather_model,
+    default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
+    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_confirm_dialog,
+    empty_context_menu, empty_file_manager_model, empty_jyotish_model, empty_managed_policy_state,
+    empty_media_model, empty_moon_model, empty_notes_model, empty_passphrase_state,
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
-    empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells, empty_viewer_model,
-    empty_weather_model, patch_calculator_model, patch_clock_model, patch_media_model, patch_password_model,
+    empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
+    empty_terminal_cells, empty_viewer_model, empty_weather_model, patch_calculator_model,
+    patch_clock_model, patch_file_manager_model, patch_media_model, patch_password_model,
     patch_processes_model, patch_recent_files_model, patch_search_model, patch_system_model,
-    build_terminal_divider_models, build_terminal_tab_models, default_terminal_divider_models,
-    default_terminal_pane_models, default_terminal_tab_models, widget_has_settings,
-    FileManagerOverlays, PasswordAddDialogOverlay, empty_context_menu, empty_confirm_dialog,
-    empty_rename_state, empty_tag_state, empty_passphrase_state, empty_managed_policy_state,
+    widget_has_settings, FileManagerOverlays, PasswordAddDialogOverlay,
 };
 
-use super::{MainWindowController, sync_vec_model};
+use super::{sync_vec_model, MainWindowController};
 
 impl MainWindowController {
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
@@ -105,6 +105,16 @@ impl MainWindowController {
                 ) {
                     continue;
                 }
+                if iref.type_id == orchid_widgets::builtin::file_manager::TYPE_ID
+                    && self.try_patch_file_manager_row(
+                        &self.workspace_floating_widgets,
+                        *id,
+                        None,
+                        None,
+                    )
+                {
+                    continue;
+                }
                 if self.try_patch_common_content_row(
                     &self.workspace_floating_widgets,
                     *id,
@@ -166,6 +176,16 @@ impl MainWindowController {
             }
             if iref.type_id == orchid_widgets::builtin::system::TYPE_ID
                 && self.try_patch_system_row(
+                    &self.workspace_widgets,
+                    *id,
+                    Some(bounds),
+                    Some(idx as i32),
+                )
+            {
+                continue;
+            }
+            if iref.type_id == orchid_widgets::builtin::file_manager::TYPE_ID
+                && self.try_patch_file_manager_row(
                     &self.workspace_widgets,
                     *id,
                     Some(bounds),
@@ -339,6 +359,102 @@ impl MainWindowController {
         false
     }
 
+    pub(super) fn try_patch_file_manager_instance(&self, id: Uuid) -> bool {
+        if self.is_floating_window(id) {
+            self.try_patch_file_manager_row(&self.workspace_floating_widgets, id, None, None)
+        } else {
+            self.try_patch_file_manager_row(&self.workspace_widgets, id, None, None)
+        }
+    }
+
+    /// Patch FM listing/chrome without replacing the workspace frame row.
+    pub(super) fn try_patch_file_manager_row(
+        &self,
+        model: &ModelRc<WidgetFrameModel>,
+        id: Uuid,
+        bounds: Option<PixelBounds>,
+        z_order: Option<i32>,
+    ) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let WidgetPayload::FileManager(p) = &ws.payload else {
+            return false;
+        };
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+            return false;
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            let overlays = self
+                .fm_overlays
+                .read()
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| FileManagerOverlays {
+                    context_menu: empty_context_menu(),
+                    confirm_dialog: empty_confirm_dialog(),
+                    rename: empty_rename_state(),
+                    tag: empty_tag_state(),
+                    tag_paths: Vec::new(),
+                    passphrase: empty_passphrase_state(),
+                    managed_policy: empty_managed_policy_state(),
+                    passphrase_paths: Vec::new(),
+                    passphrase_purpose: None,
+                    create_folder_parent: None,
+                    create_item_is_file: false,
+                    drag_active: false,
+                    drag_paths: Vec::new(),
+                    drag_drop_target: String::new(),
+                    drag_target_pane: -1,
+                });
+            let mut need_frame = patch_file_manager_model(
+                &mut row.file_manager,
+                p,
+                overlays,
+                id,
+                &self.locale,
+                false,
+                &self.fm_viewport.lock(),
+            );
+            if let Some(b) = bounds {
+                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                    row.x = b.x;
+                    row.y = b.y;
+                    row.width = b.width;
+                    row.height = b.height;
+                    need_frame = true;
+                }
+            }
+            if let Some(z) = z_order {
+                if row.z_order != z {
+                    row.z_order = z;
+                    need_frame = true;
+                }
+            }
+            let title: SharedString = ws.title.clone().into();
+            if row.title != title {
+                row.title = title;
+                need_frame = true;
+            }
+            if need_frame {
+                let (group_id, group_tabs) = self.build_group_tab_models(id);
+                row.group_id = group_id;
+                row.group_tabs = group_tabs;
+                v.set_row_data(r, row);
+            }
+            return true;
+        }
+        false
+    }
+
     /// Patch an existing viewer frame row without rebuilding empty sibling models.
     pub(super) fn try_patch_viewer_row(
         &self,
@@ -413,24 +529,15 @@ impl MainWindowController {
                 continue;
             }
             let patched = match (type_id, &ws.payload) {
-                (
-                    orchid_widgets::builtin::clock::TYPE_ID,
-                    WidgetPayload::Clock(p),
-                ) => {
+                (orchid_widgets::builtin::clock::TYPE_ID, WidgetPayload::Clock(p)) => {
                     patch_clock_model(&mut row.clock, p, &self.locale);
                     true
                 }
-                (
-                    orchid_widgets::builtin::media::TYPE_ID,
-                    WidgetPayload::MediaPlayer(p),
-                ) => {
+                (orchid_widgets::builtin::media::TYPE_ID, WidgetPayload::MediaPlayer(p)) => {
                     patch_media_model(&mut row.media, p, &self.locale);
                     true
                 }
-                (
-                    orchid_widgets::builtin::password::TYPE_ID,
-                    WidgetPayload::PasswordManager(p),
-                ) => {
+                (orchid_widgets::builtin::password::TYPE_ID, WidgetPayload::PasswordManager(p)) => {
                     let toast = self.password_toasts.read().get(&id).cloned();
                     let autofocus = self
                         .password_autofocus_pending
@@ -457,10 +564,7 @@ impl MainWindowController {
                     );
                     true
                 }
-                (
-                    orchid_widgets::builtin::search::TYPE_ID,
-                    WidgetPayload::UniversalSearch(p),
-                ) => {
+                (orchid_widgets::builtin::search::TYPE_ID, WidgetPayload::UniversalSearch(p)) => {
                     let selected = self.search_selection.read().get(&id).copied().unwrap_or(-1);
                     let request_autofocus = matches!(
                         *self.search_autofocus_pending.lock(),
@@ -475,17 +579,11 @@ impl MainWindowController {
                     );
                     true
                 }
-                (
-                    orchid_widgets::builtin::recent_files::TYPE_ID,
-                    WidgetPayload::RecentFiles(p),
-                ) => {
+                (orchid_widgets::builtin::recent_files::TYPE_ID, WidgetPayload::RecentFiles(p)) => {
                     patch_recent_files_model(&mut row.recent_files, p);
                     true
                 }
-                (
-                    orchid_widgets::builtin::calculator::TYPE_ID,
-                    WidgetPayload::Calculator(p),
-                ) => {
+                (orchid_widgets::builtin::calculator::TYPE_ID, WidgetPayload::Calculator(p)) => {
                     patch_calculator_model(&mut row.calculator, p, &self.locale);
                     true
                 }
@@ -1042,6 +1140,7 @@ impl MainWindowController {
                             passphrase_paths: Vec::new(),
                             passphrase_purpose: None,
                             create_folder_parent: None,
+                            create_item_is_file: false,
                             drag_active: false,
                             drag_paths: Vec::new(),
                             drag_drop_target: String::new(),
@@ -1222,7 +1321,10 @@ impl MainWindowController {
         }
     }
 
-    pub(super) fn build_group_tab_models(&self, instance_id: Uuid) -> (SharedString, ModelRc<crate::slint_generated::GroupTabModel>) {
+    pub(super) fn build_group_tab_models(
+        &self,
+        instance_id: Uuid,
+    ) -> (SharedString, ModelRc<crate::slint_generated::GroupTabModel>) {
         let Some(group) = self.group_manager.find_for_instance(instance_id) else {
             return (SharedString::default(), ModelRc::new(VecModel::default()));
         };
@@ -1381,7 +1483,10 @@ impl MainWindowController {
             &self.workspace_window_taskbar,
             self.build_window_taskbar_items(&all_instances),
         );
-        sync_vec_model(&self.workspace_dock_types, super::catalog::dock_types_vec(&self.locale));
+        sync_vec_model(
+            &self.workspace_dock_types,
+            super::catalog::dock_types_vec(&self.locale),
+        );
         let snap_zone = *self.snap_zone.lock();
         app_g.set_workspace(WorkspaceModel {
             workspaces: self.workspace_workspaces.clone(),

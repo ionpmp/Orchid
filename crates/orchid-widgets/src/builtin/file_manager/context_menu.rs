@@ -42,6 +42,8 @@ pub struct ContextMenuInputs {
     pub selection_count: usize,
     /// Selection is under a registered managed folder (policy dialog available).
     pub managed_policy_available: bool,
+    /// Current folder can accept create/paste (not a virtual listing).
+    pub can_create: bool,
 }
 
 /// Build the menu from the current selection and the extra flags.
@@ -57,17 +59,15 @@ pub fn build_for_selection(
     let mut items = Vec::new();
 
     if !has_selection {
-        items.push(item(
-            "fs.new-folder",
-            "fm-action-new-folder",
-            "action-new-folder",
-            true,
-        ));
-        items.last_mut().unwrap().separator_after = true;
+        return background_menu(&inputs);
     }
 
     items.push(ContextMenuItem {
-        id: if count > 1 { "fs.open-all".into() } else { "fs.open".into() },
+        id: if count > 1 {
+            "fs.open-all".into()
+        } else {
+            "fs.open".into()
+        },
         label_key: if count > 1 {
             "fm-action-open-all".into()
         } else {
@@ -100,7 +100,12 @@ pub fn build_for_selection(
     });
     items.last_mut().unwrap().separator_after = true;
 
-    items.push(item("fs.copy", "fm-action-copy", "action-copy", has_selection));
+    items.push(item(
+        "fs.copy",
+        "fm-action-copy",
+        "action-copy",
+        has_selection,
+    ));
     items.push(item("fs.cut", "fm-action-cut", "action-cut", has_selection));
     items.push(sep(item(
         "fs.paste",
@@ -109,7 +114,12 @@ pub fn build_for_selection(
         inputs.clipboard_has_contents,
     )));
 
-    items.push(item("fs.rename", "fm-action-rename", "action-rename", single));
+    items.push(item(
+        "fs.rename",
+        "fm-action-rename",
+        "action-rename",
+        single,
+    ));
     items.push(sep(item(
         "fs.delete",
         "fm-action-delete",
@@ -170,17 +180,57 @@ pub fn build_for_selection(
         separator_after: false,
         submenu: vec![
             color_item("fs.color-label:red", "fm-color-red", "red", has_selection),
-            color_item("fs.color-label:orange", "fm-color-orange", "orange", has_selection),
-            color_item("fs.color-label:yellow", "fm-color-yellow", "yellow", has_selection),
-            color_item("fs.color-label:green", "fm-color-green", "green", has_selection),
-            color_item("fs.color-label:blue", "fm-color-blue", "blue", has_selection),
-            color_item("fs.color-label:purple", "fm-color-purple", "purple", has_selection),
-            color_item("fs.color-label:gray", "fm-color-gray", "gray", has_selection),
-            color_item("fs.color-label:none", "fm-color-none", "none", has_selection),
+            color_item(
+                "fs.color-label:orange",
+                "fm-color-orange",
+                "orange",
+                has_selection,
+            ),
+            color_item(
+                "fs.color-label:yellow",
+                "fm-color-yellow",
+                "yellow",
+                has_selection,
+            ),
+            color_item(
+                "fs.color-label:green",
+                "fm-color-green",
+                "green",
+                has_selection,
+            ),
+            color_item(
+                "fs.color-label:blue",
+                "fm-color-blue",
+                "blue",
+                has_selection,
+            ),
+            color_item(
+                "fs.color-label:purple",
+                "fm-color-purple",
+                "purple",
+                has_selection,
+            ),
+            color_item(
+                "fs.color-label:gray",
+                "fm-color-gray",
+                "gray",
+                has_selection,
+            ),
+            color_item(
+                "fs.color-label:none",
+                "fm-color-none",
+                "none",
+                has_selection,
+            ),
         ],
     });
     items.push(sep(if inputs.any_starred && inputs.all_starred {
-        item("fs.unstar", "fm-action-unstar", "action-star", has_selection)
+        item(
+            "fs.unstar",
+            "fm-action-unstar",
+            "action-star",
+            has_selection,
+        )
     } else {
         item("fs.star", "fm-action-star", "action-star", has_selection)
     }));
@@ -256,6 +306,43 @@ pub fn build_for_selection(
     items
 }
 
+/// Right-click on empty listing space: only actions that apply without a target.
+fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
+    let mut items = Vec::new();
+    if inputs.can_create {
+        items.push(item(
+            "fs.new-folder",
+            "fm-action-new-folder",
+            "action-new-folder",
+            true,
+        ));
+        items.push(item(
+            "fs.new-file",
+            "fm-action-new-file",
+            "action-new-folder",
+            true,
+        ));
+    }
+    if inputs.clipboard_has_contents {
+        if !items.is_empty() {
+            items.last_mut().unwrap().separator_after = true;
+        }
+        items.push(item("fs.paste", "fm-action-paste", "action-paste", true));
+    }
+    if inputs.entry_count > 0 {
+        if !items.is_empty() {
+            items.last_mut().unwrap().separator_after = true;
+        }
+        items.push(item(
+            "fs.select-all",
+            "fm-action-select-all",
+            "action-select-all",
+            true,
+        ));
+    }
+    items
+}
+
 fn item(id: &str, label_key: &str, icon: &'static str, enabled: bool) -> ContextMenuItem {
     ContextMenuItem {
         id: id.into(),
@@ -314,31 +401,42 @@ mod tests {
         }
     }
 
-    #[test]
-    fn empty_background_offers_new_folder() {
-        let menu = build_for_selection(&[], ContextMenuInputs::default());
-        let nf = menu.iter().find(|i| i.id == "fs.new-folder").unwrap();
-        assert!(nf.enabled);
+    fn empty_background() -> ContextMenuInputs {
+        ContextMenuInputs {
+            can_create: true,
+            ..Default::default()
+        }
     }
 
     #[test]
-    fn no_selection_disables_most_actions() {
+    fn empty_background_offers_create_actions() {
+        let menu = build_for_selection(&[], empty_background());
+        let ids: Vec<&str> = menu.iter().map(|i| i.id.as_str()).collect();
+        assert!(ids.contains(&"fs.new-folder"));
+        assert!(ids.contains(&"fs.new-file"));
+        assert!(!ids.contains(&"fs.copy"));
+        assert!(!ids.contains(&"fs.open"));
+        assert!(!ids.contains(&"fs.paste"));
+    }
+
+    #[test]
+    fn empty_background_omits_create_on_virtual() {
         let menu = build_for_selection(&[], ContextMenuInputs::default());
-        let copy = menu.iter().find(|i| i.id == "fs.copy").unwrap();
-        assert!(!copy.enabled);
-        let paste = menu.iter().find(|i| i.id == "fs.paste").unwrap();
-        assert!(!paste.enabled);
+        assert!(menu.iter().all(|i| i.id != "fs.new-folder"));
+        assert!(menu.iter().all(|i| i.id != "fs.new-file"));
     }
 
     #[test]
     fn clipboard_flag_enables_paste() {
         let inputs = ContextMenuInputs {
+            can_create: true,
             clipboard_has_contents: true,
             ..Default::default()
         };
         let menu = build_for_selection(&[], inputs);
         let paste = menu.iter().find(|i| i.id == "fs.paste").unwrap();
         assert!(paste.enabled);
+        assert!(menu.iter().all(|i| i.id != "fs.copy"));
     }
 
     #[test]

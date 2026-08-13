@@ -21,27 +21,34 @@ mod viewer;
 mod weather;
 mod widget_settings;
 
-pub(crate) use calculator::{build_calculator_model, empty_calculator_model};
+pub(crate) use calculator::{
+    build_calculator_model, empty_calculator_model, patch_calculator_model,
+};
 pub(crate) use calendar::{build_calendar_model, empty_calendar_model};
-pub(crate) use clock::{build_clock_model, empty_clock_model};
+pub(crate) use clock::{build_clock_model, empty_clock_model, patch_clock_model};
 pub(crate) use file_manager::{
     build_context_menu, build_file_manager_model, build_managed_policy_state, empty_confirm_dialog,
     empty_context_menu, empty_file_manager_model, empty_managed_policy_state,
     empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
-    fm_passphrase_dialog_labels, patch_fm_selection, FileManagerOverlays, FmViewport,
+    fm_passphrase_dialog_labels, patch_file_manager_model, patch_fm_selection, FileManagerOverlays,
+    FmViewport,
 };
 pub(crate) use jyotish::{build_jyotish_model, empty_jyotish_model};
-pub(crate) use media::{build_media_model, empty_media_model};
+pub(crate) use media::{build_media_model, empty_media_model, patch_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model};
 pub(crate) use notes::{build_notes_model, empty_notes_model};
 pub(crate) use palette::build_palette_candidates;
-pub(crate) use password::{build_password_model, empty_password_model, PasswordAddDialogOverlay};
+pub(crate) use password::{
+    build_password_model, empty_password_model, patch_password_model, PasswordAddDialogOverlay,
+};
 pub(crate) use processes::{
     build_processes_model, empty_processes_confirm, empty_processes_model, patch_processes_model,
 };
-pub(crate) use recent::{build_recent_files_model, empty_recent_files_model};
+pub(crate) use recent::{
+    build_recent_files_model, empty_recent_files_model, patch_recent_files_model,
+};
 pub(crate) use rss::{build_rss_model, empty_rss_model};
-pub(crate) use search::{build_search_model, empty_search_model};
+pub(crate) use search::{build_search_model, empty_search_model, patch_search_model};
 pub(crate) use settings::{
     build_settings_fields, build_settings_sections, locale_display_name, settings_section_id,
     settings_section_index, theme_display_name, SETTINGS_SECTION_IDS,
@@ -50,7 +57,7 @@ pub(crate) use system::{build_system_model, empty_system_model, patch_system_mod
 pub(crate) use terminal::{
     blank_terminal, build_terminal_divider_models, build_terminal_tab_models,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
-    empty_terminal_cells, pane_payload_to_terminal,
+    empty_terminal_cells,
 };
 pub(crate) use viewer::{build_viewer_model, empty_viewer_model};
 pub(crate) use weather::{build_weather_model, empty_weather_model};

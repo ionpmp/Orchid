@@ -7,6 +7,8 @@ export component FmEntryGrid inherits Rectangle {
     in property <int> entry-total-count;
     in property <length> virtual-pad-top;
     in property <length> virtual-content-height;
+    in property <int> virtual-first-index;
+    in property <string> listing-id;
     in property <bool> large;
     in property <FmRenameState> rename;
     in property <bool> drag-active;
@@ -38,11 +40,13 @@ export component FmEntryGrid inherits Rectangle {
     property <int> columns: max(1, floor((root.width - tile-spacing) / (tile-size + tile-spacing)));
     property <bool> virtualized: virtual-content-height > 0px;
     property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
-    property <int> first-index: virtualized
-        ? max(0, floor(virtual-pad-top / (tile-height + tile-spacing)) * columns)
-        : 0;
+    property <int> first-index: virtualized ? max(0, virtual-first-index) : 0;
 
     background: transparent;
+
+    changed listing-id => {
+        grid-flick.viewport-y = 0px;
+    }
 
     grid-flick := Flickable {
         width: parent.width;
@@ -70,7 +74,7 @@ export component FmEntryGrid inherits Rectangle {
 
         bg-ta := TouchArea {
             width: parent.width;
-            height: parent.height;
+            height: max(parent.height, parent.viewport-height);
             pointer-event(e) => {
                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                     root.entry-context("", self.mouse-x, self.mouse-y);

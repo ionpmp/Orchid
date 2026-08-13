@@ -142,13 +142,29 @@ impl MainWindowController {
     }
     pub(super) async fn fm_refresh_ui(self: &Arc<Self>, inst: Uuid) {
         let _ = self.widget_manager.refresh_snapshot_cache(inst).await;
-        // Prefer an in-place frame patch. A full workspace rebuild remounts FM
-        // TouchAreas/FocusScopes and can freeze the Slint event loop on Windows
-        // when it lands around a click/navigate.
+        // Prefer nested-model mutation. Replacing the workspace frame remounts
+        // FileManagerView / TouchAreas and is what made selection jump.
+        if self.try_patch_file_manager_instance(inst) {
+            return;
+        }
         if let Err(e) = self.patch_workspace_frames(&[inst]) {
             warn!(?e, "fm_refresh_ui patch");
             self.schedule_rebuild();
         }
+    }
+
+    fn reset_fm_pane_viewport(&self, inst: Uuid, pane: u8) {
+        orchid_widgets::builtin::file_manager::reset_viewport_window(inst, pane);
+        self.fm_viewport.lock().insert(
+            (inst, pane),
+            FmViewport {
+                scroll_y: 0.0,
+                view_h: 480.0,
+                view_w: 640.0,
+            },
+        );
+        self.fm_viewport_window.lock().remove(&(inst, pane));
+        self.fm_viewport_pin_top.lock().insert((inst, pane));
     }
 
     /// Update selection highlighting without rebuilding the entry model / snapshot.
@@ -650,6 +666,7 @@ impl MainWindowController {
                 })
                 .unwrap_or(0)
         };
+        self.reset_fm_pane_viewport(inst, pane);
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         spawn::spawn_bg_then_local(
@@ -689,6 +706,8 @@ impl MainWindowController {
         spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::toggle_show_hidden(inst).await;
             if let Some(c) = tw.upgrade() {
+                c.reset_fm_pane_viewport(inst, 0);
+                c.reset_fm_pane_viewport(inst, 1);
                 c.fm_refresh_ui(inst).await;
             }
         });
@@ -855,6 +874,7 @@ impl MainWindowController {
         };
         let pp = fm.panes.get(pane as usize)?;
         let tab = pp.tabs.get(pp.active_tab as usize)?;
+        let offset = tab.entries_offset as usize;
         let content_y = mouse_y + viewport_y;
 
         use orchid_widgets::FmViewMode::*;
@@ -862,7 +882,7 @@ impl MainWindowController {
             List => {
                 let row = (content_y / 28.0).floor() as usize;
                 tab.entries
-                    .get(row)
+                    .get(row.checked_sub(offset)?)
                     .filter(|e| e.is_dir)
                     .map(|e| e.path.clone())
             }
@@ -872,7 +892,7 @@ impl MainWindowController {
                 }
                 let row = ((content_y - 28.0) / 28.0).floor() as usize;
                 tab.entries
-                    .get(row)
+                    .get(row.checked_sub(offset)?)
                     .filter(|e| e.is_dir)
                     .map(|e| e.path.clone())
             }
@@ -892,7 +912,7 @@ impl MainWindowController {
                 }
                 let idx = row as usize * columns + col as usize;
                 tab.entries
-                    .get(idx)
+                    .get(idx.checked_sub(offset)?)
                     .filter(|e| e.is_dir)
                     .map(|e| e.path.clone())
             }
@@ -970,6 +990,7 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let tab = tab_id.to_string();
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::switch_to_tab(inst, p, &tab).await;
@@ -1041,6 +1062,7 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         spawn::spawn_bg_then_local(
@@ -1060,6 +1082,7 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         spawn::spawn_bg_then_local(
@@ -1079,6 +1102,7 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         spawn::spawn_bg_then_local(
@@ -1098,6 +1122,7 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
+        self.reset_fm_pane_viewport(inst, p);
         let p = pane.max(0) as u8;
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
@@ -1122,6 +1147,7 @@ impl MainWindowController {
         let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
             return;
         };
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         spawn::spawn_bg_then_local(
@@ -1142,6 +1168,7 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::cycle_view_mode(inst, p).await;
@@ -1156,6 +1183,7 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::cycle_sort(inst, p).await;
@@ -1176,6 +1204,7 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let col = column.clamp(0, 3) as u8;
+        self.reset_fm_pane_viewport(inst, p);
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
             let _ = orchid_widgets::builtin::file_manager::set_sort_column(inst, p, col).await;
@@ -1196,7 +1225,12 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
-        let scroll_y = y.max(0.0);
+        let pin_top = self.fm_viewport_pin_top.lock().contains(&(inst, p));
+        let raw_y = y.max(0.0);
+        if pin_top && raw_y <= 1.0 {
+            self.fm_viewport_pin_top.lock().remove(&(inst, p));
+        }
+        let scroll_y = if pin_top { 0.0 } else { raw_y };
         let view_h = h.max(1.0);
         let view_w = w.max(1.0);
 
@@ -1216,7 +1250,7 @@ impl MainWindowController {
             (tab.view_mode, tab.item_count as usize)
         };
 
-        let (first, end, _, content_h) = match view_mode {
+        let (first, end, _, _) = match view_mode {
             orchid_widgets::FmViewMode::Icons | orchid_widgets::FmViewMode::Gallery => {
                 let large = matches!(view_mode, orchid_widgets::FmViewMode::Gallery);
                 fm_grid_window(total, scroll_y, view_h, view_w, large)
@@ -1236,11 +1270,6 @@ impl MainWindowController {
 
         orchid_widgets::builtin::file_manager::set_viewport_window(inst, p, first, end);
 
-        // Natural layout — no window slice to maintain.
-        if content_h <= 0.0 {
-            return;
-        }
-
         {
             let mut windows = self.fm_viewport_window.lock();
             if windows.get(&(inst, p)).copied() == Some(first) {
@@ -1253,8 +1282,10 @@ impl MainWindowController {
         spawn::spawn_local_compat(async move {
             if let Some(c) = tw.upgrade() {
                 let _ = c.widget_manager.refresh_snapshot_cache(inst).await;
-                if let Err(e) = c.patch_workspace_frames(&[inst]) {
-                    warn!(?e, "fm viewport patch");
+                if !c.try_patch_file_manager_instance(inst) {
+                    if let Err(e) = c.patch_workspace_frames(&[inst]) {
+                        warn!(?e, "fm viewport patch");
+                    }
                 }
             }
         });
@@ -1289,6 +1320,7 @@ impl MainWindowController {
             if c.fm_filter_seq.lock().get(&(inst, p)).copied() != Some(seq) {
                 return;
             }
+            c.reset_fm_pane_viewport(inst, p);
             let _ = orchid_widgets::builtin::file_manager::set_quick_filter(inst, p, query).await;
             c.fm_refresh_ui(inst).await;
         });
@@ -1445,6 +1477,9 @@ impl MainWindowController {
         path: String,
         is_dir: bool,
     ) {
+        if is_dir {
+            self.reset_fm_pane_viewport(inst, pane);
+        }
         let tw = Arc::downgrade(self);
         let wm = self.widget_manager.clone();
         debug!(%path, is_dir, pane, %inst, "fm_dispatch_open");
@@ -1483,6 +1518,7 @@ impl MainWindowController {
                             entry.tag = empty_tag_state();
                             entry.tag_paths.clear();
                             entry.create_folder_parent = None;
+                            entry.create_item_is_file = false;
                         }
                         c.rebuild_pending.store(false, Ordering::Release);
                         let _ = c.widget_manager.drain_frame_dirty_ids();
@@ -1528,14 +1564,19 @@ impl MainWindowController {
                     return;
                 }
             };
+        if actions.is_empty() {
+            return;
+        }
         let menu = build_context_menu(&actions, &target_paths, x, y, &self.locale);
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.context_menu = menu;
         drop(over);
-        self.schedule_rebuild();
-
+        if !self.try_patch_file_manager_instance(inst) {
+            self.schedule_rebuild();
+        }
         if target.is_empty() {
+            let _ = self.try_patch_fm_selection(inst, p);
             return;
         }
 
@@ -1605,6 +1646,7 @@ impl MainWindowController {
                 entry.tag = empty_tag_state();
                 entry.tag_paths.clear();
                 entry.create_folder_parent = None;
+                entry.create_item_is_file = false;
                 entry.drag_active = false;
                 entry.drag_paths.clear();
                 entry.drag_drop_target.clear();
@@ -1655,6 +1697,7 @@ impl MainWindowController {
                 let mut over = self.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.create_folder_parent = None;
+                entry.create_item_is_file = false;
                 entry.rename = FmRenameState {
                     active: true,
                     path: path.into(),
@@ -1671,11 +1714,29 @@ impl MainWindowController {
                 let mut over = self.fm_overlays.write();
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.create_folder_parent = Some(parent);
+                entry.create_item_is_file = false;
                 entry.rename = FmRenameState {
                     active: true,
                     path: SharedString::new(),
                     proposed_name: self.locale.tr("fm-action-new-folder").into(),
                     title: self.locale.tr("fm-action-new-folder").into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsCreateFile { parent } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.create_folder_parent = Some(parent);
+                entry.create_item_is_file = true;
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: SharedString::new(),
+                    proposed_name: self.locale.tr("fm-new-file-name").into(),
+                    title: self.locale.tr("fm-action-new-file").into(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
@@ -1932,19 +1993,23 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
-        let create_parent = self
+        let (create_parent, create_file) = self
             .fm_overlays
             .read()
             .get(&inst)
-            .and_then(|o| o.create_folder_parent.clone());
+            .map(|o| (o.create_folder_parent.clone(), o.create_item_is_file))
+            .unwrap_or((None, false));
         if let Some(parent) = create_parent {
             let newn = new_name.to_string();
             let tw = Arc::downgrade(self);
             spawn::spawn_local_compat(async move {
-                if let Err(e) =
+                let result = if create_file {
+                    orchid_widgets::builtin::file_manager::create_file(inst, &parent, &newn).await
+                } else {
                     orchid_widgets::builtin::file_manager::create_folder(inst, &parent, &newn).await
-                {
-                    warn!(?e, "fm create folder");
+                };
+                if let Err(e) = result {
+                    warn!(?e, create_file = create_file, "fm create item");
                     if let Some(c) = tw.upgrade() {
                         c.notify_fm_action_failed(&e);
                     }
@@ -1954,6 +2019,7 @@ impl MainWindowController {
                     let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                     entry.rename = empty_rename_state();
                     entry.create_folder_parent = None;
+                    entry.create_item_is_file = false;
                     drop(over);
                     c.schedule_rebuild();
                 }
@@ -1987,6 +2053,7 @@ impl MainWindowController {
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.rename = empty_rename_state();
         entry.create_folder_parent = None;
+        entry.create_item_is_file = false;
         drop(over);
         self.schedule_rebuild();
     }
@@ -2301,6 +2368,7 @@ fn default_fm_overlays() -> FileManagerOverlays {
         passphrase_paths: Vec::new(),
         passphrase_purpose: None,
         create_folder_parent: None,
+        create_item_is_file: false,
         drag_active: false,
         drag_paths: Vec::new(),
         drag_drop_target: String::new(),

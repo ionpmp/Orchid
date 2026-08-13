@@ -212,6 +212,8 @@ pub struct MainWindowController {
     fm_viewport: Arc<Mutex<HashMap<(Uuid, u8), crate::window::models::FmViewport>>>,
     /// Last virtualized window start index; skip rebuild when unchanged.
     fm_viewport_window: Arc<Mutex<HashMap<(Uuid, u8), usize>>>,
+    /// After navigation, ignore leftover Flickable scroll until it returns to top.
+    fm_viewport_pin_top: Arc<Mutex<HashSet<(Uuid, u8)>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
     last_canvas_pointer: Arc<Mutex<Option<(f32, f32)>>>,
     /// Canvas flickable scroll offset (content coordinates).
@@ -524,6 +526,7 @@ impl MainWindowController {
             fm_filter_seq: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport_window: Arc::new(Mutex::new(HashMap::new())),
+            fm_viewport_pin_top: Arc::new(Mutex::new(HashSet::new())),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),
             keyboard_modifiers: Arc::new(Mutex::new(
@@ -1170,10 +1173,6 @@ impl MainWindowController {
     const TERMINAL_TAB_BAR_PX: f32 = 29.0;
     /// Height of [`group-tabs.slint`] when a frame is part of a multi-widget group.
     const GROUP_TAB_BAR_PX: f32 = 28.0;
-
-
-
-
 
     /// Show the window and run the Slint event loop.
     pub fn run(self: Arc<Self>) -> Result<()> {

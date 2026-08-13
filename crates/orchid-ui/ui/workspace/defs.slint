@@ -1088,6 +1088,8 @@ export struct FmTab {
     virtual-pad-top: length,
     /// Full scrollable content height when virtualized; `0` means natural layout.
     virtual-content-height: length,
+    /// Global index of `entries[0]` in the filtered listing (grid placement).
+    virtual-first-index: int,
     selection-count: int,
     status-text: string,
     quick-filter: string,

@@ -85,6 +85,12 @@ release yet.
 - File-manager drag-and-drop starts on the pressed entry (selection lag no
   longer aborts the gesture) and dropping onto a file completes a move/copy
   into the current folder instead of cancelling.
+- File-manager listings no longer go blank after leaving a long folder: the
+  visible window resets on navigate / tab / filter / sort, and small folders
+  always ship a full slice. Scroll virtualization mutates the entry model in
+  place instead of remounting the widget (which made selection jump).
+- File-manager background right-click works on empty space and empty folders,
+  and shows only relevant actions (new folder / file, paste, select all).
 - Floating viewer unsaved-close confirm; Clock move-city handlers; Jyotish
   profile date/time steppers and search field sync.
 - Fluent message IDs (hyphenated only); locale UTF-8 mojibake from early

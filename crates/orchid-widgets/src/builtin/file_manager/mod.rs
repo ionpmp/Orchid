@@ -103,6 +103,10 @@ pub enum ActionOutcome {
     NeedsCreateFolder {
         parent: String,
     },
+    /// Prompt for a new file name under `parent`.
+    NeedsCreateFile {
+        parent: String,
+    },
     /// Prompt for a passphrase to encrypt or reveal encrypted files.
     NeedsPassphrase {
         paths: Vec<String>,
@@ -389,7 +393,12 @@ impl FileManagerWidget {
     pub async fn navigate(&self, path: orchid_fs::FsPath) {
         let tab = {
             let mut state = self.inner.state.lock();
+            let pane = match state.active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
             state.active_tab_mut().navigate_to(path);
+            self.inner.reset_pane_viewport(pane);
             state.active_tab().clone()
         };
         self.inner
@@ -407,9 +416,14 @@ impl FileManagerWidget {
     pub async fn go_back(&self) {
         let tab = {
             let mut state = self.inner.state.lock();
+            let pane = match state.active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
             if !state.active_tab_mut().back() {
                 return;
             }
+            self.inner.reset_pane_viewport(pane);
             state.active_tab().clone()
         };
         self.inner
@@ -427,9 +441,14 @@ impl FileManagerWidget {
     pub async fn go_forward(&self) {
         let tab = {
             let mut state = self.inner.state.lock();
+            let pane = match state.active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
             if !state.active_tab_mut().forward() {
                 return;
             }
+            self.inner.reset_pane_viewport(pane);
             state.active_tab().clone()
         };
         self.inner
@@ -608,6 +627,10 @@ impl FileManagerInner {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    fn reset_pane_viewport(&self, pane: u8) {
+        self.viewport_by_pane.write().remove(&pane);
     }
 
     fn install_dir_watch_handlers(self: &Arc<Self>) {
@@ -1473,6 +1496,26 @@ impl FileManagerInner {
         Ok(())
     }
 
+    async fn create_file_at(&self, parent: &orchid_fs::FsPath, name: &str) -> WidgetResult<()> {
+        if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains(':') {
+            return Err(WidgetError::InvalidStateForOperation(
+                "fm-invalid-folder-name".into(),
+            ));
+        }
+        let new_path = parent.join(name);
+        let provider =
+            self.deps.registry.for_path(parent).ok_or_else(|| {
+                WidgetError::InvalidStateForOperation("fm-no-provider-parent".into())
+            })?;
+        if provider.metadata(&new_path).await.is_ok() {
+            return Err(WidgetError::InvalidStateForOperation(
+                "fm-invalid-folder-name".into(),
+            ));
+        }
+        provider.write(&new_path, &[]).await.map_err(map_fs_error)?;
+        Ok(())
+    }
+
     fn spawn_view_decorations(self: &Arc<Self>, tab: TabState) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
@@ -2122,18 +2165,12 @@ fn build_tab_payload(
     let item_count = entries_filtered.len() as u32;
     // Format only the visible window (+ overscan already applied by UI).
     const DEFAULT_WINDOW: usize = 96;
-    let (first, end) = if is_active_tab {
-        inner
-            .viewport_by_pane
-            .read()
-            .get(&pane_idx)
-            .copied()
-            .unwrap_or((0, DEFAULT_WINDOW.min(entries_filtered.len())))
+    let stored = if is_active_tab {
+        inner.viewport_by_pane.read().get(&pane_idx).copied()
     } else {
-        (0, DEFAULT_WINDOW.min(entries_filtered.len()))
+        None
     };
-    let first = first.min(entries_filtered.len());
-    let end = end.clamp(first, entries_filtered.len());
+    let (first, end) = clamp_entry_window(stored, entries_filtered.len(), DEFAULT_WINDOW);
     let entries_offset = first as u32;
     let locale = inner.deps.orchid_config.read().locale.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
@@ -2703,7 +2740,7 @@ pub fn context_menu_for(
     if context_path.is_empty() {
         inner.deselect_all_in_pane(pane);
     }
-    let (entries, target_paths, entry_count, selection_count) = {
+    let (entries, target_paths, entry_count, selection_count, can_create) = {
         let state = inner.state.lock();
         let tab = active_tab_ref(&state, pane)?;
         let tab_id = tab.id;
@@ -2716,6 +2753,7 @@ pub fn context_menu_for(
             .unwrap_or_else(|| Arc::new(Vec::new()));
         let entry_count = inner.filtered_paths_for_tab(tab).len();
         let selection_count = tab.selection.count();
+        let can_create = !is_virtual(&tab.path);
         let target_paths = if context_path.is_empty() {
             Vec::new()
         } else if selection.iter().any(|p| p == context_path) {
@@ -2723,7 +2761,13 @@ pub fn context_menu_for(
         } else {
             vec![context_path.to_string()]
         };
-        (entries, target_paths, entry_count, selection_count)
+        (
+            entries,
+            target_paths,
+            entry_count,
+            selection_count,
+            can_create,
+        )
     };
     let selected_entries: Vec<orchid_fs::FsEntry> = target_paths
         .iter()
@@ -2763,6 +2807,7 @@ pub fn context_menu_for(
         managed_policy_available: target_paths
             .iter()
             .any(|p| inner.managed_root_for_path(p).is_some()),
+        can_create,
     };
     Ok((build_for_selection(&selected_entries, inputs), target_paths))
 }
@@ -2817,6 +2862,7 @@ async fn navigate_inner(
         } else {
             state.left_pane.active_tab_mut().navigate_to(path);
         }
+        inner.reset_pane_viewport(pane);
         active_tab_ref(&state, pane)?.clone()
     };
     inner
@@ -2848,6 +2894,7 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         if !changed {
             return Ok(());
         }
+        inner.reset_pane_viewport(pane);
         active_tab_ref(&state, pane)?.clone()
     };
     inner
@@ -2879,6 +2926,7 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         if !changed {
             return Ok(());
         }
+        inner.reset_pane_viewport(pane);
         active_tab_ref(&state, pane)?.clone()
     };
     inner
@@ -2939,6 +2987,7 @@ pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetR
             state.left_pane.active_tab = idx;
         }
     }
+    inner.reset_pane_viewport(pane);
     inner.publish_refresh();
     Ok(())
 }
@@ -3117,6 +3166,36 @@ pub fn set_viewport_window(instance_id: Uuid, pane: u8, first: usize, end: usize
     }
 }
 
+/// Drop a cached viewport slice so the next snapshot starts at the top.
+pub fn reset_viewport_window(instance_id: Uuid, pane: u8) {
+    if let Some(inner) = FM_LIVE.get(&instance_id) {
+        inner.reset_pane_viewport(pane);
+    }
+}
+
+/// Listings at or below this size are sent in full. Must match the UI
+/// `FM_VIRTUALIZE_THRESHOLD` so a small folder never ships a mid-list slice
+/// while Slint lays out `pad = 0` and expects every row.
+const FM_VIRTUALIZE_THRESHOLD: usize = 80;
+
+/// Map a stored virtualization window onto a listing of `len` entries.
+///
+/// A window that starts past the end (typical after navigating out of a long
+/// folder) is treated as "show from the top" rather than an empty slice.
+fn clamp_entry_window(
+    stored: Option<(usize, usize)>,
+    len: usize,
+    default_window: usize,
+) -> (usize, usize) {
+    if len <= FM_VIRTUALIZE_THRESHOLD {
+        return (0, len);
+    }
+    match stored {
+        Some((first, end)) if first < len && end > first => (first, end.min(len)),
+        _ => (0, default_window.min(len)),
+    }
+}
+
 /// Whether hidden entries are listed in navigation results.
 pub fn show_hidden(instance_id: Uuid) -> WidgetResult<bool> {
     Ok(live_inner(instance_id)?.config.read().show_hidden)
@@ -3129,6 +3208,8 @@ pub async fn toggle_show_hidden(instance_id: Uuid) -> WidgetResult<()> {
         let mut cfg = inner.config.write();
         cfg.show_hidden = !cfg.show_hidden;
     }
+    inner.reset_pane_viewport(0);
+    inner.reset_pane_viewport(1);
     inner.refresh_all_tabs().await;
     Ok(())
 }
@@ -3169,6 +3250,7 @@ pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         };
         tab.clone()
     };
+    inner.reset_pane_viewport(pane);
     inner.publish_refresh();
     inner.spawn_view_decorations(tab);
     Ok(())
@@ -3192,6 +3274,7 @@ pub async fn cycle_sort(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
         tab.sort_descending = false;
         (tab.id, tab.sort_by, tab.sort_descending)
     };
+    inner.reset_pane_viewport(pane);
     inner.resort_tab_in_memory(tab_id, sort_by, descending);
     inner.publish_refresh();
     Ok(())
@@ -3221,6 +3304,7 @@ pub async fn set_sort_column(instance_id: Uuid, pane: u8, column: u8) -> WidgetR
         }
         (tab.id, tab.sort_by, tab.sort_descending)
     };
+    inner.reset_pane_viewport(pane);
     inner.resort_tab_in_memory(tab_id, sort_by, descending);
     inner.publish_refresh();
     Ok(())
@@ -3242,6 +3326,7 @@ pub async fn set_quick_filter(instance_id: Uuid, pane: u8, q: String) -> WidgetR
         };
         tab.quick_filter = q;
     }
+    inner.reset_pane_viewport(pane);
     inner.publish_refresh();
     Ok(())
 }
@@ -3606,6 +3691,24 @@ pub async fn run_action_with_opts(
             }
             return Ok(ActionOutcome::Done);
         }
+        "fs.new-file" => {
+            let parent = {
+                let state = inner.state.lock();
+                let pane = match state.active_pane {
+                    ActivePane::Left => 0,
+                    ActivePane::Right => 1,
+                };
+                active_tab_ref(&state, pane).map(|t| t.path.clone()).ok()
+            };
+            if let Some(parent) = parent {
+                if !is_virtual(&parent) {
+                    return Ok(ActionOutcome::NeedsCreateFile {
+                        parent: parent.as_str().to_string(),
+                    });
+                }
+            }
+            return Ok(ActionOutcome::Done);
+        }
         "fs.color-label" => {
             // Parent row only opens the flyout submenu.
             return Ok(ActionOutcome::Done);
@@ -3767,6 +3870,20 @@ pub async fn create_folder(instance_id: Uuid, parent_path: &str, name: &str) -> 
         ));
     }
     inner.create_folder_at(&parent, name).await?;
+    inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+/// Create an empty file under `parent_path`.
+pub async fn create_file(instance_id: Uuid, parent_path: &str, name: &str) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let parent = orchid_fs::FsPath::new(parent_path).map_err(map_fs_error)?;
+    if is_virtual(&parent) {
+        return Err(WidgetError::InvalidStateForOperation(
+            "fm-virtual-create-denied".into(),
+        ));
+    }
+    inner.create_file_at(&parent, name).await?;
     inner.refresh_all_tabs().await;
     Ok(())
 }
@@ -4179,5 +4296,34 @@ mod type_column_tests {
         assert_eq!(type_column_extension(".gitignore"), None);
         assert_eq!(type_column_extension("Makefile"), None);
         assert_eq!(type_column_extension("trailing."), None);
+    }
+}
+
+#[cfg(test)]
+mod viewport_window_tests {
+    use super::clamp_entry_window;
+
+    #[test]
+    fn missing_window_starts_at_top() {
+        assert_eq!(clamp_entry_window(None, 200, 96), (0, 96));
+        assert_eq!(clamp_entry_window(None, 40, 96), (0, 40));
+    }
+
+    #[test]
+    fn stale_window_past_end_resets_to_top() {
+        assert_eq!(clamp_entry_window(Some((200, 350)), 50, 96), (0, 50));
+        assert_eq!(clamp_entry_window(Some((50, 50)), 50, 96), (0, 50));
+    }
+
+    #[test]
+    fn valid_window_is_clamped_to_len() {
+        assert_eq!(clamp_entry_window(Some((200, 350)), 300, 96), (200, 300));
+        assert_eq!(clamp_entry_window(Some((0, 96)), 80, 96), (0, 80));
+    }
+
+    #[test]
+    fn small_listing_ignores_stale_mid_window() {
+        assert_eq!(clamp_entry_window(Some((10, 106)), 50, 96), (0, 50));
+        assert_eq!(clamp_entry_window(Some((10, 106)), 90, 96), (10, 90));
     }
 }

@@ -120,6 +120,8 @@ pub(crate) struct FileManagerOverlays {
     pub(crate) passphrase_paths: Vec<String>,
     pub(crate) passphrase_purpose: Option<orchid_widgets::builtin::file_manager::PassphrasePurpose>,
     pub(crate) create_folder_parent: Option<String>,
+    /// When `create_folder_parent` is set, true means create a file not a folder.
+    pub(crate) create_item_is_file: bool,
     pub(crate) drag_active: bool,
     pub(crate) drag_paths: Vec<String>,
     pub(crate) drag_drop_target: String,
@@ -620,7 +622,11 @@ pub(crate) fn build_sidebar_items(
 /// Visible-window parameters for a file-manager pane.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FmViewport {
+    /// Last Flickable `viewport-y` (written on scroll; pad uses `entries_offset`).
+    #[allow(dead_code)]
     pub scroll_y: f32,
+    /// Last visible height in px.
+    #[allow(dead_code)]
     pub view_h: f32,
     pub view_w: f32,
 }
@@ -682,160 +688,256 @@ pub(crate) fn fm_grid_window(
     (first, end, pad_top, content_h)
 }
 
-pub(crate) fn build_file_manager_model(
+/// Pad / content height / first visible index from the widget's shipped window.
+///
+/// `entries_offset` is the source of truth — recomputing from `scroll_y` here
+/// desyncs the spacer from the sliced `entries` model and blanks the listing.
+fn fm_virtual_layout(
+    view_mode: i32,
+    total: usize,
+    entries_offset: usize,
+    view_w: f32,
+) -> (f32, f32, i32) {
+    if total <= FM_VIRTUALIZE_THRESHOLD {
+        return (0.0, 0.0, 0);
+    }
+    match view_mode {
+        0 | 3 => {
+            let large = view_mode == 3;
+            let tile_size = if large { 220.0 } else { 100.0 };
+            let tile_height = if large { 240.0 } else { 120.0 };
+            let spacing = 8.0;
+            let cols = ((view_w - spacing) / (tile_size + spacing))
+                .floor()
+                .max(1.0) as usize;
+            let row_h = tile_height + spacing;
+            let rows = total.div_ceil(cols);
+            let content_h = rows as f32 * row_h + spacing;
+            let first_row = entries_offset / cols;
+            (first_row as f32 * row_h, content_h, entries_offset as i32)
+        }
+        2 => {
+            let content_h = FM_LIST_ROW_H + total as f32 * FM_LIST_ROW_H;
+            (
+                entries_offset as f32 * FM_LIST_ROW_H,
+                content_h,
+                entries_offset as i32,
+            )
+        }
+        _ => {
+            let content_h = total as f32 * FM_LIST_ROW_H;
+            (
+                entries_offset as f32 * FM_LIST_ROW_H,
+                content_h,
+                entries_offset as i32,
+            )
+        }
+    }
+}
+
+fn build_fm_entry(e: &orchid_widgets::EntryPayload) -> FmEntry {
+    let tags: Vec<FmTagChip> = e
+        .tags
+        .iter()
+        .map(|tag| FmTagChip {
+            label: tag.clone().into(),
+            color: slint::Color::from_argb_u8(255, 0x4d, 0x82, 0xff),
+        })
+        .collect();
+    let thumb_img = if e.has_thumbnail {
+        e.thumbnail_rgba
+            .as_ref()
+            .map(|rgba| fm_rgba_to_image(rgba, e.thumbnail_width, e.thumbnail_height))
+            .unwrap_or_default()
+    } else {
+        Image::default()
+    };
+    FmEntry {
+        path: e.path.clone().into(),
+        name: e.name.clone().into(),
+        is_dir: e.is_dir,
+        size_text: e.size_text.clone().into(),
+        modified_text: e.modified_text.clone().into(),
+        type_text: e.type_text.clone().into(),
+        icon: e.icon.clone().into(),
+        has_thumbnail: e.has_thumbnail,
+        thumbnail_key: e.thumbnail_key.clone().unwrap_or_default().into(),
+        thumbnail: thumb_img,
+        thumbnail_width: e.thumbnail_width as i32,
+        thumbnail_height: e.thumbnail_height as i32,
+        thumbnail_is_icon: e.thumbnail_is_icon,
+        is_selected: e.is_selected,
+        is_hidden: e.is_hidden,
+        is_encrypted: e.is_encrypted,
+        is_managed: e.is_managed,
+        is_starred: e.is_starred,
+        color_label: e.color_label.clone().unwrap_or_default().into(),
+        tags: ModelRc::new(VecModel::from(tags)),
+    }
+}
+
+fn build_fm_tab(
+    t: &orchid_widgets::TabPayload,
+    locale: &LocaleManager,
+    view_w: f32,
+    sort_name_label: &SharedString,
+    sort_size_label: &SharedString,
+    sort_modified_label: &SharedString,
+    sort_type_label: &SharedString,
+) -> FmTab {
+    let view_mode = view_mode_to_int(t.view_mode);
+    let total = t.item_count as usize;
+    let (pad_top, content_h, first_index) =
+        fm_virtual_layout(view_mode, total, t.entries_offset as usize, view_w);
+    let entries: Vec<FmEntry> = t.entries.iter().map(build_fm_entry).collect();
+    let breadcrumbs: Vec<FmBreadcrumb> = t
+        .breadcrumbs
+        .iter()
+        .map(|(bp, bl)| FmBreadcrumb {
+            path: bp.clone().into(),
+            label: fm_virtual_breadcrumb_label(locale, bp, bl).into(),
+        })
+        .collect();
+    FmTab {
+        id: t.tab_id.clone().into(),
+        path_display: fm_virtual_path_display(locale, &t.path_display).into(),
+        breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
+        can_back: t.can_go_back,
+        can_forward: t.can_go_forward,
+        view_mode,
+        entries: ModelRc::new(VecModel::from(entries)),
+        entry_total_count: total as i32,
+        virtual_pad_top: pad_top,
+        virtual_content_height: content_h,
+        virtual_first_index: first_index,
+        selection_count: t.selection_count as i32,
+        status_text: fm_build_tab_status_text(locale, t).into(),
+        quick_filter: t.quick_filter.clone().into(),
+        is_loading: t.is_loading,
+        error: fm_tab_error_text(locale, t.error.as_deref()),
+        error_action_label: fm_tab_error_action_label(locale, t.error.as_deref()),
+        sort_by: t.sort_by as i32,
+        sort_descending: t.sort_descending,
+        sort_name_label: sort_name_label.clone(),
+        sort_size_label: sort_size_label.clone(),
+        sort_modified_label: sort_modified_label.clone(),
+        sort_type_label: sort_type_label.clone(),
+    }
+}
+
+fn sync_fm_rows<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
+}
+
+/// Patch an existing FM Slint model in place (nested `VecModel`s, no new ModelRc).
+///
+/// Returns `true` when parent-frame scalars changed and the workspace row must
+/// be written back. Nested listing updates are visible without that write —
+/// which is what keeps TouchAreas from remounting on every scroll tick.
+pub(crate) fn patch_file_manager_model(
+    model: &mut FileManagerModel,
     p: &orchid_widgets::FileManagerPayload,
     overlays: FileManagerOverlays,
     instance_id: Uuid,
     locale: &LocaleManager,
     request_autofocus: bool,
     viewports: &HashMap<(Uuid, u8), FmViewport>,
-) -> FileManagerModel {
+) -> bool {
+    let sort_name_label: SharedString = locale.tr("fm-sort-name").into();
+    let sort_size_label: SharedString = locale.tr("fm-sort-size").into();
+    let sort_modified_label: SharedString = locale.tr("fm-sort-modified").into();
+    let sort_type_label: SharedString = locale.tr("fm-sort-type").into();
+    let Some(panes) = model.panes.as_any().downcast_ref::<VecModel<FmPane>>() else {
+        return true;
+    };
+    while panes.row_count() > p.panes.len() {
+        panes.remove(panes.row_count() - 1);
+    }
+    for (pane_idx, pp) in p.panes.iter().enumerate() {
+        let vp = viewports
+            .get(&(instance_id, pane_idx as u8))
+            .copied()
+            .unwrap_or(FmViewport {
+                scroll_y: 0.0,
+                view_h: 480.0,
+                view_w: 640.0,
+            });
+        if pane_idx < panes.row_count() {
+            let Some(mut pane) = panes.row_data(pane_idx) else {
+                continue;
+            };
+            patch_fm_pane(
+                &mut pane,
+                pp,
+                vp.view_w,
+                locale,
+                &sort_name_label,
+                &sort_size_label,
+                &sort_modified_label,
+                &sort_type_label,
+            );
+            panes.set_row_data(pane_idx, pane);
+        } else {
+            let tabs: Vec<FmTab> = pp
+                .tabs
+                .iter()
+                .map(|t| {
+                    build_fm_tab(
+                        t,
+                        locale,
+                        vp.view_w,
+                        &sort_name_label,
+                        &sort_size_label,
+                        &sort_modified_label,
+                        &sort_type_label,
+                    )
+                })
+                .collect();
+            panes.push(FmPane {
+                tabs: ModelRc::new(VecModel::from(tabs)),
+                active_tab: pp.active_tab as i32,
+            });
+        }
+    }
+
     let active_path = p
         .panes
         .get(p.active_pane as usize)
         .and_then(|pp| pp.tabs.get(pp.active_tab as usize))
         .map(|t| t.path_display.clone())
         .unwrap_or_default();
-    let sidebar_items =
-        build_sidebar_items(locale, &active_path, &p.managed_folders, &p.network_mounts);
-    let sort_name_label = locale.tr("fm-sort-name");
-    let sort_size_label = locale.tr("fm-sort-size");
-    let sort_modified_label = locale.tr("fm-sort-modified");
-    let sort_type_label = locale.tr("fm-sort-type");
-    let panes: Vec<FmPane> = p
-        .panes
-        .iter()
-        .enumerate()
-        .map(|(pane_idx, pp)| {
-            let vp = viewports
-                .get(&(instance_id, pane_idx as u8))
-                .copied()
-                .unwrap_or(FmViewport {
-                    scroll_y: 0.0,
-                    view_h: 480.0,
-                    view_w: 640.0,
-                });
-            let tabs: Vec<FmTab> = pp
-                .tabs
-                .iter()
-                .enumerate()
-                .map(|(tab_idx, t)| {
-                    let view_mode = view_mode_to_int(t.view_mode);
-                    // Prefer item_count — widget may only ship the viewport window.
-                    let total = t.item_count as usize;
-                    let (first, _end, pad_top, content_h) = {
-                        let (sy, vh, vw) = if tab_idx == pp.active_tab as usize {
-                            (vp.scroll_y, vp.view_h, vp.view_w)
-                        } else {
-                            (0.0, 480.0, 640.0)
-                        };
-                        match view_mode {
-                            0 | 3 => fm_grid_window(total, sy, vh, vw, view_mode == 3),
-                            2 => fm_list_window(total, sy, vh, true),
-                            _ => fm_list_window(total, sy, vh, false),
-                        }
-                    };
-                    let _ = first; // pad_top already encodes the window start
+    let sidebar = build_sidebar_items(locale, &active_path, &p.managed_folders, &p.network_mounts);
+    if let (Some(old), Some(new)) = (
+        model
+            .sidebar_items
+            .as_any()
+            .downcast_ref::<VecModel<FmSidebarItem>>(),
+        sidebar.as_any().downcast_ref::<VecModel<FmSidebarItem>>(),
+    ) {
+        let rows: Vec<FmSidebarItem> = (0..new.row_count())
+            .filter_map(|i| new.row_data(i))
+            .collect();
+        sync_fm_rows(&model.sidebar_items, rows);
+        let _ = old;
+    }
 
-                    let entries: Vec<FmEntry> = t
-                        .entries
-                        .iter()
-                        .map(|e| {
-                            let tags: Vec<FmTagChip> = e
-                                .tags
-                                .iter()
-                                .map(|tag| FmTagChip {
-                                    label: tag.clone().into(),
-                                    color: slint::Color::from_argb_u8(255, 0x4d, 0x82, 0xff),
-                                })
-                                .collect();
-                            let thumb_img = if e.has_thumbnail {
-                                e.thumbnail_rgba
-                                    .as_ref()
-                                    .map(|rgba| {
-                                        fm_rgba_to_image(
-                                            rgba,
-                                            e.thumbnail_width,
-                                            e.thumbnail_height,
-                                        )
-                                    })
-                                    .unwrap_or_default()
-                            } else {
-                                Image::default()
-                            };
-                            FmEntry {
-                                path: e.path.clone().into(),
-                                name: e.name.clone().into(),
-                                is_dir: e.is_dir,
-                                size_text: e.size_text.clone().into(),
-                                modified_text: e.modified_text.clone().into(),
-                                type_text: e.type_text.clone().into(),
-                                icon: e.icon.clone().into(),
-                                has_thumbnail: e.has_thumbnail,
-                                thumbnail_key: e.thumbnail_key.clone().unwrap_or_default().into(),
-                                thumbnail: thumb_img,
-                                thumbnail_width: e.thumbnail_width as i32,
-                                thumbnail_height: e.thumbnail_height as i32,
-                                thumbnail_is_icon: e.thumbnail_is_icon,
-                                is_selected: e.is_selected,
-                                is_hidden: e.is_hidden,
-                                is_encrypted: e.is_encrypted,
-                                is_managed: e.is_managed,
-                                is_starred: e.is_starred,
-                                color_label: e.color_label.clone().unwrap_or_default().into(),
-                                tags: ModelRc::new(VecModel::from(tags)),
-                            }
-                        })
-                        .collect();
+    apply_fm_shell_scalars(model, p, overlays, instance_id, locale, request_autofocus)
+}
 
-                    let breadcrumbs: Vec<FmBreadcrumb> = t
-                        .breadcrumbs
-                        .iter()
-                        .map(|(bp, bl)| FmBreadcrumb {
-                            path: bp.clone().into(),
-                            label: fm_virtual_breadcrumb_label(locale, bp, bl).into(),
-                        })
-                        .collect();
-
-                    FmTab {
-                        id: t.tab_id.clone().into(),
-                        path_display: fm_virtual_path_display(locale, &t.path_display).into(),
-                        breadcrumbs: ModelRc::new(VecModel::from(breadcrumbs)),
-                        can_back: t.can_go_back,
-                        can_forward: t.can_go_forward,
-                        view_mode,
-                        entries: ModelRc::new(VecModel::from(entries)),
-                        entry_total_count: total as i32,
-                        virtual_pad_top: pad_top,
-                        virtual_content_height: content_h,
-                        selection_count: t.selection_count as i32,
-                        status_text: fm_build_tab_status_text(locale, t).into(),
-                        quick_filter: t.quick_filter.clone().into(),
-                        is_loading: t.is_loading,
-                        error: fm_tab_error_text(locale, t.error.as_deref()),
-                        error_action_label: fm_tab_error_action_label(locale, t.error.as_deref()),
-                        sort_by: t.sort_by as i32,
-                        sort_descending: t.sort_descending,
-                        sort_name_label: sort_name_label.clone().into(),
-                        sort_size_label: sort_size_label.clone().into(),
-                        sort_modified_label: sort_modified_label.clone().into(),
-                        sort_type_label: sort_type_label.clone().into(),
-                    }
-                })
-                .collect();
-            FmPane {
-                tabs: ModelRc::new(VecModel::from(tabs)),
-                active_tab: pp.active_tab as i32,
-            }
-        })
-        .collect();
-
-    let show_hidden =
-        orchid_widgets::builtin::file_manager::show_hidden(instance_id).unwrap_or(false);
-    let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
-        .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
-        .unwrap_or(false);
-    let activity_indicator = if p.transfer_active {
+fn fm_activity_indicator(p: &orchid_widgets::FileManagerPayload, locale: &LocaleManager) -> String {
+    if p.transfer_active {
         let percent = (p.transfer_progress * 100.0).round() as u32;
         let key = if p.transfer_is_copy {
             "fm-copying"
@@ -893,9 +995,14 @@ pub(crate) fn build_file_manager_model(
                 )
             })
             .unwrap_or_default()
-    };
+    }
+}
 
-    let clipboard_indicator = if p.clipboard_count > 0 {
+fn fm_clipboard_indicator(
+    p: &orchid_widgets::FileManagerPayload,
+    locale: &LocaleManager,
+) -> String {
+    if p.clipboard_count > 0 {
         let key = if p.clipboard_is_cut {
             "fm-clipboard-cut"
         } else {
@@ -907,45 +1014,263 @@ pub(crate) fn build_file_manager_model(
         )
     } else {
         String::new()
-    };
-
-    FileManagerModel {
-        panes: ModelRc::new(VecModel::from(panes)),
-        active_pane: i32::from(p.active_pane),
-        dual_pane: p.dual_pane,
-        dual_pane_label: if p.dual_pane {
-            locale.tr("fm-dual-pane-off").into()
-        } else {
-            locale.tr("fm-dual-pane-on").into()
-        },
-        clipboard_indicator: clipboard_indicator.into(),
-        activity_indicator: activity_indicator.into(),
-        transfer_active: p.transfer_active,
-        transfer_progress: p.transfer_progress,
-        show_hidden,
-        show_hidden_label: if show_hidden {
-            locale.tr("fm-show-hidden-on").into()
-        } else {
-            locale.tr("fm-show-hidden-off").into()
-        },
-        single_click_open,
-        single_click_open_label: if single_click_open {
-            locale.tr("fm-click-single-on").into()
-        } else {
-            locale.tr("fm-click-single-off").into()
-        },
-        request_autofocus,
-        drag_active: overlays.drag_active,
-        drag_drop_target: overlays.drag_drop_target.clone().into(),
-        drag_target_pane: overlays.drag_target_pane,
-        sidebar_items,
-        context_menu: overlays.context_menu,
-        confirm_dialog: overlays.confirm_dialog,
-        rename: overlays.rename,
-        tag: overlays.tag,
-        passphrase: overlays.passphrase,
-        managed_policy: overlays.managed_policy,
     }
+}
+
+fn apply_fm_shell_scalars(
+    model: &mut FileManagerModel,
+    p: &orchid_widgets::FileManagerPayload,
+    overlays: FileManagerOverlays,
+    instance_id: Uuid,
+    locale: &LocaleManager,
+    request_autofocus: bool,
+) -> bool {
+    let show_hidden =
+        orchid_widgets::builtin::file_manager::show_hidden(instance_id).unwrap_or(false);
+    let single_click_open = orchid_widgets::builtin::file_manager::click_behavior(instance_id)
+        .map(|b| b == orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen)
+        .unwrap_or(false);
+    let dual_pane_label: SharedString = if p.dual_pane {
+        locale.tr("fm-dual-pane-off").into()
+    } else {
+        locale.tr("fm-dual-pane-on").into()
+    };
+    let clipboard_indicator: SharedString = fm_clipboard_indicator(p, locale).into();
+    let activity_indicator: SharedString = fm_activity_indicator(p, locale).into();
+    let show_hidden_label: SharedString = if show_hidden {
+        locale.tr("fm-show-hidden-on").into()
+    } else {
+        locale.tr("fm-show-hidden-off").into()
+    };
+    let single_click_open_label: SharedString = if single_click_open {
+        locale.tr("fm-click-single-on").into()
+    } else {
+        locale.tr("fm-click-single-off").into()
+    };
+    let drag_drop_target: SharedString = overlays.drag_drop_target.clone().into();
+    let needs_frame = model.active_pane != i32::from(p.active_pane)
+        || model.dual_pane != p.dual_pane
+        || model.dual_pane_label != dual_pane_label
+        || model.clipboard_indicator != clipboard_indicator
+        || model.activity_indicator != activity_indicator
+        || model.transfer_active != p.transfer_active
+        || model.transfer_progress != p.transfer_progress
+        || model.show_hidden != show_hidden
+        || model.show_hidden_label != show_hidden_label
+        || model.single_click_open != single_click_open
+        || model.single_click_open_label != single_click_open_label
+        || model.request_autofocus != request_autofocus
+        || model.drag_active != overlays.drag_active
+        || model.drag_drop_target != drag_drop_target
+        || model.drag_target_pane != overlays.drag_target_pane
+        || model.context_menu.visible != overlays.context_menu.visible
+        || model.confirm_dialog.visible != overlays.confirm_dialog.visible
+        || model.rename.active != overlays.rename.active
+        || model.tag.active != overlays.tag.active
+        || model.passphrase.active != overlays.passphrase.active
+        || model.managed_policy.active != overlays.managed_policy.active;
+
+    model.active_pane = i32::from(p.active_pane);
+    model.dual_pane = p.dual_pane;
+    model.dual_pane_label = dual_pane_label;
+    model.clipboard_indicator = clipboard_indicator;
+    model.activity_indicator = activity_indicator;
+    model.transfer_active = p.transfer_active;
+    model.transfer_progress = p.transfer_progress;
+    model.show_hidden = show_hidden;
+    model.show_hidden_label = show_hidden_label;
+    model.single_click_open = single_click_open;
+    model.single_click_open_label = single_click_open_label;
+    model.request_autofocus = request_autofocus;
+    model.drag_active = overlays.drag_active;
+    model.drag_drop_target = drag_drop_target;
+    model.drag_target_pane = overlays.drag_target_pane;
+    model.context_menu = overlays.context_menu;
+    model.confirm_dialog = overlays.confirm_dialog;
+    model.rename = overlays.rename;
+    model.tag = overlays.tag;
+    model.passphrase = overlays.passphrase;
+    model.managed_policy = overlays.managed_policy;
+    needs_frame
+}
+
+fn patch_fm_pane(
+    pane: &mut FmPane,
+    pp: &orchid_widgets::PanePayload,
+    view_w: f32,
+    locale: &LocaleManager,
+    sort_name_label: &SharedString,
+    sort_size_label: &SharedString,
+    sort_modified_label: &SharedString,
+    sort_type_label: &SharedString,
+) {
+    pane.active_tab = pp.active_tab as i32;
+    let Some(tabs) = pane.tabs.as_any().downcast_ref::<VecModel<FmTab>>() else {
+        let built: Vec<FmTab> = pp
+            .tabs
+            .iter()
+            .map(|t| {
+                build_fm_tab(
+                    t,
+                    locale,
+                    view_w,
+                    sort_name_label,
+                    sort_size_label,
+                    sort_modified_label,
+                    sort_type_label,
+                )
+            })
+            .collect();
+        pane.tabs = ModelRc::new(VecModel::from(built));
+        return;
+    };
+    while tabs.row_count() > pp.tabs.len() {
+        tabs.remove(tabs.row_count() - 1);
+    }
+    for (tab_idx, t) in pp.tabs.iter().enumerate() {
+        let fresh = build_fm_tab(
+            t,
+            locale,
+            view_w,
+            sort_name_label,
+            sort_size_label,
+            sort_modified_label,
+            sort_type_label,
+        );
+        if tab_idx < tabs.row_count() {
+            let Some(mut tab) = tabs.row_data(tab_idx) else {
+                continue;
+            };
+            if let (Some(dst), Some(src)) = (
+                tab.entries.as_any().downcast_ref::<VecModel<FmEntry>>(),
+                fresh.entries.as_any().downcast_ref::<VecModel<FmEntry>>(),
+            ) {
+                let rows: Vec<FmEntry> = (0..src.row_count())
+                    .filter_map(|i| src.row_data(i))
+                    .collect();
+                sync_fm_rows(&tab.entries, rows);
+                let _ = dst;
+                tab.breadcrumbs = fresh.breadcrumbs;
+                tab.id = fresh.id;
+                tab.path_display = fresh.path_display;
+                tab.can_back = fresh.can_back;
+                tab.can_forward = fresh.can_forward;
+                tab.view_mode = fresh.view_mode;
+                tab.entry_total_count = fresh.entry_total_count;
+                tab.virtual_pad_top = fresh.virtual_pad_top;
+                tab.virtual_content_height = fresh.virtual_content_height;
+                tab.virtual_first_index = fresh.virtual_first_index;
+                tab.selection_count = fresh.selection_count;
+                tab.status_text = fresh.status_text;
+                tab.quick_filter = fresh.quick_filter;
+                tab.is_loading = fresh.is_loading;
+                tab.error = fresh.error;
+                tab.error_action_label = fresh.error_action_label;
+                tab.sort_by = fresh.sort_by;
+                tab.sort_descending = fresh.sort_descending;
+                tab.sort_name_label = fresh.sort_name_label;
+                tab.sort_size_label = fresh.sort_size_label;
+                tab.sort_modified_label = fresh.sort_modified_label;
+                tab.sort_type_label = fresh.sort_type_label;
+                tabs.set_row_data(tab_idx, tab);
+            } else {
+                tabs.set_row_data(tab_idx, fresh);
+            }
+        } else {
+            tabs.push(fresh);
+        }
+    }
+}
+
+pub(crate) fn build_file_manager_model(
+    p: &orchid_widgets::FileManagerPayload,
+    overlays: FileManagerOverlays,
+    instance_id: Uuid,
+    locale: &LocaleManager,
+    request_autofocus: bool,
+    viewports: &HashMap<(Uuid, u8), FmViewport>,
+) -> FileManagerModel {
+    let active_path = p
+        .panes
+        .get(p.active_pane as usize)
+        .and_then(|pp| pp.tabs.get(pp.active_tab as usize))
+        .map(|t| t.path_display.clone())
+        .unwrap_or_default();
+    let sidebar_items =
+        build_sidebar_items(locale, &active_path, &p.managed_folders, &p.network_mounts);
+    let sort_name_label: SharedString = locale.tr("fm-sort-name").into();
+    let sort_size_label: SharedString = locale.tr("fm-sort-size").into();
+    let sort_modified_label: SharedString = locale.tr("fm-sort-modified").into();
+    let sort_type_label: SharedString = locale.tr("fm-sort-type").into();
+    let panes: Vec<FmPane> = p
+        .panes
+        .iter()
+        .enumerate()
+        .map(|(pane_idx, pp)| {
+            let vp = viewports
+                .get(&(instance_id, pane_idx as u8))
+                .copied()
+                .unwrap_or(FmViewport {
+                    scroll_y: 0.0,
+                    view_h: 480.0,
+                    view_w: 640.0,
+                });
+            let tabs: Vec<FmTab> = pp
+                .tabs
+                .iter()
+                .map(|t| {
+                    build_fm_tab(
+                        t,
+                        locale,
+                        vp.view_w,
+                        &sort_name_label,
+                        &sort_size_label,
+                        &sort_modified_label,
+                        &sort_type_label,
+                    )
+                })
+                .collect();
+            FmPane {
+                tabs: ModelRc::new(VecModel::from(tabs)),
+                active_tab: pp.active_tab as i32,
+            }
+        })
+        .collect();
+
+    let mut model = FileManagerModel {
+        panes: ModelRc::new(VecModel::from(panes)),
+        sidebar_items,
+        active_pane: 0,
+        dual_pane: false,
+        dual_pane_label: SharedString::new(),
+        clipboard_indicator: SharedString::new(),
+        activity_indicator: SharedString::new(),
+        transfer_active: false,
+        transfer_progress: 0.0,
+        show_hidden: false,
+        show_hidden_label: SharedString::new(),
+        single_click_open: false,
+        single_click_open_label: SharedString::new(),
+        request_autofocus: false,
+        drag_active: false,
+        drag_drop_target: SharedString::new(),
+        drag_target_pane: -1,
+        context_menu: empty_context_menu(),
+        confirm_dialog: empty_confirm_dialog(),
+        rename: empty_rename_state(),
+        tag: empty_tag_state(),
+        passphrase: empty_passphrase_state(),
+        managed_policy: empty_managed_policy_state(),
+    };
+    let _ = apply_fm_shell_scalars(
+        &mut model,
+        p,
+        overlays,
+        instance_id,
+        locale,
+        request_autofocus,
+    );
+    model
 }
 fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
     use orchid_widgets::FmViewMode::*;

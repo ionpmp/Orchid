@@ -170,7 +170,6 @@ export component FmPane inherits Rectangle {
     }
 
     VerticalLayout {
-        clip: false;
         spacing: 0;
 
         FmTabs {
@@ -183,7 +182,6 @@ export component FmPane inherits Rectangle {
         }
 
         if pane.tabs.length > pane.active-tab && pane.active-tab >= 0 : VerticalLayout {
-            clip: false;
             spacing: 0;
             vertical-stretch: 1;
 
@@ -213,26 +211,54 @@ export component FmPane inherits Rectangle {
             Rectangle {
                 vertical-stretch: 1;
 
-                if pane.tabs[pane.active-tab].is-loading : VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: Strings.fm-loading;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
+                listing-bg-ta := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                            root.entry-context("", self.mouse-x, self.mouse-y);
+                        }
+                    }
+                }
+
+                if pane.tabs[pane.active-tab].is-loading : TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                            root.entry-context("", self.mouse-x, self.mouse-y);
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: Strings.fm-loading;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-md;
+                            horizontal-alignment: center;
+                        }
                     }
                 }
 
                 if !pane.tabs[pane.active-tab].is-loading
                     && pane.tabs[pane.active-tab].error == ""
-                    && pane.tabs[pane.active-tab].entry-total-count == 0 : VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: Strings.fm-empty-folder;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        wrap: word-wrap;
+                    && pane.tabs[pane.active-tab].entry-total-count == 0 : TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                            root.entry-context("", self.mouse-x, self.mouse-y);
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: Strings.fm-empty-folder;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-md;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
                     }
                 }
 
@@ -247,6 +273,7 @@ export component FmPane inherits Rectangle {
                         entry-total-count: pane.tabs[pane.active-tab].entry-total-count;
                         virtual-pad-top: pane.tabs[pane.active-tab].virtual-pad-top;
                         virtual-content-height: pane.tabs[pane.active-tab].virtual-content-height;
+                        listing-id: pane.tabs[pane.active-tab].id + "|" + pane.tabs[pane.active-tab].path-display + "|" + pane.tabs[pane.active-tab].quick-filter;
                         rename: root.rename;
                         drag-active: root.drag-active;
                         drag-drop-target: root.drag-drop-target;
@@ -294,6 +321,8 @@ export component FmPane inherits Rectangle {
                         entry-total-count: pane.tabs[pane.active-tab].entry-total-count;
                         virtual-pad-top: pane.tabs[pane.active-tab].virtual-pad-top;
                         virtual-content-height: pane.tabs[pane.active-tab].virtual-content-height;
+                        virtual-first-index: pane.tabs[pane.active-tab].virtual-first-index;
+                        listing-id: pane.tabs[pane.active-tab].id + "|" + pane.tabs[pane.active-tab].path-display + "|" + pane.tabs[pane.active-tab].quick-filter;
                         rename: root.rename;
                         drag-active: root.drag-active;
                         drag-drop-target: root.drag-drop-target;
