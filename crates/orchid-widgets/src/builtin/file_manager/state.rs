@@ -40,10 +40,11 @@ impl TabState {
     }
 
     /// Navigate to `new_path`, pushing the previous path onto the back
-    /// history and clearing the forward history.
-    pub fn navigate_to(&mut self, new_path: orchid_fs::FsPath) {
+    /// history and clearing the forward history. Returns `true` if the path
+    /// actually changed.
+    pub fn navigate_to(&mut self, new_path: orchid_fs::FsPath) -> bool {
         if self.path == new_path {
-            return;
+            return false;
         }
         self.history_back.push(self.path.clone());
         self.history_forward.clear();
@@ -51,6 +52,7 @@ impl TabState {
         self.selection.clear();
         self.quick_filter.clear();
         self.scroll_position = 0.0;
+        true
     }
 
     /// Pop from back history; pushes the current path on the forward

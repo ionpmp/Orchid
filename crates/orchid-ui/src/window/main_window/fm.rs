@@ -1132,6 +1132,36 @@ impl MainWindowController {
             }
         });
     }
+    pub(super) fn on_fm_history_pick(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let raw = path.to_string();
+        let Ok(fs_path) = orchid_fs::FsPath::new(raw) else {
+            return;
+        };
+        self.reset_fm_pane_viewport(inst, p);
+        let tw = Arc::downgrade(self);
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
+    }
     pub(super) fn on_fm_breadcrumb_clicked(
         self: &Arc<Self>,
         fm_id: &SharedString,

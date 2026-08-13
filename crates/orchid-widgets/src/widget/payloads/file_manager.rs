@@ -36,6 +36,17 @@ pub struct FileManagerPayload {
     /// Short-lived localized notice key (encrypt/decrypt/managed).
     pub activity_notice_key: Option<String>,
     pub activity_notice_name: Option<String>,
+    /// Visit-history dropdown rows (frequent first, then recent).
+    pub visit_history: Vec<VisitHistoryItemPayload>,
+}
+
+/// One row in the file-manager visit-history menu.
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct VisitHistoryItemPayload {
+    pub path: String,
+    pub frequent: bool,
+    pub is_header: bool,
 }
 
 /// One configured network mount surfaced in the FM payload.

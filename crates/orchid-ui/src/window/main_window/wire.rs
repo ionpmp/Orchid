@@ -2483,6 +2483,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_history_pick({
+            let t = t.clone();
+            move |fm_id, pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_history_pick(&fm_id, pane, &path);
+                }
+            }
+        });
         self.window.on_fm_breadcrumb_clicked({
             let t = t.clone();
             move |fm_id, pane, path| {

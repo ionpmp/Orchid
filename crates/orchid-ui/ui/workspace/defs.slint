@@ -1197,6 +1197,14 @@ export struct FmManagedPolicyState {
     close-label: string,
 }
 
+export struct FmVisitHistoryItem {
+    path: string,
+    label: string,
+    subtitle: string,
+    frequent: bool,
+    is-header: bool,
+}
+
 export struct FileManagerModel {
     panes: [FmPane],
     active-pane: int,
@@ -1216,6 +1224,7 @@ export struct FileManagerModel {
     drag-drop-target: string,
     drag-target-pane: int,
     sidebar-items: [FmSidebarItem],
+    visit-history: [FmVisitHistoryItem],
     context-menu: FmContextMenu,
     confirm-dialog: FmConfirmDialog,
     rename: FmRenameState,

@@ -27,7 +27,7 @@ pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
 pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
-    PanePayload, TabPayload,
+    PanePayload, TabPayload, VisitHistoryItemPayload,
 };
 pub use jyotish::{
     JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,

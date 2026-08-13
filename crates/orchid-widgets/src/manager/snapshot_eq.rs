@@ -169,6 +169,13 @@ fn file_manager_payload_eq(a: &FileManagerPayload, b: &FileManagerPayload) -> bo
         && a.activity_notice_key == b.activity_notice_key
         && a.activity_notice_name == b.activity_notice_name
         && a.activity_indicator == b.activity_indicator
+        && a.visit_history.len() == b.visit_history.len()
+        && a.visit_history
+            .iter()
+            .zip(b.visit_history.iter())
+            .all(|(x, y)| {
+                x.path == y.path && x.frequent == y.frequent && x.is_header == y.is_header
+            })
         && a.managed_folders.len() == b.managed_folders.len()
         && a.managed_folders
             .iter()

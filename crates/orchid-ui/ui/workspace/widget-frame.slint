@@ -270,6 +270,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-nav-forward(string, int);
     callback fm-nav-up(string, int);
     callback fm-nav-home(string, int);
+    callback fm-history-pick(string, int, string);
     callback fm-breadcrumb-clicked(string, int, string);
     callback fm-view-mode-cycle(string, int);
     callback fm-sort-cycle(string, int);
@@ -980,6 +981,7 @@ export component WidgetFrame inherits Rectangle {
                     nav-forward(p) => { root.fm-nav-forward(root.model.instance-id, p); }
                     nav-up(p) => { root.fm-nav-up(root.model.instance-id, p); }
                     nav-home(p) => { root.fm-nav-home(root.model.instance-id, p); }
+                    history-pick(p, path) => { root.fm-history-pick(root.model.instance-id, p, path); }
                     breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(root.model.instance-id, p, path); }
                     view-mode-cycle(p) => { root.fm-view-mode-cycle(root.model.instance-id, p); }
                     sort-cycle(p) => { root.fm-sort-cycle(root.model.instance-id, p); }

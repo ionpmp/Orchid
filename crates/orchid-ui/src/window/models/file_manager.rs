@@ -10,7 +10,7 @@ use super::super::errors::fm_localized_error;
 use crate::slint_generated::{
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu,
     FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane, FmPassphraseState,
-    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
+    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmVisitHistoryItem,
 };
 
 /// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
@@ -139,6 +139,7 @@ pub(crate) fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerMod
         transfer_active: false,
         transfer_progress: 0.0,
         sidebar_items: build_sidebar_items(locale, "", &[], &[]),
+        visit_history: ModelRc::new(VecModel::default()),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
@@ -933,6 +934,9 @@ pub(crate) fn patch_file_manager_model(
         let _ = old;
     }
 
+    let history_rows = build_visit_history_items(p, locale);
+    sync_fm_rows(&model.visit_history, history_rows);
+
     apply_fm_shell_scalars(model, p, overlays, instance_id, locale, request_autofocus)
 }
 
@@ -1091,7 +1095,53 @@ fn apply_fm_shell_scalars(
     model.tag = overlays.tag;
     model.passphrase = overlays.passphrase;
     model.managed_policy = overlays.managed_policy;
+    let history_rows = build_visit_history_items(p, locale);
+    sync_fm_rows(&model.visit_history, history_rows);
     needs_frame
+}
+
+fn visit_history_label(locale: &LocaleManager, path: &str) -> String {
+    orchid_widgets::builtin::file_manager::label_key_for_virtual_path(path)
+        .map(|key| locale.tr(key))
+        .or_else(|| {
+            orchid_fs::FsPath::new(path)
+                .ok()
+                .and_then(|p| p.file_name().map(String::from))
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or_else(|| path.to_string())
+}
+
+fn build_visit_history_items(
+    p: &orchid_widgets::FileManagerPayload,
+    locale: &LocaleManager,
+) -> Vec<FmVisitHistoryItem> {
+    p.visit_history
+        .iter()
+        .map(|item| {
+            if item.is_header {
+                FmVisitHistoryItem {
+                    path: SharedString::new(),
+                    label: if item.frequent {
+                        locale.tr("fm-nav-history-frequent").into()
+                    } else {
+                        locale.tr("fm-nav-history-recent").into()
+                    },
+                    subtitle: SharedString::new(),
+                    frequent: item.frequent,
+                    is_header: true,
+                }
+            } else {
+                FmVisitHistoryItem {
+                    path: item.path.clone().into(),
+                    label: visit_history_label(locale, &item.path).into(),
+                    subtitle: fm_virtual_path_display(locale, &item.path).into(),
+                    frequent: item.frequent,
+                    is_header: false,
+                }
+            }
+        })
+        .collect()
 }
 
 fn patch_fm_pane(
@@ -1255,6 +1305,7 @@ pub(crate) fn build_file_manager_model(
         drag_active: false,
         drag_drop_target: SharedString::new(),
         drag_target_pane: -1,
+        visit_history: ModelRc::new(VecModel::default()),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),

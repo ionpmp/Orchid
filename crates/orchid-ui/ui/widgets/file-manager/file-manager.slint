@@ -21,6 +21,7 @@ export component FileManagerView inherits Rectangle {
     callback nav-forward(int);
     callback nav-up(int);
     callback nav-home(int);
+    callback history-pick(int, string);
     callback breadcrumb-clicked(int, string);
     callback view-mode-cycle(int);
     callback sort-cycle(int);
@@ -118,6 +119,7 @@ export component FileManagerView inherits Rectangle {
                 drag-active: model.drag-active;
                 drag-drop-target: model.drag-drop-target;
                 drag-pane-target: model.drag-active && model.drag-target-pane == 0;
+                visit-history: model.visit-history;
                 tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                 tab-closed(idx, id) => { root.tab-closed(0, id); }
                 tab-new => { root.tab-new(0); }
@@ -126,6 +128,7 @@ export component FileManagerView inherits Rectangle {
                 nav-forward => { root.nav-forward(0); }
                 nav-up => { root.nav-up(0); }
                 nav-home => { root.nav-home(0); }
+                history-pick(path) => { root.history-pick(0, path); }
                 breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                 view-mode-cycle => { root.view-mode-cycle(0); }
                 sort-cycle => { root.sort-cycle(0); }
@@ -183,6 +186,7 @@ export component FileManagerView inherits Rectangle {
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
                         drag-pane-target: model.drag-active && model.drag-target-pane == 0;
+                        visit-history: model.visit-history;
                         tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                         tab-closed(idx, id) => { root.tab-closed(0, id); }
                         tab-new => { root.tab-new(0); }
@@ -191,6 +195,7 @@ export component FileManagerView inherits Rectangle {
                         nav-forward => { root.nav-forward(0); }
                         nav-up => { root.nav-up(0); }
                         nav-home => { root.nav-home(0); }
+                        history-pick(path) => { root.history-pick(0, path); }
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                         view-mode-cycle => { root.view-mode-cycle(0); }
                         sort-cycle => { root.sort-cycle(0); }
@@ -246,6 +251,7 @@ export component FileManagerView inherits Rectangle {
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
                         drag-pane-target: model.drag-active && model.drag-target-pane == 1;
+                        visit-history: model.visit-history;
                         tab-clicked(idx, id) => { root.tab-clicked(1, id); }
                         tab-closed(idx, id) => { root.tab-closed(1, id); }
                         tab-new => { root.tab-new(1); }
@@ -254,6 +260,7 @@ export component FileManagerView inherits Rectangle {
                         nav-forward => { root.nav-forward(1); }
                         nav-up => { root.nav-up(1); }
                         nav-home => { root.nav-home(1); }
+                        history-pick(path) => { root.history-pick(1, path); }
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(1, p); }
                         view-mode-cycle => { root.view-mode-cycle(1); }
                         sort-cycle => { root.sort-cycle(1); }

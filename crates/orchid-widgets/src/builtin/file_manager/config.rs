@@ -3,6 +3,8 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
+use super::visit_log::PathVisit;
+
 /// Sort key used by the file manager.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -126,9 +128,10 @@ pub struct FileManagerSession {
 pub struct FileManagerPersisted {
     pub config: FileManagerConfig,
     pub session: Option<FileManagerSession>,
+    pub path_visits: Vec<PathVisit>,
 }
 
-/// Decode widget bytes, falling back to legacy config-only blobs.
+/// Decode widget bytes, falling back to pre-visit-log and config-only blobs.
 ///
 /// # Errors
 ///
@@ -137,10 +140,23 @@ pub fn decode_persisted(bytes: &[u8]) -> crate::error::Result<FileManagerPersist
     if let Ok(persisted) = crate::widget::config::restore_state::<FileManagerPersisted>(bytes) {
         return Ok(persisted);
     }
+    #[derive(Deserialize)]
+    struct LegacySessionOnly {
+        config: FileManagerConfig,
+        session: Option<FileManagerSession>,
+    }
+    if let Ok(legacy) = crate::widget::config::restore_state::<LegacySessionOnly>(bytes) {
+        return Ok(FileManagerPersisted {
+            config: legacy.config,
+            session: legacy.session,
+            path_visits: Vec::new(),
+        });
+    }
     let config = crate::widget::config::restore_state::<FileManagerConfig>(bytes)?;
     Ok(FileManagerPersisted {
         config,
         session: None,
+        path_visits: Vec::new(),
     })
 }
 
@@ -154,6 +170,7 @@ mod persist_tests {
         let bytes = crate::widget::config::save_state(&FileManagerConfig::default()).unwrap();
         let persisted = decode_persisted(&bytes).unwrap();
         assert!(persisted.session.is_none());
+        assert!(persisted.path_visits.is_empty());
         assert_eq!(persisted.config, FileManagerConfig::default());
     }
 
@@ -178,9 +195,32 @@ mod persist_tests {
         let persisted = FileManagerPersisted {
             config: FileManagerConfig::default(),
             session: Some(session.clone()),
+            path_visits: vec![PathVisit {
+                path: "local:/tmp".into(),
+                visit_count: 3,
+                last_seq: 3,
+            }],
         };
         let bytes = crate::widget::config::save_state(&persisted).unwrap();
         let decoded = decode_persisted(&bytes).unwrap();
         assert_eq!(decoded.session, Some(session));
+        assert_eq!(decoded.path_visits.len(), 1);
+        assert_eq!(decoded.path_visits[0].visit_count, 3);
+    }
+
+    #[test]
+    fn decode_session_without_visits() {
+        #[derive(Serialize)]
+        struct Legacy {
+            config: FileManagerConfig,
+            session: Option<FileManagerSession>,
+        }
+        let bytes = crate::widget::config::save_state(&Legacy {
+            config: FileManagerConfig::default(),
+            session: None,
+        })
+        .unwrap();
+        let decoded = decode_persisted(&bytes).unwrap();
+        assert!(decoded.path_visits.is_empty());
     }
 }

@@ -709,6 +709,10 @@ impl MainWindowController {
         g.set_fm_nav_forward_disabled(mgr.tr("fm-nav-forward-disabled").into());
         g.set_fm_nav_up(mgr.tr("fm-nav-up").into());
         g.set_fm_nav_home(mgr.tr("fm-nav-home").into());
+        g.set_fm_nav_history(mgr.tr("fm-nav-history").into());
+        g.set_fm_nav_history_frequent(mgr.tr("fm-nav-history-frequent").into());
+        g.set_fm_nav_history_recent(mgr.tr("fm-nav-history-recent").into());
+        g.set_fm_nav_history_empty(mgr.tr("fm-nav-history-empty").into());
         g.set_fm_loading(mgr.tr("fm-loading").into());
         g.set_fm_empty_folder(mgr.tr("fm-empty-folder").into());
         g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());

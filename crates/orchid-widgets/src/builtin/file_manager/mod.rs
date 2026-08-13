@@ -8,6 +8,7 @@ pub mod selection;
 pub mod state;
 pub mod view_mode;
 pub mod virtual_folders;
+pub mod visit_log;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -27,7 +28,7 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
-    PanePayload, TabPayload,
+    PanePayload, TabPayload, VisitHistoryItemPayload,
 };
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
@@ -51,6 +52,7 @@ pub use virtual_folders::{
     entry_matches_category, is_virtual, label_key_for_virtual_path, sidebar_catalog, FileCategory,
     VirtualFolder,
 };
+pub use visit_log::{PathVisit, VisitLog, VisitMenuItem};
 
 /// Selection mutation mode for UI interactions.
 #[allow(missing_docs)]
@@ -248,6 +250,8 @@ struct FileManagerInner {
     dir_watch_subs: parking_lot::Mutex<Vec<orchid_core::SubscriptionHandle>>,
     /// Generation counter for coalescing external refresh tasks.
     external_refresh_gen: AtomicU64,
+    /// Folder visit counts for the history dropdown.
+    visit_log: parking_lot::Mutex<VisitLog>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -318,6 +322,7 @@ impl FileManagerWidget {
             FileManagerPersisted {
                 config: FileManagerConfig::default(),
                 session: None,
+                path_visits: Vec::new(),
             },
             initial_path,
         )
@@ -367,6 +372,7 @@ impl FileManagerWidget {
                 watch_paths: RwLock::new(HashMap::new()),
                 dir_watch_subs: parking_lot::Mutex::new(Vec::new()),
                 external_refresh_gen: AtomicU64::new(0),
+                visit_log: parking_lot::Mutex::new(VisitLog::from_entries(persisted.path_visits)),
                 bus,
             }),
         }
@@ -397,9 +403,13 @@ impl FileManagerWidget {
                 ActivePane::Left => 0,
                 ActivePane::Right => 1,
             };
-            state.active_tab_mut().navigate_to(path);
+            let changed = state.active_tab_mut().navigate_to(path);
             self.inner.reset_pane_viewport(pane);
-            state.active_tab().clone()
+            let tab = state.active_tab().clone();
+            if changed {
+                self.inner.record_visit(&tab.path);
+            }
+            tab
         };
         self.inner
             .refresh_tabs_with_opts(
@@ -424,7 +434,9 @@ impl FileManagerWidget {
                 return;
             }
             self.inner.reset_pane_viewport(pane);
-            state.active_tab().clone()
+            let tab = state.active_tab().clone();
+            self.inner.record_visit(&tab.path);
+            tab
         };
         self.inner
             .refresh_tabs_with_opts(
@@ -449,7 +461,9 @@ impl FileManagerWidget {
                 return;
             }
             self.inner.reset_pane_viewport(pane);
-            state.active_tab().clone()
+            let tab = state.active_tab().clone();
+            self.inner.record_visit(&tab.path);
+            tab
         };
         self.inner
             .refresh_tabs_with_opts(
@@ -585,6 +599,7 @@ impl Widget for FileManagerWidget {
                     ingest_error: self.inner.ingest_error_label(),
                     activity_notice_key: self.inner.activity_notice_key(),
                     activity_notice_name: self.inner.activity_notice_name(),
+                    visit_history: self.inner.visit_history_payload(),
                 }
             }),
         })
@@ -593,12 +608,14 @@ impl Widget for FileManagerWidget {
         let persisted = FileManagerPersisted {
             config: self.inner.config.read().clone(),
             session: Some(session_from_state(&self.inner.state.lock())),
+            path_visits: self.inner.visit_log.lock().entries().to_vec(),
         };
         state_codec::save_state(&persisted)
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let persisted = decode_persisted(bytes)?;
         *self.inner.config.write() = persisted.config.clone();
+        *self.inner.visit_log.lock() = VisitLog::from_entries(persisted.path_visits);
         *self.inner.state.lock() = state_from_persisted(
             &persisted.config,
             persisted.session.as_ref(),
@@ -631,6 +648,23 @@ impl FileManagerInner {
 
     fn reset_pane_viewport(&self, pane: u8) {
         self.viewport_by_pane.write().remove(&pane);
+    }
+
+    fn record_visit(&self, path: &orchid_fs::FsPath) {
+        self.visit_log.lock().record(path.as_str());
+    }
+
+    fn visit_history_payload(&self) -> Vec<VisitHistoryItemPayload> {
+        self.visit_log
+            .lock()
+            .menu_items()
+            .into_iter()
+            .map(|item| VisitHistoryItemPayload {
+                path: item.path,
+                frequent: item.frequent,
+                is_header: item.is_header,
+            })
+            .collect()
     }
 
     fn install_dir_watch_handlers(self: &Arc<Self>) {
@@ -2528,6 +2562,7 @@ pub fn descriptor(deps: FileManagerDeps) -> WidgetDescriptor {
             _ => FileManagerPersisted {
                 config: FileManagerConfig::default(),
                 session: None,
+                path_visits: Vec::new(),
             },
         };
         Ok(Box::new(FileManagerWidget::from_persisted(
@@ -2853,17 +2888,21 @@ async fn navigate_inner(
     let inner = live_inner(instance_id)?;
     let tab = {
         let mut state = inner.state.lock();
-        if pane == 1 {
+        let changed = if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
-                r.active_tab_mut().navigate_to(path);
+                r.active_tab_mut().navigate_to(path)
             } else {
-                state.left_pane.active_tab_mut().navigate_to(path);
+                state.left_pane.active_tab_mut().navigate_to(path)
             }
         } else {
-            state.left_pane.active_tab_mut().navigate_to(path);
-        }
+            state.left_pane.active_tab_mut().navigate_to(path)
+        };
         inner.reset_pane_viewport(pane);
-        active_tab_ref(&state, pane)?.clone()
+        let tab = active_tab_ref(&state, pane)?.clone();
+        if changed {
+            inner.record_visit(&tab.path);
+        }
+        tab
     };
     inner
         .refresh_tabs_with_opts(
@@ -2895,7 +2934,9 @@ pub async fn navigate_back(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
             return Ok(());
         }
         inner.reset_pane_viewport(pane);
-        active_tab_ref(&state, pane)?.clone()
+        let tab = active_tab_ref(&state, pane)?.clone();
+        inner.record_visit(&tab.path);
+        tab
     };
     inner
         .refresh_tabs_with_opts(
@@ -2927,7 +2968,9 @@ pub async fn navigate_forward(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
             return Ok(());
         }
         inner.reset_pane_viewport(pane);
-        active_tab_ref(&state, pane)?.clone()
+        let tab = active_tab_ref(&state, pane)?.clone();
+        inner.record_visit(&tab.path);
+        tab
     };
     inner
         .refresh_tabs_with_opts(
@@ -2975,6 +3018,7 @@ pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetR
         .map_err(|_| WidgetError::InvalidStateForOperation("invalid tab id".into()))?;
     {
         let mut state = inner.state.lock();
+        let prev_id = active_tab_ref(&state, pane).ok().map(|t| t.id);
         if pane == 1 {
             if let Some(r) = state.right_pane.as_mut() {
                 if let Some(idx) = r.tabs.iter().position(|t| t.id == want) {
@@ -2985,6 +3029,10 @@ pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetR
             }
         } else if let Some(idx) = state.left_pane.tabs.iter().position(|t| t.id == want) {
             state.left_pane.active_tab = idx;
+        }
+        let tab = active_tab_ref(&state, pane)?;
+        if prev_id != Some(tab.id) {
+            inner.record_visit(&tab.path);
         }
     }
     inner.reset_pane_viewport(pane);
