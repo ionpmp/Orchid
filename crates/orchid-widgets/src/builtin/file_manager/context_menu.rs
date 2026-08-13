@@ -6,6 +6,8 @@
 //! dispatches.
 
 use orchid_fs::FsEntry;
+use orchid_i18n::LocaleManager;
+use orchid_storage::LocaleConfig;
 
 /// One entry in the file-manager context menu.
 #[derive(Debug, Clone)]
@@ -44,6 +46,97 @@ pub struct ContextMenuInputs {
     pub managed_policy_available: bool,
     /// Current folder can accept create/paste (not a virtual listing).
     pub can_create: bool,
+}
+
+/// Read-only header shown at the top of a file/folder context menu.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ContextMenuInfo {
+    /// File name, or a localized “N items” summary for a multi-selection.
+    pub name: String,
+    /// Localized `Type: …` line. Empty when omitted.
+    pub type_line: String,
+    /// Localized `Size: …` line. Empty when omitted.
+    pub size_line: String,
+    /// Localized `Modified: …` line. Empty when omitted.
+    pub modified_line: String,
+    /// Localized `MIME: …` line. Empty when omitted (folders / multi-select).
+    pub mime_line: String,
+}
+
+/// Format the properties header for the current selection, if any.
+#[must_use]
+pub fn info_for_selection(
+    selection: &[FsEntry],
+    locale: &LocaleManager,
+    fmt_locale: &LocaleConfig,
+) -> Option<ContextMenuInfo> {
+    if selection.is_empty() {
+        return None;
+    }
+    let name = if selection.len() == 1 {
+        selection[0].name.clone()
+    } else {
+        locale.tr_args(
+            "fm-properties-items",
+            &orchid_i18n::FluentArgs::new().with("count", selection.len().to_string()),
+        )
+    };
+    let kind = selection_kind_label(selection, locale);
+    let type_line = locale.tr_args(
+        "fm-properties-type",
+        &orchid_i18n::FluentArgs::new().with("kind", kind),
+    );
+    let total_size: u64 = selection.iter().map(|e| e.metadata.size).sum();
+    let size_line = locale.tr_args(
+        "fm-properties-size",
+        &orchid_i18n::FluentArgs::new().with("size", locale.format_byte_size(total_size)),
+    );
+    let (modified_line, mime_line) = if selection.len() == 1 {
+        let meta = &selection[0].metadata;
+        let modified = meta
+            .modified
+            .map(|t| fmt_locale.format_datetime(t))
+            .unwrap_or_else(|| "—".into());
+        let modified_line = locale.tr_args(
+            "fm-properties-modified",
+            &orchid_i18n::FluentArgs::new().with("modified", modified),
+        );
+        let mime_line = if meta.kind == orchid_fs::FsEntryKind::Directory {
+            String::new()
+        } else {
+            let mime = meta.mime.clone().unwrap_or_else(|| "—".into());
+            locale.tr_args(
+                "fm-properties-mime",
+                &orchid_i18n::FluentArgs::new().with("mime", mime),
+            )
+        };
+        (modified_line, mime_line)
+    } else {
+        (String::new(), String::new())
+    };
+    Some(ContextMenuInfo {
+        name,
+        type_line,
+        size_line,
+        modified_line,
+        mime_line,
+    })
+}
+
+fn selection_kind_label(selection: &[FsEntry], locale: &LocaleManager) -> String {
+    let all_dirs = selection
+        .iter()
+        .all(|e| e.metadata.kind == orchid_fs::FsEntryKind::Directory);
+    let all_files = selection
+        .iter()
+        .all(|e| e.metadata.kind == orchid_fs::FsEntryKind::File);
+    if all_dirs {
+        locale.tr("fm-properties-kind-folder")
+    } else if all_files {
+        locale.tr("fm-properties-kind-file")
+    } else {
+        locale.tr("fm-properties-kind-mixed")
+    }
 }
 
 /// Build the menu from the current selection and the extra flags.
@@ -289,18 +382,11 @@ pub fn build_for_selection(
         "action-select-all",
         inputs.entry_count > 0,
     ));
-    items.push(sep(item(
+    items.push(item(
         "fs.deselect-all",
         "fm-action-deselect-all",
         "action-deselect",
         inputs.selection_count > 0,
-    )));
-
-    items.push(item(
-        "fs.properties",
-        "fm-action-properties",
-        "action-properties",
-        has_selection,
     ));
 
     items
@@ -460,5 +546,56 @@ mod tests {
         let menu = build_for_selection(&sel, ContextMenuInputs::default());
         let tag_add = menu.iter().find(|i| i.id == "fs.tag-add").unwrap();
         assert!(tag_add.enabled);
+    }
+
+    #[test]
+    fn selection_menu_omits_properties_action() {
+        let sel = vec![entry("a", FsEntryKind::File, false)];
+        let menu = build_for_selection(&sel, ContextMenuInputs::default());
+        assert!(menu.iter().all(|i| i.id != "fs.properties"));
+        let ids: Vec<&str> = menu.iter().map(|i| i.id.as_str()).collect();
+        assert!(ids.contains(&"fs.deselect-all"));
+        assert_eq!(ids.last().copied(), Some("fs.deselect-all"));
+    }
+
+    fn test_locale() -> (LocaleManager, LocaleConfig) {
+        (
+            LocaleManager::new(orchid_i18n::default_language(), None).expect("locale"),
+            LocaleConfig::default(),
+        )
+    }
+
+    #[test]
+    fn info_hidden_for_empty_selection() {
+        let (locale, fmt) = test_locale();
+        assert!(info_for_selection(&[], &locale, &fmt).is_none());
+    }
+
+    #[test]
+    fn info_for_single_file_includes_properties() {
+        let (locale, fmt) = test_locale();
+        let mut file = entry("readme.txt", FsEntryKind::File, false);
+        file.metadata.size = 2048;
+        file.metadata.mime = Some("text/plain".into());
+        let info = info_for_selection(&[file], &locale, &fmt).unwrap();
+        assert_eq!(info.name, "readme.txt");
+        assert!(info.type_line.contains("File"));
+        assert!(!info.size_line.is_empty());
+        assert!(!info.modified_line.is_empty());
+        assert!(info.mime_line.contains("text/plain"));
+    }
+
+    #[test]
+    fn info_for_multi_selection_summarizes() {
+        let (locale, fmt) = test_locale();
+        let mut a = entry("a.txt", FsEntryKind::File, false);
+        a.metadata.size = 100;
+        let dir = entry("docs", FsEntryKind::Directory, false);
+        let info = info_for_selection(&[a, dir], &locale, &fmt).unwrap();
+        assert!(info.name.contains("2"));
+        assert!(info.modified_line.is_empty());
+        assert!(info.mime_line.is_empty());
+        assert!(!info.size_line.is_empty());
+        assert!(!info.type_line.is_empty());
     }
 }

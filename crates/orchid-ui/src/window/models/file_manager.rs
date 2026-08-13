@@ -269,6 +269,12 @@ pub(crate) fn empty_context_menu() -> FmContextMenu {
         y: 0.0,
         actions: ModelRc::new(VecModel::default()),
         target_paths: ModelRc::new(VecModel::default()),
+        info_visible: false,
+        info_name: SharedString::new(),
+        info_type: SharedString::new(),
+        info_size: SharedString::new(),
+        info_modified: SharedString::new(),
+        info_mime: SharedString::new(),
     }
 }
 
@@ -1441,18 +1447,43 @@ pub(crate) fn build_context_menu_actions(
 pub(crate) fn build_context_menu(
     actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
     target_paths: &[String],
+    info: Option<&orchid_widgets::builtin::file_manager::ContextMenuInfo>,
     x: f32,
     y: f32,
     locale: &LocaleManager,
 ) -> FmContextMenu {
     let actions_vec = build_context_menu_actions(actions, locale);
     let paths_vec: Vec<SharedString> = target_paths.iter().cloned().map(Into::into).collect();
+    let (info_visible, info_name, info_type, info_size, info_modified, info_mime) = match info {
+        Some(i) => (
+            true,
+            i.name.clone().into(),
+            i.type_line.clone().into(),
+            i.size_line.clone().into(),
+            i.modified_line.clone().into(),
+            i.mime_line.clone().into(),
+        ),
+        None => (
+            false,
+            SharedString::new(),
+            SharedString::new(),
+            SharedString::new(),
+            SharedString::new(),
+            SharedString::new(),
+        ),
+    };
     FmContextMenu {
         visible: true,
         x,
         y,
         actions: ModelRc::new(VecModel::from(actions_vec)),
         target_paths: ModelRc::new(VecModel::from(paths_vec)),
+        info_visible,
+        info_name,
+        info_type,
+        info_size,
+        info_modified,
+        info_mime,
     }
 }
 

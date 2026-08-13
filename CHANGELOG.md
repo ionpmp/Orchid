@@ -30,6 +30,8 @@ release yet.
   persisted with the widget.
 - Address bar switches to an editable path with folder autocomplete; focus
   loss restores breadcrumb buttons.
+- File/folder context menu shows name, type, size, modified, and MIME at the
+  top instead of a separate Properties item.
 - Encrypted folders (age), managed folders with content-addressed ingest
   (BLAKE3 + FastCDC), rclone network mounts (SFTP / SMB / WebDAV / FTP).
 - Tantivy search with incremental FS watcher, PDF/text/DOCX extractors,

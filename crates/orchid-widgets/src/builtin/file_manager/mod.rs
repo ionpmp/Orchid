@@ -42,7 +42,9 @@ pub use config::{
     PersistedActivePane, PersistedPane, PersistedTab, SortBy, ThumbnailSize as FmThumbnailSize,
     ViewMode,
 };
-pub use context_menu::{build_for_selection, ContextMenuInputs, ContextMenuItem};
+pub use context_menu::{
+    build_for_selection, info_for_selection, ContextMenuInfo, ContextMenuInputs, ContextMenuItem,
+};
 pub use navigation::{
     coerce_typed_path, complete_parent_and_prefix, BreadcrumbSegment, NavigationResult, Navigator,
     PathCompleteItem,
@@ -94,11 +96,6 @@ pub enum ActionOutcome {
     /// Open files with the OS default application.
     OpenExternally {
         paths: Vec<String>,
-    },
-    /// Read-only info dialog (e.g. file properties).
-    ShowInfo {
-        title: String,
-        message: String,
     },
     /// Prompt for a tag name to apply to `paths`.
     NeedsTag {
@@ -167,7 +164,7 @@ pub struct FileManagerDeps {
     pub fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
     /// Application-wide config (locale formatting, etc.).
     pub orchid_config: Arc<RwLock<orchid_storage::OrchidConfig>>,
-    /// Fluent locale for UI strings built inside the widget (e.g. Properties).
+    /// Fluent locale for UI strings built inside the widget (e.g. context-menu info).
     pub locale: Arc<orchid_i18n::LocaleManager>,
     /// Optional directory watcher used to auto-refresh open folders.
     pub file_watcher: Option<Arc<orchid_fs::FileWatcher>>,
@@ -2773,7 +2770,7 @@ pub fn context_menu_for(
     instance_id: Uuid,
     pane: u8,
     context_path: &str,
-) -> WidgetResult<(Vec<ContextMenuItem>, Vec<String>)> {
+) -> WidgetResult<(Vec<ContextMenuItem>, Vec<String>, Option<ContextMenuInfo>)> {
     let inner = live_inner(instance_id)?;
     if context_path.is_empty() {
         inner.deselect_all_in_pane(pane);
@@ -2847,7 +2844,13 @@ pub fn context_menu_for(
             .any(|p| inner.managed_root_for_path(p).is_some()),
         can_create,
     };
-    Ok((build_for_selection(&selected_entries, inputs), target_paths))
+    let fmt_locale = inner.deps.orchid_config.read().locale.clone();
+    let info = info_for_selection(&selected_entries, &inner.deps.locale, &fmt_locale);
+    Ok((
+        build_for_selection(&selected_entries, inputs),
+        target_paths,
+        info,
+    ))
 }
 
 /// Select `context_path` when it is not already part of the current selection.
@@ -3803,55 +3806,6 @@ pub async fn run_action_with_opts(
             }
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
-        }
-        "fs.properties" => {
-            let fmt_locale = inner.deps.orchid_config.read().locale.clone();
-            let i18n = &inner.deps.locale;
-            let mut lines = Vec::new();
-            for p in &target_paths {
-                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                let name = fp.file_name().unwrap_or(p.as_str()).to_string();
-                if let Some(provider) = inner.deps.registry.for_path(&fp) {
-                    if let Ok(meta) = provider.metadata(&fp).await {
-                        let kind = if matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
-                            i18n.tr("fm-properties-kind-folder")
-                        } else {
-                            i18n.tr("fm-properties-kind-file")
-                        };
-                        let modified = meta
-                            .modified
-                            .map(|t| fmt_locale.format_datetime(t))
-                            .unwrap_or_else(|| "—".into());
-                        let mime = meta.mime.unwrap_or_else(|| "—".into());
-                        let size = i18n.format_byte_size(meta.size);
-                        let type_line = i18n.tr_args(
-                            "fm-properties-type",
-                            &orchid_i18n::FluentArgs::new().with("kind", kind),
-                        );
-                        let size_line = i18n.tr_args(
-                            "fm-properties-size",
-                            &orchid_i18n::FluentArgs::new().with("size", size),
-                        );
-                        let modified_line = i18n.tr_args(
-                            "fm-properties-modified",
-                            &orchid_i18n::FluentArgs::new().with("modified", modified),
-                        );
-                        let mime_line = i18n.tr_args(
-                            "fm-properties-mime",
-                            &orchid_i18n::FluentArgs::new().with("mime", mime),
-                        );
-                        lines.push(format!(
-                            "{name}\n  {type_line}\n  {size_line}\n  {modified_line}\n  {mime_line}"
-                        ));
-                        continue;
-                    }
-                }
-                lines.push(name);
-            }
-            return Ok(ActionOutcome::ShowInfo {
-                title: "fm-properties-title".to_string(),
-                message: lines.join("\n\n"),
-            });
         }
         "fs.encrypt" => {
             if target_paths.is_empty() {

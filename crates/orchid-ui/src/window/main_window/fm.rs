@@ -1704,7 +1704,7 @@ impl MainWindowController {
             return;
         };
         let target = path.to_string();
-        let (actions, target_paths) =
+        let (actions, target_paths, info) =
             match orchid_widgets::builtin::file_manager::context_menu_for(inst, p, &target) {
                 Ok(v) => v,
                 Err(e) => {
@@ -1715,7 +1715,7 @@ impl MainWindowController {
         if actions.is_empty() {
             return;
         }
-        let menu = build_context_menu(&actions, &target_paths, x, y, &self.locale);
+        let menu = build_context_menu(&actions, &target_paths, info.as_ref(), x, y, &self.locale);
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.context_menu = menu;
@@ -2030,28 +2030,6 @@ impl MainWindowController {
                         warn!(?e, path = %open_path, "open file externally");
                     }
                 }
-            }
-            orchid_widgets::builtin::file_manager::ActionOutcome::ShowInfo { title, message } => {
-                let title_text = if title == "fm-properties-title" {
-                    self.locale.tr("fm-properties-title")
-                } else {
-                    title
-                };
-                let dlg = FmConfirmDialog {
-                    visible: true,
-                    title: title_text.into(),
-                    message: message.into(),
-                    confirm_label: self.locale.tr("fm-info-close").into(),
-                    cancel_label: SharedString::new(),
-                    pending_action: SharedString::new(),
-                    pending_paths: ModelRc::new(VecModel::default()),
-                };
-                let mut over = self.fm_overlays.write();
-                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
-                entry.confirm_dialog = dlg;
-                entry.context_menu = empty_context_menu();
-                drop(over);
-                self.schedule_rebuild();
             }
         }
     }

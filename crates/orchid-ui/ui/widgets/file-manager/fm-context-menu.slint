@@ -17,7 +17,7 @@ export component FmContextMenu inherits Rectangle {
     Rectangle {
         x: menu.x;
         y: menu.y;
-        width: 240px;
+        width: 260px;
         height: lay.preferred-height + 8px;
         background: Theme.surface-raised;
         border-color: Theme.border-default;
@@ -30,6 +30,56 @@ export component FmContextMenu inherits Rectangle {
         lay := VerticalLayout {
             padding: 4px;
             spacing: 1px;
+
+            if menu.info-visible : VerticalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                spacing: 2px;
+
+                Text {
+                    text: menu.info-name;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    font-weight: Theme.weight-semibold;
+                    overflow: elide;
+                }
+                if menu.info-type != "" : Text {
+                    text: menu.info-type;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+                if menu.info-size != "" : Text {
+                    text: menu.info-size;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+                if menu.info-modified != "" : Text {
+                    text: menu.info-modified;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+                if menu.info-mime != "" : Text {
+                    text: menu.info-mime;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+
+            if menu.info-visible : Rectangle {
+                height: 5px;
+                Rectangle {
+                    y: 2px;
+                    height: 1px;
+                    width: parent.width;
+                    background: Theme.border-default;
+                }
+            }
 
             for action[i] in menu.actions : Rectangle {
                 height: action.is-separator ? 5px : 28px;
