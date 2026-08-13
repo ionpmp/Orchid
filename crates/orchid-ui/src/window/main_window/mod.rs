@@ -208,6 +208,8 @@ pub struct MainWindowController {
     fm_last_open: Arc<Mutex<Option<(Uuid, String, Instant)>>>,
     /// Monotonic sequence per (instance, pane) for quick-filter debounce.
     fm_filter_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
+    /// Monotonic sequence per (instance, pane) for address-bar path complete.
+    fm_complete_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
     /// Per-pane scroll/viewport size for entry-list virtualization.
     fm_viewport: Arc<Mutex<HashMap<(Uuid, u8), crate::window::models::FmViewport>>>,
     /// Last virtualized window start index; skip rebuild when unchanged.
@@ -524,6 +526,7 @@ impl MainWindowController {
             fm_last_click: Arc::new(Mutex::new(None)),
             fm_last_open: Arc::new(Mutex::new(None)),
             fm_filter_seq: Arc::new(Mutex::new(HashMap::new())),
+            fm_complete_seq: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport_window: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport_pin_top: Arc::new(Mutex::new(HashSet::new())),

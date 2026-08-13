@@ -315,6 +315,8 @@ export component MainWindow inherits Window {
     callback fm-nav-home(string, int);
     callback fm-history-pick(string, int, string);
     callback fm-breadcrumb-clicked(string, int, string);
+    callback fm-path-edit-changed(string, int, string);
+    callback fm-path-edit-commit(string, int, string);
     callback fm-view-mode-cycle(string, int);
     callback fm-sort-cycle(string, int);
     callback fm-sort-column-clicked(string, int, int);
@@ -736,6 +738,8 @@ export component MainWindow inherits Window {
             fm-nav-home(fm_id, p) => { root.fm-nav-home(fm_id, p); }
             fm-history-pick(fm_id, p, path) => { root.fm-history-pick(fm_id, p, path); }
             fm-breadcrumb-clicked(fm_id, p, path) => { root.fm-breadcrumb-clicked(fm_id, p, path); }
+            fm-path-edit-changed(fm_id, p, t) => { root.fm-path-edit-changed(fm_id, p, t); }
+            fm-path-edit-commit(fm_id, p, t) => { root.fm-path-edit-commit(fm_id, p, t); }
             fm-view-mode-cycle(fm_id, p) => { root.fm-view-mode-cycle(fm_id, p); }
             fm-sort-cycle(fm_id, p) => { root.fm-sort-cycle(fm_id, p); }
             fm-sort-column-clicked(fm_id, p, col) => { root.fm-sort-column-clicked(fm_id, p, col); }

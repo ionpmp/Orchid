@@ -28,6 +28,8 @@ release yet.
   filter, virtual folders (Recent, Starred, Tags, categories, network).
 - Toolbar **visited folders** menu: top 5 most frequent paths, then recent;
   persisted with the widget.
+- Address bar switches to an editable path with folder autocomplete; focus
+  loss restores breadcrumb buttons.
 - Encrypted folders (age), managed folders with content-addressed ingest
   (BLAKE3 + FastCDC), rclone network mounts (SFTP / SMB / WebDAV / FTP).
 - Tantivy search with incremental FS watcher, PDF/text/DOCX extractors,

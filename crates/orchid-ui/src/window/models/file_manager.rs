@@ -10,7 +10,7 @@ use super::super::errors::fm_localized_error;
 use crate::slint_generated::{
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu,
     FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane, FmPassphraseState,
-    FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmVisitHistoryItem,
+    FmPathSuggest, FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmVisitHistoryItem,
 };
 
 /// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
@@ -140,6 +140,7 @@ pub(crate) fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerMod
         transfer_progress: 0.0,
         sidebar_items: build_sidebar_items(locale, "", &[], &[]),
         visit_history: ModelRc::new(VecModel::default()),
+        path_suggestions: ModelRc::new(VecModel::default()),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),
@@ -842,6 +843,10 @@ fn sync_fm_rows<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     }
 }
 
+pub(crate) fn sync_fm_path_suggestions(model: &FileManagerModel, rows: Vec<FmPathSuggest>) {
+    sync_fm_rows(&model.path_suggestions, rows);
+}
+
 /// Patch an existing FM Slint model in place (nested `VecModel`s, no new ModelRc).
 ///
 /// Returns `true` when parent-frame scalars changed and the workspace row must
@@ -1306,6 +1311,7 @@ pub(crate) fn build_file_manager_model(
         drag_drop_target: SharedString::new(),
         drag_target_pane: -1,
         visit_history: ModelRc::new(VecModel::default()),
+        path_suggestions: ModelRc::new(VecModel::default()),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
         rename: empty_rename_state(),

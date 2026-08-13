@@ -2499,6 +2499,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_path_edit_changed({
+            let t = t.clone();
+            move |fm_id, pane, typed| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_path_edit_changed(&fm_id, pane, &typed);
+                }
+            }
+        });
+        self.window.on_fm_path_edit_commit({
+            let t = t.clone();
+            move |fm_id, pane, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_path_edit_commit(&fm_id, pane, &path);
+                }
+            }
+        });
         self.window.on_fm_view_mode_cycle({
             let t = t.clone();
             move |fm_id, pane| {

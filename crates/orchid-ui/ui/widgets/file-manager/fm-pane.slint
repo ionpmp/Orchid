@@ -1,6 +1,6 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
-import { FmPane as FmPaneModel, FmRenameState, FmVisitHistoryItem } from "../../workspace/defs.slint";
+import { FmPane as FmPaneModel, FmRenameState, FmVisitHistoryItem, FmPathSuggest } from "../../workspace/defs.slint";
 import { FmTabs } from "fm-tabs.slint";
 import { FmToolbar } from "fm-toolbar.slint";
 import { FmBreadcrumbs } from "fm-breadcrumbs.slint";
@@ -20,6 +20,7 @@ export component FmPane inherits Rectangle {
     in property <string> drag-drop-target;
     in property <bool> drag-pane-target;
     in property <[FmVisitHistoryItem]> visit-history;
+    in property <[FmPathSuggest]> path-suggestions;
 
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -31,6 +32,8 @@ export component FmPane inherits Rectangle {
     callback nav-home();
     callback history-pick(string);
     callback breadcrumb-clicked(string);
+    callback path-edit-changed(string);
+    callback path-edit-commit(string);
     callback view-mode-cycle();
     callback sort-cycle();
     callback sort-column-clicked(int);
@@ -65,6 +68,7 @@ export component FmPane inherits Rectangle {
     background: Theme.surface-base;
     clip: false;
     property <bool> history-open: false;
+    property <bool> address-editing: false;
 
     property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
         && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3);
@@ -98,6 +102,14 @@ export component FmPane inherits Rectangle {
             }
             if (event.text == Key.F2) {
                 root.rename-selected();
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "l" || event.text == "L")) {
+                root.address-editing = true;
+                return accept;
+            }
+            if (event.text == Key.F4) {
+                root.address-editing = true;
                 return accept;
             }
             if (rename.active && event.text == Key.Escape) {
@@ -163,6 +175,10 @@ export component FmPane inherits Rectangle {
                     root.history-open = false;
                     return accept;
                 }
+                if (root.address-editing) {
+                    root.address-editing = false;
+                    return accept;
+                }
                 root.deselect-all();
                 return accept;
             }
@@ -173,6 +189,7 @@ export component FmPane inherits Rectangle {
     pane-ta := TouchArea {
         clicked => {
             root.history-open = false;
+            root.address-editing = false;
             root.pane-focused();
             pane-keys.focus();
         }
@@ -214,12 +231,18 @@ export component FmPane inherits Rectangle {
 
             FmBreadcrumbs {
                 height: 28px;
+                z: 40;
+                clip: false;
                 breadcrumbs: pane.tabs[pane.active-tab].breadcrumbs;
+                suggestions: root.path-suggestions;
                 drag-active: root.drag-active;
                 drag-drop-target: root.drag-drop-target;
+                editing <=> root.address-editing;
                 clicked(p) => { root.breadcrumb-clicked(p); }
                 crumb-drag-hover(p) => { root.crumb-drag-hover(p); }
                 crumb-drag-drop(p) => { root.crumb-drag-drop(p); }
+                edit-changed(t) => { root.path-edit-changed(t); }
+                edit-commit(t) => { root.path-edit-commit(t); }
             }
 
             Rectangle {
@@ -228,7 +251,7 @@ export component FmPane inherits Rectangle {
                 listing-bg-ta := TouchArea {
                     width: 100%;
                     height: 100%;
-                    clicked => { root.history-open = false; }
+                    clicked => { root.history-open = false; root.address-editing = false; }
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                             root.entry-context("", self.mouse-x, self.mouse-y);
@@ -301,6 +324,7 @@ export component FmPane inherits Rectangle {
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
+                            root.address-editing = false;
                             root.pane-focused();
                             root.entry-clicked(p, ctrl);
                         }
@@ -345,6 +369,7 @@ export component FmPane inherits Rectangle {
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
+                            root.address-editing = false;
                             root.pane-focused();
                             root.entry-clicked(p, ctrl);
                         }

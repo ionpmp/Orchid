@@ -43,7 +43,10 @@ pub use config::{
     ViewMode,
 };
 pub use context_menu::{build_for_selection, ContextMenuInputs, ContextMenuItem};
-pub use navigation::{BreadcrumbSegment, NavigationResult, Navigator};
+pub use navigation::{
+    coerce_typed_path, complete_parent_and_prefix, BreadcrumbSegment, NavigationResult, Navigator,
+    PathCompleteItem,
+};
 pub use selection::SelectionModel;
 pub use state::{ActivePane, FileManagerState, PaneState, TabState};
 pub use view_mode::{config_for_mode, ViewModeConfig};
@@ -3009,6 +3012,33 @@ pub async fn navigate_up(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
 /// Jump the active tab to the user's home directory (or a local root fallback).
 pub async fn navigate_home(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     navigate(instance_id, pane, default_initial_path()).await
+}
+
+/// Directory names under the typed address, filtered by the trailing prefix.
+#[must_use]
+pub async fn complete_path(instance_id: Uuid, typed: &str) -> Vec<PathCompleteItem> {
+    let Ok(inner) = live_inner(instance_id) else {
+        return Vec::new();
+    };
+    let Some((parent, prefix)) = complete_parent_and_prefix(typed) else {
+        return Vec::new();
+    };
+    let show_hidden = inner.config.read().show_hidden;
+    let result = inner.navigator.navigate(&parent, show_hidden).await;
+    let prefix_l = prefix.to_lowercase();
+    let mut items: Vec<PathCompleteItem> = result
+        .entries
+        .into_iter()
+        .filter(|e| matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory))
+        .filter(|e| prefix_l.is_empty() || e.name.to_lowercase().starts_with(&prefix_l))
+        .map(|e| PathCompleteItem {
+            path: e.path.as_str().to_string(),
+            label: e.name,
+        })
+        .collect();
+    items.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    items.truncate(12);
+    items
 }
 
 /// Switch to tab by string id.

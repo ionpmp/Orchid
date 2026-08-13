@@ -16,13 +16,15 @@ use orchid_storage::LifecycleState;
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::WidgetPayload;
 
-use crate::slint_generated::{FmConfirmDialog, FmPassphraseState, FmRenameState, FmTagState};
+use crate::slint_generated::{
+    FmConfirmDialog, FmPassphraseState, FmPathSuggest, FmRenameState, FmTagState, WidgetFrameModel,
+};
 use crate::window::errors::{fm_localized_error, is_passphrase_retryable};
 use crate::window::models::{
     build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_context_menu,
     empty_managed_policy_state, empty_passphrase_state, empty_rename_state, empty_tag_state,
     fm_grid_window, fm_list_window, fm_passphrase_dialog_labels, patch_fm_selection,
-    FileManagerOverlays, FmViewport,
+    sync_fm_path_suggestions, FileManagerOverlays, FmViewport,
 };
 use crate::window::spawn;
 
@@ -1191,6 +1193,122 @@ impl MainWindowController {
                 }
             },
         );
+    }
+    pub(super) fn on_fm_path_edit_changed(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        typed: &SharedString,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let typed = typed.to_string();
+        if typed.is_empty() {
+            self.apply_path_suggestions(inst, Vec::new());
+            return;
+        }
+        let seq = {
+            let mut map = self.fm_complete_seq.lock();
+            let entry = map.entry((inst, p)).or_insert(0);
+            *entry = entry.wrapping_add(1);
+            *entry
+        };
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+            let Some(c) = tw.upgrade() else {
+                return;
+            };
+            if c.fm_complete_seq.lock().get(&(inst, p)).copied() != Some(seq) {
+                return;
+            }
+            let items = orchid_widgets::builtin::file_manager::complete_path(inst, &typed).await;
+            if c.fm_complete_seq.lock().get(&(inst, p)).copied() != Some(seq) {
+                return;
+            }
+            c.apply_path_suggestions(inst, items);
+        });
+    }
+    pub(super) fn on_fm_path_edit_commit(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        path: &SharedString,
+    ) {
+        self.apply_path_suggestions_for_id(fm_id, Vec::new());
+        let Some(fs_path) = orchid_widgets::builtin::file_manager::coerce_typed_path(path.as_str())
+        else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        self.reset_fm_pane_viewport(inst, p);
+        let tw = Arc::downgrade(self);
+        let wm = self.widget_manager.clone();
+        spawn::spawn_bg_then_local(
+            async move {
+                let _ = orchid_widgets::builtin::file_manager::navigate(inst, p, fs_path).await;
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            },
+            move |()| async move {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            },
+        );
+    }
+    fn apply_path_suggestions_for_id(
+        &self,
+        fm_id: &SharedString,
+        items: Vec<orchid_widgets::builtin::file_manager::PathCompleteItem>,
+    ) {
+        let Ok(inst) = Uuid::parse_str(fm_id.as_str()) else {
+            return;
+        };
+        self.apply_path_suggestions(inst, items);
+    }
+    fn apply_path_suggestions(
+        &self,
+        inst: Uuid,
+        items: Vec<orchid_widgets::builtin::file_manager::PathCompleteItem>,
+    ) {
+        let rows: Vec<FmPathSuggest> = items
+            .into_iter()
+            .map(|item| FmPathSuggest {
+                path: item.path.into(),
+                label: item.label.into(),
+            })
+            .collect();
+        for model in [&self.workspace_widgets, &self.workspace_floating_widgets] {
+            if Self::patch_path_suggestions_in(model, inst, &rows) {
+                return;
+            }
+        }
+    }
+    fn patch_path_suggestions_in(
+        model: &ModelRc<WidgetFrameModel>,
+        inst: Uuid,
+        rows: &[FmPathSuggest],
+    ) -> bool {
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+            return false;
+        };
+        let needle = inst.to_string();
+        for r in 0..v.row_count() {
+            let Some(row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            sync_fm_path_suggestions(&row.file_manager, rows.to_vec());
+            return true;
+        }
+        false
     }
     pub(super) fn on_fm_view_mode_cycle(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;

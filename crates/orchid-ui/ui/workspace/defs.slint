@@ -1205,6 +1205,11 @@ export struct FmVisitHistoryItem {
     is-header: bool,
 }
 
+export struct FmPathSuggest {
+    path: string,
+    label: string,
+}
+
 export struct FileManagerModel {
     panes: [FmPane],
     active-pane: int,
@@ -1225,6 +1230,7 @@ export struct FileManagerModel {
     drag-target-pane: int,
     sidebar-items: [FmSidebarItem],
     visit-history: [FmVisitHistoryItem],
+    path-suggestions: [FmPathSuggest],
     context-menu: FmContextMenu,
     confirm-dialog: FmConfirmDialog,
     rename: FmRenameState,

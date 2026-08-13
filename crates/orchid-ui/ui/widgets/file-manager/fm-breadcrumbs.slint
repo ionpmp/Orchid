@@ -1,17 +1,40 @@
 import { Theme } from "../../theme_global.slint";
-import { FmBreadcrumb } from "../../workspace/defs.slint";
+import { FmBreadcrumb, FmPathSuggest } from "../../workspace/defs.slint";
 
 export component FmBreadcrumbs inherits Rectangle {
     in property <[FmBreadcrumb]> breadcrumbs;
+    in property <[FmPathSuggest]> suggestions;
     in property <bool> drag-active;
     in property <string> drag-drop-target;
+    in-out property <bool> editing: false;
+
     callback clicked(string);
     callback crumb-drag-hover(string);
     callback crumb-drag-drop(string);
+    callback edit-changed(string);
+    callback edit-commit(string);
+
+    property <string> draft: "";
+    property <bool> suggest-hover: false;
 
     background: Theme.surface-base;
+    clip: false;
 
-    Flickable {
+    changed editing => {
+        if (root.editing) {
+            root.suggest-hover = false;
+            if (root.breadcrumbs.length > 0) {
+                root.draft = root.breadcrumbs[root.breadcrumbs.length - 1].path;
+            }
+            root.edit-changed(root.draft);
+        } else {
+            root.suggest-hover = false;
+            root.draft = "";
+            root.edit-changed("");
+        }
+    }
+
+    if !root.editing : Flickable {
         width: parent.width;
         height: parent.height;
         viewport-width: hlay.preferred-width;
@@ -66,7 +89,121 @@ export component FmBreadcrumbs inherits Rectangle {
                     }
                 }
             }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                min-width: 24px;
+                height: 100%;
+                TouchArea {
+                    clicked => { root.editing = true; }
+                }
+            }
+        }
+    }
+
+    if root.editing : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-width: 1px;
+        border-color: Theme.accent-brand;
+        border-radius: Theme.radius-md;
+        clip: false;
+        z: 50;
+
+        path-in := TextInput {
+            x: 8px;
+            width: parent.width - 16px;
+            height: parent.height;
+            text: root.draft;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+            single-line: true;
+            init => { self.focus(); }
+            edited => {
+                root.draft = self.text;
+                root.edit-changed(self.text);
+            }
+            accepted => {
+                root.editing = false;
+                root.edit-commit(self.text);
+            }
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.editing = false;
+                    return accept;
+                }
+                if (event.text == Key.Tab && root.suggestions.length > 0) {
+                    root.draft = root.suggestions[0].path;
+                    root.edit-changed(root.draft);
+                    return accept;
+                }
+                return reject;
+            }
+            changed has-focus => {
+                if (!self.has-focus) {
+                    blur-timer.running = false;
+                    blur-timer.running = true;
+                }
+            }
+        }
+
+        blur-timer := Timer {
+            interval: 150ms;
+            running: false;
+            triggered => {
+                if (!root.suggest-hover) {
+                    root.editing = false;
+                }
+                self.running = false;
+            }
+        }
+
+        if root.suggestions.length > 0 : Rectangle {
+            x: 0;
+            y: parent.height + 2px;
+            width: parent.width;
+            height: min(240px, suggest-lay.preferred-height + 8px);
+            background: Theme.surface-raised;
+            border-color: Theme.border-default;
+            border-width: 1px;
+            border-radius: Theme.radius-md;
+            drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
+            drop-shadow-color: #00000060;
+            z: 200;
+            clip: true;
+
+            suggest-lay := VerticalLayout {
+                padding: 4px;
+                spacing: 1px;
+                for item in root.suggestions : Rectangle {
+                    height: 28px;
+                    background: item-ta.has-hover ? Theme.accent-brand : transparent;
+                    border-radius: Theme.radius-md;
+                    item-ta := TouchArea {
+                        pointer-event(e) => {
+                            if (e.kind == PointerEventKind.down) {
+                                root.suggest-hover = true;
+                            }
+                        }
+                        clicked => {
+                            root.suggest-hover = false;
+                            root.editing = false;
+                            root.edit-commit(item.path);
+                        }
+                    }
+                    Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: parent.height;
+                        text: item.label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
         }
     }
 }
-
