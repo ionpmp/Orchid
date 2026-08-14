@@ -159,6 +159,12 @@ release yet.
   index / contact sheet, on-screen preview, header/footer metadata tokens,
   and ICC destination (`srgb` / monitor / `.icc` file). Viewer panel
   (`Shift+P` / ⌨ Ctrl+P / ⎙); FM **Tools → Image edit**.
+- Image share / export: save-as with JPEG quality and PNG compression,
+  optional max-edge resize, ICO and favicon, pixel copy / paste, set as
+  wallpaper, email attachment (auto-resized JPEG + `.eml`), social share
+  (clipboard + compose URL), and screenshot (screen / window / region,
+  optional delay). Viewer panel (`Shift+S` / ↗, `Ctrl+C` / `Ctrl+V`);
+  FM **Tools → Image edit**.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

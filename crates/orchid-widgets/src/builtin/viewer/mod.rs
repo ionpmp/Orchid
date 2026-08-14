@@ -15,12 +15,14 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    apply_adjust, apply_edit, apply_filter, apply_lossless, format_from_extension,
-    parse_adjust_line, parse_annotate_line, parse_canvas_line, parse_filter_line_in,
-    parse_print_line, parse_resize_line, AdjustOp, AnnotateOp, ArchiveViewer, CropKeep,
-    DocumentViewer, EditOp, FilterOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer,
-    LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService,
-    ThumbnailSize, ViewTransform, Viewer,
+    apply_adjust, apply_edit, apply_filter, apply_lossless, encode_png, export_file,
+    format_from_extension, parse_adjust_line, parse_annotate_line, parse_canvas_line,
+    parse_export_line, parse_filter_line_in, parse_print_line, parse_resize_line,
+    parse_screenshot_line, prepare_mail_attachment, set_wallpaper, share_intent_url,
+    unique_export_dest, write_mail_eml, write_screenshot, AdjustOp, AnnotateOp, ArchiveViewer,
+    CropKeep, DocumentViewer, EditOp, ExportFormat, ExportSpec, FilterOp, HistMode, ImageFitMode,
+    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
+    TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -1103,6 +1105,185 @@ impl ViewerWidgetInner {
         Ok(())
     }
 
+    async fn export_current(&self, raw: &str) -> WidgetResult<()> {
+        let spec = if raw.trim().is_empty() {
+            ExportSpec::default()
+        } else {
+            parse_export_line(raw).ok_or_else(|| {
+                WidgetError::InvalidStateForOperation("could not parse export spec".into())
+            })?
+        };
+        let Some(src) = self.path.read().clone() else {
+            return Ok(());
+        };
+        let os = src
+            .to_local()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        let dest = tokio::task::spawn_blocking(move || export_file(&os, &spec))
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+            .map_err(map_viewer_err)?;
+        let next = orchid_fs::FsPath::from_local(&dest)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        self.open_path(next).await
+    }
+
+    async fn copy_image(&self) -> WidgetResult<()> {
+        let img = {
+            let guard = self.viewer.lock().await;
+            guard.as_ref().and_then(|v| {
+                v.as_any()
+                    .downcast_ref::<ImageViewer>()
+                    .and_then(|img| img.clone_loaded())
+            })
+        };
+        let Some(img) = img else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || crate::builtin::file_manager::copy_loaded(&img))
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))??;
+        Ok(())
+    }
+
+    async fn paste_image(&self) -> WidgetResult<()> {
+        let hint = self
+            .path
+            .read()
+            .as_ref()
+            .and_then(|p| p.to_local().ok())
+            .unwrap_or_else(|| {
+                std::env::var_os("USERPROFILE")
+                    .map(|h| {
+                        std::path::PathBuf::from(h)
+                            .join("Pictures")
+                            .join("clipboard.png")
+                    })
+                    .unwrap_or_else(|| std::env::temp_dir().join("clipboard.png"))
+            });
+        let dest = tokio::task::spawn_blocking(move || {
+            let img = crate::builtin::file_manager::paste_loaded()?;
+            let dest = unique_export_dest(&hint, "paste", "png");
+            let bytes = encode_png(&img)
+                .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+            std::fs::write(&dest, bytes)
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            Ok::<_, WidgetError>(dest)
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))??;
+        let next = orchid_fs::FsPath::from_local(&dest)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        self.open_path(next).await
+    }
+
+    async fn set_current_wallpaper(&self) -> WidgetResult<()> {
+        let Some(src) = self.path.read().clone() else {
+            return Ok(());
+        };
+        let os = src
+            .to_local()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        tokio::task::spawn_blocking(move || {
+            let wall = {
+                let ext = os
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if matches!(ext.as_str(), "jpg" | "jpeg" | "bmp") {
+                    os
+                } else {
+                    export_file(
+                        &os,
+                        &ExportSpec {
+                            format: ExportFormat::Jpeg,
+                            quality: 92,
+                            ..ExportSpec::default()
+                        },
+                    )
+                    .map_err(map_viewer_err)?
+                }
+            };
+            set_wallpaper(&wall).map_err(map_viewer_err)
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))??;
+        Ok(())
+    }
+
+    async fn email_current(&self, raw: &str) -> WidgetResult<()> {
+        let max = raw
+            .split('|')
+            .find_map(|p| p.trim().strip_prefix("max=")?.trim().parse::<u32>().ok())
+            .or_else(|| raw.trim().parse().ok())
+            .unwrap_or(1920);
+        let Some(src) = self.path.read().clone() else {
+            return Ok(());
+        };
+        let os = src
+            .to_local()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        let eml = tokio::task::spawn_blocking(move || {
+            let jpeg = prepare_mail_attachment(&os, max)?;
+            write_mail_eml(&jpeg)
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+        .map_err(map_viewer_err)?;
+        let _ = opener::open(&eml);
+        Ok(())
+    }
+
+    async fn share_current(&self, raw: &str) -> WidgetResult<()> {
+        let network = raw
+            .split('|')
+            .next()
+            .unwrap_or(raw)
+            .trim()
+            .to_ascii_lowercase();
+        self.copy_image().await?;
+        let label = self
+            .path
+            .read()
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .unwrap_or("image")
+            .to_string();
+        if let Some(url) = share_intent_url(&network, &label) {
+            let _ = opener::open(url);
+        } else if let Some(src) = self.path.read().clone() {
+            if let Ok(os) = src.to_local() {
+                let _ = opener::open(os);
+            }
+        }
+        Ok(())
+    }
+
+    async fn screenshot_current(&self, raw: &str) -> WidgetResult<()> {
+        let spec = parse_screenshot_line(raw).ok_or_else(|| {
+            WidgetError::InvalidStateForOperation("could not parse screenshot spec".into())
+        })?;
+        let dir = self
+            .path
+            .read()
+            .as_ref()
+            .and_then(|p| p.to_local().ok())
+            .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+            .or_else(|| {
+                std::env::var_os("USERPROFILE")
+                    .map(|h| std::path::PathBuf::from(h).join("Pictures"))
+            })
+            .unwrap_or_else(std::env::temp_dir);
+        let dest = tokio::task::spawn_blocking(move || write_screenshot(&dir, &spec))
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+            .map_err(map_viewer_err)?;
+        let next = orchid_fs::FsPath::from_local(&dest)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        self.open_path(next).await
+    }
+
     async fn annotate_from_view(&self, raw: &str) -> WidgetResult<()> {
         let Some((kind, rest)) = raw.split_once(':') else {
             return Ok(());
@@ -1771,7 +1952,11 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             | "meta-strip-gps"
             | "meta-export-csv"
             | "meta-export-xml"
-            | "edit-auto-straighten" => {}
+            | "edit-auto-straighten"
+            | "copy-image"
+            | "paste-image"
+            | "wallpaper"
+            | "screenshot" => {}
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
                 || cmd.starts_with("lossless")
@@ -1785,7 +1970,12 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("adjust:")
                 || cmd.starts_with("filter:")
                 || cmd.starts_with("annotate")
-                || cmd.starts_with("print") => {}
+                || cmd.starts_with("print")
+                || cmd.starts_with("export")
+                || cmd.starts_with("screenshot")
+                || cmd.starts_with("email")
+                || cmd.starts_with("share")
+                || cmd.starts_with("save-as") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1907,6 +2097,25 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         cmd if let Some(raw) = cmd.strip_prefix("print:") => {
             inner.print_job(raw, false, print_uses_folder(raw)).await?;
         }
+        cmd if let Some(raw) = cmd.strip_prefix("export:") => {
+            inner.export_current(raw).await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("save-as:") => {
+            inner.export_current(raw).await?;
+        }
+        "copy-image" => inner.copy_image().await?,
+        "paste-image" => inner.paste_image().await?,
+        "wallpaper" => inner.set_current_wallpaper().await?,
+        cmd if let Some(raw) = cmd.strip_prefix("email:") => {
+            inner.email_current(raw).await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("share:") => {
+            inner.share_current(raw).await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("screenshot:") => {
+            inner.screenshot_current(raw).await?;
+        }
+        "screenshot" => inner.screenshot_current("").await?,
         cmd if let Some(raw) = cmd.strip_prefix("edit-resize:") => {
             if let Some((spec, filter)) = parse_resize_line(raw) {
                 inner

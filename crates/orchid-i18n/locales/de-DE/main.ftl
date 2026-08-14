@@ -562,6 +562,19 @@ viewer-image-print = Print (Ctrl+P)
 viewer-image-print-preview = Preview
 viewer-image-print-sheet = Index sheet
 viewer-image-print-hint = paper=a4|letter|4x6  margin=12  nup=1|2|4|6|9  fit=contain|cover  header/footer tokens {"{name}"} {"{date}"} {"{w}"} {"{h}"} {"{page}"}  icc=srgb|monitor|file.icc
+viewer-image-export = Share / export (Shift+S)
+viewer-image-export-save = Save as
+viewer-image-export-ico = ICO
+viewer-image-export-favicon = Favicon
+viewer-image-export-copy = Copy
+viewer-image-export-paste = Paste
+viewer-image-export-wallpaper = Wallpaper
+viewer-image-export-email = Email
+viewer-image-export-share = Share
+viewer-image-export-shot = Screenshot
+viewer-image-export-shot-window = Window
+viewer-image-export-shot-delay = Delay 3s
+viewer-image-export-hint = jpg|png|webp|bmp|ico|favicon  q=85  level=6  max=1920
 viewer-image-thumbs = Miniaturen
 viewer-image-thumb-grid = Miniaturraster
 viewer-image-thumb-size = Miniaturgröße
@@ -860,6 +873,15 @@ fm-action-image-print-preview = Print preview…
 fm-action-image-print-sheet = Print index sheet…
 fm-action-image-print-nup = Print N-up…
 fm-action-image-print-batch = Batch print…
+fm-action-image-export = Export / save as…
+fm-action-image-email = Email attachment…
+fm-action-image-share = Share image…
+fm-action-image-copy = Copy image
+fm-action-image-paste = Paste image
+fm-action-image-wallpaper = Set as wallpaper
+fm-action-image-screenshot = Screenshot…
+fm-action-image-ico = Export ICO
+fm-action-image-favicon = Export favicon
 fm-action-meta = Metadaten
 fm-action-meta-edit = IPTC / XMP bearbeiten…
 fm-action-meta-gps = GPS setzen / löschen…
@@ -1254,6 +1276,15 @@ fm-image-print-nup-title = N-up print
 fm-image-print-batch-title = Batch print
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
 fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-export-title = Export image
+fm-image-export-hint = jpg | q=85 | max=1920
+fm-image-email-title = Email attachment
+fm-image-email-hint = max=1920
+fm-image-share-title = Share
+fm-image-share-hint = twitter | facebook | vk | system
+fm-image-screenshot-title = Screenshot
+fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
+fm-image-export-bad-spec = Could not parse the export settings.
 fm-meta-edit-title = Bildmetadaten
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

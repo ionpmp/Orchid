@@ -129,6 +129,16 @@ pub(super) async fn run(
         | "fs.image-print-sheet"
         | "fs.image-print-nup"
         | "fs.image-print-batch" => super::image_print::run(inner, action_id, paths, input).await,
+        "fs.image-export"
+        | "fs.image-save-as"
+        | "fs.image-email"
+        | "fs.image-share"
+        | "fs.image-copy"
+        | "fs.image-paste"
+        | "fs.image-wallpaper"
+        | "fs.image-screenshot"
+        | "fs.image-ico"
+        | "fs.image-favicon" => super::image_share::run(inner, action_id, paths, input).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,

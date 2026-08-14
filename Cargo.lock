@@ -5664,11 +5664,13 @@ dependencies = [
  "chrono",
  "dashmap",
  "encoding_rs",
+ "hex",
  "id3",
  "image",
  "infer",
  "kamadak-exif",
  "libjpeg-turbo-rs",
+ "md-5",
  "memmap2",
  "orchid-core",
  "orchid-fs",
@@ -5682,6 +5684,8 @@ dependencies = [
  "resvg",
  "ropey",
  "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "swash",
  "tempfile",
  "thiserror 2.0.19",
@@ -5716,6 +5720,7 @@ dependencies = [
 name = "orchid-widgets"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "async-trait",
  "bincode",
  "bitflags 2.13.1",

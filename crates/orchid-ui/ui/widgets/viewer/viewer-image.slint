@@ -42,6 +42,10 @@ export component ViewerImageView inherits Rectangle {
     property <bool> show-filter: false;
     property <bool> show-annotate: false;
     property <bool> show-print: false;
+    property <bool> show-share: false;
+    property <string> export-fmt: "jpg";
+    property <string> export-q: "85";
+    property <string> export-max: "1920";
     property <string> print-paper: "a4";
     property <string> print-margin: "12";
     property <string> print-nup: "1";
@@ -52,6 +56,9 @@ export component ViewerImageView inherits Rectangle {
 
     function print-spec() -> string {
         return "paper=" + root.print-paper + " | margin=" + root.print-margin + " | nup=" + root.print-nup + " | fit=" + root.print-fit + " | header=" + root.print-header + " | footer=" + root.print-footer + " | icc=" + root.print-icc;
+    }
+    function export-spec() -> string {
+        return root.export-fmt + " | q=" + root.export-q + " | max=" + root.export-max;
     }
     /// 0 off, 1 line, 2 arrow, 3 rect, 4 ellipse, 5 poly, 6 pen, 7 text, 8 callout, 9 privacy, 10 highlight.
     property <int> ann-mode: 0;
@@ -117,7 +124,7 @@ export component ViewerImageView inherits Rectangle {
             if (event.text == "f" || event.text == "F") {
                 if (event.modifiers.shift) {
                     root.show-filter = !root.show-filter;
-                    if (root.show-filter) { root.show-adjust = false; root.show-annotate = false; root.show-print = false; }
+                    if (root.show-filter) { root.show-adjust = false; root.show-annotate = false; root.show-print = false; root.show-share = false; }
                 } else {
                     root.fit();
                 }
@@ -295,7 +302,7 @@ export component ViewerImageView inherits Rectangle {
             if (event.text == "l" || event.text == "L") {
                 if (event.modifiers.shift) {
                     root.show-adjust = !root.show-adjust;
-                    if (root.show-adjust) { root.show-filter = false; root.show-annotate = false; root.show-print = false; }
+                    if (root.show-adjust) { root.show-filter = false; root.show-annotate = false; root.show-print = false; root.show-share = false; }
                 } else {
                     root.command("loop");
                 }
@@ -315,8 +322,25 @@ export component ViewerImageView inherits Rectangle {
                 root.command("lens");
                 return accept;
             }
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "s" || event.text == "S")) {
+                root.command("export:" + root.export-spec());
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
+                root.command("copy-image");
+                return accept;
+            }
+            if (event.modifiers.control && !event.modifiers.alt && (event.text == "v" || event.text == "V")) {
+                root.command("paste-image");
+                return accept;
+            }
             if (event.text == "s" || event.text == "S") {
-                root.select-zoom = !root.select-zoom;
+                if (event.modifiers.shift) {
+                    root.show-share = !root.show-share;
+                    if (root.show-share) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; root.show-print = false; }
+                } else {
+                    root.select-zoom = !root.select-zoom;
+                }
                 return accept;
             }
             if (event.text == "n" || event.text == "N") {
@@ -334,7 +358,7 @@ export component ViewerImageView inherits Rectangle {
             if (event.text == "d" || event.text == "D") {
                 if (event.modifiers.shift) {
                     root.show-annotate = !root.show-annotate;
-                    if (root.show-annotate) { root.show-adjust = false; root.show-filter = false; root.show-print = false; }
+                    if (root.show-annotate) { root.show-adjust = false; root.show-filter = false; root.show-print = false; root.show-share = false; }
                     else { root.ann-mode = 0; }
                 } else {
                     root.command("thumb-size");
@@ -356,7 +380,7 @@ export component ViewerImageView inherits Rectangle {
                     root.command("print:" + root.print-spec());
                 } else if (event.modifiers.shift) {
                     root.show-print = !root.show-print;
-                    if (root.show-print) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; }
+                    if (root.show-print) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; root.show-share = false; }
                 } else {
                     root.command("contact-sheet");
                 }
@@ -1763,7 +1787,7 @@ export component ViewerImageView inherits Rectangle {
                     ed-adj-ta := TouchArea {
                         clicked => {
                             root.show-adjust = !root.show-adjust;
-                            if (root.show-adjust) { root.show-filter = false; root.show-annotate = false; root.show-print = false; }
+                            if (root.show-adjust) { root.show-filter = false; root.show-annotate = false; root.show-print = false; root.show-share = false; }
                             img-keys.focus();
                         }
                     }
@@ -1794,7 +1818,7 @@ export component ViewerImageView inherits Rectangle {
                     ed-flt-ta := TouchArea {
                         clicked => {
                             root.show-filter = !root.show-filter;
-                            if (root.show-filter) { root.show-adjust = false; root.show-annotate = false; root.show-print = false; }
+                            if (root.show-filter) { root.show-adjust = false; root.show-annotate = false; root.show-print = false; root.show-share = false; }
                             img-keys.focus();
                         }
                     }
@@ -1825,7 +1849,7 @@ export component ViewerImageView inherits Rectangle {
                     ed-ann-ta := TouchArea {
                         clicked => {
                             root.show-annotate = !root.show-annotate;
-                            if (root.show-annotate) { root.show-adjust = false; root.show-filter = false; root.show-print = false; }
+                            if (root.show-annotate) { root.show-adjust = false; root.show-filter = false; root.show-print = false; root.show-share = false; }
                             else { root.ann-mode = 0; }
                             img-keys.focus();
                         }
@@ -1857,7 +1881,7 @@ export component ViewerImageView inherits Rectangle {
                     ed-prt-ta := TouchArea {
                         clicked => {
                             root.show-print = !root.show-print;
-                            if (root.show-print) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; }
+                            if (root.show-print) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; root.show-share = false; }
                             img-keys.focus();
                         }
                     }
@@ -1873,6 +1897,37 @@ export component ViewerImageView inherits Rectangle {
                     Text {
                         text: "⎙";
                         color: root.show-print ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.show-share ? Theme.surface-raised
+                        : ed-exp-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-exp-ta := TouchArea {
+                        clicked => {
+                            root.show-share = !root.show-share;
+                            if (root.show-share) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; root.show-print = false; }
+                            img-keys.focus();
+                        }
+                    }
+                    if ed-exp-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-exp-hint.preferred-width + 12px;
+                        height: ed-exp-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-exp-hint := Text { x: 6px; y: 3px; text: model.export-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "↗";
+                        color: root.show-share ? Theme.accent-brand : Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center; vertical-alignment: center;
                     }
@@ -2652,6 +2707,54 @@ export component ViewerImageView inherits Rectangle {
                         Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; width: 28px; TouchArea { clicked => { root.print-nup = "4"; root.command("print-preview:folder | " + root.print-spec()); } } Text { text: "4"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
                         Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; width: 28px; TouchArea { clicked => { root.print-nup = "6"; root.command("print-preview:folder | " + root.print-spec()); } } Text { text: "6"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
                         Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; width: 28px; TouchArea { clicked => { root.print-nup = "9"; root.command("print-preview:folder | " + root.print-spec()); } } Text { text: "9"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                    }
+                }
+            }
+
+            if root.show-share : Rectangle {
+                x: 8px;
+                y: 8px;
+                width: min(400px, parent.width * 0.56);
+                height: min(parent.height - 16px, 340px);
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 56;
+                clip: true;
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 5px;
+                    Text { text: model.export-label; color: Theme.text-primary; font-size: Theme.font-size-sm; }
+                    Text { text: model.export-hint-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; wrap: word-wrap; }
+                    HorizontalLayout {
+                        spacing: 4px; height: 24px;
+                        TextInput { text <=> root.export-fmt; color: Theme.text-primary; font-size: Theme.font-size-sm; width: 64px; }
+                        TextInput { text <=> root.export-q; color: Theme.text-primary; font-size: Theme.font-size-sm; width: 36px; }
+                        TextInput { text <=> root.export-max; color: Theme.text-primary; font-size: Theme.font-size-sm; width: 56px; }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px; height: 24px;
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("export:" + root.export-spec()); } } Text { text: model.export-save-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; width: 48px; TouchArea { clicked => { root.command("export:ico"); } } Text { text: model.export-ico-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; width: 72px; TouchArea { clicked => { root.command("export:favicon"); } } Text { text: model.export-favicon-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px; height: 24px;
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("copy-image"); } } Text { text: model.export-copy-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("paste-image"); } } Text { text: model.export-paste-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("wallpaper"); } } Text { text: model.export-wallpaper-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px; height: 24px;
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("email:max=" + root.export-max); } } Text { text: model.export-email-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("share:twitter"); } } Text { text: model.export-share-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px; height: 24px;
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("screenshot:screen"); } } Text { text: model.export-shot-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("screenshot:window | delay=2"); } } Text { text: model.export-shot-window-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
+                        Rectangle { background: Theme.surface-base; border-radius: Theme.radius-md; TouchArea { clicked => { root.command("screenshot:screen | delay=3"); } } Text { text: model.export-shot-delay-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; } }
                     }
                 }
             }

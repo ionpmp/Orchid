@@ -80,6 +80,16 @@ async fn convert(
             locale.tr("fm-image-convert-hint"),
         ));
     };
+    if raw.contains('=') {
+        let spec = orchid_viewers::parse_export_line(raw).ok_or_else(|| {
+            WidgetError::InvalidStateForOperation(locale.tr("fm-image-export-bad-spec"))
+        })?;
+        return Ok(report_count(
+            locale,
+            "fm-image-convert-title",
+            apply_each(&images, |os| orchid_viewers::export_file(os, &spec))?,
+        ));
+    }
     let fmt = EncodeFormat::parse(raw).ok_or_else(|| {
         WidgetError::InvalidStateForOperation(locale.tr("fm-image-batch-bad-spec"))
     })?;

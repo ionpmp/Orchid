@@ -552,6 +552,19 @@ viewer-image-print = Печать (Ctrl+P)
 viewer-image-print-preview = Превью
 viewer-image-print-sheet = Контакт-лист
 viewer-image-print-hint = paper=a4|letter|4x6  margin=12  nup=1|2|4|6|9  fit=contain|cover  колонтитулы {"{name}"} {"{date}"} {"{w}"} {"{h}"} {"{page}"}  icc=srgb|monitor|file.icc
+viewer-image-export = Обмен / экспорт (Shift+S)
+viewer-image-export-save = Сохранить как
+viewer-image-export-ico = ICO
+viewer-image-export-favicon = Favicon
+viewer-image-export-copy = Копировать
+viewer-image-export-paste = Вставить
+viewer-image-export-wallpaper = Обои
+viewer-image-export-email = Почта
+viewer-image-export-share = Поделиться
+viewer-image-export-shot = Снимок
+viewer-image-export-shot-window = Окно
+viewer-image-export-shot-delay = Задержка 3 с
+viewer-image-export-hint = jpg|png|webp|bmp|ico|favicon  q=85  level=6  max=1920
 viewer-image-thumbs = Миниатюры
 viewer-image-thumb-grid = Сетка миниатюр
 viewer-image-thumb-size = Размер миниатюр
@@ -849,6 +862,15 @@ fm-action-image-print-preview = Превью печати…
 fm-action-image-print-sheet = Печать контакт-листа…
 fm-action-image-print-nup = Печать N-up…
 fm-action-image-print-batch = Пакетная печать…
+fm-action-image-export = Экспорт / сохранить как…
+fm-action-image-email = Вложение в письмо…
+fm-action-image-share = Поделиться снимком…
+fm-action-image-copy = Копировать изображение
+fm-action-image-paste = Вставить изображение
+fm-action-image-wallpaper = Сделать обоями
+fm-action-image-screenshot = Снимок экрана…
+fm-action-image-ico = Экспорт ICO
+fm-action-image-favicon = Экспорт favicon
 fm-action-meta = Метаданные
 fm-action-meta-edit = Править IPTC / XMP…
 fm-action-meta-gps = Задать / снять GPS…
@@ -1243,6 +1265,15 @@ fm-image-print-nup-title = Печать N-up
 fm-image-print-batch-title = Пакетная печать
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
 fm-image-print-bad-spec = Не удалось разобрать макет печати.
+fm-image-export-title = Экспорт снимка
+fm-image-export-hint = jpg | q=85 | max=1920
+fm-image-email-title = Вложение в письмо
+fm-image-email-hint = max=1920
+fm-image-share-title = Поделиться
+fm-image-share-hint = twitter | facebook | vk | system
+fm-image-screenshot-title = Снимок экрана
+fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
+fm-image-export-bad-spec = Не удалось разобрать настройки экспорта.
 fm-meta-edit-title = Метаданные изображения
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=широта,долгота date=ГГГГ:ММ:ДД ЧЧ:ММ:СС
 fm-meta-gps-title = GPS

@@ -1045,6 +1045,60 @@ fn tools_menu(
                     "action-copy",
                     has_selection,
                 ),
+                item(
+                    "fs.image-export",
+                    "fm-action-image-export",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-email",
+                    "fm-action-image-email",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-share",
+                    "fm-action-image-share",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-copy",
+                    "fm-action-image-copy",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-paste",
+                    "fm-action-image-paste",
+                    "action-copy",
+                    true,
+                ),
+                item(
+                    "fs.image-wallpaper",
+                    "fm-action-image-wallpaper",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-screenshot",
+                    "fm-action-image-screenshot",
+                    "action-copy",
+                    true,
+                ),
+                item(
+                    "fs.image-ico",
+                    "fm-action-image-ico",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-favicon",
+                    "fm-action-image-favicon",
+                    "action-copy",
+                    has_selection,
+                ),
             ],
         },
         ContextMenuItem {
@@ -1802,6 +1856,11 @@ mod tests {
             .iter()
             .any(|i| i.id == "fs.image-compare"));
         assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-print"));
+        assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-export"));
+        assert!(image_edit
+            .submenu
+            .iter()
+            .any(|i| i.id == "fs.image-screenshot"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

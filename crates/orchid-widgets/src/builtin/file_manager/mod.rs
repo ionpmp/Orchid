@@ -9,6 +9,8 @@ pub mod find;
 mod image_batch;
 mod image_edit;
 mod image_print;
+mod image_share;
+pub(crate) use image_share::{copy_loaded, paste_loaded};
 mod meta_edit;
 pub mod navigation;
 pub mod selection;
@@ -4683,6 +4685,16 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.image-print-sheet"
             | "fs.image-print-nup"
             | "fs.image-print-batch"
+            | "fs.image-export"
+            | "fs.image-save-as"
+            | "fs.image-email"
+            | "fs.image-share"
+            | "fs.image-copy"
+            | "fs.image-paste"
+            | "fs.image-wallpaper"
+            | "fs.image-screenshot"
+            | "fs.image-ico"
+            | "fs.image-favicon"
             | "fs.id3"
             | "fs.office-meta"
             | "fs.signature"

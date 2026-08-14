@@ -828,6 +828,19 @@ viewer-image-print = Print (Ctrl+P)
 viewer-image-print-preview = Preview
 viewer-image-print-sheet = Index sheet
 viewer-image-print-hint = paper=a4|letter|4x6  margin=12  nup=1|2|4|6|9  fit=contain|cover  header/footer tokens {"{name}"} {"{date}"} {"{w}"} {"{h}"} {"{page}"}  icc=srgb|monitor|file.icc
+viewer-image-export = Share / export (Shift+S)
+viewer-image-export-save = Save as
+viewer-image-export-ico = ICO
+viewer-image-export-favicon = Favicon
+viewer-image-export-copy = Copy
+viewer-image-export-paste = Paste
+viewer-image-export-wallpaper = Wallpaper
+viewer-image-export-email = Email
+viewer-image-export-share = Share
+viewer-image-export-shot = Screenshot
+viewer-image-export-shot-window = Window
+viewer-image-export-shot-delay = Delay 3s
+viewer-image-export-hint = jpg|png|webp|bmp|ico|favicon  q=85  level=6  max=1920
 viewer-image-thumbs = Thumbnails
 viewer-image-thumb-grid = Thumbnail grid
 viewer-image-thumb-size = Thumbnail size
@@ -1133,6 +1146,15 @@ fm-action-image-print-preview = Print preview…
 fm-action-image-print-sheet = Print index sheet…
 fm-action-image-print-nup = Print N-up…
 fm-action-image-print-batch = Batch print…
+fm-action-image-export = Export / save as…
+fm-action-image-email = Email attachment…
+fm-action-image-share = Share image…
+fm-action-image-copy = Copy image
+fm-action-image-paste = Paste image
+fm-action-image-wallpaper = Set as wallpaper
+fm-action-image-screenshot = Screenshot…
+fm-action-image-ico = Export ICO
+fm-action-image-favicon = Export favicon
 fm-action-meta = Metadata
 fm-action-meta-edit = Edit IPTC / XMP…
 fm-action-meta-gps = Set / clear GPS…
@@ -1498,7 +1520,7 @@ fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | 
 fm-image-wm-image-title = Image watermark
 fm-image-wm-image-hint = wm-image=logo.png | pos=br | opacity=30 | scale=0.22
 fm-image-convert-title = Convert format
-fm-image-convert-hint = jpg | png | webp | bmp
+fm-image-convert-hint = jpg | png | webp | bmp   or   jpg | q=85 | max=1920
 fm-image-rotate-title = Lossless rotate
 fm-image-rotate-hint = cw | ccw | 180 | flip-h | flip-v | exif
 fm-image-thumbs-title = Export thumbnails
@@ -1527,6 +1549,15 @@ fm-image-print-nup-title = N-up print
 fm-image-print-batch-title = Batch print
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
 fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-export-title = Export image
+fm-image-export-hint = jpg | q=85 | max=1920
+fm-image-email-title = Email attachment
+fm-image-email-hint = max=1920
+fm-image-share-title = Share
+fm-image-share-hint = twitter | facebook | vk | system
+fm-image-screenshot-title = Screenshot
+fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
+fm-image-export-bad-spec = Could not parse the export settings.
 fm-meta-edit-title = Image metadata
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
