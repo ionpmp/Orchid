@@ -808,6 +808,22 @@ viewer-image-filter-look-vivid = Vivid
 viewer-image-filter-look-soft = Soft
 viewer-image-filter-look-drama = Drama
 viewer-image-filter-look-clean = Clean
+viewer-image-annotate = Draw / annotate (save a copy)
+viewer-image-annotate-apply = Close polygon
+viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-line = Line
+viewer-image-annotate-arrow = Arrow
+viewer-image-annotate-rect = Rect
+viewer-image-annotate-ellipse = Ellipse
+viewer-image-annotate-poly = Polygon
+viewer-image-annotate-pen = Pen
+viewer-image-annotate-text = Text
+viewer-image-annotate-callout = Callout
+viewer-image-annotate-privacy = Privacy
+viewer-image-annotate-highlight = Highlight
+viewer-image-annotate-watermark = Text mark
+viewer-image-annotate-wm-image = Image mark
+viewer-image-annotate-stamp = Date stamp
 viewer-image-thumbs = Thumbnails
 viewer-image-thumb-grid = Thumbnail grid
 viewer-image-thumb-size = Thumbnail size
@@ -1090,6 +1106,10 @@ fm-action-image-sketch = Sketch
 fm-action-image-vignette = Vignette
 fm-action-image-redeye = Red-eye reduction
 fm-action-image-filter-save-look = Save look…
+fm-action-image-annotate = Annotate / draw…
+fm-action-image-watermark = Text watermark…
+fm-action-image-wm-image = Image watermark…
+fm-action-image-stamp = Date stamp
 fm-action-meta = Metadata
 fm-action-meta-edit = Edit IPTC / XMP…
 fm-action-meta-gps = Set / clear GPS…
@@ -1447,6 +1467,13 @@ fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despec
 fm-image-filter-bad-spec = Could not parse the filter.
 fm-image-filter-save-title = Save look
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
+fm-image-annotate-title = Annotate
+fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
+fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-watermark-title = Text watermark
+fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
+fm-image-wm-image-title = Image watermark
+fm-image-wm-image-hint = wm-image=logo.png | pos=br | opacity=30 | scale=0.22
 fm-meta-edit-title = Image metadata
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

@@ -16,10 +16,11 @@ use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
     apply_adjust, apply_edit, apply_filter, apply_lossless, format_from_extension,
-    parse_adjust_line, parse_canvas_line, parse_filter_line_in, parse_resize_line, AdjustOp,
-    ArchiveViewer, CropKeep, DocumentViewer, EditOp, FilterOp, HistMode, ImageFitMode,
-    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
-    TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
+    parse_adjust_line, parse_annotate_line, parse_canvas_line, parse_filter_line_in,
+    parse_resize_line, AdjustOp, AnnotateOp, ArchiveViewer, CropKeep, DocumentViewer, EditOp,
+    FilterOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer, LosslessOp, PdfViewer,
+    SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService, ThumbnailSize, ViewTransform,
+    Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -1042,6 +1043,117 @@ impl ViewerWidgetInner {
         self.open_path(next).await
     }
 
+    async fn apply_annotate_current(&self, op: AnnotateOp) -> WidgetResult<()> {
+        let Some(src) = self.path.read().clone() else {
+            return Ok(());
+        };
+        let os = src
+            .to_local()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        let dest =
+            tokio::task::spawn_blocking(move || orchid_viewers::apply_annotate_file(&os, &op))
+                .await
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+                .map_err(map_viewer_err)?;
+        let next = orchid_fs::FsPath::from_local(&dest)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        self.open_path(next).await
+    }
+
+    async fn annotate_from_view(&self, raw: &str) -> WidgetResult<()> {
+        let Some((kind, rest)) = raw.split_once(':') else {
+            return Ok(());
+        };
+        let (coords, tail) = rest
+            .split_once(" | ")
+            .map(|(a, b)| (a, b))
+            .unwrap_or((rest, ""));
+        let img_pts = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            let mut out = Vec::new();
+            if kind == "pen" || kind == "poly" {
+                for pair in coords.split([';', ' ']) {
+                    let Some((x, y)) = pair.split_once(',') else {
+                        continue;
+                    };
+                    if let (Ok(x), Ok(y)) = (x.parse::<f32>(), y.parse::<f32>()) {
+                        if let Some(p) = img.viewport_to_image(x, y) {
+                            out.push(p);
+                        }
+                    }
+                }
+            } else {
+                let nums: Vec<f32> = coords.split(':').filter_map(|s| s.parse().ok()).collect();
+                for pair in nums.chunks(2) {
+                    if pair.len() == 2 {
+                        if let Some(p) = img.viewport_to_image(pair[0], pair[1]) {
+                            out.push(p);
+                        }
+                    }
+                }
+            }
+            out
+        };
+        let packed = match kind {
+            "line" | "arrow" if img_pts.len() >= 2 => format!(
+                "{kind}={},{},{},{}{tail_part}",
+                img_pts[0].0,
+                img_pts[0].1,
+                img_pts[1].0,
+                img_pts[1].1,
+                tail_part = if tail.is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {tail}")
+                }
+            ),
+            "rect" | "ellipse" | "highlight" | "privacy" if img_pts.len() >= 2 => {
+                let x = img_pts[0].0.min(img_pts[1].0);
+                let y = img_pts[0].1.min(img_pts[1].1);
+                let w = (img_pts[0].0 - img_pts[1].0).abs();
+                let h = (img_pts[0].1 - img_pts[1].1).abs();
+                let extra = if tail.is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {tail}")
+                };
+                format!("{kind}={x},{y},{w},{h}{extra}")
+            }
+            "text" | "callout" if !img_pts.is_empty() => {
+                let extra = if tail.is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {tail}")
+                };
+                format!("x={} | y={}{extra}", img_pts[0].0, img_pts[0].1)
+            }
+            "pen" | "poly" if img_pts.len() >= 2 => {
+                let pts = img_pts
+                    .iter()
+                    .map(|(x, y)| format!("{x},{y}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let extra = if tail.is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {tail}")
+                };
+                format!("{kind}={pts}{extra}")
+            }
+            _ => return Ok(()),
+        };
+        if let Some(op) = parse_annotate_line(&packed) {
+            self.apply_annotate_current(op).await?;
+        }
+        Ok(())
+    }
+
     async fn edit_crop_from_view(
         &self,
         x0: f32,
@@ -1619,7 +1731,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("meta-save:")
                 || cmd.starts_with("edit-")
                 || cmd.starts_with("adjust:")
-                || cmd.starts_with("filter:") => {}
+                || cmd.starts_with("filter:")
+                || cmd.starts_with("annotate") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1717,6 +1830,14 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             });
             if let Some(op) = parse_filter_line_in(raw, dir.as_deref()) {
                 inner.apply_filter_current(op).await?;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("annotate-view:") => {
+            inner.annotate_from_view(raw).await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("annotate:") => {
+            if let Some(op) = parse_annotate_line(raw) {
+                inner.apply_annotate_current(op).await?;
             }
         }
         cmd if let Some(raw) = cmd.strip_prefix("edit-resize:") => {

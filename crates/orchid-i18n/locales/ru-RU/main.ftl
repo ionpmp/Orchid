@@ -532,6 +532,22 @@ viewer-image-filter-look-vivid = Яркий
 viewer-image-filter-look-soft = Мягкий
 viewer-image-filter-look-drama = Драма
 viewer-image-filter-look-clean = Чистый
+viewer-image-annotate = Рисование / аннотации (копия)
+viewer-image-annotate-apply = Замкнуть многоугольник
+viewer-image-annotate-hint = Потяните фигуру, кликните текст или поставьте водяной знак. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-line = Линия
+viewer-image-annotate-arrow = Стрелка
+viewer-image-annotate-rect = Прямоугольник
+viewer-image-annotate-ellipse = Эллипс
+viewer-image-annotate-poly = Многоугольник
+viewer-image-annotate-pen = Перо
+viewer-image-annotate-text = Текст
+viewer-image-annotate-callout = Выноска
+viewer-image-annotate-privacy = Приватность
+viewer-image-annotate-highlight = Маркер
+viewer-image-annotate-watermark = Текст
+viewer-image-annotate-wm-image = Картинка
+viewer-image-annotate-stamp = Штамп даты
 viewer-image-thumbs = Миниатюры
 viewer-image-thumb-grid = Сетка миниатюр
 viewer-image-thumb-size = Размер миниатюр
@@ -806,6 +822,10 @@ fm-action-image-sketch = Карандаш
 fm-action-image-vignette = Виньетка
 fm-action-image-redeye = Красные глаза
 fm-action-image-filter-save-look = Сохранить образ…
+fm-action-image-annotate = Аннотация / рисунок…
+fm-action-image-watermark = Текстовый водяной знак…
+fm-action-image-wm-image = Водяной знак-картинка…
+fm-action-image-stamp = Штамп даты съёмки
 fm-action-meta = Метаданные
 fm-action-meta-edit = Править IPTC / XMP…
 fm-action-meta-gps = Задать / снять GPS…
@@ -1163,6 +1183,13 @@ fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despec
 fm-image-filter-bad-spec = Не удалось разобрать фильтр.
 fm-image-filter-save-title = Сохранить образ
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
+fm-image-annotate-title = Аннотация
+fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
+fm-image-annotate-bad-spec = Не удалось разобрать аннотацию.
+fm-image-watermark-title = Текстовый водяной знак
+fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
+fm-image-wm-image-title = Водяной знак-картинка
+fm-image-wm-image-hint = wm-image=logo.png | pos=br | opacity=30 | scale=0.22
 fm-meta-edit-title = Метаданные изображения
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=широта,долгота date=ГГГГ:ММ:ДД ЧЧ:ММ:СС
 fm-meta-gps-title = GPS

@@ -907,6 +907,30 @@ fn tools_menu(
                     "action-copy",
                     has_selection,
                 ),
+                item(
+                    "fs.image-annotate",
+                    "fm-action-image-annotate",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-watermark",
+                    "fm-action-image-watermark",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-wm-image",
+                    "fm-action-image-wm-image",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-stamp",
+                    "fm-action-image-stamp",
+                    "action-copy",
+                    has_selection,
+                ),
             ],
         },
         ContextMenuItem {
@@ -1655,6 +1679,10 @@ mod tests {
             .unwrap();
         assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-adjust"));
         assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-filter"));
+        assert!(image_edit
+            .submenu
+            .iter()
+            .any(|i| i.id == "fs.image-watermark"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

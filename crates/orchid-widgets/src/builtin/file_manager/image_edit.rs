@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use orchid_viewers::{
-    apply_adjust_file, apply_edit_file, apply_filter_file, is_image_file_extension,
-    load_image_file, parse_adjust_line, parse_canvas_line, parse_filter_line_in, parse_resize_line,
-    save_filter_preset, AdjustOp, EditOp, FilterOp, FilterPreset,
+    apply_adjust_file, apply_annotate_file, apply_edit_file, apply_filter_file,
+    is_image_file_extension, load_image_file, parse_adjust_line, parse_annotate_line,
+    parse_canvas_line, parse_filter_line_in, parse_resize_line, save_filter_preset, AdjustOp,
+    AnnotateOp, EditOp, FilterOp, FilterPreset,
 };
 
 use super::map_fs_error;
@@ -40,6 +41,38 @@ pub(super) async fn run(
         "fs.image-vignette" => filter_token(inner, paths, "vignette=40").await,
         "fs.image-redeye" => filter_token(inner, paths, "redeye").await,
         "fs.image-filter-save-look" => save_look(inner, paths, input).await,
+        "fs.image-annotate" => annotate_line(inner, paths, input).await,
+        "fs.image-watermark" => {
+            watermark_line(
+                inner,
+                paths,
+                input,
+                "watermark=© Orchid | pos=br | opacity=40 | size=18",
+                "fm-image-watermark-title",
+                "fm-image-watermark-hint",
+            )
+            .await
+        }
+        "fs.image-wm-image" => {
+            watermark_line(
+                inner,
+                paths,
+                input,
+                "wm-image=logo.png | pos=br | opacity=30 | scale=0.22",
+                "fm-image-wm-image-title",
+                "fm-image-wm-image-hint",
+            )
+            .await
+        }
+        "fs.image-stamp" => {
+            annotate_token(
+                inner,
+                paths,
+                "stamp | pos=br | opacity=50 | size=16",
+                "fm-action-image-stamp",
+            )
+            .await
+        }
         _ => Ok(ActionOutcome::Done),
     }
 }
@@ -255,6 +288,87 @@ fn parse_save_look(raw: &str) -> Option<(String, String)> {
         return None;
     }
     Some((name, ops.join(" | ")))
+}
+
+async fn annotate_line(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.image-annotate",
+            &path_strs(&images),
+            "watermark=© Orchid | pos=br | opacity=40 | size=18",
+            locale.tr("fm-image-annotate-title"),
+            locale.tr("fm-image-annotate-hint"),
+        ));
+    };
+    let op = parse_annotate_line(raw).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-annotate-bad-spec"))
+    })?;
+    let n = apply_annotate_all(&images, &op)?;
+    Ok(report_count(locale, "fm-image-annotate-title", n))
+}
+
+async fn watermark_line(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+    proposed: &str,
+    title_key: &str,
+    hint_key: &str,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            if title_key.contains("wm-image") {
+                "fs.image-wm-image"
+            } else {
+                "fs.image-watermark"
+            },
+            &path_strs(&images),
+            proposed,
+            locale.tr(title_key),
+            locale.tr(hint_key),
+        ));
+    };
+    let op = parse_annotate_line(raw).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-annotate-bad-spec"))
+    })?;
+    let n = apply_annotate_all(&images, &op)?;
+    Ok(report_count(locale, title_key, n))
+}
+
+async fn annotate_token(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    raw: &str,
+    title_key: &str,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let op = parse_annotate_line(raw).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-annotate-bad-spec"))
+    })?;
+    let n = apply_annotate_all(&images, &op)?;
+    Ok(report_count(locale, title_key, n))
+}
+
+fn apply_annotate_all(
+    images: &[(orchid_fs::FsPath, PathBuf)],
+    op: &AnnotateOp,
+) -> WidgetResult<u32> {
+    let mut n = 0u32;
+    for (_, os) in images {
+        apply_annotate_file(os, op)
+            .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 fn selected_images(

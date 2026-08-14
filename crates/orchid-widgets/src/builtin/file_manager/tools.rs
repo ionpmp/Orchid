@@ -105,9 +105,11 @@ pub(super) async fn run(
         | "fs.image-sketch"
         | "fs.image-vignette"
         | "fs.image-redeye"
-        | "fs.image-filter-save-look" => {
-            super::image_edit::run(inner, action_id, paths, input).await
-        }
+        | "fs.image-filter-save-look"
+        | "fs.image-annotate"
+        | "fs.image-watermark"
+        | "fs.image-wm-image"
+        | "fs.image-stamp" => super::image_edit::run(inner, action_id, paths, input).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,

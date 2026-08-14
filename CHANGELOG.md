@@ -144,6 +144,11 @@ release yet.
   one-click looks (`vivid` / `soft` / `drama` / `clean` / `fade`) plus
   folder presets (`orchid-filter-presets.json`). Viewer panel (`Shift+F` /
   ✻); FM **Tools → Image edit**.
+- Image annotations write a sibling file: line / arrow, rectangle / ellipse /
+  polygon, freehand pen, text (font / size / color), callouts, privacy
+  blur or pixelate, highlight, text and image watermarks with nine-slot
+  placement and opacity, batch watermark, and a shoot-date stamp.
+  Viewer panel (`Shift+D` / ✎); FM **Tools → Image edit**.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find
