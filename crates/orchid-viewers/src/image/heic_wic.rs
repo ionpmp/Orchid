@@ -1,7 +1,7 @@
-//! Windows Imaging Component (WIC) HEIC/HEIF decode.
+//! Windows Imaging Component (WIC) decode for HEIC, AVIF, and JPEG 2000.
 //!
-//! Requires the OS HEIF Image Extensions (or equivalent codec). When the
-//! codec is missing, callers surface [`crate::error::ViewerError::UnsupportedHeic`].
+//! Requires the matching OS codec (HEIF / AV1 / JPEG 2000). When the codec
+//! is missing, callers surface a format-specific [`crate::error::ViewerError`].
 
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_WICPixelFormat32bppRGBA, IWICFormatConverter, IWICImagingFactory,
@@ -16,18 +16,27 @@ use crate::image::loader::{ImageFormat, LoadedImage};
 
 /// Decode HEIC/HEIF bytes via WIC into RGBA8.
 pub(crate) fn decode_heic_wic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    decode_wic(bytes, size, ImageFormat::Heic)
+}
+
+/// Decode `bytes` with WIC and tag the result as `format`.
+pub(crate) fn decode_wic(bytes: &[u8], size: u64, format: ImageFormat) -> Result<LoadedImage> {
     decode_heic_wic_inner(bytes)
         .map(|(rgba, width, height)| LoadedImage {
             rgba: std::sync::Arc::new(rgba),
             width,
             height,
-            format: ImageFormat::Heic,
+            format,
             original_size_bytes: size,
             ..LoadedImage::meta_defaults()
         })
         .map_err(|e| {
-            tracing::debug!(error = %e, "WIC HEIC decode failed");
-            ViewerError::UnsupportedHeic
+            tracing::debug!(error = %e, format = format.label(), "WIC decode failed");
+            match format {
+                ImageFormat::Avif => ViewerError::UnsupportedAvif,
+                ImageFormat::Jpeg2000 => ViewerError::UnsupportedJpeg2000,
+                _ => ViewerError::UnsupportedHeic,
+            }
         })
 }
 

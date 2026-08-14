@@ -12,8 +12,9 @@ use image::GenericImageView;
 
 /// Extensions the image viewer / FM treat as images (including pending HEIC/RAW).
 pub const IMAGE_FILE_EXTENSIONS: &[&str] = &[
-    "png", "jpg", "jpeg", "webp", "bmp", "gif", "tiff", "tif", "avif", "tga", "svg", "heic",
-    "heif", "cr2", "nef", "arw", "dng", "raf", "orf", "rw2",
+    "png", "jpg", "jpeg", "jpe", "webp", "bmp", "gif", "tiff", "tif", "avif", "tga", "svg", "heic",
+    "heif", "jxl", "dng", "cr2", "nef", "arw", "raf", "orf", "rw2", "psd", "xcf", "pcx", "ico",
+    "cur", "pbm", "pgm", "ppm", "pnm", "jp2", "j2k", "jpx", "jpf", "dds", "exr", "hdr", "rgbe",
 ];
 
 /// Decode a local image path (same pipeline as the viewer, including ICC).
@@ -90,6 +91,16 @@ pub enum ImageFormat {
     Svg,
     Heic,
     Raw,
+    Ico,
+    Pnm,
+    Dds,
+    Hdr,
+    OpenExr,
+    Jxl,
+    Psd,
+    Xcf,
+    Pcx,
+    Jpeg2000,
     Unknown,
 }
 
@@ -109,6 +120,16 @@ impl ImageFormat {
             Self::Svg => "SVG",
             Self::Heic => "HEIC",
             Self::Raw => "RAW",
+            Self::Ico => "ICO",
+            Self::Pnm => "PNM",
+            Self::Dds => "DDS",
+            Self::Hdr => "HDR",
+            Self::OpenExr => "EXR",
+            Self::Jxl => "JXL",
+            Self::Psd => "PSD",
+            Self::Xcf => "XCF",
+            Self::Pcx => "PCX",
+            Self::Jpeg2000 => "JPEG 2000",
             Self::Unknown => "Image",
         }
     }
@@ -124,6 +145,11 @@ impl ImageFormat {
             Tiff => Self::Tiff,
             Avif => Self::Avif,
             Tga => Self::Tga,
+            Ico => Self::Ico,
+            Pnm => Self::Pnm,
+            Dds => Self::Dds,
+            Hdr => Self::Hdr,
+            OpenExr => Self::OpenExr,
             _ => Self::Unknown,
         }
     }
@@ -212,8 +238,28 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
     if looks_like_svg(bytes) {
         return decode_svg(bytes, size);
     }
+    if looks_like_avif(bytes) || matches!(extension, Some("avif" | "avifs")) {
+        return decode_avif(bytes, size);
+    }
     if looks_like_heic(bytes) || matches!(extension, Some("heic" | "heif")) {
         return decode_heic(bytes, size);
+    }
+    if crate::image::extra::looks_like_jxl(bytes) || matches!(extension, Some("jxl")) {
+        return crate::image::extra::decode_jxl(bytes, size);
+    }
+    if crate::image::extra::looks_like_psd(bytes) || matches!(extension, Some("psd")) {
+        return crate::image::extra::decode_psd(bytes, size);
+    }
+    if crate::image::extra::looks_like_xcf(bytes) || matches!(extension, Some("xcf")) {
+        return crate::image::extra::decode_xcf(bytes, size);
+    }
+    if crate::image::extra::looks_like_pcx(bytes) || matches!(extension, Some("pcx")) {
+        return crate::image::extra::decode_pcx(bytes, size);
+    }
+    if crate::image::extra::looks_like_jp2(bytes)
+        || matches!(extension, Some("jp2" | "j2k" | "jpx" | "jpf"))
+    {
+        return crate::image::extra::decode_jp2(bytes, size);
     }
     if looks_like_raw(bytes) || is_raw_extension(extension) {
         return decode_raw_preview(bytes, size);
@@ -261,6 +307,18 @@ fn decode_heic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     {
         let _ = (bytes, size);
         Err(ViewerError::UnsupportedHeic)
+    }
+}
+
+fn decode_avif(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    #[cfg(windows)]
+    {
+        crate::image::heic_wic::decode_wic(bytes, size, ImageFormat::Avif)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (bytes, size);
+        Err(ViewerError::UnsupportedAvif)
     }
 }
 
@@ -342,7 +400,13 @@ pub fn looks_like_svg(bytes: &[u8]) -> bool {
 /// True when `bytes` look like HEIC/HEIF (ISO BMFF `ftyp` with a HEIF brand).
 #[must_use]
 pub fn looks_like_heic(bytes: &[u8]) -> bool {
-    sniff_unsupported_image(bytes) == Some(ImageFormat::Heic)
+    sniff_ftyp(bytes) == Some(ImageFormat::Heic)
+}
+
+/// True when `bytes` look like AVIF (`ftyp` brand `avif` / `avis`).
+#[must_use]
+pub fn looks_like_avif(bytes: &[u8]) -> bool {
+    sniff_ftyp(bytes) == Some(ImageFormat::Avif)
 }
 
 /// True when `bytes` match a common camera-RAW magic sequence.
@@ -351,11 +415,11 @@ pub fn looks_like_raw(bytes: &[u8]) -> bool {
     sniff_unsupported_image(bytes) == Some(ImageFormat::Raw)
 }
 
-/// Sniff HEIC/HEIF or common RAW containers. Returns `None` when unknown.
+/// Sniff HEIC/HEIF, AVIF, or common RAW containers. Returns `None` when unknown.
 #[must_use]
 pub fn sniff_unsupported_image(bytes: &[u8]) -> Option<ImageFormat> {
-    if is_heic_ftyp(bytes) {
-        return Some(ImageFormat::Heic);
+    if let Some(fmt) = sniff_ftyp(bytes) {
+        return Some(fmt);
     }
     if is_raw_magic(bytes) {
         return Some(ImageFormat::Raw);
@@ -363,30 +427,37 @@ pub fn sniff_unsupported_image(bytes: &[u8]) -> Option<ImageFormat> {
     None
 }
 
-fn is_heic_ftyp(bytes: &[u8]) -> bool {
-    // ISO BMFF: [size:4][ftyp][major_brand:4][…] plus optional compatible brands.
+fn sniff_ftyp(bytes: &[u8]) -> Option<ImageFormat> {
     if bytes.len() < 12 || &bytes[4..8] != b"ftyp" {
-        return false;
+        return None;
     }
-    const HEIF_BRANDS: &[&[u8]] = &[
-        b"heic", b"heif", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs", b"mif1",
-        b"msf1",
+    const AVIF: &[&[u8]] = &[b"avif", b"avis", b"avia"];
+    const HEIF: &[&[u8]] = &[
+        b"heic", b"heif", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs",
     ];
-    // Check major brand at offset 8, then every compatible brand from offset 16.
+    let mut saw_heif_generic = false;
     let mut offset = 8;
     while offset + 4 <= bytes.len() {
         let brand = &bytes[offset..offset + 4];
-        if HEIF_BRANDS.contains(&brand) {
-            return true;
+        if AVIF.contains(&brand) {
+            return Some(ImageFormat::Avif);
         }
-        // Skip minor_version (4 bytes) after the major brand.
+        if HEIF.contains(&brand) {
+            return Some(ImageFormat::Heic);
+        }
+        if brand == b"mif1" || brand == b"msf1" {
+            saw_heif_generic = true;
+        }
         offset = if offset == 8 { 16 } else { offset + 4 };
-        // Don't scan forever on huge boxes.
         if offset > 64 {
             break;
         }
     }
-    false
+    if saw_heif_generic {
+        Some(ImageFormat::Heic)
+    } else {
+        None
+    }
 }
 
 fn is_raw_magic(bytes: &[u8]) -> bool {
@@ -675,8 +746,71 @@ mod tests {
         v.extend_from_slice(b"ftyp");
         v.extend_from_slice(b"avif");
         v.extend_from_slice(&[0, 0, 0, 0]);
-        v.extend_from_slice(b"avif");
+        v.extend_from_slice(b"mif1");
         assert!(!looks_like_heic(&v));
-        assert_eq!(sniff_unsupported_image(&v), None);
+        assert!(looks_like_avif(&v));
+        assert_eq!(sniff_unsupported_image(&v), Some(ImageFormat::Avif));
+    }
+
+    fn encode_rgb(fmt: image::ImageFormat, w: u32, h: u32) -> Vec<u8> {
+        let mut img = image::RgbImage::new(w, h);
+        img.put_pixel(0, 0, image::Rgb([200, 10, 30]));
+        if w > 1 && h > 1 {
+            img.put_pixel(w - 1, h - 1, image::Rgb([10, 200, 40]));
+        }
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut cursor, fmt)
+            .unwrap();
+        cursor.into_inner()
+    }
+
+    fn encode_rgba(fmt: image::ImageFormat, w: u32, h: u32) -> Vec<u8> {
+        let mut img = image::RgbaImage::new(w, h);
+        img.put_pixel(0, 0, image::Rgba([200, 10, 30, 255]));
+        if w > 1 && h > 1 {
+            img.put_pixel(w - 1, h - 1, image::Rgba([10, 200, 40, 255]));
+        }
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut cursor, fmt)
+            .unwrap();
+        cursor.into_inner()
+    }
+
+    #[test]
+    fn decodes_ico_pnm_hdr_exr() {
+        let ico = encode_rgba(image::ImageFormat::Ico, 16, 16);
+        let loaded = decode_bytes(&ico, ico.len() as u64, Some("ico")).unwrap();
+        assert_eq!(loaded.format, ImageFormat::Ico);
+        assert_eq!(loaded.width, 16);
+        let pnm = encode_rgb(image::ImageFormat::Pnm, 8, 8);
+        let loaded = decode_bytes(&pnm, pnm.len() as u64, Some("ppm")).unwrap();
+        assert_eq!(loaded.format, ImageFormat::Pnm);
+        assert_eq!(loaded.width, 8);
+        for (fmt, ext, label) in [
+            (image::ImageFormat::Hdr, "hdr", ImageFormat::Hdr),
+            (image::ImageFormat::OpenExr, "exr", ImageFormat::OpenExr),
+        ] {
+            let mut img = image::Rgb32FImage::new(4, 4);
+            img.put_pixel(0, 0, image::Rgb([1.5, 0.2, 0.1]));
+            let mut cursor = std::io::Cursor::new(Vec::new());
+            image::DynamicImage::ImageRgb32F(img)
+                .write_to(&mut cursor, fmt)
+                .unwrap();
+            let bytes = cursor.into_inner();
+            let loaded = decode_bytes(&bytes, bytes.len() as u64, Some(ext)).unwrap();
+            assert_eq!(loaded.format, label, "{ext}");
+            assert_eq!(loaded.width, 4);
+        }
+    }
+
+    #[test]
+    fn extra_extensions_are_images() {
+        for ext in [
+            "jxl", "psd", "xcf", "pcx", "ico", "cur", "jp2", "dds", "exr", "hdr",
+        ] {
+            assert!(is_image_file_extension(ext), "{ext}");
+        }
     }
 }

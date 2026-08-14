@@ -30,11 +30,23 @@ pub enum ViewerError {
     #[error("lossless image transform: {0}")]
     ImageLossless(String),
 
-    /// HEIC/HEIF containers are recognised but not decoded yet.
+    /// HEIC/HEIF containers are recognised but the OS codec is missing.
     ///
     /// Display string is the Fluent key so the UI can localise it.
     #[error("viewer-image-heic-unsupported")]
     UnsupportedHeic,
+
+    /// AVIF containers need a WIC / AV1 image codec.
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-avif-unsupported")]
+    UnsupportedAvif,
+
+    /// JPEG 2000 needs a WIC codec (not bundled).
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-jp2-unsupported")]
+    UnsupportedJpeg2000,
 
     /// Camera RAW containers are recognised but not decoded yet.
     ///

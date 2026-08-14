@@ -9,6 +9,7 @@ pub mod color;
 pub mod edit;
 pub mod exif;
 pub mod export;
+pub mod extra;
 pub mod filter;
 pub mod loader;
 pub mod lossless;

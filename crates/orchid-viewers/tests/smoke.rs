@@ -98,6 +98,14 @@ fn unsupported_image_errors_expose_ftl_keys() {
         ViewerError::UnsupportedRaw.to_string(),
         "viewer-image-raw-unsupported"
     );
+    assert_eq!(
+        ViewerError::UnsupportedAvif.to_string(),
+        "viewer-image-avif-unsupported"
+    );
+    assert_eq!(
+        ViewerError::UnsupportedJpeg2000.to_string(),
+        "viewer-image-jp2-unsupported"
+    );
 }
 
 #[tokio::test]

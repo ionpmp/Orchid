@@ -45,7 +45,9 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
     if image::guess_format(sample).is_ok()
         || crate::image::loader::looks_like_svg(sample)
         || crate::image::loader::looks_like_heic(sample)
+        || crate::image::loader::looks_like_avif(sample)
         || crate::image::loader::looks_like_raw(sample)
+        || crate::image::extra::looks_like_extra_image(sample)
     {
         return Some(ViewerKind::Image);
     }
@@ -243,6 +245,32 @@ mod tests {
     fn avif_extension_still_routes_to_image() {
         let kind = kind_for(&path("local:/a/b.avif"), b"").unwrap();
         assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn extra_raster_extensions_route_to_image() {
+        for ext in [
+            "jxl", "psd", "xcf", "pcx", "ico", "cur", "jp2", "exr", "hdr", "dds",
+        ] {
+            let kind = kind_for(&path(&format!("local:/a/b.{ext}")), b"").unwrap();
+            assert_eq!(kind, ViewerKind::Image, "{ext}");
+        }
+    }
+
+    #[test]
+    fn extra_magic_routes_to_image() {
+        assert_eq!(
+            kind_for(&path("local:/a/b.bin"), b"8BPS\0\0").unwrap(),
+            ViewerKind::Image
+        );
+        assert_eq!(
+            kind_for(&path("local:/a/b.bin"), b"gimp xcf file\0").unwrap(),
+            ViewerKind::Image
+        );
+        assert_eq!(
+            kind_for(&path("local:/a/b.bin"), &[0xFF, 0x0A, 0, 0]).unwrap(),
+            ViewerKind::Image
+        );
     }
 
     #[test]
