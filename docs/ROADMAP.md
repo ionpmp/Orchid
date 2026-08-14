@@ -42,6 +42,7 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
 - [x] Virtual folders (Recent, Categories, Network, Recycle Bin) — Recent, Starred, Tags, categories, Recycle Bin (list / restore / purge / empty via OS trash); localized breadcrumbs + empty states; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] File properties / content metadata — Alt+Enter report (path, times, attributes, MIME) plus EXIF, ID3, Office `docProps/core.xml` edit, Authenticode / PE certificate-table view, Sharing (SMB name / UNC, share or unshare folder, open the Windows Sharing tab), Previous Versions (shadow copies: list, restore, copy beside, open the Windows tab), and BitLocker (status, lock / unlock, Windows control panel)
+- [x] Undo / redo for file operations — Ctrl+Z / Ctrl+Y (session stack): copy, move, rename, new file/folder, Recycle Bin delete; overwrites and permanent deletes are not stacked
 - [x] Quick filter
 - [x] Encryption integration — encrypt / decrypt / reveal in UI; localized passphrase dialog + status toasts; retry on wrong password; age engine via `EncryptedFolderEngine`
 - [x] Managed folders — sidebar with ingest stats, localized ingest failure toast, status bar stats, in-flight indicator + toast, add/remove in context menu

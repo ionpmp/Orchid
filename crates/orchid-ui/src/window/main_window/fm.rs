@@ -3125,6 +3125,14 @@ impl MainWindowController {
                 }
                 return;
             }
+            "undo" => {
+                self.spawn_fm_action(inst, "fs.undo", Vec::new());
+                return;
+            }
+            "redo" => {
+                self.spawn_fm_action(inst, "fs.redo", Vec::new());
+                return;
+            }
             "new-file" => {
                 self.spawn_fm_action(inst, "fs.new-file", Vec::new());
                 return;

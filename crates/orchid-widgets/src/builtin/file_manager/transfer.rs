@@ -161,6 +161,7 @@ impl FileManagerInner {
         let registry = self.deps.registry.as_ref();
         let dest_str = job.dest_dir.as_str();
         let mut result: WidgetResult<ActionOutcome> = Ok(ActionOutcome::Done);
+        let mut undo_pairs: Vec<(String, String)> = Vec::new();
         let mut idx = 0usize;
         while idx < job.sources.len() {
             let p = &job.sources[idx];
@@ -218,6 +219,7 @@ impl FileManagerInner {
                 drop(sink);
                 let _ = progress_task.await;
                 self.end_transfer();
+                self.record_transfer_undo(job.is_copy, undo_pairs);
                 *self.xfer.pending.lock() = Some(PendingTransfer {
                     remaining: job.sources[idx..].to_vec(),
                     dest_dir: job.dest_dir,
@@ -254,6 +256,7 @@ impl FileManagerInner {
                     drop(sink);
                     let _ = progress_task.await;
                     self.end_transfer();
+                    self.record_transfer_undo(job.is_copy, undo_pairs);
                     *self.xfer.pending.lock() = Some(PendingTransfer {
                         remaining: job.sources[idx..].to_vec(),
                         dest_dir: job.dest_dir,
@@ -271,6 +274,10 @@ impl FileManagerInner {
                 result = Err(e);
                 break;
             }
+            let dest_was_new = !dest_exists || matches!(job.policy, Some(ConflictChoice::Rename));
+            if dest_was_new {
+                undo_pairs.push((src.as_str().to_string(), dest.as_str().to_string()));
+            }
             idx += 1;
         }
 
@@ -280,6 +287,7 @@ impl FileManagerInner {
         if let Err(ref e) = result {
             self.set_transfer_notice(e.to_string());
         }
+        self.record_transfer_undo(job.is_copy, undo_pairs);
         if result.is_ok() {
             self.refresh_all_tabs().await;
         }
@@ -418,6 +426,7 @@ pub async fn apply_conflict(
                     orchid_fs::TransferControl::default(),
                 )
                 .await?;
+            inner.record_transfer_undo(pending.is_copy, vec![(src, dest.as_str().to_string())]);
             if sources.is_empty() {
                 inner.refresh_all_tabs().await;
                 return Ok(ActionOutcome::Done);

@@ -11,6 +11,7 @@ pub mod selection;
 pub mod state;
 pub mod tools;
 pub mod transfer;
+mod undo;
 pub mod view_mode;
 pub mod virtual_folders;
 pub mod visit_log;
@@ -319,6 +320,8 @@ struct FileManagerInner {
     visit_log: parking_lot::Mutex<VisitLog>,
     /// Runtime find / duplicate / large-file result sets (`virtual:search/<id>`).
     search_sessions: RwLock<HashMap<Uuid, find::SearchSession>>,
+    /// Session-only undo / redo for copy, move, rename, create, and recycle.
+    undo: parking_lot::Mutex<undo::FsUndoStack>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -444,6 +447,7 @@ impl FileManagerWidget {
                 external_refresh_gen: AtomicU64::new(0),
                 visit_log: parking_lot::Mutex::new(VisitLog::from_entries(persisted.path_visits)),
                 search_sessions: RwLock::new(HashMap::new()),
+                undo: parking_lot::Mutex::new(undo::FsUndoStack::default()),
                 bus,
             }),
         }
@@ -1604,6 +1608,10 @@ impl FileManagerInner {
             .create_dir(&new_path, false)
             .await
             .map_err(map_fs_error)?;
+        self.record_undo(undo::FsUndoOp::Create {
+            paths: vec![new_path.as_str().to_string()],
+            recycle_items: Vec::new(),
+        });
         Ok(())
     }
 
@@ -1624,6 +1632,10 @@ impl FileManagerInner {
             ));
         }
         provider.write(&new_path, &[]).await.map_err(map_fs_error)?;
+        self.record_undo(undo::FsUndoOp::Create {
+            paths: vec![new_path.as_str().to_string()],
+            recycle_items: Vec::new(),
+        });
         Ok(())
     }
 
@@ -3045,6 +3057,8 @@ pub fn context_menu_for(
     }
     let inputs = ContextMenuInputs {
         clipboard_has_contents: inner.deps.clipboard.can_paste(),
+        can_undo: inner.can_undo(),
+        can_redo: inner.can_redo(),
         all_encrypted: selected_entries
             .iter()
             .all(|e| e.metadata.extended.is_encrypted),
@@ -4096,6 +4110,14 @@ pub async fn run_action_with_opts(
         "fs.paste" => {
             return inner.paste_clipboard().await;
         }
+        "fs.undo" => {
+            inner.undo_last().await?;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.redo" => {
+            inner.redo_last().await?;
+            return Ok(ActionOutcome::Done);
+        }
         "fs.rename" => {
             if target_paths.len() == 1 {
                 let p = target_paths[0].clone();
@@ -4141,6 +4163,10 @@ pub async fn run_action_with_opts(
                 });
             }
             inner.delete_paths(&target_paths, Some(recycle)).await?;
+            if recycle {
+                let items = undo::match_recycle_virtual_paths(&target_paths).await;
+                inner.record_undo(undo::FsUndoOp::Recycle { items });
+            }
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
@@ -4151,6 +4177,19 @@ pub async fn run_action_with_opts(
             orchid_fs::restore_recycle(&target_paths)
                 .await
                 .map_err(map_fs_error)?;
+            let restored: Vec<String> = target_paths
+                .iter()
+                .filter_map(|p| {
+                    let orig = orchid_fs::recycle_original_path(p)?;
+                    orchid_fs::FsPath::from_local(std::path::Path::new(&orig))
+                        .ok()
+                        .map(|fp| fp.as_str().to_string())
+                })
+                .collect();
+            inner.record_undo(undo::FsUndoOp::Create {
+                paths: restored,
+                recycle_items: Vec::new(),
+            });
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
@@ -4656,6 +4695,9 @@ pub async fn rename(instance_id: Uuid, old_path: &str, new_name: &str) -> Widget
         .rename(&old, &new_path)
         .await
         .map_err(map_fs_error)?;
+    inner.record_undo(undo::FsUndoOp::Rename {
+        pairs: vec![(old.as_str().to_string(), new_path.as_str().to_string())],
+    });
     inner.refresh_all_tabs().await;
     Ok(())
 }
@@ -5017,6 +5059,7 @@ pub async fn apply_batch_rename(
     replace: &str,
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
+    let mut pairs = Vec::new();
     for (i, p) in paths.iter().enumerate() {
         let old = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
         let Some(name) = old.file_name() else {
@@ -5034,7 +5077,9 @@ pub async fn apply_batch_rename(
             continue;
         };
         provider.rename(&old, &dest).await.map_err(map_fs_error)?;
+        pairs.push((old.as_str().to_string(), dest.as_str().to_string()));
     }
+    inner.record_undo(undo::FsUndoOp::Rename { pairs });
     inner.refresh_all_tabs().await;
     Ok(())
 }

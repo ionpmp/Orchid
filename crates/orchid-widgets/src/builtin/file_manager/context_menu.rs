@@ -29,6 +29,10 @@ pub struct ContextMenuItem {
 #[allow(missing_docs)]
 pub struct ContextMenuInputs {
     pub clipboard_has_contents: bool,
+    /// Undo stack is non-empty.
+    pub can_undo: bool,
+    /// Redo stack is non-empty.
+    pub can_redo: bool,
     pub all_encrypted: bool,
     pub any_encrypted: bool,
     pub all_managed: bool,
@@ -280,6 +284,7 @@ pub fn build_for_selection(
         "action-paste",
         inputs.clipboard_has_contents,
     )));
+    push_undo_redo(&mut items, &inputs);
 
     items.push(item(
         if single {
@@ -548,6 +553,7 @@ pub fn build_for_selection(
 /// Recycle Bin: restore / purge selected items, or empty the bin.
 fn recycle_menu(has_selection: bool, inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
     let mut items = Vec::new();
+    push_undo_redo(&mut items, inputs);
     if has_selection {
         items.push(item(
             "fs.recycle-restore",
@@ -604,6 +610,10 @@ fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
         }
         items.push(item("fs.paste", "fm-action-paste", "action-paste", true));
     }
+    if !items.is_empty() {
+        items.last_mut().unwrap().separator_after = true;
+    }
+    push_undo_redo(&mut items, inputs);
     if inputs.entry_count > 0 {
         if !items.is_empty() {
             items.last_mut().unwrap().separator_after = true;
@@ -714,6 +724,21 @@ fn select_more_menu(inputs: &ContextMenuInputs) -> ContextMenuItem {
             ),
         ],
     }
+}
+
+fn push_undo_redo(items: &mut Vec<ContextMenuItem>, inputs: &ContextMenuInputs) {
+    items.push(item(
+        "fs.undo",
+        "fm-action-undo",
+        "action-undo",
+        inputs.can_undo,
+    ));
+    items.push(sep(item(
+        "fs.redo",
+        "fm-action-redo",
+        "action-redo",
+        inputs.can_redo,
+    )));
 }
 
 fn item(id: &str, label_key: &str, icon: &'static str, enabled: bool) -> ContextMenuItem {
@@ -1296,6 +1321,8 @@ mod tests {
         assert!(ids.contains(&"fs.new-folder"));
         assert!(ids.contains(&"fs.new-file"));
         assert!(ids.contains(&"fs.branch-view"));
+        assert!(ids.contains(&"fs.undo"));
+        assert!(ids.contains(&"fs.redo"));
         assert!(!ids.contains(&"fs.copy"));
         assert!(!ids.contains(&"fs.open"));
         assert!(!ids.contains(&"fs.paste"));
@@ -1351,6 +1378,23 @@ mod tests {
         let paste = menu.iter().find(|i| i.id == "fs.paste").unwrap();
         assert!(paste.enabled);
         assert!(menu.iter().all(|i| i.id != "fs.copy"));
+    }
+
+    #[test]
+    fn undo_flag_enables_undo() {
+        let menu = build_for_selection(
+            &[],
+            ContextMenuInputs {
+                can_create: true,
+                can_undo: true,
+                can_redo: true,
+                ..Default::default()
+            },
+        );
+        let undo = menu.iter().find(|i| i.id == "fs.undo").unwrap();
+        let redo = menu.iter().find(|i| i.id == "fs.redo").unwrap();
+        assert!(undo.enabled);
+        assert!(redo.enabled);
     }
 
     #[test]

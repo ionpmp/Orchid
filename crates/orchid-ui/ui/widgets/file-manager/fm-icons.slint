@@ -785,4 +785,70 @@ export component FmActionIcon inherits Rectangle {
             background: root.ink;
         }
     }
+
+    if icon-id == "action-undo" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22;
+            y: parent.height * 0.28;
+            width: parent.width * 0.52;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.68;
+            y: parent.height * 0.28;
+            width: 2px;
+            height: parent.height * 0.32;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.16;
+            y: parent.height * 0.18;
+            width: parent.width * 0.18;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.16;
+            y: parent.height * 0.36;
+            width: parent.width * 0.18;
+            height: 2px;
+            background: root.ink;
+        }
+    }
+
+    if icon-id == "action-redo" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.26;
+            y: parent.height * 0.28;
+            width: parent.width * 0.52;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.26;
+            y: parent.height * 0.28;
+            width: 2px;
+            height: parent.height * 0.32;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.66;
+            y: parent.height * 0.18;
+            width: parent.width * 0.18;
+            height: 2px;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.66;
+            y: parent.height * 0.36;
+            width: parent.width * 0.18;
+            height: 2px;
+            background: root.ink;
+        }
+    }
 }

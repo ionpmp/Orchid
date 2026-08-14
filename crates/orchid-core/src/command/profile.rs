@@ -249,6 +249,22 @@ pub const PROFILE_BINDINGS: &[ProfileBinding] = &[
         linux: "Ctrl+V",
     },
     ProfileBinding {
+        id: "fs.undo",
+        label_key: "fm-action-undo",
+        orchid: "Ctrl+Z",
+        windows: "Ctrl+Z",
+        macos: "Win+Z",
+        linux: "Ctrl+Z",
+    },
+    ProfileBinding {
+        id: "fs.redo",
+        label_key: "fm-action-redo",
+        orchid: "Ctrl+Y",
+        windows: "Ctrl+Y",
+        macos: "Win+Shift+Z",
+        linux: "Ctrl+Shift+Z",
+    },
+    ProfileBinding {
         id: "fs.rename",
         label_key: "fm-action-rename",
         orchid: "F2",
@@ -568,5 +584,25 @@ mod tests {
             Some("fs.copy-to-other")
         );
         assert!(validate_override(ShortcutProfile::Orchid, &empty, "fs.rename", &f5).is_err());
+    }
+
+    #[test]
+    fn undo_redo_profile_defaults() {
+        let empty = HashMap::new();
+        let z = Shortcut::parse("Ctrl+Z").unwrap();
+        assert_eq!(
+            lookup_fm_action(ShortcutProfile::Orchid, &empty, &z),
+            Some("fs.undo")
+        );
+        let y = Shortcut::parse("Ctrl+Y").unwrap();
+        assert_eq!(
+            lookup_fm_action(ShortcutProfile::Windows, &empty, &y),
+            Some("fs.redo")
+        );
+        let macos_z = resolve_profile_shortcut(ShortcutProfile::Macos, &empty, "fs.undo").unwrap();
+        assert_eq!(macos_z.to_string_canonical(), "Win+Z");
+        let linux_redo =
+            resolve_profile_shortcut(ShortcutProfile::Linux, &empty, "fs.redo").unwrap();
+        assert_eq!(linux_redo.to_string_canonical(), "Ctrl+Shift+Z");
     }
 }

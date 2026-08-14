@@ -50,7 +50,9 @@ release yet.
 - File operations: F5/F6 copy/move to the other pane (clipboard in
   single-pane), F7 new folder, Shift+F4 new file, F8/Del delete (to Recycle
   Bin; restore / empty from the Recycle Bin folder), Shift+Del
-  permanent delete, Ctrl+X cut. Overwrite / Skip / Rename / Overwrite older
+  permanent delete, Ctrl+X cut. Ctrl+Z / Ctrl+Y undo and redo copy, move,
+  rename, new file/folder, and Recycle Bin delete (session-only; overwrites
+  and permanent deletes are not stacked). Overwrite / Skip / Rename / Overwrite older
   / Resume conflict dialog with “apply to all”. Copy queue with pause,
   resume, cancel, verify, new/changed-only, folder structure only, NTFS
   ADS, timestamps and attributes. Batch rename by pattern; symlink /

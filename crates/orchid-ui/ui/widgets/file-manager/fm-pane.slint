@@ -124,6 +124,8 @@ export component FmPane inherits Rectangle {
         if (act == "fs.copy") { root.copy-selected(); return true; }
         if (act == "fs.cut") { root.nav-command("cut"); return true; }
         if (act == "fs.paste") { root.paste-clipboard(); return true; }
+        if (act == "fs.undo") { root.nav-command("undo"); return true; }
+        if (act == "fs.redo") { root.nav-command("redo"); return true; }
         if (act == "fs.rename") { root.rename-selected(); return true; }
         if (act == "fs.delete") { root.delete-selected(); return true; }
         if (act == "fs.delete-permanent") { root.nav-command("delete-perm"); return true; }
