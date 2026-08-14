@@ -222,6 +222,31 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         thumb_size_label: locale.tr("viewer-image-thumb-size").into(),
         thumb_meta_label: locale.tr("viewer-image-thumb-meta").into(),
         contact_sheet_label: locale.tr("viewer-image-contact-sheet").into(),
+        slideshow_playing: false,
+        slideshow_paused: false,
+        slideshow_interval_ms: 4000,
+        slideshow_random: false,
+        slideshow_transition: 1,
+        slideshow_transition_ms: 500,
+        slideshow_overlay: true,
+        slideshow_overlay_text: SharedString::new(),
+        slideshow_music: SharedString::new(),
+        slideshow_gen: 0,
+        prev_rgba_image: Image::default(),
+        prev_width_px: 0,
+        prev_height_px: 0,
+        slideshow_label: locale.tr("viewer-image-slideshow").into(),
+        slideshow_pause_label: locale.tr("viewer-image-slideshow-pause").into(),
+        slideshow_speed_label: format!("{} {}s", locale.tr("viewer-image-slideshow-speed"), 4)
+            .into(),
+        slideshow_random_label: locale.tr("viewer-image-slideshow-random").into(),
+        slideshow_transition_label: locale.tr("viewer-image-slideshow-transition").into(),
+        slideshow_overlay_label: locale.tr("viewer-image-slideshow-overlay").into(),
+        slideshow_music_label: locale.tr("viewer-image-slideshow-music").into(),
+        slideshow_export_html_label: locale.tr("viewer-image-slideshow-export-html").into(),
+        slideshow_export_video_label: locale.tr("viewer-image-slideshow-export-video").into(),
+        slideshow_export_exe_label: locale.tr("viewer-image-slideshow-export-exe").into(),
+        slideshow_export_scr_label: locale.tr("viewer-image-slideshow-export-scr").into(),
     }
 }
 
@@ -816,6 +841,40 @@ fn build_image_snapshot(
         thumb_size_label: locale.tr("viewer-image-thumb-size").into(),
         thumb_meta_label: locale.tr("viewer-image-thumb-meta").into(),
         contact_sheet_label: locale.tr("viewer-image-contact-sheet").into(),
+        slideshow_playing: s.slideshow_playing,
+        slideshow_paused: s.slideshow_paused,
+        slideshow_interval_ms: s.slideshow_interval_ms as i32,
+        slideshow_random: s.slideshow_random,
+        slideshow_transition: i32::from(s.slideshow_transition),
+        slideshow_transition_ms: s.slideshow_transition_ms as i32,
+        slideshow_overlay: s.slideshow_overlay,
+        slideshow_overlay_text: s.slideshow_overlay_text.clone().into(),
+        slideshow_music: s.slideshow_music.clone().into(),
+        slideshow_gen: s.slideshow_gen as i32,
+        prev_rgba_image: match &s.prev_rgba {
+            Some(rgba) if s.prev_width > 0 && s.prev_height > 0 => {
+                slint_image_from_rgba(rgba, s.prev_width, s.prev_height)
+            }
+            _ => Image::default(),
+        },
+        prev_width_px: s.prev_width as i32,
+        prev_height_px: s.prev_height as i32,
+        slideshow_label: locale.tr("viewer-image-slideshow").into(),
+        slideshow_pause_label: locale.tr("viewer-image-slideshow-pause").into(),
+        slideshow_speed_label: format!(
+            "{} {}s",
+            locale.tr("viewer-image-slideshow-speed"),
+            (s.slideshow_interval_ms / 1000).max(1)
+        )
+        .into(),
+        slideshow_random_label: locale.tr("viewer-image-slideshow-random").into(),
+        slideshow_transition_label: locale.tr("viewer-image-slideshow-transition").into(),
+        slideshow_overlay_label: locale.tr("viewer-image-slideshow-overlay").into(),
+        slideshow_music_label: locale.tr("viewer-image-slideshow-music").into(),
+        slideshow_export_html_label: locale.tr("viewer-image-slideshow-export-html").into(),
+        slideshow_export_video_label: locale.tr("viewer-image-slideshow-export-video").into(),
+        slideshow_export_exe_label: locale.tr("viewer-image-slideshow-export-exe").into(),
+        slideshow_export_scr_label: locale.tr("viewer-image-slideshow-export-scr").into(),
     }
 }
 

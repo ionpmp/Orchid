@@ -93,6 +93,10 @@ export component ViewerImageView inherits Rectangle {
                 root.command("bg-next");
                 return accept;
             }
+            if (event.text == Key.F5) {
+                root.command("slideshow");
+                return accept;
+            }
             if (event.text == Key.F11) {
                 root.command("fullscreen");
                 return accept;
@@ -102,7 +106,15 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == "m" || event.text == "M") {
-                root.command("next-monitor");
+                if (event.modifiers.shift) {
+                    root.command("slideshow-music");
+                } else {
+                    root.command("next-monitor");
+                }
+                return accept;
+            }
+            if (event.text == Key.Escape && model.slideshow-playing) {
+                root.command("slideshow-stop");
                 return accept;
             }
             if (event.text == Key.Escape && (model.chrome-hidden || model.kiosk)) {
@@ -171,7 +183,15 @@ export component ViewerImageView inherits Rectangle {
                 root.flip-v();
                 return accept;
             }
-            if (event.text == Key.PageDown || event.text == Key.Space) {
+            if (event.text == Key.Space) {
+                if (model.slideshow-playing) {
+                    root.command("slideshow-pause");
+                } else {
+                    root.command("next");
+                }
+                return accept;
+            }
+            if (event.text == Key.PageDown) {
                 root.command("next");
                 return accept;
             }
@@ -196,7 +216,11 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == "o" || event.text == "O") {
-                root.command("reveal-folder");
+                if (event.modifiers.shift) {
+                    root.command("slideshow-overlay");
+                } else {
+                    root.command("reveal-folder");
+                }
                 return accept;
             }
             if (event.text == "z" || event.text == "Z") {
@@ -228,7 +252,31 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == "p" || event.text == "P") {
-                root.command("contact-sheet");
+                if (event.modifiers.control && event.modifiers.shift) {
+                    root.command("slideshow-export-html");
+                } else {
+                    root.command("contact-sheet");
+                }
+                return accept;
+            }
+            if (event.text == "y" || event.text == "Y") {
+                root.command("slideshow-random");
+                return accept;
+            }
+            if (event.text == "j" || event.text == "J") {
+                if (event.modifiers.shift) {
+                    root.command("slideshow-trans-ms");
+                } else {
+                    root.command("slideshow-transition");
+                }
+                return accept;
+            }
+            if (event.text == ",") {
+                root.command("slideshow-slower");
+                return accept;
+            }
+            if (event.text == ".") {
+                root.command("slideshow-faster");
                 return accept;
             }
             if (event.text == "h" || event.text == "H") {
@@ -770,6 +818,177 @@ export component ViewerImageView inherits Rectangle {
                     HorizontalLayout {
                         padding-left: 6px; padding-right: 6px;
                         Text { text: model.contact-sheet-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.slideshow-playing ? Theme.surface-raised
+                        : slide-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    slide-ta := TouchArea {
+                        clicked => { root.command("slideshow"); img-keys.focus(); }
+                    }
+                    if slide-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: slide-hint.preferred-width + 12px;
+                        height: slide-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        slide-hint := Text { x: 6px; y: 3px; text: model.slideshow-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                if model.slideshow-playing : Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.slideshow-paused ? Theme.surface-raised
+                        : spause-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    spause-ta := TouchArea {
+                        clicked => { root.command("slideshow-pause"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-pause-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 52px;
+                    height: 28px;
+                    background: sspd-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sspd-ta := TouchArea {
+                        clicked => { root.command("slideshow-faster"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-speed-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.slideshow-random ? Theme.surface-raised
+                        : srand-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    srand-ta := TouchArea {
+                        clicked => { root.command("slideshow-random"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-random-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 44px;
+                    height: 28px;
+                    background: strans-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    strans-ta := TouchArea {
+                        clicked => { root.command("slideshow-transition"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-transition-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.slideshow-overlay ? Theme.surface-raised
+                        : sovl-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sovl-ta := TouchArea {
+                        clicked => { root.command("slideshow-overlay"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-overlay-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.slideshow-music != "" ? Theme.surface-raised
+                        : smus-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    smus-ta := TouchArea {
+                        clicked => { root.command("slideshow-music"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-music-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: sexp-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sexp-ta := TouchArea {
+                        clicked => { root.command("slideshow-export-html"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-export-html-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: svid-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    svid-ta := TouchArea {
+                        clicked => { root.command("slideshow-export-video"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-export-video-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: sexe-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sexe-ta := TouchArea {
+                        clicked => { root.command("slideshow-export-exe"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-export-exe-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: sscr-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sscr-ta := TouchArea {
+                        clicked => { root.command("slideshow-export-scr"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.slideshow-export-scr-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
 
@@ -1495,7 +1714,7 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        if model.thumb-strip == 2 && !model.chrome-hidden && !model.thumb-grid && model.thumbs.length > 0 : Rectangle {
+        if model.thumb-strip == 2 && !model.chrome-hidden && !model.thumb-grid && !model.slideshow-playing && model.thumbs.length > 0 : Rectangle {
             height: root.thumb-strip-h;
             background: Theme.surface-base;
             thumb-strip-top := Flickable {
@@ -1561,16 +1780,70 @@ export component ViewerImageView inherits Rectangle {
             property <bool> overflows: model.width-px * 1px * model.zoom > self.width + 4px
                 || model.height-px * 1px * model.zoom > self.height + 4px;
 
-            Image {
-                source: model.rgba-image;
-                x: canvas.img-left;
+            property <float> slide-t: model.slideshow-playing && model.prev-width-px > 0 && model.slideshow-transition-ms > 0
+                ? min(1.0, model.slideshow-gen * 50.0 / model.slideshow-transition-ms)
+                : 1.0;
+
+            if model.slideshow-playing && model.prev-width-px > 0 && model.slideshow-transition != 0 : Image {
+                source: model.prev-rgba-image;
+                x: canvas.img-left + (model.slideshow-transition == 2 ? canvas.width * canvas.slide-t : 0px);
                 y: canvas.img-top;
                 width: model.width-px * 1px * model.zoom;
                 height: model.height-px * 1px * model.zoom;
                 image-fit: fill;
+                opacity: model.slideshow-transition == 4 ? 1.0 : (1.0 - canvas.slide-t);
+                transform-rotation: model.rotation-deg * 1deg;
+            }
+
+            if model.slideshow-playing && model.slideshow-transition == 4 : Rectangle {
+                x: canvas.img-left;
+                y: canvas.img-top;
+                width: model.width-px * 1px * model.zoom * canvas.slide-t;
+                height: model.height-px * 1px * model.zoom;
+                clip: true;
+                Image {
+                    source: model.rgba-image;
+                    width: model.width-px * 1px * model.zoom;
+                    height: model.height-px * 1px * model.zoom;
+                    image-fit: fill;
+                    transform-rotation: model.rotation-deg * 1deg;
+                    transform-scale-x: model.flipped-h ? -1 : 1;
+                    transform-scale-y: model.flipped-v ? -1 : 1;
+                }
+            }
+
+            if !(model.slideshow-playing && model.slideshow-transition == 4) : Image {
+                source: model.rgba-image;
+                x: canvas.img-left - (model.slideshow-playing && model.slideshow-transition == 2
+                    ? canvas.width * (1.0 - canvas.slide-t) : 0px);
+                y: canvas.img-top;
+                width: model.width-px * 1px * model.zoom;
+                height: model.height-px * 1px * model.zoom;
+                image-fit: fill;
+                opacity: !model.slideshow-playing || model.slideshow-transition == 0
+                    ? 1.0
+                    : canvas.slide-t;
                 transform-rotation: model.rotation-deg * 1deg;
                 transform-scale-x: model.flipped-h ? -1 : 1;
                 transform-scale-y: model.flipped-v ? -1 : 1;
+            }
+
+            if model.slideshow-playing && model.slideshow-overlay && model.slideshow-overlay-text != "" : Rectangle {
+                x: 16px;
+                y: parent.height - self.height - 16px;
+                width: min(parent.width - 32px, ovl-txt.preferred-width + 20px);
+                height: ovl-txt.preferred-height + 12px;
+                background: #000000aa;
+                border-radius: Theme.radius-md;
+                ovl-txt := Text {
+                    x: 10px;
+                    y: 6px;
+                    width: parent.width - 20px;
+                    text: model.slideshow-overlay-text;
+                    color: #ffffff;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
             }
 
             pan-area := TouchArea {
@@ -1728,7 +2001,7 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
 
-            if model.thumb-grid : thumb-grid-host := Rectangle {
+            if model.thumb-grid && !model.slideshow-playing : thumb-grid-host := Rectangle {
                 width: parent.width;
                 height: parent.height;
                 background: root.canvas-bg;
@@ -1824,7 +2097,7 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        if model.thumb-strip == 1 && !model.chrome-hidden && !model.thumb-grid && model.thumbs.length > 0 : Rectangle {
+        if model.thumb-strip == 1 && !model.chrome-hidden && !model.thumb-grid && !model.slideshow-playing && model.thumbs.length > 0 : Rectangle {
             height: root.thumb-strip-h;
             background: Theme.surface-base;
             Flickable {

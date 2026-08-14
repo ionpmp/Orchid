@@ -1,6 +1,7 @@
 //! Viewer widget: wraps an [`orchid_viewers::Viewer`] for any given path.
 
 mod image_nav;
+mod image_slideshow;
 mod image_thumbs;
 
 use std::collections::{HashMap, VecDeque};
@@ -14,8 +15,8 @@ use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
     apply_lossless, format_from_extension, ArchiveViewer, DocumentViewer, ImageFitMode,
-    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SyntaxHighlighter, TextViewer,
-    ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
+    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
+    TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -65,6 +66,16 @@ struct ViewerPersisted {
     thumb_meta: bool,
     #[serde(default = "default_preload_n")]
     preload_n: u8,
+    #[serde(default = "default_slide_interval")]
+    slide_interval_ms: u32,
+    #[serde(default)]
+    slide_random: bool,
+    #[serde(default = "default_slide_trans")]
+    slide_transition: u8,
+    #[serde(default = "default_slide_trans_ms")]
+    slide_transition_ms: u32,
+    #[serde(default = "default_true")]
+    slide_overlay: bool,
 }
 
 fn default_true() -> bool {
@@ -83,6 +94,18 @@ fn default_preload_n() -> u8 {
     2
 }
 
+fn default_slide_interval() -> u32 {
+    4000
+}
+
+fn default_slide_trans() -> u8 {
+    1
+}
+
+fn default_slide_trans_ms() -> u32 {
+    500
+}
+
 impl Default for ViewerPersisted {
     fn default() -> Self {
         Self {
@@ -98,6 +121,11 @@ impl Default for ViewerPersisted {
             thumb_size: 1,
             thumb_meta: true,
             preload_n: 2,
+            slide_interval_ms: 4000,
+            slide_random: false,
+            slide_transition: 1,
+            slide_transition_ms: 500,
+            slide_overlay: true,
         }
     }
 }
@@ -120,6 +148,7 @@ impl ViewerPersisted {
         floating: Option<crate::layout::PixelBounds>,
         image_loop: bool,
         thumbs: &image_thumbs::ImageThumbState,
+        slide: &image_slideshow::SlideshowState,
     ) -> Self {
         let (floating_on, float_x, float_y, float_w, float_h) = match floating {
             Some(b) => (true, Some(b.x), Some(b.y), Some(b.width), Some(b.height)),
@@ -138,6 +167,11 @@ impl ViewerPersisted {
             thumb_size: thumbs.size.as_u8(),
             thumb_meta: thumbs.show_meta,
             preload_n: thumbs.preload_n,
+            slide_interval_ms: slide.interval_ms,
+            slide_random: slide.random,
+            slide_transition: slide.transition.as_u8(),
+            slide_transition_ms: slide.transition_ms,
+            slide_overlay: slide.overlay,
         }
     }
 }
@@ -184,6 +218,9 @@ struct ViewerWidgetInner {
     image_preload: RwLock<image_thumbs::ImagePreloadCache>,
     /// Bumped to cancel in-flight thumb / preload jobs.
     thumb_gen: AtomicU64,
+    slideshow: RwLock<image_slideshow::SlideshowState>,
+    slide_tick: AtomicU64,
+    music_child: parking_lot::Mutex<Option<std::process::Child>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -376,6 +413,7 @@ impl ViewerWidgetInner {
             snap,
             &self.image_nav.read(),
             Some(&self.image_thumbs.read()),
+            Some(&self.slideshow.read()),
         ));
     }
 
@@ -397,6 +435,9 @@ impl ViewerWidgetInner {
             self.image_nav.write().set_current(path);
         }
         self.image_nav.write().push_history(path);
+        if self.slideshow.read().overlay {
+            self.slideshow.write().overlay_text = image_slideshow::overlay_for_path(path);
+        }
     }
 
     async fn navigate_images(&self, step: image_nav::NavStep) -> WidgetResult<()> {
@@ -414,9 +455,23 @@ impl ViewerWidgetInner {
                 }
             }
         }
+        self.capture_slide_prev();
+        let use_shuffle = {
+            let sl = self.slideshow.read();
+            sl.playing && sl.random && matches!(step, image_nav::NavStep::Next)
+        };
         let n = self.image_nav.read().siblings.len().max(1);
         for _ in 0..n {
-            let Some(idx) = self.image_nav.read().pick(step) else {
+            let idx = if use_shuffle {
+                let nav = self.image_nav.read().clone();
+                self.slideshow.write().next_shuffled(&nav)
+            } else {
+                self.image_nav.read().pick(step)
+            };
+            let Some(idx) = idx else {
+                if self.slideshow.read().playing && !self.image_nav.read().loop_playlist {
+                    self.stop_slideshow();
+                }
                 return Ok(());
             };
             let Some(next) = self.image_nav.read().siblings.get(idx).cloned() else {
@@ -436,6 +491,7 @@ impl ViewerWidgetInner {
     }
 
     async fn close_viewer(&self) {
+        self.stop_slideshow();
         let taken = self.viewer.lock().await.take();
         if let Some(mut v) = taken {
             let _ = v.close().await;
@@ -452,6 +508,7 @@ impl ViewerWidgetInner {
                 v.snapshot(),
                 &self.image_nav.read(),
                 Some(&self.image_thumbs.read()),
+                Some(&self.slideshow.read()),
             ));
         }
         drop(guard);
@@ -583,6 +640,166 @@ impl ViewerWidgetInner {
             .retain(|t| t.path != path.as_str());
     }
 
+    fn capture_slide_prev(&self) {
+        if !self.slideshow.read().playing {
+            return;
+        }
+        let Some(ViewerSnapshot::Image(s)) = self.snapshot.read().clone() else {
+            return;
+        };
+        let mut sl = self.slideshow.write();
+        sl.prev_rgba = Some(s.rgba_bytes);
+        sl.prev_w = s.width_px;
+        sl.prev_h = s.height_px;
+        sl.gen = 0;
+    }
+
+    fn patch_slide_clock(&self) {
+        let gen = self.slideshow.read().gen;
+        if let Some(ViewerSnapshot::Image(s)) = self.snapshot.write().as_mut() {
+            s.slideshow_gen = gen;
+        }
+        self.publish_refresh();
+    }
+
+    fn stop_slideshow(&self) {
+        self.slide_tick.fetch_add(1, Ordering::Relaxed);
+        {
+            let mut sl = self.slideshow.write();
+            sl.playing = false;
+            sl.paused = false;
+            sl.prev_rgba = None;
+        }
+        image_slideshow::stop_music(&mut self.music_child.lock());
+    }
+
+    fn schedule_slideshow_ticks(&self) {
+        let gen = self.slide_tick.fetch_add(1, Ordering::Relaxed) + 1;
+        let inner = {
+            let Some(entry) = VIEWER_LIVE.get(&self.instance_id) else {
+                return;
+            };
+            Arc::clone(entry.value())
+        };
+        tokio::spawn(async move {
+            let mut elapsed = 0u32;
+            loop {
+                if inner.slide_tick.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                let (playing, paused, interval, trans_ms) = {
+                    let sl = inner.slideshow.read();
+                    (sl.playing, sl.paused, sl.interval_ms, sl.transition_ms)
+                };
+                if !playing {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                if inner.slide_tick.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                if paused {
+                    continue;
+                }
+                elapsed = elapsed.saturating_add(50);
+                let bumped = {
+                    let mut sl = inner.slideshow.write();
+                    if sl.gen.saturating_mul(50) < trans_ms.max(1) {
+                        sl.gen = sl.gen.saturating_add(1);
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if bumped {
+                    inner.patch_slide_clock();
+                }
+                if elapsed >= interval.max(400) {
+                    elapsed = 0;
+                    if let Err(e) = inner.navigate_images(image_nav::NavStep::Next).await {
+                        warn!(error = %e, "slideshow advance failed");
+                        return;
+                    }
+                }
+            }
+        });
+    }
+
+    async fn start_slideshow(&self) -> WidgetResult<()> {
+        {
+            let path = self.path.read().clone();
+            if let Some(path) = path.as_ref() {
+                if is_image_path(path) {
+                    let need = self.image_nav.read().siblings.is_empty();
+                    if need {
+                        self.after_image_opened(path).await;
+                    }
+                }
+            }
+        }
+        let music = {
+            let existing = self.slideshow.read().music_path.clone();
+            if existing.is_some() {
+                existing
+            } else if let Some(path) = self.path.read().clone() {
+                image_slideshow::first_folder_audio(&self.deps.registry, &path)
+                    .await
+                    .map(|p| p.as_str().to_string())
+            } else {
+                None
+            }
+        };
+        {
+            let nav = self.image_nav.read().clone();
+            let mut sl = self.slideshow.write();
+            sl.playing = true;
+            sl.paused = false;
+            sl.music_path = music.clone();
+            if sl.random {
+                sl.rebuild_shuffle(&nav);
+            }
+            if sl.overlay {
+                if let Some(path) = self.path.read().as_ref() {
+                    sl.overlay_text = image_slideshow::overlay_for_path(path);
+                }
+            }
+        }
+        if let Some(m) = music {
+            image_slideshow::start_music(&m, &mut self.music_child.lock());
+        }
+        self.schedule_slideshow_ticks();
+        self.refresh_snapshot().await;
+        Ok(())
+    }
+
+    async fn toggle_slideshow(&self) -> WidgetResult<()> {
+        if self.slideshow.read().playing {
+            self.stop_slideshow();
+            self.refresh_snapshot().await;
+            Ok(())
+        } else {
+            self.start_slideshow().await
+        }
+    }
+
+    async fn export_slideshow(&self, kind: &str) -> WidgetResult<()> {
+        let nav = self.image_nav.read().clone();
+        let slide = self.slideshow.read().clone();
+        let dest = match kind {
+            "video" => {
+                tokio::task::spawn_blocking(move || image_slideshow::write_video(&nav, &slide))
+                    .await
+                    .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+            }
+            _ => tokio::task::spawn_blocking(move || image_slideshow::write_pack(&nav, &slide))
+                .await
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?,
+        }
+        .map_err(WidgetError::InvalidStateForOperation)?;
+        let _ = opener::open(&dest);
+        Ok(())
+    }
+
     async fn apply_lossless_path(
         &self,
         path: &orchid_fs::FsPath,
@@ -696,6 +913,9 @@ impl ViewerWidget {
                 image_thumbs: RwLock::new(image_thumbs::ImageThumbState::default()),
                 image_preload: RwLock::new(image_thumbs::ImagePreloadCache::default()),
                 thumb_gen: AtomicU64::new(0),
+                slideshow: RwLock::new(image_slideshow::SlideshowState::default()),
+                slide_tick: AtomicU64::new(0),
+                music_child: parking_lot::Mutex::new(None),
                 bus,
             }),
         }
@@ -810,6 +1030,7 @@ fn apply_image_overlay(
     snap: ViewerSnapshot,
     nav: &image_nav::ImageFolderNav,
     thumbs: Option<&image_thumbs::ImageThumbState>,
+    slide: Option<&image_slideshow::SlideshowState>,
 ) -> ViewerSnapshot {
     match snap {
         ViewerSnapshot::Image(mut s) => {
@@ -823,6 +1044,21 @@ fn apply_image_overlay(
                 s.thumb_grid = th.grid;
                 s.thumb_size = th.size.as_u8();
                 s.thumb_show_meta = th.show_meta;
+            }
+            if let Some(sl) = slide {
+                s.slideshow_playing = sl.playing;
+                s.slideshow_paused = sl.paused;
+                s.slideshow_interval_ms = sl.interval_ms;
+                s.slideshow_random = sl.random;
+                s.slideshow_transition = sl.transition.as_u8();
+                s.slideshow_transition_ms = sl.transition_ms;
+                s.slideshow_overlay = sl.overlay;
+                s.slideshow_overlay_text = sl.overlay_text.clone();
+                s.slideshow_music = sl.music_path.clone().unwrap_or_default();
+                s.slideshow_gen = sl.gen;
+                s.prev_rgba = sl.prev_rgba.clone();
+                s.prev_width = sl.prev_w;
+                s.prev_height = sl.prev_h;
             }
             ViewerSnapshot::Image(s)
         }
@@ -1054,13 +1290,39 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             "lens" => img.toggle_lens(),
             "rotate-180" => img.rotate_180(),
             "reset-transform" => img.reset_transforms(),
-            "next" | "prev" | "first" | "last" | "random" | "loop" | "thumbs" | "thumb-grid"
-            | "thumb-size" | "thumb-meta" | "thumb-refresh" | "contact-sheet" => {}
+            "next"
+            | "prev"
+            | "first"
+            | "last"
+            | "random"
+            | "loop"
+            | "thumbs"
+            | "thumb-grid"
+            | "thumb-size"
+            | "thumb-meta"
+            | "thumb-refresh"
+            | "contact-sheet"
+            | "slideshow"
+            | "slideshow-stop"
+            | "slideshow-pause"
+            | "slideshow-faster"
+            | "slideshow-slower"
+            | "slideshow-random"
+            | "slideshow-transition"
+            | "slideshow-trans-ms"
+            | "slideshow-overlay"
+            | "slideshow-music"
+            | "slideshow-export-html"
+            | "slideshow-export-video"
+            | "slideshow-export-exe"
+            | "slideshow-export-scr" => {}
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
                 || cmd.starts_with("lossless")
                 || cmd.starts_with("preload:")
-                || cmd.starts_with("open-thumb:") => {}
+                || cmd.starts_with("open-thumb:")
+                || cmd.starts_with("slideshow-interval:")
+                || cmd.starts_with("slideshow-music:") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1200,6 +1462,100 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 inner.image_thumbs.write().grid = false;
                 inner.open_path(path).await?;
             }
+        }
+        "slideshow" => inner.toggle_slideshow().await?,
+        "slideshow-stop" => {
+            inner.stop_slideshow();
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-pause" => {
+            if inner.slideshow.read().playing {
+                let next = !inner.slideshow.read().paused;
+                inner.slideshow.write().paused = next;
+                inner.refresh_snapshot().await;
+            }
+        }
+        "slideshow-faster" => {
+            inner.slideshow.write().cycle_interval(true);
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-slower" => {
+            inner.slideshow.write().cycle_interval(false);
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-random" => {
+            let next = !inner.slideshow.read().random;
+            {
+                let nav = inner.image_nav.read().clone();
+                let mut sl = inner.slideshow.write();
+                sl.random = next;
+                if next {
+                    sl.rebuild_shuffle(&nav);
+                }
+            }
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-transition" => {
+            let next = inner.slideshow.read().transition.cycle();
+            inner.slideshow.write().transition = next;
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-trans-ms" => {
+            inner.slideshow.write().cycle_transition_ms();
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-overlay" => {
+            let next = !inner.slideshow.read().overlay;
+            inner.slideshow.write().overlay = next;
+            if next {
+                if let Some(path) = inner.path.read().as_ref() {
+                    inner.slideshow.write().overlay_text = image_slideshow::overlay_for_path(path);
+                }
+            }
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-music" => {
+            let current = inner.slideshow.read().music_path.clone();
+            let path = inner.path.read().clone();
+            let next = if let Some(path) = path {
+                image_slideshow::next_folder_audio(&inner.deps.registry, &path, current.as_deref())
+                    .await
+            } else {
+                None
+            };
+            inner.slideshow.write().music_path = next.as_ref().map(|p| p.as_str().to_string());
+            if inner.slideshow.read().playing {
+                match &next {
+                    Some(p) => {
+                        image_slideshow::start_music(p.as_str(), &mut inner.music_child.lock())
+                    }
+                    None => image_slideshow::stop_music(&mut inner.music_child.lock()),
+                }
+            }
+            inner.refresh_snapshot().await;
+        }
+        "slideshow-export-html" | "slideshow-export-exe" | "slideshow-export-scr" => {
+            inner.export_slideshow("pack").await?;
+        }
+        "slideshow-export-video" => inner.export_slideshow("video").await?,
+        cmd if let Some(raw) = cmd.strip_prefix("slideshow-interval:") => {
+            if let Ok(sec) = raw.parse::<u32>() {
+                inner.slideshow.write().interval_ms = (sec * 1000).clamp(1000, 30_000);
+                inner.refresh_snapshot().await;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("slideshow-music:") => {
+            inner.slideshow.write().music_path = if raw.is_empty() {
+                None
+            } else {
+                Some(raw.to_string())
+            };
+            if inner.slideshow.read().playing {
+                if let Some(m) = inner.slideshow.read().music_path.clone() {
+                    image_slideshow::start_music(&m, &mut inner.music_child.lock());
+                }
+            }
+            inner.refresh_snapshot().await;
         }
         _ => inner.refresh_snapshot().await,
     }
@@ -2211,6 +2567,7 @@ impl Widget for ViewerWidget {
                     snap,
                     &self.inner.image_nav.read(),
                     Some(&self.inner.image_thumbs.read()),
+                    Some(&self.inner.slideshow.read()),
                 ),
             }),
         })
@@ -2225,8 +2582,9 @@ impl Widget for ViewerWidget {
         let floating = *self.inner.floating.read();
         let image_loop = self.inner.image_nav.read().loop_playlist;
         let thumbs = self.inner.image_thumbs.read().clone();
+        let slide = self.inner.slideshow.read().clone();
         state_codec::save_state(&ViewerPersisted::from_live(
-            path, floating, image_loop, &thumbs,
+            path, floating, image_loop, &thumbs, &slide,
         ))
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
@@ -2241,6 +2599,7 @@ impl Widget for ViewerWidget {
         *self.inner.floating.write() = floating;
         self.inner.image_nav.write().loop_playlist = persisted.image_loop;
         apply_persisted_thumbs(&self.inner, &persisted);
+        apply_persisted_slideshow(&self.inner, &persisted);
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -2275,6 +2634,15 @@ fn apply_persisted_thumbs(inner: &ViewerWidgetInner, persisted: &ViewerPersisted
     thumbs.size = ThumbnailSize::from_u8(persisted.thumb_size);
     thumbs.show_meta = persisted.thumb_meta;
     thumbs.preload_n = persisted.preload_n.min(8);
+}
+
+fn apply_persisted_slideshow(inner: &ViewerWidgetInner, persisted: &ViewerPersisted) {
+    let mut sl = inner.slideshow.write();
+    sl.interval_ms = persisted.slide_interval_ms.clamp(1000, 30_000);
+    sl.random = persisted.slide_random;
+    sl.transition = SlideTransition::from_u8(persisted.slide_transition);
+    sl.transition_ms = persisted.slide_transition_ms.clamp(80, 3000);
+    sl.overlay = persisted.slide_overlay;
 }
 
 /// Descriptor for the viewer widget. The caller injects shared deps
@@ -2316,6 +2684,7 @@ pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
         };
         widget.inner.image_nav.write().loop_playlist = persisted.image_loop;
         apply_persisted_thumbs(&widget.inner, &persisted);
+        apply_persisted_slideshow(&widget.inner, &persisted);
         Ok(Box::new(widget) as Box<dyn Widget>)
     });
     WidgetDescriptor {

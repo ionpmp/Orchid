@@ -7,6 +7,7 @@ pub mod exif;
 pub mod loader;
 pub mod lossless;
 pub mod operations;
+pub mod slideshow;
 pub mod transform;
 
 #[cfg(windows)]
@@ -440,6 +441,19 @@ impl Viewer for ImageViewer {
             thumb_grid: false,
             thumb_size: 1,
             thumb_show_meta: true,
+            slideshow_playing: false,
+            slideshow_paused: false,
+            slideshow_interval_ms: 4000,
+            slideshow_random: false,
+            slideshow_transition: 1,
+            slideshow_transition_ms: 500,
+            slideshow_overlay: true,
+            slideshow_overlay_text: String::new(),
+            slideshow_music: String::new(),
+            slideshow_gen: 0,
+            prev_rgba: None,
+            prev_width: 0,
+            prev_height: 0,
         })
     }
 

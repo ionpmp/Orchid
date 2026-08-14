@@ -34,6 +34,10 @@ pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
 pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
+pub use image::slideshow::{
+    export_slideshow_pack, export_slideshow_video, is_slideshow_audio_extension, overlay_text,
+    SlideTransition, SlideshowExport,
+};
 pub use image::{
     is_image_file_extension, load_image, ImageBackground, ImageFitMode, ImageFormat, ImageViewer,
     LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT, IMAGE_FILE_EXTENSIONS,

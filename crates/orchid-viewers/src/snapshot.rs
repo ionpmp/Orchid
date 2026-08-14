@@ -140,6 +140,21 @@ pub struct ImageSnapshot {
     pub thumb_size: u8,
     /// Show name / size / date / rating under each thumbnail.
     pub thumb_show_meta: bool,
+    pub slideshow_playing: bool,
+    pub slideshow_paused: bool,
+    pub slideshow_interval_ms: u32,
+    pub slideshow_random: bool,
+    /// 0 none, 1 fade, 2 slide, 3 dissolve, 4 wipe.
+    pub slideshow_transition: u8,
+    pub slideshow_transition_ms: u32,
+    pub slideshow_overlay: bool,
+    pub slideshow_overlay_text: String,
+    pub slideshow_music: String,
+    /// Bumped on each slide so the UI restarts the transition.
+    pub slideshow_gen: u32,
+    pub prev_rgba: Option<Arc<Vec<u8>>>,
+    pub prev_width: u32,
+    pub prev_height: u32,
 }
 
 /// One folder sibling in the image thumbnail strip or grid.

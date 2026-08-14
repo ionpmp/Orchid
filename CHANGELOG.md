@@ -109,6 +109,11 @@ release yet.
   shared on-disk thumbnail cache (mtime-keyed; refreshes when the file
   changes), fast EXIF/embedded-JPEG thumbs, and a contact-sheet PNG
   (`T`/`G`/`D`/`I`/`P`).
+- Image slideshow: auto-advance every N seconds (F5), pause/resume (Space),
+  speed (`,`/`.`), random order (Y), fade/slide/dissolve/wipe with adjustable
+  duration (J / Shift+J), loop, name/date/EXIF overlay (Shift+O), folder
+  background music (Shift+M / ffplay), and export to HTML player, ffmpeg
+  MP4, optional self-running EXE, and `.scr` screensaver.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find
