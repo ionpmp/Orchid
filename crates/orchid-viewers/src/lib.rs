@@ -50,6 +50,12 @@ pub use image::edit::{
     save_sibling, CropKeep, EditOp, ResizeSpec,
 };
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
+pub use image::export::{
+    capture_screenshot, encode_png, export_file, export_loaded, loaded_from_rgba,
+    parse_export_line, parse_screenshot_line, prepare_mail_attachment, set_wallpaper,
+    share_intent_url, unique_export_dest, write_mail_eml, write_screenshot, ExportFormat,
+    ExportSpec, ScreenshotKind, ScreenshotSpec,
+};
 pub use image::filter::{
     apply_filter, apply_filter_file, builtin_looks, load_filter_presets, parse_filter_line,
     parse_filter_line_in, save_filter_preset, FilterOp, FilterPreset,

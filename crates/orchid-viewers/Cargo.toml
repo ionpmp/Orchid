@@ -75,6 +75,7 @@ features = [
     "Win32_Graphics_Imaging",
     "Win32_System_Com",
     "Win32_UI_ColorSystem",
+    "Win32_UI_WindowsAndMessaging",
 ]
 
 # Archive readers are wrapped through orchid-fs; direct deps are not needed
