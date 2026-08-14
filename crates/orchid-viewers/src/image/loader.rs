@@ -33,6 +33,27 @@ pub struct LoadedImage {
     pub height: u32,
     pub format: ImageFormat,
     pub original_size_bytes: u64,
+    /// Source ICC / assumed profile label for the status strip.
+    pub color_source: String,
+    /// Destination profile label after color management.
+    pub color_dest: String,
+    /// EXIF orientation that was applied (`1` = none).
+    pub orientation: u32,
+}
+
+impl LoadedImage {
+    pub(crate) fn meta_defaults() -> Self {
+        Self {
+            rgba: Arc::new(Vec::new()),
+            width: 0,
+            height: 0,
+            format: ImageFormat::Unknown,
+            original_size_bytes: 0,
+            color_source: String::new(),
+            color_dest: String::new(),
+            orientation: 1,
+        }
+    }
 }
 
 /// Image format the loader recognised.
@@ -181,16 +202,32 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
         .unwrap_or(ImageFormat::Unknown);
-    let img = image::load_from_memory(bytes).map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
+    let img =
+        image::load_from_memory(bytes).map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
+    Ok(finish_decoded(img, bytes, size, guessed))
+}
+
+fn finish_decoded(
+    img: image::DynamicImage,
+    file_bytes: &[u8],
+    size: u64,
+    format: ImageFormat,
+) -> LoadedImage {
+    let orientation = crate::image::exif::orientation_from_bytes(file_bytes);
+    let img = crate::image::exif::apply_orientation(img, orientation);
     let (w, h) = img.dimensions();
-    let rgba = Arc::new(img.to_rgba8().into_raw());
-    Ok(LoadedImage {
-        rgba,
+    let mut rgba = img.to_rgba8().into_raw();
+    let color = crate::image::color::apply_embedded_icc(&mut rgba, file_bytes);
+    LoadedImage {
+        rgba: Arc::new(rgba),
         width: w,
         height: h,
-        format: guessed,
+        format,
         original_size_bytes: size,
-    })
+        color_source: color.source_profile,
+        color_dest: color.dest_profile,
+        orientation,
+    }
 }
 
 fn decode_heic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
@@ -224,15 +261,7 @@ fn decode_raw_preview(bytes: &[u8], size: u64) -> Result<LoadedImage> {
         tracing::debug!(error = %e, "RAW embedded JPEG decode failed");
         ViewerError::UnsupportedRaw
     })?;
-    let (w, h) = img.dimensions();
-    let rgba = Arc::new(img.to_rgba8().into_raw());
-    Ok(LoadedImage {
-        rgba,
-        width: w,
-        height: h,
-        format: ImageFormat::Raw,
-        original_size_bytes: size,
-    })
+    Ok(finish_decoded(img, jpeg, size, ImageFormat::Raw))
 }
 
 /// Scan for JPEG SOI…EOI segments and return the largest one (preview > thumb).
@@ -274,7 +303,11 @@ pub fn looks_like_svg(bytes: &[u8]) -> bool {
         return false;
     };
     let trimmed = text.trim_start_matches('\u{feff}').trim_start();
-    let head: String = trimmed.chars().take(512).collect::<String>().to_ascii_lowercase();
+    let head: String = trimmed
+        .chars()
+        .take(512)
+        .collect::<String>()
+        .to_ascii_lowercase();
     if head.starts_with("<svg") {
         return true;
     }
@@ -371,7 +404,9 @@ fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
     }
 
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height).ok_or_else(|| {
-        ViewerError::ImageDecode(format!("failed to allocate {width}×{height} pixmap for SVG"))
+        ViewerError::ImageDecode(format!(
+            "failed to allocate {width}×{height} pixmap for SVG"
+        ))
     })?;
     resvg::render(
         &tree,
@@ -390,6 +425,7 @@ fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
         height,
         format: ImageFormat::Svg,
         original_size_bytes: size,
+        ..LoadedImage::meta_defaults()
     })
 }
 
@@ -521,10 +557,7 @@ mod tests {
             sniff_unsupported_image(b"FUJIFILMCCD-RAW \x00rest"),
             Some(ImageFormat::Raw)
         );
-        assert_eq!(
-            sniff_unsupported_image(b"IIROxxxx"),
-            Some(ImageFormat::Raw)
-        );
+        assert_eq!(sniff_unsupported_image(b"IIROxxxx"), Some(ImageFormat::Raw));
         assert_eq!(
             sniff_unsupported_image(b"IIU\0rest"),
             Some(ImageFormat::Raw)

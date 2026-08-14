@@ -102,8 +102,18 @@ pub struct ImageSnapshot {
     pub rotation_degrees: i16,
     pub flipped_horizontal: bool,
     pub flipped_vertical: bool,
-    /// `true` when Fit Screen is active; `false` for Actual Size / custom zoom.
-    pub fit_mode: bool,
+    /// 0 custom, 1 window, 2 width, 3 height, 4 shrink (see [`crate::ImageFitMode`]).
+    pub fit_mode: u8,
+    /// 0 theme, 1 black, 2 white, 3 gray, 4 checkerboard, 5 custom.
+    pub background: u8,
+    pub bg_r: u8,
+    pub bg_g: u8,
+    pub bg_b: u8,
+    pub chrome_hidden: bool,
+    pub kiosk: bool,
+    pub color_source: String,
+    pub color_dest: String,
+    pub orientation: u32,
     /// Short format label (e.g. `PNG`) for the localized status strip.
     pub format_label: String,
     /// Original file size in bytes (for the localized status strip).

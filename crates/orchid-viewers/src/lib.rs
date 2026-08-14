@@ -20,23 +20,23 @@ pub mod thumbnail;
 pub mod viewer_trait;
 
 pub use archive::ArchiveViewer;
+pub use audio_tags::{format_id3_report, is_id3_extension, read_id3_fields, AudioTagField};
 pub use dispatch::{kind_for, select_viewer, ViewerKind};
+pub use document::ooxml::core_props::{
+    format_office_report, is_office_extension, pack_office_props, read_office_core_props,
+    unpack_office_props, write_office_core_props, OfficeCoreProps,
+};
 pub use document::{
     create_sample_docx, sample_document, Alignment, Block, CellImage, Document, DocumentViewer,
     EditCommand, ListKind, UndoStack as DocumentUndoStack,
 };
 pub use error::{Result, ViewerError};
-pub use audio_tags::{format_id3_report, is_id3_extension, read_id3_fields, AudioTagField};
-pub use document::ooxml::core_props::{
-    format_office_report, is_office_extension, pack_office_props, read_office_core_props,
-    unpack_office_props, write_office_core_props, OfficeCoreProps,
-};
 pub use html::{is_html_file_extension, HtmlViewer};
-pub use image::{
-    is_image_file_extension, ImageFormat, ImageViewer, LoadedImage, ViewTransform,
-    IMAGE_FILE_EXTENSIONS,
-};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
+pub use image::{
+    is_image_file_extension, ImageBackground, ImageFitMode, ImageFormat, ImageViewer, LoadedImage,
+    ViewTransform, IMAGE_FILE_EXTENSIONS,
+};
 pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};
 pub use pdf::PdfViewer;
 pub use snapshot::{

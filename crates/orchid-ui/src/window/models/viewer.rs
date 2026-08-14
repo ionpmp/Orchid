@@ -167,11 +167,24 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         rotation_deg: 0,
         flipped_h: false,
         flipped_v: false,
-        fit_mode: true,
+        fit_mode: 1,
+        bg_kind: 0,
+        bg_r: 26,
+        bg_g: 26,
+        bg_b: 46,
+        chrome_hidden: false,
+        kiosk: false,
         info_text: SharedString::new(),
         path_display: SharedString::new(),
         fit_label: locale.tr("viewer-image-fit-screen").into(),
+        fit_width_label: locale.tr("viewer-image-fit-width").into(),
+        fit_height_label: locale.tr("viewer-image-fit-height").into(),
+        fit_shrink_label: locale.tr("viewer-image-fit-shrink").into(),
         actual_size_label: locale.tr("viewer-image-actual-size").into(),
+        bg_label: locale.tr("viewer-image-background").into(),
+        fullscreen_label: locale.tr("viewer-image-fullscreen").into(),
+        kiosk_label: locale.tr("viewer-image-kiosk").into(),
+        next_monitor_label: locale.tr("viewer-image-next-monitor").into(),
     }
 }
 
@@ -601,12 +614,68 @@ fn build_document_snapshot(
     model
 }
 
+fn composite_checkerboard(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Arc<Vec<u8>> {
+    const TILE: u32 = 8;
+    let mut out = rgba.as_ref().clone();
+    let w = width as usize;
+    for y in 0..height {
+        for x in 0..width {
+            let i = (y as usize * w + x as usize) * 4;
+            let Some(px) = out.get_mut(i..i + 4) else {
+                continue;
+            };
+            let a = u32::from(px[3]);
+            if a >= 255 {
+                continue;
+            }
+            let light = ((x / TILE) + (y / TILE)) % 2 == 0;
+            let c = if light { 204u32 } else { 102u32 };
+            if a == 0 {
+                px[0] = c as u8;
+                px[1] = c as u8;
+                px[2] = c as u8;
+                px[3] = 255;
+            } else {
+                let ia = 255 - a;
+                px[0] = ((u32::from(px[0]) * a + c * ia) / 255) as u8;
+                px[1] = ((u32::from(px[1]) * a + c * ia) / 255) as u8;
+                px[2] = ((u32::from(px[2]) * a + c * ia) / 255) as u8;
+                px[3] = 255;
+            }
+        }
+    }
+    Arc::new(out)
+}
+
 fn build_image_snapshot(
     s: &orchid_viewers::ImageSnapshot,
     locale: &LocaleManager,
 ) -> ViewerImageModel {
-    let image = slint_image_from_rgba(&s.rgba_bytes, s.width_px, s.height_px);
+    let pixels = if s.background == 4 {
+        composite_checkerboard(&s.rgba_bytes, s.width_px, s.height_px)
+    } else {
+        Arc::clone(&s.rgba_bytes)
+    };
+    let image = slint_image_from_rgba(&pixels, s.width_px, s.height_px);
 
+    let args = orchid_i18n::FluentArgs::new()
+        .with("width", s.width_px.to_string())
+        .with("height", s.height_px.to_string())
+        .with("size", locale.format_byte_size(s.size_bytes))
+        .with("format", viewer_image_format_label(locale, &s.format_label));
+    let mut info = locale.tr_args("viewer-image-info", &args);
+    if !s.color_source.is_empty() {
+        info.push_str(" · ");
+        info.push_str(&s.color_source);
+        if s.color_dest != s.color_source {
+            info.push_str(" → ");
+            info.push_str(&s.color_dest);
+        }
+    }
+    if s.orientation > 1 {
+        info.push_str(" · EXIF ");
+        info.push_str(&s.orientation.to_string());
+    }
     ViewerImageModel {
         width_px: s.width_px as i32,
         height_px: s.height_px as i32,
@@ -617,18 +686,24 @@ fn build_image_snapshot(
         rotation_deg: i32::from(s.rotation_degrees),
         flipped_h: s.flipped_horizontal,
         flipped_v: s.flipped_vertical,
-        fit_mode: s.fit_mode,
-        info_text: {
-            let args = orchid_i18n::FluentArgs::new()
-                .with("width", s.width_px.to_string())
-                .with("height", s.height_px.to_string())
-                .with("size", locale.format_byte_size(s.size_bytes))
-                .with("format", viewer_image_format_label(locale, &s.format_label));
-            locale.tr_args("viewer-image-info", &args).into()
-        },
+        fit_mode: i32::from(s.fit_mode),
+        bg_kind: i32::from(s.background),
+        bg_r: i32::from(s.bg_r),
+        bg_g: i32::from(s.bg_g),
+        bg_b: i32::from(s.bg_b),
+        chrome_hidden: s.chrome_hidden,
+        kiosk: s.kiosk,
+        info_text: info.into(),
         path_display: s.path_display.clone().into(),
         fit_label: locale.tr("viewer-image-fit-screen").into(),
+        fit_width_label: locale.tr("viewer-image-fit-width").into(),
+        fit_height_label: locale.tr("viewer-image-fit-height").into(),
+        fit_shrink_label: locale.tr("viewer-image-fit-shrink").into(),
         actual_size_label: locale.tr("viewer-image-actual-size").into(),
+        bg_label: locale.tr("viewer-image-background").into(),
+        fullscreen_label: locale.tr("viewer-image-fullscreen").into(),
+        kiosk_label: locale.tr("viewer-image-kiosk").into(),
+        next_monitor_label: locale.tr("viewer-image-next-monitor").into(),
     }
 }
 

@@ -26,6 +26,7 @@ import { WidgetSettingsDialog } from "widget-settings-dialog.slint";
 
 export component WidgetFrame inherits Rectangle {
     in property <WidgetFrameModel> model;
+    property <bool> hide-frame-chrome: model.type-id == "viewer" && model.viewer.image.kiosk;
 
     callback close-clicked();
     callback settings-clicked();
@@ -228,6 +229,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-image-flip-h(string);
     callback viewer-image-flip-v(string);
     callback viewer-image-pan(string, length, length);
+    callback viewer-image-command(string, string);
     callback viewer-viewport-changed(string, length, length);
 
     callback viewer-pdf-prev-page(string);
@@ -373,7 +375,9 @@ export component WidgetFrame inherits Rectangle {
         x: 0;
         y: 0;
         width: parent.width;
-        height: 32px;
+        height: root.hide-frame-chrome ? 0px : 32px;
+        visible: !root.hide-frame-chrome;
+        clip: true;
         background: Theme.surface-base;
 
         Rectangle {
@@ -670,9 +674,9 @@ export component WidgetFrame inherits Rectangle {
 
     content := Rectangle {
         x: 0;
-        y: 32px;
+        y: root.hide-frame-chrome ? 0px : 32px;
         width: parent.width;
-        height: parent.height - 32px;
+        height: root.hide-frame-chrome ? parent.height : parent.height - 32px;
         background: Theme.surface-base;
 
         VerticalLayout {
@@ -1024,6 +1028,7 @@ export component WidgetFrame inherits Rectangle {
                         image-flip-h => { root.viewer-image-flip-h(root.model.instance-id); }
                         image-flip-v => { root.viewer-image-flip-v(root.model.instance-id); }
                         image-pan(dx, dy) => { root.viewer-image-pan(root.model.instance-id, dx, dy); }
+                        image-command(c) => { root.viewer-image-command(root.model.instance-id, c); }
 
                         pdf-prev-page => { root.viewer-pdf-prev-page(root.model.instance-id); }
                         pdf-next-page => { root.viewer-pdf-next-page(root.model.instance-id); }

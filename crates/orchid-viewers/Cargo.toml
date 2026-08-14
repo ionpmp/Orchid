@@ -55,6 +55,7 @@ parley.workspace = true
 swash.workspace = true
 zip.workspace = true
 kamadak-exif.workspace = true
+qcms.workspace = true
 id3.workspace = true
 
 orchid-core.workspace = true
@@ -65,8 +66,10 @@ orchid-fs.workspace = true
 workspace = true
 features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Graphics_Imaging",
     "Win32_System_Com",
+    "Win32_UI_ColorSystem",
 ]
 
 # Archive readers are wrapped through orchid-fs; direct deps are not needed

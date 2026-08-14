@@ -193,6 +193,7 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-image-flip-h(string);
     callback viewer-image-flip-v(string);
     callback viewer-image-pan(string, length, length);
+    callback viewer-image-command(string, string);
     callback viewer-viewport-changed(string, length, length);
     callback viewer-pdf-prev-page(string);
     callback viewer-pdf-next-page(string);
@@ -589,6 +590,7 @@ export component WorkspaceView inherits Rectangle {
                     viewer-image-flip-h(id) => { root.viewer-image-flip-h(id); }
                     viewer-image-flip-v(id) => { root.viewer-image-flip-v(id); }
                     viewer-image-pan(id, dx, dy) => { root.viewer-image-pan(id, dx, dy); }
+                    viewer-image-command(id, c) => { root.viewer-image-command(id, c); }
                     viewer-viewport-changed(id, w, h) => { root.viewer-viewport-changed(id, w, h); }
                     viewer-pdf-prev-page(id) => { root.viewer-pdf-prev-page(id); }
                     viewer-pdf-next-page(id) => { root.viewer-pdf-next-page(id); }
@@ -731,6 +733,7 @@ export component WorkspaceView inherits Rectangle {
             viewer-image-flip-h(id) => { root.viewer-image-flip-h(id); }
             viewer-image-flip-v(id) => { root.viewer-image-flip-v(id); }
             viewer-image-pan(id, dx, dy) => { root.viewer-image-pan(id, dx, dy); }
+            viewer-image-command(id, c) => { root.viewer-image-command(id, c); }
             viewer-viewport-changed(id, vw, vh) => { root.viewer-viewport-changed(id, vw, vh); }
             viewer-pdf-prev-page(id) => { root.viewer-pdf-prev-page(id); }
             viewer-pdf-next-page(id) => { root.viewer-pdf-next-page(id); }

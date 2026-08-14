@@ -861,11 +861,26 @@ export struct ViewerImageModel {
     rotation-deg: int,
     flipped-h: bool,
     flipped-v: bool,
-    fit-mode: bool,
+    /// 0 custom, 1 window, 2 width, 3 height, 4 shrink.
+    fit-mode: int,
+    /// 0 theme, 1 black, 2 white, 3 gray, 4 checkerboard, 5 custom.
+    bg-kind: int,
+    bg-r: int,
+    bg-g: int,
+    bg-b: int,
+    chrome-hidden: bool,
+    kiosk: bool,
     info-text: string,
     path-display: string,
     fit-label: string,
+    fit-width-label: string,
+    fit-height-label: string,
+    fit-shrink-label: string,
     actual-size-label: string,
+    bg-label: string,
+    fullscreen-label: string,
+    kiosk-label: string,
+    next-monitor-label: string,
 }
 
 export struct ViewerPdfModel {

@@ -2,6 +2,7 @@
 
 use std::any::Any;
 
+pub mod color;
 pub mod exif;
 pub mod loader;
 pub mod operations;
@@ -22,7 +23,7 @@ use crate::viewer_trait::Viewer;
 pub use loader::{
     is_image_file_extension, load_image, rgba_arc, ImageFormat, LoadedImage, IMAGE_FILE_EXTENSIONS,
 };
-pub use transform::ViewTransform;
+pub use transform::{ImageBackground, ImageFitMode, ViewTransform};
 
 /// Max image size this viewer accepts. 128 MiB.
 pub const DEFAULT_SIZE_LIMIT: u64 = 128 * 1024 * 1024;
@@ -33,8 +34,11 @@ pub struct ImageViewer {
     image: RwLock<Option<LoadedImage>>,
     transform: RwLock<ViewTransform>,
     viewport: RwLock<(f32, f32)>,
-    /// When true, viewport changes re-apply fit-to-viewport (like PDF fit modes).
-    fit_mode: RwLock<bool>,
+    fit_mode: RwLock<ImageFitMode>,
+    background: RwLock<ImageBackground>,
+    custom_bg: RwLock<(u8, u8, u8)>,
+    chrome_hidden: RwLock<bool>,
+    kiosk: RwLock<bool>,
     size_limit: u64,
 }
 
@@ -64,7 +68,11 @@ impl ImageViewer {
             image: RwLock::new(None),
             transform: RwLock::new(ViewTransform::default()),
             viewport: RwLock::new((800.0, 600.0)),
-            fit_mode: RwLock::new(true),
+            fit_mode: RwLock::new(ImageFitMode::Window),
+            background: RwLock::new(ImageBackground::Theme),
+            custom_bg: RwLock::new((26, 26, 46)),
+            chrome_hidden: RwLock::new(false),
+            kiosk: RwLock::new(false),
             size_limit: DEFAULT_SIZE_LIMIT,
         }
     }
@@ -75,27 +83,29 @@ impl ImageViewer {
     /// tracks window / frame resizes (same idea as PDF fit modes).
     pub fn set_viewport(&self, width: f32, height: f32) {
         *self.viewport.write() = (width.max(1.0), height.max(1.0));
-        let should_fit = *self.fit_mode.read();
-        if should_fit {
+        if self.fit_mode.read().tracks_viewport() {
             self.apply_fit_transform();
         }
     }
 
     /// Change zoom, anchored at `(anchor_x, anchor_y)`.
     pub fn set_zoom(&self, factor: f32, anchor_x: f32, anchor_y: f32) {
-        *self.fit_mode.write() = false;
+        *self.fit_mode.write() = ImageFitMode::Custom;
         self.transform.write().set_zoom(factor, anchor_x, anchor_y);
     }
 
     /// Pan by `(dx, dy)` pixels.
     pub fn pan(&self, dx: f32, dy: f32) {
-        *self.fit_mode.write() = false;
+        *self.fit_mode.write() = ImageFitMode::Custom;
         self.transform.write().pan(dx, dy);
     }
 
     /// Rotate 90° clockwise.
     pub fn rotate_cw(&self) {
         self.transform.write().rotate_clockwise();
+        if self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
     }
 
     /// Toggle horizontal flip.
@@ -112,29 +122,92 @@ impl ImageViewer {
 
     /// Reset transform to best fit.
     pub fn fit_to_viewport(&self) {
-        *self.fit_mode.write() = true;
-        self.apply_fit_transform();
+        self.set_fit_mode(ImageFitMode::Window);
+    }
+
+    /// Fit so the image width matches the viewport.
+    pub fn fit_to_width(&self) {
+        self.set_fit_mode(ImageFitMode::Width);
+    }
+
+    /// Fit so the image height matches the viewport.
+    pub fn fit_to_height(&self) {
+        self.set_fit_mode(ImageFitMode::Height);
+    }
+
+    /// Fit without enlarging past 1:1.
+    pub fn fit_shrink(&self) {
+        self.set_fit_mode(ImageFitMode::Shrink);
+    }
+
+    /// Set the active fit mode and recompute zoom.
+    pub fn set_fit_mode(&self, mode: ImageFitMode) {
+        *self.fit_mode.write() = mode;
+        if mode.tracks_viewport() {
+            self.apply_fit_transform();
+        }
     }
 
     fn apply_fit_transform(&self) {
+        let mode = *self.fit_mode.read();
         let image = self.image.read();
         let (vw, vh) = *self.viewport.read();
         let (iw, ih) = match image.as_ref() {
             Some(i) => (i.width, i.height),
             None => (1, 1),
         };
-        *self.transform.write() = ViewTransform::fit_to_viewport(iw, ih, vw, vh);
+        let rot = self.transform.read().rotation_degrees;
+        let flip_h = self.transform.read().flipped_horizontal;
+        let flip_v = self.transform.read().flipped_vertical;
+        let mut t = ViewTransform::fit_mode(mode, iw, ih, rot, vw, vh);
+        t.flipped_horizontal = flip_h;
+        t.flipped_vertical = flip_v;
+        *self.transform.write() = t;
     }
 
-    /// Reset transform to 1:1.
+    /// Reset transform to 1:1 (keeps rotation / flip).
     pub fn actual_size(&self) {
-        *self.fit_mode.write() = false;
-        self.transform.write().reset();
+        *self.fit_mode.write() = ImageFitMode::Custom;
+        let mut t = self.transform.write();
+        t.zoom = 1.0;
+        t.pan_x = 0.0;
+        t.pan_y = 0.0;
+    }
+
+    /// Cycle the canvas background.
+    pub fn cycle_background(&self) {
+        let next = self.background.read().next();
+        *self.background.write() = next;
+    }
+
+    /// Set a custom RGB canvas color and select that background.
+    pub fn set_custom_background(&self, r: u8, g: u8, b: u8) {
+        *self.custom_bg.write() = (r, g, b);
+        *self.background.write() = ImageBackground::Custom;
+    }
+
+    /// Toggle viewer toolbar / status chrome.
+    pub fn toggle_chrome_hidden(&self) {
+        let next = !*self.chrome_hidden.read();
+        *self.chrome_hidden.write() = next;
+    }
+
+    /// Toggle kiosk (borderless chrome + hidden widget header).
+    pub fn toggle_kiosk(&self) {
+        let next = !*self.kiosk.read();
+        *self.kiosk.write() = next;
+        *self.chrome_hidden.write() = next;
+    }
+
+    /// Leave fullscreen / kiosk chrome (Esc).
+    pub fn exit_immersive(&self) {
+        *self.kiosk.write() = false;
+        *self.chrome_hidden.write() = false;
     }
 
     /// Nudge zoom by a factor around the viewport center.
     pub fn zoom_by(&self, factor: f32) {
-        *self.fit_mode.write() = false;
+        *self.fit_mode.write() = ImageFitMode::Custom;
         let (vw, vh) = *self.viewport.read();
         let anchor_x = vw / 2.0;
         let anchor_y = vh / 2.0;
@@ -145,6 +218,9 @@ impl ImageViewer {
     /// Rotate 90° counter-clockwise.
     pub fn rotate_ccw(&self) {
         self.transform.write().rotate_counter_clockwise();
+        if self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
     }
 }
 
@@ -184,6 +260,7 @@ impl Viewer for ImageViewer {
             return ViewerSnapshot::Loading { path_display };
         };
         let transform = *self.transform.read();
+        let (bg_r, bg_g, bg_b) = *self.custom_bg.read();
         ViewerSnapshot::Image(ImageSnapshot {
             path_display,
             width_px: image.width,
@@ -195,7 +272,16 @@ impl Viewer for ImageViewer {
             rotation_degrees: transform.rotation_degrees,
             flipped_horizontal: transform.flipped_horizontal,
             flipped_vertical: transform.flipped_vertical,
-            fit_mode: *self.fit_mode.read(),
+            fit_mode: self.fit_mode.read().as_u8(),
+            background: self.background.read().as_u8(),
+            bg_r,
+            bg_g,
+            bg_b,
+            chrome_hidden: *self.chrome_hidden.read(),
+            kiosk: *self.kiosk.read(),
+            color_source: image.color_source.clone(),
+            color_dest: image.color_dest.clone(),
+            orientation: image.orientation,
             format_label: image.format.label().to_string(),
             size_bytes: image.original_size_bytes,
             info_text: String::new(),

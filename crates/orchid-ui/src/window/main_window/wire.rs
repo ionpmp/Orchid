@@ -1839,6 +1839,25 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_image_command({
+            let t = t.clone();
+            move |id, cmd| {
+                if let Some(c) = t.upgrade() {
+                    c.apply_viewer_window_command(cmd.as_str());
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        c.bring_floating_to_front(inst);
+                        let cmd = cmd.to_string();
+                        spawn::spawn_local_compat(async move {
+                            if let Err(e) =
+                                orchid_widgets::builtin::viewer::image_command(inst, &cmd).await
+                            {
+                                warn!(?e, "viewer image command");
+                            }
+                        });
+                    }
+                }
+            }
+        });
         self.window.on_viewer_viewport_changed({
             let t = t.clone();
             move |id, w, h| {
@@ -2972,5 +2991,54 @@ impl MainWindowController {
             }
         });
         Ok(())
+    }
+
+    /// OS-level fullscreen / kiosk / next-monitor for the image viewer.
+    fn apply_viewer_window_command(&self, cmd: &str) {
+        use slint::winit_030::winit::dpi::PhysicalPosition;
+        use slint::winit_030::winit::window::Fullscreen;
+        use slint::winit_030::WinitWindowAccessor;
+
+        self.window.window().with_winit_window(|win| match cmd {
+            "fullscreen" => {
+                if win.fullscreen().is_some() {
+                    win.set_fullscreen(None);
+                } else {
+                    win.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                }
+            }
+            "kiosk" => {
+                if win.is_decorated() {
+                    win.set_decorations(false);
+                    win.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                } else {
+                    win.set_fullscreen(None);
+                    win.set_decorations(true);
+                }
+            }
+            "exit-immersive" => {
+                win.set_fullscreen(None);
+                win.set_decorations(true);
+            }
+            "next-monitor" => {
+                let monitors: Vec<_> = win.available_monitors().collect();
+                if monitors.len() < 2 {
+                    return;
+                }
+                let current = win.current_monitor();
+                let idx = current
+                    .as_ref()
+                    .and_then(|cur| monitors.iter().position(|m| m.name() == cur.name()))
+                    .unwrap_or(0);
+                let next = monitors[(idx + 1) % monitors.len()].clone();
+                if win.fullscreen().is_some() {
+                    win.set_fullscreen(Some(Fullscreen::Borderless(Some(next))));
+                } else {
+                    let pos = next.position();
+                    win.set_outer_position(PhysicalPosition::new(pos.x, pos.y));
+                }
+            }
+            _ => {}
+        });
     }
 }

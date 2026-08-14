@@ -4,9 +4,8 @@
 //! codec is missing, callers surface [`crate::error::ViewerError::UnsupportedHeic`].
 
 use windows::Win32::Graphics::Imaging::{
-    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppRGBA, IWICFormatConverter,
-    IWICImagingFactory, WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom,
-    WICDecodeMetadataCacheOnDemand,
+    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppRGBA, IWICFormatConverter, IWICImagingFactory,
+    WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
 };
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
@@ -24,6 +23,7 @@ pub(crate) fn decode_heic_wic(bytes: &[u8], size: u64) -> Result<LoadedImage> {
             height,
             format: ImageFormat::Heic,
             original_size_bytes: size,
+            ..LoadedImage::meta_defaults()
         })
         .map_err(|e| {
             tracing::debug!(error = %e, "WIC HEIC decode failed");
@@ -73,11 +73,12 @@ fn decode_heic_wic_inner(bytes: &[u8]) -> windows::core::Result<(Vec<u8>, u32, u
         let stride = width.checked_mul(4).ok_or(windows::core::Error::from(
             windows::Win32::Foundation::E_OUTOFMEMORY,
         ))?;
-        let buf_len = (stride as usize)
-            .checked_mul(height as usize)
-            .ok_or(windows::core::Error::from(
-                windows::Win32::Foundation::E_OUTOFMEMORY,
-            ))?;
+        let buf_len =
+            (stride as usize)
+                .checked_mul(height as usize)
+                .ok_or(windows::core::Error::from(
+                    windows::Win32::Foundation::E_OUTOFMEMORY,
+                ))?;
         let mut rgba = vec![0u8; buf_len];
         converter.CopyPixels(std::ptr::null(), stride, &mut rgba)?;
         Ok((rgba, width, height))

@@ -21,6 +21,7 @@ export component ViewerView inherits Rectangle {
     callback image-flip-h();
     callback image-flip-v();
     callback image-pan(length, length);
+    callback image-command(string);
 
     callback pdf-prev-page();
     callback pdf-next-page();
@@ -108,6 +109,7 @@ export component ViewerView inherits Rectangle {
         flip-h => { root.image-flip-h(); }
         flip-v => { root.image-flip-v(); }
         pan(dx, dy) => { root.image-pan(dx, dy); }
+        command(c) => { root.image-command(c); }
     }
 
     if model.kind == 4 : ViewerPdfView {

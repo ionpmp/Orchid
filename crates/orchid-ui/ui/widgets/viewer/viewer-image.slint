@@ -14,12 +14,19 @@ export component ViewerImageView inherits Rectangle {
     callback flip-h();
     callback flip-v();
     callback pan(length, length);
+    callback command(string);
 
     background: transparent;
 
     property <length> last-mx: 0px;
     property <length> last-my: 0px;
     property <length> pan-step: 40px;
+    property <color> canvas-bg: model.bg-kind == 1 ? #000000
+        : model.bg-kind == 2 ? #ffffff
+        : model.bg-kind == 3 ? #808080
+        : model.bg-kind == 4 ? #707070
+        : model.bg-kind == 5 ? rgb(model.bg-r, model.bg-g, model.bg-b)
+        : Theme.surface-base;
 
     img-keys := FocusScope {
         width: 100%;
@@ -41,6 +48,38 @@ export component ViewerImageView inherits Rectangle {
             }
             if (event.text == "1") {
                 root.actual-size();
+                return accept;
+            }
+            if (event.text == "w" || event.text == "W") {
+                root.command("fit-width");
+                return accept;
+            }
+            if (event.text == "e" || event.text == "E") {
+                root.command("fit-height");
+                return accept;
+            }
+            if (event.text == "0") {
+                root.command("fit-shrink");
+                return accept;
+            }
+            if (event.text == "b" || event.text == "B") {
+                root.command("bg-next");
+                return accept;
+            }
+            if (event.text == Key.F11) {
+                root.command("fullscreen");
+                return accept;
+            }
+            if (event.text == "k" || event.text == "K") {
+                root.command("kiosk");
+                return accept;
+            }
+            if (event.text == "m" || event.text == "M") {
+                root.command("next-monitor");
+                return accept;
+            }
+            if (event.text == Key.Escape && (model.chrome-hidden || model.kiosk)) {
+                root.command("exit-immersive");
                 return accept;
             }
             if (event.text == "r" || event.text == "R") {
@@ -81,7 +120,7 @@ export component ViewerImageView inherits Rectangle {
     VerticalLayout {
         spacing: 0;
 
-        Rectangle {
+        if !model.chrome-hidden : Rectangle {
             height: 36px;
             background: Theme.surface-base;
             border-radius: Theme.radius-md;
@@ -176,7 +215,7 @@ export component ViewerImageView inherits Rectangle {
                 Rectangle {
                     min-width: 40px;
                     height: 28px;
-                    background: model.fit-mode ? Theme.surface-raised
+                    background: model.fit-mode == 1 ? Theme.surface-raised
                         : fit-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -208,7 +247,7 @@ export component ViewerImageView inherits Rectangle {
                         padding-right: 8px;
                         Text {
                             text: model.fit-label;
-                            color: model.fit-mode ? Theme.accent-brand : Theme.text-primary;
+                            color: model.fit-mode == 1 ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -219,7 +258,136 @@ export component ViewerImageView inherits Rectangle {
                 Rectangle {
                     min-width: 40px;
                     height: 28px;
-                    background: !model.fit-mode ? Theme.surface-raised
+                    background: model.fit-mode == 2 ? Theme.surface-raised
+                        : fit-w-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fit-w-ta := TouchArea {
+                        clicked => {
+                            root.command("fit-width");
+                            img-keys.focus();
+                        }
+                    }
+                    if fit-w-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fit-w-hint.preferred-width + 12px;
+                        height: fit-w-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fit-w-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fit-width-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.fit-width-label;
+                            color: model.fit-mode == 2 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.fit-mode == 3 ? Theme.surface-raised
+                        : fit-h-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fit-h-ta := TouchArea {
+                        clicked => {
+                            root.command("fit-height");
+                            img-keys.focus();
+                        }
+                    }
+                    if fit-h-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fit-h-hint.preferred-width + 12px;
+                        height: fit-h-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fit-h-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fit-height-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.fit-height-label;
+                            color: model.fit-mode == 3 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.fit-mode == 4 ? Theme.surface-raised
+                        : fit-s-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fit-s-ta := TouchArea {
+                        clicked => {
+                            root.command("fit-shrink");
+                            img-keys.focus();
+                        }
+                    }
+                    if fit-s-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fit-s-hint.preferred-width + 12px;
+                        height: fit-s-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fit-s-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fit-shrink-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.fit-shrink-label;
+                            color: model.fit-mode == 4 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.fit-mode == 0 ? Theme.surface-raised
                         : actual-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -251,7 +419,7 @@ export component ViewerImageView inherits Rectangle {
                         padding-right: 8px;
                         Text {
                             text: model.actual-size-label;
-                            color: !model.fit-mode ? Theme.accent-brand : Theme.text-primary;
+                            color: model.fit-mode == 0 ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -408,11 +576,184 @@ export component ViewerImageView inherits Rectangle {
                         vertical-alignment: center;
                     }
                 }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.bg-kind != 0 ? Theme.surface-raised
+                        : bg-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    bg-ta := TouchArea {
+                        clicked => {
+                            root.command("bg-next");
+                            img-keys.focus();
+                        }
+                    }
+                    if bg-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: bg-hint.preferred-width + 12px;
+                        height: bg-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        bg-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.bg-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.bg-label;
+                            color: model.bg-kind != 0 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.chrome-hidden ? Theme.surface-raised
+                        : fs-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fs-ta := TouchArea {
+                        clicked => {
+                            root.command("fullscreen");
+                            img-keys.focus();
+                        }
+                    }
+                    if fs-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: fs-hint.preferred-width + 12px;
+                        height: fs-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        fs-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.fullscreen-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.fullscreen-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.kiosk ? Theme.surface-raised
+                        : kiosk-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    kiosk-ta := TouchArea {
+                        clicked => {
+                            root.command("kiosk");
+                            img-keys.focus();
+                        }
+                    }
+                    if kiosk-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: kiosk-hint.preferred-width + 12px;
+                        height: kiosk-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        kiosk-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.kiosk-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.kiosk-label;
+                            color: model.kiosk ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: mon-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    mon-ta := TouchArea {
+                        clicked => {
+                            root.command("next-monitor");
+                            img-keys.focus();
+                        }
+                    }
+                    if mon-ta.has-hover : Rectangle {
+                        x: parent.x;
+                        y: parent.height + 2px;
+                        width: mon-hint.preferred-width + 12px;
+                        height: mon-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+                        z: 100;
+                        mon-hint := Text {
+                            x: 6px; y: 3px;
+                            text: model.next-monitor-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.next-monitor-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
             }
         }
 
         Rectangle {
-            background: Theme.surface-base;
+            background: root.canvas-bg;
             vertical-stretch: 1;
             clip: true;
 
@@ -448,7 +789,7 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        if model.info-text != "" : Rectangle {
+        if model.info-text != "" && !model.chrome-hidden : Rectangle {
             height: 24px;
             background: Theme.surface-base;
             HorizontalLayout {

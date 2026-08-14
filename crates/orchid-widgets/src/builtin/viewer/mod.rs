@@ -501,6 +501,35 @@ pub async fn image_flip_v(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Image toolbar / keyboard command (`fit-width`, `fit-height`, `fit-shrink`,
+/// `bg-next`, `fullscreen`, `kiosk`, …).
+pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+            return Ok(());
+        };
+        match command {
+            "fit-window" | "fit" => img.fit_to_viewport(),
+            "fit-width" => img.fit_to_width(),
+            "fit-height" => img.fit_to_height(),
+            "fit-shrink" => img.fit_shrink(),
+            "actual" => img.actual_size(),
+            "bg-next" => img.cycle_background(),
+            "fullscreen" => img.toggle_chrome_hidden(),
+            "kiosk" => img.toggle_kiosk(),
+            "exit-immersive" => img.exit_immersive(),
+            _ => {}
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Image: pan by logical pixels.
 pub async fn image_pan(instance_id: Uuid, dx: f32, dy: f32) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

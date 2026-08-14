@@ -25,6 +25,9 @@ fn from_rgba(src: RgbaImage, template: &LoadedImage) -> LoadedImage {
         height: h,
         format: template.format,
         original_size_bytes: template.original_size_bytes,
+        color_source: template.color_source.clone(),
+        color_dest: template.color_dest.clone(),
+        orientation: template.orientation,
     }
 }
 
@@ -102,6 +105,9 @@ pub fn crop(src: &LoadedImage, x: u32, y: u32, w: u32, h: u32) -> Result<LoadedI
         height: h,
         format: src.format,
         original_size_bytes: src.original_size_bytes,
+        color_source: src.color_source.clone(),
+        color_dest: src.color_dest.clone(),
+        orientation: src.orientation,
     })
 }
 
@@ -134,6 +140,7 @@ mod tests {
             height: 2,
             format: ImageFormat::Png,
             original_size_bytes: 0,
+            ..LoadedImage::meta_defaults()
         }
     }
 

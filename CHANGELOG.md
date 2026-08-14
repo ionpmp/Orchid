@@ -84,6 +84,12 @@ release yet.
 #### Viewers
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
+- Image display: fit-to-window / width / height, 1:1, shrink-if-larger
+  (no upscale), theme / black / white / gray / custom / checkerboard
+  backgrounds (alpha), EXIF orientation auto-rotate, ICC color management
+  toward the Windows monitor profile (or sRGB). Fullscreen (F11),
+  borderless kiosk, and next-monitor (M). Slint stays 8-bit RGBA — HDR
+  framebuffer presentation is still pending.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find
