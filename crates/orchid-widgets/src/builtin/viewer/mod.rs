@@ -15,11 +15,11 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    apply_adjust, apply_edit, apply_lossless, format_from_extension, parse_adjust_line,
-    parse_canvas_line, parse_resize_line, AdjustOp, ArchiveViewer, CropKeep, DocumentViewer,
-    EditOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer, LosslessOp, PdfViewer,
-    SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService, ThumbnailSize, ViewTransform,
-    Viewer,
+    apply_adjust, apply_edit, apply_filter, apply_lossless, format_from_extension,
+    parse_adjust_line, parse_canvas_line, parse_filter_line_in, parse_resize_line, AdjustOp,
+    ArchiveViewer, CropKeep, DocumentViewer, EditOp, FilterOp, HistMode, ImageFitMode,
+    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
+    TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -1009,6 +1009,39 @@ impl ViewerWidgetInner {
         self.open_path(next).await
     }
 
+    async fn apply_filter_current(&self, op: FilterOp) -> WidgetResult<()> {
+        let Some(src) = self.path.read().clone() else {
+            return Ok(());
+        };
+        let img = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(viewer) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            viewer.clone_loaded()
+        };
+        let Some(img) = img else {
+            return Ok(());
+        };
+        let os = src
+            .to_local()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        let suffix = op.suffix();
+        let dest = tokio::task::spawn_blocking(move || {
+            let out = apply_filter(&img, &op)?;
+            orchid_viewers::save_sibling(&os, &out, suffix)
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+        .map_err(map_viewer_err)?;
+        let next = orchid_fs::FsPath::from_local(&dest)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        self.open_path(next).await
+    }
+
     async fn edit_crop_from_view(
         &self,
         x0: f32,
@@ -1585,7 +1618,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("probe:")
                 || cmd.starts_with("meta-save:")
                 || cmd.starts_with("edit-")
-                || cmd.starts_with("adjust:") => {}
+                || cmd.starts_with("adjust:")
+                || cmd.starts_with("filter:") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1673,6 +1707,16 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         cmd if let Some(raw) = cmd.strip_prefix("adjust:") => {
             if let Some(op) = parse_adjust_line(raw) {
                 inner.apply_adjust_current(op).await?;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("filter:") => {
+            let dir = inner.path.read().as_ref().and_then(|p| {
+                p.to_local()
+                    .ok()
+                    .and_then(|os| os.parent().map(std::path::Path::to_path_buf))
+            });
+            if let Some(op) = parse_filter_line_in(raw, dir.as_deref()) {
+                inner.apply_filter_current(op).await?;
             }
         }
         cmd if let Some(raw) = cmd.strip_prefix("edit-resize:") => {

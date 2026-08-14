@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use orchid_viewers::{
-    apply_adjust_file, apply_edit_file, is_image_file_extension, load_image_file,
-    parse_adjust_line, parse_canvas_line, parse_resize_line, AdjustOp, EditOp,
+    apply_adjust_file, apply_edit_file, apply_filter_file, is_image_file_extension,
+    load_image_file, parse_adjust_line, parse_canvas_line, parse_filter_line_in, parse_resize_line,
+    save_filter_preset, AdjustOp, EditOp, FilterOp, FilterPreset,
 };
 
 use super::map_fs_error;
@@ -30,6 +31,15 @@ pub(super) async fn run(
         "fs.image-gray" => adjust_token(inner, paths, AdjustOp::Grayscale).await,
         "fs.image-sepia" => adjust_token(inner, paths, AdjustOp::Sepia).await,
         "fs.image-invert" => adjust_token(inner, paths, AdjustOp::Invert).await,
+        "fs.image-filter" => filter_line(inner, paths, input).await,
+        "fs.image-sharpen" => filter_token(inner, paths, "sharpen").await,
+        "fs.image-blur" => filter_token(inner, paths, "blur=1.5").await,
+        "fs.image-despeckle" => filter_token(inner, paths, "despeckle").await,
+        "fs.image-cartoon" => filter_token(inner, paths, "cartoon").await,
+        "fs.image-sketch" => filter_token(inner, paths, "sketch").await,
+        "fs.image-vignette" => filter_token(inner, paths, "vignette=40").await,
+        "fs.image-redeye" => filter_token(inner, paths, "redeye").await,
+        "fs.image-filter-save-look" => save_look(inner, paths, input).await,
         _ => Ok(ActionOutcome::Done),
     }
 }
@@ -147,6 +157,106 @@ async fn adjust_token(
     Ok(report_count(locale, title, n))
 }
 
+async fn filter_line(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.image-filter",
+            &path_strs(&images),
+            "sharpen=1 | vignette=20",
+            locale.tr("fm-image-filter-title"),
+            locale.tr("fm-image-filter-hint"),
+        ));
+    };
+    let dir = images.first().and_then(|(_, os)| os.parent());
+    let op = parse_filter_line_in(raw, dir).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-filter-bad-spec"))
+    })?;
+    let n = apply_filter_all(&images, &op)?;
+    Ok(report_count(locale, "fm-image-filter-title", n))
+}
+
+async fn filter_token(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    raw: &str,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let dir = images.first().and_then(|(_, os)| os.parent());
+    let op = parse_filter_line_in(raw, dir).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-filter-bad-spec"))
+    })?;
+    let title = match &op {
+        FilterOp::Sharpen { .. } => "fm-action-image-sharpen",
+        FilterOp::Blur { .. } => "fm-action-image-blur",
+        FilterOp::Despeckle => "fm-action-image-despeckle",
+        FilterOp::Cartoon => "fm-action-image-cartoon",
+        FilterOp::Sketch => "fm-action-image-sketch",
+        FilterOp::Vignette { .. } => "fm-action-image-vignette",
+        FilterOp::RedEye { .. } => "fm-action-image-redeye",
+        _ => "fm-image-filter-title",
+    };
+    let n = apply_filter_all(&images, &op)?;
+    Ok(report_count(locale, title, n))
+}
+
+async fn save_look(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.image-filter-save-look",
+            &path_strs(&images),
+            "name=portrait | skin=40 | vignette=15",
+            locale.tr("fm-image-filter-save-title"),
+            locale.tr("fm-image-filter-save-hint"),
+        ));
+    };
+    let (name, ops) = parse_save_look(raw).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-filter-bad-spec"))
+    })?;
+    let dir = images
+        .first()
+        .and_then(|(_, os)| os.parent())
+        .ok_or_else(|| {
+            WidgetError::InvalidStateForOperation(locale.tr("fm-image-filter-bad-spec"))
+        })?;
+    save_filter_preset(dir, FilterPreset { name, ops })
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+    Ok(report_count(locale, "fm-image-filter-save-title", 1))
+}
+
+fn parse_save_look(raw: &str) -> Option<(String, String)> {
+    let mut name = None;
+    let mut ops = Vec::new();
+    for part in raw.split(" | ") {
+        let part = part.trim();
+        if let Some(v) = part
+            .strip_prefix("name=")
+            .or_else(|| part.strip_prefix("look="))
+        {
+            name = Some(v.trim().to_string());
+        } else if !part.is_empty() {
+            ops.push(part);
+        }
+    }
+    let name = name.filter(|s| !s.is_empty())?;
+    if ops.is_empty() {
+        return None;
+    }
+    Some((name, ops.join(" | ")))
+}
+
 fn selected_images(
     inner: &Arc<FileManagerInner>,
     paths: &[String],
@@ -171,6 +281,16 @@ fn selected_images(
         ));
     }
     Ok(out)
+}
+
+fn apply_filter_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &FilterOp) -> WidgetResult<u32> {
+    let mut n = 0u32;
+    for (_, os) in images {
+        apply_filter_file(os, op)
+            .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 fn apply_adjust_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &AdjustOp) -> WidgetResult<u32> {

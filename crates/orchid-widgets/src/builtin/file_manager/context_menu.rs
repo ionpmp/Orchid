@@ -853,6 +853,60 @@ fn tools_menu(
                     "action-copy",
                     has_selection,
                 ),
+                item(
+                    "fs.image-filter",
+                    "fm-action-image-filter",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-sharpen",
+                    "fm-action-image-sharpen",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-blur",
+                    "fm-action-image-blur",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-despeckle",
+                    "fm-action-image-despeckle",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-cartoon",
+                    "fm-action-image-cartoon",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-sketch",
+                    "fm-action-image-sketch",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-vignette",
+                    "fm-action-image-vignette",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-redeye",
+                    "fm-action-image-redeye",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-filter-save-look",
+                    "fm-action-image-filter-save-look",
+                    "action-copy",
+                    has_selection,
+                ),
             ],
         },
         ContextMenuItem {
@@ -1600,6 +1654,7 @@ mod tests {
             .find(|i| i.id == "fs.image-edit")
             .unwrap();
         assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-adjust"));
+        assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-filter"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

@@ -137,6 +137,13 @@ release yet.
   vibrance / hue / gamma, packed curves and levels, selective color,
   channel mixer, grayscale / sepia / invert, posterize / solarize /
   threshold. Viewer panel (`Shift+L` / ☼); FM **Tools → Image edit**.
+- Image filters write a sibling file: sharpen / unsharp mask, Gaussian and
+  motion blur, median / despeckle, emboss, edge detect, oil / watercolor /
+  cartoon / pencil sketch, grain, vignette, barrel-pincushion and chromatic
+  aberration correction, red-eye, skin smoothing, stacked recipes, and
+  one-click looks (`vivid` / `soft` / `drama` / `clean` / `fade`) plus
+  folder presets (`orchid-filter-presets.json`). Viewer panel (`Shift+F` /
+  ✻); FM **Tools → Image edit**.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

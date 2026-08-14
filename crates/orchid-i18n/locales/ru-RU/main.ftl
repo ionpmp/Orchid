@@ -518,6 +518,20 @@ viewer-image-adjust-auto-color = Авто-цвет / баланс белого
 viewer-image-adjust-gray = Оттенки серого
 viewer-image-adjust-sepia = Сепия
 viewer-image-adjust-invert = Негатив
+viewer-image-filter = Фильтры / эффекты (копия)
+viewer-image-filter-apply = Применить
+viewer-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
+viewer-image-filter-sharpen = Резкость
+viewer-image-filter-blur = Размытие
+viewer-image-filter-despeckle = Деспекл
+viewer-image-filter-cartoon = Мультфильм
+viewer-image-filter-sketch = Карандаш
+viewer-image-filter-vignette = Виньетка
+viewer-image-filter-redeye = Красные глаза
+viewer-image-filter-look-vivid = Яркий
+viewer-image-filter-look-soft = Мягкий
+viewer-image-filter-look-drama = Драма
+viewer-image-filter-look-clean = Чистый
 viewer-image-thumbs = Миниатюры
 viewer-image-thumb-grid = Сетка миниатюр
 viewer-image-thumb-size = Размер миниатюр
@@ -783,6 +797,15 @@ fm-action-image-auto-color = Авто-цвет
 fm-action-image-gray = В оттенки серого
 fm-action-image-sepia = В сепию
 fm-action-image-invert = Негатив
+fm-action-image-filter = Фильтр / эффект…
+fm-action-image-sharpen = Резкость
+fm-action-image-blur = Размытие
+fm-action-image-despeckle = Деспекл
+fm-action-image-cartoon = Мультфильм
+fm-action-image-sketch = Карандаш
+fm-action-image-vignette = Виньетка
+fm-action-image-redeye = Красные глаза
+fm-action-image-filter-save-look = Сохранить образ…
 fm-action-meta = Метаданные
 fm-action-meta-edit = Править IPTC / XMP…
 fm-action-meta-gps = Задать / снять GPS…
@@ -1135,6 +1158,11 @@ fm-image-edit-bad-spec = Не удалось разобрать размер.
 fm-image-adjust-title = Цвет / тон
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
 fm-image-adjust-bad-spec = Не удалось разобрать коррекцию.
+fm-image-filter-title = Фильтр / эффект
+fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
+fm-image-filter-bad-spec = Не удалось разобрать фильтр.
+fm-image-filter-save-title = Сохранить образ
+fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-meta-edit-title = Метаданные изображения
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=широта,долгота date=ГГГГ:ММ:ДД ЧЧ:ММ:СС
 fm-meta-gps-title = GPS

@@ -96,7 +96,18 @@ pub(super) async fn run(
         | "fs.image-auto-color"
         | "fs.image-gray"
         | "fs.image-sepia"
-        | "fs.image-invert" => super::image_edit::run(inner, action_id, paths, input).await,
+        | "fs.image-invert"
+        | "fs.image-filter"
+        | "fs.image-sharpen"
+        | "fs.image-blur"
+        | "fs.image-despeckle"
+        | "fs.image-cartoon"
+        | "fs.image-sketch"
+        | "fs.image-vignette"
+        | "fs.image-redeye"
+        | "fs.image-filter-save-look" => {
+            super::image_edit::run(inner, action_id, paths, input).await
+        }
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,
