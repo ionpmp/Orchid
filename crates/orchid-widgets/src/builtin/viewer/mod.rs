@@ -1134,6 +1134,20 @@ fn apply_image_overlay(
                     .map(|g| g.label())
                     .unwrap_or_default();
                 s.has_gps = ins.inspect.as_ref().and_then(|i| i.gps).is_some();
+                if let Some(i) = ins.inspect.as_ref() {
+                    let e = orchid_viewers::inspect_to_edit(i);
+                    s.meta_edit_title = e.title.unwrap_or_default();
+                    s.meta_edit_creator = e.creator.unwrap_or_default();
+                    s.meta_edit_copyright = e.copyright.unwrap_or_default();
+                    s.meta_edit_keywords = e.keywords.unwrap_or_default();
+                    s.meta_edit_description = e.description.unwrap_or_default();
+                    s.meta_edit_date = e.date.flatten().unwrap_or_default();
+                    s.meta_edit_gps = e
+                        .gps
+                        .flatten()
+                        .map(|g| format!("{},{}", g.lat, g.lon))
+                        .unwrap_or_default();
+                }
             }
             ViewerSnapshot::Image(s)
         }
@@ -1394,7 +1408,11 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             | "meta-panel"
             | "meta-overlay"
             | "hist-mode"
-            | "gps-map" => {}
+            | "gps-map"
+            | "meta-strip"
+            | "meta-strip-gps"
+            | "meta-export-csv"
+            | "meta-export-xml" => {}
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
                 || cmd.starts_with("lossless")
@@ -1402,7 +1420,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("open-thumb:")
                 || cmd.starts_with("slideshow-interval:")
                 || cmd.starts_with("slideshow-music:")
-                || cmd.starts_with("probe:") => {}
+                || cmd.starts_with("probe:")
+                || cmd.starts_with("meta-save:") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1656,6 +1675,25 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 let _ = opener::open(url);
             }
         }
+        "meta-strip" => apply_viewer_meta(
+            &inner,
+            &orchid_viewers::EditableMeta {
+                strip_all: true,
+                ..orchid_viewers::EditableMeta::default()
+            },
+        )?,
+        "meta-strip-gps" => apply_viewer_meta(
+            &inner,
+            &orchid_viewers::EditableMeta {
+                strip_gps: true,
+                ..orchid_viewers::EditableMeta::default()
+            },
+        )?,
+        "meta-export-csv" => export_viewer_meta(&inner, false)?,
+        "meta-export-xml" => export_viewer_meta(&inner, true)?,
+        cmd if let Some(raw) = cmd.strip_prefix("meta-save:") => {
+            apply_viewer_meta(&inner, &orchid_viewers::unpack_editable_meta(raw))?;
+        }
         cmd if let Some(raw) = cmd.strip_prefix("probe:") => {
             let parts: Vec<&str> = raw.split(':').collect();
             if parts.len() == 2 {
@@ -1677,6 +1715,46 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         }
         _ => inner.refresh_snapshot().await,
     }
+    Ok(())
+}
+
+fn apply_viewer_meta(
+    inner: &ViewerWidgetInner,
+    edit: &orchid_viewers::EditableMeta,
+) -> WidgetResult<()> {
+    let Some(path) = inner.path.read().clone() else {
+        return Ok(());
+    };
+    let os = path
+        .to_local()
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    orchid_viewers::apply_editable_meta(&os, edit)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+    inner.schedule_inspect(&path);
+    Ok(())
+}
+
+fn export_viewer_meta(inner: &ViewerWidgetInner, xml: bool) -> WidgetResult<()> {
+    let Some(path) = inner.path.read().clone() else {
+        return Ok(());
+    };
+    let os = path
+        .to_local()
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    let body = if xml {
+        orchid_viewers::export_metadata_xml(std::slice::from_ref(&os))
+    } else {
+        orchid_viewers::export_metadata_csv(std::slice::from_ref(&os))
+    }
+    .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+    let dest = if xml {
+        os.with_extension("metadata.xml")
+    } else {
+        os.with_extension("metadata.csv")
+    };
+    std::fs::write(&dest, body)
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    let _ = opener::open(&dest);
     Ok(())
 }
 

@@ -119,6 +119,11 @@ release yet.
   MD5 and SHA-256, brightness+RGB histogram, and RGB/HSL/HEX/CMYK under
   the cursor. Shift+I opens the panel; Ctrl+Shift+O overlays EXIF;
   Ctrl+H cycles the histogram (`Shift+I` / `Ctrl+Shift+O` / `Ctrl+H`).
+- Image metadata editing: IPTC / XMP fields, set or clear GPS, set or shift
+  the shoot date, strip all tags or GPS only (privacy), copy tags between
+  files, CSV/XML export and CSV import, and folder templates
+  (`orchid-meta-templates.json`). File Manager **Tools → Metadata**; the
+  viewer panel can save, strip, and export the open file.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

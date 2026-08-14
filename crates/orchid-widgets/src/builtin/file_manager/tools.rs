@@ -75,6 +75,18 @@ pub(super) async fn run(
         "fs.bitlocker-unlock" => bitlocker_unlock(inner, paths, input).await,
         "fs.bitlocker-os" => bitlocker_os_panel().await,
         "fs.exif" => exif_report(inner, paths).await,
+        "fs.meta-edit"
+        | "fs.meta-gps"
+        | "fs.meta-date"
+        | "fs.meta-date-shift"
+        | "fs.meta-strip"
+        | "fs.meta-strip-gps"
+        | "fs.meta-copy"
+        | "fs.meta-export-csv"
+        | "fs.meta-export-xml"
+        | "fs.meta-import-csv"
+        | "fs.meta-template-save"
+        | "fs.meta-template-apply" => super::meta_edit::run(inner, action_id, paths, input).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,

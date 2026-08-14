@@ -785,6 +785,88 @@ fn tools_menu(
             has_selection || single_file,
         ),
         item("fs.exif", "fm-action-exif", "action-copy", single_file),
+        ContextMenuItem {
+            id: "fs.meta".into(),
+            label_key: "fm-action-meta".into(),
+            icon: "action-copy",
+            swatch_color: None,
+            enabled: has_selection,
+            separator_after: false,
+            submenu: vec![
+                item(
+                    "fs.meta-edit",
+                    "fm-action-meta-edit",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-gps",
+                    "fm-action-meta-gps",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-date",
+                    "fm-action-meta-date",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-date-shift",
+                    "fm-action-meta-date-shift",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-strip",
+                    "fm-action-meta-strip",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-strip-gps",
+                    "fm-action-meta-strip-gps",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-copy",
+                    "fm-action-meta-copy",
+                    "action-copy",
+                    two_files,
+                ),
+                item(
+                    "fs.meta-export-csv",
+                    "fm-action-meta-export-csv",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-export-xml",
+                    "fm-action-meta-export-xml",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-import-csv",
+                    "fm-action-meta-import-csv",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-template-save",
+                    "fm-action-meta-template-save",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.meta-template-apply",
+                    "fm-action-meta-template-apply",
+                    "action-copy",
+                    has_selection,
+                ),
+            ],
+        },
         item("fs.id3", "fm-action-id3", "action-copy", single_file),
         item(
             "fs.office-meta",
@@ -1440,6 +1522,9 @@ mod tests {
         assert!(tool_ids.contains(&"fs.compare-dirs"));
         assert!(tool_ids.contains(&"fs.split"));
         assert!(tool_ids.contains(&"fs.hash"));
+        assert!(tool_ids.contains(&"fs.meta"));
+        let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
+        assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]
         assert!(tool_ids.contains(&"fs.share"));
         #[cfg(windows)]

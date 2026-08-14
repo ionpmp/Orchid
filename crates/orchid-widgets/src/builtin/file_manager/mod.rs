@@ -6,6 +6,7 @@ pub mod clipboard;
 pub mod config;
 pub mod context_menu;
 pub mod find;
+mod meta_edit;
 pub mod navigation;
 pub mod selection;
 pub mod state;
@@ -4625,6 +4626,18 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.bitlocker-os"
             | "fs.properties"
             | "fs.exif"
+            | "fs.meta-edit"
+            | "fs.meta-gps"
+            | "fs.meta-date"
+            | "fs.meta-date-shift"
+            | "fs.meta-strip"
+            | "fs.meta-strip-gps"
+            | "fs.meta-copy"
+            | "fs.meta-export-csv"
+            | "fs.meta-export-xml"
+            | "fs.meta-import-csv"
+            | "fs.meta-template-save"
+            | "fs.meta-template-apply"
             | "fs.id3"
             | "fs.office-meta"
             | "fs.signature"

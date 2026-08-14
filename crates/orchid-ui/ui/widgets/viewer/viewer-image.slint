@@ -2055,8 +2055,8 @@ export component ViewerImageView inherits Rectangle {
             if model.meta-panel : Rectangle {
                 x: parent.width - self.width - 8px;
                 y: 8px;
-                width: min(320px, parent.width * 0.46);
-                height: min(parent.height - 16px, 560px);
+                width: min(340px, parent.width * 0.48);
+                height: min(parent.height - 16px, 640px);
                 background: Theme.surface-raised;
                 border-radius: Theme.radius-md;
                 border-width: 1px;
@@ -2094,6 +2094,229 @@ export component ViewerImageView inherits Rectangle {
                             vertical-alignment: center;
                             width: parent.width;
                             height: parent.height;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-title-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-title-in := TextInput {
+                            text: model.meta-edit-title;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-creator-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-creator-in := TextInput {
+                            text: model.meta-edit-creator;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-copyright-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-copyright-in := TextInput {
+                            text: model.meta-edit-copyright;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-keywords-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-keywords-in := TextInput {
+                            text: model.meta-edit-keywords;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-description-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-desc-in := TextInput {
+                            text: model.meta-edit-description;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-date-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-date-in := TextInput {
+                            text: model.meta-edit-date;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 22px;
+                        Text {
+                            text: model.meta-gps-field-label;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            width: 72px;
+                            vertical-alignment: center;
+                        }
+                        meta-gps-in := TextInput {
+                            text: model.meta-edit-gps;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            single-line: true;
+                            vertical-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        height: 26px;
+                        Rectangle {
+                            background: Theme.accent-brand;
+                            border-radius: Theme.radius-md;
+                            TouchArea {
+                                clicked => {
+                                    root.command("meta-save:title=" + meta-title-in.text
+                                        + "\ncreator=" + meta-creator-in.text
+                                        + "\ncopyright=" + meta-copyright-in.text
+                                        + "\nkeywords=" + meta-keywords-in.text
+                                        + "\ndescription=" + meta-desc-in.text
+                                        + "\ndate=" + meta-date-in.text
+                                        + "\ngps=" + meta-gps-in.text);
+                                    img-keys.focus();
+                                }
+                            }
+                            Text {
+                                text: model.meta-save-label;
+                                color: #ffffff;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: parent.width;
+                                height: parent.height;
+                            }
+                        }
+                        Rectangle {
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea {
+                                clicked => { root.command("meta-strip"); img-keys.focus(); }
+                            }
+                            Text {
+                                text: model.meta-strip-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: parent.width;
+                                height: parent.height;
+                            }
+                        }
+                        Rectangle {
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea {
+                                clicked => { root.command("meta-strip-gps"); img-keys.focus(); }
+                            }
+                            Text {
+                                text: model.meta-strip-gps-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: parent.width;
+                                height: parent.height;
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        height: 24px;
+                        Rectangle {
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea {
+                                clicked => { root.command("meta-export-csv"); img-keys.focus(); }
+                            }
+                            Text {
+                                text: model.meta-export-csv-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: parent.width;
+                                height: parent.height;
+                            }
+                        }
+                        Rectangle {
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea {
+                                clicked => { root.command("meta-export-xml"); img-keys.focus(); }
+                            }
+                            Text {
+                                text: model.meta-export-xml-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: parent.width;
+                                height: parent.height;
+                            }
                         }
                     }
                     Flickable {
