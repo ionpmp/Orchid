@@ -1500,6 +1500,8 @@ viewer-error-unavailable = 뷰어를 사용할 수 없습니다
 viewer-pdf-unavailable = 이 빌드에서는 PDF 지원을 사용할 수 없습니다.
 viewer-image-heic-unsupported = HEIC 이미지는 아직 지원되지 않습니다
 viewer-image-raw-unsupported = RAW 이미지는 아직 지원되지 않습니다
+viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
+viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
 viewer-archive-select-preview = 미리 볼 파일 선택
 viewer-archive-binary-preview = 바이너리 파일, { $size }
 

@@ -1798,6 +1798,8 @@ viewer-error-unknown = An unexpected viewer error occurred
 viewer-pdf-unavailable = PDF support is unavailable on this build.
 viewer-image-heic-unsupported = HEIC images are not supported yet
 viewer-image-raw-unsupported = RAW images are not supported yet
+viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
+viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
 viewer-archive-select-preview = Select a file to preview
 viewer-archive-binary-preview = Binary file, { $size }
 

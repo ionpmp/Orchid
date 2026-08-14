@@ -1501,6 +1501,8 @@ viewer-error-unavailable = العارض غير متاح
 viewer-pdf-unavailable = دعم PDF غير متاح في هذا الإصدار.
 viewer-image-heic-unsupported = صور HEIC غير مدعومة بعد
 viewer-image-raw-unsupported = صور RAW غير مدعومة بعد
+viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
+viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
 viewer-archive-select-preview = حدّد ملفًا للمعاينة
 viewer-archive-binary-preview = ملف ثنائي، { $size }
 

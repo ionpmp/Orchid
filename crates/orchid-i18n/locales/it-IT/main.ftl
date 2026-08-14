@@ -1500,6 +1500,8 @@ viewer-error-unavailable = Il visualizzatore non Ã¨ disponibile
 viewer-pdf-unavailable = Il supporto PDF non Ã¨ disponibile in questa build.
 viewer-image-heic-unsupported = Le immagini HEIC non sono ancora supportate
 viewer-image-raw-unsupported = Le immagini RAW non sono ancora supportate
+viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
+viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
 viewer-archive-select-preview = Seleziona un file da anteprima
 viewer-archive-binary-preview = File binario, { $size }
 

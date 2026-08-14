@@ -1500,6 +1500,8 @@ viewer-error-unavailable = 查看器不可用
 viewer-pdf-unavailable = 此版本不支持 PDF。
 viewer-image-heic-unsupported = 暂不支持 HEIC 图片
 viewer-image-raw-unsupported = 暂不支持 RAW 图片
+viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
+viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
 viewer-archive-select-preview = 选择要预览的文件
 viewer-archive-binary-preview = 二进制文件，{ $size }
 

@@ -1504,6 +1504,8 @@ viewer-error-unavailable = Просмотрщик недоступен
 viewer-pdf-unavailable = Поддержка PDF недоступна в этой сборке.
 viewer-image-heic-unsupported = Изображения HEIC пока не поддерживаются
 viewer-image-raw-unsupported = Изображения RAW пока не поддерживаются
+viewer-image-avif-unsupported = Для AVIF установите расширение HEIF / AV1
+viewer-image-jp2-unsupported = Для JPEG 2000 нужен кодек Windows Imaging
 viewer-archive-select-preview = Выберите файл для предпросмотра
 viewer-archive-binary-preview = Бинарный файл, { $size }
 

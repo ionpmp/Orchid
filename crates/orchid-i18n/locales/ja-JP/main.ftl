@@ -1500,6 +1500,8 @@ viewer-error-unavailable = ビューアーを利用できません
 viewer-pdf-unavailable = このビルドでは PDF サポートは利用できません。
 viewer-image-heic-unsupported = HEIC画像はまだサポートされていません
 viewer-image-raw-unsupported = RAW画像はまだサポートされていません
+viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
+viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
 viewer-archive-select-preview = プレビューするファイルを選択
 viewer-archive-binary-preview = バイナリファイル、{ $size }
 
