@@ -1711,6 +1711,7 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        super::image_touch::remember_viewer(inst);
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
@@ -1726,6 +1727,7 @@ impl MainWindowController {
             move |id| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        super::image_touch::remember_viewer(inst);
                         let tw = Arc::downgrade(&c);
                         viewer_spawn!(
                             tw,
@@ -1827,6 +1829,7 @@ impl MainWindowController {
             move |id, dx, dy| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        super::image_touch::remember_viewer(inst);
                         c.bring_floating_to_front(inst);
                         spawn::spawn_local_compat(async move {
                             if let Err(e) =
@@ -1845,6 +1848,7 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     c.apply_viewer_window_command(cmd.as_str());
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        super::image_touch::remember_viewer(inst);
                         if cmd.as_str() == "reveal-folder" {
                             if let Some(folder) =
                                 orchid_widgets::builtin::viewer::current_image_folder(inst)

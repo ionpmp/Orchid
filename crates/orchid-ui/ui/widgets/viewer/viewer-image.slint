@@ -24,6 +24,14 @@ export component ViewerImageView inherits Rectangle {
     property <length> swipe-y: 0px;
     property <length> pan-step: 40px;
     property <bool> show-recent: false;
+    property <bool> select-zoom: false;
+    property <bool> selecting: false;
+    property <length> sel-x0: 0px;
+    property <length> sel-y0: 0px;
+    property <length> sel-x1: 0px;
+    property <length> sel-y1: 0px;
+    property <bool> nav-hidden: false;
+    property <bool> middle-pan: false;
     property <color> canvas-bg: model.bg-kind == 1 ? #000000
         : model.bg-kind == 2 ? #ffffff
         : model.bg-kind == 3 ? #808080
@@ -125,6 +133,18 @@ export component ViewerImageView inherits Rectangle {
                 root.command("reveal-folder");
                 return accept;
             }
+            if (event.text == "z" || event.text == "Z") {
+                root.command("lens");
+                return accept;
+            }
+            if (event.text == "s" || event.text == "S") {
+                root.select-zoom = !root.select-zoom;
+                return accept;
+            }
+            if (event.text == "n" || event.text == "N") {
+                root.nav-hidden = !root.nav-hidden;
+                return accept;
+            }
             if (event.text == "h" || event.text == "H") {
                 // H is flip when not Shift? Keep H as flip; use Shift+H for recent.
                 if (event.modifiers.shift) {
@@ -212,12 +232,71 @@ export component ViewerImageView inherits Rectangle {
                     width: 56px;
                     height: 28px;
                     y: (parent.height - self.height) / 2;
-                    Text {
-                        text: floor(model.zoom * 100) + "%";
+                    zoom-pct := TextInput {
+                        text: "" + floor(model.zoom * 100);
+                        input-type: number;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                        accepted => {
+                            root.command("zoom:" + self.text);
+                            img-keys.focus();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.select-zoom ? Theme.surface-raised
+                        : sel-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sel-ta := TouchArea {
+                        clicked => { root.select-zoom = !root.select-zoom; img-keys.focus(); }
+                    }
+                    if sel-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: sel-hint.preferred-width + 12px;
+                        height: sel-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        sel-hint := Text { x: 6px; y: 3px; text: model.zoom-selection-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "▭";
+                        color: root.select-zoom ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: model.lens ? Theme.surface-raised
+                        : lens-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    lens-ta := TouchArea {
+                        clicked => { root.command("lens"); img-keys.focus(); }
+                    }
+                    if lens-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: lens-hint.preferred-width + 12px;
+                        height: lens-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        lens-hint := Text { x: 6px; y: 3px; text: model.lens-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "⌕";
+                        color: model.lens ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center; vertical-alignment: center;
                     }
                 }
 
@@ -1012,15 +1091,20 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        Rectangle {
+        canvas := Rectangle {
             background: root.canvas-bg;
             vertical-stretch: 1;
             clip: true;
 
+            property <length> img-left: (self.width - model.width-px * 1px * model.zoom) / 2 + model.pan-x;
+            property <length> img-top: (self.height - model.height-px * 1px * model.zoom) / 2 + model.pan-y;
+            property <bool> overflows: model.width-px * 1px * model.zoom > self.width + 4px
+                || model.height-px * 1px * model.zoom > self.height + 4px;
+
             Image {
                 source: model.rgba-image;
-                x: (parent.width - self.width) / 2 + model.pan-x;
-                y: (parent.height - self.height) / 2 + model.pan-y;
+                x: canvas.img-left;
+                y: canvas.img-top;
                 width: model.width-px * 1px * model.zoom;
                 height: model.height-px * 1px * model.zoom;
                 image-fit: fill;
@@ -1038,10 +1122,27 @@ export component ViewerImageView inherits Rectangle {
                         root.last-my = self.mouse-y;
                         root.swipe-x = self.mouse-x;
                         root.swipe-y = self.mouse-y;
+                        root.middle-pan = e.button == PointerEventButton.middle;
+                        if (e.modifiers.shift || root.select-zoom) {
+                            root.selecting = true;
+                            root.sel-x0 = self.mouse-x;
+                            root.sel-y0 = self.mouse-y;
+                            root.sel-x1 = self.mouse-x;
+                            root.sel-y1 = self.mouse-y;
+                        }
                         img-keys.focus();
                     }
                     if (e.kind == PointerEventKind.up) {
-                        if (model.fit-mode != 0
+                        root.middle-pan = false;
+                        if (root.selecting) {
+                            root.command("zoom-rect:"
+                                + (root.sel-x0 / 1px) + ":"
+                                + (root.sel-y0 / 1px) + ":"
+                                + (root.sel-x1 / 1px) + ":"
+                                + (root.sel-y1 / 1px));
+                            root.selecting = false;
+                            root.select-zoom = false;
+                        } else if (model.fit-mode != 0
                             && abs(self.mouse-x - root.swipe-x) > 80px
                             && abs(self.mouse-x - root.swipe-x) > abs(self.mouse-y - root.swipe-y) * 2) {
                             if (self.mouse-x - root.swipe-x < 0px) {
@@ -1053,7 +1154,10 @@ export component ViewerImageView inherits Rectangle {
                     }
                 }
                 moved => {
-                    if (self.pressed && model.fit-mode == 0) {
+                    if (root.selecting && self.pressed) {
+                        root.sel-x1 = self.mouse-x;
+                        root.sel-y1 = self.mouse-y;
+                    } else if (self.pressed && (model.fit-mode == 0 || root.middle-pan)) {
                         root.pan(self.mouse-x - root.last-mx, self.mouse-y - root.last-my);
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
@@ -1062,9 +1166,9 @@ export component ViewerImageView inherits Rectangle {
                 scroll-event(event) => {
                     if (event.modifiers.control) {
                         if (event.delta-y < 0) {
-                            root.zoom-in();
+                            root.command("zoom-at:1.1:" + (self.mouse-x / 1px) + ":" + (self.mouse-y / 1px));
                         } else {
-                            root.zoom-out();
+                            root.command("zoom-at:0.909:" + (self.mouse-x / 1px) + ":" + (self.mouse-y / 1px));
                         }
                     } else if (event.delta-y < 0 || event.delta-x < 0) {
                         root.command("next");
@@ -1072,6 +1176,86 @@ export component ViewerImageView inherits Rectangle {
                         root.command("prev");
                     }
                     return accept;
+                }
+            }
+
+            if root.selecting : Rectangle {
+                x: min(root.sel-x0, root.sel-x1);
+                y: min(root.sel-y0, root.sel-y1);
+                width: abs(root.sel-x1 - root.sel-x0);
+                height: abs(root.sel-y1 - root.sel-y0);
+                border-width: 1px;
+                border-color: Theme.accent-brand;
+                background: #3d8bfd33;
+                z: 20;
+            }
+
+            if model.lens : Rectangle {
+                x: pan-area.mouse-x - 64px;
+                y: pan-area.mouse-y - 64px;
+                width: 128px;
+                height: 128px;
+                border-radius: 64px;
+                clip: true;
+                border-width: 2px;
+                border-color: Theme.accent-brand;
+                z: 30;
+                Image {
+                    source: model.rgba-image;
+                    width: model.width-px * 1px * model.zoom * 2.5;
+                    height: model.height-px * 1px * model.zoom * 2.5;
+                    x: 64px - (pan-area.mouse-x - canvas.img-left) * 2.5;
+                    y: 64px - (pan-area.mouse-y - canvas.img-top) * 2.5;
+                    image-fit: fill;
+                    transform-rotation: model.rotation-deg * 1deg;
+                    transform-scale-x: model.flipped-h ? -1 : 1;
+                    transform-scale-y: model.flipped-v ? -1 : 1;
+                }
+            }
+
+            if canvas.overflows && !root.nav-hidden : Rectangle {
+                x: parent.width - self.width - 8px;
+                y: parent.height - self.height - 8px;
+                width: 140px;
+                height: max(48px, 140px * model.height-px / max(1, model.width-px));
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 40;
+                clip: true;
+
+                property <float> vis-x0: max(0, (0 - canvas.img-left / 1px) / max(0.01, model.zoom * model.width-px));
+                property <float> vis-y0: max(0, (0 - canvas.img-top / 1px) / max(0.01, model.zoom * model.height-px));
+                property <float> vis-x1: min(1, (canvas.width / 1px - canvas.img-left / 1px) / max(0.01, model.zoom * model.width-px));
+                property <float> vis-y1: min(1, (canvas.height / 1px - canvas.img-top / 1px) / max(0.01, model.zoom * model.height-px));
+
+                Image {
+                    source: model.rgba-image;
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: fill;
+                }
+                Rectangle {
+                    x: parent.vis-x0 * parent.width;
+                    y: parent.vis-y0 * parent.height;
+                    width: max(4px, (parent.vis-x1 - parent.vis-x0) * parent.width);
+                    height: max(4px, (parent.vis-y1 - parent.vis-y0) * parent.height);
+                    border-width: 1px;
+                    border-color: Theme.accent-brand;
+                    background: #3d8bfd33;
+                }
+                nav-ta := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    clicked => {
+                        root.command("nav-pan:" + (self.mouse-x / parent.width) + ":" + (self.mouse-y / parent.height));
+                    }
+                    moved => {
+                        if (self.pressed) {
+                            root.command("nav-pan:" + (self.mouse-x / parent.width) + ":" + (self.mouse-y / parent.height));
+                        }
+                    }
                 }
             }
 

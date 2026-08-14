@@ -39,6 +39,7 @@ pub struct ImageViewer {
     custom_bg: RwLock<(u8, u8, u8)>,
     chrome_hidden: RwLock<bool>,
     kiosk: RwLock<bool>,
+    lens: RwLock<bool>,
     size_limit: u64,
 }
 
@@ -73,6 +74,7 @@ impl ImageViewer {
             custom_bg: RwLock::new((26, 26, 46)),
             chrome_hidden: RwLock::new(false),
             kiosk: RwLock::new(false),
+            lens: RwLock::new(false),
             size_limit: DEFAULT_SIZE_LIMIT,
         }
     }
@@ -207,12 +209,72 @@ impl ImageViewer {
 
     /// Nudge zoom by a factor around the viewport center.
     pub fn zoom_by(&self, factor: f32) {
-        *self.fit_mode.write() = ImageFitMode::Custom;
         let (vw, vh) = *self.viewport.read();
-        let anchor_x = vw / 2.0;
-        let anchor_y = vh / 2.0;
+        self.zoom_at(factor, vw / 2.0, vh / 2.0);
+    }
+
+    /// Nudge zoom by a factor, keeping `(anchor_x, anchor_y)` fixed on screen.
+    pub fn zoom_at(&self, factor: f32, anchor_x: f32, anchor_y: f32) {
+        *self.fit_mode.write() = ImageFitMode::Custom;
         let z = self.transform.read().zoom * factor;
         self.transform.write().set_zoom(z, anchor_x, anchor_y);
+    }
+
+    /// Set zoom to `percent` (100 = 1:1), anchored at the viewport center.
+    pub fn zoom_to_percent(&self, percent: f32) {
+        let (vw, vh) = *self.viewport.read();
+        self.set_zoom(percent / 100.0, vw / 2.0, vh / 2.0);
+    }
+
+    /// Zoom so the viewport rectangle fills the view.
+    pub fn zoom_to_rect(&self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        *self.fit_mode.write() = ImageFitMode::Custom;
+        let (vw, vh) = *self.viewport.read();
+        self.transform.write().zoom_to_rect(x0, y0, x1, y1, vw, vh);
+    }
+
+    /// Pan so image fraction `(nx, ny)` (0–1) sits at the viewport center.
+    pub fn pan_to_image_fraction(&self, nx: f32, ny: f32) {
+        *self.fit_mode.write() = ImageFitMode::Custom;
+        let image = self.image.read();
+        let (iw, ih) = match image.as_ref() {
+            Some(i) => (i.width, i.height),
+            None => return,
+        };
+        let rot = self.transform.read().rotation_degrees;
+        self.transform
+            .write()
+            .pan_to_image_fraction(nx, ny, iw, ih, rot);
+    }
+
+    /// Toggle the magnifier overlay.
+    pub fn toggle_lens(&self) {
+        let next = !*self.lens.read();
+        *self.lens.write() = next;
+    }
+
+    /// Snapshot fit + transform for restore-on-switch.
+    #[must_use]
+    pub fn capture_view(&self) -> (ImageFitMode, ViewTransform) {
+        (*self.fit_mode.read(), *self.transform.read())
+    }
+
+    /// Restore a previously captured view (same image).
+    pub fn restore_view(&self, fit: ImageFitMode, transform: ViewTransform) {
+        *self.fit_mode.write() = fit;
+        *self.transform.write() = transform;
+        if fit.tracks_viewport() {
+            self.apply_fit_transform();
+        }
+    }
+
+    /// Apply only a zoom factor (new image; pan reset).
+    pub fn restore_zoom_only(&self, zoom: f32) {
+        *self.fit_mode.write() = ImageFitMode::Custom;
+        let mut t = self.transform.write();
+        t.zoom = zoom.clamp(0.05, 32.0);
+        t.pan_x = 0.0;
+        t.pan_y = 0.0;
     }
 
     /// Rotate 90° counter-clockwise.
@@ -289,6 +351,7 @@ impl Viewer for ImageViewer {
             folder_count: 0,
             loop_folder: true,
             recent_paths: Vec::new(),
+            lens: *self.lens.read(),
         })
     }
 
@@ -307,5 +370,43 @@ impl Viewer for ImageViewer {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zoom_to_percent_is_custom() {
+        let v = ImageViewer::new();
+        v.set_viewport(200.0, 200.0);
+        v.zoom_to_percent(250.0);
+        let (fit, t) = v.capture_view();
+        assert_eq!(fit, ImageFitMode::Custom);
+        assert!((t.zoom - 2.5).abs() < 1e-3);
+    }
+
+    #[test]
+    fn restore_zoom_only_resets_pan() {
+        let v = ImageViewer::new();
+        v.pan(12.0, -4.0);
+        v.restore_zoom_only(2.0);
+        let (fit, t) = v.capture_view();
+        assert_eq!(fit, ImageFitMode::Custom);
+        assert!((t.zoom - 2.0).abs() < 1e-3);
+        assert!(t.pan_x.abs() < 1e-3);
+        assert!(t.pan_y.abs() < 1e-3);
+    }
+
+    #[test]
+    fn restore_view_reapplies_fit_mode() {
+        let v = ImageViewer::new();
+        v.set_viewport(200.0, 100.0);
+        v.set_fit_mode(ImageFitMode::Width);
+        let saved = v.capture_view();
+        v.actual_size();
+        v.restore_view(saved.0, saved.1);
+        assert_eq!(v.capture_view().0, ImageFitMode::Width);
     }
 }

@@ -2,6 +2,7 @@
 
 mod image_nav;
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -11,7 +12,8 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    ArchiveViewer, DocumentViewer, ImageViewer, PdfViewer, SyntaxHighlighter, TextViewer, Viewer,
+    ArchiveViewer, DocumentViewer, ImageFitMode, ImageViewer, PdfViewer, SyntaxHighlighter,
+    TextViewer, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -142,7 +144,54 @@ struct ViewerWidgetInner {
     floating: RwLock<Option<crate::layout::PixelBounds>>,
     /// Image folder playlist (next/prev, loop, recent).
     image_nav: RwLock<image_nav::ImageFolderNav>,
+    /// Last zoom / fit per path (and the most recent view for new files).
+    image_views: RwLock<ImageViewMemory>,
     bus: Arc<orchid_core::EventBus>,
+}
+
+#[derive(Clone, Copy)]
+struct SavedImageView {
+    fit: ImageFitMode,
+    transform: ViewTransform,
+}
+
+struct ImageViewMemory {
+    by_path: HashMap<String, SavedImageView>,
+    order: VecDeque<String>,
+    last: Option<SavedImageView>,
+}
+
+impl Default for ImageViewMemory {
+    fn default() -> Self {
+        Self {
+            by_path: HashMap::new(),
+            order: VecDeque::new(),
+            last: None,
+        }
+    }
+}
+
+impl ImageViewMemory {
+    fn insert(&mut self, path: String, view: SavedImageView) {
+        if self.by_path.insert(path.clone(), view).is_some() {
+            self.order.retain(|p| p != &path);
+        }
+        self.order.push_back(path);
+        while self.order.len() > 32 {
+            if let Some(old) = self.order.pop_front() {
+                self.by_path.remove(&old);
+            }
+        }
+        self.last = Some(view);
+    }
+
+    fn lookup(&self, path: &str) -> (Option<SavedImageView>, bool) {
+        if let Some(v) = self.by_path.get(path).copied() {
+            (Some(v), true)
+        } else {
+            (self.last, false)
+        }
+    }
 }
 
 impl std::fmt::Debug for ViewerWidgetInner {
@@ -163,9 +212,50 @@ impl ViewerWidgetInner {
         );
     }
 
+    async fn remember_current_image_view(&self) {
+        let path = match self.path.read().clone() {
+            Some(p) if is_image_path(&p) => p,
+            _ => return,
+        };
+        let guard = self.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return;
+        };
+        let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+            return;
+        };
+        let (fit, transform) = img.capture_view();
+        drop(guard);
+        self.image_views
+            .write()
+            .insert(path.as_str().to_string(), SavedImageView { fit, transform });
+    }
+
+    async fn restore_image_view(&self, path: &orchid_fs::FsPath) {
+        let (saved, exact) = self.image_views.read().lookup(path.as_str());
+        let Some(saved) = saved else {
+            return;
+        };
+        let guard = self.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return;
+        };
+        let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+            return;
+        };
+        if exact {
+            img.restore_view(saved.fit, saved.transform);
+        } else if saved.fit.tracks_viewport() {
+            img.set_fit_mode(saved.fit);
+        } else {
+            img.restore_zoom_only(saved.transform.zoom);
+        }
+    }
+
     /// Open a path: picks the right viewer kind, opens it, and caches the
     /// first snapshot.
     async fn open_path(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
+        self.remember_current_image_view().await;
         let registry = self.deps.registry.clone();
         let highlighter = self.deps.highlighter.clone();
         *self.snapshot.write() = Some(ViewerSnapshot::Loading {
@@ -207,6 +297,11 @@ impl ViewerWidgetInner {
         *self.viewer.lock().await = Some(viewer);
         if is_image_path(&path) {
             self.after_image_opened(&path).await;
+            self.restore_image_view(&path).await;
+            let guard = self.viewer.lock().await;
+            if let Some(v) = guard.as_ref() {
+                *self.snapshot.write() = Some(v.snapshot());
+            }
         }
         self.overlay_image_nav();
         self.publish_refresh();
@@ -323,6 +418,7 @@ impl ViewerWidget {
                 pending_edit: AtomicBool::new(false),
                 floating: RwLock::new(None),
                 image_nav: RwLock::new(image_nav::ImageFolderNav::default()),
+                image_views: RwLock::new(ImageViewMemory::default()),
                 bus,
             }),
         }
@@ -501,6 +597,22 @@ pub fn find_instance_for_path(instance_ids: &[Uuid], path: &orchid_fs::FsPath) -
     None
 }
 
+/// Image: zoom by `factor` around the viewport center (pinch / commands).
+pub async fn image_zoom_by(instance_id: Uuid, factor: f32) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+            img.zoom_by(factor);
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Image toolbar: zoom in (~10%).
 pub async fn image_zoom_in(instance_id: Uuid) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -651,8 +763,53 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             "fullscreen" => img.toggle_chrome_hidden(),
             "kiosk" => img.toggle_kiosk(),
             "exit-immersive" => img.exit_immersive(),
+            "lens" => img.toggle_lens(),
             "next" | "prev" | "first" | "last" | "random" | "loop" => {}
             cmd if cmd.starts_with("goto:") || cmd.starts_with("recent:") => {}
+            cmd if let Some(raw) = cmd.strip_prefix("zoom:") => {
+                let raw = raw.trim().trim_end_matches('%');
+                if let Ok(p) = raw.parse::<f32>() {
+                    img.zoom_to_percent(p);
+                }
+            }
+            cmd if let Some(raw) = cmd.strip_prefix("zoom-at:") => {
+                let parts: Vec<&str> = raw.split(':').collect();
+                if parts.len() == 3 {
+                    if let (Ok(f), Ok(x), Ok(y)) = (
+                        parts[0].parse::<f32>(),
+                        parts[1].parse::<f32>(),
+                        parts[2].parse::<f32>(),
+                    ) {
+                        img.zoom_at(f, x, y);
+                    }
+                }
+            }
+            cmd if let Some(raw) = cmd.strip_prefix("zoom-rect:") => {
+                let parts: Vec<&str> = raw.split(':').collect();
+                if parts.len() == 4 {
+                    if let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
+                        parts[0].parse::<f32>(),
+                        parts[1].parse::<f32>(),
+                        parts[2].parse::<f32>(),
+                        parts[3].parse::<f32>(),
+                    ) {
+                        img.zoom_to_rect(x0, y0, x1, y1);
+                    }
+                }
+            }
+            cmd if let Some(raw) = cmd.strip_prefix("nav-pan:") => {
+                let parts: Vec<&str> = raw.split(':').collect();
+                if parts.len() == 2 {
+                    if let (Ok(nx), Ok(ny)) = (parts[0].parse::<f32>(), parts[1].parse::<f32>()) {
+                        img.pan_to_image_fraction(nx, ny);
+                    }
+                }
+            }
+            cmd if let Some(raw) = cmd.strip_prefix("pinch:") => {
+                if let Ok(f) = raw.parse::<f32>() {
+                    img.zoom_by(f);
+                }
+            }
             _ => {}
         }
     }

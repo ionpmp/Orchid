@@ -222,6 +222,44 @@ impl ViewTransform {
         self.pan_y += dy;
     }
 
+    /// Zoom so the viewport rectangle `(x0,y0)–(x1,y1)` fills the view.
+    ///
+    /// Coordinates are in the same screen space as [`Self::pan_x`].
+    pub fn zoom_to_rect(
+        &mut self,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        viewport_w: f32,
+        viewport_h: f32,
+    ) {
+        let w = (x1 - x0).abs().max(8.0);
+        let h = (y1 - y0).abs().max(8.0);
+        let cx = (x0 + x1) * 0.5;
+        let cy = (y0 + y1) * 0.5;
+        let factor = (viewport_w / w).min(viewport_h / h);
+        let new_zoom = (self.zoom * factor).clamp(0.05, 32.0);
+        self.set_zoom(new_zoom, cx, cy);
+        self.pan(viewport_w * 0.5 - cx, viewport_h * 0.5 - cy);
+    }
+
+    /// Pan so image fraction `(nx, ny)` (0–1) sits at the viewport center.
+    pub fn pan_to_image_fraction(
+        &mut self,
+        nx: f32,
+        ny: f32,
+        image_w: u32,
+        image_h: u32,
+        rotation_degrees: i16,
+    ) {
+        let (iw, ih) = Self::oriented_size(image_w, image_h, rotation_degrees);
+        let nx = nx.clamp(0.0, 1.0);
+        let ny = ny.clamp(0.0, 1.0);
+        self.pan_x = (iw as f32) * self.zoom * (0.5 - nx);
+        self.pan_y = (ih as f32) * self.zoom * (0.5 - ny);
+    }
+
     /// Rotate 90° clockwise.
     pub fn rotate_clockwise(&mut self) {
         self.rotation_degrees = (self.rotation_degrees + 90).rem_euclid(360);
@@ -300,5 +338,22 @@ mod tests {
             b = b.next();
         }
         assert_eq!(b, ImageBackground::Theme);
+    }
+
+    #[test]
+    fn zoom_to_rect_enlarges_and_centers() {
+        let mut t = ViewTransform::default();
+        t.zoom = 1.0;
+        t.zoom_to_rect(40.0, 40.0, 80.0, 80.0, 200.0, 200.0);
+        assert!((t.zoom - 5.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn pan_to_fraction_centers_requested_point() {
+        let mut t = ViewTransform::default();
+        t.zoom = 2.0;
+        t.pan_to_image_fraction(0.25, 0.5, 100, 80, 0);
+        assert!((t.pan_x - 50.0).abs() < 1e-3);
+        assert!(t.pan_y.abs() < 1e-3);
     }
 }

@@ -128,6 +128,8 @@ pub struct ImageSnapshot {
     pub loop_folder: bool,
     /// Recently viewed image paths in this viewer (newest first).
     pub recent_paths: Vec<String>,
+    /// Magnifier overlay follows the pointer.
+    pub lens: bool,
 }
 
 /// PDF page snapshot.

@@ -199,6 +199,11 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         folder_label: locale.tr("viewer-image-folder").into(),
         recent_label: locale.tr("viewer-image-recent").into(),
         goto_label: locale.tr("viewer-image-goto").into(),
+        lens: false,
+        zoom_percent_label: locale.tr("viewer-image-zoom-percent").into(),
+        zoom_selection_label: locale.tr("viewer-image-zoom-selection").into(),
+        lens_label: locale.tr("viewer-image-lens").into(),
+        navigator_label: locale.tr("viewer-image-navigator").into(),
     }
 }
 
@@ -747,6 +752,11 @@ fn build_image_snapshot(
         folder_label: locale.tr("viewer-image-folder").into(),
         recent_label: locale.tr("viewer-image-recent").into(),
         goto_label: locale.tr("viewer-image-goto").into(),
+        lens: s.lens,
+        zoom_percent_label: locale.tr("viewer-image-zoom-percent").into(),
+        zoom_selection_label: locale.tr("viewer-image-zoom-selection").into(),
+        lens_label: locale.tr("viewer-image-lens").into(),
+        navigator_label: locale.tr("viewer-image-navigator").into(),
     }
 }
 

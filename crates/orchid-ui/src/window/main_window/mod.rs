@@ -85,6 +85,7 @@ mod catalog;
 mod clock;
 mod floating;
 mod fm;
+mod image_touch;
 mod input;
 mod jyotish;
 mod media_search;
@@ -1298,6 +1299,37 @@ impl MainWindowController {
                         if let Some(c) = tw.upgrade() {
                             if let Some(ev) = input::winit_touch_to_orchid(touch, c.window.window())
                             {
+                                let actions = image_touch::on_touch(&ev);
+                                if let Some(inst) = image_touch::last_viewer() {
+                                    for action in actions {
+                                        match action {
+                                            image_touch::ImageTouchAction::Zoom(factor) => {
+                                                spawn::spawn_local_compat(async move {
+                                                    if let Err(e) =
+                                                        orchid_widgets::builtin::viewer::image_zoom_by(
+                                                            inst, factor,
+                                                        )
+                                                        .await
+                                                    {
+                                                        warn!(?e, "viewer pinch zoom");
+                                                    }
+                                                });
+                                            }
+                                            image_touch::ImageTouchAction::Pan(dx, dy) => {
+                                                spawn::spawn_local_compat(async move {
+                                                    if let Err(e) =
+                                                        orchid_widgets::builtin::viewer::image_pan(
+                                                            inst, dx, dy,
+                                                        )
+                                                        .await
+                                                    {
+                                                        warn!(?e, "viewer two-finger pan");
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
                                 c.feed_touch_input(ev);
                             }
                         }
