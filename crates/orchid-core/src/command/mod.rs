@@ -17,6 +17,7 @@
 pub mod descriptor;
 pub mod palette;
 pub mod parser;
+pub mod profile;
 pub mod registry;
 pub mod shortcut;
 
@@ -25,5 +26,10 @@ pub use descriptor::{
 };
 pub use palette::{CommandPalette, PaletteResult};
 pub use parser::{parse_command_line, parse_command_line_with_registry, ParsedCommand};
+pub use profile::{
+    binding_conflict, display_profile_shortcut, is_file_manager_binding, lookup_fm_action,
+    profile_default_str, resolve_profile_shortcut, validate_override, ProfileBinding,
+    ShortcutProfile, PROFILE_BINDINGS,
+};
 pub use registry::{ActionFactory, CommandRegistry, ShortcutOverrideResult};
 pub use shortcut::{is_reserved, Key, Modifiers, Shortcut};

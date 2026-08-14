@@ -1548,32 +1548,12 @@ fn view_mode_to_int(vm: orchid_widgets::FmViewMode) -> i32 {
         Gallery => 3,
     }
 }
-fn fm_action_shortcut(id: &str) -> &'static str {
-    match id {
-        "fs.select-all" => "Ctrl+A",
-        "fs.deselect-all" => "Esc",
-        "fs.invert-selection" => "*",
-        "fs.select-mask-add" => "+",
-        "fs.select-mask-sub" => "-",
-        "fs.copy" => "Ctrl+C",
-        "fs.cut" => "Ctrl+X",
-        "fs.paste" => "Ctrl+V",
-        "fs.rename" => "F2",
-        "fs.delete" => "F8",
-        "fs.delete-permanent" => "Shift+Del",
-        "fs.new-folder" => "F7",
-        "fs.new-file" => "Shift+F4",
-        "viewer.open" => "F3",
-        "viewer.edit" => "F4",
-        "fs.copy-to-other" => "F5",
-        "fs.move-to-other" => "F6",
-        "fs.open-tab" => "Ctrl+Shift+T",
-        "fs.open-other-pane" => "Ctrl+Shift+Enter",
-        "fs.branch-view" => "Ctrl+B",
-        "fs.find" => "Alt+F7",
-        "fs.properties" => "Alt+Enter",
-        _ => "",
-    }
+fn fm_action_shortcut(id: &str, shortcuts: &orchid_storage::ShortcutsConfig) -> String {
+    let profile = orchid_core::ShortcutProfile::parse(&shortcuts.profile)
+        .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+    orchid_core::resolve_profile_shortcut(profile, &shortcuts.overrides, id)
+        .map(|sc| orchid_core::display_profile_shortcut(profile, &sc))
+        .unwrap_or_default()
 }
 
 fn context_menu_item_label(
@@ -1633,6 +1613,7 @@ fn build_context_subitems(
 pub(crate) fn build_context_menu_actions(
     actions: &[orchid_widgets::builtin::file_manager::ContextMenuItem],
     locale: &LocaleManager,
+    shortcuts: &orchid_storage::ShortcutsConfig,
 ) -> Vec<FmContextAction> {
     let mut out = Vec::new();
     for a in actions {
@@ -1640,7 +1621,7 @@ pub(crate) fn build_context_menu_actions(
         out.push(FmContextAction {
             id: a.id.clone().into(),
             label: context_menu_item_label(a, locale),
-            shortcut: fm_action_shortcut(&a.id).into(),
+            shortcut: fm_action_shortcut(&a.id, shortcuts).into(),
             icon: a.icon.into(),
             enabled: context_menu_item_enabled(a),
             is_separator: false,
@@ -1670,8 +1651,9 @@ pub(crate) fn build_context_menu(
     x: f32,
     y: f32,
     locale: &LocaleManager,
+    shortcuts: &orchid_storage::ShortcutsConfig,
 ) -> FmContextMenu {
-    let actions_vec = build_context_menu_actions(actions, locale);
+    let actions_vec = build_context_menu_actions(actions, locale, shortcuts);
     let paths_vec: Vec<SharedString> = target_paths.iter().cloned().map(Into::into).collect();
     let (info_visible, info_name, info_type, info_size, info_modified, info_mime) = match info {
         Some(i) => (

@@ -19,12 +19,10 @@ use super::MainWindowController;
 
 impl MainWindowController {
     pub(super) fn command_palette_shortcut(&self) -> Shortcut {
-        self.config
-            .read()
-            .shortcuts
-            .overrides
-            .get("command-palette")
-            .and_then(|s| Shortcut::parse(s).ok())
+        let cfg = self.config.read();
+        let profile = orchid_core::ShortcutProfile::parse(&cfg.shortcuts.profile)
+            .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+        orchid_core::resolve_profile_shortcut(profile, &cfg.shortcuts.overrides, "command-palette")
             .unwrap_or_else(|| Shortcut::parse("Ctrl+Shift+P").expect("valid default shortcut"))
     }
 
@@ -167,11 +165,13 @@ impl MainWindowController {
     }
 
     pub(super) fn apply_command_shortcut_overrides(self: &Arc<Self>) {
-        let overrides = self.config.read().shortcuts.overrides.clone();
-        if overrides.is_empty() {
-            return;
-        }
-        for result in self.command_registry.apply_shortcut_overrides(&overrides) {
+        let shortcuts = self.config.read().shortcuts.clone();
+        let profile = orchid_core::ShortcutProfile::parse(&shortcuts.profile)
+            .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+        for result in self
+            .command_registry
+            .rebind_shortcuts(profile, &shortcuts.overrides)
+        {
             if let Err(reason) = result.outcome {
                 warn!(
                     command = %result.command_id,
@@ -186,7 +186,8 @@ impl MainWindowController {
         let cfg = self.config.read();
         let swap = matches!(cfg.input.primary_hand, orchid_storage::Hand::Left)
             || cfg.input.mirror_edge_swipes;
-        self.input_mapper.set_bindings(default_bindings_mirrored(swap));
+        self.input_mapper
+            .set_bindings(default_bindings_mirrored(swap));
     }
 
     pub(super) fn dispatch_registry_shortcut(self: &Arc<Self>, cmd_id: String) {
@@ -204,10 +205,9 @@ impl MainWindowController {
             return;
         }
         let log = p.to_logical(win.scale_factor());
-        self.gesture_recognizer.lock().set_bounds(ScreenBounds::new(
-            log.width,
-            log.height,
-        ));
+        self.gesture_recognizer
+            .lock()
+            .set_bounds(ScreenBounds::new(log.width, log.height));
     }
 
     pub(super) fn handle_recognized_gestures(
@@ -234,7 +234,10 @@ impl MainWindowController {
     }
 
     pub(super) fn feed_touch_input(self: &Arc<Self>, touch: TouchEvent) {
-        let gestures = self.gesture_recognizer.lock().feed(&InputEvent::Touch(touch));
+        let gestures = self
+            .gesture_recognizer
+            .lock()
+            .feed(&InputEvent::Touch(touch));
         self.handle_recognized_gestures(gestures);
     }
 }
@@ -426,4 +429,52 @@ fn winit_named_f_index(key: &slint::winit_030::winit::keyboard::NamedKey) -> Opt
         NamedKey::F35 => 35,
         _ => return None,
     })
+}
+
+/// Build a [`Shortcut`] from a Slint `KeyPressed` event (named key + modifiers).
+pub(super) fn slint_key_to_shortcut(
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    meta: bool,
+    key: &str,
+) -> Option<Shortcut> {
+    let mut parts = Vec::with_capacity(5);
+    if ctrl {
+        parts.push("Ctrl");
+    }
+    if alt {
+        parts.push("Alt");
+    }
+    if shift {
+        parts.push("Shift");
+    }
+    if meta {
+        parts.push("Win");
+    }
+    let token = key.trim();
+    if token.is_empty() {
+        return None;
+    }
+    parts.push(token);
+    Shortcut::parse(&parts.join("+")).ok()
+}
+
+/// Resolve a file-manager action id for a Slint key event, or an empty string.
+pub(super) fn resolve_fm_action_from_slint(
+    shortcuts: &orchid_storage::ShortcutsConfig,
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    meta: bool,
+    key: &str,
+) -> String {
+    let Some(pressed) = slint_key_to_shortcut(ctrl, alt, shift, meta, key) else {
+        return String::new();
+    };
+    let profile = orchid_core::ShortcutProfile::parse(&shortcuts.profile)
+        .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+    orchid_core::lookup_fm_action(profile, &shortcuts.overrides, &pressed)
+        .unwrap_or("")
+        .to_string()
 }

@@ -9,6 +9,7 @@ use parking_lot::RwLock;
 use crate::action::Action;
 use crate::command::descriptor::{CommandCategory, CommandDescriptor};
 use crate::command::parser::ParsedCommand;
+use crate::command::profile::{profile_default_str, ShortcutProfile};
 use crate::command::shortcut::Shortcut;
 use crate::error::{CoreError, Result};
 
@@ -16,9 +17,8 @@ use crate::error::{CoreError, Result};
 ///
 /// Every registered command provides one. `Arc<dyn Fn(...)>` makes the factory
 /// cheap to clone and share across registrations.
-pub type ActionFactory = Arc<
-    dyn Fn(ParsedCommand) -> Result<Box<dyn Action>> + Send + Sync + 'static,
->;
+pub type ActionFactory =
+    Arc<dyn Fn(ParsedCommand) -> Result<Box<dyn Action>> + Send + Sync + 'static>;
 
 struct CommandEntry {
     descriptor: CommandDescriptor,
@@ -109,11 +109,7 @@ impl CommandRegistry {
     /// )
     /// .unwrap();
     /// ```
-    pub fn register(
-        &self,
-        descriptor: CommandDescriptor,
-        factory: ActionFactory,
-    ) -> Result<()> {
+    pub fn register(&self, descriptor: CommandDescriptor, factory: ActionFactory) -> Result<()> {
         if self.inner.contains_key(&descriptor.id) {
             return Err(CoreError::DuplicateCommand(descriptor.id));
         }
@@ -187,6 +183,42 @@ impl CommandRegistry {
         (entry.factory)(args)
     }
 
+    /// Restore every command to its compiled-in [`CommandDescriptor::default_shortcut`].
+    pub fn reset_effective_shortcuts(&self) {
+        for entry in self.inner.iter() {
+            *entry.effective_shortcut.write() = entry.descriptor.default_shortcut.clone();
+        }
+    }
+
+    /// Overlay a [`ShortcutProfile`] onto compiled defaults (unbinds empty entries).
+    pub fn apply_shortcut_profile(&self, profile: ShortcutProfile) {
+        for entry in self.inner.iter() {
+            let Some(raw) = profile_default_str(profile, &entry.descriptor.id) else {
+                continue;
+            };
+            if raw.is_empty() {
+                *entry.effective_shortcut.write() = None;
+                continue;
+            }
+            if let Ok(sc) = Shortcut::parse(raw) {
+                if crate::command::shortcut::is_reserved(&sc).is_none() {
+                    *entry.effective_shortcut.write() = Some(sc);
+                }
+            }
+        }
+    }
+
+    /// Reset compiled defaults, apply `profile`, then user `overrides`.
+    pub fn rebind_shortcuts(
+        &self,
+        profile: ShortcutProfile,
+        overrides: &HashMap<String, String>,
+    ) -> Vec<ShortcutOverrideResult> {
+        self.reset_effective_shortcuts();
+        self.apply_shortcut_profile(profile);
+        self.apply_shortcut_overrides(overrides)
+    }
+
     /// Apply a batch of user shortcut overrides.
     ///
     /// Each entry in `overrides` is `command_id -> shortcut_string`. Every
@@ -242,7 +274,9 @@ impl CommandRegistry {
     /// overrides.
     #[must_use]
     pub fn effective_shortcut(&self, id: &str) -> Option<Shortcut> {
-        self.inner.get(id).and_then(|e| e.effective_shortcut.read().clone())
+        self.inner
+            .get(id)
+            .and_then(|e| e.effective_shortcut.read().clone())
     }
 
     // ------------------------------------------------------------------
@@ -316,7 +350,8 @@ mod tests {
     #[test]
     fn apply_shortcut_overrides_reports_per_entry() {
         let reg = CommandRegistry::new();
-        reg.register(desc("a", None, Some("Ctrl+A")), factory()).unwrap();
+        reg.register(desc("a", None, Some("Ctrl+A")), factory())
+            .unwrap();
         reg.register(desc("b", None, None), factory()).unwrap();
 
         let mut overrides = HashMap::new();
@@ -328,7 +363,10 @@ mod tests {
         let results = reg.apply_shortcut_overrides(&overrides);
         assert_eq!(results.len(), 3);
 
-        let by_id: HashMap<_, _> = results.into_iter().map(|r| (r.command_id, r.outcome)).collect();
+        let by_id: HashMap<_, _> = results
+            .into_iter()
+            .map(|r| (r.command_id, r.outcome))
+            .collect();
         assert!(by_id["a"].is_ok());
         assert!(by_id["b"].is_err());
         assert!(by_id["unknown"].is_err());
@@ -336,6 +374,25 @@ mod tests {
         assert_eq!(
             reg.effective_shortcut("a"),
             Some(Shortcut::parse("Ctrl+Shift+A").unwrap())
+        );
+    }
+
+    #[test]
+    fn rebind_shortcuts_resets_cleared_overrides() {
+        let reg = CommandRegistry::new();
+        reg.register(desc("settings.open", None, Some("Ctrl+,")), factory())
+            .unwrap();
+        let mut overrides = HashMap::new();
+        overrides.insert("settings.open".into(), "Ctrl+Shift+O".into());
+        reg.rebind_shortcuts(crate::ShortcutProfile::Orchid, &overrides);
+        assert_eq!(
+            reg.effective_shortcut("settings.open"),
+            Some(Shortcut::parse("Ctrl+Shift+O").unwrap())
+        );
+        reg.rebind_shortcuts(crate::ShortcutProfile::Macos, &HashMap::new());
+        assert_eq!(
+            reg.effective_shortcut("settings.open"),
+            Some(Shortcut::parse("Win+,").unwrap())
         );
     }
 

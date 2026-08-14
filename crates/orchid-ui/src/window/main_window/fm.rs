@@ -1742,7 +1742,16 @@ impl MainWindowController {
         if actions.is_empty() {
             return;
         }
-        let menu = build_context_menu(&actions, &target_paths, info.as_ref(), x, y, &self.locale);
+        let shortcuts = self.config.read().shortcuts.clone();
+        let menu = build_context_menu(
+            &actions,
+            &target_paths,
+            info.as_ref(),
+            x,
+            y,
+            &self.locale,
+            &shortcuts,
+        );
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.context_menu = menu;

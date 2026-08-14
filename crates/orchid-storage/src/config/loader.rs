@@ -48,6 +48,8 @@ palm-rejection = true
 pen-double-tap-action = "switch-tool"
 
 [shortcuts]
+# Default layer: "orchid" (Commander), "windows", "macos", or "linux".
+profile = "orchid"
 # Override built-in keyboard shortcuts by command id.
 # Example:
 # overrides = { command-palette = "Ctrl+Shift+P" }

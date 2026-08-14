@@ -48,9 +48,12 @@ pub use action::{
     ReversiblePair, REVERSIBLE_WINDOW_SECONDS,
 };
 pub use command::{
-    is_reserved, parse_command_line, parse_command_line_with_registry, ActionFactory, CommandArg,
-    CommandArgKind, CommandCategory, CommandDescriptor, CommandPalette, CommandRegistry, Key,
-    Modifiers, PaletteResult, ParsedCommand, Shortcut, ShortcutOverrideResult, TerminalInvocation,
+    binding_conflict, display_profile_shortcut, is_file_manager_binding, is_reserved,
+    lookup_fm_action, parse_command_line, parse_command_line_with_registry, profile_default_str,
+    resolve_profile_shortcut, validate_override, ActionFactory, CommandArg, CommandArgKind,
+    CommandCategory, CommandDescriptor, CommandPalette, CommandRegistry, Key, Modifiers,
+    PaletteResult, ParsedCommand, ProfileBinding, Shortcut, ShortcutOverrideResult,
+    ShortcutProfile, TerminalInvocation, PROFILE_BINDINGS,
 };
 pub use error::{CoreError, Result};
 pub use event::{

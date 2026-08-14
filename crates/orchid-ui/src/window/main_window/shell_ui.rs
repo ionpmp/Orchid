@@ -1,5 +1,6 @@
 //! Settings, navigation, notifications, onboarding, and command-palette shell UI.
 
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -19,21 +20,33 @@ use crate::slint_generated::{
 };
 use crate::window::errors::{storage_localized_error, ui_localized_error};
 use crate::window::models::{
-    build_palette_candidates, build_settings_fields, build_settings_sections,
-    settings_section_id, settings_section_index, SETTINGS_SECTION_IDS,
+    build_palette_candidates, build_settings_fields, build_settings_sections, settings_section_id,
+    settings_section_index, SETTINGS_SECTION_IDS,
 };
 use crate::window::spawn;
 
-use super::{AddWidgetPlacement, MainWindowController, WORKSPACE_CHROME_H, sync_vec_model};
+use super::{sync_vec_model, AddWidgetPlacement, MainWindowController, WORKSPACE_CHROME_H};
 
 const COMMAND_PALETTE_LIMIT: usize = 50;
 
 const ONBOARDING_STEP_COUNT: i32 = 4;
 const ONBOARDING_STEP_KEYS: [(&str, &str); 4] = [
-    ("onboarding-step-welcome-title", "onboarding-step-welcome-body"),
-    ("onboarding-step-workspace-title", "onboarding-step-workspace-body"),
-    ("onboarding-step-palette-title", "onboarding-step-palette-body"),
-    ("onboarding-step-gestures-title", "onboarding-step-gestures-body"),
+    (
+        "onboarding-step-welcome-title",
+        "onboarding-step-welcome-body",
+    ),
+    (
+        "onboarding-step-workspace-title",
+        "onboarding-step-workspace-body",
+    ),
+    (
+        "onboarding-step-palette-title",
+        "onboarding-step-palette-body",
+    ),
+    (
+        "onboarding-step-gestures-title",
+        "onboarding-step-gestures-body",
+    ),
 ];
 
 /// Soft cap so bridges/toasts cannot grow the in-memory list without bound.
@@ -50,13 +63,7 @@ impl MainWindowController {
         let title_key = format!("settings-section-{}", section);
         let title = self.locale.tr(&title_key).into();
         let hint = self.locale.tr("settings-panel-hint").into();
-        // Shortcuts (and similar) are view-only in the panel — surface the
-        // dedicated coming-soon copy so users know to edit config.toml.
-        let coming_soon = if section == "shortcuts" {
-            self.locale.tr("settings-panel-coming-soon").into()
-        } else {
-            SharedString::default()
-        };
+        let coming_soon = SharedString::default();
         let cfg = self.config.read();
         let fields = build_settings_fields(
             &section,
@@ -66,7 +73,10 @@ impl MainWindowController {
             &self.command_registry,
         );
         drop(cfg);
-        sync_vec_model(&self.settings_sections, build_settings_sections(&self.locale));
+        sync_vec_model(
+            &self.settings_sections,
+            build_settings_sections(&self.locale),
+        );
         sync_vec_model(&self.settings_fields, fields);
         let g = self.window.global::<SettingsGlobal>();
         g.set_visible(st.visible);
@@ -80,7 +90,12 @@ impl MainWindowController {
         g.set_fields(self.settings_fields.clone());
     }
 
-    pub(super) fn on_settings_field_changed(self: &Arc<Self>, section: &str, key: &str, value: &str) {
+    pub(super) fn on_settings_field_changed(
+        self: &Arc<Self>,
+        section: &str,
+        key: &str,
+        value: &str,
+    ) {
         if !self.settings.read().visible {
             return;
         }
@@ -140,7 +155,7 @@ impl MainWindowController {
 
     pub(super) fn open_settings(self: &Arc<Self>, section: &str) {
         self.on_command_palette_dismiss();
-        let section = if SETTINGS_SECTION_IDS.iter().any(|&id| id == section) {
+        let section = if SETTINGS_SECTION_IDS.contains(&section) {
             section.to_string()
         } else {
             SETTINGS_SECTION_IDS[0].to_string()
@@ -219,7 +234,10 @@ impl MainWindowController {
                 .into(),
             severity,
         };
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        if let Some(model) = self
+            .notifications
+            .as_any()
+            .downcast_ref::<VecModel<NotificationItem>>()
         {
             model.insert(0, item);
             while model.row_count() > NOTIFICATION_LIST_CAP {
@@ -231,7 +249,10 @@ impl MainWindowController {
     }
 
     pub(super) fn clear_notifications(self: &Arc<Self>) {
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        if let Some(model) = self
+            .notifications
+            .as_any()
+            .downcast_ref::<VecModel<NotificationItem>>()
         {
             model.set_vec(Vec::new());
         }
@@ -240,11 +261,14 @@ impl MainWindowController {
     }
 
     pub(super) fn dismiss_notification(self: &Arc<Self>, id: &str) {
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        if let Some(model) = self
+            .notifications
+            .as_any()
+            .downcast_ref::<VecModel<NotificationItem>>()
         {
-            if let Some(idx) = (0..model.row_count()).find(|&i| {
-                model.row_data(i).is_some_and(|item| item.id.as_str() == id)
-            }) {
+            if let Some(idx) = (0..model.row_count())
+                .find(|&i| model.row_data(i).is_some_and(|item| item.id.as_str() == id))
+            {
                 model.remove(idx);
             }
         }
@@ -254,7 +278,10 @@ impl MainWindowController {
 
     fn snapshot_notifications(&self) -> orchid_storage::NotificationCenterState {
         let mut items = Vec::new();
-        if let Some(model) = self.notifications.as_any().downcast_ref::<VecModel<NotificationItem>>()
+        if let Some(model) = self
+            .notifications
+            .as_any()
+            .downcast_ref::<VecModel<NotificationItem>>()
         {
             for i in 0..model.row_count() {
                 if let Some(row) = model.row_data(i) {
@@ -285,10 +312,7 @@ impl MainWindowController {
     }
 
     pub(super) fn ensure_startup_notification_tip(self: &Arc<Self>) {
-        if self
-            .notification_tip_pushed
-            .swap(true, Ordering::AcqRel)
-        {
+        if self.notification_tip_pushed.swap(true, Ordering::AcqRel) {
             return;
         }
         if self.notifications.row_count() > 0 {
@@ -330,8 +354,7 @@ impl MainWindowController {
             warn!(?e, "config validation failed on save");
             return;
         }
-        match orchid_crypto::protect_network_mount_passwords(&mut cfg.file_manager.network_mounts)
-        {
+        match orchid_crypto::protect_network_mount_passwords(&mut cfg.file_manager.network_mounts) {
             Ok(true) => {
                 self.config.write().file_manager.network_mounts =
                     cfg.file_manager.network_mounts.clone();
@@ -655,17 +678,55 @@ fn apply_settings_field(
         ("input", "mirror-edge-swipes") => {
             cfg.input.mirror_edge_swipes = parse_settings_bool(value)?;
         }
-        ("shortcuts", "leader-key") => {
-            cfg.shortcuts.leader_key = if value.is_empty() {
-                None
-            } else {
-                Some(value.to_string())
+        ("shortcuts", "profile") => {
+            let Some(profile) = orchid_core::ShortcutProfile::parse(value) else {
+                return Err(format!("unknown shortcut profile `{value}`"));
             };
+            cfg.shortcuts.profile = profile.as_str().to_string();
+        }
+        ("shortcuts", "leader-key") => {
+            let trimmed = value.trim();
+            let none = locale.tr("settings-value-none");
+            if trimmed.is_empty() || trimmed == none {
+                cfg.shortcuts.leader_key = None;
+            } else {
+                let sc = orchid_core::Shortcut::parse(trimmed).map_err(|e| e.to_string())?;
+                if let Some(reason) = orchid_core::is_reserved(&sc) {
+                    return Err(reason.to_string());
+                }
+                cfg.shortcuts.leader_key = Some(sc.to_string_canonical());
+            }
         }
         ("shortcuts", "leader-timeout") => {
-            cfg.shortcuts.leader_timeout_ms = value
+            let ms = value
                 .parse::<u64>()
                 .map_err(|_| format!("invalid leader timeout `{value}`"))?;
+            if !(200..=10_000).contains(&ms) {
+                return Err("leader timeout must be between 200 and 10000 ms".into());
+            }
+            cfg.shortcuts.leader_timeout_ms = ms;
+        }
+        (section, key) if section == "shortcuts" && key.starts_with("bind:") => {
+            let id = &key["bind:".len()..];
+            let profile = orchid_core::ShortcutProfile::parse(&cfg.shortcuts.profile)
+                .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+            let trimmed = value.trim();
+            let none = locale.tr("settings-value-none");
+            if trimmed.is_empty() || trimmed == none {
+                cfg.shortcuts.overrides.remove(id);
+            } else {
+                let sc = orchid_core::Shortcut::parse(trimmed).map_err(|e| e.to_string())?;
+                orchid_core::validate_override(profile, &cfg.shortcuts.overrides, id, &sc)?;
+                let profile_sc =
+                    orchid_core::resolve_profile_shortcut(profile, &HashMap::new(), id);
+                if profile_sc.as_ref() == Some(&sc) {
+                    cfg.shortcuts.overrides.remove(id);
+                } else {
+                    cfg.shortcuts
+                        .overrides
+                        .insert(id.to_string(), sc.to_string_canonical());
+                }
+            }
         }
         ("locale", "language") => {
             if value.is_empty() {

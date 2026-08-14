@@ -1,5 +1,6 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
+import { ShortcutBindings } from "../../shortcuts_global.slint";
 import { FmPane as FmPaneModel, FmRenameState, FmVisitHistoryItem, FmPathSuggest } from "../../workspace/defs.slint";
 import { FmTabs } from "fm-tabs.slint";
 import { FmToolbar } from "fm-toolbar.slint";
@@ -82,6 +83,72 @@ export component FmPane inherits Rectangle {
     property <length> grid-tile: grid-view && pane.tabs[pane.active-tab].view-mode == 3 ? 220px : 100px;
     property <int> grid-cols: max(1, floor((root.width - 8px) / (grid-tile + 8px)));
 
+    function named-key(t: string) -> string {
+        if (t == Key.F1) { return "F1"; }
+        if (t == Key.F2) { return "F2"; }
+        if (t == Key.F3) { return "F3"; }
+        if (t == Key.F4) { return "F4"; }
+        if (t == Key.F5) { return "F5"; }
+        if (t == Key.F6) { return "F6"; }
+        if (t == Key.F7) { return "F7"; }
+        if (t == Key.F8) { return "F8"; }
+        if (t == Key.F9) { return "F9"; }
+        if (t == Key.F10) { return "F10"; }
+        if (t == Key.F11) { return "F11"; }
+        if (t == Key.F12) { return "F12"; }
+        if (t == Key.Return) { return "Enter"; }
+        if (t == Key.Delete) { return "Delete"; }
+        if (t == Key.Backspace) { return "Backspace"; }
+        if (t == Key.Escape) { return "Escape"; }
+        if (t == Key.Tab) { return "Tab"; }
+        if (t == Key.Insert) { return "Insert"; }
+        if (t == Key.Home) { return "Home"; }
+        if (t == Key.End) { return "End"; }
+        if (t == Key.PageUp) { return "PageUp"; }
+        if (t == Key.PageDown) { return "PageDown"; }
+        if (t == Key.UpArrow) { return "ArrowUp"; }
+        if (t == Key.DownArrow) { return "ArrowDown"; }
+        if (t == Key.LeftArrow) { return "ArrowLeft"; }
+        if (t == Key.RightArrow) { return "ArrowRight"; }
+        if (t == " ") { return "Space"; }
+        return t;
+    }
+
+    function dispatch-fm-action(act: string) -> bool {
+        if (act == "") { return false; }
+        if (act == "fs.select-all") { root.select-all(); return true; }
+        if (act == "fs.deselect-all") { root.deselect-all(); return true; }
+        if (act == "fs.invert-selection") { root.selection-command("invert"); return true; }
+        if (act == "fs.select-mask-add") { root.selection-command("mask-add"); return true; }
+        if (act == "fs.select-mask-sub") { root.selection-command("mask-sub"); return true; }
+        if (act == "fs.copy") { root.copy-selected(); return true; }
+        if (act == "fs.cut") { root.nav-command("cut"); return true; }
+        if (act == "fs.paste") { root.paste-clipboard(); return true; }
+        if (act == "fs.rename") { root.rename-selected(); return true; }
+        if (act == "fs.delete") { root.delete-selected(); return true; }
+        if (act == "fs.delete-permanent") { root.nav-command("delete-perm"); return true; }
+        if (act == "fs.new-folder") { root.new-folder(); return true; }
+        if (act == "fs.new-file") { root.nav-command("new-file"); return true; }
+        if (act == "viewer.open") { root.nav-command("view"); return true; }
+        if (act == "viewer.edit") { root.nav-command("edit"); return true; }
+        if (act == "fs.copy-to-other") { root.nav-command("copy-other"); return true; }
+        if (act == "fs.move-to-other") { root.nav-command("move-other"); return true; }
+        if (act == "fs.open-tab") { root.nav-command("open-tab"); return true; }
+        if (act == "fs.open-other-pane") { root.nav-command("other-pane"); return true; }
+        if (act == "fs.branch-view") { root.nav-command("branch"); return true; }
+        if (act == "fs.find") { root.nav-command("find"); return true; }
+        if (act == "fs.properties") { root.nav-command("properties"); return true; }
+        if (act == "fs.address-bar") { root.address-editing = true; return true; }
+        if (act == "fs.tab-new") { root.tab-new(); return true; }
+        if (act == "fs.drive-root") { root.nav-command("drive-root"); return true; }
+        if (act == "fs.drives-menu") {
+            root.drives-open = !root.drives-open;
+            root.history-open = false;
+            return true;
+        }
+        return false;
+    }
+
     pane-keys := FocusScope {
         width: parent.width;
         height: parent.height;
@@ -89,80 +156,6 @@ export component FmPane inherits Rectangle {
         key-pressed(event) => {
             if (!root.is-active) {
                 return reject;
-            }
-            if (event.modifiers.control && (event.text == "a" || event.text == "A")) {
-                root.select-all();
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == "*") {
-                root.selection-command("invert");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == "+") {
-                root.selection-command("mask-add");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == "-") {
-                root.selection-command("mask-sub");
-                return accept;
-            }
-            if (event.modifiers.control && (event.text == "x" || event.text == "X")) {
-                root.nav-command("cut");
-                return accept;
-            }
-            if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
-                root.copy-selected();
-                return accept;
-            }
-            if (event.modifiers.control && (event.text == "v" || event.text == "V")) {
-                root.paste-clipboard();
-                return accept;
-            }
-            if (event.modifiers.control && event.modifiers.shift
-                && (event.text == "n" || event.text == "N")) {
-                root.new-folder();
-                return accept;
-            }
-            if (event.text == Key.F2) {
-                root.rename-selected();
-                return accept;
-            }
-            if (event.modifiers.control && (event.text == "l" || event.text == "L")) {
-                root.address-editing = true;
-                return accept;
-            }
-            if (event.modifiers.shift && event.text == Key.F4) {
-                root.nav-command("new-file");
-                return accept;
-            }
-            if (event.text == Key.F3) {
-                root.nav-command("view");
-                return accept;
-            }
-            if (event.text == Key.F4) {
-                root.nav-command("edit");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == Key.F5) {
-                root.nav-command("copy-other");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == Key.F6) {
-                root.nav-command("move-other");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.modifiers.alt
-                && event.text == Key.F7) {
-                root.nav-command("find");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == Key.F7) {
-                root.new-folder();
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.text == Key.F8) {
-                root.delete-selected();
-                return accept;
             }
             if (rename.active && event.text == Key.Escape) {
                 root.rename-cancel();
@@ -176,18 +169,25 @@ export component FmPane inherits Rectangle {
                 root.nav-command("cancel");
                 return accept;
             }
-            if (event.modifiers.shift && event.text == Key.Delete) {
-                root.nav-command("delete-perm");
-                return accept;
-            }
-            if (event.text == Key.Delete) {
-                root.delete-selected();
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.modifiers.alt
-                && event.text == Key.Return) {
-                root.nav-command("properties");
-                return accept;
+            if (!rename.active && !root.address-editing) {
+                if (dispatch-fm-action(ShortcutBindings.resolve-fm-action(
+                    event.modifiers.control,
+                    event.modifiers.alt,
+                    event.modifiers.shift,
+                    event.modifiers.meta,
+                    named-key(event.text),
+                ))) {
+                    return accept;
+                }
+                if (event.text == Key.Delete && !event.modifiers.shift) {
+                    root.delete-selected();
+                    return accept;
+                }
+                if (event.modifiers.control && event.modifiers.shift
+                    && (event.text == "n" || event.text == "N")) {
+                    root.new-folder();
+                    return accept;
+                }
             }
             if (event.text == Key.Return) {
                 if (!rename.active) {
@@ -209,37 +209,6 @@ export component FmPane inherits Rectangle {
                     return accept;
                 }
                 return reject;
-            }
-            if (!rename.active && !root.address-editing && event.modifiers.control
-                && (event.text == "\\" || event.text == "/")) {
-                root.nav-command("drive-root");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.modifiers.control
-                && (event.text == "b" || event.text == "B")) {
-                root.nav-command("branch");
-                return accept;
-            }
-            if (!rename.active && event.modifiers.control && event.modifiers.shift
-                && (event.text == "t" || event.text == "T")) {
-                root.nav-command("open-tab");
-                return accept;
-            }
-            if (!rename.active && event.modifiers.control && !event.modifiers.shift
-                && (event.text == "t" || event.text == "T")) {
-                root.tab-new();
-                return accept;
-            }
-            if (!rename.active && event.modifiers.control && event.modifiers.shift
-                && event.text == Key.Return) {
-                root.nav-command("other-pane");
-                return accept;
-            }
-            if (!rename.active && !root.address-editing && event.modifiers.alt
-                && event.text == Key.F1) {
-                root.drives-open = !root.drives-open;
-                root.history-open = false;
-                return accept;
             }
             if (!rename.active) {
                 if (event.text == Key.UpArrow) {

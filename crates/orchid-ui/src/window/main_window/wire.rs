@@ -10,7 +10,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::error::Result;
-use crate::slint_generated::NotificationGlobal;
+use crate::slint_generated::{NotificationGlobal, ShortcutBindings};
 use crate::window::errors::{ui_localized_error, viewer_localized_error};
 use crate::window::spawn;
 
@@ -272,6 +272,27 @@ impl MainWindowController {
                 }
             }
         });
+        self.window
+            .global::<ShortcutBindings>()
+            .on_resolve_fm_action({
+                let t = t.clone();
+                move |ctrl, alt, shift, meta, key| {
+                    t.upgrade()
+                        .map(|c| {
+                            let shortcuts = c.config.read().shortcuts.clone();
+                            super::input::resolve_fm_action_from_slint(
+                                &shortcuts,
+                                ctrl,
+                                alt,
+                                shift,
+                                meta,
+                                key.as_str(),
+                            )
+                            .into()
+                        })
+                        .unwrap_or_default()
+                }
+            });
         self.window.on_onboarding_next_clicked({
             let t = t.clone();
             move || {

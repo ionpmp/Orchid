@@ -707,7 +707,7 @@ impl OrchidApp {
                 .map_err(|e| UiError::Slint(format!("register command {cmd_id}: {e}")))?;
         }
 
-        apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts.overrides);
+        apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts);
 
         crate::autostart::sync_open_on_startup(&config.read().general);
 
@@ -961,12 +961,11 @@ impl OrchidApp {
 
 fn apply_command_shortcut_overrides(
     registry: &CommandRegistry,
-    overrides: &std::collections::HashMap<String, String>,
+    shortcuts: &orchid_storage::ShortcutsConfig,
 ) {
-    if overrides.is_empty() {
-        return;
-    }
-    for result in registry.apply_shortcut_overrides(overrides) {
+    let profile = orchid_core::ShortcutProfile::parse(&shortcuts.profile)
+        .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+    for result in registry.rebind_shortcuts(profile, &shortcuts.overrides) {
         if let Err(reason) = result.outcome {
             tracing::warn!(
                 command = %result.command_id,

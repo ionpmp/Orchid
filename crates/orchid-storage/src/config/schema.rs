@@ -180,6 +180,10 @@ pub enum PenDoubleTapAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct ShortcutsConfig {
+    /// OS / commander convention used as the default layer: `orchid`,
+    /// `windows`, `macos`, or `linux`.
+    #[serde(default = "default_shortcut_profile")]
+    pub profile: String,
     /// Map of command identifier (e.g. `"command-palette"`) to a shortcut
     /// string like `"Ctrl+Shift+P"`.
     pub overrides: HashMap<String, String>,
@@ -198,12 +202,17 @@ pub struct ShortcutsConfig {
 impl Default for ShortcutsConfig {
     fn default() -> Self {
         Self {
+            profile: default_shortcut_profile(),
             overrides: HashMap::new(),
             leader_key: default_leader_key(),
             leader_timeout_ms: default_leader_timeout_ms(),
             leader_bindings: default_leader_bindings(),
         }
     }
+}
+
+fn default_shortcut_profile() -> String {
+    "orchid".into()
 }
 
 fn default_leader_key() -> Option<String> {
@@ -412,6 +421,26 @@ impl OrchidConfig {
             )));
         }
 
+        let profile = self.shortcuts.profile.trim();
+        if !matches!(
+            profile,
+            "orchid"
+                | "commander"
+                | "windows"
+                | "win"
+                | "macos"
+                | "mac"
+                | "osx"
+                | "darwin"
+                | "linux"
+                | "gnome"
+                | "kde"
+        ) {
+            return Err(StorageError::ConfigValidation(format!(
+                "shortcuts.profile must be orchid, windows, macos, or linux, got `{profile}`"
+            )));
+        }
+
         Ok(())
     }
 }
@@ -495,6 +524,7 @@ mod tests {
     #[test]
     fn shortcuts_config_defaults_include_leader_mode() {
         let cfg = ShortcutsConfig::default();
+        assert_eq!(cfg.profile, "orchid");
         assert_eq!(cfg.leader_key.as_deref(), Some("Ctrl+Shift+Space"));
         assert_eq!(cfg.leader_timeout_ms, 1200);
         assert_eq!(
@@ -506,7 +536,9 @@ mod tests {
     #[test]
     fn shortcuts_config_backward_compat() {
         let cfg: OrchidConfig = toml::from_str("[shortcuts]\noverrides = {}").unwrap();
+        assert_eq!(cfg.shortcuts.profile, "orchid");
         assert!(cfg.shortcuts.leader_bindings.contains_key("s"));
+        assert!(cfg.validate().is_ok());
     }
 
     #[test]

@@ -20,6 +20,9 @@ release yet.
   schema v2 persistence.
 - Widget **groups** (tab stacks), workspaces, 16×10 layout grid, catalog, dock,
   command palette, leader-key mode, onboarding tour, hint mode (`Win+?`).
+- User-remappable shortcuts in Settings, with **Orchid (Commander)**,
+  **Windows**, **macOS**, and **Linux** profiles (`[shortcuts].profile` plus
+  per-command overrides).
 - Nine bundled themes + JSON theme loader; 11 Fluent locales with RTL (ar-SA).
 
 #### File manager & storage

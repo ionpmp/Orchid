@@ -200,6 +200,17 @@ pub(crate) fn locale_display_name(locale_mgr: &LocaleManager, id: &LocaleId) -> 
     }
 }
 
+fn shortcut_profile_options(locale: &LocaleManager) -> Vec<(SharedString, SharedString)> {
+    vec![
+        ("orchid".into(), locale.tr("settings-profile-orchid").into()),
+        (
+            "windows".into(),
+            locale.tr("settings-profile-windows").into(),
+        ),
+        ("macos".into(), locale.tr("settings-profile-macos").into()),
+        ("linux".into(), locale.tr("settings-profile-linux").into()),
+    ]
+}
 
 fn command_display_label(
     registry: &CommandRegistry,
@@ -322,7 +333,10 @@ pub(crate) fn build_settings_fields(
                 "settings-field-primary-hand",
                 &[
                     ("left".into(), locale.tr("settings-value-hand-left").into()),
-                    ("right".into(), locale.tr("settings-value-hand-right").into()),
+                    (
+                        "right".into(),
+                        locale.tr("settings-value-hand-right").into(),
+                    ),
                 ],
                 match cfg.input.primary_hand {
                     orchid_storage::Hand::Left => "left",
@@ -372,30 +386,33 @@ pub(crate) fn build_settings_fields(
             );
         }
         "shortcuts" => {
-            push_settings_readonly(
+            let profile = orchid_core::ShortcutProfile::parse(&cfg.shortcuts.profile)
+                .unwrap_or(orchid_core::ShortcutProfile::Orchid);
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "profile",
+                "settings-field-shortcut-profile",
+                &shortcut_profile_options(locale),
+                profile.as_str(),
+            );
+            push_settings_text(
                 &mut rows,
                 locale,
                 "leader-key",
                 "settings-field-leader-key",
-                cfg
-                    .shortcuts
+                cfg.shortcuts
                     .leader_key
                     .clone()
-                    .unwrap_or_else(|| locale.tr("settings-value-none").into())
-                    .into(),
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| locale.tr("settings-value-none")),
             );
-            push_settings_readonly(
+            push_settings_text(
                 &mut rows,
                 locale,
                 "leader-timeout",
                 "settings-field-leader-timeout",
-                locale
-                    .tr_args(
-                        "settings-value-leader-timeout",
-                        &orchid_i18n::FluentArgs::new()
-                            .with("ms", cfg.shortcuts.leader_timeout_ms.to_string()),
-                    )
-                    .into(),
+                cfg.shortcuts.leader_timeout_ms.to_string(),
             );
             push_settings_readonly(
                 &mut rows,
@@ -406,7 +423,7 @@ pub(crate) fn build_settings_fields(
                     locale.tr("settings-value-none").into()
                 } else {
                     let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
-                    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+                    pairs.sort_by_key(|(a, _)| *a);
                     let sep = locale.tr("settings-shortcut-list-separator");
                     pairs
                         .into_iter()
@@ -424,29 +441,28 @@ pub(crate) fn build_settings_fields(
                         .into()
                 },
             );
-            if cfg.shortcuts.overrides.is_empty() {
-                push_settings_readonly(
-                    &mut rows,
-                    locale,
-                    "shortcut-overrides",
-                    "settings-field-shortcut-overrides",
-                    locale.tr("settings-value-none").into(),
-                );
-            } else {
-                let mut pairs: Vec<_> = cfg.shortcuts.overrides.iter().collect();
-                pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
-                for (cmd, shortcut) in pairs {
-                    rows.push(SettingsFieldRow {
-                        key: format!("override:{cmd}").into(),
-                        label: command_display_label(registry, locale, cmd).into(),
-                        kind: SETTINGS_FIELD_READONLY,
-                        value: shortcut.clone().into(),
-                        bool_value: false,
-                        combo_options: settings_strings_model(vec![]),
-                        combo_values: settings_strings_model(vec![]),
-                        combo_index: -1,
-                    });
-                }
+            for binding in orchid_core::PROFILE_BINDINGS {
+                let value = orchid_core::resolve_profile_shortcut(
+                    profile,
+                    &cfg.shortcuts.overrides,
+                    binding.id,
+                )
+                .map(|sc| orchid_core::display_profile_shortcut(profile, &sc))
+                .unwrap_or_else(|| locale.tr("settings-value-none"));
+                let label = registry
+                    .get(binding.id)
+                    .map(|d| locale.tr(&d.display_name_key))
+                    .unwrap_or_else(|| locale.tr(binding.label_key));
+                rows.push(SettingsFieldRow {
+                    key: format!("bind:{}", binding.id).into(),
+                    label: label.into(),
+                    kind: SETTINGS_FIELD_TEXT,
+                    value: value.into(),
+                    bool_value: false,
+                    combo_options: settings_strings_model(vec![]),
+                    combo_values: settings_strings_model(vec![]),
+                    combo_index: -1,
+                });
             }
         }
         "locale" => {
