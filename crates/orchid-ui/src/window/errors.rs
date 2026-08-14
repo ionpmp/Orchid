@@ -155,6 +155,8 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         "virtual-empty-category" => return locale.tr("fm-virtual-category-empty"),
         "virtual-empty-search" => return locale.tr("fm-virtual-search-empty"),
         "virtual-empty-search-results" => return locale.tr("fm-virtual-search-results-empty"),
+        "virtual-empty-recycle" => return locale.tr("fm-virtual-recycle-empty"),
+        "virtual-empty-recycle-unsupported" => return locale.tr("fm-virtual-recycle-unsupported"),
         "fm-transfer-virtual-dest"
         | "fm-virtual-create-denied"
         | "fm-encryption-unavailable"
@@ -177,7 +179,10 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-split-bad-size"
         | "fm-hash-no-sidecar"
         | "fm-chmod-bad-mode"
-        | "fm-join-failed" => return locale.tr(msg),
+        | "fm-join-failed"
+        | "fm-error-recycle-unsupported"
+        | "fm-error-recycle-collision"
+        | "fm-error-recycle-twins" => return locale.tr(msg),
         "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
         "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
         "file-manager widget not live" => return locale.tr("fm-error-unavailable"),

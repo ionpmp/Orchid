@@ -39,13 +39,15 @@ pub use mime::guess_mime;
 pub use operations::{
     acl_grant, acl_reset, acl_text, apply_attr_patch, apply_name_case, chmod, chown, compare_dirs,
     compare_files, copy, copy_with_control, create_hard_link, create_junction, create_symlink,
-    decode_base64, decode_uue, decoded_path, delete, discover_parts, encode_base64, encode_uue,
-    format_hash_report, format_verify_report, hash_path, hash_paths, inspect_path,
-    inspect_signature, is_hash_sidecar, join_files, join_output_name, move_, parse_mode,
-    parse_timestamp, set_mtime, sidecar_path, split_file, sync_dirs, verify_hash_file,
+    decode_base64, decode_uue, decoded_path, delete, discover_parts, empty_recycle, encode_base64,
+    encode_uue, format_hash_report, format_verify_report, hash_path, hash_paths, inspect_path,
+    inspect_signature, is_hash_sidecar, is_recycle_item, is_recycle_listing, is_recycle_virtual,
+    join_files, join_output_name, list_recycle, move_, parse_mode, parse_timestamp, purge_recycle,
+    recycle_entries, recycle_item_id, recycle_listing_supported, recycle_original_path,
+    restore_recycle, set_mtime, sidecar_path, split_file, sync_dirs, verify_hash_file,
     write_hash_file, AttrPatch, CopyOptions, DeleteOptions, DiffKind, DirDiff, FileCompare,
-    FileProperties, HashAlgo, HashRecord, NameCase, OperationProgress, ProgressSink, SignatureReport,
-    SyncMode, SyncStats, TransferControl, VerifyRow,
+    FileProperties, HashAlgo, HashRecord, NameCase, OperationProgress, ProgressSink, RecycleItem,
+    SignatureReport, SyncMode, SyncStats, TransferControl, VerifyRow, RECYCLE_PATH,
 };
 pub use path::FsPath;
 pub use provider::{

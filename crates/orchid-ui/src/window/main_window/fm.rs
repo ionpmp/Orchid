@@ -1852,19 +1852,17 @@ impl MainWindowController {
                 paths,
             } => {
                 let n = paths.len();
-                let message_text = if matches!(
-                    message.as_str(),
+                let message_text = match message.as_str() {
                     "fm-confirm-delete"
-                        | "fm-confirm-delete-permanent"
-                        | "fm-confirm-copy"
-                        | "fm-confirm-move"
-                ) {
-                    self.locale.tr_args(
+                    | "fm-confirm-delete-permanent"
+                    | "fm-confirm-copy"
+                    | "fm-confirm-move"
+                    | "fm-confirm-recycle-purge" => self.locale.tr_args(
                         &message,
                         &orchid_i18n::FluentArgs::new().with("n", n.to_string()),
-                    )
-                } else {
-                    message
+                    ),
+                    "fm-confirm-recycle-empty" => self.locale.tr(&message),
+                    _ => message,
                 };
                 let dlg = FmConfirmDialog {
                     visible: true,

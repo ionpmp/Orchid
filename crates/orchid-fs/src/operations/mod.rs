@@ -1,4 +1,4 @@
-//! File operations (copy, move, delete, compare, hash, encode, attributes).
+//! File operations (copy, move, delete, recycle, compare, hash, encode, attributes).
 
 pub mod attrs;
 pub mod checksum;
@@ -8,10 +8,11 @@ pub mod delete;
 pub mod encode;
 pub mod inspect;
 pub mod link;
-pub mod signature;
 #[path = "move_.rs"]
 pub mod move_;
 pub mod progress;
+pub mod recycle;
+pub mod signature;
 pub mod split;
 
 pub use attrs::{
@@ -33,7 +34,12 @@ pub use encode::{
 };
 pub use inspect::{inspect_path, FileProperties};
 pub use link::{create_hard_link, create_junction, create_symlink};
-pub use signature::{inspect_signature, SignatureReport};
 pub use move_::move_;
 pub use progress::{OperationProgress, ProgressSink, TransferControl};
+pub use recycle::{
+    empty_recycle, is_recycle_item, is_recycle_listing, is_recycle_virtual, list_recycle,
+    purge_recycle, recycle_entries, recycle_item_id, recycle_listing_supported,
+    recycle_original_path, restore_recycle, RecycleItem, RECYCLE_PATH,
+};
+pub use signature::{inspect_signature, SignatureReport};
 pub use split::{discover_parts, join_files, join_output_name, split_file};

@@ -28,8 +28,9 @@ release yet.
 #### File manager & storage
 - Dual-pane FM with icons / list / details / gallery, tabs, breadcrumbs,
   drag-and-drop (including OS drop and FM→viewer), tags, colour labels, quick
-  filter, virtual folders (Recent, Starred, Tags, Search results, categories,
-  network).
+  filter, virtual folders (Recent, Starred, Tags, Search results, Recycle Bin,
+  categories, network). Browse the Recycle Bin, restore items, permanently
+  delete selected items, or empty the bin.
 - Find files (`Alt+F7` / Tools): name / mask / regex, size, date, attributes,
   content grep (literal or regex), case sensitivity, archives, indexed search
   (Windows Search then Tantivy), save results as a virtual folder; find
@@ -47,7 +48,8 @@ release yet.
   volumes, Ctrl+Shift+T opens the selection in a new tab, Ctrl+Shift+Enter
   opens it in the other pane, Ctrl+B flattens nested files (branch view).
 - File operations: F5/F6 copy/move to the other pane (clipboard in
-  single-pane), F7 new folder, Shift+F4 new file, F8/Del delete, Shift+Del
+  single-pane), F7 new folder, Shift+F4 new file, F8/Del delete (to Recycle
+  Bin; restore / empty from the Recycle Bin folder), Shift+Del
   permanent delete, Ctrl+X cut. Overwrite / Skip / Rename / Overwrite older
   / Resume conflict dialog with “apply to all”. Copy queue with pause,
   resume, cancel, verify, new/changed-only, folder structure only, NTFS

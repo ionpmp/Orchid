@@ -50,6 +50,8 @@ pub struct ContextMenuInputs {
     pub dual_pane: bool,
     /// Current folder is inside an archive (`archive:`).
     pub in_archive: bool,
+    /// Current folder is the Recycle Bin virtual listing.
+    pub in_recycle: bool,
 }
 
 /// Read-only header shown at the top of a file/folder context menu.
@@ -105,15 +107,21 @@ pub fn info_for_selection(
             "fm-properties-modified",
             &orchid_i18n::FluentArgs::new().with("modified", modified),
         );
-        let mime_line = if meta.kind == orchid_fs::FsEntryKind::Directory {
-            String::new()
-        } else {
-            let mime = meta.mime.clone().unwrap_or_else(|| "—".into());
-            locale.tr_args(
-                "fm-properties-mime",
-                &orchid_i18n::FluentArgs::new().with("mime", mime),
-            )
-        };
+        let mime_line =
+            if let Some(orig) = orchid_fs::recycle_original_path(selection[0].path.as_str()) {
+                locale.tr_args(
+                    "fm-properties-original",
+                    &orchid_i18n::FluentArgs::new().with("path", orig),
+                )
+            } else if meta.kind == orchid_fs::FsEntryKind::Directory {
+                String::new()
+            } else {
+                let mime = meta.mime.clone().unwrap_or_else(|| "—".into());
+                locale.tr_args(
+                    "fm-properties-mime",
+                    &orchid_i18n::FluentArgs::new().with("mime", mime),
+                )
+            };
         (modified_line, mime_line)
     } else {
         (String::new(), String::new())
@@ -154,6 +162,10 @@ pub fn build_for_selection(
     let single_file = count == 1 && selection[0].metadata.kind == orchid_fs::FsEntryKind::File;
     let single = count == 1;
     let mut items = Vec::new();
+
+    if inputs.in_recycle {
+        return recycle_menu(has_selection, &inputs);
+    }
 
     if !has_selection {
         return background_menu(&inputs);
@@ -533,6 +545,42 @@ pub fn build_for_selection(
     items
 }
 
+/// Recycle Bin: restore / purge selected items, or empty the bin.
+fn recycle_menu(has_selection: bool, inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
+    let mut items = Vec::new();
+    if has_selection {
+        items.push(item(
+            "fs.recycle-restore",
+            "fm-action-recycle-restore",
+            "action-open",
+            true,
+        ));
+        items.push(sep(item(
+            "fs.recycle-purge",
+            "fm-action-recycle-purge",
+            "action-delete",
+            true,
+        )));
+    }
+    items.push(item(
+        "fs.recycle-empty",
+        "fm-action-recycle-empty",
+        "action-delete",
+        inputs.entry_count > 0,
+    ));
+    if inputs.entry_count > 0 {
+        items.last_mut().unwrap().separator_after = true;
+        items.push(item(
+            "fs.select-all",
+            "fm-action-select-all",
+            "action-select-all",
+            true,
+        ));
+        items.push(select_more_menu(inputs));
+    }
+    items
+}
+
 /// Right-click on empty listing space: only actions that apply without a target.
 fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
     let mut items = Vec::new();
@@ -758,12 +806,7 @@ fn tools_menu(
             dual,
         ),
         item("fs.sync-both", "fm-action-sync-both", "action-copy", dual),
-        item(
-            "fs.cloud-sync",
-            "fm-action-cloud-sync",
-            "action-copy",
-            dual,
-        ),
+        item("fs.cloud-sync", "fm-action-cloud-sync", "action-copy", dual),
         item(
             "fs.network-bookmark",
             "fm-action-network-bookmark",
@@ -1161,6 +1204,38 @@ mod tests {
         let menu = build_for_selection(&[], ContextMenuInputs::default());
         assert!(menu.iter().all(|i| i.id != "fs.new-folder"));
         assert!(menu.iter().all(|i| i.id != "fs.new-file"));
+    }
+
+    #[test]
+    fn recycle_menu_offers_restore_and_empty() {
+        let sel = vec![entry("gone.txt", FsEntryKind::File, false)];
+        let menu = build_for_selection(
+            &sel,
+            ContextMenuInputs {
+                in_recycle: true,
+                entry_count: 1,
+                selection_count: 1,
+                ..Default::default()
+            },
+        );
+        let ids: Vec<&str> = menu.iter().map(|i| i.id.as_str()).collect();
+        assert!(ids.contains(&"fs.recycle-restore"));
+        assert!(ids.contains(&"fs.recycle-purge"));
+        assert!(ids.contains(&"fs.recycle-empty"));
+        assert!(!ids.contains(&"fs.copy"));
+        assert!(!ids.contains(&"fs.delete"));
+        let empty = build_for_selection(
+            &[],
+            ContextMenuInputs {
+                in_recycle: true,
+                entry_count: 3,
+                ..Default::default()
+            },
+        );
+        let empty_ids: Vec<&str> = empty.iter().map(|i| i.id.as_str()).collect();
+        assert!(empty_ids.contains(&"fs.recycle-empty"));
+        assert!(!empty_ids.contains(&"fs.recycle-restore"));
+        assert!(!empty_ids.contains(&"fs.new-folder"));
     }
 
     #[test]

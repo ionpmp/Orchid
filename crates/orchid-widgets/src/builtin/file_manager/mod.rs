@@ -1238,13 +1238,30 @@ impl FileManagerInner {
     }
 
     async fn delete_paths(&self, paths: &[String], to_recycle: Option<bool>) -> WidgetResult<()> {
+        let recycle_paths: Vec<String> = paths
+            .iter()
+            .filter(|p| orchid_fs::is_recycle_item(p))
+            .cloned()
+            .collect();
+        if !recycle_paths.is_empty() {
+            orchid_fs::purge_recycle(&recycle_paths)
+                .await
+                .map_err(map_fs_error)?;
+        }
+        let rest: Vec<&String> = paths
+            .iter()
+            .filter(|p| !orchid_fs::is_recycle_item(p))
+            .collect();
+        if rest.is_empty() {
+            return Ok(());
+        }
         let registry = &self.deps.registry;
         let to_recycle_bin = to_recycle.unwrap_or_else(|| self.config.read().delete_to_recycle);
         let opts = orchid_fs::operations::delete::DeleteOptions {
             to_recycle_bin,
             recursive: !to_recycle_bin, // permanent deletes need recurse for folders
         };
-        for p in paths {
+        for p in rest {
             let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
             orchid_fs::operations::delete::delete(registry, &fp, opts)
                 .await
@@ -1855,6 +1872,9 @@ impl FileManagerInner {
         if raw == "virtual:search" {
             return self.list_search_sessions();
         }
+        if orchid_fs::is_recycle_listing(raw) {
+            return self.list_recycle_bin().await;
+        }
         if let Some(id) = find::search_session_id(raw) {
             return self
                 .search_sessions
@@ -1864,6 +1884,16 @@ impl FileManagerInner {
                 .unwrap_or_default();
         }
         Vec::new()
+    }
+
+    async fn list_recycle_bin(&self) -> Vec<orchid_fs::FsEntry> {
+        match orchid_fs::list_recycle().await {
+            Ok(items) => orchid_fs::recycle_entries(&items),
+            Err(e) => {
+                warn!(error = %e, "recycle bin list failed");
+                Vec::new()
+            }
+        }
     }
 
     fn list_search_sessions(&self) -> Vec<orchid_fs::FsEntry> {
@@ -2310,7 +2340,10 @@ fn build_tab_payload(
     is_active_tab: bool,
 ) -> TabPayload {
     let raw_path = tab.path.as_str();
-    let (path_display, breadcrumbs) = if raw_path == "virtual:search" {
+    let (path_display, breadcrumbs) = if raw_path == "virtual:recycle" {
+        let label = inner.deps.locale.tr("fm-virtual-recycle");
+        (raw_path.to_string(), vec![(raw_path.to_string(), label)])
+    } else if raw_path == "virtual:search" {
         (
             raw_path.to_string(),
             vec![(raw_path.to_string(), "Search".to_string())],
@@ -2408,11 +2441,21 @@ fn build_tab_payload(
                     .modified
                     .map(|t| locale.format_datetime(t))
                     .unwrap_or_default(),
-                type_text: classify(
-                    &inner.deps.locale,
-                    &e.name,
-                    matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
-                ),
+                type_text: orchid_fs::recycle_original_path(path_key)
+                    .and_then(|orig| {
+                        std::path::Path::new(&orig)
+                            .parent()
+                            .map(|p| p.display().to_string())
+                            .filter(|s| !s.is_empty())
+                            .or(Some(orig))
+                    })
+                    .unwrap_or_else(|| {
+                        classify(
+                            &inner.deps.locale,
+                            &e.name,
+                            matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
+                        )
+                    }),
                 icon: if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
                     "folder".into()
                 } else {
@@ -2905,6 +2948,32 @@ fn map_fs_error(e: orchid_fs::FsError) -> WidgetError {
     WidgetError::InvalidStateForOperation(e.to_string())
 }
 
+async fn recycle_purge_action(
+    inner: &Arc<FileManagerInner>,
+    target_paths: Vec<String>,
+    skip_confirm: bool,
+) -> WidgetResult<ActionOutcome> {
+    let paths: Vec<String> = target_paths
+        .into_iter()
+        .filter(|p| orchid_fs::is_recycle_item(p))
+        .collect();
+    if paths.is_empty() {
+        return Ok(ActionOutcome::Done);
+    }
+    if inner.config.read().confirm_delete && !skip_confirm {
+        return Ok(ActionOutcome::NeedsConfirmation {
+            message: "fm-confirm-recycle-purge".into(),
+            action_id: "fs.recycle-purge".into(),
+            paths,
+        });
+    }
+    orchid_fs::purge_recycle(&paths)
+        .await
+        .map_err(map_fs_error)?;
+    inner.refresh_all_tabs().await;
+    Ok(ActionOutcome::Done)
+}
+
 /// Report a passphrase failure to the status bar (dialog may stay open for retry).
 pub fn report_passphrase_error(instance_id: Uuid, message: String) -> WidgetResult<()> {
     live_inner(instance_id)?.set_passphrase_error(message);
@@ -3010,6 +3079,18 @@ pub fn context_menu_for(
             .active_tab()
             .path
             .is_archive(),
+        in_recycle: {
+            let tab_path = inner
+                .state
+                .lock()
+                .active_pane()
+                .active_tab()
+                .path
+                .as_str()
+                .to_string();
+            orchid_fs::is_recycle_listing(&tab_path)
+                || target_paths.iter().any(|p| orchid_fs::is_recycle_item(p))
+        },
     };
     let fmt_locale = inner.deps.orchid_config.read().locale.clone();
     let info = info_for_selection(&selected_entries, &inner.deps.locale, &fmt_locale);
@@ -4038,6 +4119,9 @@ pub async fn run_action_with_opts(
             }
         }
         "fs.delete" | "fs.delete-recycle" | "fs.delete-permanent" => {
+            if target_paths.iter().any(|p| orchid_fs::is_recycle_item(p)) {
+                return recycle_purge_action(&inner, target_paths, opts.skip_confirm).await;
+            }
             let cfg = inner.config.read().clone();
             let recycle = match action_id {
                 "fs.delete-recycle" => true,
@@ -4057,6 +4141,31 @@ pub async fn run_action_with_opts(
                 });
             }
             inner.delete_paths(&target_paths, Some(recycle)).await?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.recycle-restore" => {
+            if target_paths.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            orchid_fs::restore_recycle(&target_paths)
+                .await
+                .map_err(map_fs_error)?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.recycle-purge" => {
+            return recycle_purge_action(&inner, target_paths, opts.skip_confirm).await;
+        }
+        "fs.recycle-empty" => {
+            if !opts.skip_confirm {
+                return Ok(ActionOutcome::NeedsConfirmation {
+                    message: "fm-confirm-recycle-empty".into(),
+                    action_id: "fs.recycle-empty".into(),
+                    paths: vec![orchid_fs::RECYCLE_PATH.to_string()],
+                });
+            }
+            orchid_fs::empty_recycle().await.map_err(map_fs_error)?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
@@ -4747,6 +4856,14 @@ pub async fn open_path(
     let inner = live_inner(instance_id)?;
     let fp = orchid_fs::FsPath::new(path).map_err(map_fs_error)?;
 
+    if orchid_fs::is_recycle_item(path) {
+        orchid_fs::restore_recycle(&[path.to_string()])
+            .await
+            .map_err(map_fs_error)?;
+        inner.refresh_all_tabs().await;
+        return Ok(ActionOutcome::Done);
+    }
+
     let is_dir = entry_is_directory(&inner, &fp, is_dir_hint).await;
     debug!(%path, is_dir, elapsed_ms = t0.elapsed().as_millis(), "fm open_path classified");
 
@@ -4787,6 +4904,9 @@ async fn entry_is_directory(
 ) -> bool {
     if is_virtual(fp) {
         let raw = fp.as_str();
+        if orchid_fs::is_recycle_item(raw) {
+            return false;
+        }
         return is_dir_hint
             || category_for_virtual_path(raw).is_some()
             || label_key_for_virtual_path(raw).is_some()
@@ -4977,6 +5097,7 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         "cat:audio" => orchid_fs::FsPath::new("virtual:categories/audio").ok(),
         "cat:archives" => orchid_fs::FsPath::new("virtual:categories/archives").ok(),
         "fav:search" => orchid_fs::FsPath::new("virtual:search").ok(),
+        "fav:recycle" => orchid_fs::FsPath::new("virtual:recycle").ok(),
         "net:places" => orchid_fs::FsPath::new("virtual:network").ok(),
         other if other.starts_with("net:") && other != "net:places" => {
             let idx = other

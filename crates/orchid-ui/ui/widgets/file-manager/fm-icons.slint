@@ -173,6 +173,49 @@ export component FmSidebarIcon inherits Rectangle {
         }
     }
 
+    if icon-id == "sidebar-recycle" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.28;
+            y: 1px;
+            width: parent.width * 0.44;
+            height: 2px;
+            background: Theme.accent-brand;
+        }
+        Rectangle {
+            x: 1px;
+            y: 3px;
+            width: parent.width - 2px;
+            height: 2px;
+            background: Theme.accent-brand;
+        }
+        Rectangle {
+            x: 2px;
+            y: 5px;
+            width: parent.width - 4px;
+            height: parent.height - 6px;
+            border-width: 1.5px;
+            border-color: Theme.accent-brand;
+            background: transparent;
+            border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.35;
+            y: 7px;
+            width: 1.5px;
+            height: parent.height - 10px;
+            background: Theme.accent-brand;
+        }
+        Rectangle {
+            x: parent.width * 0.62;
+            y: 7px;
+            width: 1.5px;
+            height: parent.height - 10px;
+            background: Theme.accent-brand;
+        }
+    }
+
     if icon-id == "sidebar-recent" : Rectangle {
         width: parent.width;
         height: parent.height;

@@ -409,6 +409,7 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
         "virtual:starred" => Some("fav:starred"),
         "virtual:tags" => Some("fav:tags"),
         "virtual:search" => Some("fav:search"),
+        "virtual:recycle" => Some("fav:recycle"),
         "virtual:categories/images" => Some("cat:images"),
         "virtual:categories/documents" => Some("cat:documents"),
         "virtual:categories/video" => Some("cat:video"),
@@ -706,6 +707,14 @@ pub(crate) fn build_sidebar_items(
             is_section_header: false,
             is_active: active_id == Some("fav:search")
                 || active_path.starts_with("virtual:search/"),
+        },
+        FmSidebarItem {
+            id: "fav:recycle".into(),
+            label: locale.tr("fm-virtual-recycle").into(),
+            icon: "sidebar-recycle".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: active_id == Some("fav:recycle"),
         },
         FmSidebarItem {
             id: "section:categories".into(),

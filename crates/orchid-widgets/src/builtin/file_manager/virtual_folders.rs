@@ -39,6 +39,7 @@ pub fn sidebar_catalog() -> Vec<VirtualFolder> {
         ("virtual:starred", "fm-virtual-starred", "sidebar-starred"),
         ("virtual:tags", "fm-virtual-tags", "sidebar-tags"),
         ("virtual:search", "fm-virtual-search", "sidebar-search"),
+        ("virtual:recycle", "fm-virtual-recycle", "sidebar-recycle"),
         (
             "virtual:categories/images",
             "fm-category-images",
@@ -111,6 +112,7 @@ pub fn label_key_for_virtual_path(raw: &str) -> Option<&'static str> {
         "virtual:categories/archives" => Some("fm-category-archives"),
         "virtual:network" => Some("fm-sidebar-network-all"),
         "virtual:search" => Some("fm-virtual-search"),
+        "virtual:recycle" => Some("fm-virtual-recycle"),
         _ => None,
     }
 }
@@ -125,6 +127,11 @@ pub fn empty_placeholder_for_path(raw: &str) -> Option<&'static str> {
         "virtual:network" => Some("network-placeholder"),
         "virtual:search" => Some("virtual-empty-search"),
         path if path.starts_with("virtual:search/") => Some("virtual-empty-search-results"),
+        "virtual:recycle" => Some(if orchid_fs::recycle_listing_supported() {
+            "virtual-empty-recycle"
+        } else {
+            "virtual-empty-recycle-unsupported"
+        }),
         path if category_for_virtual_path(path).is_some() => Some("virtual-empty-category"),
         _ => None,
     }
@@ -220,6 +227,7 @@ mod tests {
         let cat = sidebar_catalog();
         assert!(cat.iter().any(|v| v.path.as_str() == "virtual:recent"));
         assert!(cat.iter().any(|v| v.label_key == "fm-virtual-starred"));
+        assert!(cat.iter().any(|v| v.path.as_str() == "virtual:recycle"));
     }
 
     #[test]
