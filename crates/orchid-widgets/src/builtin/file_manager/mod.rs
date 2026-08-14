@@ -628,13 +628,7 @@ impl Widget for FileManagerWidget {
             ActivePane::Right => 1,
         };
         let tab = state.active_tab();
-        let clip_op = self.inner.deps.clipboard.operation();
-        let clip_count = self.inner.deps.clipboard.len();
-        let (clipboard_count, clipboard_is_cut) = match clip_op {
-            ClipboardOperation::None => (0, false),
-            ClipboardOperation::Copy => (clip_count as u32, false),
-            ClipboardOperation::Cut => (clip_count as u32, true),
-        };
+        let (clipboard_count, clipboard_is_cut) = self.inner.deps.clipboard.display_state();
 
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
@@ -2981,7 +2975,7 @@ pub fn context_menu_for(
         }
     }
     let inputs = ContextMenuInputs {
-        clipboard_has_contents: !inner.deps.clipboard.is_empty(),
+        clipboard_has_contents: inner.deps.clipboard.can_paste(),
         all_encrypted: selected_entries
             .iter()
             .all(|e| e.metadata.extended.is_encrypted),
@@ -3446,6 +3440,14 @@ pub async fn switch_active_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()>
     }
     inner.publish_refresh();
     Ok(())
+}
+
+/// Shared file clipboard for a live file-manager instance.
+#[must_use]
+pub fn file_clipboard(instance_id: Uuid) -> Option<Arc<FileClipboard>> {
+    FM_LIVE
+        .get(&instance_id)
+        .map(|inner| inner.deps.clipboard.clone())
 }
 
 /// Snapshot live file-manager config for the settings dialog.

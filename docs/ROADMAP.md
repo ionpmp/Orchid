@@ -38,6 +38,7 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
 - [x] Views (icons, list, details, gallery)
 - [x] Tabs, breadcrumbs
 - [x] Drag-and-drop — folder rows, breadcrumbs, cross-pane, OS drop (move/copy with Ctrl), FM→viewer content zone (multi-file: floating viewer per new path / focus if already open, soft cap 8 + one rebuild), cross-widget FM move, transfer progress + failure toast; canvas + FM content-zone hit-test; wheel-scroll during drag; Enter/single-click open uses real `is_dir` from FM snapshot
+- [x] System clipboard — copy/cut/paste files via `CF_HDROP` + Preferred DropEffect (Explorer and other apps); remote-only selections stay on the in-app clipboard
 - [x] Virtual folders (Recent, Categories, Network) — Recent, Starred, Tags, categories; localized breadcrumbs + empty states; network mounts from config.toml with rclone browse/write + `copyto`/`moveto` fast paths
 - [x] Inline rename, tags, color labels — inline rename in list/grid; tag / colour / star via `orchid-fs::TagManager`
 - [x] File properties / content metadata — Alt+Enter report (path, times, attributes, MIME) plus EXIF, ID3, Office `docProps/core.xml` edit, and Authenticode / PE certificate-table view

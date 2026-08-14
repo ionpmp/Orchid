@@ -92,6 +92,7 @@ mod notes;
 mod password;
 mod processes;
 mod shell_ui;
+mod system_file_clipboard;
 mod terminal;
 mod weather;
 mod widget_settings;

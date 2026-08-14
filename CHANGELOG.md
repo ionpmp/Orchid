@@ -59,6 +59,8 @@ release yet.
   / name case, chmod (and Unix chown), Windows ACL via icacls. Properties
   report (`Alt+Enter`) with EXIF, ID3, Office core metadata (editable),
   and Windows Authenticode / PE certificate-table inspection.
+- System clipboard file copy/paste (`CF_HDROP` + Preferred DropEffect) so
+  Ctrl+C / Ctrl+X / Ctrl+V exchange files with Explorer and other apps.
 - Browse archives as folders (`archive:`), extract all or selected, create /
   add / delete / test; password, multi-volume, and SFX via 7-Zip. Formats:
   ZIP, RAR, 7z, TAR / TAR.GZ / TAR.XZ / TAR.BZ2, CAB, ISO, ACE, ARJ, LZH;

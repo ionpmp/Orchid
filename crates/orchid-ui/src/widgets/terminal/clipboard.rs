@@ -51,6 +51,22 @@ impl ArboardClipboard {
         self.inner.lock().get_text()
     }
 
+    /// Place local file paths on the OS clipboard (`CF_HDROP` on Windows).
+    pub fn set_file_list(&self, paths: &[std::path::PathBuf]) -> Result<(), arboard::Error> {
+        self.inner.lock().set().file_list(paths)
+    }
+
+    /// Read a file list from the OS clipboard.
+    ///
+    /// Returns `Ok(None)` when the clipboard has no files.
+    pub fn get_file_list(&self) -> Result<Option<Vec<std::path::PathBuf>>, arboard::Error> {
+        match self.inner.lock().get().file_list() {
+            Ok(paths) if !paths.is_empty() => Ok(Some(paths)),
+            Ok(_) | Err(arboard::Error::ContentNotAvailable) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Read an image from the clipboard as PNG bytes + pixel size.
     ///
     /// Returns `Ok(None)` when the clipboard has no image.
@@ -67,10 +83,7 @@ impl ArboardClipboard {
         };
         let mut png = Vec::new();
         if rgba
-            .write_to(
-                &mut std::io::Cursor::new(&mut png),
-                image::ImageFormat::Png,
-            )
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
             .is_err()
         {
             return Ok(None);

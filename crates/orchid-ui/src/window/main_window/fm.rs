@@ -1731,6 +1731,9 @@ impl MainWindowController {
             return;
         };
         let target = path.to_string();
+        if let Some(clip) = orchid_widgets::builtin::file_manager::file_clipboard(inst) {
+            super::system_file_clipboard::refresh_os_file_note(&clip);
+        }
         let (actions, target_paths, info) =
             match orchid_widgets::builtin::file_manager::context_menu_for(inst, p, &target) {
                 Ok(v) => v,
@@ -3027,6 +3030,9 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
+        if let Some(clip) = orchid_widgets::builtin::file_manager::file_clipboard(inst) {
+            super::system_file_clipboard::ingest_os_files(&clip);
+        }
         self.spawn_fm_action(inst, "fs.paste", Vec::new());
     }
     pub(super) fn on_fm_selection_command(
@@ -3250,6 +3256,15 @@ impl MainWindowController {
                     }
                 };
             if let Some(c) = tw.upgrade() {
+                if matches!(
+                    action_id.as_str(),
+                    "fs.copy" | "fs.cut" | "fs.copy-to-other" | "fs.move-to-other"
+                ) {
+                    if let Some(clip) = orchid_widgets::builtin::file_manager::file_clipboard(inst)
+                    {
+                        super::system_file_clipboard::push_file_clipboard(&clip);
+                    }
+                }
                 c.apply_fm_action_outcome(inst, outcome);
             }
         });

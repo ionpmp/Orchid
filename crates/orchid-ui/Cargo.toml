@@ -43,7 +43,12 @@ fontdue = "0.9.3"
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
-features = ["Win32_System_Registry"]
+features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Registry",
+]
 
 [build-dependencies]
 slint-build.workspace = true
