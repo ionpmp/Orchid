@@ -124,6 +124,11 @@ pub(super) async fn run(
         | "fs.image-composite"
         | "fs.image-pano"
         | "fs.image-hdr" => super::image_batch::run(inner, action_id, paths, input).await,
+        "fs.image-print"
+        | "fs.image-print-preview"
+        | "fs.image-print-sheet"
+        | "fs.image-print-nup"
+        | "fs.image-print-batch" => super::image_print::run(inner, action_id, paths, input).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,

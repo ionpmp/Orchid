@@ -17,10 +17,10 @@ use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
     apply_adjust, apply_edit, apply_filter, apply_lossless, format_from_extension,
     parse_adjust_line, parse_annotate_line, parse_canvas_line, parse_filter_line_in,
-    parse_resize_line, AdjustOp, AnnotateOp, ArchiveViewer, CropKeep, DocumentViewer, EditOp,
-    FilterOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer, LosslessOp, PdfViewer,
-    SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService, ThumbnailSize, ViewTransform,
-    Viewer,
+    parse_print_line, parse_resize_line, AdjustOp, AnnotateOp, ArchiveViewer, CropKeep,
+    DocumentViewer, EditOp, FilterOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer,
+    LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService,
+    ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -1060,6 +1060,49 @@ impl ViewerWidgetInner {
         self.open_path(next).await
     }
 
+    async fn print_job(&self, raw: &str, preview: bool, folder: bool) -> WidgetResult<()> {
+        let spec = if raw.trim().is_empty() {
+            orchid_viewers::PrintSpec::default()
+        } else {
+            parse_print_line(raw).ok_or_else(|| {
+                WidgetError::InvalidStateForOperation("could not parse print spec".into())
+            })?
+        };
+        let paths = if folder {
+            self.image_nav.read().siblings.clone()
+        } else {
+            self.path.read().clone().into_iter().collect()
+        };
+        let os: Vec<std::path::PathBuf> = paths.iter().filter_map(|p| p.to_local().ok()).collect();
+        if os.is_empty() {
+            return Ok(());
+        }
+        let hint = os[0].clone();
+        let dests = tokio::task::spawn_blocking(move || {
+            let refs: Vec<&std::path::Path> = os.iter().map(std::path::PathBuf::as_path).collect();
+            if preview {
+                orchid_viewers::write_print_preview(&refs, &spec, &hint).map(|p| vec![p])
+            } else {
+                orchid_viewers::write_print_temps(&refs, &spec)
+            }
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+        .map_err(map_viewer_err)?;
+        if preview {
+            if let Some(dest) = dests.first() {
+                let next = orchid_fs::FsPath::from_local(dest)
+                    .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                return self.open_path(next).await;
+            }
+            return Ok(());
+        }
+        for dest in dests {
+            orchid_viewers::send_to_printer(&dest).map_err(map_viewer_err)?;
+        }
+        Ok(())
+    }
+
     async fn annotate_from_view(&self, raw: &str) -> WidgetResult<()> {
         let Some((kind, rest)) = raw.split_once(':') else {
             return Ok(());
@@ -1660,6 +1703,15 @@ pub async fn image_flip_v(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
+fn print_uses_folder(raw: &str) -> bool {
+    raw.split(" | ").any(|p| {
+        matches!(
+            p.trim().to_ascii_lowercase().as_str(),
+            "folder" | "sheet" | "index" | "contact"
+        )
+    })
+}
+
 /// Image toolbar / keyboard command (`fit-width`, `fit-height`, `fit-shrink`,
 /// `bg-next`, `fullscreen`, `kiosk`, …).
 pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()> {
@@ -1732,7 +1784,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("edit-")
                 || cmd.starts_with("adjust:")
                 || cmd.starts_with("filter:")
-                || cmd.starts_with("annotate") => {}
+                || cmd.starts_with("annotate")
+                || cmd.starts_with("print") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1839,6 +1892,20 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             if let Some(op) = parse_annotate_line(raw) {
                 inner.apply_annotate_current(op).await?;
             }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("print-preview:") => {
+            let folder = print_uses_folder(raw);
+            inner.print_job(raw, true, folder).await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("print-sheet:") => {
+            let mut line = raw.to_string();
+            if !line.contains("sheet") {
+                line = format!("sheet | {line}");
+            }
+            inner.print_job(&line, false, true).await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("print:") => {
+            inner.print_job(raw, false, print_uses_folder(raw)).await?;
         }
         cmd if let Some(raw) = cmd.strip_prefix("edit-resize:") => {
             if let Some((spec, filter)) = parse_resize_line(raw) {

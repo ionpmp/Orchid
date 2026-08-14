@@ -8,6 +8,7 @@ pub mod context_menu;
 pub mod find;
 mod image_batch;
 mod image_edit;
+mod image_print;
 mod meta_edit;
 pub mod navigation;
 pub mod selection;
@@ -4677,6 +4678,11 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.image-composite"
             | "fs.image-pano"
             | "fs.image-hdr"
+            | "fs.image-print"
+            | "fs.image-print-preview"
+            | "fs.image-print-sheet"
+            | "fs.image-print-nup"
+            | "fs.image-print-batch"
             | "fs.id3"
             | "fs.office-meta"
             | "fs.signature"

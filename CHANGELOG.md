@@ -155,6 +155,10 @@ release yet.
   (`orchid-batch-recipes.json`), 2–4 image compare and pick-best, pixel
   diff, composite / merge, panorama stitch, and HDR merge from brackets.
   Existing batch resize / adjust / watermark / metadata stay in the same menu.
+- Image print: single photo or batch, paper size and margins, 2/4/6/9-up,
+  index / contact sheet, on-screen preview, header/footer metadata tokens,
+  and ICC destination (`srgb` / monitor / `.icc` file). Viewer panel
+  (`Shift+P` / ⌨ Ctrl+P / ⎙); FM **Tools → Image edit**.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

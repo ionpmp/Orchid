@@ -1015,6 +1015,36 @@ fn tools_menu(
                     "action-copy",
                     has_selection,
                 ),
+                item(
+                    "fs.image-print",
+                    "fm-action-image-print",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-print-preview",
+                    "fm-action-image-print-preview",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-print-sheet",
+                    "fm-action-image-print-sheet",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-print-nup",
+                    "fm-action-image-print-nup",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-print-batch",
+                    "fm-action-image-print-batch",
+                    "action-copy",
+                    has_selection,
+                ),
             ],
         },
         ContextMenuItem {
@@ -1771,6 +1801,7 @@ mod tests {
             .submenu
             .iter()
             .any(|i| i.id == "fs.image-compare"));
+        assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-print"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

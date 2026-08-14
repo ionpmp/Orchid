@@ -558,6 +558,10 @@ viewer-image-annotate-highlight = Highlight
 viewer-image-annotate-watermark = Text mark
 viewer-image-annotate-wm-image = Image mark
 viewer-image-annotate-stamp = Date stamp
+viewer-image-print = Print (Ctrl+P)
+viewer-image-print-preview = Preview
+viewer-image-print-sheet = Index sheet
+viewer-image-print-hint = paper=a4|letter|4x6  margin=12  nup=1|2|4|6|9  fit=contain|cover  header/footer tokens {"{name}"} {"{date}"} {"{w}"} {"{h}"} {"{page}"}  icc=srgb|monitor|file.icc
 viewer-image-thumbs = サムネイル
 viewer-image-thumb-grid = サムネイルグリッド
 viewer-image-thumb-size = サムネイルサイズ
@@ -851,6 +855,11 @@ fm-action-image-diff = Pixel diff
 fm-action-image-composite = Composite / merge…
 fm-action-image-pano = Stitch panorama
 fm-action-image-hdr = HDR merge
+fm-action-image-print = Print…
+fm-action-image-print-preview = Print preview…
+fm-action-image-print-sheet = Print index sheet…
+fm-action-image-print-nup = Print N-up…
+fm-action-image-print-batch = Batch print…
 fm-action-meta = Metadata
 fm-action-meta-edit = Edit IPTC / XMP…
 fm-action-meta-gps = Set / clear GPS…
@@ -1238,6 +1247,13 @@ fm-image-diff-title = Pixel diff
 fm-image-diff-body = Changed { $changed } / { $total } pixels (mean { $mean }). Saved { $path }.
 fm-image-composite-title = Composite
 fm-image-composite-hint = avg | overlay | side | stack
+fm-image-print-title = Print
+fm-image-print-preview-title = Print preview
+fm-image-print-sheet-title = Index sheet
+fm-image-print-nup-title = N-up print
+fm-image-print-batch-title = Batch print
+fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
+fm-image-print-bad-spec = Could not parse the print layout.
 fm-meta-edit-title = Image metadata
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

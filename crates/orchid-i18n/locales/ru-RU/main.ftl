@@ -548,6 +548,10 @@ viewer-image-annotate-highlight = Маркер
 viewer-image-annotate-watermark = Текст
 viewer-image-annotate-wm-image = Картинка
 viewer-image-annotate-stamp = Штамп даты
+viewer-image-print = Печать (Ctrl+P)
+viewer-image-print-preview = Превью
+viewer-image-print-sheet = Контакт-лист
+viewer-image-print-hint = paper=a4|letter|4x6  margin=12  nup=1|2|4|6|9  fit=contain|cover  колонтитулы {"{name}"} {"{date}"} {"{w}"} {"{h}"} {"{page}"}  icc=srgb|monitor|file.icc
 viewer-image-thumbs = Миниатюры
 viewer-image-thumb-grid = Сетка миниатюр
 viewer-image-thumb-size = Размер миниатюр
@@ -840,6 +844,11 @@ fm-action-image-diff = Попиксельный diff
 fm-action-image-composite = Склеить / наложить…
 fm-action-image-pano = Панорама
 fm-action-image-hdr = HDR-склейка
+fm-action-image-print = Печать…
+fm-action-image-print-preview = Превью печати…
+fm-action-image-print-sheet = Печать контакт-листа…
+fm-action-image-print-nup = Печать N-up…
+fm-action-image-print-batch = Пакетная печать…
 fm-action-meta = Метаданные
 fm-action-meta-edit = Править IPTC / XMP…
 fm-action-meta-gps = Задать / снять GPS…
@@ -1227,6 +1236,13 @@ fm-image-diff-title = Попиксельный diff
 fm-image-diff-body = Изменено { $changed } / { $total } пикселей (среднее { $mean }). Сохранено { $path }.
 fm-image-composite-title = Склейка
 fm-image-composite-hint = avg | overlay | side | stack
+fm-image-print-title = Печать
+fm-image-print-preview-title = Превью печати
+fm-image-print-sheet-title = Контакт-лист
+fm-image-print-nup-title = Печать N-up
+fm-image-print-batch-title = Пакетная печать
+fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
+fm-image-print-bad-spec = Не удалось разобрать макет печати.
 fm-meta-edit-title = Метаданные изображения
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=широта,долгота date=ГГГГ:ММ:ДД ЧЧ:ММ:СС
 fm-meta-gps-title = GPS
