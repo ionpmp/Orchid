@@ -63,7 +63,8 @@ release yet.
   Windows Authenticode / PE certificate-table inspection, a Sharing
   section (SMB name, UNC, share / unshare, Windows Sharing tab), and
   Previous Versions (Volume Shadow Copy list, restore, copy beside,
-  Windows Previous Versions tab).
+  Windows Previous Versions tab), and BitLocker (volume status, lock /
+  unlock with password or recovery key, Windows BitLocker panel).
 - System clipboard file copy/paste (`CF_HDROP` + Preferred DropEffect) so
   Ctrl+C / Ctrl+X / Ctrl+V exchange files with Explorer and other apps.
 - Browse archives as folders (`archive:`), extract all or selected, create /

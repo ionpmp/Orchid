@@ -37,21 +37,23 @@ pub use managed::{
 };
 pub use mime::guess_mime;
 pub use operations::{
-    acl_grant, acl_reset, acl_text, add_folder_share, apply_attr_patch, apply_name_case, chmod,
-    chown, compare_dirs, compare_files, copy, copy_previous_version, copy_with_control,
-    create_hard_link, create_junction, create_symlink, decode_base64, decode_uue, decoded_path,
-    delete, discover_parts, empty_recycle, encode_base64, encode_uue, exact_user_share,
-    format_hash_report, format_verify_report, hash_path, hash_paths, inspect_path,
+    acl_grant, acl_reset, acl_text, add_folder_share, apply_attr_patch, apply_name_case,
+    bitlocker_drive_letter, bitlocker_lock, bitlocker_status, bitlocker_unlock, chmod, chown,
+    compare_dirs, compare_files, copy, copy_previous_version, copy_with_control, create_hard_link,
+    create_junction, create_symlink, decode_base64, decode_uue, decoded_path, delete,
+    discover_parts, empty_recycle, encode_base64, encode_uue, exact_user_share, format_hash_report,
+    format_recovery_key, format_verify_report, hash_path, hash_paths, inspect_path,
     inspect_signature, is_admin_share_name, is_hash_sidecar, is_recycle_item, is_recycle_listing,
-    is_recycle_virtual, join_files, join_output_name, list_recycle, move_,
-    open_previous_versions_tab, open_sharing_tab, parse_mode, parse_timestamp,
+    is_recycle_virtual, join_files, join_output_name, list_recycle, looks_like_recovery_key, move_,
+    open_bitlocker_os, open_previous_versions_tab, open_sharing_tab, parse_mode, parse_timestamp,
     pick_previous_version, previous_version_file_stamp, previous_versions, purge_recycle,
     recycle_entries, recycle_item_id, recycle_listing_supported, recycle_original_path,
     remove_folder_share, restore_previous_version, restore_recycle, set_mtime, share_covers_path,
     shares_for_path, sidecar_path, split_file, sync_dirs, verify_hash_file, write_hash_file,
-    AttrPatch, CopyOptions, DeleteOptions, DiffKind, DirDiff, FileCompare, FileProperties,
-    FolderShare, HashAlgo, HashRecord, NameCase, OperationProgress, PreviousVersion, ProgressSink,
-    RecycleItem, SignatureReport, SyncMode, SyncStats, TransferControl, VerifyRow, RECYCLE_PATH,
+    AttrPatch, BitLockerConversion, BitLockerLock, BitLockerProtection, BitLockerStatus,
+    CopyOptions, DeleteOptions, DiffKind, DirDiff, FileCompare, FileProperties, FolderShare,
+    HashAlgo, HashRecord, NameCase, OperationProgress, PreviousVersion, ProgressSink, RecycleItem,
+    SignatureReport, SyncMode, SyncStats, TransferControl, VerifyRow, RECYCLE_PATH,
 };
 pub use path::FsPath;
 pub use provider::{

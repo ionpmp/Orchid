@@ -195,7 +195,14 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-error-versions-bad-index"
         | "fm-error-versions-denied"
         | "fm-error-versions-collision"
-        | "fm-error-versions-os" => return locale.tr(msg),
+        | "fm-error-versions-os"
+        | "fm-error-bitlocker-unsupported"
+        | "fm-error-bitlocker-none"
+        | "fm-error-bitlocker-denied"
+        | "fm-error-bitlocker-auth"
+        | "fm-error-bitlocker-locked"
+        | "fm-error-bitlocker-not-encrypted"
+        | "fm-error-bitlocker-os" => return locale.tr(msg),
         "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
         "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
         "file-manager widget not live" => return locale.tr("fm-error-unavailable"),

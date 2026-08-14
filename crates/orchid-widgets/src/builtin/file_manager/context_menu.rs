@@ -1122,6 +1122,40 @@ fn tools_menu(
                 ),
             ],
         });
+        submenu.push(ContextMenuItem {
+            id: "fs.bitlocker".into(),
+            label_key: "fm-action-bitlocker".into(),
+            icon: "action-copy",
+            swatch_color: None,
+            enabled: has_selection,
+            separator_after: false,
+            submenu: vec![
+                item(
+                    "fs.bitlocker-view",
+                    "fm-action-bitlocker-view",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.bitlocker-lock",
+                    "fm-action-bitlocker-lock",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.bitlocker-unlock",
+                    "fm-action-bitlocker-unlock",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.bitlocker-os",
+                    "fm-action-bitlocker-os",
+                    "action-copy",
+                    true,
+                ),
+            ],
+        });
     }
     ContextMenuItem {
         id: "fs.tools".into(),
@@ -1366,6 +1400,8 @@ mod tests {
         assert!(tool_ids.contains(&"fs.share"));
         #[cfg(windows)]
         assert!(tool_ids.contains(&"fs.versions"));
+        #[cfg(windows)]
+        assert!(tool_ids.contains(&"fs.bitlocker"));
         let hash = tools.submenu.iter().find(|i| i.id == "fs.hash").unwrap();
         assert!(hash.submenu.iter().any(|i| i.id == "fs.hash-sha256"));
         let open = menu.iter().find(|i| i.id == "fs.open").unwrap();

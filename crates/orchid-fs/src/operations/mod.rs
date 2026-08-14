@@ -1,6 +1,7 @@
-//! File operations (copy, move, delete, recycle, share, versions, compare, hash, encode, attributes).
+//! File operations (copy, move, delete, recycle, share, versions, BitLocker, compare, hash, encode, attributes).
 
 pub mod attrs;
+pub mod bitlocker;
 pub mod checksum;
 pub mod compare;
 pub mod copy;
@@ -20,6 +21,11 @@ pub mod versions;
 pub use attrs::{
     acl_grant, acl_reset, acl_text, apply_attr_patch, apply_name_case, chmod, chown, parse_mode,
     parse_timestamp, set_mtime, AttrPatch, NameCase,
+};
+pub use bitlocker::{
+    bitlocker_drive_letter, bitlocker_lock, bitlocker_status, bitlocker_unlock,
+    format_recovery_key, looks_like_recovery_key, open_bitlocker_os, BitLockerConversion,
+    BitLockerLock, BitLockerProtection, BitLockerStatus,
 };
 pub use checksum::{
     format_hash_report, format_verify_report, hash_path, hash_paths, is_hash_sidecar,

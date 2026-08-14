@@ -70,6 +70,10 @@ pub(super) async fn run(
         "fs.versions-restore" => versions_restore(inner, paths, opts, input).await,
         "fs.versions-copy" => versions_copy(inner, paths, input).await,
         "fs.versions-os" => versions_os_tab(inner, paths).await,
+        "fs.bitlocker" | "fs.bitlocker-view" => bitlocker_report(inner, paths).await,
+        "fs.bitlocker-lock" => bitlocker_lock(inner, paths, opts).await,
+        "fs.bitlocker-unlock" => bitlocker_unlock(inner, paths, input).await,
+        "fs.bitlocker-os" => bitlocker_os_panel().await,
         "fs.exif" => exif_report(inner, paths).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
@@ -168,6 +172,7 @@ async fn file_properties(
     append_content_metadata(&mut body, locale, &fp);
     append_sharing(&mut body, locale, &fp).await;
     append_previous_versions(&mut body, locale, &fmt, &fp).await;
+    append_bitlocker(&mut body, locale, &fp).await;
     Ok(report(locale.tr("fm-properties-title"), body))
 }
 
@@ -508,6 +513,169 @@ async fn versions_os_tab(
     orchid_fs::open_previous_versions_tab(&fp)
         .await
         .map_err(map_fs_error)?;
+    Ok(ActionOutcome::Done)
+}
+
+async fn append_bitlocker(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    fp: &orchid_fs::FsPath,
+) {
+    body.push('\n');
+    body.push_str(&locale.tr("fm-bitlocker-title"));
+    body.push('\n');
+    match orchid_fs::bitlocker_status(fp).await {
+        Ok(status) => push_bitlocker_lines(body, locale, &status),
+        Err(_) => {
+            body.push_str(&locale.tr("fm-bitlocker-unsupported"));
+            body.push('\n');
+        }
+    }
+}
+
+fn push_bitlocker_lines(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    status: &orchid_fs::BitLockerStatus,
+) {
+    let args = |key: &str, value: String| {
+        locale.tr_args(key, &orchid_i18n::FluentArgs::new().with("value", value))
+    };
+    body.push_str(&args("fm-bitlocker-drive", status.letter.clone()));
+    body.push('\n');
+    body.push_str(&args(
+        "fm-bitlocker-protection",
+        locale.tr(bitlocker_protection_key(status.protection)),
+    ));
+    body.push('\n');
+    body.push_str(&args(
+        "fm-bitlocker-lock",
+        locale.tr(bitlocker_lock_key(status.lock)),
+    ));
+    body.push('\n');
+    body.push_str(&args(
+        "fm-bitlocker-conversion",
+        locale.tr(bitlocker_conversion_key(status.conversion)),
+    ));
+    body.push('\n');
+    if matches!(
+        status.conversion,
+        orchid_fs::BitLockerConversion::Encrypting
+            | orchid_fs::BitLockerConversion::Decrypting
+            | orchid_fs::BitLockerConversion::EncryptionPaused
+            | orchid_fs::BitLockerConversion::DecryptionPaused
+    ) {
+        body.push_str(&args("fm-bitlocker-percent", status.percent.to_string()));
+        body.push('\n');
+    }
+    if !status.method.is_empty() {
+        body.push_str(&args("fm-bitlocker-method", status.method.clone()));
+        body.push('\n');
+    }
+}
+
+fn bitlocker_protection_key(v: orchid_fs::BitLockerProtection) -> &'static str {
+    match v {
+        orchid_fs::BitLockerProtection::On => "fm-bitlocker-protection-on",
+        orchid_fs::BitLockerProtection::Off => "fm-bitlocker-protection-off",
+        orchid_fs::BitLockerProtection::Unknown => "fm-bitlocker-protection-unknown",
+    }
+}
+
+fn bitlocker_lock_key(v: orchid_fs::BitLockerLock) -> &'static str {
+    match v {
+        orchid_fs::BitLockerLock::Unlocked => "fm-bitlocker-lock-unlocked",
+        orchid_fs::BitLockerLock::Locked => "fm-bitlocker-lock-locked",
+        orchid_fs::BitLockerLock::Unknown => "fm-bitlocker-lock-unknown",
+    }
+}
+
+fn bitlocker_conversion_key(v: orchid_fs::BitLockerConversion) -> &'static str {
+    match v {
+        orchid_fs::BitLockerConversion::FullyDecrypted => "fm-bitlocker-conv-decrypted",
+        orchid_fs::BitLockerConversion::FullyEncrypted => "fm-bitlocker-conv-encrypted",
+        orchid_fs::BitLockerConversion::Encrypting => "fm-bitlocker-conv-encrypting",
+        orchid_fs::BitLockerConversion::Decrypting => "fm-bitlocker-conv-decrypting",
+        orchid_fs::BitLockerConversion::EncryptionPaused => "fm-bitlocker-conv-enc-paused",
+        orchid_fs::BitLockerConversion::DecryptionPaused => "fm-bitlocker-conv-dec-paused",
+        orchid_fs::BitLockerConversion::Unknown => "fm-bitlocker-conv-unknown",
+    }
+}
+
+async fn bitlocker_report(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fp = first_path(inner, paths)?;
+    let status = orchid_fs::bitlocker_status(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    let mut body = String::new();
+    body.push_str(&locale.tr("fm-bitlocker-title"));
+    body.push('\n');
+    push_bitlocker_lines(&mut body, locale, &status);
+    Ok(report(locale.tr("fm-bitlocker-title"), body))
+}
+
+async fn bitlocker_lock(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    opts: RunActionOpts,
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    let status = orchid_fs::bitlocker_status(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    if !opts.skip_confirm {
+        return Ok(ActionOutcome::NeedsConfirmation {
+            message: inner.deps.locale.tr_args(
+                "fm-confirm-bitlocker-lock",
+                &orchid_i18n::FluentArgs::new().with("drive", status.letter.clone()),
+            ),
+            action_id: "fs.bitlocker-lock".into(),
+            paths: vec![fp.as_str().to_string()],
+        });
+    }
+    let locked = orchid_fs::bitlocker_lock(&fp).await.map_err(map_fs_error)?;
+    Ok(report(
+        inner.deps.locale.tr("fm-bitlocker-title"),
+        inner.deps.locale.tr_args(
+            "fm-bitlocker-lock-done",
+            &orchid_i18n::FluentArgs::new().with("drive", locked.letter),
+        ),
+    ))
+}
+
+async fn bitlocker_unlock(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    let Some(secret) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.bitlocker-unlock",
+            paths,
+            "",
+            inner.deps.locale.tr("fm-bitlocker-unlock-title"),
+            inner.deps.locale.tr("fm-bitlocker-unlock-hint"),
+        ));
+    };
+    let unlocked = orchid_fs::bitlocker_unlock(&fp, secret)
+        .await
+        .map_err(map_fs_error)?;
+    Ok(report(
+        inner.deps.locale.tr("fm-bitlocker-title"),
+        inner.deps.locale.tr_args(
+            "fm-bitlocker-unlock-done",
+            &orchid_i18n::FluentArgs::new().with("drive", unlocked.letter),
+        ),
+    ))
+}
+
+async fn bitlocker_os_panel() -> WidgetResult<ActionOutcome> {
+    orchid_fs::open_bitlocker_os().await.map_err(map_fs_error)?;
     Ok(ActionOutcome::Done)
 }
 
