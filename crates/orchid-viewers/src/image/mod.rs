@@ -5,6 +5,7 @@ use std::any::Any;
 pub mod color;
 pub mod exif;
 pub mod loader;
+pub mod lossless;
 pub mod operations;
 pub mod transform;
 
@@ -277,6 +278,51 @@ impl ImageViewer {
         self.transform
             .write()
             .pan_to_image_fraction(nx, ny, iw, ih, rot);
+    }
+
+    /// Map a viewport rectangle to an image-pixel crop `(x, y, w, h)`.
+    #[must_use]
+    pub fn viewport_rect_to_image_crop(
+        &self,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+    ) -> Option<(u32, u32, u32, u32)> {
+        let image = self.image.read();
+        let img = image.as_ref()?;
+        let (iw, ih) = (img.width as f32, img.height as f32);
+        if iw < 1.0 || ih < 1.0 {
+            return None;
+        }
+        let t = *self.transform.read();
+        let (vw, vh) = *self.viewport.read();
+        let disp_w = iw * t.zoom;
+        let disp_h = ih * t.zoom;
+        let img_left = (vw - disp_w) * 0.5 + t.pan_x;
+        let img_top = (vh - disp_h) * 0.5 + t.pan_y;
+        let cx = img_left + disp_w * 0.5;
+        let cy = img_top + disp_h * 0.5;
+        let rad = -t.rotation_degrees.to_radians();
+        let (cos, sin) = (rad.cos(), rad.sin());
+        let to_image = |x: f32, y: f32| -> (f32, f32) {
+            let mut dx = x - cx;
+            let mut dy = y - cy;
+            let rx = dx * cos - dy * sin;
+            let ry = dx * sin + dy * cos;
+            dx = if t.flipped_horizontal { -rx } else { rx };
+            dy = if t.flipped_vertical { -ry } else { ry };
+            (iw * 0.5 + dx / t.zoom, ih * 0.5 + dy / t.zoom)
+        };
+        let (ax, ay) = to_image(x0, y0);
+        let (bx, by) = to_image(x1, y1);
+        let x = ax.min(bx).clamp(0.0, iw - 1.0).floor() as u32;
+        let y = ay.min(by).clamp(0.0, ih - 1.0).floor() as u32;
+        let x1i = ax.max(bx).clamp(1.0, iw).ceil() as u32;
+        let y1i = ay.max(by).clamp(1.0, ih).ceil() as u32;
+        let w = x1i.saturating_sub(x).max(1);
+        let h = y1i.saturating_sub(y).max(1);
+        Some((x, y, w, h))
     }
 
     /// Toggle the magnifier overlay.

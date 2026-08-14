@@ -4267,6 +4267,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libjpeg-turbo-rs"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0d8a1c652b51dbb85c3c3164b1da63b88dafcc3fc12ecceb52f7577738c21f1"
+dependencies = [
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "libloading"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5659,6 +5668,7 @@ dependencies = [
  "image",
  "infer",
  "kamadak-exif",
+ "libjpeg-turbo-rs",
  "memmap2",
  "orchid-core",
  "orchid-fs",

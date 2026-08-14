@@ -33,6 +33,7 @@ pub use document::{
 pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
+pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
 pub use image::{
     is_image_file_extension, ImageBackground, ImageFitMode, ImageFormat, ImageViewer, LoadedImage,
     ViewTransform, IMAGE_FILE_EXTENSIONS,

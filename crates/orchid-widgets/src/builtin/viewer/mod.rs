@@ -12,8 +12,8 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    ArchiveViewer, DocumentViewer, ImageFitMode, ImageViewer, PdfViewer, SyntaxHighlighter,
-    TextViewer, ViewTransform, Viewer,
+    apply_lossless, format_from_extension, ArchiveViewer, DocumentViewer, ImageFitMode,
+    ImageViewer, LosslessOp, PdfViewer, SyntaxHighlighter, TextViewer, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -191,6 +191,12 @@ impl ImageViewMemory {
         } else {
             (self.last, false)
         }
+    }
+
+    fn forget(&mut self, path: &str) {
+        self.by_path.remove(path);
+        self.order.retain(|p| p != path);
+        self.last = None;
     }
 }
 
@@ -388,6 +394,84 @@ impl ViewerWidgetInner {
         }
         drop(guard);
         self.publish_refresh();
+    }
+
+    async fn apply_lossless_path(
+        &self,
+        path: &orchid_fs::FsPath,
+        op: LosslessOp,
+    ) -> WidgetResult<()> {
+        let provider = self.deps.registry.for_path(path).ok_or_else(|| {
+            WidgetError::InvalidStateForOperation(format!("no provider for {}", path.as_str()))
+        })?;
+        let bytes = provider
+            .read(path)
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        let fmt = format_from_extension(path.extension());
+        let out = tokio::task::spawn_blocking(move || apply_lossless(&bytes, fmt, op))
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+            .map_err(map_viewer_err)?;
+        provider
+            .write(path, &out)
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn reopen_after_lossless(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
+        self.image_views.write().forget(path.as_str());
+        *self.path.write() = None;
+        self.open_path(path).await
+    }
+
+    async fn apply_lossless_current(&self, op: LosslessOp) -> WidgetResult<()> {
+        let Some(path) = self.path.read().clone() else {
+            return Ok(());
+        };
+        self.apply_lossless_path(&path, op).await?;
+        self.reopen_after_lossless(path).await
+    }
+
+    async fn apply_lossless_folder(&self, op: LosslessOp) -> WidgetResult<()> {
+        let siblings = self.image_nav.read().siblings.clone();
+        let current = self.path.read().clone();
+        let mut ok = 0usize;
+        let mut last_err: Option<WidgetError> = None;
+        for path in &siblings {
+            match self.apply_lossless_path(path, op).await {
+                Ok(()) => ok += 1,
+                Err(e) => last_err = Some(e),
+            }
+        }
+        if let Some(path) = current {
+            self.reopen_after_lossless(path).await?;
+        }
+        if ok == 0 {
+            if let Some(e) = last_err {
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
+
+    async fn apply_lossless_crop(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> WidgetResult<()> {
+        let crop = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            img.viewport_rect_to_image_crop(x0, y0, x1, y1)
+        };
+        let Some((x, y, w, h)) = crop else {
+            return Ok(());
+        };
+        self.apply_lossless_current(LosslessOp::Crop { x, y, w, h })
+            .await
     }
 }
 
@@ -767,7 +851,9 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             "rotate-180" => img.rotate_180(),
             "reset-transform" => img.reset_transforms(),
             "next" | "prev" | "first" | "last" | "random" | "loop" => {}
-            cmd if cmd.starts_with("goto:") || cmd.starts_with("recent:") => {}
+            cmd if cmd.starts_with("goto:")
+                || cmd.starts_with("recent:")
+                || cmd.starts_with("lossless") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -844,6 +930,29 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         cmd if let Some(raw) = cmd.strip_prefix("recent:") => {
             if let Ok(path) = orchid_fs::FsPath::new(raw) {
                 inner.open_path(path).await?;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("lossless-folder:") => {
+            if let Some(op) = LosslessOp::from_token(raw) {
+                inner.apply_lossless_folder(op).await?;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("lossless-crop:") => {
+            let parts: Vec<&str> = raw.split(':').collect();
+            if parts.len() == 4 {
+                if let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
+                    parts[0].parse::<f32>(),
+                    parts[1].parse::<f32>(),
+                    parts[2].parse::<f32>(),
+                    parts[3].parse::<f32>(),
+                ) {
+                    inner.apply_lossless_crop(x0, y0, x1, y1).await?;
+                }
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("lossless-") => {
+            if let Some(op) = LosslessOp::from_token(raw) {
+                inner.apply_lossless_current(op).await?;
             }
         }
         _ => inner.refresh_snapshot().await,

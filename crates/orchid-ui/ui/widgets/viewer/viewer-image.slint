@@ -25,6 +25,7 @@ export component ViewerImageView inherits Rectangle {
     property <length> pan-step: 40px;
     property <bool> show-recent: false;
     property <bool> select-zoom: false;
+    property <bool> select-crop: false;
     property <bool> selecting: false;
     property <length> sel-x0: 0px;
     property <length> sel-y0: 0px;
@@ -91,6 +92,40 @@ export component ViewerImageView inherits Rectangle {
             }
             if (event.text == Key.Escape && (model.chrome-hidden || model.kiosk)) {
                 root.command("exit-immersive");
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
+                if (event.modifiers.alt) {
+                    root.command("lossless-folder:cw");
+                } else if (event.modifiers.shift) {
+                    root.command("lossless-ccw");
+                } else {
+                    root.command("lossless-cw");
+                }
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "u" || event.text == "U")) {
+                root.command("lossless-180");
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "e" || event.text == "E")) {
+                if (event.modifiers.shift) {
+                    root.command("lossless-folder:exif");
+                } else {
+                    root.command("lossless-exif");
+                }
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.alt && (event.text == "h" || event.text == "H")) {
+                root.command("lossless-flip-h");
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.alt && (event.text == "v" || event.text == "V")) {
+                root.command("lossless-flip-v");
+                return accept;
+            }
+            if (!event.modifiers.control && (event.text == "c" || event.text == "C")) {
+                root.select-crop = !root.select-crop;
                 return accept;
             }
             if (event.text == "r" || event.text == "R") {
@@ -913,6 +948,123 @@ export component ViewerImageView inherits Rectangle {
                     }
                 }
 
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: ll-cw-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ll-cw-ta := TouchArea {
+                        clicked => { root.command("lossless-cw"); img-keys.focus(); }
+                    }
+                    if ll-cw-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ll-cw-hint.preferred-width + 12px;
+                        height: ll-cw-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ll-cw-hint := Text { x: 6px; y: 3px; text: model.lossless-rotate-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "↻*"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: ll-fh-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ll-fh-ta := TouchArea {
+                        clicked => { root.command("lossless-flip-h"); img-keys.focus(); }
+                    }
+                    if ll-fh-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ll-fh-hint.preferred-width + 12px;
+                        height: ll-fh-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ll-fh-hint := Text { x: 6px; y: 3px; text: model.lossless-flip-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "⇄*"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.select-crop ? Theme.surface-raised
+                        : ll-crop-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ll-crop-ta := TouchArea {
+                        clicked => { root.select-crop = !root.select-crop; img-keys.focus(); }
+                    }
+                    if ll-crop-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ll-crop-hint.preferred-width + 12px;
+                        height: ll-crop-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ll-crop-hint := Text { x: 6px; y: 3px; text: model.lossless-crop-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "✂";
+                        color: root.select-crop ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: ll-exif-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ll-exif-ta := TouchArea {
+                        clicked => { root.command("lossless-exif"); img-keys.focus(); }
+                    }
+                    if ll-exif-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ll-exif-hint.preferred-width + 12px;
+                        height: ll-exif-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ll-exif-hint := Text { x: 6px; y: 3px; text: model.lossless-exif-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.lossless-exif-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: ll-folder-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ll-folder-ta := TouchArea {
+                        clicked => { root.command("lossless-folder:cw"); img-keys.focus(); }
+                    }
+                    if ll-folder-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ll-folder-hint.preferred-width + 12px;
+                        height: ll-folder-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ll-folder-hint := Text { x: 6px; y: 3px; text: model.lossless-folder-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.lossless-folder-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
                 Rectangle { width: 8px; }
 
                 Rectangle {
@@ -1202,7 +1354,7 @@ export component ViewerImageView inherits Rectangle {
                         root.swipe-x = self.mouse-x;
                         root.swipe-y = self.mouse-y;
                         root.middle-pan = e.button == PointerEventButton.middle;
-                        if (e.modifiers.shift || root.select-zoom) {
+                        if (e.modifiers.shift || root.select-zoom || root.select-crop) {
                             root.selecting = true;
                             root.sel-x0 = self.mouse-x;
                             root.sel-y0 = self.mouse-y;
@@ -1214,13 +1366,22 @@ export component ViewerImageView inherits Rectangle {
                     if (e.kind == PointerEventKind.up) {
                         root.middle-pan = false;
                         if (root.selecting) {
-                            root.command("zoom-rect:"
-                                + (root.sel-x0 / 1px) + ":"
-                                + (root.sel-y0 / 1px) + ":"
-                                + (root.sel-x1 / 1px) + ":"
-                                + (root.sel-y1 / 1px));
+                            if (root.select-crop) {
+                                root.command("lossless-crop:"
+                                    + (root.sel-x0 / 1px) + ":"
+                                    + (root.sel-y0 / 1px) + ":"
+                                    + (root.sel-x1 / 1px) + ":"
+                                    + (root.sel-y1 / 1px));
+                            } else {
+                                root.command("zoom-rect:"
+                                    + (root.sel-x0 / 1px) + ":"
+                                    + (root.sel-y0 / 1px) + ":"
+                                    + (root.sel-x1 / 1px) + ":"
+                                    + (root.sel-y1 / 1px));
+                            }
                             root.selecting = false;
                             root.select-zoom = false;
+                            root.select-crop = false;
                         } else if (model.fit-mode != 0
                             && abs(self.mouse-x - root.swipe-x) > 80px
                             && abs(self.mouse-x - root.swipe-x) > abs(self.mouse-y - root.swipe-y) * 2) {

@@ -26,6 +26,10 @@ pub enum ViewerError {
     #[error("failed to decode image: {0}")]
     ImageDecode(String),
 
+    /// Lossless JPEG/PNG transform or write failed.
+    #[error("lossless image transform: {0}")]
+    ImageLossless(String),
+
     /// HEIC/HEIF containers are recognised but not decoded yet.
     ///
     /// Display string is the Fluent key so the UI can localise it.

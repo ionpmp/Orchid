@@ -101,6 +101,9 @@ release yet.
 - Image view-only transforms: 90° CW/CCW, 180°, free angle (field or
   `[` / `]`), horizontal / vertical flip, and reset orientation (no
   file write).
+- Lossless JPEG/PNG file transforms: rotate 90/180/270, flip, MCU-aligned
+  JPEG crop, EXIF auto-rotate without recompress, and batch rotate of
+  the folder playlist.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

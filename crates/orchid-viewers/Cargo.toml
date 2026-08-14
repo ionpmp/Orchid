@@ -55,6 +55,7 @@ parley.workspace = true
 swash.workspace = true
 zip.workspace = true
 kamadak-exif.workspace = true
+libjpeg-turbo-rs.workspace = true
 qcms.workspace = true
 id3.workspace = true
 

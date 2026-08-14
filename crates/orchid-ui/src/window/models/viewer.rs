@@ -207,6 +207,11 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         rotate_180_label: locale.tr("viewer-image-rotate-180").into(),
         rotate_angle_label: locale.tr("viewer-image-rotate-angle").into(),
         reset_transform_label: locale.tr("viewer-image-reset-transform").into(),
+        lossless_rotate_label: locale.tr("viewer-image-lossless-rotate").into(),
+        lossless_flip_label: locale.tr("viewer-image-lossless-flip").into(),
+        lossless_crop_label: locale.tr("viewer-image-lossless-crop").into(),
+        lossless_exif_label: locale.tr("viewer-image-lossless-exif").into(),
+        lossless_folder_label: locale.tr("viewer-image-lossless-folder").into(),
     }
 }
 
@@ -763,6 +768,11 @@ fn build_image_snapshot(
         rotate_180_label: locale.tr("viewer-image-rotate-180").into(),
         rotate_angle_label: locale.tr("viewer-image-rotate-angle").into(),
         reset_transform_label: locale.tr("viewer-image-reset-transform").into(),
+        lossless_rotate_label: locale.tr("viewer-image-lossless-rotate").into(),
+        lossless_flip_label: locale.tr("viewer-image-lossless-flip").into(),
+        lossless_crop_label: locale.tr("viewer-image-lossless-crop").into(),
+        lossless_exif_label: locale.tr("viewer-image-lossless-exif").into(),
+        lossless_folder_label: locale.tr("viewer-image-lossless-folder").into(),
     }
 }
 
