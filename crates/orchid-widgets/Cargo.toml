@@ -30,6 +30,7 @@ reqwest.workspace = true
 feed-rs.workspace = true
 futures.workspace = true
 opener.workspace = true
+regex.workspace = true
 sysinfo.workspace = true
 starship-battery.workspace = true
 url.workspace = true

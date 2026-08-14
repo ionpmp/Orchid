@@ -38,6 +38,7 @@ pub fn sidebar_catalog() -> Vec<VirtualFolder> {
         ("virtual:recent", "fm-virtual-recent", "sidebar-recent"),
         ("virtual:starred", "fm-virtual-starred", "sidebar-starred"),
         ("virtual:tags", "fm-virtual-tags", "sidebar-tags"),
+        ("virtual:search", "fm-virtual-search", "sidebar-search"),
         (
             "virtual:categories/images",
             "fm-category-images",
@@ -109,6 +110,7 @@ pub fn label_key_for_virtual_path(raw: &str) -> Option<&'static str> {
         "virtual:categories/audio" => Some("fm-category-audio"),
         "virtual:categories/archives" => Some("fm-category-archives"),
         "virtual:network" => Some("fm-sidebar-network-all"),
+        "virtual:search" => Some("fm-virtual-search"),
         _ => None,
     }
 }
@@ -121,6 +123,8 @@ pub fn empty_placeholder_for_path(raw: &str) -> Option<&'static str> {
         "virtual:starred" => Some("virtual-empty-starred"),
         "virtual:tags" => Some("virtual-empty-tags"),
         "virtual:network" => Some("network-placeholder"),
+        "virtual:search" => Some("virtual-empty-search"),
+        path if path.starts_with("virtual:search/") => Some("virtual-empty-search-results"),
         path if category_for_virtual_path(path).is_some() => Some("virtual-empty-category"),
         _ => None,
     }

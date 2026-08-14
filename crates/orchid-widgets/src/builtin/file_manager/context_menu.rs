@@ -572,6 +572,7 @@ fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
         if !items.is_empty() {
             items.last_mut().unwrap().separator_after = true;
         }
+        items.push(item("fs.find", "fm-action-find", "action-select-all", true));
         items.push(item(
             "fs.branch-view",
             "fm-action-branch-view",
@@ -703,6 +704,14 @@ fn tools_menu(
     dual: bool,
 ) -> ContextMenuItem {
     let mut submenu = vec![
+        item("fs.find", "fm-action-find", "action-select-all", true),
+        item(
+            "fs.find-duplicates",
+            "fm-action-find-duplicates",
+            "action-copy",
+            true,
+        ),
+        item("fs.find-large", "fm-action-find-large", "action-copy", true),
         item(
             "fs.compare-dirs",
             "fm-action-compare-dirs",

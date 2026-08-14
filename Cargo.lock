@@ -5696,6 +5696,7 @@ dependencies = [
  "orchid-viewers",
  "parking_lot",
  "redb",
+ "regex",
  "reqwest",
  "secrecy",
  "serde",

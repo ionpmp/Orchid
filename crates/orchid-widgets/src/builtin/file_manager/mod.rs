@@ -5,6 +5,7 @@ pub mod batch_rename;
 pub mod clipboard;
 pub mod config;
 pub mod context_menu;
+pub mod find;
 pub mod navigation;
 pub mod selection;
 pub mod state;
@@ -49,6 +50,7 @@ pub use config::{
 pub use context_menu::{
     build_for_selection, info_for_selection, ContextMenuInfo, ContextMenuInputs, ContextMenuItem,
 };
+pub use find::{is_search_virtual, search_session_id, FindSpec, SearchSession};
 pub use navigation::{
     coerce_typed_path, complete_parent_and_prefix, drive_root, list_local_drives,
     BreadcrumbSegment, DriveItem, NavigationResult, Navigator, PathCompleteItem,
@@ -159,6 +161,14 @@ pub enum ActionOutcome {
         proposed: String,
         title: String,
         hint: String,
+    },
+    /// Open the Find Files dialog for the current folder.
+    NeedsFindDialog {
+        root: String,
+    },
+    /// Navigate the active pane to a find-results virtual folder.
+    NavigateSearch {
+        path: String,
     },
     /// Show read-only managed-folder policy for `path`.
     NeedsManagedPolicy {
@@ -304,6 +314,8 @@ struct FileManagerInner {
     external_refresh_gen: AtomicU64,
     /// Folder visit counts for the history dropdown.
     visit_log: parking_lot::Mutex<VisitLog>,
+    /// Runtime find / duplicate / large-file result sets (`virtual:search/<id>`).
+    search_sessions: RwLock<HashMap<Uuid, find::SearchSession>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -428,6 +440,7 @@ impl FileManagerWidget {
                 dir_watch_subs: parking_lot::Mutex::new(Vec::new()),
                 external_refresh_gen: AtomicU64::new(0),
                 visit_log: parking_lot::Mutex::new(VisitLog::from_entries(persisted.path_visits)),
+                search_sessions: RwLock::new(HashMap::new()),
                 bus,
             }),
         }
@@ -1842,7 +1855,51 @@ impl FileManagerInner {
         if raw == "virtual:network" {
             return self.list_network_mounts();
         }
+        if raw == "virtual:search" {
+            return self.list_search_sessions();
+        }
+        if let Some(id) = find::search_session_id(raw) {
+            return self
+                .search_sessions
+                .read()
+                .get(&id)
+                .map(|s| s.entries.clone())
+                .unwrap_or_default();
+        }
         Vec::new()
+    }
+
+    fn list_search_sessions(&self) -> Vec<orchid_fs::FsEntry> {
+        let mut sessions: Vec<find::SearchSession> = self
+            .search_sessions
+            .read()
+            .values()
+            .filter(|s| s.saved)
+            .cloned()
+            .collect();
+        sessions.sort_by(|a, b| a.label.cmp(&b.label));
+        sessions
+            .into_iter()
+            .filter_map(|s| {
+                let path = orchid_fs::FsPath::new(s.virtual_path()).ok()?;
+                Some(orchid_fs::FsEntry {
+                    name: s.label,
+                    path,
+                    metadata: orchid_fs::FsMetadata {
+                        kind: orchid_fs::FsEntryKind::Directory,
+                        size: s.entries.len() as u64,
+                        created: None,
+                        modified: None,
+                        accessed: None,
+                        readonly: false,
+                        hidden: false,
+                        system: false,
+                        mime: None,
+                        extended: orchid_fs::ExtendedAttributes::default(),
+                    },
+                })
+            })
+            .collect()
     }
 
     fn list_network_mounts(&self) -> Vec<orchid_fs::FsEntry> {
@@ -2229,11 +2286,36 @@ fn build_tab_payload(
     pane_idx: u8,
     is_active_tab: bool,
 ) -> TabPayload {
-    let crumbs = inner.navigator.breadcrumbs_for(&tab.path);
-    let breadcrumbs: Vec<(String, String)> = crumbs
-        .into_iter()
-        .map(|c| (c.path.as_str().to_string(), c.display_name))
-        .collect();
+    let raw_path = tab.path.as_str();
+    let (path_display, breadcrumbs) = if raw_path == "virtual:search" {
+        (
+            raw_path.to_string(),
+            vec![(raw_path.to_string(), "Search".to_string())],
+        )
+    } else if let Some(id) = find::search_session_id(raw_path) {
+        let label = inner
+            .search_sessions
+            .read()
+            .get(&id)
+            .map(|s| s.label.clone())
+            .unwrap_or_else(|| "Search".to_string());
+        (
+            label.clone(),
+            vec![
+                ("virtual:search".to_string(), "Search".to_string()),
+                (raw_path.to_string(), label),
+            ],
+        )
+    } else {
+        let crumbs = inner.navigator.breadcrumbs_for(&tab.path);
+        (
+            raw_path.to_string(),
+            crumbs
+                .into_iter()
+                .map(|c| (c.path.as_str().to_string(), c.display_name))
+                .collect(),
+        )
+    };
 
     let quick = tab.quick_filter.trim();
     let entries_filtered: Vec<&orchid_fs::FsEntry> = if quick.is_empty() {
@@ -2348,7 +2430,7 @@ fn build_tab_payload(
     };
     TabPayload {
         tab_id: tab.id.to_string(),
-        path_display: tab.path.as_str().to_string(),
+        path_display,
         breadcrumbs,
         can_go_back: !tab.history_back.is_empty(),
         can_go_forward: !tab.history_forward.is_empty(),
@@ -2940,6 +3022,17 @@ fn active_tab_ref(state: &FileManagerState, pane: u8) -> WidgetResult<&TabState>
         }
     }
     Ok(state.left_pane.active_tab())
+}
+
+fn active_tab_path(inner: &FileManagerInner) -> String {
+    let state = inner.state.lock();
+    let pane = match state.active_pane {
+        ActivePane::Left => 0,
+        ActivePane::Right => 1,
+    };
+    active_tab_ref(&state, pane)
+        .map(|t| t.path.as_str().to_string())
+        .unwrap_or_default()
 }
 
 /// Navigate the given `pane` (0 left, 1 right) to `path`.
@@ -4161,6 +4254,24 @@ pub async fn run_action_with_opts(
                 filter: true,
             });
         }
+        "fs.find" => {
+            let root = active_tab_path(&inner);
+            return Ok(ActionOutcome::NeedsFindDialog { root });
+        }
+        "fs.find-duplicates" => {
+            let root = orchid_fs::FsPath::new(active_tab_path(&inner)).map_err(map_fs_error)?;
+            return find::run_find_duplicates(&inner, &root).await;
+        }
+        "fs.find-large" => {
+            let root = active_tab_path(&inner);
+            return Ok(ActionOutcome::NeedsToolPrompt {
+                action_id: "fs.find-large".into(),
+                paths: vec![root],
+                proposed: "100MB".into(),
+                title: inner.deps.locale.tr("fm-find-large-title"),
+                hint: inner.deps.locale.tr("fm-find-large-hint"),
+            });
+        }
         "fs.new-folder" => {
             let parent = {
                 let state = inner.state.lock();
@@ -4326,6 +4437,15 @@ pub async fn complete_tool(
     input: &str,
 ) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
+    if action_id == "fs.find-large" {
+        let root = paths
+            .first()
+            .cloned()
+            .unwrap_or_else(|| active_tab_path(&inner));
+        let min_size = parse_byte_size(input).unwrap_or(100 * 1024 * 1024);
+        let fp = orchid_fs::FsPath::new(&root).map_err(map_fs_error)?;
+        return find::run_find_large(&inner, &fp, min_size).await;
+    }
     if archive::is_archive_action(action_id) {
         return archive::run(&inner, action_id, &paths, Some(input)).await;
     }
@@ -4337,6 +4457,14 @@ pub async fn complete_tool(
         Some(input),
     )
     .await
+}
+
+/// Run Find Files from the packed dialog payload.
+pub async fn complete_find(instance_id: Uuid, packed: &str) -> WidgetResult<ActionOutcome> {
+    let inner = live_inner(instance_id)?;
+    let fallback = active_tab_path(&inner);
+    let spec = find::FindSpec::unpack(packed, &fallback);
+    find::run_find(&inner, spec).await
 }
 
 /// Commit rename on the backing filesystem.
@@ -4622,7 +4750,8 @@ async fn entry_is_directory(
         let raw = fp.as_str();
         return is_dir_hint
             || category_for_virtual_path(raw).is_some()
-            || label_key_for_virtual_path(raw).is_some();
+            || label_key_for_virtual_path(raw).is_some()
+            || find::is_search_virtual(raw);
     }
     if let Some(provider) = inner.deps.registry.for_path(fp) {
         if let Ok(meta) = provider.metadata(fp).await {
@@ -4808,6 +4937,7 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         "cat:video" => orchid_fs::FsPath::new("virtual:categories/video").ok(),
         "cat:audio" => orchid_fs::FsPath::new("virtual:categories/audio").ok(),
         "cat:archives" => orchid_fs::FsPath::new("virtual:categories/archives").ok(),
+        "fav:search" => orchid_fs::FsPath::new("virtual:search").ok(),
         "net:places" => orchid_fs::FsPath::new("virtual:network").ok(),
         other if other.starts_with("net:") && other != "net:places" => {
             let idx = other
