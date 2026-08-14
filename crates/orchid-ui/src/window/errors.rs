@@ -23,13 +23,13 @@ pub(crate) fn viewer_localized_error(locale: &LocaleManager, err: &str) -> Strin
         _ if msg.starts_with("failed to render PDF page") => locale.tr("viewer-error-pdf-render"),
         _ if msg == "PDF has no pages" => locale.tr("viewer-error-pdf-empty"),
         _ if msg.starts_with("failed to parse text:") => locale.tr("viewer-error-parse-text"),
-        _ if msg.starts_with("syntax grammar not found") => locale.tr("viewer-error-syntax-grammar"),
+        _ if msg.starts_with("syntax grammar not found") => {
+            locale.tr("viewer-error-syntax-grammar")
+        }
         _ if msg.starts_with("archive entry not found:") => {
             locale.tr("viewer-error-archive-entry-not-found")
         }
-        _ if msg.starts_with("thumbnail generation failed:") => {
-            locale.tr("viewer-error-thumbnail")
-        }
+        _ if msg.starts_with("thumbnail generation failed:") => locale.tr("viewer-error-thumbnail"),
         "no viewer" | "viewer widget not live" => locale.tr("viewer-error-unavailable"),
         "not an archive" | "no archive open" => locale.tr("viewer-error-no-archive"),
         _ if lower_contains_io(msg) => locale.tr("viewer-error-io"),
@@ -96,7 +96,9 @@ pub(crate) fn media_localized_error(
         MediaError::NoSession => locale.tr("media-no-session"),
         MediaError::Unsupported => locale.tr("media-unsupported"),
         MediaError::ControlFailed(reason)
-            if reason.to_ascii_lowercase().contains("transport command rejected") =>
+            if reason
+                .to_ascii_lowercase()
+                .contains("transport command rejected") =>
         {
             locale.tr("media-control-rejected")
         }
@@ -167,7 +169,13 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-no-provider-path"
         | "fm-empty-tag"
         | "fm-drop-not-directory"
-        | "fm-drop-unavailable" => return locale.tr(msg),
+        | "fm-drop-unavailable"
+        | "fm-tools-need-dual-pane"
+        | "fm-tools-need-two-files"
+        | "fm-split-bad-size"
+        | "fm-hash-no-sidecar"
+        | "fm-chmod-bad-mode"
+        | "fm-join-failed" => return locale.tr(msg),
         "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
         "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
         "file-manager widget not live" => return locale.tr("fm-error-unavailable"),
@@ -209,7 +217,10 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         {
             locale.tr("fm-network-auth-failed")
         }
-        _ if lower.contains("permission denied") || lower.contains("forbidden") || lower.contains("403") => {
+        _ if lower.contains("permission denied")
+            || lower.contains("forbidden")
+            || lower.contains("403") =>
+        {
             // Prefer a generic access message for local FS; keep network wording for HTTP 403.
             if lower.contains("403") || lower.contains("forbidden") {
                 locale.tr("fm-network-permission-denied")
@@ -227,13 +238,17 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
             locale.tr("fm-network-connection-failed")
         }
         _ if lower.contains("already exists") => locale.tr("fm-transfer-already-exists"),
-        _ if lower.contains("cannot drop into virtual folder") => locale.tr("fm-transfer-virtual-dest"),
+        _ if lower.contains("cannot drop into virtual folder") => {
+            locale.tr("fm-transfer-virtual-dest")
+        }
         _ if lower.contains("cannot create folder in virtual location") => {
             locale.tr("fm-virtual-create-denied")
         }
         _ if lower.contains("encryption unavailable") => locale.tr("fm-encryption-unavailable"),
         _ if lower.contains("managed folders unavailable") => locale.tr("fm-managed-unavailable"),
-        _ if lower.contains("no selection for managed folder") => locale.tr("fm-managed-no-selection"),
+        _ if lower.contains("no selection for managed folder") => {
+            locale.tr("fm-managed-no-selection")
+        }
         _ if lower.contains("not a managed folder") => locale.tr("fm-not-managed-folder"),
         _ if lower.contains("managed folder conflict") => locale.tr("fm-managed-conflict"),
         _ if lower.contains("invalid passphrase") => locale.tr("fm-passphrase-invalid"),

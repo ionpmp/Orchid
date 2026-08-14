@@ -1,8 +1,44 @@
 //! Progress reporting channel used by file operations.
 
-use tokio::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+
+use crate::error::{FsError, Result};
 use crate::path::FsPath;
+
+/// Cancellation + pause flags shared with a running copy/move.
+#[derive(Clone, Default)]
+pub struct TransferControl {
+    /// Cancel the operation at the next file/chunk boundary.
+    pub cancel: Option<CancellationToken>,
+    /// When `true`, the copy loop waits until cleared.
+    pub pause: Option<Arc<AtomicBool>>,
+}
+
+impl TransferControl {
+    /// Wait while paused; error if cancelled.
+    pub(crate) async fn wait(&self) -> Result<()> {
+        loop {
+            if let Some(c) = &self.cancel {
+                if c.is_cancelled() {
+                    return Err(FsError::Cancelled);
+                }
+            }
+            let paused = self
+                .pause
+                .as_ref()
+                .is_some_and(|p| p.load(Ordering::Relaxed));
+            if !paused {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+}
 
 /// Snapshot of a long-running file operation.
 #[derive(Debug, Clone)]

@@ -32,6 +32,23 @@ release yet.
   loss restores breadcrumb buttons.
 - File/folder context menu shows name, type, size, modified, and MIME at the
   top instead of a separate Properties item.
+- Selection: Shift+click / Ctrl+click, invert (`*`), name mask (`+` / `-`),
+  files-only / folders-only, attribute filter, rectangular marquee, and
+  hover checkboxes; status bar shows selected size.
+- Navigation: Ctrl+PgUp goes up, Alt+F1 / toolbar drive menu switches
+  volumes, Ctrl+Shift+T opens the selection in a new tab, Ctrl+Shift+Enter
+  opens it in the other pane, Ctrl+B flattens nested files (branch view).
+- File operations: F5/F6 copy/move to the other pane (clipboard in
+  single-pane), F7 new folder, Shift+F4 new file, F8/Del delete, Shift+Del
+  permanent delete, Ctrl+X cut. Overwrite / Skip / Rename / Overwrite older
+  / Resume conflict dialog with “apply to all”. Copy queue with pause,
+  resume, cancel, verify, new/changed-only, folder structure only, NTFS
+  ADS, timestamps and attributes. Batch rename by pattern; symlink /
+  hardlink / junction. Touch action bar when single-click open is on.
+  Advanced tools: folder compare / sync / merge, byte-level file compare,
+  split / join, checksums (MD5 / SHA-1 / SHA-256 / BLAKE3 / CRC32) with
+  sidecar verify, Base64 / UUE encode–decode, bulk attributes / timestamps
+  / name case, chmod (and Unix chown), Windows ACL via icacls.
 - Encrypted folders (age), managed folders with content-addressed ingest
   (BLAKE3 + FastCDC), rclone network mounts (SFTP / SMB / WebDAV / FTP).
 - Tantivy search with incremental FS watcher, PDF/text/DOCX extractors,

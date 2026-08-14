@@ -1,11 +1,13 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
-import { FmTab, FmVisitHistoryItem } from "../../workspace/defs.slint";
+import { FmTab, FmVisitHistoryItem, FmPathSuggest } from "../../workspace/defs.slint";
 
 export component FmToolbar inherits Rectangle {
     in property <FmTab> tab;
     in property <[FmVisitHistoryItem]> visit-history;
+    in property <[FmPathSuggest]> drives;
     in-out property <bool> history-open: false;
+    in-out property <bool> drives-open: false;
 
     callback new-folder();
     callback back();
@@ -15,6 +17,7 @@ export component FmToolbar inherits Rectangle {
     callback history-pick(string);
     callback view-mode-cycle();
     callback sort-cycle();
+    callback branch-toggle();
     callback quick-filter-changed(string);
 
     background: Theme.surface-raised;
@@ -166,7 +169,10 @@ export component FmToolbar inherits Rectangle {
             z: 50;
 
             hist-ta := TouchArea {
-                clicked => { root.history-open = !root.history-open; }
+                clicked => {
+                    root.drives-open = false;
+                    root.history-open = !root.history-open;
+                }
             }
             // Clock glyph (history) — rectangles, no emoji.
             Rectangle {
@@ -296,6 +302,97 @@ export component FmToolbar inherits Rectangle {
                                     overflow: elide;
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: drv-ta.has-hover || root.drives-open ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+            clip: false;
+            z: 50;
+
+            drv-ta := TouchArea {
+                clicked => {
+                    root.history-open = false;
+                    root.drives-open = !root.drives-open;
+                }
+            }
+            Text {
+                text: "C:";
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if drv-ta.has-hover && !root.drives-open : Rectangle {
+                x: 0;
+                y: parent.height + 4px;
+                width: drv-hint.preferred-width + 12px;
+                height: drv-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                drv-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-nav-drives;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            if root.drives-open : Rectangle {
+                x: 0;
+                y: parent.height + 4px;
+                width: 220px;
+                height: min(280px, drv-lay.preferred-height + 8px);
+                background: Theme.surface-raised;
+                border-color: Theme.border-default;
+                border-width: 1px;
+                border-radius: Theme.radius-md;
+                drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
+                drop-shadow-color: #00000060;
+                z: 200;
+                clip: true;
+
+                drv-lay := VerticalLayout {
+                    padding: 4px;
+                    spacing: 1px;
+
+                    if root.drives.length == 0 : Text {
+                        text: Strings.fm-nav-drives-empty;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                    }
+
+                    for item in root.drives : Rectangle {
+                        height: 28px;
+                        background: drow-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        drow-ta := TouchArea {
+                            clicked => {
+                                root.drives-open = false;
+                                root.history-pick(item.path);
+                            }
+                        }
+                        Text {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: parent.height;
+                            text: item.label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
                         }
                     }
                 }
@@ -449,6 +546,45 @@ export component FmToolbar inherits Rectangle {
                 vm-hint := Text {
                     x: 6px; y: 3px;
                     text: tab.view-mode == 0 ? Strings.fm-view-icons : tab.view-mode == 1 ? Strings.fm-view-list : tab.view-mode == 2 ? Strings.fm-view-details : Strings.fm-view-gallery;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+        }
+
+        Rectangle {
+            width: 28px; height: 28px;
+            y: (parent.height - self.height) / 2;
+            background: tab.branch-view || br-ta.has-hover ? Theme.surface-base : transparent;
+            border-radius: Theme.radius-md;
+            border-width: tab.branch-view ? 1px : 0px;
+            border-color: Theme.accent-brand;
+
+            br-ta := TouchArea {
+                clicked => { root.branch-toggle(); }
+            }
+            Text {
+                text: "B";
+                color: tab.branch-view ? Theme.accent-brand : Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-semibold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if br-ta.has-hover : Rectangle {
+                x: 0;
+                y: parent.height + 4px;
+                width: br-hint.preferred-width + 12px;
+                height: br-hint.preferred-height + 6px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 100;
+                br-hint := Text {
+                    x: 6px; y: 3px;
+                    text: Strings.fm-action-branch-view;
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
                 }

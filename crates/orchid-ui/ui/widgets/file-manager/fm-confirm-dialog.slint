@@ -17,8 +17,8 @@ export component FmConfirmDialog inherits Rectangle {
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: 360px;
-        height: lay.preferred-height + 16px;
+        width: root.info-only ? min(520px, parent.width - 32px) : 360px;
+        height: min(lay.preferred-height + 16px, parent.height - 32px);
         background: Theme.surface-raised;
         border-radius: Theme.radius-md;
         drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;

@@ -982,6 +982,13 @@ export struct ViewerDocumentModel {
     superscript-label: string,
     subscript-label: string,
     clear-formatting-label: string,
+    link-label: string,
+    link-placeholder: string,
+    link-apply-label: string,
+    link-remove-label: string,
+    tip-link: string,
+    /// External hyperlink URL at the caret (empty when none).
+    link-url: string,
     font-smaller-label: string,
     font-larger-label: string,
     font-family-prev-label: string,
@@ -1102,6 +1109,7 @@ export struct FmTab {
     sort-size-label: string,
     sort-modified-label: string,
     sort-type-label: string,
+    branch-view: bool,
 }
 
 export struct FmPane {
@@ -1162,11 +1170,35 @@ export struct FmConfirmDialog {
     pending-paths: [string],
 }
 
+export struct FmConflictDialog {
+    visible: bool,
+    title: string,
+    message: string,
+    dest-name: string,
+    show-resume: bool,
+    apply-all-label: string,
+    overwrite-label: string,
+    skip-label: string,
+    rename-label: string,
+    older-label: string,
+    resume-label: string,
+    cancel-label: string,
+}
+
 export struct FmRenameState {
     active: bool,
     path: string,
     proposed-name: string,
     title: string,
+    hint: string,
+    show-filter: bool,
+    files-label: string,
+    folders-label: string,
+    size-min-label: string,
+    size-max-label: string,
+    hidden-label: string,
+    readonly-label: string,
+    days-label: string,
     ok-label: string,
     cancel-label: string,
 }
@@ -1225,6 +1257,8 @@ export struct FileManagerModel {
     activity-indicator: string,
     transfer-active: bool,
     transfer-progress: float,
+    transfer-paused: bool,
+    transfer-queue: int,
     show-hidden: bool,
     show-hidden-label: string,
     single-click-open: bool,
@@ -1236,9 +1270,11 @@ export struct FileManagerModel {
     drag-target-pane: int,
     sidebar-items: [FmSidebarItem],
     visit-history: [FmVisitHistoryItem],
+    drives: [FmPathSuggest],
     path-suggestions: [FmPathSuggest],
     context-menu: FmContextMenu,
     confirm-dialog: FmConfirmDialog,
+    conflict-dialog: FmConflictDialog,
     rename: FmRenameState,
     tag: FmTagState,
     passphrase: FmPassphraseState,

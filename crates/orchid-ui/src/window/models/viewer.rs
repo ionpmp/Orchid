@@ -277,6 +277,12 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         superscript_label: locale.tr("viewer-document-superscript").into(),
         subscript_label: locale.tr("viewer-document-subscript").into(),
         clear_formatting_label: locale.tr("viewer-document-clear-formatting").into(),
+        link_label: locale.tr("viewer-document-link").into(),
+        link_placeholder: locale.tr("viewer-document-link-placeholder").into(),
+        link_apply_label: locale.tr("viewer-document-link-apply").into(),
+        link_remove_label: locale.tr("viewer-document-link-remove").into(),
+        tip_link: locale.tr("viewer-document-tip-link").into(),
+        link_url: SharedString::new(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),
         font_family_prev_label: locale.tr("viewer-document-font-prev").into(),
@@ -463,6 +469,7 @@ fn build_document_snapshot(
     model.find_match_index = s.find_match_index;
     model.find_match_count = s.find_match_count;
     model.link_hover = s.link_hover;
+    model.link_url = s.link_url.clone().into();
     model
 }
 

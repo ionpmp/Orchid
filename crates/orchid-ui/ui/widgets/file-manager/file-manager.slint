@@ -1,12 +1,15 @@
 import { Theme } from "../../theme_global.slint";
+import { Strings } from "../../strings_global.slint";
 import { FileManagerModel } from "../../workspace/defs.slint";
 import { FmSidebar } from "fm-sidebar.slint";
 import { FmPane } from "fm-pane.slint";
 import { FmContextMenu } from "fm-context-menu.slint";
 import { FmConfirmDialog } from "fm-confirm-dialog.slint";
+import { FmConflictDialog } from "fm-conflict-dialog.slint";
 import { FmTagDialog } from "fm-tag-dialog.slint";
 import { FmPassphraseDialog } from "fm-passphrase-dialog.slint";
 import { FmManagedPolicyDialog } from "fm-managed-policy-dialog.slint";
+import { FmRenameDialog } from "fm-rename-dialog.slint";
 
 export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
@@ -40,6 +43,7 @@ export component FileManagerView inherits Rectangle {
 
     callback confirm-yes();
     callback confirm-no();
+    callback conflict-choice(string, bool);
 
     callback rename-commit(string, string);
     callback rename-cancel();
@@ -54,6 +58,9 @@ export component FileManagerView inherits Rectangle {
     callback managed-policy-close();
 
     callback select-all(int);
+    callback selection-command(int, string);
+    callback nav-command(int, string);
+    callback marquee-select(int, int, int, bool, int);
     callback delete-selected(int);
     callback copy-selected(int);
     callback paste-clipboard(int);
@@ -73,8 +80,12 @@ export component FileManagerView inherits Rectangle {
 
     background: transparent;
 
+    VerticalLayout {
+        spacing: 0;
+
     HorizontalLayout {
         spacing: 0;
+        vertical-stretch: 1;
 
         // Navigation sidebar only in dual-pane. Single-pane is the listing alone.
         if model.dual-pane : Rectangle {
@@ -117,11 +128,14 @@ export component FileManagerView inherits Rectangle {
                 activity-hint: model.activity-indicator;
                 transfer-active: model.transfer-active;
                 transfer-progress: model.transfer-progress;
+                transfer-paused: model.transfer-paused;
+                transfer-queue: model.transfer-queue;
                 rename: model.rename;
                 drag-active: model.drag-active;
                 drag-drop-target: model.drag-drop-target;
                 drag-pane-target: model.drag-active && model.drag-target-pane == 0;
                 visit-history: model.visit-history;
+                drives: model.drives;
                 path-suggestions: model.path-suggestions;
                 tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                 tab-closed(idx, id) => { root.tab-closed(0, id); }
@@ -145,6 +159,9 @@ export component FileManagerView inherits Rectangle {
                 entry-context(p, x, y) => { root.entry-context(0, p, x, y); }
                 pane-focused => { root.pane-clicked(0); }
                 select-all => { root.select-all(0); }
+                selection-command(cmd) => { root.selection-command(0, cmd); }
+                nav-command(cmd) => { root.nav-command(0, cmd); }
+                marquee-select(a, b, add, cols) => { root.marquee-select(0, a, b, add, cols); }
                 delete-selected => { root.delete-selected(0); }
                 copy-selected => { root.copy-selected(0); }
                 paste-clipboard => { root.paste-clipboard(0); }
@@ -187,11 +204,14 @@ export component FileManagerView inherits Rectangle {
                 activity-hint: model.activity-indicator;
                 transfer-active: model.transfer-active;
                 transfer-progress: model.transfer-progress;
+                transfer-paused: model.transfer-paused;
+                transfer-queue: model.transfer-queue;
                         rename: model.rename;
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
                         drag-pane-target: model.drag-active && model.drag-target-pane == 0;
                         visit-history: model.visit-history;
+                drives: model.drives;
                         path-suggestions: model.path-suggestions;
                         tab-clicked(idx, id) => { root.tab-clicked(0, id); }
                         tab-closed(idx, id) => { root.tab-closed(0, id); }
@@ -215,6 +235,9 @@ export component FileManagerView inherits Rectangle {
                         entry-context(p, x, y) => { root.entry-context(0, p, x, y); }
                         pane-focused => { root.pane-clicked(0); }
                         select-all => { root.select-all(0); }
+                        selection-command(cmd) => { root.selection-command(0, cmd); }
+                nav-command(cmd) => { root.nav-command(0, cmd); }
+                        marquee-select(a, b, add, cols) => { root.marquee-select(0, a, b, add, cols); }
                         delete-selected => { root.delete-selected(0); }
                         copy-selected => { root.copy-selected(0); }
                         paste-clipboard => { root.paste-clipboard(0); }
@@ -255,11 +278,14 @@ export component FileManagerView inherits Rectangle {
                 activity-hint: model.activity-indicator;
                 transfer-active: model.transfer-active;
                 transfer-progress: model.transfer-progress;
+                transfer-paused: model.transfer-paused;
+                transfer-queue: model.transfer-queue;
                         rename: model.rename;
                         drag-active: model.drag-active;
                         drag-drop-target: model.drag-drop-target;
                         drag-pane-target: model.drag-active && model.drag-target-pane == 1;
                         visit-history: model.visit-history;
+                drives: model.drives;
                         path-suggestions: model.path-suggestions;
                         tab-clicked(idx, id) => { root.tab-clicked(1, id); }
                         tab-closed(idx, id) => { root.tab-closed(1, id); }
@@ -283,6 +309,9 @@ export component FileManagerView inherits Rectangle {
                         entry-context(p, x, y) => { root.entry-context(1, p, x, y); }
                         pane-focused => { root.pane-clicked(1); }
                         select-all => { root.select-all(1); }
+                        selection-command(cmd) => { root.selection-command(1, cmd); }
+                        nav-command(cmd) => { root.nav-command(1, cmd); }
+                        marquee-select(a, b, add, cols) => { root.marquee-select(1, a, b, add, cols); }
                         delete-selected => { root.delete-selected(1); }
                         copy-selected => { root.copy-selected(1); }
                         paste-clipboard => { root.paste-clipboard(1); }
@@ -309,6 +338,94 @@ export component FileManagerView inherits Rectangle {
         }
     }
 
+        if model.single-click-open : Rectangle {
+            height: 48px;
+            background: Theme.surface-raised;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 4px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 40px;
+                    background: copy-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    copy-ta := TouchArea { clicked => { root.copy-selected(model.active-pane); } }
+                    Text {
+                        text: Strings.fm-action-copy;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 40px;
+                    background: cut-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    cut-ta := TouchArea { clicked => { root.nav-command(model.active-pane, "cut"); } }
+                    Text {
+                        text: Strings.fm-action-cut;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 40px;
+                    background: paste-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    paste-ta := TouchArea { clicked => { root.paste-clipboard(model.active-pane); } }
+                    Text {
+                        text: Strings.fm-action-paste;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 40px;
+                    background: del-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    del-ta := TouchArea { clicked => { root.delete-selected(model.active-pane); } }
+                    Text {
+                        text: Strings.fm-action-delete;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 40px;
+                    background: rn-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    rn-ta := TouchArea { clicked => { root.rename-selected(model.active-pane); } }
+                    Text {
+                        text: Strings.fm-action-rename;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 40px;
+                    background: nf-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    nf-ta := TouchArea { clicked => { root.new-folder(model.active-pane); } }
+                    Text {
+                        text: Strings.fm-action-new-folder;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
     if model.context-menu.visible : FmContextMenu {
         x: 0; y: 0;
         width: parent.width;
@@ -325,6 +442,14 @@ export component FileManagerView inherits Rectangle {
         dialog: model.confirm-dialog;
         yes => { root.confirm-yes(); }
         no => { root.confirm-no(); }
+    }
+
+    if model.conflict-dialog.visible : FmConflictDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        dialog: model.conflict-dialog;
+        choice(c, all) => { root.conflict-choice(c, all); }
     }
 
     if model.tag.active : FmTagDialog {
@@ -352,6 +477,15 @@ export component FileManagerView inherits Rectangle {
         height: parent.height;
         state: model.managed-policy;
         close => { root.managed-policy-close(); }
+    }
+
+    if model.rename.active && (model.rename.path == "" || model.rename.path == "orchid:select-mask" || model.rename.path == "orchid:batch-rename" || model.rename.path == "orchid:conflict-rename" || model.rename.path == "orchid:tool") : FmRenameDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        state: model.rename;
+        commit(old, new) => { root.rename-commit(old, new); }
+        cancel => { root.rename-cancel(); }
     }
 }
 

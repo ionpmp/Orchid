@@ -1,11 +1,14 @@
 //! File-manager widget.
 
+pub mod batch_rename;
 pub mod clipboard;
 pub mod config;
 pub mod context_menu;
 pub mod navigation;
 pub mod selection;
 pub mod state;
+pub mod tools;
+pub mod transfer;
 pub mod view_mode;
 pub mod virtual_folders;
 pub mod visit_log;
@@ -46,11 +49,15 @@ pub use context_menu::{
     build_for_selection, info_for_selection, ContextMenuInfo, ContextMenuInputs, ContextMenuItem,
 };
 pub use navigation::{
-    coerce_typed_path, complete_parent_and_prefix, BreadcrumbSegment, NavigationResult, Navigator,
-    PathCompleteItem,
+    coerce_typed_path, complete_parent_and_prefix, drive_root, list_local_drives,
+    BreadcrumbSegment, DriveItem, NavigationResult, Navigator, PathCompleteItem,
 };
-pub use selection::SelectionModel;
+pub use selection::{parse_byte_size, MaskOp, SelectFilter, SelectionModel};
 pub use state::{ActivePane, FileManagerState, PaneState, TabState};
+pub use transfer::{
+    apply_conflict, cancel_transfer, copy_to_other_pane, move_to_other_pane, pause_transfer,
+    resume_transfer, ConflictChoice, TransferOptions,
+};
 pub use view_mode::{config_for_mode, ViewModeConfig};
 pub use virtual_folders::{
     category_for_virtual_path, category_search_extensions, empty_placeholder_for_path,
@@ -101,6 +108,11 @@ pub enum ActionOutcome {
     NeedsTag {
         paths: Vec<String>,
     },
+    /// Prompt for a selection mask / filter (`+`, `-`, or Select by filter).
+    NeedsSelectMask {
+        op: MaskOp,
+        filter: bool,
+    },
     /// Prompt for a folder name under `parent`.
     NeedsCreateFolder {
         parent: String,
@@ -113,6 +125,31 @@ pub enum ActionOutcome {
     NeedsPassphrase {
         paths: Vec<String>,
         purpose: PassphrasePurpose,
+    },
+    /// Prompt for overwrite / skip / rename when a destination exists.
+    NeedsConflict {
+        source: String,
+        dest: String,
+        dest_name: String,
+        can_resume: bool,
+        is_copy: bool,
+    },
+    /// Prompt for a batch-rename pattern applied to `paths`.
+    NeedsBatchRename {
+        paths: Vec<String>,
+    },
+    /// Show a read-only report (checksums, compare, ACL).
+    NeedsReport {
+        title: String,
+        body: String,
+    },
+    /// Prompt for a tool parameter (split size, chmod, ACL grant, …).
+    NeedsToolPrompt {
+        action_id: String,
+        paths: Vec<String>,
+        proposed: String,
+        title: String,
+        hint: String,
     },
     /// Show read-only managed-folder policy for `path`.
     NeedsManagedPolicy {
@@ -228,6 +265,8 @@ struct FileManagerInner {
     tab_errors: RwLock<std::collections::HashMap<Uuid, Option<String>>>,
     /// Copy/move progress for drag-and-drop and OS file drops.
     transfer: RwLock<TransferState>,
+    /// Pause / cancel / queue for the active transfer.
+    xfer: transfer::TransferCtl,
     /// Last failed transfer message (brief status-bar toast).
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Tab ids currently loading a directory listing (navigation in flight).
@@ -263,6 +302,8 @@ struct TransferState {
     processed_bytes: u64,
     total_bytes: u64,
     last_publish: Option<std::time::Instant>,
+    paused: bool,
+    queue_len: u32,
 }
 
 /// Options for [`FileManagerInner::refresh_all_tabs_with_opts`].
@@ -360,6 +401,7 @@ impl FileManagerWidget {
                 encrypted_paths: RwLock::new(Vec::new()),
                 tab_errors: RwLock::new(HashMap::new()),
                 transfer: RwLock::new(TransferState::default()),
+                xfer: transfer::TransferCtl::default(),
                 transfer_notice: RwLock::new(None),
                 loading_tabs: RwLock::new(HashSet::new()),
                 viewport_by_pane: RwLock::new(HashMap::new()),
@@ -589,6 +631,8 @@ impl Widget for FileManagerWidget {
                         0.0
                     },
                     transfer_is_copy: transfer.is_copy,
+                    transfer_paused: transfer.paused,
+                    transfer_queue: transfer.queue_len,
                     transfer_current: if transfer.active {
                         Some(transfer.current_name.clone())
                     } else {
@@ -806,7 +850,7 @@ impl FileManagerInner {
         changed: &orchid_fs::FsPath,
         show_hidden: bool,
     ) -> bool {
-        if is_virtual(&tab.path) {
+        if is_virtual(&tab.path) || tab.branch_view {
             return false;
         }
         let Some(parent) = changed.parent() else {
@@ -1058,9 +1102,11 @@ impl FileManagerInner {
     }
 
     fn begin_transfer(&self, is_copy: bool) {
+        let queue_len = self.xfer.queue.lock().len() as u32;
         *self.transfer.write() = TransferState {
             active: true,
             is_copy,
+            queue_len,
             ..TransferState::default()
         };
         self.publish_refresh();
@@ -1089,88 +1135,12 @@ impl FileManagerInner {
     }
 
     fn end_transfer(&self) {
-        *self.transfer.write() = TransferState::default();
+        let queue_len = self.xfer.queue.lock().len() as u32;
+        *self.transfer.write() = TransferState {
+            queue_len,
+            ..TransferState::default()
+        };
         self.publish_refresh();
-    }
-
-    async fn transfer_paths(
-        self: &Arc<Self>,
-        sources: &[String],
-        dest_dir: &orchid_fs::FsPath,
-        is_copy: bool,
-    ) -> WidgetResult<()> {
-        if is_virtual(dest_dir) {
-            return Err(WidgetError::InvalidStateForOperation(
-                "fm-transfer-virtual-dest".into(),
-            ));
-        }
-        self.begin_transfer(is_copy);
-        let (sink, mut rx) = orchid_fs::ProgressSink::channel();
-        let inner = Arc::clone(self);
-        let progress_task = tokio::spawn(async move {
-            while let Some(p) = rx.recv().await {
-                inner.apply_transfer_progress(&p);
-            }
-        });
-
-        let registry = &self.deps.registry;
-        let dest_str = dest_dir.as_str();
-        let mut result = Ok(());
-        for p in sources {
-            let src = match orchid_fs::FsPath::new(p) {
-                Ok(fp) => fp,
-                Err(e) => {
-                    result = Err(map_fs_error(e));
-                    break;
-                }
-            };
-            if &src == dest_dir {
-                continue;
-            }
-            let src_str = src.as_str();
-            if dest_str.len() > src_str.len() {
-                let rest = &dest_str[src_str.len()..];
-                if rest.starts_with('/') || rest.starts_with('\\') {
-                    continue;
-                }
-            }
-            let name = src.file_name().map(str::to_string).unwrap_or_else(|| {
-                if is_copy {
-                    "copy".into()
-                } else {
-                    "moved".into()
-                }
-            });
-            let dest = dest_dir.join(&name);
-            if src == dest {
-                continue;
-            }
-            let op = if is_copy {
-                orchid_fs::operations::copy::copy(
-                    registry,
-                    &src,
-                    &dest,
-                    orchid_fs::operations::copy::CopyOptions::default(),
-                    Some(&sink),
-                    None,
-                )
-                .await
-            } else {
-                orchid_fs::operations::move_::move_(registry, &src, &dest, Some(&sink), None).await
-            };
-            if let Err(e) = op {
-                result = Err(map_fs_error(e));
-                break;
-            }
-        }
-
-        drop(sink);
-        let _ = progress_task.await;
-        self.end_transfer();
-        if let Err(ref e) = result {
-            self.set_transfer_notice(e.to_string());
-        }
-        result
     }
 
     async fn refresh_all_tabs(self: &Arc<Self>) {
@@ -1244,26 +1214,9 @@ impl FileManagerInner {
         }
     }
 
-    async fn paste_clipboard(self: &Arc<Self>) -> WidgetResult<()> {
-        let dest_dir = {
-            let state = self.state.lock();
-            state.active_tab().path.clone()
-        };
-        if is_virtual(&dest_dir) {
-            return Ok(());
-        }
-        let (sources, op) = self.deps.clipboard.paste(&dest_dir);
-        if sources.is_empty() || op == ClipboardOperation::None {
-            return Ok(());
-        }
-        let paths: Vec<String> = sources.iter().map(|p| p.as_str().to_string()).collect();
-        let is_copy = op == ClipboardOperation::Copy;
-        self.transfer_paths(&paths, &dest_dir, is_copy).await
-    }
-
-    async fn delete_paths(&self, paths: &[String]) -> WidgetResult<()> {
+    async fn delete_paths(&self, paths: &[String], to_recycle: Option<bool>) -> WidgetResult<()> {
         let registry = &self.deps.registry;
-        let to_recycle_bin = self.config.read().delete_to_recycle;
+        let to_recycle_bin = to_recycle.unwrap_or_else(|| self.config.read().delete_to_recycle);
         let opts = orchid_fs::operations::delete::DeleteOptions {
             to_recycle_bin,
             recursive: !to_recycle_bin, // permanent deletes need recurse for folders
@@ -1285,6 +1238,17 @@ impl FileManagerInner {
         let entries = if is_virtual(&path) {
             self.tab_errors.write().insert(tab.id, None);
             let mut entries = self.list_virtual(&path).await;
+            sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
+            let entries = Arc::new(entries);
+            self.entries_by_tab
+                .write()
+                .insert(tab.id, Arc::clone(&entries));
+            entries
+        } else if tab.branch_view {
+            let result = self.navigator.list_branch(&path, show_hidden).await;
+            self.tab_errors.write().insert(tab.id, result.error.clone());
+            let mut entries = result.entries;
+            self.apply_entry_metadata(&mut entries);
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
             let entries = Arc::new(entries);
             self.entries_by_tab
@@ -1472,6 +1436,79 @@ impl FileManagerInner {
         if let Some(t) = tab {
             t.selection.select_all(&paths);
         }
+    }
+
+    fn invert_selection_in_pane(&self, pane: u8) {
+        self.mutate_selection_in_pane(pane, |sel, paths, _| sel.invert(paths));
+    }
+
+    fn apply_filter_in_pane(&self, pane: u8, op: MaskOp, filter: &SelectFilter) {
+        self.mutate_selection_in_pane(pane, |sel, paths, entries| {
+            sel.apply_matching(paths, op, |p| {
+                entries
+                    .iter()
+                    .find(|e| e.path.as_str() == p)
+                    .is_some_and(|e| selection::entry_matches_filter(e, filter))
+            });
+        });
+    }
+
+    fn select_index_range_in_pane(
+        &self,
+        pane: u8,
+        from: usize,
+        to: usize,
+        additive: bool,
+        columns: usize,
+    ) {
+        self.mutate_selection_in_pane(pane, |sel, paths, _| {
+            sel.select_index_rect(paths, from, to, columns, additive);
+        });
+    }
+
+    fn mutate_selection_in_pane(
+        &self,
+        pane: u8,
+        f: impl FnOnce(&mut SelectionModel, &[String], &[orchid_fs::FsEntry]),
+    ) {
+        let (tab_id, paths, entries) = {
+            let state = self.state.lock();
+            let tab = match active_tab_ref(&state, pane) {
+                Ok(t) => t,
+                Err(_) => return,
+            };
+            let entries = self
+                .entries_by_tab
+                .read()
+                .get(&tab.id)
+                .cloned()
+                .unwrap_or_else(|| Arc::new(Vec::new()));
+            (tab.id, self.filtered_paths_for_tab(tab), entries)
+        };
+        let mut state = self.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.tabs.iter_mut().find(|t| t.id == tab_id)
+            } else {
+                state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
+            }
+        } else {
+            state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
+        };
+        if let Some(t) = tab {
+            f(&mut t.selection, &paths, entries.as_slice());
+        }
+    }
+
+    fn selection_bytes_in_tab(&self, tab: &TabState) -> u64 {
+        let Some(entries) = self.entries_by_tab.read().get(&tab.id).cloned() else {
+            return 0;
+        };
+        entries
+            .iter()
+            .filter(|e| tab.selection.is_selected(e.path.as_str()))
+            .map(|e| e.metadata.size)
+            .sum()
     }
 
     fn move_selection_in_pane(&self, pane: u8, delta: i32, extend: bool) {
@@ -2280,6 +2317,7 @@ fn build_tab_payload(
         })
         .collect();
     let selection_count = tab.selection.count() as u32;
+    let selection_bytes = inner.selection_bytes_in_tab(tab);
     let managed_stats_guard = inner.managed_stats.read();
     let managed_stats = managed_stats_guard.get(tab.path.as_str());
     let (managed_files_tracked, managed_dedup_bytes) = managed_stats
@@ -2306,6 +2344,7 @@ fn build_tab_payload(
         entries_offset,
         selection_count,
         item_count,
+        selection_bytes,
         managed_files_tracked,
         managed_dedup_bytes,
         quick_filter: tab.quick_filter.clone(),
@@ -2313,6 +2352,7 @@ fn build_tab_payload(
         error,
         sort_by: sort_by_to_u8(tab.sort_by),
         sort_descending: tab.sort_descending,
+        branch_view: tab.branch_view,
     }
 }
 
@@ -2625,6 +2665,7 @@ fn tab_from_persisted(pt: &PersistedTab, fallback: &orchid_fs::FsPath) -> TabSta
         scroll_position: 0.0,
         sort_by: pt.sort_by,
         sort_descending: pt.sort_descending,
+        branch_view: false,
     }
 }
 
@@ -2843,6 +2884,7 @@ pub fn context_menu_for(
             .iter()
             .any(|p| inner.managed_root_for_path(p).is_some()),
         can_create,
+        dual_pane: inner.state.lock().right_pane.is_some(),
     };
     let fmt_locale = inner.deps.orchid_config.read().locale.clone();
     let info = info_for_selection(&selected_entries, &inner.deps.locale, &fmt_locale);
@@ -3116,37 +3158,137 @@ pub async fn close_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetResul
     Ok(())
 }
 
-/// Create new tab in pane (cloned from current path).
+/// Create a new tab in `pane`. When `path` is `None`, clones the current folder.
 pub async fn new_tab(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    new_tab_at(instance_id, pane, None).await
+}
+
+/// Create a new tab in `pane` opened at `path` (or the current folder).
+pub async fn new_tab_at(
+    instance_id: Uuid,
+    pane: u8,
+    path: Option<orchid_fs::FsPath>,
+) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    {
+    let tab = {
         let cfg = inner.config.read().clone();
         let mut state = inner.state.lock();
-        if pane == 1 {
-            if let Some(r) = state.right_pane.as_mut() {
-                let path = r.active_tab().path.clone();
-                r.tabs
-                    .push(TabState::new(path, cfg.default_view_mode, cfg.sort_by));
-                r.active_tab = r.tabs.len().saturating_sub(1);
-            } else {
-                let path = state.left_pane.active_tab().path.clone();
+        let dest = if pane == 1 && state.right_pane.is_some() {
+            state.right_pane.as_mut().expect("right pane")
+        } else {
+            &mut state.left_pane
+        };
+        let path = path.unwrap_or_else(|| dest.active_tab().path.clone());
+        dest.tabs
+            .push(TabState::new(path, cfg.default_view_mode, cfg.sort_by));
+        dest.active_tab = dest.tabs.len().saturating_sub(1);
+        dest.active_tab().clone()
+    };
+    inner
+        .refresh_tabs_with_opts(
+            &[tab],
+            RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            },
+        )
+        .await;
+    Ok(())
+}
+
+/// Open `path` (or the current folder) in the opposite pane, enabling dual-pane if needed.
+pub async fn open_in_other_pane(
+    instance_id: Uuid,
+    src_pane: u8,
+    path: Option<orchid_fs::FsPath>,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let dual = inner.config.read().dual_pane;
+    if !dual {
+        drop(inner);
+        toggle_dual_pane(instance_id).await?;
+    }
+    let inner = live_inner(instance_id)?;
+    let dest_pane: u8 = if src_pane == 1 { 0 } else { 1 };
+    let target = {
+        let state = inner.state.lock();
+        if let Some(p) = path {
+            p
+        } else {
+            let src = if src_pane == 1 {
                 state
-                    .left_pane
-                    .tabs
-                    .push(TabState::new(path, cfg.default_view_mode, cfg.sort_by));
-                state.left_pane.active_tab = state.left_pane.tabs.len().saturating_sub(1);
+                    .right_pane
+                    .as_ref()
+                    .unwrap_or(&state.left_pane)
+                    .active_tab()
+            } else {
+                state.left_pane.active_tab()
+            };
+            src.path.clone()
+        }
+    };
+    drop(inner);
+    navigate(instance_id, dest_pane, target).await?;
+    switch_active_pane(instance_id, dest_pane).await
+}
+
+/// Flatten or restore the listing of nested files in `pane` (branch view).
+pub async fn toggle_branch_view(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let tab = {
+        let mut state = inner.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.active_tab_mut()
+            } else {
+                state.left_pane.active_tab_mut()
             }
         } else {
-            let path = state.left_pane.active_tab().path.clone();
-            state
-                .left_pane
-                .tabs
-                .push(TabState::new(path, cfg.default_view_mode, cfg.sort_by));
-            state.left_pane.active_tab = state.left_pane.tabs.len().saturating_sub(1);
+            state.left_pane.active_tab_mut()
+        };
+        if is_virtual(&tab.path) {
+            return Ok(());
         }
-    }
-    inner.publish_refresh();
+        tab.branch_view = !tab.branch_view;
+        tab.selection.clear();
+        inner.reset_pane_viewport(pane);
+        tab.clone()
+    };
+    inner
+        .refresh_tabs_with_opts(
+            &[tab],
+            RefreshOpts {
+                publish: true,
+                indicate_loading: true,
+            },
+        )
+        .await;
     Ok(())
+}
+
+/// Jump `pane` to the drive / volume root of the current folder.
+pub async fn navigate_drive_root(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let current = {
+        let state = inner.state.lock();
+        let tab = if pane == 1 {
+            state
+                .right_pane
+                .as_ref()
+                .unwrap_or(&state.left_pane)
+                .active_tab()
+        } else {
+            state.left_pane.active_tab()
+        };
+        tab.path.clone()
+    };
+    let Some(root) = drive_root(&current) else {
+        return Ok(());
+    };
+    if root == current {
+        return Ok(());
+    }
+    navigate(instance_id, pane, root).await
 }
 
 /// Switch active pane focus.
@@ -3497,15 +3639,16 @@ pub fn selected_entries(instance_id: Uuid, pane: u8) -> Vec<(String, bool)> {
         .collect()
 }
 
-/// `(selection_count, item_count)` for the active tab in `pane`.
+/// `(selection_count, item_count, selected_bytes)` for the active tab in `pane`.
 #[must_use]
-pub fn selection_counts(instance_id: Uuid, pane: u8) -> Option<(u32, u32)> {
+pub fn selection_counts(instance_id: Uuid, pane: u8) -> Option<(u32, u32, u64)> {
     let inner = live_inner(instance_id).ok()?;
     let state = inner.state.lock();
     let tab = active_tab_ref(&state, pane).ok()?;
     let selection_count = tab.selection.count() as u32;
     let item_count = inner.filtered_paths_for_tab(tab).len() as u32;
-    Some((selection_count, item_count))
+    let bytes = inner.selection_bytes_in_tab(tab);
+    Some((selection_count, item_count, bytes))
 }
 
 /// Run a context-menu action against `target_paths`.
@@ -3571,6 +3714,40 @@ pub async fn run_action_with_opts(
             let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
             let is_dir = entry_is_directory(&inner, &fp, false).await;
             return open_path(instance_id, pane, p, is_dir).await;
+        }
+        "fs.open-tab" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            let folder = if let Some(p) = target_paths.first() {
+                folder_path_from_target(&inner, p).await
+            } else {
+                None
+            };
+            new_tab_at(instance_id, pane, folder).await?;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.open-other-pane" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            let folder = if let Some(p) = target_paths.first() {
+                folder_path_from_target(&inner, p).await
+            } else {
+                None
+            };
+            open_in_other_pane(instance_id, pane, folder).await?;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.branch-view" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            toggle_branch_view(instance_id, pane).await?;
+            return Ok(ActionOutcome::Done);
         }
         "fs.open-all" => {
             let mut files = Vec::new();
@@ -3673,9 +3850,7 @@ pub async fn run_action_with_opts(
             inner.deps.clipboard.cut(paths);
         }
         "fs.paste" => {
-            inner.paste_clipboard().await?;
-            inner.refresh_all_tabs().await;
-            return Ok(ActionOutcome::Done);
+            return inner.paste_clipboard().await;
         }
         "fs.rename" => {
             if target_paths.len() == 1 {
@@ -3686,23 +3861,127 @@ pub async fn run_action_with_opts(
                     current_name,
                 });
             }
+            if target_paths.len() > 1 {
+                return Ok(ActionOutcome::NeedsBatchRename {
+                    paths: target_paths,
+                });
+            }
         }
-        "fs.delete" => {
+        "fs.batch-rename" => {
+            if !target_paths.is_empty() {
+                return Ok(ActionOutcome::NeedsBatchRename {
+                    paths: target_paths,
+                });
+            }
+        }
+        "fs.delete" | "fs.delete-recycle" | "fs.delete-permanent" => {
             let cfg = inner.config.read().clone();
+            let recycle = match action_id {
+                "fs.delete-recycle" => true,
+                "fs.delete-permanent" => false,
+                _ => cfg.delete_to_recycle,
+            };
             if cfg.confirm_delete && !target_paths.is_empty() && !opts.skip_confirm {
-                let message = if cfg.delete_to_recycle {
+                let message = if recycle {
                     "fm-confirm-delete"
                 } else {
                     "fm-confirm-delete-permanent"
                 };
                 return Ok(ActionOutcome::NeedsConfirmation {
-                    // Fluent key resolved in the UI with `{ $n }` = paths.len().
                     message: message.into(),
                     action_id: action_id.to_string(),
                     paths: target_paths,
                 });
             }
-            inner.delete_paths(&target_paths).await?;
+            inner.delete_paths(&target_paths, Some(recycle)).await?;
+            inner.refresh_all_tabs().await;
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.copy-to-other" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            return copy_to_other_pane(
+                instance_id,
+                pane,
+                target_paths,
+                TransferOptions::default(),
+                opts.skip_confirm,
+            )
+            .await;
+        }
+        "fs.move-to-other" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            return move_to_other_pane(
+                instance_id,
+                pane,
+                target_paths,
+                TransferOptions::default(),
+                opts.skip_confirm,
+            )
+            .await;
+        }
+        "fs.copy-verify" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            return copy_to_other_pane(
+                instance_id,
+                pane,
+                target_paths,
+                TransferOptions {
+                    verify: true,
+                    ..TransferOptions::default()
+                },
+                opts.skip_confirm,
+            )
+            .await;
+        }
+        "fs.copy-newer" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            return copy_to_other_pane(
+                instance_id,
+                pane,
+                target_paths,
+                TransferOptions {
+                    newer_only: true,
+                    ..TransferOptions::default()
+                },
+                opts.skip_confirm,
+            )
+            .await;
+        }
+        "fs.copy-structure" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            return copy_to_other_pane(
+                instance_id,
+                pane,
+                target_paths,
+                TransferOptions {
+                    structure_only: true,
+                    ..TransferOptions::default()
+                },
+                opts.skip_confirm,
+            )
+            .await;
+        }
+        "fs.link-symlink" | "fs.link-hard" | "fs.link-junction" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            create_link_in_pane(instance_id, pane, &target_paths, action_id).await?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
@@ -3753,6 +4032,95 @@ pub async fn run_action_with_opts(
             };
             inner.deselect_all_in_pane(pane);
             return Ok(ActionOutcome::Done);
+        }
+        "fs.select-more" => {
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.invert-selection" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.invert_selection_in_pane(pane);
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.select-files" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.apply_filter_in_pane(
+                pane,
+                MaskOp::Replace,
+                &SelectFilter {
+                    folders: false,
+                    ..SelectFilter::default()
+                },
+            );
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.select-folders" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.apply_filter_in_pane(
+                pane,
+                MaskOp::Replace,
+                &SelectFilter {
+                    files: false,
+                    ..SelectFilter::default()
+                },
+            );
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.select-hidden" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.apply_filter_in_pane(
+                pane,
+                MaskOp::Add,
+                &SelectFilter {
+                    hidden: true,
+                    ..SelectFilter::default()
+                },
+            );
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.select-readonly" => {
+            let pane = match inner.state.lock().active_pane {
+                ActivePane::Left => 0,
+                ActivePane::Right => 1,
+            };
+            inner.apply_filter_in_pane(
+                pane,
+                MaskOp::Add,
+                &SelectFilter {
+                    readonly: true,
+                    ..SelectFilter::default()
+                },
+            );
+            return Ok(ActionOutcome::Done);
+        }
+        "fs.select-mask" | "fs.select-mask-add" => {
+            return Ok(ActionOutcome::NeedsSelectMask {
+                op: MaskOp::Add,
+                filter: false,
+            });
+        }
+        "fs.select-mask-sub" => {
+            return Ok(ActionOutcome::NeedsSelectMask {
+                op: MaskOp::Subtract,
+                filter: false,
+            });
+        }
+        "fs.select-filter" => {
+            return Ok(ActionOutcome::NeedsSelectMask {
+                op: MaskOp::Replace,
+                filter: true,
+            });
         }
         "fs.new-folder" => {
             let parent = {
@@ -3854,12 +4222,76 @@ pub async fn run_action_with_opts(
                 purpose: PassphrasePurpose::Reveal,
             });
         }
+        id if is_tools_action(id) => {
+            return tools::run(&inner, action_id, &target_paths, opts, None).await;
+        }
         _ => {
             // Unknown actions: treat as done for MVP.
         }
     }
     inner.publish_refresh();
     Ok(ActionOutcome::Done)
+}
+
+fn is_tools_action(id: &str) -> bool {
+    matches!(
+        id,
+        "fs.compare-dirs"
+            | "fs.compare-dirs-bytes"
+            | "fs.compare-files"
+            | "fs.sync-to-other"
+            | "fs.sync-from-other"
+            | "fs.sync-both"
+            | "fs.merge-to-other"
+            | "fs.split"
+            | "fs.join"
+            | "fs.hash-md5"
+            | "fs.hash-sha1"
+            | "fs.hash-sha256"
+            | "fs.hash-blake3"
+            | "fs.hash-crc32"
+            | "fs.hash-verify"
+            | "fs.encode-base64"
+            | "fs.decode-base64"
+            | "fs.encode-uue"
+            | "fs.decode-uue"
+            | "fs.attr-readonly-on"
+            | "fs.attr-readonly-off"
+            | "fs.attr-hidden-on"
+            | "fs.attr-hidden-off"
+            | "fs.attr-system-on"
+            | "fs.attr-system-off"
+            | "fs.attr-archive-on"
+            | "fs.attr-archive-off"
+            | "fs.touch-now"
+            | "fs.touch-set"
+            | "fs.case-lower"
+            | "fs.case-upper"
+            | "fs.case-title"
+            | "fs.chmod"
+            | "fs.chown"
+            | "fs.acl-view"
+            | "fs.acl-grant"
+            | "fs.acl-reset"
+    )
+}
+
+/// Finish a tool prompt (`NeedsToolPrompt`) with the user's `input`.
+pub async fn complete_tool(
+    instance_id: Uuid,
+    action_id: &str,
+    paths: Vec<String>,
+    input: &str,
+) -> WidgetResult<ActionOutcome> {
+    let inner = live_inner(instance_id)?;
+    tools::run(
+        &inner,
+        action_id,
+        &paths,
+        RunActionOpts { skip_confirm: true },
+        Some(input),
+    )
+    .await
 }
 
 /// Commit rename on the backing filesystem.
@@ -3973,6 +4405,59 @@ pub async fn select_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()>
 pub async fn deselect_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     inner.deselect_all_in_pane(pane);
+    Ok(())
+}
+
+/// Active pane index (0 left, 1 right) for `instance_id`.
+#[must_use]
+pub fn focused_pane(instance_id: Uuid) -> Option<u8> {
+    let inner = live_inner(instance_id).ok()?;
+    let pane = inner.state.lock().active_pane;
+    Some(match pane {
+        ActivePane::Left => 0,
+        ActivePane::Right => 1,
+    })
+}
+
+/// Invert the visible selection in `pane`'s active tab.
+pub async fn invert_selection_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.invert_selection_in_pane(pane);
+    Ok(())
+}
+
+/// Apply a name/attribute mask to the visible listing.
+pub async fn apply_select_filter(
+    instance_id: Uuid,
+    pane: u8,
+    op: MaskOp,
+    filter: SelectFilter,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.apply_filter_in_pane(pane, op, &filter);
+    Ok(())
+}
+
+/// Select listing indices `[from, to]` (inclusive). `additive` keeps the previous set.
+///
+/// `columns <= 1` selects a linear range (list / details). Otherwise the bounding
+/// rectangle of the two tile indices in an icon grid is selected.
+pub async fn select_index_range(
+    instance_id: Uuid,
+    pane: u8,
+    from: i32,
+    to: i32,
+    additive: bool,
+    columns: i32,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.select_index_range_in_pane(
+        pane,
+        from.max(0) as usize,
+        to.max(0) as usize,
+        additive,
+        columns.max(1) as usize,
+    );
     Ok(())
 }
 
@@ -4104,6 +4589,18 @@ async fn entry_is_directory(
     is_dir_hint
 }
 
+async fn folder_path_from_target(
+    inner: &FileManagerInner,
+    path: &str,
+) -> Option<orchid_fs::FsPath> {
+    let fp = orchid_fs::FsPath::new(path).ok()?;
+    if entry_is_directory(inner, &fp, false).await {
+        Some(fp)
+    } else {
+        fp.parent()
+    }
+}
+
 /// Refresh every tab in a live file-manager instance.
 pub async fn refresh_instance(instance_id: Uuid) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -4117,27 +4614,8 @@ pub async fn move_paths_to_directory(
     instance_id: Uuid,
     sources: Vec<String>,
     dest_dir: &str,
-) -> WidgetResult<()> {
-    if sources.is_empty() {
-        return Ok(());
-    }
-    let inner = live_inner(instance_id)?;
-    let dest = orchid_fs::FsPath::new(dest_dir).map_err(map_fs_error)?;
-    if let Some(provider) = inner.deps.registry.for_path(&dest) {
-        let meta = provider.metadata(&dest).await.map_err(map_fs_error)?;
-        if !matches!(meta.kind, orchid_fs::FsEntryKind::Directory) {
-            return Err(WidgetError::InvalidStateForOperation(
-                "fm-drop-not-directory".into(),
-            ));
-        }
-    } else {
-        return Err(WidgetError::InvalidStateForOperation(
-            "fm-drop-unavailable".into(),
-        ));
-    }
-    inner.transfer_paths(&sources, &dest, false).await?;
-    inner.refresh_all_tabs().await;
-    Ok(())
+) -> WidgetResult<ActionOutcome> {
+    transfer_into_directory(instance_id, sources, dest_dir, false).await
 }
 
 /// Copy `sources` into directory `dest_dir` (Ctrl+drag or Ctrl+OS drop).
@@ -4145,9 +4623,18 @@ pub async fn copy_paths_to_directory(
     instance_id: Uuid,
     sources: Vec<String>,
     dest_dir: &str,
-) -> WidgetResult<()> {
+) -> WidgetResult<ActionOutcome> {
+    transfer_into_directory(instance_id, sources, dest_dir, true).await
+}
+
+async fn transfer_into_directory(
+    instance_id: Uuid,
+    sources: Vec<String>,
+    dest_dir: &str,
+    is_copy: bool,
+) -> WidgetResult<ActionOutcome> {
     if sources.is_empty() {
-        return Ok(());
+        return Ok(ActionOutcome::Done);
     }
     let inner = live_inner(instance_id)?;
     let dest = orchid_fs::FsPath::new(dest_dir).map_err(map_fs_error)?;
@@ -4163,8 +4650,89 @@ pub async fn copy_paths_to_directory(
             "fm-drop-unavailable".into(),
         ));
     }
-    inner.transfer_paths(&sources, &dest, true).await?;
+    inner.transfer_paths(&sources, &dest, is_copy).await
+}
+
+/// Apply a batch-rename pattern to `paths`.
+pub async fn apply_batch_rename(
+    instance_id: Uuid,
+    paths: Vec<String>,
+    pattern: &str,
+    find: &str,
+    replace: &str,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    for (i, p) in paths.iter().enumerate() {
+        let old = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+        let Some(name) = old.file_name() else {
+            continue;
+        };
+        let new_name = batch_rename::apply_rename_pattern(name, i, pattern, find, replace);
+        if new_name.is_empty() || new_name == name {
+            continue;
+        }
+        let Some(parent) = old.parent() else {
+            continue;
+        };
+        let dest = parent.join(&new_name);
+        let Some(provider) = inner.deps.registry.for_path(&old) else {
+            continue;
+        };
+        provider.rename(&old, &dest).await.map_err(map_fs_error)?;
+    }
     inner.refresh_all_tabs().await;
+    Ok(())
+}
+
+async fn create_link_in_pane(
+    instance_id: Uuid,
+    pane: u8,
+    paths: &[String],
+    kind: &str,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let dest_dir = {
+        let state = inner.state.lock();
+        let tab = if pane == 1 {
+            state
+                .right_pane
+                .as_ref()
+                .unwrap_or(&state.left_pane)
+                .active_tab()
+        } else {
+            state.left_pane.active_tab()
+        };
+        tab.path.clone()
+    };
+    if is_virtual(&dest_dir) {
+        return Err(WidgetError::InvalidStateForOperation(
+            "fm-transfer-virtual-dest".into(),
+        ));
+    }
+    let Some(target_s) = paths.first() else {
+        return Ok(());
+    };
+    let target = orchid_fs::FsPath::new(target_s).map_err(map_fs_error)?;
+    let base = target.file_name().unwrap_or("link");
+    let suffix = match kind {
+        "fs.link-hard" => "hardlink",
+        "fs.link-junction" => "junction",
+        _ => "link",
+    };
+    let (stem, ext) = batch_rename::split_stem_ext(base);
+    let link_name = format!("{stem} - {suffix}{ext}");
+    let link = dest_dir.join(&link_name);
+    match kind {
+        "fs.link-hard" => orchid_fs::create_hard_link(&link, &target)
+            .await
+            .map_err(map_fs_error)?,
+        "fs.link-junction" => orchid_fs::create_junction(&link, &target)
+            .await
+            .map_err(map_fs_error)?,
+        _ => orchid_fs::create_symlink(&link, &target)
+            .await
+            .map_err(map_fs_error)?,
+    }
     Ok(())
 }
 
@@ -4203,6 +4771,9 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
                     .and_then(|uri| orchid_fs::FsPath::new(&uri).ok())
             })
         }
+        other if other.starts_with("drive:") => other
+            .strip_prefix("drive:")
+            .and_then(|p| orchid_fs::FsPath::new(p).ok()),
         other if other.starts_with("managed:") => {
             let idx = other
                 .strip_prefix("managed:")

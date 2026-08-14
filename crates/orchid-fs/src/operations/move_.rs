@@ -67,9 +67,7 @@ pub async fn move_(
     // Slow path: copy then delete source.
     let opts = CopyOptions {
         overwrite: false,
-        verify_content_hash: false,
-        preserve_timestamps: true,
-        follow_symlinks: true,
+        ..CopyOptions::default()
     };
     copy(registry, from, to, opts, progress, cancel.clone()).await?;
     if let Some(c) = &cancel {

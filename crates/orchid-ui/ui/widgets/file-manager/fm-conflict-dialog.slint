@@ -1,0 +1,146 @@
+import { Theme } from "../../theme_global.slint";
+import { FmConflictDialog } from "../../workspace/defs.slint";
+
+export component FmConflictDialog inherits Rectangle {
+    in property <FmConflictDialog> dialog;
+    in-out property <bool> apply-all: false;
+
+    callback choice(string, bool);
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.choice("cancel", false); }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 24px, 420px);
+        height: lay.preferred-height + 16px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
+        drop-shadow-color: #00000080;
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 10px;
+
+            Text {
+                text: dialog.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+            Text {
+                text: dialog.message;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-md;
+                wrap: word-wrap;
+            }
+
+            Rectangle {
+                height: 28px;
+                border-radius: Theme.radius-md;
+                apply-ta := TouchArea { clicked => { root.apply-all = !root.apply-all; } }
+                Text {
+                    text: (root.apply-all ? "☑ " : "☐ ") + dialog.apply-all-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                spacing: 6px;
+
+                Rectangle {
+                    height: 36px;
+                    background: ow-ta.has-hover ? Theme.accent-brand : #4d82ff88;
+                    border-radius: Theme.radius-md;
+                    ow-ta := TouchArea { clicked => { root.choice("overwrite", root.apply-all); } }
+                    Text {
+                        text: dialog.overwrite-label;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Rectangle {
+                        height: 32px;
+                        horizontal-stretch: 1;
+                        background: sk-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        sk-ta := TouchArea { clicked => { root.choice("skip", root.apply-all); } }
+                        Text {
+                            text: dialog.skip-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        height: 32px;
+                        horizontal-stretch: 1;
+                        background: rn-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        rn-ta := TouchArea { clicked => { root.choice("rename", root.apply-all); } }
+                        Text {
+                            text: dialog.rename-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Rectangle {
+                        height: 32px;
+                        horizontal-stretch: 1;
+                        background: ol-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        ol-ta := TouchArea { clicked => { root.choice("older", root.apply-all); } }
+                        Text {
+                            text: dialog.older-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+                    }
+                    if dialog.show-resume : Rectangle {
+                        height: 32px;
+                        horizontal-stretch: 1;
+                        background: rs-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        rs-ta := TouchArea { clicked => { root.choice("resume", root.apply-all); } }
+                        Text {
+                            text: dialog.resume-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        height: 32px;
+                        horizontal-stretch: 1;
+                        background: ca-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        ca-ta := TouchArea { clicked => { root.choice("cancel", false); } }
+                        Text {
+                            text: dialog.cancel-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

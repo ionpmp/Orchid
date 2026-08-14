@@ -96,6 +96,47 @@ impl Navigator {
         trail.reverse();
         trail
     }
+
+    /// Flatten nested files and folders under `path` (branch view).
+    pub async fn list_branch(
+        &self,
+        path: &orchid_fs::FsPath,
+        show_hidden: bool,
+    ) -> NavigationResult {
+        const MAX_ENTRIES: usize = 8000;
+        const MAX_DEPTH: usize = 6;
+        let mut entries = Vec::new();
+        let mut dirs = std::collections::VecDeque::from([(path.clone(), 0usize)]);
+        while let Some((dir, depth)) = dirs.pop_front() {
+            if entries.len() >= MAX_ENTRIES {
+                break;
+            }
+            let listed = self.navigate(&dir, show_hidden).await;
+            if listed.error.is_some() && depth == 0 {
+                return listed;
+            }
+            for e in listed.entries {
+                let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
+                if is_dir && depth + 1 < MAX_DEPTH {
+                    dirs.push_back((e.path.clone(), depth + 1));
+                }
+                let mut e = e;
+                e.name = relative_display_name(path, &e.path);
+                entries.push(e);
+                if entries.len() >= MAX_ENTRIES {
+                    break;
+                }
+            }
+        }
+        let total = entries.len();
+        NavigationResult {
+            entries,
+            breadcrumbs: self.breadcrumbs_for(path),
+            parent: path.parent(),
+            total_entries: total,
+            error: None,
+        }
+    }
 }
 
 /// One address-bar autocomplete row.
@@ -151,6 +192,85 @@ pub fn complete_parent_and_prefix(typed: &str) -> Option<(orchid_fs::FsPath, Str
     Some((coerce_typed_path(dir)?, prefix))
 }
 
+/// One local volume / mount shown in the drive switcher.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriveItem {
+    /// Canonical [`orchid_fs::FsPath`] string (`local:c:/`).
+    pub path: String,
+    /// Short label (`C:` or `C:  Windows`).
+    pub label: String,
+}
+
+/// Drive or volume root of `path` (`local:c:/foo` → `local:c:/`).
+#[must_use]
+pub fn drive_root(path: &orchid_fs::FsPath) -> Option<orchid_fs::FsPath> {
+    let body = path.without_scheme();
+    let bytes = body.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+        let letter = (bytes[0] as char).to_ascii_lowercase();
+        return orchid_fs::FsPath::new(format!("{}:{letter}:/", path.scheme())).ok();
+    }
+    if body.starts_with('/') {
+        return orchid_fs::FsPath::new(format!("{}:/", path.scheme())).ok();
+    }
+    None
+}
+
+/// Mounted local volumes for the drive switcher.
+#[must_use]
+pub fn list_local_drives() -> Vec<DriveItem> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let mut out: Vec<DriveItem> = Vec::new();
+    for disk in disks.list() {
+        let mp = disk.mount_point();
+        let Ok(fp) = orchid_fs::FsPath::from_local(mp) else {
+            continue;
+        };
+        let raw = mp.to_string_lossy();
+        let trimmed = raw.trim_end_matches(['\\', '/']);
+        let letter = if trimmed.len() >= 2 && trimmed.as_bytes()[1] == b':' {
+            format!(
+                "{}:",
+                trimmed.chars().next().unwrap_or('?').to_ascii_uppercase()
+            )
+        } else if trimmed.is_empty() {
+            fp.as_str().to_string()
+        } else {
+            trimmed.to_string()
+        };
+        let extra = disk.name().to_string_lossy();
+        let label = if extra.is_empty() {
+            letter
+        } else {
+            format!("{letter}  {extra}")
+        };
+        if out.iter().any(|d| d.path == fp.as_str()) {
+            continue;
+        }
+        out.push(DriveItem {
+            path: fp.as_str().to_string(),
+            label,
+        });
+    }
+    out.sort_by(|a, b| a.label.cmp(&b.label));
+    out
+}
+
+fn relative_display_name(root: &orchid_fs::FsPath, entry: &orchid_fs::FsPath) -> String {
+    let root_s = root.as_str().trim_end_matches('/');
+    let entry_s = entry.as_str();
+    entry_s
+        .strip_prefix(root_s)
+        .map(|rest| rest.trim_start_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            entry
+                .file_name()
+                .unwrap_or_else(|| entry.as_str())
+                .to_string()
+        })
+}
+
 #[cfg(test)]
 mod complete_tests {
     use super::*;
@@ -170,5 +290,25 @@ mod complete_tests {
         let (root, empty) = complete_parent_and_prefix("local:c:/").unwrap();
         assert_eq!(root.as_str(), "local:c:/");
         assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn drive_root_windows_and_unix() {
+        let win = orchid_fs::FsPath::new("local:c:/Users/docs").unwrap();
+        assert_eq!(drive_root(&win).unwrap().as_str(), "local:c:/");
+        let unix = orchid_fs::FsPath::new("local:/home/a").unwrap();
+        assert_eq!(drive_root(&unix).unwrap().as_str(), "local:/");
+    }
+
+    #[test]
+    fn relative_display_strips_root() {
+        let root = orchid_fs::FsPath::new("local:c:/proj").unwrap();
+        let nested = orchid_fs::FsPath::new("local:c:/proj/src/main.rs").unwrap();
+        assert_eq!(relative_display_name(&root, &nested), "src/main.rs");
+    }
+
+    #[test]
+    fn list_local_drives_does_not_panic() {
+        let _ = list_local_drives();
     }
 }

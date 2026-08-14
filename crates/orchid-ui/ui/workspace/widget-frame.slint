@@ -287,6 +287,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-context-dismiss(string);
     callback fm-confirm-yes(string);
     callback fm-confirm-no(string);
+    callback fm-conflict-choice(string, string, bool);
     callback fm-rename-commit(string, string, string);
     callback fm-rename-cancel(string);
     callback fm-tag-commit(string, string);
@@ -296,6 +297,9 @@ export component WidgetFrame inherits Rectangle {
     callback fm-passphrase-biometric(string);
     callback fm-managed-policy-close(string);
     callback fm-select-all(string, int);
+    callback fm-selection-command(string, int, string);
+    callback fm-nav-command(string, int, string);
+    callback fm-marquee-select(string, int, int, int, bool, int);
     callback fm-delete-selected(string, int);
     callback fm-copy-selected(string, int);
     callback fm-paste-clipboard(string, int);
@@ -481,12 +485,51 @@ export component WidgetFrame inherits Rectangle {
             Rectangle {
                 background: maximize-area.has-hover ? Theme.surface-raised : transparent;
                 border-radius: Theme.radius-md;
-                Text {
-                    text: model.window-state == 1 ? "❐" : "□";
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+
+                // Vector representation for Maximize / Restore
+                Rectangle {
+                    width: 12px;
+                    height: 12px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+
+                    if model.window-state == 1 : Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        // Background square (top-right)
+                        Rectangle {
+                            x: 3px;
+                            y: 0;
+                            width: 9px;
+                            height: 9px;
+                            border-width: 1.5px;
+                            border-color: Theme.text-secondary;
+                            border-radius: 1px;
+                            background: transparent;
+                        }
+                        // Foreground square (bottom-left)
+                        Rectangle {
+                            x: 0;
+                            y: 3px;
+                            width: 9px;
+                            height: 9px;
+                            border-width: 1.5px;
+                            border-color: Theme.text-secondary;
+                            border-radius: 1px;
+                            background: Theme.surface-base;
+                        }
+                    }
+
+                    if model.window-state != 1 : Rectangle {
+                        width: 10px;
+                        height: 10px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        border-width: 1.5px;
+                        border-color: Theme.text-secondary;
+                        border-radius: 1px;
+                        background: transparent;
+                    }
                 }
             }
         }
@@ -502,12 +545,14 @@ export component WidgetFrame inherits Rectangle {
             Rectangle {
                 background: minimize-area.has-hover ? Theme.surface-raised : transparent;
                 border-radius: Theme.radius-md;
-                Text {
-                    text: "–";
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+
+                // Vector representation for Minimize (flat horizontal line)
+                Rectangle {
+                    width: 10px;
+                    height: 1.5px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.text-secondary;
                 }
             }
         }
@@ -523,12 +568,26 @@ export component WidgetFrame inherits Rectangle {
             Rectangle {
                 background: dock-area.has-hover ? Theme.surface-raised : transparent;
                 border-radius: Theme.radius-md;
-                Text {
-                    text: "▣";
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+
+                // Vector representation for Dock (Square inside a square)
+                Rectangle {
+                    width: 12px;
+                    height: 12px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    border-width: 1.5px;
+                    border-color: Theme.text-secondary;
+                    border-radius: 1px;
+                    background: transparent;
+
+                    Rectangle {
+                        width: 5px;
+                        height: 5px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.text-secondary;
+                        border-radius: 0.5px;
+                    }
                 }
             }
         }
@@ -544,12 +603,37 @@ export component WidgetFrame inherits Rectangle {
             Rectangle {
                 background: undock-area.has-hover ? Theme.surface-raised : transparent;
                 border-radius: Theme.radius-md;
-                Text {
-                    text: "⧉";
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+
+                // Vector representation for Undock (Two overlapping squares)
+                Rectangle {
+                    width: 12px;
+                    height: 12px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+
+                    // Background square (bottom-left)
+                    Rectangle {
+                        x: 0;
+                        y: 3px;
+                        width: 9px;
+                        height: 9px;
+                        border-width: 1.5px;
+                        border-color: Theme.text-secondary;
+                        border-radius: 1px;
+                        background: transparent;
+                    }
+
+                    // Foreground square (top-right)
+                    Rectangle {
+                        x: 3px;
+                        y: 0;
+                        width: 9px;
+                        height: 9px;
+                        border-width: 1.5px;
+                        border-color: Theme.text-secondary;
+                        border-radius: 1px;
+                        background: Theme.surface-base;
+                    }
                 }
             }
         }
@@ -1000,6 +1084,7 @@ export component WidgetFrame inherits Rectangle {
                     context-dismiss => { root.fm-context-dismiss(root.model.instance-id); }
                     confirm-yes => { root.fm-confirm-yes(root.model.instance-id); }
                     confirm-no => { root.fm-confirm-no(root.model.instance-id); }
+                    conflict-choice(choice, all) => { root.fm-conflict-choice(root.model.instance-id, choice, all); }
                     rename-commit(old, new) => { root.fm-rename-commit(root.model.instance-id, old, new); }
                     rename-cancel => { root.fm-rename-cancel(root.model.instance-id); }
                     tag-commit(tag) => { root.fm-tag-commit(root.model.instance-id, tag); }
@@ -1009,6 +1094,9 @@ export component WidgetFrame inherits Rectangle {
                     passphrase-biometric => { root.fm-passphrase-biometric(root.model.instance-id); }
                     managed-policy-close => { root.fm-managed-policy-close(root.model.instance-id); }
                     select-all(p) => { root.fm-select-all(root.model.instance-id, p); }
+                    selection-command(p, cmd) => { root.fm-selection-command(root.model.instance-id, p, cmd); }
+                    nav-command(p, cmd) => { root.fm-nav-command(root.model.instance-id, p, cmd); }
+                    marquee-select(p, a, b, add, cols) => { root.fm-marquee-select(root.model.instance-id, p, a, b, add, cols); }
                     delete-selected(p) => { root.fm-delete-selected(root.model.instance-id, p); }
                     copy-selected(p) => { root.fm-copy-selected(root.model.instance-id, p); }
                     paste-clipboard(p) => { root.fm-paste-clipboard(root.model.instance-id, p); }

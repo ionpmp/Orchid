@@ -255,6 +255,23 @@ export component FmSidebarIcon inherits Rectangle {
         Rectangle { x: 4px; y: 8px; width: parent.width - 8px; height: 2px; background: Theme.accent-brand; }
     }
 
+    if icon-id == "sidebar-drive" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.35;
+            width: parent.width * 0.8; height: parent.height * 0.45;
+            border-radius: 2px;
+            background: Theme.accent-brand;
+        }
+        Rectangle {
+            x: parent.width * 0.35; y: parent.height * 0.18;
+            width: parent.width * 0.3; height: parent.height * 0.2;
+            border-radius: 1px;
+            background: Theme.accent-brand;
+        }
+    }
+
     if icon-id == "sidebar-network" || icon-id == "sidebar-mount" : Rectangle {
         width: parent.width;
         height: parent.height;

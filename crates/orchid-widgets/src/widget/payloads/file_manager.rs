@@ -25,6 +25,10 @@ pub struct FileManagerPayload {
     pub transfer_progress: f32,
     /// True when the active transfer is a copy (false = move).
     pub transfer_is_copy: bool,
+    /// True when the user paused the active transfer.
+    pub transfer_paused: bool,
+    /// Jobs waiting behind the active transfer.
+    pub transfer_queue: u32,
     /// File name currently being copied or moved.
     pub transfer_current: Option<String>,
     /// Recent transfer failure (raw message; localize in UI).
@@ -95,6 +99,8 @@ pub struct TabPayload {
     pub entries_offset: u32,
     pub selection_count: u32,
     pub item_count: u32,
+    /// Sum of selected file sizes (folders contribute their metadata size, often 0).
+    pub selection_bytes: u64,
     /// Managed-folder ingest stats when viewing a registered root.
     pub managed_files_tracked: Option<u32>,
     pub managed_dedup_bytes: Option<u64>,
@@ -104,6 +110,8 @@ pub struct TabPayload {
     /// Sort column index: 0 name, 1 size, 2 modified, 3 type.
     pub sort_by: u8,
     pub sort_descending: bool,
+    /// Flattened recursive listing of the current folder.
+    pub branch_view: bool,
 }
 
 /// One entry row.

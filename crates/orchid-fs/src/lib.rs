@@ -33,7 +33,14 @@ pub use managed::{
 };
 pub use mime::guess_mime;
 pub use operations::{
-    copy, delete, move_, CopyOptions, DeleteOptions, OperationProgress, ProgressSink,
+    acl_grant, acl_reset, acl_text, apply_attr_patch, apply_name_case, chmod, chown, compare_dirs,
+    compare_files, copy, copy_with_control, create_hard_link, create_junction, create_symlink,
+    decode_base64, decode_uue, decoded_path, delete, discover_parts, encode_base64, encode_uue,
+    format_hash_report, format_verify_report, hash_path, hash_paths, is_hash_sidecar, join_files,
+    join_output_name, move_, parse_mode, parse_timestamp, set_mtime, sidecar_path, split_file,
+    sync_dirs, verify_hash_file, write_hash_file, AttrPatch, CopyOptions, DeleteOptions, DiffKind,
+    DirDiff, FileCompare, HashAlgo, HashRecord, NameCase, OperationProgress, ProgressSink,
+    SyncMode, SyncStats, TransferControl, VerifyRow,
 };
 pub use path::FsPath;
 pub use provider::{

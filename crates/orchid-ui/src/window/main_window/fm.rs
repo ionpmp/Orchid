@@ -17,14 +17,16 @@ use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::WidgetPayload;
 
 use crate::slint_generated::{
-    FmConfirmDialog, FmPassphraseState, FmPathSuggest, FmRenameState, FmTagState, WidgetFrameModel,
+    FmConfirmDialog, FmConflictDialog, FmPassphraseState, FmPathSuggest, FmRenameState, FmTagState,
+    WidgetFrameModel,
 };
 use crate::window::errors::{fm_localized_error, is_passphrase_retryable};
 use crate::window::models::{
-    build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_context_menu,
-    empty_managed_policy_state, empty_passphrase_state, empty_rename_state, empty_tag_state,
-    fm_grid_window, fm_list_window, fm_passphrase_dialog_labels, patch_fm_selection,
-    sync_fm_path_suggestions, FileManagerOverlays, FmViewport,
+    build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_conflict_dialog,
+    empty_context_menu, empty_fm_overlays, empty_managed_policy_state, empty_passphrase_state,
+    empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
+    fm_passphrase_dialog_labels, patch_fm_selection, sync_fm_path_suggestions, FileManagerOverlays,
+    FmViewport,
 };
 use crate::window::spawn;
 
@@ -189,7 +191,7 @@ impl MainWindowController {
                 .into_iter()
                 .map(|(p, _)| p)
                 .collect();
-        let Some((selection_count, item_count)) =
+        let Some((selection_count, item_count, selection_bytes)) =
             orchid_widgets::builtin::file_manager::selection_counts(inst, pane)
         else {
             return false;
@@ -217,6 +219,7 @@ impl MainWindowController {
                 &selected,
                 selection_count,
                 item_count,
+                selection_bytes,
                 &self.locale,
             );
         }
@@ -450,10 +453,17 @@ impl MainWindowController {
                 )
                 .await
             };
-            if let Err(e) = result {
-                warn!(?e, dest = %dest, copy, "fm drag drop");
-                if let Some(c) = tw.upgrade() {
-                    c.notify_fm_action_failed(&e);
+            match result {
+                Ok(outcome) => {
+                    if let Some(c) = tw.upgrade() {
+                        c.apply_fm_action_outcome(target_inst, outcome);
+                    }
+                }
+                Err(e) => {
+                    warn!(?e, dest = %dest, copy, "fm drag drop");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                 }
             }
             if source_inst != target_inst {
@@ -605,10 +615,17 @@ impl MainWindowController {
                 orchid_widgets::builtin::file_manager::move_paths_to_directory(inst, paths, &dest)
                     .await
             };
-            if let Err(e) = result {
-                warn!(?e, dest = %dest, copy, "fm os file drop");
-                if let Some(c) = tw.upgrade() {
-                    c.notify_fm_action_failed(&e);
+            match result {
+                Ok(outcome) => {
+                    if let Some(c) = tw.upgrade() {
+                        c.apply_fm_action_outcome(inst, outcome);
+                    }
+                }
+                Err(e) => {
+                    warn!(?e, dest = %dest, copy, "fm os file drop");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
                 }
             }
             if let Some(c) = tw.upgrade() {
@@ -626,6 +643,16 @@ impl MainWindowController {
 
     pub(super) fn fm_selected_entries(&self, inst: Uuid, pane: u8) -> Vec<(String, bool)> {
         orchid_widgets::builtin::file_manager::selected_entries(inst, pane)
+    }
+
+    fn fm_selected_folder(&self, inst: Uuid, pane: u8) -> Option<orchid_fs::FsPath> {
+        let (path, is_dir) = self.fm_selected_entries(inst, pane).into_iter().next()?;
+        let fp = orchid_fs::FsPath::new(&path).ok()?;
+        if is_dir {
+            Some(fp)
+        } else {
+            fp.parent()
+        }
     }
 
     pub(super) fn fm_entry_is_dir(&self, inst: Uuid, pane: u8, path: &str) -> bool {
@@ -1790,9 +1817,13 @@ impl MainWindowController {
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.context_menu = empty_context_menu();
                 entry.confirm_dialog = empty_confirm_dialog();
+                entry.conflict_dialog = empty_conflict_dialog();
                 entry.rename = empty_rename_state();
                 entry.tag = empty_tag_state();
                 entry.tag_paths.clear();
+                entry.batch_rename_paths.clear();
+                entry.tool_action = None;
+                entry.tool_paths.clear();
                 entry.create_folder_parent = None;
                 entry.create_item_is_file = false;
                 entry.drag_active = false;
@@ -1808,15 +1839,20 @@ impl MainWindowController {
                 paths,
             } => {
                 let n = paths.len();
-                let message_text =
-                    if message == "fm-confirm-delete" || message == "fm-confirm-delete-permanent" {
-                        self.locale.tr_args(
-                            &message,
-                            &orchid_i18n::FluentArgs::new().with("n", n.to_string()),
-                        )
-                    } else {
-                        message
-                    };
+                let message_text = if matches!(
+                    message.as_str(),
+                    "fm-confirm-delete"
+                        | "fm-confirm-delete-permanent"
+                        | "fm-confirm-copy"
+                        | "fm-confirm-move"
+                ) {
+                    self.locale.tr_args(
+                        &message,
+                        &orchid_i18n::FluentArgs::new().with("n", n.to_string()),
+                    )
+                } else {
+                    message
+                };
                 let dlg = FmConfirmDialog {
                     visible: true,
                     title: self.locale.tr("fm-confirm-title").into(),
@@ -1851,6 +1887,15 @@ impl MainWindowController {
                     path: path.into(),
                     proposed_name: current_name.into(),
                     title: self.locale.tr("fm-rename-title").into(),
+                    hint: SharedString::new(),
+                    show_filter: false,
+                    files_label: SharedString::new(),
+                    folders_label: SharedString::new(),
+                    size_min_label: SharedString::new(),
+                    size_max_label: SharedString::new(),
+                    hidden_label: SharedString::new(),
+                    readonly_label: SharedString::new(),
+                    days_label: SharedString::new(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
@@ -1868,6 +1913,15 @@ impl MainWindowController {
                     path: SharedString::new(),
                     proposed_name: self.locale.tr("fm-action-new-folder").into(),
                     title: self.locale.tr("fm-action-new-folder").into(),
+                    hint: SharedString::new(),
+                    show_filter: false,
+                    files_label: SharedString::new(),
+                    folders_label: SharedString::new(),
+                    size_min_label: SharedString::new(),
+                    size_max_label: SharedString::new(),
+                    hidden_label: SharedString::new(),
+                    readonly_label: SharedString::new(),
+                    days_label: SharedString::new(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
@@ -1885,6 +1939,15 @@ impl MainWindowController {
                     path: SharedString::new(),
                     proposed_name: self.locale.tr("fm-new-file-name").into(),
                     title: self.locale.tr("fm-action-new-file").into(),
+                    hint: SharedString::new(),
+                    show_filter: false,
+                    files_label: SharedString::new(),
+                    folders_label: SharedString::new(),
+                    size_min_label: SharedString::new(),
+                    size_max_label: SharedString::new(),
+                    hidden_label: SharedString::new(),
+                    readonly_label: SharedString::new(),
+                    days_label: SharedString::new(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
@@ -1900,6 +1963,51 @@ impl MainWindowController {
                     active: true,
                     proposed_tag: SharedString::new(),
                     title: self.locale.tr("fm-tag-add-title").into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsSelectMask {
+                op,
+                filter,
+            } => {
+                let (title, hint) = if filter {
+                    (
+                        self.locale.tr("fm-select-filter-title"),
+                        self.locale.tr("fm-select-filter-hint"),
+                    )
+                } else if matches!(op, orchid_widgets::builtin::file_manager::MaskOp::Subtract) {
+                    (
+                        self.locale.tr("fm-deselect-mask-title"),
+                        self.locale.tr("fm-select-mask-hint"),
+                    )
+                } else {
+                    (
+                        self.locale.tr("fm-select-mask-title"),
+                        self.locale.tr("fm-select-mask-hint"),
+                    )
+                };
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.select_mask_op = Some(op);
+                entry.create_folder_parent = None;
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: "orchid:select-mask".into(),
+                    proposed_name: "*.*".into(),
+                    title: title.into(),
+                    hint: hint.into(),
+                    show_filter: filter,
+                    files_label: self.locale.tr("fm-select-filter-files").into(),
+                    folders_label: self.locale.tr("fm-select-filter-folders").into(),
+                    size_min_label: self.locale.tr("fm-select-filter-size-min").into(),
+                    size_max_label: self.locale.tr("fm-select-filter-size-max").into(),
+                    hidden_label: self.locale.tr("fm-select-filter-hidden").into(),
+                    readonly_label: self.locale.tr("fm-select-filter-readonly").into(),
+                    days_label: self.locale.tr("fm-select-filter-days").into(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };
@@ -1943,6 +2051,120 @@ impl MainWindowController {
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.managed_policy =
                     build_managed_policy_state(self.locale.as_ref(), &path, policy.as_ref());
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsConflict {
+                dest_name,
+                can_resume,
+                ..
+            } => {
+                let dlg = FmConflictDialog {
+                    visible: true,
+                    title: self.locale.tr("fm-conflict-title").into(),
+                    message: self
+                        .locale
+                        .tr_args(
+                            "fm-conflict-message",
+                            &orchid_i18n::FluentArgs::new().with("name", dest_name.clone()),
+                        )
+                        .into(),
+                    dest_name: dest_name.into(),
+                    show_resume: can_resume,
+                    apply_all_label: self.locale.tr("fm-conflict-apply-all").into(),
+                    overwrite_label: self.locale.tr("fm-conflict-overwrite").into(),
+                    skip_label: self.locale.tr("fm-conflict-skip").into(),
+                    rename_label: self.locale.tr("fm-conflict-rename").into(),
+                    older_label: self.locale.tr("fm-conflict-older").into(),
+                    resume_label: self.locale.tr("fm-conflict-resume").into(),
+                    cancel_label: self.locale.tr("fm-transfer-cancel").into(),
+                };
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.conflict_dialog = dlg;
+                entry.confirm_dialog = empty_confirm_dialog();
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsReport { title, body } => {
+                let dlg = FmConfirmDialog {
+                    visible: true,
+                    title: title.into(),
+                    message: body.into(),
+                    confirm_label: self.locale.tr("fm-info-close").into(),
+                    cancel_label: SharedString::new(),
+                    pending_action: SharedString::new(),
+                    pending_paths: ModelRc::new(VecModel::default()),
+                };
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.confirm_dialog = dlg;
+                entry.rename = empty_rename_state();
+                entry.tool_action = None;
+                entry.tool_paths.clear();
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsToolPrompt {
+                action_id,
+                paths,
+                proposed,
+                title,
+                hint,
+            } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.tool_action = Some(action_id);
+                entry.tool_paths = paths;
+                entry.create_folder_parent = None;
+                entry.create_item_is_file = false;
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: "orchid:tool".into(),
+                    proposed_name: proposed.into(),
+                    title: title.into(),
+                    hint: hint.into(),
+                    show_filter: false,
+                    files_label: SharedString::new(),
+                    folders_label: SharedString::new(),
+                    size_min_label: SharedString::new(),
+                    size_max_label: SharedString::new(),
+                    hidden_label: SharedString::new(),
+                    readonly_label: SharedString::new(),
+                    days_label: SharedString::new(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsBatchRename { paths } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.batch_rename_paths = paths;
+                entry.create_folder_parent = None;
+                entry.create_item_is_file = false;
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: "orchid:batch-rename".into(),
+                    proposed_name: "{name}_{n}{ext}".into(),
+                    title: self.locale.tr("fm-batch-rename-title").into(),
+                    hint: self.locale.tr("fm-batch-rename-hint").into(),
+                    show_filter: false,
+                    files_label: SharedString::new(),
+                    folders_label: SharedString::new(),
+                    size_min_label: SharedString::new(),
+                    size_max_label: SharedString::new(),
+                    hidden_label: SharedString::new(),
+                    readonly_label: SharedString::new(),
+                    days_label: SharedString::new(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
                 entry.context_menu = empty_context_menu();
                 drop(over);
                 self.schedule_rebuild();
@@ -2084,19 +2306,7 @@ impl MainWindowController {
                 }
             };
             if let Some(c) = tw.upgrade() {
-                match outcome {
-                    orchid_widgets::builtin::file_manager::ActionOutcome::Done => {
-                        let mut over = c.fm_overlays.write();
-                        let entry = over.entry(inst).or_insert_with(default_fm_overlays);
-                        entry.confirm_dialog = empty_confirm_dialog();
-                        entry.context_menu = empty_context_menu();
-                        drop(over);
-                        c.schedule_rebuild();
-                    }
-                    other => {
-                        warn!(?other, "unexpected outcome after fm confirm");
-                    }
-                }
+                c.apply_fm_action_outcome(inst, outcome);
             }
         });
     }
@@ -2119,6 +2329,153 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
             return;
         };
+        let mask_op = self
+            .fm_overlays
+            .read()
+            .get(&inst)
+            .and_then(|o| o.select_mask_op);
+        if let Some(op) = mask_op {
+            let packed = new_name.to_string();
+            let filter = parse_select_filter_commit(&packed);
+            let pane = orchid_widgets::builtin::file_manager::focused_pane(inst).unwrap_or(0);
+            let tw = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                if let Err(e) = orchid_widgets::builtin::file_manager::apply_select_filter(
+                    inst, pane, op, filter,
+                )
+                .await
+                {
+                    warn!(?e, "fm select mask");
+                }
+                if let Some(c) = tw.upgrade() {
+                    let mut over = c.fm_overlays.write();
+                    let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                    entry.rename = empty_rename_state();
+                    entry.select_mask_op = None;
+                    drop(over);
+                    c.fm_refresh_selection_ui(inst, pane);
+                    c.schedule_rebuild();
+                }
+            });
+            return;
+        }
+        let batch_paths = self
+            .fm_overlays
+            .read()
+            .get(&inst)
+            .map(|o| o.batch_rename_paths.clone())
+            .unwrap_or_default();
+        if !batch_paths.is_empty() {
+            let pattern = new_name.to_string();
+            let tw = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                if let Err(e) = orchid_widgets::builtin::file_manager::apply_batch_rename(
+                    inst,
+                    batch_paths,
+                    &pattern,
+                    "",
+                    "",
+                )
+                .await
+                {
+                    warn!(?e, "fm batch rename");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
+                }
+                if let Some(c) = tw.upgrade() {
+                    let mut over = c.fm_overlays.write();
+                    let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                    entry.rename = empty_rename_state();
+                    entry.batch_rename_paths.clear();
+                    drop(over);
+                    c.schedule_rebuild();
+                }
+            });
+            return;
+        }
+        if old_path.as_str() == "orchid:tool" {
+            let (action, paths) = self
+                .fm_overlays
+                .read()
+                .get(&inst)
+                .map(|o| {
+                    (
+                        o.tool_action.clone().unwrap_or_default(),
+                        o.tool_paths.clone(),
+                    )
+                })
+                .unwrap_or_default();
+            if action.is_empty() {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.rename = empty_rename_state();
+                entry.tool_action = None;
+                entry.tool_paths.clear();
+                drop(over);
+                self.schedule_rebuild();
+                return;
+            }
+            let input = new_name.to_string();
+            let tw = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                match orchid_widgets::builtin::file_manager::complete_tool(
+                    inst, &action, paths, &input,
+                )
+                .await
+                {
+                    Ok(outcome) => {
+                        if let Some(c) = tw.upgrade() {
+                            let mut over = c.fm_overlays.write();
+                            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                            entry.rename = empty_rename_state();
+                            entry.tool_action = None;
+                            entry.tool_paths.clear();
+                            drop(over);
+                            c.apply_fm_action_outcome(inst, outcome);
+                        }
+                    }
+                    Err(e) => {
+                        warn!(?e, "fm tool prompt");
+                        if let Some(c) = tw.upgrade() {
+                            c.notify_fm_action_failed(&e);
+                        }
+                    }
+                }
+            });
+            return;
+        }
+        if old_path.as_str() == "orchid:conflict-rename" {
+            let newn = new_name.to_string();
+            let tw = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                let result = orchid_widgets::builtin::file_manager::apply_conflict(
+                    inst,
+                    orchid_widgets::builtin::file_manager::ConflictChoice::Rename,
+                    false,
+                    Some(newn),
+                )
+                .await;
+                match result {
+                    Ok(outcome) => {
+                        if let Some(c) = tw.upgrade() {
+                            let mut over = c.fm_overlays.write();
+                            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                            entry.rename = empty_rename_state();
+                            drop(over);
+                            c.apply_fm_action_outcome(inst, outcome);
+                        }
+                    }
+                    Err(e) => {
+                        warn!(?e, "fm conflict rename");
+                        if let Some(c) = tw.upgrade() {
+                            c.notify_fm_action_failed(&e);
+                        }
+                    }
+                }
+            });
+            return;
+        }
         let (create_parent, create_file) = self
             .fm_overlays
             .read()
@@ -2177,11 +2534,105 @@ impl MainWindowController {
         };
         let mut over = self.fm_overlays.write();
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+        let restore_conflict = entry.rename.path.as_str() == "orchid:conflict-rename";
         entry.rename = empty_rename_state();
         entry.create_folder_parent = None;
         entry.create_item_is_file = false;
+        entry.select_mask_op = None;
+        entry.batch_rename_paths.clear();
+        entry.tool_action = None;
+        entry.tool_paths.clear();
+        if restore_conflict {
+            entry.conflict_dialog.visible = true;
+        }
         drop(over);
         self.schedule_rebuild();
+    }
+    pub(super) fn on_fm_conflict_choice(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        choice: &SharedString,
+        apply_all: bool,
+    ) {
+        let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
+            return;
+        };
+        let ch = choice.to_string();
+        if ch == "cancel" {
+            if let Err(e) = orchid_widgets::builtin::file_manager::cancel_transfer(inst) {
+                warn!(?e, "fm conflict cancel");
+            }
+            let mut over = self.fm_overlays.write();
+            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+            entry.conflict_dialog = empty_conflict_dialog();
+            drop(over);
+            self.schedule_rebuild();
+            return;
+        }
+        if ch == "rename" && !apply_all {
+            let dest_name = self
+                .fm_overlays
+                .read()
+                .get(&inst)
+                .map(|o| o.conflict_dialog.dest_name.clone())
+                .unwrap_or_default();
+            let mut over = self.fm_overlays.write();
+            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+            entry.conflict_dialog.visible = false;
+            entry.rename = FmRenameState {
+                active: true,
+                path: "orchid:conflict-rename".into(),
+                proposed_name: dest_name,
+                title: self.locale.tr("fm-conflict-rename").into(),
+                hint: SharedString::new(),
+                show_filter: false,
+                files_label: SharedString::new(),
+                folders_label: SharedString::new(),
+                size_min_label: SharedString::new(),
+                size_max_label: SharedString::new(),
+                hidden_label: SharedString::new(),
+                readonly_label: SharedString::new(),
+                days_label: SharedString::new(),
+                ok_label: self.locale.tr("fm-rename-ok").into(),
+                cancel_label: self.locale.tr("fm-rename-cancel").into(),
+            };
+            drop(over);
+            self.schedule_rebuild();
+            return;
+        }
+        let mapped = match ch.as_str() {
+            "overwrite" => orchid_widgets::builtin::file_manager::ConflictChoice::Overwrite,
+            "skip" => orchid_widgets::builtin::file_manager::ConflictChoice::Skip,
+            "older" => orchid_widgets::builtin::file_manager::ConflictChoice::OverwriteOlder,
+            "resume" => orchid_widgets::builtin::file_manager::ConflictChoice::Resume,
+            "rename" => orchid_widgets::builtin::file_manager::ConflictChoice::Rename,
+            _ => return,
+        };
+        {
+            let mut over = self.fm_overlays.write();
+            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+            entry.conflict_dialog = empty_conflict_dialog();
+        }
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            match orchid_widgets::builtin::file_manager::apply_conflict(
+                inst, mapped, apply_all, None,
+            )
+            .await
+            {
+                Ok(outcome) => {
+                    if let Some(c) = tw.upgrade() {
+                        c.apply_fm_action_outcome(inst, outcome);
+                    }
+                }
+                Err(e) => {
+                    warn!(?e, "fm conflict choice");
+                    if let Some(c) = tw.upgrade() {
+                        c.notify_fm_action_failed(&e);
+                    }
+                }
+            }
+        });
     }
     pub(super) fn on_fm_tag_commit(self: &Arc<Self>, fm_id: &SharedString, tag: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
@@ -2442,6 +2893,170 @@ impl MainWindowController {
         };
         self.spawn_fm_action(inst, "fs.paste", Vec::new());
     }
+    pub(super) fn on_fm_selection_command(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        command: &SharedString,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let cmd = command.to_string();
+        match cmd.as_str() {
+            "invert" => {
+                let tw = Arc::downgrade(self);
+                spawn::spawn_local_compat(async move {
+                    if let Err(e) =
+                        orchid_widgets::builtin::file_manager::invert_selection_in_pane(inst, p)
+                            .await
+                    {
+                        warn!(?e, "fm invert");
+                        return;
+                    }
+                    if let Some(c) = tw.upgrade() {
+                        c.fm_refresh_selection_ui(inst, p);
+                    }
+                });
+            }
+            "mask-add" => self.spawn_fm_action(inst, "fs.select-mask-add", Vec::new()),
+            "mask-sub" => self.spawn_fm_action(inst, "fs.select-mask-sub", Vec::new()),
+            "filter" => self.spawn_fm_action(inst, "fs.select-filter", Vec::new()),
+            _ => {}
+        }
+    }
+    pub(super) fn on_fm_nav_command(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        command: &SharedString,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let cmd = command.to_string();
+        match cmd.as_str() {
+            "pause" => {
+                if let Err(e) = orchid_widgets::builtin::file_manager::pause_transfer(inst) {
+                    warn!(?e, "fm pause");
+                }
+                self.schedule_rebuild();
+                return;
+            }
+            "resume" => {
+                if let Err(e) = orchid_widgets::builtin::file_manager::resume_transfer(inst) {
+                    warn!(?e, "fm resume");
+                }
+                self.schedule_rebuild();
+                return;
+            }
+            "cancel" => {
+                if let Err(e) = orchid_widgets::builtin::file_manager::cancel_transfer(inst) {
+                    warn!(?e, "fm cancel transfer");
+                }
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.conflict_dialog = empty_conflict_dialog();
+                drop(over);
+                self.schedule_rebuild();
+                return;
+            }
+            "copy-other" => {
+                self.spawn_fm_action(inst, "fs.copy-to-other", self.fm_selected_paths(inst, p));
+                return;
+            }
+            "move-other" => {
+                self.spawn_fm_action(inst, "fs.move-to-other", self.fm_selected_paths(inst, p));
+                return;
+            }
+            "delete-perm" => {
+                let paths = self.fm_selected_paths(inst, p);
+                if !paths.is_empty() {
+                    self.spawn_fm_action(inst, "fs.delete-permanent", paths);
+                }
+                return;
+            }
+            "cut" => {
+                let paths = self.fm_selected_paths(inst, p);
+                if !paths.is_empty() {
+                    self.spawn_fm_action(inst, "fs.cut", paths);
+                }
+                return;
+            }
+            "new-file" => {
+                self.spawn_fm_action(inst, "fs.new-file", Vec::new());
+                return;
+            }
+            "batch-rename" => {
+                let paths = self.fm_selected_paths(inst, p);
+                if !paths.is_empty() {
+                    self.spawn_fm_action(inst, "fs.batch-rename", paths);
+                }
+                return;
+            }
+            _ => {}
+        }
+        let folder = self.fm_selected_folder(inst, p);
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            let result = match cmd.as_str() {
+                "drive-root" => {
+                    orchid_widgets::builtin::file_manager::navigate_drive_root(inst, p).await
+                }
+                "branch" => {
+                    orchid_widgets::builtin::file_manager::toggle_branch_view(inst, p).await
+                }
+                "open-tab" => {
+                    orchid_widgets::builtin::file_manager::new_tab_at(inst, p, folder).await
+                }
+                "other-pane" => {
+                    orchid_widgets::builtin::file_manager::open_in_other_pane(inst, p, folder).await
+                }
+                _ => Ok(()),
+            };
+            if let Err(e) = result {
+                warn!(?e, %cmd, "fm nav-command");
+                return;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.reset_fm_pane_viewport(inst, p);
+                if cmd == "other-pane" {
+                    c.reset_fm_pane_viewport(inst, if p == 1 { 0 } else { 1 });
+                }
+                c.fm_refresh_ui(inst).await;
+            }
+        });
+    }
+    pub(super) fn on_fm_marquee_select(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        from: i32,
+        to: i32,
+        additive: bool,
+        columns: i32,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            if let Err(e) = orchid_widgets::builtin::file_manager::select_index_range(
+                inst, p, from, to, additive, columns,
+            )
+            .await
+            {
+                warn!(?e, "fm marquee");
+                return;
+            }
+            if let Some(c) = tw.upgrade() {
+                c.fm_refresh_selection_ui(inst, p);
+            }
+        });
+    }
     pub(super) fn on_fm_rename_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
@@ -2483,21 +3098,34 @@ impl MainWindowController {
 }
 
 fn default_fm_overlays() -> FileManagerOverlays {
-    FileManagerOverlays {
-        context_menu: empty_context_menu(),
-        confirm_dialog: empty_confirm_dialog(),
-        rename: empty_rename_state(),
-        tag: empty_tag_state(),
-        tag_paths: Vec::new(),
-        passphrase: empty_passphrase_state(),
-        managed_policy: empty_managed_policy_state(),
-        passphrase_paths: Vec::new(),
-        passphrase_purpose: None,
-        create_folder_parent: None,
-        create_item_is_file: false,
-        drag_active: false,
-        drag_paths: Vec::new(),
-        drag_drop_target: String::new(),
-        drag_target_pane: -1,
+    empty_fm_overlays()
+}
+
+fn parse_select_filter_commit(raw: &str) -> orchid_widgets::builtin::file_manager::SelectFilter {
+    use orchid_widgets::builtin::file_manager::{parse_byte_size, SelectFilter};
+    if !raw.contains('\n') {
+        return SelectFilter::name_mask(raw);
+    }
+    let mut parts = raw.split('\n');
+    let pattern = parts.next().unwrap_or("*").to_string();
+    let files = parts.next() != Some("0");
+    let folders = parts.next() != Some("0");
+    let min_size = parts.next().and_then(parse_byte_size);
+    let max_size = parts.next().and_then(parse_byte_size);
+    let hidden = parts.next() == Some("1");
+    let readonly = parts.next() == Some("1");
+    let newer_than_days = parts
+        .next()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .filter(|d| *d > 0);
+    SelectFilter {
+        pattern,
+        files,
+        folders,
+        min_size,
+        max_size,
+        hidden,
+        readonly,
+        newer_than_days,
     }
 }

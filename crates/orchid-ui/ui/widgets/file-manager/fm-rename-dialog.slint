@@ -7,11 +7,32 @@ export component FmRenameDialog inherits Rectangle {
     callback cancel();
 
     property <string> edited-name: state.proposed-name;
+    property <bool> files-on: true;
+    property <bool> folders-on: true;
+    property <string> size-min: "";
+    property <string> size-max: "";
+    property <bool> hidden-on: false;
+    property <bool> readonly-on: false;
+    property <string> days: "";
 
     background: #00000080;
 
     backdrop-ta := TouchArea {
         clicked => { root.cancel(); }
+    }
+
+    function packed-payload() -> string {
+        if (!state.show-filter) {
+            return root.edited-name;
+        }
+        return root.edited-name + "\n"
+            + (root.files-on ? "1" : "0") + "\n"
+            + (root.folders-on ? "1" : "0") + "\n"
+            + root.size-min + "\n"
+            + root.size-max + "\n"
+            + (root.hidden-on ? "1" : "0") + "\n"
+            + (root.readonly-on ? "1" : "0") + "\n"
+            + root.days;
     }
 
     Rectangle {
@@ -35,6 +56,13 @@ export component FmRenameDialog inherits Rectangle {
                 font-weight: Theme.weight-semibold;
             }
 
+            if state.hint != "" : Text {
+                text: state.hint;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
             Rectangle {
                 height: 32px;
                 background: Theme.surface-base;
@@ -55,6 +83,128 @@ export component FmRenameDialog inherits Rectangle {
                         horizontal-stretch: 1;
                         single-line: true;
                         edited => { root.edited-name = self.text; }
+                    }
+                }
+            }
+
+            if state.show-filter : HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 28px;
+                    border-radius: Theme.radius-md;
+                    background: files-ta.has-hover ? Theme.surface-base : transparent;
+                    files-ta := TouchArea { clicked => { root.files-on = !root.files-on; } }
+                    Text {
+                        text: (root.files-on ? "☑ " : "☐ ") + state.files-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 28px;
+                    border-radius: Theme.radius-md;
+                    background: folders-ta.has-hover ? Theme.surface-base : transparent;
+                    folders-ta := TouchArea { clicked => { root.folders-on = !root.folders-on; } }
+                    Text {
+                        text: (root.folders-on ? "☑ " : "☐ ") + state.folders-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            if state.show-filter : HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: state.size-min-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 28px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TextInput {
+                            text: root.size-min;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.size-min = self.text; }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: state.size-max-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 28px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TextInput {
+                            text: root.size-max;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.size-max = self.text; }
+                        }
+                    }
+                }
+            }
+
+            if state.show-filter : HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 28px;
+                    border-radius: Theme.radius-md;
+                    hidden-ta := TouchArea { clicked => { root.hidden-on = !root.hidden-on; } }
+                    Text {
+                        text: (root.hidden-on ? "☑ " : "☐ ") + state.hidden-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 28px;
+                    border-radius: Theme.radius-md;
+                    ro-ta := TouchArea { clicked => { root.readonly-on = !root.readonly-on; } }
+                    Text {
+                        text: (root.readonly-on ? "☑ " : "☐ ") + state.readonly-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            if state.show-filter : VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: state.days-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                }
+                Rectangle {
+                    height: 28px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    TextInput {
+                        text: root.days;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        single-line: true;
+                        edited => { root.days = self.text; }
                     }
                 }
             }
@@ -84,7 +234,7 @@ export component FmRenameDialog inherits Rectangle {
                     background: ok-ta.has-hover ? Theme.accent-brand : #4d82ff88;
                     border-radius: Theme.radius-md;
                     ok-ta := TouchArea {
-                        clicked => { root.commit(state.path, root.edited-name); }
+                        clicked => { root.commit(state.path, root.packed-payload()); }
                     }
                     Text {
                         text: state.ok-label;

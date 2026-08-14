@@ -252,6 +252,7 @@ export component WorkspaceView inherits Rectangle {
     callback fm-context-dismiss(string);
     callback fm-confirm-yes(string);
     callback fm-confirm-no(string);
+    callback fm-conflict-choice(string, string, bool);
     callback fm-rename-commit(string, string, string);
     callback fm-rename-cancel(string);
     callback fm-tag-commit(string, string);
@@ -261,6 +262,9 @@ export component WorkspaceView inherits Rectangle {
     callback fm-passphrase-biometric(string);
     callback fm-managed-policy-close(string);
     callback fm-select-all(string, int);
+    callback fm-selection-command(string, int, string);
+    callback fm-nav-command(string, int, string);
+    callback fm-marquee-select(string, int, int, int, bool, int);
     callback fm-delete-selected(string, int);
     callback fm-copy-selected(string, int);
     callback fm-paste-clipboard(string, int);
@@ -635,6 +639,7 @@ export component WorkspaceView inherits Rectangle {
                     fm-context-dismiss(fm_id) => { root.fm-context-dismiss(fm_id); }
                     fm-confirm-yes(fm_id) => { root.fm-confirm-yes(fm_id); }
                     fm-confirm-no(fm_id) => { root.fm-confirm-no(fm_id); }
+                    fm-conflict-choice(fm_id, choice, all) => { root.fm-conflict-choice(fm_id, choice, all); }
                     fm-rename-commit(fm_id, old, new) => { root.fm-rename-commit(fm_id, old, new); }
                     fm-rename-cancel(fm_id) => { root.fm-rename-cancel(fm_id); }
                     fm-tag-commit(fm_id, tag) => { root.fm-tag-commit(fm_id, tag); }
@@ -644,6 +649,9 @@ export component WorkspaceView inherits Rectangle {
                     fm-passphrase-biometric(fm_id) => { root.fm-passphrase-biometric(fm_id); }
                     fm-managed-policy-close(fm_id) => { root.fm-managed-policy-close(fm_id); }
                     fm-select-all(fm_id, p) => { root.fm-select-all(fm_id, p); }
+                    fm-selection-command(fm_id, p, cmd) => { root.fm-selection-command(fm_id, p, cmd); }
+                    fm-nav-command(fm_id, p, cmd) => { root.fm-nav-command(fm_id, p, cmd); }
+                    fm-marquee-select(fm_id, p, a, b, add, cols) => { root.fm-marquee-select(fm_id, p, a, b, add, cols); }
                     fm-delete-selected(fm_id, p) => { root.fm-delete-selected(fm_id, p); }
                     fm-copy-selected(fm_id, p) => { root.fm-copy-selected(fm_id, p); }
                     fm-paste-clipboard(fm_id, p) => { root.fm-paste-clipboard(fm_id, p); }

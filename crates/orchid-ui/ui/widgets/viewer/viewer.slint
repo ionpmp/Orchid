@@ -48,6 +48,7 @@ export component ViewerView inherits Rectangle {
     callback document-preview-key(string, bool, bool);
     callback document-find-request(string, bool);
     callback document-replace-request(string, string, bool);
+    callback document-link-request(string);
 
     background: transparent;
 
@@ -149,5 +150,6 @@ export component ViewerView inherits Rectangle {
         preview-key(k, c, s) => { root.document-preview-key(k, c, s); }
         find-request(q, fwd) => { root.document-find-request(q, fwd); }
         replace-request(q, r, all) => { root.document-replace-request(q, r, all); }
+        link-request(url) => { root.document-link-request(url); }
     }
 }

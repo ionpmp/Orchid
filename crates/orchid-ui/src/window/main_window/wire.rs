@@ -2277,6 +2277,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_document_link_request({
+            let t = t.clone();
+            move |id, url| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let url = url.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::document_link(inst, url)
+                        );
+                    }
+                }
+            }
+        });
         self.window.on_viewer_document_preview_key({
             let t = t.clone();
             move |id, key, ctrl, shift| {
@@ -2619,6 +2635,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_conflict_choice({
+            let t = t.clone();
+            move |fm_id, choice, apply_all| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_conflict_choice(&fm_id, &choice, apply_all);
+                }
+            }
+        });
         self.window.on_fm_rename_commit({
             let t = t.clone();
             move |fm_id, old_path, new_name| {
@@ -2688,6 +2712,30 @@ impl MainWindowController {
             move |fm_id, pane| {
                 if let Some(c) = t.upgrade() {
                     c.on_fm_select_all(&fm_id, pane);
+                }
+            }
+        });
+        self.window.on_fm_selection_command({
+            let t = t.clone();
+            move |fm_id, pane, cmd| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_selection_command(&fm_id, pane, &cmd);
+                }
+            }
+        });
+        self.window.on_fm_nav_command({
+            let t = t.clone();
+            move |fm_id, pane, cmd| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_nav_command(&fm_id, pane, &cmd);
+                }
+            }
+        });
+        self.window.on_fm_marquee_select({
+            let t = t.clone();
+            move |fm_id, pane, from, to, additive, columns| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_marquee_select(&fm_id, pane, from, to, additive, columns);
                 }
             }
         });

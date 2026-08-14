@@ -299,6 +299,7 @@ export component MainWindow inherits Window {
     callback viewer-document-preview-key(string, string, bool, bool);
     callback viewer-document-find-request(string, string, bool);
     callback viewer-document-replace-request(string, string, string, bool);
+    callback viewer-document-link-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -330,6 +331,7 @@ export component MainWindow inherits Window {
     callback fm-context-dismiss(string);
     callback fm-confirm-yes(string);
     callback fm-confirm-no(string);
+    callback fm-conflict-choice(string, string, bool);
     callback fm-rename-commit(string, string, string);
     callback fm-rename-cancel(string);
     callback fm-tag-commit(string, string);
@@ -339,6 +341,9 @@ export component MainWindow inherits Window {
     callback fm-passphrase-biometric(string);
     callback fm-managed-policy-close(string);
     callback fm-select-all(string, int);
+    callback fm-selection-command(string, int, string);
+    callback fm-nav-command(string, int, string);
+    callback fm-marquee-select(string, int, int, int, bool, int);
     callback fm-delete-selected(string, int);
     callback fm-copy-selected(string, int);
     callback fm-paste-clipboard(string, int);
@@ -722,6 +727,7 @@ export component MainWindow inherits Window {
             viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
             viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
             viewer-document-replace-request(id, q, r, all) => { root.viewer-document-replace-request(id, q, r, all); }
+            viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
 
             fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
             fm-toggle-dual-pane(fm_id) => { root.fm-toggle-dual-pane(fm_id); }
@@ -753,6 +759,7 @@ export component MainWindow inherits Window {
             fm-context-dismiss(fm_id) => { root.fm-context-dismiss(fm_id); }
             fm-confirm-yes(fm_id) => { root.fm-confirm-yes(fm_id); }
             fm-confirm-no(fm_id) => { root.fm-confirm-no(fm_id); }
+            fm-conflict-choice(fm_id, choice, all) => { root.fm-conflict-choice(fm_id, choice, all); }
             fm-rename-commit(fm_id, old, new) => { root.fm-rename-commit(fm_id, old, new); }
             fm-rename-cancel(fm_id) => { root.fm-rename-cancel(fm_id); }
             fm-tag-commit(fm_id, tag) => { root.fm-tag-commit(fm_id, tag); }
@@ -762,6 +769,9 @@ export component MainWindow inherits Window {
             fm-passphrase-biometric(fm_id) => { root.fm-passphrase-biometric(fm_id); }
             fm-managed-policy-close(fm_id) => { root.fm-managed-policy-close(fm_id); }
             fm-select-all(fm_id, p) => { root.fm-select-all(fm_id, p); }
+            fm-selection-command(fm_id, p, cmd) => { root.fm-selection-command(fm_id, p, cmd); }
+            fm-nav-command(fm_id, p, cmd) => { root.fm-nav-command(fm_id, p, cmd); }
+            fm-marquee-select(fm_id, p, a, b, add, cols) => { root.fm-marquee-select(fm_id, p, a, b, add, cols); }
             fm-delete-selected(fm_id, p) => { root.fm-delete-selected(fm_id, p); }
             fm-copy-selected(fm_id, p) => { root.fm-copy-selected(fm_id, p); }
             fm-paste-clipboard(fm_id, p) => { root.fm-paste-clipboard(fm_id, p); }

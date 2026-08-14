@@ -19,6 +19,8 @@ pub struct TabState {
     pub scroll_position: f32,
     pub sort_by: SortBy,
     pub sort_descending: bool,
+    /// Flatten nested files into one listing (Total Commander branch view).
+    pub branch_view: bool,
 }
 
 impl TabState {
@@ -36,6 +38,7 @@ impl TabState {
             scroll_position: 0.0,
             sort_by,
             sort_descending: false,
+            branch_view: false,
         }
     }
 
@@ -52,6 +55,7 @@ impl TabState {
         self.selection.clear();
         self.quick_filter.clear();
         self.scroll_position = 0.0;
+        self.branch_view = false;
         true
     }
 
@@ -198,5 +202,13 @@ mod tests {
         let mut tab = TabState::new(p("local:/a"), ViewMode::Details, SortBy::Name);
         assert!(!tab.back());
         assert!(!tab.forward());
+    }
+
+    #[test]
+    fn navigate_to_clears_branch_view() {
+        let mut tab = TabState::new(p("local:/a"), ViewMode::Details, SortBy::Name);
+        tab.branch_view = true;
+        tab.navigate_to(p("local:/a/b"));
+        assert!(!tab.branch_view);
     }
 }

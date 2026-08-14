@@ -1,14 +1,14 @@
 //! Copy operation with streaming, progress, cancellation, and optional
 //! content-hash verification.
 
-use std::path::PathBuf;
+use std::io::SeekFrom;
+use std::path::{Path, PathBuf};
 
 use filetime::FileTime;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_util::sync::CancellationToken;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 use crate::error::{FsError, Result};
-use crate::operations::progress::{OperationProgress, ProgressSink};
+use crate::operations::progress::{OperationProgress, ProgressSink, TransferControl};
 use crate::path::FsPath;
 use crate::provider::FsProviderRegistry;
 
@@ -17,10 +17,22 @@ use crate::provider::FsProviderRegistry;
 pub struct CopyOptions {
     /// Overwrite an existing destination.
     pub overwrite: bool,
+    /// If the destination exists, skip it instead of failing.
+    pub skip_existing: bool,
+    /// Overwrite only when the source is newer than the destination.
+    pub overwrite_older: bool,
+    /// Create directories but do not copy file contents.
+    pub structure_only: bool,
+    /// Resume a partial destination (append remaining bytes).
+    pub resume: bool,
     /// Compute BLAKE3 on source + destination; fail if they differ.
     pub verify_content_hash: bool,
     /// Preserve `modified` (and where supported, `accessed`) timestamps.
     pub preserve_timestamps: bool,
+    /// Preserve readonly / hidden / system attributes.
+    pub preserve_attributes: bool,
+    /// Copy NTFS alternate data streams (Windows local only; best-effort).
+    pub copy_ads: bool,
     /// Follow symlinks rather than copying the link itself.
     pub follow_symlinks: bool,
 }
@@ -29,8 +41,14 @@ impl Default for CopyOptions {
     fn default() -> Self {
         Self {
             overwrite: false,
+            skip_existing: false,
+            overwrite_older: false,
+            structure_only: false,
+            resume: false,
             verify_content_hash: false,
             preserve_timestamps: true,
+            preserve_attributes: true,
+            copy_ads: true,
             follow_symlinks: true,
         }
     }
@@ -52,7 +70,30 @@ pub async fn copy(
     to: &FsPath,
     options: CopyOptions,
     progress: Option<&ProgressSink>,
-    cancel: Option<CancellationToken>,
+    cancel: Option<tokio_util::sync::CancellationToken>,
+) -> Result<()> {
+    copy_with_control(
+        registry,
+        from,
+        to,
+        options,
+        progress,
+        TransferControl {
+            cancel,
+            pause: None,
+        },
+    )
+    .await
+}
+
+/// [`copy`] with pause support.
+pub async fn copy_with_control(
+    registry: &FsProviderRegistry,
+    from: &FsPath,
+    to: &FsPath,
+    options: CopyOptions,
+    progress: Option<&ProgressSink>,
+    ctl: TransferControl,
 ) -> Result<()> {
     let src_provider = registry
         .for_path(from)
@@ -82,27 +123,11 @@ pub async fn copy(
 
     let src_meta = src_provider.metadata(from).await?;
     if matches!(src_meta.kind, crate::entry::FsEntryKind::Directory) {
-        copy_directory(
-            registry,
-            from,
-            to,
-            options,
-            progress,
-            cancel,
-        )
-        .await
+        copy_directory(registry, from, to, options, progress, ctl).await
+    } else if options.structure_only {
+        Ok(())
     } else {
-        copy_file_with_progress(
-            registry,
-            from,
-            to,
-            options,
-            progress,
-            cancel,
-            0,
-            0,
-        )
-        .await?;
+        copy_file_with_progress(registry, from, to, options, progress, ctl, 0, 0).await?;
         Ok(())
     }
 }
@@ -113,7 +138,7 @@ async fn copy_directory(
     to: &FsPath,
     options: CopyOptions,
     progress: Option<&ProgressSink>,
-    cancel: Option<CancellationToken>,
+    ctl: TransferControl,
 ) -> Result<()> {
     // MVP: directory copy only supported between local paths, since that's
     // the only provider that exists today. Walk with `walkdir`, stream each
@@ -137,6 +162,9 @@ async fn copy_directory(
             tokio::fs::create_dir_all(&dst).await?;
             continue;
         }
+        if options.structure_only {
+            continue;
+        }
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         total_bytes += size;
         files.push((entry.path().to_path_buf(), dst, size));
@@ -146,11 +174,7 @@ async fn copy_directory(
     let mut bytes_done: u64 = 0;
 
     for (items_done, (src, dst, _size)) in (0_u64..).zip(files) {
-        if let Some(c) = &cancel {
-            if c.is_cancelled() {
-                return Err(FsError::Cancelled);
-            }
-        }
+        ctl.wait().await?;
         let src_fs = FsPath::from_local(&src)?;
         let dst_fs = FsPath::from_local(&dst)?;
         let bytes_copied = copy_file_with_progress(
@@ -159,7 +183,7 @@ async fn copy_directory(
             &dst_fs,
             options,
             progress,
-            cancel.clone(),
+            ctl.clone(),
             bytes_done,
             total_bytes,
         )
@@ -185,10 +209,11 @@ async fn copy_file_with_progress(
     to: &FsPath,
     options: CopyOptions,
     progress: Option<&ProgressSink>,
-    cancel: Option<CancellationToken>,
+    ctl: TransferControl,
     bytes_before: u64,
     bytes_total: u64,
 ) -> Result<u64> {
+    ctl.wait().await?;
     let src_provider = registry
         .for_path(from)
         .ok_or_else(|| FsError::ProviderNotMounted(from.to_string()))?;
@@ -196,15 +221,68 @@ async fn copy_file_with_progress(
         .for_path(to)
         .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
 
-    if !options.overwrite && dst_provider.exists(to).await? {
-        return Err(FsError::AlreadyExists(to.to_string()));
+    let src_meta = src_provider.metadata(from).await?;
+    let dest_exists = dst_provider.exists(to).await?;
+    let mut resume_from = 0u64;
+    if dest_exists {
+        let dst_meta = dst_provider.metadata(to).await.ok();
+        if options.skip_existing {
+            return Ok(0);
+        }
+        if options.overwrite_older {
+            let src_m = src_meta.modified;
+            let dst_m = dst_meta.as_ref().and_then(|m| m.modified);
+            if let (Some(s), Some(d)) = (src_m, dst_m) {
+                if s <= d {
+                    return Ok(0);
+                }
+            }
+        } else if options.resume {
+            let dest_size = dst_meta.as_ref().map(|m| m.size).unwrap_or(0);
+            if dest_size > 0 && dest_size < src_meta.size && to.is_local() {
+                resume_from = dest_size;
+            } else if !options.overwrite {
+                return Err(FsError::AlreadyExists(to.to_string()));
+            }
+        } else if !options.overwrite {
+            return Err(FsError::AlreadyExists(to.to_string()));
+        }
     }
 
-    let src_meta = src_provider.metadata(from).await?;
-    let total = if bytes_total == 0 { src_meta.size } else { bytes_total };
+    if options.verify_content_hash && resume_from > 0 {
+        // Hash verification needs a full rewrite.
+        resume_from = 0;
+    }
+
+    let total = if bytes_total == 0 {
+        src_meta.size
+    } else {
+        bytes_total
+    };
 
     let mut reader = src_provider.read_stream(from).await?;
-    let mut writer = dst_provider.write_stream(to).await?;
+    if resume_from > 0 {
+        let mut skipped = 0u64;
+        let mut skip_buf = vec![0u8; 128 * 1024];
+        while skipped < resume_from {
+            let want = ((resume_from - skipped) as usize).min(skip_buf.len());
+            let n = reader.read(&mut skip_buf[..want]).await?;
+            if n == 0 {
+                break;
+            }
+            skipped += n as u64;
+        }
+    }
+
+    let mut writer: Box<dyn tokio::io::AsyncWrite + Unpin + Send> =
+        if resume_from > 0 && to.is_local() {
+            let os = to.to_local()?;
+            let mut file = tokio::fs::OpenOptions::new().write(true).open(&os).await?;
+            file.seek(SeekFrom::Start(resume_from)).await?;
+            Box::new(file)
+        } else {
+            dst_provider.write_stream(to).await?
+        };
 
     let mut hasher = if options.verify_content_hash {
         Some(orchid_crypto::StreamHasher::new())
@@ -213,13 +291,9 @@ async fn copy_file_with_progress(
     };
 
     let mut buf = vec![0u8; 128 * 1024];
-    let mut written: u64 = 0;
+    let mut written: u64 = resume_from;
     loop {
-        if let Some(c) = &cancel {
-            if c.is_cancelled() {
-                return Err(FsError::Cancelled);
-            }
-        }
+        ctl.wait().await?;
         let n = reader.read(&mut buf).await?;
         if n == 0 {
             break;
@@ -267,13 +341,206 @@ async fn copy_file_with_progress(
     if options.preserve_timestamps {
         if let (Some(modified), true) = (src_meta.modified, to.is_local()) {
             let os = to.to_local()?;
-            let ft = FileTime::from_unix_time(modified.timestamp(), modified.timestamp_subsec_nanos());
-            let _ = tokio::task::spawn_blocking(move || {
-                filetime::set_file_mtime(&os, ft)
-            })
-            .await;
+            let ft =
+                FileTime::from_unix_time(modified.timestamp(), modified.timestamp_subsec_nanos());
+            let _ = tokio::task::spawn_blocking(move || filetime::set_file_mtime(&os, ft)).await;
         }
     }
 
+    if options.preserve_attributes && to.is_local() {
+        let os = to.to_local()?;
+        apply_attributes(&os, src_meta.readonly, src_meta.hidden, src_meta.system);
+    }
+
+    if options.copy_ads && from.is_local() && to.is_local() {
+        let src_os = from.to_local()?;
+        let dst_os = to.to_local()?;
+        copy_ads_best_effort(&src_os, &dst_os);
+    }
+
     Ok(written)
+}
+
+fn apply_attributes(path: &Path, readonly: bool, hidden: bool, system: bool) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::{
+            SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_NORMAL,
+            FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM,
+        };
+        let mut attrs = FILE_ATTRIBUTE_NORMAL;
+        if readonly {
+            attrs |= FILE_ATTRIBUTE_READONLY;
+        }
+        if hidden {
+            attrs |= FILE_ATTRIBUTE_HIDDEN;
+        }
+        if system {
+            attrs |= FILE_ATTRIBUTE_SYSTEM;
+        }
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        let _ = unsafe { SetFileAttributesW(PCWSTR(wide.as_ptr()), attrs) };
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = hidden;
+        let _ = system;
+        if let Ok(meta) = std::fs::metadata(path) {
+            let mut perms = meta.permissions();
+            perms.set_readonly(readonly);
+            let _ = std::fs::set_permissions(path, perms);
+        }
+    }
+}
+
+fn copy_ads_best_effort(from: &Path, to: &Path) {
+    #[cfg(windows)]
+    {
+        if let Err(e) = copy_ntfs_ads(from, to) {
+            tracing::debug!(error = %e, "ADS copy skipped");
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (from, to);
+    }
+}
+
+#[cfg(windows)]
+fn copy_ntfs_ads(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows::Win32::Storage::FileSystem::{
+        FindClose, FindFirstStreamW, FindNextStreamW, FindStreamInfoStandard,
+        WIN32_FIND_STREAM_DATA,
+    };
+
+    let mut path: Vec<u16> = from.as_os_str().encode_wide().chain([0]).collect();
+    let mut data = WIN32_FIND_STREAM_DATA::default();
+    let handle = unsafe {
+        FindFirstStreamW(
+            PWSTR(path.as_mut_ptr()),
+            FindStreamInfoStandard,
+            &mut data as *mut _ as *mut _,
+            Some(0),
+        )
+    };
+    let handle = match handle {
+        Ok(h) if h != INVALID_HANDLE_VALUE => h,
+        _ => return Ok(()),
+    };
+    loop {
+        let name = {
+            let raw = &data.cStreamName;
+            let len = raw.iter().position(|&c| c == 0).unwrap_or(raw.len());
+            String::from_utf16_lossy(&raw[..len])
+        };
+        // `::$DATA` is the default unnamed stream (already copied).
+        if !name.is_empty() && name != "::$DATA" && name != ":$DATA" {
+            let stream = name.trim_end_matches(":$DATA");
+            let src = ads_os_path(from, stream);
+            let dst = ads_os_path(to, stream);
+            if let Ok(bytes) = std::fs::read(&src) {
+                let _ = std::fs::write(&dst, bytes);
+            }
+        }
+        let next = unsafe { FindNextStreamW(handle, &mut data as *mut _ as *mut _) };
+        if next.is_err() {
+            break;
+        }
+    }
+    unsafe {
+        let _ = FindClose(handle);
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn ads_os_path(path: &Path, stream: &str) -> PathBuf {
+    let stream = stream.trim_start_matches(':');
+    PathBuf::from(format!("{}:{stream}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::{FsProviderRegistry, LocalProvider};
+    use std::sync::Arc;
+
+    fn registry() -> FsProviderRegistry {
+        let r = FsProviderRegistry::new();
+        r.register(Arc::new(LocalProvider::new()) as Arc<dyn crate::provider::FsProvider>)
+            .unwrap();
+        r
+    }
+
+    #[tokio::test]
+    async fn skip_existing_leaves_dest() {
+        let td = tempfile::tempdir().unwrap();
+        let src = td.path().join("a.txt");
+        let dst = td.path().join("b.txt");
+        std::fs::write(&src, b"new").unwrap();
+        std::fs::write(&dst, b"old").unwrap();
+        let mut opts = CopyOptions::default();
+        opts.skip_existing = true;
+        copy(
+            &registry(),
+            &FsPath::from_local(&src).unwrap(),
+            &FsPath::from_local(&dst).unwrap(),
+            opts,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"old");
+    }
+
+    #[tokio::test]
+    async fn structure_only_skips_files() {
+        let td = tempfile::tempdir().unwrap();
+        let src = td.path().join("tree");
+        let dst = td.path().join("out");
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::write(src.join("sub/a.txt"), b"x").unwrap();
+        let mut opts = CopyOptions::default();
+        opts.structure_only = true;
+        copy(
+            &registry(),
+            &FsPath::from_local(&src).unwrap(),
+            &FsPath::from_local(&dst).unwrap(),
+            opts,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(dst.join("sub").is_dir());
+        assert!(!dst.join("sub/a.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn resume_appends_remaining_bytes() {
+        let td = tempfile::tempdir().unwrap();
+        let src = td.path().join("src.bin");
+        let dst = td.path().join("dst.bin");
+        std::fs::write(&src, b"hello world").unwrap();
+        std::fs::write(&dst, b"hello").unwrap();
+        let mut opts = CopyOptions::default();
+        opts.resume = true;
+        copy(
+            &registry(),
+            &FsPath::from_local(&src).unwrap(),
+            &FsPath::from_local(&dst).unwrap(),
+            opts,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"hello world");
+    }
 }

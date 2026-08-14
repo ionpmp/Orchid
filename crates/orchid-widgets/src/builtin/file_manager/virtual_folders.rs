@@ -135,30 +135,50 @@ pub fn entry_matches_category(entry: &FsEntry, cat: FileCategory) -> bool {
     let mime = entry.metadata.mime.as_deref();
     let ext = entry.path.extension().map(|e| e.to_lowercase());
     match cat {
-        FileCategory::Images => mime_is_prefix(mime, "image/")
-            || ext
-                .as_deref()
-                .is_some_and(orchid_viewers::is_image_file_extension),
+        FileCategory::Images => {
+            mime_is_prefix(mime, "image/")
+                || ext
+                    .as_deref()
+                    .is_some_and(orchid_viewers::is_image_file_extension)
+        }
         FileCategory::Documents => {
             mime_is_prefix(mime, "text/")
                 || mime == Some("application/pdf")
-                || mime.map(|m| m.contains("document") || m.contains("msword") || m.contains("spreadsheet"))
+                || mime
+                    .map(|m| {
+                        m.contains("document") || m.contains("msword") || m.contains("spreadsheet")
+                    })
                     .unwrap_or(false)
                 || ext_in(
                     &ext,
                     &[
-                        "pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ppt", "pptx",
-                        "csv", "ods", "odp",
+                        "pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ppt",
+                        "pptx", "csv", "ods", "odp",
                     ],
                 )
         }
-        FileCategory::Video => mime_is_prefix(mime, "video/")
-            || ext_in(&ext, &["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "flv"]),
-        FileCategory::Audio => mime_is_prefix(mime, "audio/")
-            || ext_in(&ext, &["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus"]),
-        FileCategory::Archives => mime.map(|m| m.contains("zip") || m.contains("archive") || m.contains("compressed"))
-            .unwrap_or(false)
-            || ext_in(&ext, &["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "cab"]),
+        FileCategory::Video => {
+            mime_is_prefix(mime, "video/")
+                || ext_in(
+                    &ext,
+                    &["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "flv"],
+                )
+        }
+        FileCategory::Audio => {
+            mime_is_prefix(mime, "audio/")
+                || ext_in(
+                    &ext,
+                    &["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus"],
+                )
+        }
+        FileCategory::Archives => {
+            mime.map(|m| m.contains("zip") || m.contains("archive") || m.contains("compressed"))
+                .unwrap_or(false)
+                || ext_in(
+                    &ext,
+                    &["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "cab"],
+                )
+        }
     }
 }
 

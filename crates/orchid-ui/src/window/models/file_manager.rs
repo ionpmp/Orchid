@@ -8,9 +8,10 @@ use uuid::Uuid;
 
 use super::super::errors::fm_localized_error;
 use crate::slint_generated::{
-    FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmContextAction, FmContextMenu,
-    FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane, FmPassphraseState,
-    FmPathSuggest, FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState, FmVisitHistoryItem,
+    FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmConflictDialog, FmContextAction,
+    FmContextMenu, FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane,
+    FmPassphraseState, FmPathSuggest, FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
+    FmVisitHistoryItem,
 };
 
 /// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
@@ -112,6 +113,7 @@ fn fm_rgba_to_image(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
 pub(crate) struct FileManagerOverlays {
     pub(crate) context_menu: FmContextMenu,
     pub(crate) confirm_dialog: FmConfirmDialog,
+    pub(crate) conflict_dialog: FmConflictDialog,
     pub(crate) rename: FmRenameState,
     pub(crate) tag: FmTagState,
     pub(crate) tag_paths: Vec<String>,
@@ -122,10 +124,15 @@ pub(crate) struct FileManagerOverlays {
     pub(crate) create_folder_parent: Option<String>,
     /// When `create_folder_parent` is set, true means create a file not a folder.
     pub(crate) create_item_is_file: bool,
+    pub(crate) select_mask_op: Option<orchid_widgets::builtin::file_manager::MaskOp>,
     pub(crate) drag_active: bool,
     pub(crate) drag_paths: Vec<String>,
     pub(crate) drag_drop_target: String,
     pub(crate) drag_target_pane: i32,
+    pub(crate) batch_rename_paths: Vec<String>,
+    /// Pending advanced-tool action waiting on the rename/prompt dialog.
+    pub(crate) tool_action: Option<String>,
+    pub(crate) tool_paths: Vec<String>,
 }
 
 pub(crate) fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerModel {
@@ -138,11 +145,15 @@ pub(crate) fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerMod
         activity_indicator: SharedString::new(),
         transfer_active: false,
         transfer_progress: 0.0,
+        transfer_paused: false,
+        transfer_queue: 0,
         sidebar_items: build_sidebar_items(locale, "", &[], &[]),
         visit_history: ModelRc::new(VecModel::default()),
+        drives: ModelRc::new(VecModel::default()),
         path_suggestions: ModelRc::new(VecModel::default()),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
+        conflict_dialog: empty_conflict_dialog(),
         rename: empty_rename_state(),
         tag: empty_tag_state(),
         passphrase: empty_passphrase_state(),
@@ -290,12 +301,63 @@ pub(crate) fn empty_confirm_dialog() -> FmConfirmDialog {
     }
 }
 
+pub(crate) fn empty_conflict_dialog() -> FmConflictDialog {
+    FmConflictDialog {
+        visible: false,
+        title: SharedString::new(),
+        message: SharedString::new(),
+        dest_name: SharedString::new(),
+        show_resume: false,
+        apply_all_label: SharedString::new(),
+        overwrite_label: SharedString::new(),
+        skip_label: SharedString::new(),
+        rename_label: SharedString::new(),
+        older_label: SharedString::new(),
+        resume_label: SharedString::new(),
+        cancel_label: SharedString::new(),
+    }
+}
+
+pub(crate) fn empty_fm_overlays() -> FileManagerOverlays {
+    FileManagerOverlays {
+        context_menu: empty_context_menu(),
+        confirm_dialog: empty_confirm_dialog(),
+        conflict_dialog: empty_conflict_dialog(),
+        rename: empty_rename_state(),
+        tag: empty_tag_state(),
+        tag_paths: Vec::new(),
+        passphrase: empty_passphrase_state(),
+        managed_policy: empty_managed_policy_state(),
+        passphrase_paths: Vec::new(),
+        passphrase_purpose: None,
+        create_folder_parent: None,
+        create_item_is_file: false,
+        select_mask_op: None,
+        drag_active: false,
+        drag_paths: Vec::new(),
+        drag_drop_target: String::new(),
+        drag_target_pane: -1,
+        batch_rename_paths: Vec::new(),
+        tool_action: None,
+        tool_paths: Vec::new(),
+    }
+}
+
 pub(crate) fn empty_rename_state() -> FmRenameState {
     FmRenameState {
         active: false,
         path: SharedString::new(),
         proposed_name: SharedString::new(),
         title: SharedString::new(),
+        hint: SharedString::new(),
+        show_filter: false,
+        files_label: SharedString::new(),
+        folders_label: SharedString::new(),
+        size_min_label: SharedString::new(),
+        size_max_label: SharedString::new(),
+        hidden_label: SharedString::new(),
+        readonly_label: SharedString::new(),
+        days_label: SharedString::new(),
         ok_label: SharedString::new(),
         cancel_label: SharedString::new(),
     }
@@ -382,13 +444,18 @@ fn active_network_sidebar_index(
 }
 
 fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPayload) -> String {
-    fm_status_text(
+    let mut text = fm_status_text(
         locale,
         t.item_count,
         t.selection_count,
+        t.selection_bytes,
         t.managed_files_tracked,
         t.managed_dedup_bytes,
-    )
+    );
+    if t.branch_view {
+        text = format!("{text} · {}", locale.tr("fm-status-branch"));
+    }
+    text
 }
 
 /// Status-bar text for a tab given live selection/item counts.
@@ -396,17 +463,39 @@ pub(crate) fn fm_status_text(
     locale: &LocaleManager,
     item_count: u32,
     selection_count: u32,
+    selection_bytes: u64,
     managed_tracked: Option<u32>,
     managed_dedup_bytes: Option<u64>,
 ) -> String {
+    let size = locale.format_byte_size(selection_bytes);
     if let (Some(tracked), Some(dedup_bytes)) = (managed_tracked, managed_dedup_bytes) {
+        if selection_count > 0 && selection_bytes > 0 {
+            locale.tr_args(
+                "fm-status-managed-size",
+                &orchid_i18n::FluentArgs::new()
+                    .with("items", item_count.to_string())
+                    .with("selected", selection_count.to_string())
+                    .with("size", size)
+                    .with("tracked", tracked.to_string())
+                    .with("dedup", locale.format_byte_size(dedup_bytes)),
+            )
+        } else {
+            locale.tr_args(
+                "fm-status-managed",
+                &orchid_i18n::FluentArgs::new()
+                    .with("items", item_count.to_string())
+                    .with("selected", selection_count.to_string())
+                    .with("tracked", tracked.to_string())
+                    .with("dedup", locale.format_byte_size(dedup_bytes)),
+            )
+        }
+    } else if selection_count > 0 && selection_bytes > 0 {
         locale.tr_args(
-            "fm-status-managed",
+            "fm-status-bar-size",
             &orchid_i18n::FluentArgs::new()
                 .with("items", item_count.to_string())
                 .with("selected", selection_count.to_string())
-                .with("tracked", tracked.to_string())
-                .with("dedup", locale.format_byte_size(dedup_bytes)),
+                .with("size", size),
         )
     } else {
         locale.tr_args(
@@ -427,6 +516,7 @@ pub(crate) fn patch_fm_selection(
     selected: &HashSet<String>,
     selection_count: u32,
     item_count: u32,
+    selection_bytes: u64,
     locale: &LocaleManager,
 ) -> bool {
     let pane_idx = pane.min(1) as usize;
@@ -457,7 +547,20 @@ pub(crate) fn patch_fm_selection(
         }
     }
     tab.selection_count = selection_count as i32;
-    tab.status_text = fm_status_text(locale, item_count, selection_count, None, None).into();
+    tab.status_text = {
+        let mut text = fm_status_text(
+            locale,
+            item_count,
+            selection_count,
+            selection_bytes,
+            None,
+            None,
+        );
+        if tab.branch_view {
+            text = format!("{text} · {}", locale.tr("fm-status-branch"));
+        }
+        text.into()
+    };
     tabs.set_row_data(active, tab);
     true
 }
@@ -496,7 +599,32 @@ pub(crate) fn build_sidebar_items(
     let active_id = fm_sidebar_id_for_path(active_path);
     let active_managed = active_managed_sidebar_index(active_path, managed_folders);
     let active_network = active_network_sidebar_index(active_path, network_mounts);
-    let mut items = vec![
+    let mut items = vec![];
+    let drives = orchid_widgets::builtin::file_manager::list_local_drives();
+    if !drives.is_empty() {
+        items.push(FmSidebarItem {
+            id: "section:drives".into(),
+            label: locale.tr("fm-sidebar-drives").into(),
+            icon: "sidebar-drive".into(),
+            indent: 0,
+            is_section_header: true,
+            is_active: false,
+        });
+        for d in &drives {
+            let root = d.path.trim_end_matches('/');
+            items.push(FmSidebarItem {
+                id: format!("drive:{}", d.path).into(),
+                label: d.label.clone().into(),
+                icon: "sidebar-drive".into(),
+                indent: 1,
+                is_section_header: false,
+                is_active: active_path == d.path
+                    || active_path.starts_with(&format!("{root}/"))
+                    || active_path.eq_ignore_ascii_case(&d.path),
+            });
+        }
+    }
+    items.extend([
         FmSidebarItem {
             id: "section:favorites".into(),
             label: locale.tr("fm-sidebar-favorites").into(),
@@ -577,7 +705,7 @@ pub(crate) fn build_sidebar_items(
             is_section_header: false,
             is_active: active_id == Some("cat:archives"),
         },
-    ];
+    ]);
     if !managed_folders.is_empty() {
         items.push(FmSidebarItem {
             id: "section:managed".into(),
@@ -830,6 +958,7 @@ fn build_fm_tab(
         sort_size_label: sort_size_label.clone(),
         sort_modified_label: sort_modified_label.clone(),
         sort_type_label: sort_type_label.clone(),
+        branch_view: t.branch_view,
     }
 }
 
@@ -1070,6 +1199,8 @@ fn apply_fm_shell_scalars(
         || model.activity_indicator != activity_indicator
         || model.transfer_active != p.transfer_active
         || model.transfer_progress != p.transfer_progress
+        || model.transfer_paused != p.transfer_paused
+        || model.transfer_queue != p.transfer_queue as i32
         || model.show_hidden != show_hidden
         || model.show_hidden_label != show_hidden_label
         || model.single_click_open != single_click_open
@@ -1080,6 +1211,7 @@ fn apply_fm_shell_scalars(
         || model.drag_target_pane != overlays.drag_target_pane
         || model.context_menu.visible != overlays.context_menu.visible
         || model.confirm_dialog.visible != overlays.confirm_dialog.visible
+        || model.conflict_dialog.visible != overlays.conflict_dialog.visible
         || model.rename.active != overlays.rename.active
         || model.tag.active != overlays.tag.active
         || model.passphrase.active != overlays.passphrase.active
@@ -1092,6 +1224,8 @@ fn apply_fm_shell_scalars(
     model.activity_indicator = activity_indicator;
     model.transfer_active = p.transfer_active;
     model.transfer_progress = p.transfer_progress;
+    model.transfer_paused = p.transfer_paused;
+    model.transfer_queue = p.transfer_queue as i32;
     model.show_hidden = show_hidden;
     model.show_hidden_label = show_hidden_label;
     model.single_click_open = single_click_open;
@@ -1102,12 +1236,14 @@ fn apply_fm_shell_scalars(
     model.drag_target_pane = overlays.drag_target_pane;
     model.context_menu = overlays.context_menu;
     model.confirm_dialog = overlays.confirm_dialog;
+    model.conflict_dialog = overlays.conflict_dialog;
     model.rename = overlays.rename;
     model.tag = overlays.tag;
     model.passphrase = overlays.passphrase;
     model.managed_policy = overlays.managed_policy;
     let history_rows = build_visit_history_items(p, locale);
     sync_fm_rows(&model.visit_history, history_rows);
+    sync_fm_rows(&model.drives, build_drive_items());
     needs_frame
 }
 
@@ -1151,6 +1287,16 @@ fn build_visit_history_items(
                     is_header: false,
                 }
             }
+        })
+        .collect()
+}
+
+fn build_drive_items() -> Vec<FmPathSuggest> {
+    orchid_widgets::builtin::file_manager::list_local_drives()
+        .into_iter()
+        .map(|d| FmPathSuggest {
+            path: d.path.into(),
+            label: d.label.into(),
         })
         .collect()
 }
@@ -1233,6 +1379,7 @@ fn patch_fm_pane(
                 tab.sort_size_label = fresh.sort_size_label;
                 tab.sort_modified_label = fresh.sort_modified_label;
                 tab.sort_type_label = fresh.sort_type_label;
+                tab.branch_view = fresh.branch_view;
                 tabs.set_row_data(tab_idx, tab);
             } else {
                 tabs.set_row_data(tab_idx, fresh);
@@ -1308,6 +1455,8 @@ pub(crate) fn build_file_manager_model(
         activity_indicator: SharedString::new(),
         transfer_active: false,
         transfer_progress: 0.0,
+        transfer_paused: false,
+        transfer_queue: 0,
         show_hidden: false,
         show_hidden_label: SharedString::new(),
         single_click_open: false,
@@ -1317,9 +1466,11 @@ pub(crate) fn build_file_manager_model(
         drag_drop_target: SharedString::new(),
         drag_target_pane: -1,
         visit_history: ModelRc::new(VecModel::default()),
+        drives: ModelRc::new(VecModel::default()),
         path_suggestions: ModelRc::new(VecModel::default()),
         context_menu: empty_context_menu(),
         confirm_dialog: empty_confirm_dialog(),
+        conflict_dialog: empty_conflict_dialog(),
         rename: empty_rename_state(),
         tag: empty_tag_state(),
         passphrase: empty_passphrase_state(),
@@ -1348,11 +1499,22 @@ fn fm_action_shortcut(id: &str) -> &'static str {
     match id {
         "fs.select-all" => "Ctrl+A",
         "fs.deselect-all" => "Esc",
+        "fs.invert-selection" => "*",
+        "fs.select-mask-add" => "+",
+        "fs.select-mask-sub" => "-",
         "fs.copy" => "Ctrl+C",
+        "fs.cut" => "Ctrl+X",
         "fs.paste" => "Ctrl+V",
         "fs.rename" => "F2",
-        "fs.delete" => "Del",
-        "fs.new-folder" => "Ctrl+Shift+N",
+        "fs.delete" => "F8",
+        "fs.delete-permanent" => "Shift+Del",
+        "fs.new-folder" => "F7",
+        "fs.new-file" => "Shift+F4",
+        "fs.copy-to-other" => "F5",
+        "fs.move-to-other" => "F6",
+        "fs.open-tab" => "Ctrl+Shift+T",
+        "fs.open-other-pane" => "Ctrl+Shift+Enter",
+        "fs.branch-view" => "Ctrl+B",
         _ => "",
     }
 }

@@ -27,15 +27,14 @@ use crate::window::models::{
     build_rss_model, build_search_model, build_system_model, build_terminal_divider_models,
     build_terminal_tab_models, build_viewer_model, build_weather_model,
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
-    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_confirm_dialog,
-    empty_context_menu, empty_file_manager_model, empty_jyotish_model, empty_managed_policy_state,
-    empty_media_model, empty_moon_model, empty_notes_model, empty_passphrase_state,
+    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_file_manager_model,
+    empty_fm_overlays, empty_jyotish_model, empty_media_model, empty_moon_model, empty_notes_model,
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
-    empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
-    empty_terminal_cells, empty_viewer_model, empty_weather_model, patch_calculator_model,
-    patch_clock_model, patch_file_manager_model, patch_media_model, patch_password_model,
-    patch_processes_model, patch_recent_files_model, patch_search_model, patch_system_model,
-    widget_has_settings, FileManagerOverlays, PasswordAddDialogOverlay,
+    empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells,
+    empty_viewer_model, empty_weather_model, patch_calculator_model, patch_clock_model,
+    patch_file_manager_model, patch_media_model, patch_password_model, patch_processes_model,
+    patch_recent_files_model, patch_search_model, patch_system_model, widget_has_settings,
+    PasswordAddDialogOverlay,
 };
 
 use super::{sync_vec_model, MainWindowController};
@@ -398,23 +397,7 @@ impl MainWindowController {
                 .read()
                 .get(&id)
                 .cloned()
-                .unwrap_or_else(|| FileManagerOverlays {
-                    context_menu: empty_context_menu(),
-                    confirm_dialog: empty_confirm_dialog(),
-                    rename: empty_rename_state(),
-                    tag: empty_tag_state(),
-                    tag_paths: Vec::new(),
-                    passphrase: empty_passphrase_state(),
-                    managed_policy: empty_managed_policy_state(),
-                    passphrase_paths: Vec::new(),
-                    passphrase_purpose: None,
-                    create_folder_parent: None,
-                    create_item_is_file: false,
-                    drag_active: false,
-                    drag_paths: Vec::new(),
-                    drag_drop_target: String::new(),
-                    drag_target_pane: -1,
-                });
+                .unwrap_or_else(empty_fm_overlays);
             let mut need_frame = patch_file_manager_model(
                 &mut row.file_manager,
                 p,
@@ -1129,23 +1112,7 @@ impl MainWindowController {
                         .read()
                         .get(&pl.instance_id)
                         .cloned()
-                        .unwrap_or_else(|| FileManagerOverlays {
-                            context_menu: empty_context_menu(),
-                            confirm_dialog: empty_confirm_dialog(),
-                            rename: empty_rename_state(),
-                            tag: empty_tag_state(),
-                            tag_paths: Vec::new(),
-                            passphrase: empty_passphrase_state(),
-                            managed_policy: empty_managed_policy_state(),
-                            passphrase_paths: Vec::new(),
-                            passphrase_purpose: None,
-                            create_folder_parent: None,
-                            create_item_is_file: false,
-                            drag_active: false,
-                            drag_paths: Vec::new(),
-                            drag_drop_target: String::new(),
-                            drag_target_pane: -1,
-                        });
+                        .unwrap_or_else(empty_fm_overlays);
                     (
                         tstr,
                         80,

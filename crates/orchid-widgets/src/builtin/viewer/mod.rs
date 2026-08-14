@@ -976,6 +976,30 @@ pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> Wi
     Ok(())
 }
 
+/// Document: apply or remove an external hyperlink on the selection.
+///
+/// Empty `url` removes the link under the caret / selection.
+pub async fn document_link(instance_id: Uuid, url: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        let result = if url.trim().is_empty() {
+            doc.remove_hyperlink_selection()
+        } else {
+            doc.set_hyperlink_selection(&url)
+        };
+        result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Document: pointer on the preview canvas
 /// (`phase`: 0=down, 1=move, 2=up, 3=double-click word select,
 /// 4=triple-click paragraph, 5=hover; `ctrl` opens hyperlinks on down).

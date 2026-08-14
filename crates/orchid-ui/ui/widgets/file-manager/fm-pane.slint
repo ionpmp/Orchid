@@ -15,12 +15,15 @@ export component FmPane inherits Rectangle {
     in property <string> activity-hint;
     in property <bool> transfer-active;
     in property <float> transfer-progress;
+    in property <bool> transfer-paused;
+    in property <int> transfer-queue;
     in property <FmRenameState> rename;
     in property <bool> drag-active;
     in property <string> drag-drop-target;
     in property <bool> drag-pane-target;
     in property <[FmVisitHistoryItem]> visit-history;
     in property <[FmPathSuggest]> path-suggestions;
+    in property <[FmPathSuggest]> drives;
 
     callback tab-clicked(int, string);
     callback tab-closed(int, string);
@@ -44,6 +47,9 @@ export component FmPane inherits Rectangle {
     callback entry-context(string, length, length);
     callback pane-focused();
     callback select-all();
+    callback selection-command(string);
+    callback nav-command(string);
+    callback marquee-select(int, int, bool, int);
     callback delete-selected();
     callback copy-selected();
     callback paste-clipboard();
@@ -68,6 +74,7 @@ export component FmPane inherits Rectangle {
     background: Theme.surface-base;
     clip: false;
     property <bool> history-open: false;
+    property <bool> drives-open: false;
     property <bool> address-editing: false;
 
     property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
@@ -85,6 +92,22 @@ export component FmPane inherits Rectangle {
             }
             if (event.modifiers.control && (event.text == "a" || event.text == "A")) {
                 root.select-all();
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == "*") {
+                root.selection-command("invert");
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == "+") {
+                root.selection-command("mask-add");
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == "-") {
+                root.selection-command("mask-sub");
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "x" || event.text == "X")) {
+                root.nav-command("cut");
                 return accept;
             }
             if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
@@ -108,8 +131,28 @@ export component FmPane inherits Rectangle {
                 root.address-editing = true;
                 return accept;
             }
+            if (event.modifiers.shift && event.text == Key.F4) {
+                root.nav-command("new-file");
+                return accept;
+            }
             if (event.text == Key.F4) {
                 root.address-editing = true;
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == Key.F5) {
+                root.nav-command("copy-other");
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == Key.F6) {
+                root.nav-command("move-other");
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == Key.F7) {
+                root.new-folder();
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.text == Key.F8) {
+                root.delete-selected();
                 return accept;
             }
             if (rename.active && event.text == Key.Escape) {
@@ -118,6 +161,14 @@ export component FmPane inherits Rectangle {
             }
             if (drag-active && event.text == Key.Escape) {
                 root.entry-drag-cancel();
+                return accept;
+            }
+            if (transfer-active && event.text == Key.Escape) {
+                root.nav-command("cancel");
+                return accept;
+            }
+            if (event.modifiers.shift && event.text == Key.Delete) {
+                root.nav-command("delete-perm");
                 return accept;
             }
             if (event.text == Key.Delete) {
@@ -137,6 +188,44 @@ export component FmPane inherits Rectangle {
                     return accept;
                 }
                 return reject;
+            }
+            if (event.modifiers.control && event.text == Key.PageUp) {
+                if (!rename.active) {
+                    root.nav-up();
+                    return accept;
+                }
+                return reject;
+            }
+            if (!rename.active && !root.address-editing && event.modifiers.control
+                && (event.text == "\\" || event.text == "/")) {
+                root.nav-command("drive-root");
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.modifiers.control
+                && (event.text == "b" || event.text == "B")) {
+                root.nav-command("branch");
+                return accept;
+            }
+            if (!rename.active && event.modifiers.control && event.modifiers.shift
+                && (event.text == "t" || event.text == "T")) {
+                root.nav-command("open-tab");
+                return accept;
+            }
+            if (!rename.active && event.modifiers.control && !event.modifiers.shift
+                && (event.text == "t" || event.text == "T")) {
+                root.tab-new();
+                return accept;
+            }
+            if (!rename.active && event.modifiers.control && event.modifiers.shift
+                && event.text == Key.Return) {
+                root.nav-command("other-pane");
+                return accept;
+            }
+            if (!rename.active && !root.address-editing && event.modifiers.alt
+                && event.text == Key.F1) {
+                root.drives-open = !root.drives-open;
+                root.history-open = false;
+                return accept;
             }
             if (!rename.active) {
                 if (event.text == Key.UpArrow) {
@@ -175,6 +264,10 @@ export component FmPane inherits Rectangle {
                     root.history-open = false;
                     return accept;
                 }
+                if (root.drives-open) {
+                    root.drives-open = false;
+                    return accept;
+                }
                 if (root.address-editing) {
                     root.address-editing = false;
                     return accept;
@@ -189,6 +282,7 @@ export component FmPane inherits Rectangle {
     pane-ta := TouchArea {
         clicked => {
             root.history-open = false;
+            root.drives-open = false;
             root.address-editing = false;
             root.pane-focused();
             pane-keys.focus();
@@ -217,7 +311,9 @@ export component FmPane inherits Rectangle {
                 clip: false;
                 tab: pane.tabs[pane.active-tab];
                 visit-history: root.visit-history;
+                drives: root.drives;
                 history-open <=> root.history-open;
+                drives-open <=> root.drives-open;
                 new-folder => { root.new-folder(); }
                 back => { root.nav-back(); }
                 forward => { root.nav-forward(); }
@@ -226,6 +322,7 @@ export component FmPane inherits Rectangle {
                 history-pick(path) => { root.history-pick(path); }
                 view-mode-cycle => { root.view-mode-cycle(); }
                 sort-cycle => { root.sort-cycle(); }
+                branch-toggle => { root.nav-command("branch"); }
                 quick-filter-changed(q) => { root.quick-filter-changed(q); }
             }
 
@@ -251,7 +348,7 @@ export component FmPane inherits Rectangle {
                 listing-bg-ta := TouchArea {
                     width: 100%;
                     height: 100%;
-                    clicked => { root.history-open = false; root.address-editing = false; }
+                    clicked => { root.history-open = false; root.drives-open = false; root.address-editing = false; }
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                             root.entry-context("", self.mouse-x, self.mouse-y);
@@ -322,6 +419,7 @@ export component FmPane inherits Rectangle {
                         sort-size-label: pane.tabs[pane.active-tab].sort-size-label;
                         sort-modified-label: pane.tabs[pane.active-tab].sort-modified-label;
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
+                        selection-count: pane.tabs[pane.active-tab].selection-count;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
                             root.address-editing = false;
@@ -348,6 +446,7 @@ export component FmPane inherits Rectangle {
                         drop-on-current-dir => { root.drop-on-current-dir(); }
                         drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
+                        marquee-select(a, b, add) => { root.marquee-select(a, b, add, 1); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -367,6 +466,7 @@ export component FmPane inherits Rectangle {
                         drag-active: root.drag-active;
                         drag-drop-target: root.drag-drop-target;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
+                        selection-count: pane.tabs[pane.active-tab].selection-count;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
                             root.address-editing = false;
@@ -392,6 +492,7 @@ export component FmPane inherits Rectangle {
                         drop-on-current-dir => { root.drop-on-current-dir(); }
                         drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
+                        marquee-select(a, b, add, cols) => { root.marquee-select(a, b, add, cols); }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {
@@ -477,6 +578,42 @@ export component FmPane inherits Rectangle {
                                 vertical-alignment: center;
                                 wrap: no-wrap;
                                 overflow: elide;
+                            }
+                        }
+
+                        if transfer-active : Rectangle {
+                            height: 100%;
+                            pause-ta := TouchArea {
+                                clicked => { root.nav-command(root.transfer-paused ? "resume" : "pause"); }
+                            }
+                            Text {
+                                text: root.transfer-paused ? Strings.fm-transfer-resume : Strings.fm-transfer-pause;
+                                color: pause-ta.has-hover ? Theme.text-primary : Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if transfer-active : Rectangle {
+                            height: 100%;
+                            xfer-cancel-ta := TouchArea {
+                                clicked => { root.nav-command("cancel"); }
+                            }
+                            Text {
+                                text: Strings.fm-transfer-cancel;
+                                color: xfer-cancel-ta.has-hover ? Theme.text-primary : Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if transfer-queue > 0 : Rectangle {
+                            height: 100%;
+                            Text {
+                                text: "+" + transfer-queue;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
                             }
                         }
 

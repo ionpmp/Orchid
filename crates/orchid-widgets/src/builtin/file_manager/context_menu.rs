@@ -46,6 +46,8 @@ pub struct ContextMenuInputs {
     pub managed_policy_available: bool,
     /// Current folder can accept create/paste (not a virtual listing).
     pub can_create: bool,
+    /// Dual-pane mode (compare / sync against the other pane).
+    pub dual_pane: bool,
 }
 
 /// Read-only header shown at the top of a file/folder context menu.
@@ -189,17 +191,63 @@ pub fn build_for_selection(
                 "widget-viewer",
                 single_file,
             ),
+            item(
+                "fs.open-tab",
+                "fm-action-open-tab",
+                "action-new-tab",
+                has_selection,
+            ),
+            item(
+                "fs.open-other-pane",
+                "fm-action-open-other-pane",
+                "action-open",
+                has_selection,
+            ),
         ],
     });
     items.last_mut().unwrap().separator_after = true;
 
+    items.push(ContextMenuItem {
+        id: "fs.copy".into(),
+        label_key: "fm-action-copy".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: has_selection,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.copy-to-other",
+                "fm-action-copy-other",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.copy-verify",
+                "fm-action-copy-verify",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.copy-newer",
+                "fm-action-copy-newer",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.copy-structure",
+                "fm-action-copy-structure",
+                "action-copy",
+                has_selection,
+            ),
+        ],
+    });
+    items.push(item("fs.cut", "fm-action-cut", "action-cut", has_selection));
     items.push(item(
-        "fs.copy",
-        "fm-action-copy",
-        "action-copy",
+        "fs.move-to-other",
+        "fm-action-move-other",
+        "action-cut",
         has_selection,
     ));
-    items.push(item("fs.cut", "fm-action-cut", "action-cut", has_selection));
     items.push(sep(item(
         "fs.paste",
         "fm-action-paste",
@@ -208,17 +256,77 @@ pub fn build_for_selection(
     )));
 
     items.push(item(
-        "fs.rename",
-        "fm-action-rename",
+        if single {
+            "fs.rename"
+        } else {
+            "fs.batch-rename"
+        },
+        if single {
+            "fm-action-rename"
+        } else {
+            "fm-action-batch-rename"
+        },
         "action-rename",
-        single,
-    ));
-    items.push(sep(item(
-        "fs.delete",
-        "fm-action-delete",
-        "action-delete",
         has_selection,
-    )));
+    ));
+    items.push(ContextMenuItem {
+        id: "fs.delete".into(),
+        label_key: "fm-action-delete".into(),
+        icon: "action-delete",
+        swatch_color: None,
+        enabled: has_selection,
+        separator_after: true,
+        submenu: vec![
+            item(
+                "fs.delete-recycle",
+                "fm-action-delete-recycle",
+                "action-delete",
+                has_selection,
+            ),
+            item(
+                "fs.delete-permanent",
+                "fm-action-delete-permanent",
+                "action-delete",
+                has_selection,
+            ),
+        ],
+    });
+
+    items.push(ContextMenuItem {
+        id: "fs.link".into(),
+        label_key: "fm-action-link".into(),
+        icon: "action-new-file",
+        swatch_color: None,
+        enabled: single,
+        separator_after: true,
+        submenu: vec![
+            item(
+                "fs.link-symlink",
+                "fm-action-symlink",
+                "action-new-file",
+                single,
+            ),
+            item(
+                "fs.link-hard",
+                "fm-action-hardlink",
+                "action-new-file",
+                single,
+            ),
+            item(
+                "fs.link-junction",
+                "fm-action-junction",
+                "action-new-folder",
+                single,
+            ),
+        ],
+    });
+
+    items.push(tools_menu(
+        has_selection,
+        single_file,
+        count >= 2,
+        inputs.dual_pane,
+    ));
 
     items.push(ContextMenuItem {
         id: "fs.tag-add".into(),
@@ -388,6 +496,15 @@ pub fn build_for_selection(
         "action-deselect",
         inputs.selection_count > 0,
     ));
+    items.push(select_more_menu(&inputs));
+    if inputs.can_create {
+        items.push(item(
+            "fs.branch-view",
+            "fm-action-branch-view",
+            "action-select-all",
+            true,
+        ));
+    }
 
     items
 }
@@ -425,8 +542,99 @@ fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
             "action-select-all",
             true,
         ));
+        items.push(select_more_menu(inputs));
+    }
+    if inputs.can_create {
+        if !items.is_empty() {
+            items.last_mut().unwrap().separator_after = true;
+        }
+        items.push(item(
+            "fs.branch-view",
+            "fm-action-branch-view",
+            "action-select-all",
+            true,
+        ));
+    }
+    if inputs.dual_pane {
+        if !items.is_empty() {
+            items.last_mut().unwrap().separator_after = true;
+        }
+        items.push(item(
+            "fs.compare-dirs",
+            "fm-action-compare-dirs",
+            "action-copy",
+            true,
+        ));
+        items.push(item(
+            "fs.sync-both",
+            "fm-action-sync-both",
+            "action-copy",
+            true,
+        ));
     }
     items
+}
+
+fn select_more_menu(inputs: &ContextMenuInputs) -> ContextMenuItem {
+    let n = inputs.entry_count > 0;
+    ContextMenuItem {
+        id: "fs.select-more".into(),
+        label_key: "fm-action-select-more".into(),
+        icon: "action-select-all",
+        swatch_color: None,
+        enabled: n,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.invert-selection",
+                "fm-action-invert-selection",
+                "action-select-all",
+                n,
+            ),
+            item(
+                "fs.select-files",
+                "fm-action-select-files",
+                "action-select-all",
+                n,
+            ),
+            item(
+                "fs.select-folders",
+                "fm-action-select-folders",
+                "action-select-all",
+                n,
+            ),
+            item(
+                "fs.select-mask-add",
+                "fm-action-select-mask",
+                "action-select-all",
+                n,
+            ),
+            item(
+                "fs.select-mask-sub",
+                "fm-action-deselect-mask",
+                "action-deselect",
+                inputs.selection_count > 0,
+            ),
+            item(
+                "fs.select-filter",
+                "fm-action-select-filter",
+                "action-select-all",
+                n,
+            ),
+            item(
+                "fs.select-hidden",
+                "fm-action-select-hidden",
+                "action-select-all",
+                n,
+            ),
+            item(
+                "fs.select-readonly",
+                "fm-action-select-readonly",
+                "action-select-all",
+                n,
+            ),
+        ],
+    }
 }
 
 fn item(id: &str, label_key: &str, icon: &'static str, enabled: bool) -> ContextMenuItem {
@@ -456,6 +664,286 @@ fn color_item(id: &str, label_key: &str, swatch: &'static str, enabled: bool) ->
 fn sep(mut it: ContextMenuItem) -> ContextMenuItem {
     it.separator_after = true;
     it
+}
+
+fn tools_menu(
+    has_selection: bool,
+    single_file: bool,
+    two_files: bool,
+    dual: bool,
+) -> ContextMenuItem {
+    let mut submenu = vec![
+        item(
+            "fs.compare-dirs",
+            "fm-action-compare-dirs",
+            "action-copy",
+            dual,
+        ),
+        item(
+            "fs.compare-dirs-bytes",
+            "fm-action-compare-dirs-bytes",
+            "action-copy",
+            dual,
+        ),
+        item(
+            "fs.compare-files",
+            "fm-action-compare-files",
+            "action-copy",
+            (single_file && dual) || two_files,
+        ),
+        item("fs.sync-to-other", "fm-action-sync-to", "action-copy", dual),
+        item(
+            "fs.sync-from-other",
+            "fm-action-sync-from",
+            "action-copy",
+            dual,
+        ),
+        item("fs.sync-both", "fm-action-sync-both", "action-copy", dual),
+        item("fs.merge-to-other", "fm-action-merge", "action-copy", dual),
+        item(
+            "fs.split",
+            "fm-action-split",
+            "action-new-file",
+            single_file,
+        ),
+        item(
+            "fs.join",
+            "fm-action-join",
+            "action-new-file",
+            has_selection,
+        ),
+    ];
+    submenu.push(ContextMenuItem {
+        id: "fs.hash".into(),
+        label_key: "fm-action-hash".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: has_selection,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.hash-md5",
+                "fm-action-hash-md5",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.hash-sha1",
+                "fm-action-hash-sha1",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.hash-sha256",
+                "fm-action-hash-sha256",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.hash-blake3",
+                "fm-action-hash-blake3",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.hash-crc32",
+                "fm-action-hash-crc32",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.hash-verify",
+                "fm-action-hash-verify",
+                "action-copy",
+                has_selection,
+            ),
+        ],
+    });
+    submenu.push(ContextMenuItem {
+        id: "fs.encode".into(),
+        label_key: "fm-action-encode".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: single_file,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.encode-base64",
+                "fm-action-encode-base64",
+                "action-copy",
+                single_file,
+            ),
+            item(
+                "fs.decode-base64",
+                "fm-action-decode-base64",
+                "action-copy",
+                single_file,
+            ),
+            item(
+                "fs.encode-uue",
+                "fm-action-encode-uue",
+                "action-copy",
+                single_file,
+            ),
+            item(
+                "fs.decode-uue",
+                "fm-action-decode-uue",
+                "action-copy",
+                single_file,
+            ),
+        ],
+    });
+    submenu.push(ContextMenuItem {
+        id: "fs.attr".into(),
+        label_key: "fm-action-attributes".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: has_selection,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.attr-readonly-on",
+                "fm-action-attr-readonly-on",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-readonly-off",
+                "fm-action-attr-readonly-off",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-hidden-on",
+                "fm-action-attr-hidden-on",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-hidden-off",
+                "fm-action-attr-hidden-off",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-system-on",
+                "fm-action-attr-system-on",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-system-off",
+                "fm-action-attr-system-off",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-archive-on",
+                "fm-action-attr-archive-on",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.attr-archive-off",
+                "fm-action-attr-archive-off",
+                "action-copy",
+                has_selection,
+            ),
+        ],
+    });
+    submenu.push(ContextMenuItem {
+        id: "fs.touch".into(),
+        label_key: "fm-action-touch".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: has_selection,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.touch-now",
+                "fm-action-touch-now",
+                "action-copy",
+                has_selection,
+            ),
+            item(
+                "fs.touch-set",
+                "fm-action-touch-set",
+                "action-copy",
+                has_selection,
+            ),
+        ],
+    });
+    submenu.push(ContextMenuItem {
+        id: "fs.case".into(),
+        label_key: "fm-action-case".into(),
+        icon: "action-rename",
+        swatch_color: None,
+        enabled: has_selection,
+        separator_after: false,
+        submenu: vec![
+            item(
+                "fs.case-lower",
+                "fm-action-case-lower",
+                "action-rename",
+                has_selection,
+            ),
+            item(
+                "fs.case-upper",
+                "fm-action-case-upper",
+                "action-rename",
+                has_selection,
+            ),
+            item(
+                "fs.case-title",
+                "fm-action-case-title",
+                "action-rename",
+                has_selection,
+            ),
+        ],
+    });
+    submenu.push(item(
+        "fs.chmod",
+        "fm-action-chmod",
+        "action-copy",
+        has_selection,
+    ));
+    #[cfg(unix)]
+    submenu.push(item(
+        "fs.chown",
+        "fm-action-chown",
+        "action-copy",
+        has_selection,
+    ));
+    #[cfg(windows)]
+    {
+        submenu.push(item(
+            "fs.acl-view",
+            "fm-action-acl-view",
+            "action-copy",
+            has_selection,
+        ));
+        submenu.push(item(
+            "fs.acl-grant",
+            "fm-action-acl-grant",
+            "action-copy",
+            has_selection,
+        ));
+        submenu.push(item(
+            "fs.acl-reset",
+            "fm-action-acl-reset",
+            "action-copy",
+            has_selection,
+        ));
+    }
+    ContextMenuItem {
+        id: "fs.tools".into(),
+        label_key: "fm-action-tools".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: true,
+        separator_after: true,
+        submenu,
+    }
 }
 
 #[cfg(test)]
@@ -500,6 +988,7 @@ mod tests {
         let ids: Vec<&str> = menu.iter().map(|i| i.id.as_str()).collect();
         assert!(ids.contains(&"fs.new-folder"));
         assert!(ids.contains(&"fs.new-file"));
+        assert!(ids.contains(&"fs.branch-view"));
         assert!(!ids.contains(&"fs.copy"));
         assert!(!ids.contains(&"fs.open"));
         assert!(!ids.contains(&"fs.paste"));
@@ -555,7 +1044,25 @@ mod tests {
         assert!(menu.iter().all(|i| i.id != "fs.properties"));
         let ids: Vec<&str> = menu.iter().map(|i| i.id.as_str()).collect();
         assert!(ids.contains(&"fs.deselect-all"));
-        assert_eq!(ids.last().copied(), Some("fs.deselect-all"));
+        assert!(ids.contains(&"fs.select-more"));
+        assert_eq!(ids.last().copied(), Some("fs.select-more"));
+        let more = menu.iter().find(|i| i.id == "fs.select-more").unwrap();
+        let sub: Vec<&str> = more.submenu.iter().map(|i| i.id.as_str()).collect();
+        assert!(sub.contains(&"fs.invert-selection"));
+        assert!(sub.contains(&"fs.select-files"));
+        assert!(sub.contains(&"fs.select-mask-add"));
+        assert!(sub.contains(&"fs.select-filter"));
+        let tools = menu.iter().find(|i| i.id == "fs.tools").unwrap();
+        let tool_ids: Vec<&str> = tools.submenu.iter().map(|i| i.id.as_str()).collect();
+        assert!(tool_ids.contains(&"fs.compare-dirs"));
+        assert!(tool_ids.contains(&"fs.split"));
+        assert!(tool_ids.contains(&"fs.hash"));
+        let hash = tools.submenu.iter().find(|i| i.id == "fs.hash").unwrap();
+        assert!(hash.submenu.iter().any(|i| i.id == "fs.hash-sha256"));
+        let open = menu.iter().find(|i| i.id == "fs.open").unwrap();
+        let open_sub: Vec<&str> = open.submenu.iter().map(|i| i.id.as_str()).collect();
+        assert!(open_sub.contains(&"fs.open-tab"));
+        assert!(open_sub.contains(&"fs.open-other-pane"));
     }
 
     fn test_locale() -> (LocaleManager, LocaleConfig) {
