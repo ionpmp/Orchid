@@ -41,6 +41,10 @@ pub use image::edit::{
     save_sibling, CropKeep, EditOp, ResizeSpec,
 };
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
+pub use image::filter::{
+    apply_filter, apply_filter_file, builtin_looks, load_filter_presets, parse_filter_line,
+    parse_filter_line_in, save_filter_preset, FilterOp, FilterPreset,
+};
 pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
 pub use image::meta_edit::{
     apply_editable_meta, copy_image_metadata, export_metadata_csv, export_metadata_xml,

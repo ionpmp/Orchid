@@ -6,6 +6,7 @@ pub mod adjust;
 pub mod color;
 pub mod edit;
 pub mod exif;
+pub mod filter;
 pub mod loader;
 pub mod lossless;
 pub mod meta_edit;
