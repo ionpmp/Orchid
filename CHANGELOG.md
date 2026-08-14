@@ -131,6 +131,12 @@ release yet.
   (four corners), straighten along a line, and auto-straighten.
   Viewer toolbar (`Shift+C` crop copy); FM **Tools → Image edit** for
   batch resize / canvas / auto-straighten.
+- Image tone / color corrections write a sibling file: brightness /
+  contrast, exposure / highlights / shadows, auto-levels / auto-contrast /
+  auto-color (gray-world), white-balance temperature / tint, saturation /
+  vibrance / hue / gamma, packed curves and levels, selective color,
+  channel mixer, grayscale / sepia / invert, posterize / solarize /
+  threshold. Viewer panel (`Shift+L` / ☼); FM **Tools → Image edit**.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

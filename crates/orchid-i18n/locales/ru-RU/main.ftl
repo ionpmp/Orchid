@@ -509,6 +509,15 @@ viewer-image-edit-canvas = Холст (2000x1500 или +40+40)
 viewer-image-edit-straighten = Выпрямить по линии
 viewer-image-edit-auto-straighten = Авто-горизонт
 viewer-image-edit-perspective = Перспектива (4 угла)
+viewer-image-adjust = Цвет / тон (копия)
+viewer-image-adjust-apply = Применить
+viewer-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
+viewer-image-adjust-auto-levels = Авто-уровни
+viewer-image-adjust-auto-contrast = Авто-контраст
+viewer-image-adjust-auto-color = Авто-цвет / баланс белого
+viewer-image-adjust-gray = Оттенки серого
+viewer-image-adjust-sepia = Сепия
+viewer-image-adjust-invert = Негатив
 viewer-image-thumbs = Миниатюры
 viewer-image-thumb-grid = Сетка миниатюр
 viewer-image-thumb-size = Размер миниатюр
@@ -767,6 +776,13 @@ fm-action-image-edit = Правка изображения
 fm-action-image-resize = Изменить размер…
 fm-action-image-canvas = Расширить холст…
 fm-action-image-auto-straighten = Авто-горизонт
+fm-action-image-adjust = Цвет / тон…
+fm-action-image-auto-levels = Авто-уровни
+fm-action-image-auto-contrast = Авто-контраст
+fm-action-image-auto-color = Авто-цвет
+fm-action-image-gray = В оттенки серого
+fm-action-image-sepia = В сепию
+fm-action-image-invert = Негатив
 fm-action-meta = Метаданные
 fm-action-meta-edit = Править IPTC / XMP…
 fm-action-meta-gps = Задать / снять GPS…
@@ -1116,6 +1132,9 @@ fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest
 fm-image-canvas-title = Холст
 fm-image-canvas-hint = 2000x1500  или  +40+40 поля
 fm-image-edit-bad-spec = Не удалось разобрать размер.
+fm-image-adjust-title = Цвет / тон
+fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
+fm-image-adjust-bad-spec = Не удалось разобрать коррекцию.
 fm-meta-edit-title = Метаданные изображения
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=широта,долгота date=ГГГГ:ММ:ДД ЧЧ:ММ:СС
 fm-meta-gps-title = GPS

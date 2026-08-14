@@ -519,6 +519,15 @@ viewer-image-edit-canvas = Expand canvas (2000x1500 or +40+40)
 viewer-image-edit-straighten = Straighten along a line
 viewer-image-edit-auto-straighten = Auto-straighten horizon
 viewer-image-edit-perspective = Perspective (click 4 corners)
+viewer-image-adjust = Color / tone (save a copy)
+viewer-image-adjust-apply = Apply
+viewer-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
+viewer-image-adjust-auto-levels = Auto-levels
+viewer-image-adjust-auto-contrast = Auto-contrast
+viewer-image-adjust-auto-color = Auto-color / white balance
+viewer-image-adjust-gray = Grayscale
+viewer-image-adjust-sepia = Sepia
+viewer-image-adjust-invert = Invert / negative
 viewer-image-thumbs = Miniatures
 viewer-image-thumb-grid = Grille de miniatures
 viewer-image-thumb-size = Taille des miniatures
@@ -778,6 +787,13 @@ fm-action-image-edit = Image edit
 fm-action-image-resize = Resize image…
 fm-action-image-canvas = Expand canvas…
 fm-action-image-auto-straighten = Auto-straighten
+fm-action-image-adjust = Adjust color / tone…
+fm-action-image-auto-levels = Auto-levels
+fm-action-image-auto-contrast = Auto-contrast
+fm-action-image-auto-color = Auto-color
+fm-action-image-gray = Convert to grayscale
+fm-action-image-sepia = Convert to sepia
+fm-action-image-invert = Invert / negative
 fm-action-meta = Métadonnées
 fm-action-meta-edit = Modifier IPTC / XMP…
 fm-action-meta-gps = Définir / effacer GPS…
@@ -1127,6 +1143,9 @@ fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest
 fm-image-canvas-title = Expand canvas
 fm-image-canvas-hint = 2000x1500  or  +40+40 padding
 fm-image-edit-bad-spec = Could not parse the size.
+fm-image-adjust-title = Adjust color / tone
+fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
+fm-image-adjust-bad-spec = Could not parse the adjustment.
 fm-meta-edit-title = Métadonnées de l’image
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

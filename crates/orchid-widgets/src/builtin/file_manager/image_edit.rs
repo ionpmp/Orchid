@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use orchid_viewers::{
-    apply_edit_file, is_image_file_extension, load_image_file, parse_canvas_line,
-    parse_resize_line, EditOp,
+    apply_adjust_file, apply_edit_file, is_image_file_extension, load_image_file,
+    parse_adjust_line, parse_canvas_line, parse_resize_line, AdjustOp, EditOp,
 };
 
 use super::map_fs_error;
@@ -23,6 +23,13 @@ pub(super) async fn run(
         "fs.image-resize" => resize(inner, paths, input).await,
         "fs.image-canvas" => canvas(inner, paths, input).await,
         "fs.image-auto-straighten" => auto_straighten(inner, paths).await,
+        "fs.image-adjust" => adjust(inner, paths, input).await,
+        "fs.image-auto-levels" => adjust_token(inner, paths, AdjustOp::AutoLevels).await,
+        "fs.image-auto-contrast" => adjust_token(inner, paths, AdjustOp::AutoContrast).await,
+        "fs.image-auto-color" => adjust_token(inner, paths, AdjustOp::AutoColor).await,
+        "fs.image-gray" => adjust_token(inner, paths, AdjustOp::Grayscale).await,
+        "fs.image-sepia" => adjust_token(inner, paths, AdjustOp::Sepia).await,
+        "fs.image-invert" => adjust_token(inner, paths, AdjustOp::Invert).await,
         _ => Ok(ActionOutcome::Done),
     }
 }
@@ -97,6 +104,49 @@ async fn auto_straighten(
     Ok(report_count(locale, "fm-action-image-auto-straighten", n))
 }
 
+async fn adjust(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.image-adjust",
+            &path_strs(&images),
+            "brightness=0 | contrast=0 | saturation=0 | temp=0",
+            locale.tr("fm-image-adjust-title"),
+            locale.tr("fm-image-adjust-hint"),
+        ));
+    };
+    let op = parse_adjust_line(raw).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation(locale.tr("fm-image-adjust-bad-spec"))
+    })?;
+    let n = apply_adjust_all(&images, &op)?;
+    Ok(report_count(locale, "fm-image-adjust-title", n))
+}
+
+async fn adjust_token(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    op: AdjustOp,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let images = selected_images(inner, paths)?;
+    let title = match op {
+        AdjustOp::AutoLevels => "fm-action-image-auto-levels",
+        AdjustOp::AutoContrast => "fm-action-image-auto-contrast",
+        AdjustOp::AutoColor => "fm-action-image-auto-color",
+        AdjustOp::Grayscale => "fm-action-image-gray",
+        AdjustOp::Sepia => "fm-action-image-sepia",
+        AdjustOp::Invert => "fm-action-image-invert",
+        _ => "fm-image-adjust-title",
+    };
+    let n = apply_adjust_all(&images, &op)?;
+    Ok(report_count(locale, title, n))
+}
+
 fn selected_images(
     inner: &Arc<FileManagerInner>,
     paths: &[String],
@@ -121,6 +171,16 @@ fn selected_images(
         ));
     }
     Ok(out)
+}
+
+fn apply_adjust_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &AdjustOp) -> WidgetResult<u32> {
+    let mut n = 0u32;
+    for (_, os) in images {
+        apply_adjust_file(os, op)
+            .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 fn apply_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &EditOp) -> WidgetResult<u32> {

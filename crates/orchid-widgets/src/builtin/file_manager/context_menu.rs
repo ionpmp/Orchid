@@ -811,6 +811,48 @@ fn tools_menu(
                     "action-copy",
                     has_selection,
                 ),
+                item(
+                    "fs.image-adjust",
+                    "fm-action-image-adjust",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-auto-levels",
+                    "fm-action-image-auto-levels",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-auto-contrast",
+                    "fm-action-image-auto-contrast",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-auto-color",
+                    "fm-action-image-auto-color",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-gray",
+                    "fm-action-image-gray",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-sepia",
+                    "fm-action-image-sepia",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-invert",
+                    "fm-action-image-invert",
+                    "action-copy",
+                    has_selection,
+                ),
             ],
         },
         ContextMenuItem {
@@ -1552,6 +1594,12 @@ mod tests {
         assert!(tool_ids.contains(&"fs.hash"));
         assert!(tool_ids.contains(&"fs.meta"));
         assert!(tool_ids.contains(&"fs.image-edit"));
+        let image_edit = tools
+            .submenu
+            .iter()
+            .find(|i| i.id == "fs.image-edit")
+            .unwrap();
+        assert!(image_edit.submenu.iter().any(|i| i.id == "fs.image-adjust"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

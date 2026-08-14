@@ -87,9 +87,16 @@ pub(super) async fn run(
         | "fs.meta-import-csv"
         | "fs.meta-template-save"
         | "fs.meta-template-apply" => super::meta_edit::run(inner, action_id, paths, input).await,
-        "fs.image-resize" | "fs.image-canvas" | "fs.image-auto-straighten" => {
-            super::image_edit::run(inner, action_id, paths, input).await
-        }
+        "fs.image-resize"
+        | "fs.image-canvas"
+        | "fs.image-auto-straighten"
+        | "fs.image-adjust"
+        | "fs.image-auto-levels"
+        | "fs.image-auto-contrast"
+        | "fs.image-auto-color"
+        | "fs.image-gray"
+        | "fs.image-sepia"
+        | "fs.image-invert" => super::image_edit::run(inner, action_id, paths, input).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,
