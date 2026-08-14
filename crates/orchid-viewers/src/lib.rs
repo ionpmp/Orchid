@@ -39,6 +39,12 @@ pub use image::adjust::{
 pub use image::annotate::{
     apply_annotate, apply_annotate_file, parse_annotate_line, AnnotateOp, DrawStyle, WatermarkPos,
 };
+pub use image::batch::{
+    compare_files, compare_strip, composite, composite_files, convert_file, diff_files,
+    export_thumb_file, image_date_token, load_batch_recipes, merge_hdr, merge_hdr_files,
+    pick_best_file, pixel_diff, planned_sibling, save_batch_recipe, stitch_panorama,
+    stitch_panorama_files, BatchRecipe, CompositeMode, DiffStats, EncodeFormat,
+};
 pub use image::edit::{
     apply_edit, apply_edit_file, parse_canvas_line, parse_resize_line, parse_resize_spec,
     save_sibling, CropKeep, EditOp, ResizeSpec,

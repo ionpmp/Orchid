@@ -4,6 +4,7 @@ use std::any::Any;
 
 pub mod adjust;
 pub mod annotate;
+pub mod batch;
 pub mod color;
 pub mod edit;
 pub mod exif;
