@@ -14,6 +14,7 @@ pub mod lossless;
 pub mod meta_edit;
 pub mod metadata;
 pub mod operations;
+pub mod print;
 pub mod slideshow;
 pub mod transform;
 

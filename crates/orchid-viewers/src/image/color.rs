@@ -65,6 +65,40 @@ pub fn apply_embedded_icc(rgba: &mut [u8], file_bytes: &[u8]) -> ColorManageInfo
     }
 }
 
+/// Transform sRGB-working pixels into `dest_icc` (printer / custom profile).
+#[must_use]
+pub fn transform_srgb_to_icc(rgba: &mut [u8], dest_icc: &[u8]) -> bool {
+    let Some(mut dest_profile) = qcms::Profile::new_from_slice(dest_icc, false) else {
+        return false;
+    };
+    dest_profile.precache_output_transform();
+    let src_profile = qcms::Profile::new_sRGB();
+    let Some(xform) = qcms::Transform::new(
+        src_profile.as_ref(),
+        dest_profile.as_ref(),
+        qcms::DataType::RGBA8,
+        qcms::Intent::default(),
+    ) else {
+        return false;
+    };
+    xform.apply(rgba);
+    true
+}
+
+/// Bytes for a named print destination: `srgb`, `monitor`, or a `.icc` path.
+#[must_use]
+pub fn load_print_icc(name: &str) -> Option<Vec<u8>> {
+    let t = name.trim();
+    if t.is_empty() || t.eq_ignore_ascii_case("srgb") {
+        return None;
+    }
+    if t.eq_ignore_ascii_case("monitor") {
+        return monitor_icc_profile();
+    }
+    let path = std::path::Path::new(t);
+    std::fs::read(path).ok().filter(|b| b.len() > 128)
+}
+
 /// Description of an embedded ICC profile, when the file carries one.
 #[must_use]
 pub fn embedded_icc_label(bytes: &[u8]) -> Option<String> {
