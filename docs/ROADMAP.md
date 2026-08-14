@@ -120,6 +120,12 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
 ## v1.x — 9–18 months
 
 - [ ] AI agents (Ollama + OpenAI API) — will enqueue on `BackgroundJobQueue` (already used for RSS/weather)
+- [ ] Photo library intelligence (after AI agents) — builds on FM `TagManager` + the image viewer
+  - [ ] Hierarchical tags (`places/italy/rome`, nested sidebar, inherit / filter by ancestor)
+  - [ ] Auto-tagging via AI — local Ollama or OpenAI: scene, objects, caption → tags (opt-in, review before apply)
+  - [ ] Face recognition and grouping by people — detect / cluster / name, People virtual folder, privacy: local embeddings only
+  - [ ] Group photos by event / date — burst + EXIF/XMP shoot-date clusters, named events
+  - [ ] Smart albums by criteria — saved queries (tag / person / date / GPS / rating / type) as virtual folders
 - [ ] Graphical resource monitor with history
 - [~] Extended notification system — in-app list with Clear all, per-item dismiss, a 50-item soft cap, and redb-backed persistence across sessions; startup tip + bridged FM/password/config/viewer action failures (incl. PDF/archive/viewport + FM rename/delete/drop/context); OS toasts deferred
 - [ ] Built-in browser (WebView2)
