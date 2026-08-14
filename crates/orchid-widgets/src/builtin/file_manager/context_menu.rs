@@ -786,6 +786,34 @@ fn tools_menu(
         ),
         item("fs.exif", "fm-action-exif", "action-copy", single_file),
         ContextMenuItem {
+            id: "fs.image-edit".into(),
+            label_key: "fm-action-image-edit".into(),
+            icon: "action-copy",
+            swatch_color: None,
+            enabled: has_selection,
+            separator_after: false,
+            submenu: vec![
+                item(
+                    "fs.image-resize",
+                    "fm-action-image-resize",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-canvas",
+                    "fm-action-image-canvas",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-auto-straighten",
+                    "fm-action-image-auto-straighten",
+                    "action-copy",
+                    has_selection,
+                ),
+            ],
+        },
+        ContextMenuItem {
             id: "fs.meta".into(),
             label_key: "fm-action-meta".into(),
             icon: "action-copy",
@@ -1523,6 +1551,7 @@ mod tests {
         assert!(tool_ids.contains(&"fs.split"));
         assert!(tool_ids.contains(&"fs.hash"));
         assert!(tool_ids.contains(&"fs.meta"));
+        assert!(tool_ids.contains(&"fs.image-edit"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

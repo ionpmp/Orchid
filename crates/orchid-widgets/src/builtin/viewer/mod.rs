@@ -15,9 +15,10 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    apply_lossless, format_from_extension, ArchiveViewer, DocumentViewer, HistMode, ImageFitMode,
-    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
-    TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
+    apply_edit, apply_lossless, format_from_extension, parse_canvas_line, parse_resize_line,
+    ArchiveViewer, CropKeep, DocumentViewer, EditOp, HistMode, ImageFitMode, ImageThumbItem,
+    ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter, TextViewer,
+    ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -934,6 +935,132 @@ impl ViewerWidgetInner {
         self.apply_lossless_current(LosslessOp::Crop { x, y, w, h })
             .await
     }
+
+    async fn apply_edit_current(&self, op: EditOp) -> WidgetResult<()> {
+        let Some(src) = self.path.read().clone() else {
+            return Ok(());
+        };
+        let img = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(viewer) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            viewer.clone_loaded()
+        };
+        let Some(img) = img else {
+            return Ok(());
+        };
+        let os = src
+            .to_local()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        let suffix = match &op {
+            EditOp::Crop { .. } => "crop",
+            EditOp::Resize { .. } => "resize",
+            EditOp::Canvas { .. } => "canvas",
+            EditOp::Perspective { .. } => "perspective",
+            EditOp::Straighten { .. } | EditOp::AutoStraighten => "straighten",
+        };
+        let dest = tokio::task::spawn_blocking(move || {
+            let out = apply_edit(&img, &op)?;
+            orchid_viewers::save_sibling(&os, &out, suffix)
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+        .map_err(map_viewer_err)?;
+        let next = orchid_fs::FsPath::from_local(&dest)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        self.open_path(next).await
+    }
+
+    async fn edit_crop_from_view(
+        &self,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        aspect: f32,
+        keep: u8,
+    ) -> WidgetResult<()> {
+        let crop = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            img.viewport_rect_to_image_crop(x0, y0, x1, y1)
+        };
+        let Some((x, y, w, h)) = crop else {
+            return Ok(());
+        };
+        self.apply_edit_current(EditOp::Crop {
+            x,
+            y,
+            w,
+            h,
+            aspect: (aspect > 0.05).then_some(aspect),
+            keep: match keep {
+                1 => CropKeep::Width,
+                2 => CropKeep::Height,
+                _ => CropKeep::None,
+            },
+        })
+        .await
+    }
+
+    async fn edit_line_from_view(
+        &self,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        perspective: bool,
+        extra: &[(f32, f32)],
+    ) -> WidgetResult<()> {
+        let pts = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            let mut out = Vec::new();
+            for (x, y) in [(x0, y0), (x1, y1)]
+                .into_iter()
+                .chain(extra.iter().copied())
+            {
+                if let Some(p) = img.viewport_to_image(x, y) {
+                    out.push(p);
+                }
+            }
+            out
+        };
+        if perspective {
+            if pts.len() < 4 {
+                return Ok(());
+            }
+            return self
+                .apply_edit_current(EditOp::Perspective {
+                    quad: [pts[0], pts[1], pts[2], pts[3]],
+                })
+                .await;
+        }
+        if pts.len() < 2 {
+            return Ok(());
+        }
+        self.apply_edit_current(EditOp::Straighten {
+            x0: pts[0].0,
+            y0: pts[0].1,
+            x1: pts[1].0,
+            y1: pts[1].1,
+        })
+        .await
+    }
 }
 
 /// Viewer widget.
@@ -1412,7 +1539,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             | "meta-strip"
             | "meta-strip-gps"
             | "meta-export-csv"
-            | "meta-export-xml" => {}
+            | "meta-export-xml"
+            | "edit-auto-straighten" => {}
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
                 || cmd.starts_with("lossless")
@@ -1421,7 +1549,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("slideshow-interval:")
                 || cmd.starts_with("slideshow-music:")
                 || cmd.starts_with("probe:")
-                || cmd.starts_with("meta-save:") => {}
+                || cmd.starts_with("meta-save:")
+                || cmd.starts_with("edit-") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1503,6 +1632,86 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         cmd if let Some(raw) = cmd.strip_prefix("lossless-folder:") => {
             if let Some(op) = LosslessOp::from_token(raw) {
                 inner.apply_lossless_folder(op).await?;
+            }
+        }
+        "edit-auto-straighten" => inner.apply_edit_current(EditOp::AutoStraighten).await?,
+        cmd if let Some(raw) = cmd.strip_prefix("edit-resize:") => {
+            if let Some((spec, filter)) = parse_resize_line(raw) {
+                inner
+                    .apply_edit_current(EditOp::Resize { spec, filter })
+                    .await?;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("edit-canvas:") => {
+            let size = {
+                let guard = inner.viewer.lock().await;
+                guard.as_ref().and_then(|v| {
+                    v.as_any()
+                        .downcast_ref::<ImageViewer>()
+                        .and_then(|img| img.clone_loaded())
+                        .map(|i| (i.width, i.height))
+                })
+            };
+            if let Some((sw, sh)) = size {
+                if let Some((w, h)) = parse_canvas_line(raw, sw, sh) {
+                    inner
+                        .apply_edit_current(EditOp::Canvas {
+                            width: w,
+                            height: h,
+                            fill: [0, 0, 0, 255],
+                        })
+                        .await?;
+                }
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("edit-crop:") => {
+            let parts: Vec<&str> = raw.split(':').collect();
+            if parts.len() >= 4 {
+                if let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
+                    parts[0].parse::<f32>(),
+                    parts[1].parse::<f32>(),
+                    parts[2].parse::<f32>(),
+                    parts[3].parse::<f32>(),
+                ) {
+                    let aspect = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                    let keep = parts.get(5).and_then(|s| s.parse().ok()).unwrap_or(0u8);
+                    inner
+                        .edit_crop_from_view(x0, y0, x1, y1, aspect, keep)
+                        .await?;
+                }
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("edit-straighten:") => {
+            let parts: Vec<&str> = raw.split(':').collect();
+            if parts.len() == 4 {
+                if let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
+                    parts[0].parse::<f32>(),
+                    parts[1].parse::<f32>(),
+                    parts[2].parse::<f32>(),
+                    parts[3].parse::<f32>(),
+                ) {
+                    inner
+                        .edit_line_from_view(x0, y0, x1, y1, false, &[])
+                        .await?;
+                }
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("edit-perspective:") => {
+            let parts: Vec<&str> = raw.split(':').collect();
+            if parts.len() == 8 {
+                let nums: Result<Vec<f32>, _> = parts.iter().map(|s| s.parse()).collect();
+                if let Ok(n) = nums {
+                    inner
+                        .edit_line_from_view(
+                            n[0],
+                            n[1],
+                            n[2],
+                            n[3],
+                            true,
+                            &[(n[4], n[5]), (n[6], n[7])],
+                        )
+                        .await?;
+                }
             }
         }
         cmd if let Some(raw) = cmd.strip_prefix("lossless-crop:") => {

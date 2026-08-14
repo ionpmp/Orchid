@@ -124,6 +124,13 @@ release yet.
   files, CSV/XML export and CSV import, and folder templates
   (`orchid-meta-templates.json`). File Manager **Tools → Metadata**; the
   viewer panel can save, strip, and export the open file.
+- Destructive image edits write a sibling file (never the original):
+  rectangle crop with optional aspect lock (1:1 / 4:3 / 3:2 / 16:9) and
+  keep-width / keep-height, resize to `%` / `px` / `cm` with
+  Nearest / Bilinear / Bicubic / Lanczos, canvas expand, perspective
+  (four corners), straighten along a line, and auto-straighten.
+  Viewer toolbar (`Shift+C` crop copy); FM **Tools → Image edit** for
+  batch resize / canvas / auto-straighten.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

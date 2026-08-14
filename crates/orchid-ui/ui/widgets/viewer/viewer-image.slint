@@ -35,6 +35,18 @@ export component ViewerImageView inherits Rectangle {
     property <bool> show-recent: false;
     property <bool> select-zoom: false;
     property <bool> select-crop: false;
+    property <bool> select-edit-crop: false;
+    property <bool> select-straighten: false;
+    property <bool> select-perspective: false;
+    property <int> persp-n: 0;
+    property <length> persp-x0: 0px;
+    property <length> persp-y0: 0px;
+    property <length> persp-x1: 0px;
+    property <length> persp-y1: 0px;
+    property <length> persp-x2: 0px;
+    property <length> persp-y2: 0px;
+    property <float> crop-aspect: 0;
+    property <int> crop-keep: 0;
     property <bool> selecting: false;
     property <length> sel-x0: 0px;
     property <length> sel-y0: 0px;
@@ -152,7 +164,38 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (!event.modifiers.control && (event.text == "c" || event.text == "C")) {
-                root.select-crop = !root.select-crop;
+                if (event.modifiers.shift) {
+                    root.select-edit-crop = !root.select-edit-crop;
+                    root.select-crop = false;
+                } else {
+                    root.select-crop = !root.select-crop;
+                    root.select-edit-crop = false;
+                }
+                return accept;
+            }
+            if (event.modifiers.shift && (event.text == "a" || event.text == "A")) {
+                if (root.crop-aspect < 0.5) { root.crop-aspect = 1; }
+                else if (root.crop-aspect < 1.1) { root.crop-aspect = 1.333333; }
+                else if (root.crop-aspect < 1.4) { root.crop-aspect = 1.5; }
+                else if (root.crop-aspect < 1.6) { root.crop-aspect = 1.777778; }
+                else { root.crop-aspect = 0; }
+                return accept;
+            }
+            if (event.modifiers.shift && (event.text == "k" || event.text == "K")) {
+                root.crop-keep = (root.crop-keep + 1) > 2 ? 0 : root.crop-keep + 1;
+                return accept;
+            }
+            if (event.modifiers.shift && event.text == "/") {
+                root.select-straighten = !root.select-straighten;
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "a" || event.text == "A")) {
+                root.command("edit-auto-straighten");
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.alt && (event.text == "p" || event.text == "P")) {
+                root.select-perspective = !root.select-perspective;
+                root.persp-n = 0;
                 return accept;
             }
             if (event.text == "r" || event.text == "R") {
@@ -1464,6 +1507,199 @@ export component ViewerImageView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.select-edit-crop ? Theme.surface-raised
+                        : ed-crop-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-crop-ta := TouchArea {
+                        clicked => { root.select-edit-crop = !root.select-edit-crop; root.select-crop = false; img-keys.focus(); }
+                    }
+                    if ed-crop-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-crop-hint.preferred-width + 12px;
+                        height: ed-crop-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-crop-hint := Text { x: 6px; y: 3px; text: model.edit-crop-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "✂+";
+                        color: root.select-edit-crop ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 36px;
+                    height: 28px;
+                    background: ed-asp-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-asp-ta := TouchArea {
+                        clicked => {
+                            if (root.crop-aspect < 0.5) { root.crop-aspect = 1; }
+                            else if (root.crop-aspect < 1.1) { root.crop-aspect = 1.333333; }
+                            else if (root.crop-aspect < 1.4) { root.crop-aspect = 1.5; }
+                            else if (root.crop-aspect < 1.6) { root.crop-aspect = 1.777778; }
+                            else { root.crop-aspect = 0; }
+                            img-keys.focus();
+                        }
+                    }
+                    if ed-asp-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-asp-hint.preferred-width + 12px;
+                        height: ed-asp-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-asp-hint := Text { x: 6px; y: 3px; text: model.edit-aspect-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: root.crop-aspect < 0.5 ? "free"
+                            : root.crop-aspect < 1.1 ? "1:1"
+                            : root.crop-aspect < 1.4 ? "4:3"
+                            : root.crop-aspect < 1.6 ? "3:2"
+                            : "16:9";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: ed-keep-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-keep-ta := TouchArea {
+                        clicked => { root.crop-keep = (root.crop-keep + 1) > 2 ? 0 : root.crop-keep + 1; img-keys.focus(); }
+                    }
+                    if ed-keep-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-keep-hint.preferred-width + 12px;
+                        height: ed-keep-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-keep-hint := Text { x: 6px; y: 3px; text: model.edit-keep-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: root.crop-keep == 1 ? "W" : root.crop-keep == 2 ? "H" : "·";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 72px;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    ed-resize-in := TextInput {
+                        text: "50%";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accepted => { root.command("edit-resize:" + self.text); img-keys.focus(); }
+                    }
+                }
+
+                Rectangle {
+                    width: 72px;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    ed-canvas-in := TextInput {
+                        text: "+40+40";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accepted => { root.command("edit-canvas:" + self.text); img-keys.focus(); }
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.select-straighten ? Theme.surface-raised
+                        : ed-str-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-str-ta := TouchArea {
+                        clicked => { root.select-straighten = !root.select-straighten; img-keys.focus(); }
+                    }
+                    if ed-str-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-str-hint.preferred-width + 12px;
+                        height: ed-str-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-str-hint := Text { x: 6px; y: 3px; text: model.edit-straighten-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "/";
+                        color: root.select-straighten ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: ed-auto-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-auto-ta := TouchArea {
+                        clicked => { root.command("edit-auto-straighten"); img-keys.focus(); }
+                    }
+                    if ed-auto-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-auto-hint.preferred-width + 12px;
+                        height: ed-auto-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-auto-hint := Text { x: 6px; y: 3px; text: model.edit-auto-straighten-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "⌐"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.select-perspective ? Theme.surface-raised
+                        : ed-persp-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-persp-ta := TouchArea {
+                        clicked => { root.select-perspective = !root.select-perspective; root.persp-n = 0; img-keys.focus(); }
+                    }
+                    if ed-persp-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-persp-hint.preferred-width + 12px;
+                        height: ed-persp-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-persp-hint := Text { x: 6px; y: 3px; text: model.edit-perspective-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: "◇";
+                        color: root.select-perspective ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     min-width: 36px;
                     height: 28px;
                     background: ll-exif-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1929,7 +2165,22 @@ export component ViewerImageView inherits Rectangle {
                         root.swipe-x = self.mouse-x;
                         root.swipe-y = self.mouse-y;
                         root.middle-pan = e.button == PointerEventButton.middle;
-                        if (e.modifiers.shift || root.select-zoom || root.select-crop) {
+                        if (root.select-perspective) {
+                            if (root.persp-n == 0) { root.persp-x0 = self.mouse-x; root.persp-y0 = self.mouse-y; }
+                            if (root.persp-n == 1) { root.persp-x1 = self.mouse-x; root.persp-y1 = self.mouse-y; }
+                            if (root.persp-n == 2) { root.persp-x2 = self.mouse-x; root.persp-y2 = self.mouse-y; }
+                            if (root.persp-n == 3) {
+                                root.command("edit-perspective:"
+                                    + (root.persp-x0 / 1px) + ":" + (root.persp-y0 / 1px) + ":"
+                                    + (root.persp-x1 / 1px) + ":" + (root.persp-y1 / 1px) + ":"
+                                    + (root.persp-x2 / 1px) + ":" + (root.persp-y2 / 1px) + ":"
+                                    + (self.mouse-x / 1px) + ":" + (self.mouse-y / 1px));
+                                root.select-perspective = false;
+                                root.persp-n = 0;
+                            } else {
+                                root.persp-n = root.persp-n + 1;
+                            }
+                        } else if (e.modifiers.shift || root.select-zoom || root.select-crop || root.select-edit-crop || root.select-straighten) {
                             root.selecting = true;
                             root.sel-x0 = self.mouse-x;
                             root.sel-y0 = self.mouse-y;
@@ -1947,6 +2198,20 @@ export component ViewerImageView inherits Rectangle {
                                     + (root.sel-y0 / 1px) + ":"
                                     + (root.sel-x1 / 1px) + ":"
                                     + (root.sel-y1 / 1px));
+                            } else if (root.select-edit-crop) {
+                                root.command("edit-crop:"
+                                    + (root.sel-x0 / 1px) + ":"
+                                    + (root.sel-y0 / 1px) + ":"
+                                    + (root.sel-x1 / 1px) + ":"
+                                    + (root.sel-y1 / 1px) + ":"
+                                    + root.crop-aspect + ":"
+                                    + root.crop-keep);
+                            } else if (root.select-straighten) {
+                                root.command("edit-straighten:"
+                                    + (root.sel-x0 / 1px) + ":"
+                                    + (root.sel-y0 / 1px) + ":"
+                                    + (root.sel-x1 / 1px) + ":"
+                                    + (root.sel-y1 / 1px));
                             } else {
                                 root.command("zoom-rect:"
                                     + (root.sel-x0 / 1px) + ":"
@@ -1957,6 +2222,8 @@ export component ViewerImageView inherits Rectangle {
                             root.selecting = false;
                             root.select-zoom = false;
                             root.select-crop = false;
+                            root.select-edit-crop = false;
+                            root.select-straighten = false;
                         } else if (model.fit-mode != 0
                             && abs(self.mouse-x - root.swipe-x) > 80px
                             && abs(self.mouse-x - root.swipe-x) > abs(self.mouse-y - root.swipe-y) * 2) {
@@ -1971,7 +2238,11 @@ export component ViewerImageView inherits Rectangle {
                 moved => {
                     if (root.selecting && self.pressed) {
                         root.sel-x1 = self.mouse-x;
-                        root.sel-y1 = self.mouse-y;
+                        if (root.select-edit-crop && root.crop-aspect > 0.05) {
+                            root.sel-y1 = root.sel-y0 + ((self.mouse-x - root.sel-x0) / 1px / root.crop-aspect) * 1px;
+                        } else {
+                            root.sel-y1 = self.mouse-y;
+                        }
                     } else if (self.pressed && (model.fit-mode == 0 || root.middle-pan)) {
                         root.pan(self.mouse-x - root.last-mx, self.mouse-y - root.last-my);
                         root.last-mx = self.mouse-x;

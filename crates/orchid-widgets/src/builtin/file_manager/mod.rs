@@ -6,6 +6,7 @@ pub mod clipboard;
 pub mod config;
 pub mod context_menu;
 pub mod find;
+mod image_edit;
 mod meta_edit;
 pub mod navigation;
 pub mod selection;
@@ -4638,6 +4639,9 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.meta-import-csv"
             | "fs.meta-template-save"
             | "fs.meta-template-apply"
+            | "fs.image-resize"
+            | "fs.image-canvas"
+            | "fs.image-auto-straighten"
             | "fs.id3"
             | "fs.office-meta"
             | "fs.signature"
