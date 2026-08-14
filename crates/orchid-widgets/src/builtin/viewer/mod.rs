@@ -764,8 +764,20 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             "kiosk" => img.toggle_kiosk(),
             "exit-immersive" => img.exit_immersive(),
             "lens" => img.toggle_lens(),
+            "rotate-180" => img.rotate_180(),
+            "reset-transform" => img.reset_transforms(),
             "next" | "prev" | "first" | "last" | "random" | "loop" => {}
             cmd if cmd.starts_with("goto:") || cmd.starts_with("recent:") => {}
+            cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
+                if let Ok(deg) = raw.parse::<f32>() {
+                    img.set_rotation(deg);
+                }
+            }
+            cmd if let Some(raw) = cmd.strip_prefix("rotate-by:") => {
+                if let Ok(delta) = raw.parse::<f32>() {
+                    img.rotate_by(delta);
+                }
+            }
             cmd if let Some(raw) = cmd.strip_prefix("zoom:") => {
                 let raw = raw.trim().trim_end_matches('%');
                 if let Ok(p) = raw.parse::<f32>() {

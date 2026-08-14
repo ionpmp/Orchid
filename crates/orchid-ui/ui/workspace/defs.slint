@@ -858,7 +858,7 @@ export struct ViewerImageModel {
     zoom: float,
     pan-x: length,
     pan-y: length,
-    rotation-deg: int,
+    rotation-deg: float,
     flipped-h: bool,
     flipped-v: bool,
     /// 0 custom, 1 window, 2 width, 3 height, 4 shrink.
@@ -900,6 +900,9 @@ export struct ViewerImageModel {
     zoom-selection-label: string,
     lens-label: string,
     navigator-label: string,
+    rotate-180-label: string,
+    rotate-angle-label: string,
+    reset-transform-label: string,
 }
 
 export struct ViewerPdfModel {

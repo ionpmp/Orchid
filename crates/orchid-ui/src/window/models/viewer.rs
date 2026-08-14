@@ -164,7 +164,7 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         zoom: 1.0,
         pan_x: 0.0,
         pan_y: 0.0,
-        rotation_deg: 0,
+        rotation_deg: 0.0,
         flipped_h: false,
         flipped_v: false,
         fit_mode: 1,
@@ -204,6 +204,9 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         zoom_selection_label: locale.tr("viewer-image-zoom-selection").into(),
         lens_label: locale.tr("viewer-image-lens").into(),
         navigator_label: locale.tr("viewer-image-navigator").into(),
+        rotate_180_label: locale.tr("viewer-image-rotate-180").into(),
+        rotate_angle_label: locale.tr("viewer-image-rotate-angle").into(),
+        reset_transform_label: locale.tr("viewer-image-reset-transform").into(),
     }
 }
 
@@ -717,7 +720,7 @@ fn build_image_snapshot(
         zoom: s.zoom,
         pan_x: s.pan_x,
         pan_y: s.pan_y,
-        rotation_deg: i32::from(s.rotation_degrees),
+        rotation_deg: s.rotation_degrees,
         flipped_h: s.flipped_horizontal,
         flipped_v: s.flipped_vertical,
         fit_mode: i32::from(s.fit_mode),
@@ -757,6 +760,9 @@ fn build_image_snapshot(
         zoom_selection_label: locale.tr("viewer-image-zoom-selection").into(),
         lens_label: locale.tr("viewer-image-lens").into(),
         navigator_label: locale.tr("viewer-image-navigator").into(),
+        rotate_180_label: locale.tr("viewer-image-rotate-180").into(),
+        rotate_angle_label: locale.tr("viewer-image-rotate-angle").into(),
+        reset_transform_label: locale.tr("viewer-image-reset-transform").into(),
     }
 }
 

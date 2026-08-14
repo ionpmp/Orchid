@@ -75,7 +75,7 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.zoom.to_bits() == b.zoom.to_bits()
                 && a.pan_x.to_bits() == b.pan_x.to_bits()
                 && a.pan_y.to_bits() == b.pan_y.to_bits()
-                && a.rotation_degrees == b.rotation_degrees
+                && a.rotation_degrees.to_bits() == b.rotation_degrees.to_bits()
                 && a.flipped_horizontal == b.flipped_horizontal
                 && a.flipped_vertical == b.flipped_vertical
                 && a.fit_mode == b.fit_mode

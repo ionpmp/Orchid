@@ -98,6 +98,9 @@ release yet.
   cursor-anchored Ctrl+wheel, pinch + two-finger pan, magnifier (Z),
   thumbnail overview for large images, and restore last zoom when
   switching files.
+- Image view-only transforms: 90° CW/CCW, 180°, free angle (field or
+  `[` / `]`), horizontal / vertical flip, and reset orientation (no
+  file write).
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

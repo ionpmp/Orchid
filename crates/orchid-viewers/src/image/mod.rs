@@ -110,6 +110,38 @@ impl ImageViewer {
         }
     }
 
+    /// Rotate 180° (view-only).
+    pub fn rotate_180(&self) {
+        self.transform.write().rotate_180();
+        if self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
+    }
+
+    /// Set an absolute view-only angle in degrees.
+    pub fn set_rotation(&self, degrees: f32) {
+        self.transform.write().set_rotation(degrees);
+        if self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
+    }
+
+    /// Nudge the view-only angle by `delta` degrees.
+    pub fn rotate_by(&self, delta: f32) {
+        self.transform.write().rotate_by(delta);
+        if self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
+    }
+
+    /// Clear rotation and flips (keeps zoom / pan).
+    pub fn reset_transforms(&self) {
+        self.transform.write().reset_orientation();
+        if self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
+    }
+
     /// Toggle horizontal flip.
     pub fn flip_horizontal(&self) {
         let mut t = self.transform.write();
@@ -408,5 +440,17 @@ mod tests {
         v.actual_size();
         v.restore_view(saved.0, saved.1);
         assert_eq!(v.capture_view().0, ImageFitMode::Width);
+    }
+
+    #[test]
+    fn reset_transforms_clears_orientation() {
+        let v = ImageViewer::new();
+        v.rotate_180();
+        v.flip_horizontal();
+        v.reset_transforms();
+        let (_, t) = v.capture_view();
+        assert!(t.rotation_degrees.abs() < 1e-3);
+        assert!(!t.flipped_horizontal);
+        assert!(!t.flipped_vertical);
     }
 }

@@ -99,7 +99,7 @@ pub struct ImageSnapshot {
     pub zoom: f32,
     pub pan_x: f32,
     pub pan_y: f32,
-    pub rotation_degrees: i16,
+    pub rotation_degrees: f32,
     pub flipped_horizontal: bool,
     pub flipped_vertical: bool,
     /// 0 custom, 1 window, 2 width, 3 height, 4 shrink (see [`crate::ImageFitMode`]).

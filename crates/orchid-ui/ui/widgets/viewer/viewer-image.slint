@@ -101,6 +101,22 @@ export component ViewerImageView inherits Rectangle {
                 }
                 return accept;
             }
+            if (event.text == "u" || event.text == "U") {
+                root.command("rotate-180");
+                return accept;
+            }
+            if (event.text == "x" || event.text == "X") {
+                root.command("reset-transform");
+                return accept;
+            }
+            if (event.text == "[") {
+                root.command(event.modifiers.shift ? "rotate-by:-15" : "rotate-by:-1");
+                return accept;
+            }
+            if (event.text == "]") {
+                root.command(event.modifiers.shift ? "rotate-by:15" : "rotate-by:1");
+                return accept;
+            }
             if (event.text == "v" || event.text == "V") {
                 root.flip-v();
                 return accept;
@@ -832,6 +848,69 @@ export component ViewerImageView inherits Rectangle {
                         }
                     }
                     Text { text: "↺"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 32px;
+                    height: 28px;
+                    background: r180-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    r180-ta := TouchArea {
+                        clicked => { root.command("rotate-180"); img-keys.focus(); }
+                    }
+                    if r180-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: r180-hint.preferred-width + 12px;
+                        height: r180-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        r180-hint := Text { x: 6px; y: 3px; text: model.rotate-180-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "180"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 48px;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    rot-in := TextInput {
+                        text: "" + floor(model.rotation-deg);
+                        input-type: number;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accepted => {
+                            root.command("rotate:" + self.text);
+                            img-keys.focus();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: rst-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    rst-ta := TouchArea {
+                        clicked => { root.command("reset-transform"); img-keys.focus(); }
+                    }
+                    if rst-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: rst-hint.preferred-width + 12px;
+                        height: rst-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        rst-hint := Text { x: 6px; y: 3px; text: model.reset-transform-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.reset-transform-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
                 }
 
                 Rectangle { width: 8px; }

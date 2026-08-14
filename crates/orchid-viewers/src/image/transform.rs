@@ -103,7 +103,7 @@ pub struct ViewTransform {
     pub zoom: f32,
     pub pan_x: f32,
     pub pan_y: f32,
-    pub rotation_degrees: i16,
+    pub rotation_degrees: f32,
     pub flipped_horizontal: bool,
     pub flipped_vertical: bool,
 }
@@ -114,7 +114,7 @@ impl Default for ViewTransform {
             zoom: 1.0,
             pan_x: 0.0,
             pan_y: 0.0,
-            rotation_degrees: 0,
+            rotation_degrees: 0.0,
             flipped_horizontal: false,
             flipped_vertical: false,
         }
@@ -122,14 +122,21 @@ impl Default for ViewTransform {
 }
 
 impl ViewTransform {
-    /// Image size after 90° / 270° rotation (for fit math).
+    /// Axis-aligned bounding size after `rotation_degrees` (for fit math).
     #[must_use]
-    pub fn oriented_size(image_w: u32, image_h: u32, rotation_degrees: i16) -> (u32, u32) {
-        if rotation_degrees.rem_euclid(180) == 90 {
-            (image_h, image_w)
-        } else {
-            (image_w, image_h)
+    pub fn oriented_size(image_w: u32, image_h: u32, rotation_degrees: f32) -> (u32, u32) {
+        let deg = rotation_degrees.rem_euclid(360.0);
+        if (deg - 90.0).abs() < 0.5 || (deg - 270.0).abs() < 0.5 {
+            return (image_h, image_w);
         }
+        if deg < 0.5 || (deg - 180.0).abs() < 0.5 {
+            return (image_w, image_h);
+        }
+        let r = deg.to_radians();
+        let (c, s) = (r.cos().abs(), r.sin().abs());
+        let w = (image_w as f32 * c + image_h as f32 * s).round().max(1.0) as u32;
+        let h = (image_w as f32 * s + image_h as f32 * c).round().max(1.0) as u32;
+        (w, h)
     }
 
     /// Zoom that fits `image_w x image_h` into the viewport for `mode`.
@@ -138,7 +145,7 @@ impl ViewTransform {
         mode: ImageFitMode,
         image_w: u32,
         image_h: u32,
-        rotation_degrees: i16,
+        rotation_degrees: f32,
         viewport_w: f32,
         viewport_h: f32,
     ) -> f32 {
@@ -170,7 +177,7 @@ impl ViewTransform {
             ImageFitMode::Window,
             image_w,
             image_h,
-            0,
+            0.0,
             viewport_w,
             viewport_h,
         )
@@ -182,7 +189,7 @@ impl ViewTransform {
         mode: ImageFitMode,
         image_w: u32,
         image_h: u32,
-        rotation_degrees: i16,
+        rotation_degrees: f32,
         viewport_w: f32,
         viewport_h: f32,
     ) -> Self {
@@ -251,7 +258,7 @@ impl ViewTransform {
         ny: f32,
         image_w: u32,
         image_h: u32,
-        rotation_degrees: i16,
+        rotation_degrees: f32,
     ) {
         let (iw, ih) = Self::oriented_size(image_w, image_h, rotation_degrees);
         let nx = nx.clamp(0.0, 1.0);
@@ -262,12 +269,34 @@ impl ViewTransform {
 
     /// Rotate 90° clockwise.
     pub fn rotate_clockwise(&mut self) {
-        self.rotation_degrees = (self.rotation_degrees + 90).rem_euclid(360);
+        self.rotate_by(90.0);
     }
 
     /// Rotate 90° counter-clockwise.
     pub fn rotate_counter_clockwise(&mut self) {
-        self.rotation_degrees = (self.rotation_degrees - 90).rem_euclid(360);
+        self.rotate_by(-90.0);
+    }
+
+    /// Rotate 180°.
+    pub fn rotate_180(&mut self) {
+        self.rotate_by(180.0);
+    }
+
+    /// Add `delta` degrees (view-only).
+    pub fn rotate_by(&mut self, delta: f32) {
+        self.rotation_degrees = (self.rotation_degrees + delta).rem_euclid(360.0);
+    }
+
+    /// Set an absolute view-only angle in degrees.
+    pub fn set_rotation(&mut self, degrees: f32) {
+        self.rotation_degrees = degrees.rem_euclid(360.0);
+    }
+
+    /// Clear rotation and flips (keeps zoom / pan).
+    pub fn reset_orientation(&mut self) {
+        self.rotation_degrees = 0.0;
+        self.flipped_horizontal = false;
+        self.flipped_vertical = false;
     }
 
     /// Reset to identity (zoom 1.0, no pan, no rotation).
@@ -288,27 +317,27 @@ mod tests {
 
     #[test]
     fn fit_width_uses_x_scale() {
-        let z = ViewTransform::zoom_for_fit(ImageFitMode::Width, 1000, 500, 0, 200.0, 200.0);
+        let z = ViewTransform::zoom_for_fit(ImageFitMode::Width, 1000, 500, 0.0, 200.0, 200.0);
         assert!((z - 0.2).abs() < 1e-3);
     }
 
     #[test]
     fn fit_height_uses_y_scale() {
-        let z = ViewTransform::zoom_for_fit(ImageFitMode::Height, 1000, 500, 0, 200.0, 200.0);
+        let z = ViewTransform::zoom_for_fit(ImageFitMode::Height, 1000, 500, 0.0, 200.0, 200.0);
         assert!((z - 0.4).abs() < 1e-3);
     }
 
     #[test]
     fn shrink_does_not_upscale() {
-        let z = ViewTransform::zoom_for_fit(ImageFitMode::Shrink, 100, 80, 0, 400.0, 400.0);
+        let z = ViewTransform::zoom_for_fit(ImageFitMode::Shrink, 100, 80, 0.0, 400.0, 400.0);
         assert!((z - 1.0).abs() < 1e-3);
-        let z2 = ViewTransform::zoom_for_fit(ImageFitMode::Window, 100, 80, 0, 400.0, 400.0);
+        let z2 = ViewTransform::zoom_for_fit(ImageFitMode::Window, 100, 80, 0.0, 400.0, 400.0);
         assert!(z2 > 1.5);
     }
 
     #[test]
     fn rotated_fit_swaps_axes() {
-        let z = ViewTransform::zoom_for_fit(ImageFitMode::Window, 1000, 500, 90, 200.0, 200.0);
+        let z = ViewTransform::zoom_for_fit(ImageFitMode::Window, 1000, 500, 90.0, 200.0, 200.0);
         // Oriented size is 500×1000; limiting axis is height (200/1000).
         assert!((z - 0.2).abs() < 1e-3);
     }
@@ -328,7 +357,39 @@ mod tests {
         for _ in 0..4 {
             t.rotate_clockwise();
         }
-        assert_eq!(t.rotation_degrees, 0);
+        assert!((t.rotation_degrees).abs() < 1e-3);
+    }
+
+    #[test]
+    fn rotate_180_and_free_angle() {
+        let mut t = ViewTransform::default();
+        t.rotate_180();
+        assert!((t.rotation_degrees - 180.0).abs() < 1e-3);
+        t.set_rotation(45.0);
+        assert!((t.rotation_degrees - 45.0).abs() < 1e-3);
+        t.rotate_by(-15.0);
+        assert!((t.rotation_degrees - 30.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn reset_orientation_keeps_zoom() {
+        let mut t = ViewTransform::default();
+        t.zoom = 2.0;
+        t.pan_x = 8.0;
+        t.rotate_180();
+        t.flipped_horizontal = true;
+        t.reset_orientation();
+        assert!((t.zoom - 2.0).abs() < 1e-3);
+        assert!((t.pan_x - 8.0).abs() < 1e-3);
+        assert!(t.rotation_degrees.abs() < 1e-3);
+        assert!(!t.flipped_horizontal);
+    }
+
+    #[test]
+    fn free_rotation_grows_oriented_box() {
+        let (w, h) = ViewTransform::oriented_size(100, 50, 45.0);
+        assert!(w > 100);
+        assert!(h > 50);
     }
 
     #[test]
@@ -352,7 +413,7 @@ mod tests {
     fn pan_to_fraction_centers_requested_point() {
         let mut t = ViewTransform::default();
         t.zoom = 2.0;
-        t.pan_to_image_fraction(0.25, 0.5, 100, 80, 0);
+        t.pan_to_image_fraction(0.25, 0.5, 100, 80, 0.0);
         assert!((t.pan_x - 50.0).abs() < 1e-3);
         assert!(t.pan_y.abs() < 1e-3);
     }
