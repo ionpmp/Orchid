@@ -931,6 +931,90 @@ fn tools_menu(
                     "action-copy",
                     has_selection,
                 ),
+                item(
+                    "fs.image-convert",
+                    "fm-action-image-convert",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-rotate",
+                    "fm-action-image-rotate",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-thumbs",
+                    "fm-action-image-thumbs",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-rename-tpl",
+                    "fm-action-image-rename-tpl",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-batch",
+                    "fm-action-image-batch",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-batch-preview",
+                    "fm-action-image-batch-preview",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-batch-save",
+                    "fm-action-image-batch-save",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-batch-cancel",
+                    "fm-action-image-batch-cancel",
+                    "action-copy",
+                    true,
+                ),
+                item(
+                    "fs.image-compare",
+                    "fm-action-image-compare",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-pick",
+                    "fm-action-image-pick",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-diff",
+                    "fm-action-image-diff",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-composite",
+                    "fm-action-image-composite",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-pano",
+                    "fm-action-image-pano",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.image-hdr",
+                    "fm-action-image-hdr",
+                    "action-copy",
+                    has_selection,
+                ),
             ],
         },
         ContextMenuItem {
@@ -1683,6 +1767,10 @@ mod tests {
             .submenu
             .iter()
             .any(|i| i.id == "fs.image-watermark"));
+        assert!(image_edit
+            .submenu
+            .iter()
+            .any(|i| i.id == "fs.image-compare"));
         let meta = tools.submenu.iter().find(|i| i.id == "fs.meta").unwrap();
         assert!(meta.submenu.iter().any(|i| i.id == "fs.meta-edit"));
         #[cfg(windows)]

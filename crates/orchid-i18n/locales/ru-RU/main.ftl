@@ -826,6 +826,20 @@ fm-action-image-annotate = Аннотация / рисунок…
 fm-action-image-watermark = Текстовый водяной знак…
 fm-action-image-wm-image = Водяной знак-картинка…
 fm-action-image-stamp = Штамп даты съёмки
+fm-action-image-convert = Сменить формат…
+fm-action-image-rotate = Поворот без потерь…
+fm-action-image-thumbs = Экспорт миниатюр…
+fm-action-image-rename-tpl = Переименовать снимки…
+fm-action-image-batch = Пакетный рецепт…
+fm-action-image-batch-preview = Превью пакета…
+fm-action-image-batch-save = Сохранить рецепт…
+fm-action-image-batch-cancel = Отменить пакет
+fm-action-image-compare = Сравнить рядом
+fm-action-image-pick = Оставить лучший…
+fm-action-image-diff = Попиксельный diff
+fm-action-image-composite = Склеить / наложить…
+fm-action-image-pano = Панорама
+fm-action-image-hdr = HDR-склейка
 fm-action-meta = Метаданные
 fm-action-meta-edit = Править IPTC / XMP…
 fm-action-meta-gps = Задать / снять GPS…
@@ -1190,6 +1204,29 @@ fm-image-watermark-title = Текстовый водяной знак
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = Водяной знак-картинка
 fm-image-wm-image-hint = wm-image=logo.png | pos=br | opacity=30 | scale=0.22
+fm-image-convert-title = Смена формата
+fm-image-convert-hint = jpg | png | webp | bmp
+fm-image-rotate-title = Поворот без потерь
+fm-image-rotate-hint = cw | ccw | 180 | flip-h | flip-v | exif
+fm-image-thumbs-title = Экспорт миниатюр
+fm-image-thumbs-hint = 256 jpg
+fm-image-rename-title = Переименовать снимки
+fm-image-rename-hint = {"{name}_{date}_{n}{ext}"}   токены: {"{name}"} {"{ext}"} {"{n}"} {"{date}"} {"{w}"} {"{h}"}
+fm-image-batch-title = Пакетный рецепт
+fm-image-batch-hint = resize=50% | convert=jpg | thumb=256 | rotate=cw | watermark=© | recipe=web | preview
+fm-image-batch-preview-title = Превью пакета
+fm-image-batch-save-title = Сохранить рецепт
+fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
+fm-image-batch-cancel-title = Отмена пакета
+fm-image-batch-cancel-body = Текущий пакет остановится после файла, который уже обрабатывается.
+fm-image-batch-bad-spec = Не удалось разобрать пакетную команду.
+fm-image-compare-need = Выберите 2–4 изображения.
+fm-image-pick-title = Оставить лучший
+fm-image-pick-hint = keep=1
+fm-image-diff-title = Попиксельный diff
+fm-image-diff-body = Изменено { $changed } / { $total } пикселей (среднее { $mean }). Сохранено { $path }.
+fm-image-composite-title = Склейка
+fm-image-composite-hint = avg | overlay | side | stack
 fm-meta-edit-title = Метаданные изображения
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=широта,долгота date=ГГГГ:ММ:ДД ЧЧ:ММ:СС
 fm-meta-gps-title = GPS

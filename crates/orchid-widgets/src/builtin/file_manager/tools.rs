@@ -110,6 +110,20 @@ pub(super) async fn run(
         | "fs.image-watermark"
         | "fs.image-wm-image"
         | "fs.image-stamp" => super::image_edit::run(inner, action_id, paths, input).await,
+        "fs.image-convert"
+        | "fs.image-rotate"
+        | "fs.image-thumbs"
+        | "fs.image-rename-tpl"
+        | "fs.image-batch"
+        | "fs.image-batch-preview"
+        | "fs.image-batch-save"
+        | "fs.image-batch-cancel"
+        | "fs.image-compare"
+        | "fs.image-pick"
+        | "fs.image-diff"
+        | "fs.image-composite"
+        | "fs.image-pano"
+        | "fs.image-hdr" => super::image_batch::run(inner, action_id, paths, input).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
         "fs.signature" => signature_report(inner, paths).await,

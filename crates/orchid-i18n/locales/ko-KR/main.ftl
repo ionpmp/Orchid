@@ -837,6 +837,20 @@ fm-action-image-annotate = Annotate / draw…
 fm-action-image-watermark = Text watermark…
 fm-action-image-wm-image = Image watermark…
 fm-action-image-stamp = Date stamp
+fm-action-image-convert = Convert format…
+fm-action-image-rotate = Lossless rotate…
+fm-action-image-thumbs = Export thumbnails…
+fm-action-image-rename-tpl = Rename images…
+fm-action-image-batch = Batch recipe…
+fm-action-image-batch-preview = Preview batch…
+fm-action-image-batch-save = Save batch recipe…
+fm-action-image-batch-cancel = Cancel batch
+fm-action-image-compare = Compare side-by-side
+fm-action-image-pick = Keep best…
+fm-action-image-diff = Pixel diff
+fm-action-image-composite = Composite / merge…
+fm-action-image-pano = Stitch panorama
+fm-action-image-hdr = HDR merge
 fm-action-meta = Metadata
 fm-action-meta-edit = Edit IPTC / XMP…
 fm-action-meta-gps = Set / clear GPS…
@@ -1201,6 +1215,29 @@ fm-image-watermark-title = Text watermark
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = Image watermark
 fm-image-wm-image-hint = wm-image=logo.png | pos=br | opacity=30 | scale=0.22
+fm-image-convert-title = Convert format
+fm-image-convert-hint = jpg | png | webp | bmp
+fm-image-rotate-title = Lossless rotate
+fm-image-rotate-hint = cw | ccw | 180 | flip-h | flip-v | exif
+fm-image-thumbs-title = Export thumbnails
+fm-image-thumbs-hint = 256 jpg
+fm-image-rename-title = Rename images
+fm-image-rename-hint = {"{name}_{date}_{n}{ext}"}   tokens: {"{name}"} {"{ext}"} {"{n}"} {"{date}"} {"{w}"} {"{h}"}
+fm-image-batch-title = Batch recipe
+fm-image-batch-hint = resize=50% | convert=jpg | thumb=256 | rotate=cw | watermark=© | recipe=web | preview
+fm-image-batch-preview-title = Batch preview
+fm-image-batch-save-title = Save batch recipe
+fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
+fm-image-batch-cancel-title = Cancel batch
+fm-image-batch-cancel-body = The current batch will stop after the file in progress.
+fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-compare-need = Select 2–4 images.
+fm-image-pick-title = Keep best
+fm-image-pick-hint = keep=1
+fm-image-diff-title = Pixel diff
+fm-image-diff-body = Changed { $changed } / { $total } pixels (mean { $mean }). Saved { $path }.
+fm-image-composite-title = Composite
+fm-image-composite-hint = avg | overlay | side | stack
 fm-meta-edit-title = Image metadata
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

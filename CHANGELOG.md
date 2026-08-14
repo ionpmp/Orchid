@@ -149,6 +149,12 @@ release yet.
   blur or pixelate, highlight, text and image watermarks with nine-slot
   placement and opacity, batch watermark, and a shoot-date stamp.
   Viewer panel (`Shift+D` / ✎); FM **Tools → Image edit**.
+- Multi-image tools in FM **Tools → Image edit**: batch convert (JPEG / PNG /
+  WebP / BMP), lossless rotate, thumbnail export, image rename templates
+  (`{date}` / `{w}` / `{h}`), recipe preview / cancel / save
+  (`orchid-batch-recipes.json`), 2–4 image compare and pick-best, pixel
+  diff, composite / merge, panorama stitch, and HDR merge from brackets.
+  Existing batch resize / adjust / watermark / metadata stay in the same menu.
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

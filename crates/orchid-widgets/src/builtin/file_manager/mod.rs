@@ -6,6 +6,7 @@ pub mod clipboard;
 pub mod config;
 pub mod context_menu;
 pub mod find;
+mod image_batch;
 mod image_edit;
 mod meta_edit;
 pub mod navigation;
@@ -4662,6 +4663,20 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.image-watermark"
             | "fs.image-wm-image"
             | "fs.image-stamp"
+            | "fs.image-convert"
+            | "fs.image-rotate"
+            | "fs.image-thumbs"
+            | "fs.image-rename-tpl"
+            | "fs.image-batch"
+            | "fs.image-batch-preview"
+            | "fs.image-batch-save"
+            | "fs.image-batch-cancel"
+            | "fs.image-compare"
+            | "fs.image-pick"
+            | "fs.image-diff"
+            | "fs.image-composite"
+            | "fs.image-pano"
+            | "fs.image-hdr"
             | "fs.id3"
             | "fs.office-meta"
             | "fs.signature"

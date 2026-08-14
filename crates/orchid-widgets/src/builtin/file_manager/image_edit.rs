@@ -363,7 +363,11 @@ fn apply_annotate_all(
     op: &AnnotateOp,
 ) -> WidgetResult<u32> {
     let mut n = 0u32;
+    super::image_batch::begin_batch();
     for (_, os) in images {
+        if super::image_batch::cancelled() {
+            break;
+        }
         apply_annotate_file(os, op)
             .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
         n += 1;
@@ -371,7 +375,7 @@ fn apply_annotate_all(
     Ok(n)
 }
 
-fn selected_images(
+pub(super) fn selected_images(
     inner: &Arc<FileManagerInner>,
     paths: &[String],
 ) -> WidgetResult<Vec<(orchid_fs::FsPath, PathBuf)>> {
@@ -399,7 +403,11 @@ fn selected_images(
 
 fn apply_filter_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &FilterOp) -> WidgetResult<u32> {
     let mut n = 0u32;
+    super::image_batch::begin_batch();
     for (_, os) in images {
+        if super::image_batch::cancelled() {
+            break;
+        }
         apply_filter_file(os, op)
             .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
         n += 1;
@@ -409,7 +417,11 @@ fn apply_filter_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &FilterOp) -> W
 
 fn apply_adjust_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &AdjustOp) -> WidgetResult<u32> {
     let mut n = 0u32;
+    super::image_batch::begin_batch();
     for (_, os) in images {
+        if super::image_batch::cancelled() {
+            break;
+        }
         apply_adjust_file(os, op)
             .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
         n += 1;
@@ -419,7 +431,11 @@ fn apply_adjust_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &AdjustOp) -> W
 
 fn apply_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &EditOp) -> WidgetResult<u32> {
     let mut n = 0u32;
+    super::image_batch::begin_batch();
     for (_, os) in images {
+        if super::image_batch::cancelled() {
+            break;
+        }
         apply_edit_file(os, op)
             .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
         n += 1;
@@ -427,14 +443,18 @@ fn apply_all(images: &[(orchid_fs::FsPath, PathBuf)], op: &EditOp) -> WidgetResu
     Ok(n)
 }
 
-fn path_strs(images: &[(orchid_fs::FsPath, PathBuf)]) -> Vec<String> {
+pub(super) fn path_strs(images: &[(orchid_fs::FsPath, PathBuf)]) -> Vec<String> {
     images
         .iter()
         .map(|(fp, _)| fp.as_str().to_string())
         .collect()
 }
 
-fn report_count(locale: &orchid_i18n::LocaleManager, title_key: &str, n: u32) -> ActionOutcome {
+pub(super) fn report_count(
+    locale: &orchid_i18n::LocaleManager,
+    title_key: &str,
+    n: u32,
+) -> ActionOutcome {
     ActionOutcome::NeedsReport {
         title: locale.tr(title_key),
         body: locale.tr_args(
@@ -444,7 +464,7 @@ fn report_count(locale: &orchid_i18n::LocaleManager, title_key: &str, n: u32) ->
     }
 }
 
-fn prompt(
+pub(super) fn prompt(
     action_id: &str,
     paths: &[String],
     proposed: &str,
