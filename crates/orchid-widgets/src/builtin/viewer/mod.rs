@@ -1,9 +1,10 @@
 //! Viewer widget: wraps an [`orchid_viewers::Viewer`] for any given path.
 
 mod image_nav;
+mod image_thumbs;
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -13,7 +14,8 @@ use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
     apply_lossless, format_from_extension, ArchiveViewer, DocumentViewer, ImageFitMode,
-    ImageViewer, LosslessOp, PdfViewer, SyntaxHighlighter, TextViewer, ViewTransform, Viewer,
+    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SyntaxHighlighter, TextViewer,
+    ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -51,10 +53,34 @@ struct ViewerPersisted {
     /// Wrap folder playlist at the ends.
     #[serde(default = "default_true")]
     image_loop: bool,
+    /// 0 hidden, 1 bottom, 2 top.
+    #[serde(default = "default_thumb_strip")]
+    thumb_strip: u8,
+    #[serde(default)]
+    thumb_grid: bool,
+    /// 0 small, 1 medium, 2 large.
+    #[serde(default = "default_thumb_size")]
+    thumb_size: u8,
+    #[serde(default = "default_true")]
+    thumb_meta: bool,
+    #[serde(default = "default_preload_n")]
+    preload_n: u8,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_thumb_strip() -> u8 {
+    1
+}
+
+fn default_thumb_size() -> u8 {
+    1
+}
+
+fn default_preload_n() -> u8 {
+    2
 }
 
 impl Default for ViewerPersisted {
@@ -67,6 +93,11 @@ impl Default for ViewerPersisted {
             float_w: None,
             float_h: None,
             image_loop: true,
+            thumb_strip: 1,
+            thumb_grid: false,
+            thumb_size: 1,
+            thumb_meta: true,
+            preload_n: 2,
         }
     }
 }
@@ -88,26 +119,25 @@ impl ViewerPersisted {
         path: Option<String>,
         floating: Option<crate::layout::PixelBounds>,
         image_loop: bool,
+        thumbs: &image_thumbs::ImageThumbState,
     ) -> Self {
-        match floating {
-            Some(b) => Self {
-                path,
-                floating: true,
-                float_x: Some(b.x),
-                float_y: Some(b.y),
-                float_w: Some(b.width),
-                float_h: Some(b.height),
-                image_loop,
-            },
-            None => Self {
-                path,
-                floating: false,
-                float_x: None,
-                float_y: None,
-                float_w: None,
-                float_h: None,
-                image_loop,
-            },
+        let (floating_on, float_x, float_y, float_w, float_h) = match floating {
+            Some(b) => (true, Some(b.x), Some(b.y), Some(b.width), Some(b.height)),
+            None => (false, None, None, None, None),
+        };
+        Self {
+            path,
+            floating: floating_on,
+            float_x,
+            float_y,
+            float_w,
+            float_h,
+            image_loop,
+            thumb_strip: thumbs.strip,
+            thumb_grid: thumbs.grid,
+            thumb_size: thumbs.size.as_u8(),
+            thumb_meta: thumbs.show_meta,
+            preload_n: thumbs.preload_n,
         }
     }
 }
@@ -122,6 +152,8 @@ pub struct ViewerDeps {
     pub registry: Arc<orchid_fs::FsProviderRegistry>,
     /// Shared syntax highlighter (reused across text viewers).
     pub highlighter: Arc<SyntaxHighlighter>,
+    /// Shared disk-backed thumbnail cache (same root as the file manager).
+    pub thumbnails: Option<Arc<ThumbnailService>>,
 }
 
 impl std::fmt::Debug for ViewerDeps {
@@ -146,6 +178,12 @@ struct ViewerWidgetInner {
     image_nav: RwLock<image_nav::ImageFolderNav>,
     /// Last zoom / fit per path (and the most recent view for new files).
     image_views: RwLock<ImageViewMemory>,
+    /// Thumbnail strip / grid prefs and generated cells.
+    image_thumbs: RwLock<image_thumbs::ImageThumbState>,
+    /// Next-N decoded images for instant next/prev.
+    image_preload: RwLock<image_thumbs::ImagePreloadCache>,
+    /// Bumped to cancel in-flight thumb / preload jobs.
+    thumb_gen: AtomicU64,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -284,7 +322,22 @@ impl ViewerWidgetInner {
                 return Ok(());
             }
         };
-        if let Err(e) = viewer.open(path.clone(), registry).await {
+        if is_image_path(&path) {
+            let preloaded = self.image_preload.write().take(path.as_str());
+            if let Some(loaded) = preloaded {
+                if let Some(img) = viewer.as_any_mut().downcast_mut::<ImageViewer>() {
+                    img.open_loaded(path.clone(), loaded);
+                }
+            } else if let Err(e) = viewer.open(path.clone(), registry).await {
+                warn!(error = %e, "viewer open failed");
+                *self.snapshot.write() = Some(ViewerSnapshot::Error {
+                    path_display: path.as_str().to_string(),
+                    message: e.to_string(),
+                });
+                self.publish_refresh();
+                return Ok(());
+            }
+        } else if let Err(e) = viewer.open(path.clone(), registry).await {
             warn!(error = %e, "viewer open failed");
             *self.snapshot.write() = Some(ViewerSnapshot::Error {
                 path_display: path.as_str().to_string(),
@@ -308,6 +361,7 @@ impl ViewerWidgetInner {
             if let Some(v) = guard.as_ref() {
                 *self.snapshot.write() = Some(v.snapshot());
             }
+            self.schedule_thumbs_and_preload();
         }
         self.overlay_image_nav();
         self.publish_refresh();
@@ -318,7 +372,11 @@ impl ViewerWidgetInner {
         let Some(snap) = self.snapshot.write().take() else {
             return;
         };
-        *self.snapshot.write() = Some(apply_image_nav(snap, &self.image_nav.read()));
+        *self.snapshot.write() = Some(apply_image_overlay(
+            snap,
+            &self.image_nav.read(),
+            Some(&self.image_thumbs.read()),
+        ));
     }
 
     async fn after_image_opened(&self, path: &orchid_fs::FsPath) {
@@ -390,10 +448,139 @@ impl ViewerWidgetInner {
     async fn refresh_snapshot(&self) {
         let guard = self.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
-            *self.snapshot.write() = Some(apply_image_nav(v.snapshot(), &self.image_nav.read()));
+            *self.snapshot.write() = Some(apply_image_overlay(
+                v.snapshot(),
+                &self.image_nav.read(),
+                Some(&self.image_thumbs.read()),
+            ));
         }
         drop(guard);
         self.publish_refresh();
+    }
+
+    fn schedule_thumbs_and_preload(&self) {
+        let gen = self.thumb_gen.fetch_add(1, Ordering::Relaxed) + 1;
+        let inner = {
+            let Some(entry) = VIEWER_LIVE.get(&self.instance_id) else {
+                return;
+            };
+            Arc::clone(entry.value())
+        };
+        tokio::spawn(async move {
+            inner.refresh_thumbs(gen).await;
+            inner.preload_ahead(gen).await;
+        });
+    }
+
+    async fn refresh_thumbs(&self, gen: u64) {
+        let Some(service) = self.deps.thumbnails.clone() else {
+            return;
+        };
+        if self.thumb_gen.load(Ordering::Relaxed) != gen {
+            return;
+        }
+        let (siblings, current, size) = {
+            let nav = self.image_nav.read();
+            let thumbs = self.image_thumbs.read();
+            (
+                nav.siblings.clone(),
+                nav.siblings.get(nav.index).cloned(),
+                thumbs.size,
+            )
+        };
+        let current_key = current.as_ref().map(|p| p.as_str().to_string());
+        let mut items = Vec::with_capacity(siblings.len().min(256));
+        for (i, path) in siblings.iter().take(256).enumerate() {
+            if self.thumb_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            let (size_bytes, modified_ms, date_text, rating) =
+                image_thumbs::sibling_meta(&self.deps.registry, path).await;
+            let key = ThumbnailService::cache_key(path, modified_ms);
+            let thumb =
+                image_thumbs::load_one_thumb(&service, &self.deps.registry, path, key, size).await;
+            items.push(ImageThumbItem {
+                path: path.as_str().to_string(),
+                name: path.file_name().unwrap_or_default().to_string(),
+                size_bytes,
+                date_text,
+                rating,
+                rgba: thumb.as_ref().map(|t| Arc::clone(&t.rgba)),
+                width: thumb.as_ref().map(|t| t.width).unwrap_or(0),
+                height: thumb.as_ref().map(|t| t.height).unwrap_or(0),
+                selected: current_key.as_deref() == Some(path.as_str()),
+                index: (i + 1) as u32,
+            });
+            if items.len() % 8 == 0 {
+                if self.thumb_gen.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                self.image_thumbs.write().items = items.clone();
+                self.overlay_image_nav();
+                self.publish_refresh();
+            }
+        }
+        if self.thumb_gen.load(Ordering::Relaxed) != gen {
+            return;
+        }
+        self.image_thumbs.write().items = items;
+        self.overlay_image_nav();
+        self.publish_refresh();
+    }
+
+    async fn preload_ahead(&self, gen: u64) {
+        if self.thumb_gen.load(Ordering::Relaxed) != gen {
+            return;
+        }
+        let (n, paths) = {
+            let thumbs = self.image_thumbs.read();
+            let nav = self.image_nav.read();
+            (
+                thumbs.preload_n as usize,
+                image_thumbs::preload_paths(&nav, thumbs.preload_n as usize),
+            )
+        };
+        if n == 0 {
+            return;
+        }
+        let cap = n.saturating_mul(2).saturating_add(2);
+        for path in paths {
+            if self.thumb_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            if self.image_preload.read().contains(path.as_str()) {
+                continue;
+            }
+            let registry = Arc::clone(&self.deps.registry);
+            if let Some((key, img)) = image_thumbs::preload_one(registry, path).await {
+                if self.thumb_gen.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                self.image_preload.write().insert(key, img, cap);
+            }
+        }
+    }
+
+    async fn write_contact_sheet(&self) -> WidgetResult<()> {
+        let Some(service) = self.deps.thumbnails.clone() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "thumbnail cache unavailable".into(),
+            ));
+        };
+        let nav = self.image_nav.read().clone();
+        let size = self.image_thumbs.read().size;
+        let dest = image_thumbs::write_contact_sheet(&service, &self.deps.registry, &nav, size)
+            .await
+            .map_err(WidgetError::InvalidStateForOperation)?;
+        self.open_path(dest).await
+    }
+
+    fn forget_thumb_memory(&self, path: &orchid_fs::FsPath) {
+        self.image_preload.write().forget(path.as_str());
+        self.image_thumbs
+            .write()
+            .items
+            .retain(|t| t.path != path.as_str());
     }
 
     async fn apply_lossless_path(
@@ -422,6 +609,7 @@ impl ViewerWidgetInner {
 
     async fn reopen_after_lossless(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
         self.image_views.write().forget(path.as_str());
+        self.forget_thumb_memory(&path);
         *self.path.write() = None;
         self.open_path(path).await
     }
@@ -437,6 +625,8 @@ impl ViewerWidgetInner {
     async fn apply_lossless_folder(&self, op: LosslessOp) -> WidgetResult<()> {
         let siblings = self.image_nav.read().siblings.clone();
         let current = self.path.read().clone();
+        self.image_preload.write().clear();
+        self.image_thumbs.write().items.clear();
         let mut ok = 0usize;
         let mut last_err: Option<WidgetError> = None;
         for path in &siblings {
@@ -503,6 +693,9 @@ impl ViewerWidget {
                 floating: RwLock::new(None),
                 image_nav: RwLock::new(image_nav::ImageFolderNav::default()),
                 image_views: RwLock::new(ImageViewMemory::default()),
+                image_thumbs: RwLock::new(image_thumbs::ImageThumbState::default()),
+                image_preload: RwLock::new(image_thumbs::ImagePreloadCache::default()),
+                thumb_gen: AtomicU64::new(0),
                 bus,
             }),
         }
@@ -613,13 +806,24 @@ fn is_image_path(path: &orchid_fs::FsPath) -> bool {
         .is_some_and(orchid_viewers::is_image_file_extension)
 }
 
-fn apply_image_nav(snap: ViewerSnapshot, nav: &image_nav::ImageFolderNav) -> ViewerSnapshot {
+fn apply_image_overlay(
+    snap: ViewerSnapshot,
+    nav: &image_nav::ImageFolderNav,
+    thumbs: Option<&image_thumbs::ImageThumbState>,
+) -> ViewerSnapshot {
     match snap {
         ViewerSnapshot::Image(mut s) => {
             s.folder_index = nav.index.saturating_add(1) as u32;
             s.folder_count = nav.siblings.len() as u32;
             s.loop_folder = nav.loop_playlist;
             s.recent_paths = nav.recent_paths();
+            if let Some(th) = thumbs {
+                s.thumbs = th.items.clone();
+                s.thumb_strip = th.strip;
+                s.thumb_grid = th.grid;
+                s.thumb_size = th.size.as_u8();
+                s.thumb_show_meta = th.show_meta;
+            }
             ViewerSnapshot::Image(s)
         }
         other => other,
@@ -850,10 +1054,13 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             "lens" => img.toggle_lens(),
             "rotate-180" => img.rotate_180(),
             "reset-transform" => img.reset_transforms(),
-            "next" | "prev" | "first" | "last" | "random" | "loop" => {}
+            "next" | "prev" | "first" | "last" | "random" | "loop" | "thumbs" | "thumb-grid"
+            | "thumb-size" | "thumb-meta" | "thumb-refresh" | "contact-sheet" => {}
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
-                || cmd.starts_with("lossless") => {}
+                || cmd.starts_with("lossless")
+                || cmd.starts_with("preload:")
+                || cmd.starts_with("open-thumb:") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -953,6 +1160,45 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         cmd if let Some(raw) = cmd.strip_prefix("lossless-") => {
             if let Some(op) = LosslessOp::from_token(raw) {
                 inner.apply_lossless_current(op).await?;
+            }
+        }
+        "thumbs" => {
+            inner.image_thumbs.write().cycle_strip();
+            inner.refresh_snapshot().await;
+        }
+        "thumb-grid" => {
+            let next = !inner.image_thumbs.read().grid;
+            inner.image_thumbs.write().grid = next;
+            inner.refresh_snapshot().await;
+        }
+        "thumb-size" => {
+            inner.image_thumbs.write().cycle_size();
+            inner.schedule_thumbs_and_preload();
+            inner.refresh_snapshot().await;
+        }
+        "thumb-meta" => {
+            let next = !inner.image_thumbs.read().show_meta;
+            inner.image_thumbs.write().show_meta = next;
+            inner.refresh_snapshot().await;
+        }
+        "thumb-refresh" => {
+            inner.image_thumbs.write().items.clear();
+            inner.schedule_thumbs_and_preload();
+            inner.refresh_snapshot().await;
+        }
+        "contact-sheet" => {
+            inner.write_contact_sheet().await?;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("preload:") => {
+            if let Ok(n) = raw.parse::<u8>() {
+                inner.image_thumbs.write().preload_n = n.min(8);
+                inner.schedule_thumbs_and_preload();
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("open-thumb:") => {
+            if let Ok(path) = orchid_fs::FsPath::new(raw) {
+                inner.image_thumbs.write().grid = false;
+                inner.open_path(path).await?;
             }
         }
         _ => inner.refresh_snapshot().await,
@@ -1961,7 +2207,11 @@ impl Widget for ViewerWidget {
             title,
             status: WidgetStatus::Ready,
             payload: WidgetPayload::Viewer(ViewerPayload {
-                snapshot: apply_image_nav(snap, &self.inner.image_nav.read()),
+                snapshot: apply_image_overlay(
+                    snap,
+                    &self.inner.image_nav.read(),
+                    Some(&self.inner.image_thumbs.read()),
+                ),
             }),
         })
     }
@@ -1974,19 +2224,23 @@ impl Widget for ViewerWidget {
             .map(|p| p.as_str().to_string());
         let floating = *self.inner.floating.read();
         let image_loop = self.inner.image_nav.read().loop_playlist;
-        state_codec::save_state(&ViewerPersisted::from_live(path, floating, image_loop))
+        let thumbs = self.inner.image_thumbs.read().clone();
+        state_codec::save_state(&ViewerPersisted::from_live(
+            path, floating, image_loop, &thumbs,
+        ))
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let persisted: ViewerPersisted = state_codec::restore_state(bytes)?;
         let floating = persisted.floating_bounds();
-        if let Some(raw) = persisted.path {
-            match orchid_fs::FsPath::new(&raw) {
+        if let Some(ref raw) = persisted.path {
+            match orchid_fs::FsPath::new(raw.as_str()) {
                 Ok(p) => *self.inner.pending_path.write() = Some(p),
                 Err(e) => warn!(error = %e, path = %raw, "viewer: invalid persisted path"),
             }
         }
         *self.inner.floating.write() = floating;
         self.inner.image_nav.write().loop_playlist = persisted.image_loop;
+        apply_persisted_thumbs(&self.inner, &persisted);
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -2012,6 +2266,15 @@ fn title_from(path_display: &str) -> String {
             .unwrap_or(path_display)
             .to_string()
     }
+}
+
+fn apply_persisted_thumbs(inner: &ViewerWidgetInner, persisted: &ViewerPersisted) {
+    let mut thumbs = inner.image_thumbs.write();
+    thumbs.strip = persisted.thumb_strip.min(2);
+    thumbs.grid = persisted.thumb_grid;
+    thumbs.size = ThumbnailSize::from_u8(persisted.thumb_size);
+    thumbs.show_meta = persisted.thumb_meta;
+    thumbs.preload_n = persisted.preload_n.min(8);
 }
 
 /// Descriptor for the viewer widget. The caller injects shared deps
@@ -2052,6 +2315,7 @@ pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
             }
         };
         widget.inner.image_nav.write().loop_playlist = persisted.image_loop;
+        apply_persisted_thumbs(&widget.inner, &persisted);
         Ok(Box::new(widget) as Box<dyn Widget>)
     });
     WidgetDescriptor {

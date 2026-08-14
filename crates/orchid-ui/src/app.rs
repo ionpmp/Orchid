@@ -440,11 +440,16 @@ impl OrchidApp {
         register_rclone_providers(&fs_registry, network_mounts.clone())
             .map_err(|e| UiError::Slint(format!("register rclone providers: {e}")))?;
         let syntax_highlighter = Arc::new(orchid_viewers::SyntaxHighlighter::new());
+        let thumbnails = Arc::new(
+            orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
+                .map_err(|e| UiError::Slint(format!("thumbnail service: {e}")))?,
+        );
         widget_registry
             .register(orchid_widgets::builtin::viewer::descriptor(
                 orchid_widgets::builtin::viewer::ViewerDeps {
                     registry: fs_registry.clone(),
                     highlighter: syntax_highlighter,
+                    thumbnails: Some(thumbnails.clone()),
                 },
             ))
             .map_err(|e| UiError::Slint(format!("register viewer: {e}")))?;
@@ -492,10 +497,6 @@ impl OrchidApp {
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
-        let thumbnails = Arc::new(
-            orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
-                .map_err(|e| UiError::Slint(format!("thumbnail service: {e}")))?,
-        );
         let chunk_store = Arc::new(
             orchid_crypto::ChunkStore::new(paths.chunks_dir.clone(), storage.clone())
                 .map_err(|e| UiError::Slint(format!("chunk store: {e}")))?,

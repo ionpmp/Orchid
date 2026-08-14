@@ -104,6 +104,11 @@ release yet.
 - Lossless JPEG/PNG file transforms: rotate 90/180/270, flip, MCU-aligned
   JPEG crop, EXIF auto-rotate without recompress, and batch rotate of
   the folder playlist.
+- Image thumbnail strip (top/bottom), folder grid mode, S/M/L size,
+  name/size/date/rating under each cell, preload of the next N images,
+  shared on-disk thumbnail cache (mtime-keyed; refreshes when the file
+  changes), fast EXIF/embedded-JPEG thumbs, and a contact-sheet PNG
+  (`T`/`G`/`D`/`I`/`P`).
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

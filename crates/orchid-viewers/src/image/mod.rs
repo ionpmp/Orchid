@@ -362,6 +362,13 @@ impl ImageViewer {
             self.apply_fit_transform();
         }
     }
+
+    /// Install an already-decoded image (preload cache hit).
+    pub fn open_loaded(&mut self, path: orchid_fs::FsPath, loaded: LoadedImage) {
+        *self.image.write() = Some(loaded);
+        *self.path.write() = Some(path);
+        self.fit_to_viewport();
+    }
 }
 
 #[async_trait]
@@ -376,9 +383,7 @@ impl Viewer for ImageViewer {
         registry: Arc<orchid_fs::FsProviderRegistry>,
     ) -> Result<()> {
         let loaded = load_image(&path, registry, self.size_limit).await?;
-        *self.image.write() = Some(loaded);
-        *self.path.write() = Some(path);
-        self.fit_to_viewport();
+        self.open_loaded(path, loaded);
         Ok(())
     }
 
@@ -430,6 +435,11 @@ impl Viewer for ImageViewer {
             loop_folder: true,
             recent_paths: Vec::new(),
             lens: *self.lens.read(),
+            thumbs: Vec::new(),
+            thumb_strip: 0,
+            thumb_grid: false,
+            thumb_size: 1,
+            thumb_show_meta: true,
         })
     }
 

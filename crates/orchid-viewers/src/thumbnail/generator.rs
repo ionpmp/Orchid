@@ -9,14 +9,31 @@ use crate::error::{Result, ViewerError};
 use super::Thumbnail;
 
 /// Build a thumbnail from image bytes, fitting the longest side to
-/// `target_px`. PDF / video thumbnails are future tasks.
+/// `target_px`. Prefers an EXIF / embedded JPEG preview so a 40 MP file
+/// does not need a full decode. PDF / video thumbnails are future tasks.
 ///
 /// # Errors
 ///
 /// Returns [`ViewerError::ThumbnailFailed`] on decode failure.
 pub fn image_thumbnail(bytes: &[u8], target_px: u32) -> Result<Thumbnail> {
-    let img = image::load_from_memory(bytes)
-        .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))?;
+    if let Some(preview) = super::exif_preview::exif_jpeg_thumbnail(bytes) {
+        if let Ok(thumb) = decode_fit(preview, target_px) {
+            return Ok(thumb);
+        }
+    }
+    if let Some(preview) = super::exif_preview::embedded_jpeg_preview(bytes) {
+        if preview.len() < bytes.len() {
+            if let Ok(thumb) = decode_fit(preview, target_px) {
+                return Ok(thumb);
+            }
+        }
+    }
+    decode_fit(bytes, target_px)
+}
+
+fn decode_fit(bytes: &[u8], target_px: u32) -> Result<Thumbnail> {
+    let img =
+        image::load_from_memory(bytes).map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))?;
     let (w, h) = img.dimensions();
     let (tw, th) = fit(w, h, target_px);
     let resized = img.resize(tw, th, FilterType::Lanczos3).to_rgba8();
@@ -53,5 +70,20 @@ mod tests {
         img.write_to(&mut buf, image::ImageFormat::Png).unwrap();
         let thumb = image_thumbnail(&buf.into_inner(), 100).unwrap();
         assert!(thumb.width.max(thumb.height) == 100);
+    }
+
+    #[test]
+    fn prefers_embedded_jpeg_preview() {
+        let preview = image::RgbImage::from_pixel(16, 8, image::Rgb([9, 8, 7]));
+        let mut preview_buf = std::io::Cursor::new(Vec::new());
+        preview
+            .write_to(&mut preview_buf, image::ImageFormat::Jpeg)
+            .unwrap();
+        let preview_jpeg = preview_buf.into_inner();
+        let mut container = vec![0xFF, 0xD8, 0x00, 0x01];
+        container.extend_from_slice(&preview_jpeg);
+        let thumb = image_thumbnail(&container, 16).unwrap();
+        assert!(thumb.width <= 16 && thumb.height <= 16);
+        assert!(thumb.width > 0 && thumb.height > 0);
     }
 }

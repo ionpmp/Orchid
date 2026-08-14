@@ -219,6 +219,7 @@ pub async fn list_image_siblings(
         .filter(|e| {
             matches!(e.metadata.kind, FsEntryKind::File | FsEntryKind::Symlink)
                 && e.path.extension().is_some_and(is_image_file_extension)
+                && !e.name.eq_ignore_ascii_case("orchid-contact-sheet.png")
         })
         .map(|e| e.path)
         .collect();

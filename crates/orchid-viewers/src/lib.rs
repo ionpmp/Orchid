@@ -35,20 +35,22 @@ pub use html::{is_html_file_extension, HtmlViewer};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
 pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
 pub use image::{
-    is_image_file_extension, ImageBackground, ImageFitMode, ImageFormat, ImageViewer, LoadedImage,
-    ViewTransform, IMAGE_FILE_EXTENSIONS,
+    is_image_file_extension, load_image, ImageBackground, ImageFitMode, ImageFormat, ImageViewer,
+    LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT, IMAGE_FILE_EXTENSIONS,
 };
 pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, DocumentSnapshot,
-    HtmlSnapshot, ImageSnapshot, MediaSnapshot, PdfSnapshot, SelectionRange, SyntaxLine,
-    SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
+    HtmlSnapshot, ImageSnapshot, ImageThumbItem, MediaSnapshot, PdfSnapshot, SelectionRange,
+    SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
 };
 pub use text::{
     CursorPos, FindOptions, LineEnding, SyntaxHighlighter, TextBuffer, TextDisplayMode, TextOp,
     TextOpKind, TextViewer, TextViewerMode, UndoStack, VIEWER_ENCODINGS,
 };
+pub use thumbnail::contact_sheet::{compose_contact_sheet, encode_contact_sheet_png};
+pub use thumbnail::exif_preview::rating_from_bytes;
 pub use thumbnail::{Thumbnail, ThumbnailCache, ThumbnailService, ThumbnailSize};
 pub use viewer_trait::Viewer;
 

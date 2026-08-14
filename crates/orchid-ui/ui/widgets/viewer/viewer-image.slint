@@ -16,6 +16,15 @@ export component ViewerImageView inherits Rectangle {
     callback pan(length, length);
     callback command(string);
 
+    function rating-stars(n: int) -> string {
+        if (n <= 0) { return ""; }
+        if (n == 1) { return "★"; }
+        if (n == 2) { return "★★"; }
+        if (n == 3) { return "★★★"; }
+        if (n == 4) { return "★★★★"; }
+        return "★★★★★";
+    }
+
     background: transparent;
 
     property <length> last-mx: 0px;
@@ -33,6 +42,12 @@ export component ViewerImageView inherits Rectangle {
     property <length> sel-y1: 0px;
     property <bool> nav-hidden: false;
     property <bool> middle-pan: false;
+    property <length> thumb-cell: model.thumb-size == 0 ? 64px
+        : model.thumb-size == 2 ? 256px
+        : 128px;
+    property <length> thumb-strip-h: root.thumb-cell
+        + (model.thumb-show-meta ? 42px : 6px)
+        + 10px;
     property <color> canvas-bg: model.bg-kind == 1 ? #000000
         : model.bg-kind == 2 ? #ffffff
         : model.bg-kind == 3 ? #808080
@@ -194,6 +209,26 @@ export component ViewerImageView inherits Rectangle {
             }
             if (event.text == "n" || event.text == "N") {
                 root.nav-hidden = !root.nav-hidden;
+                return accept;
+            }
+            if (event.text == "t" || event.text == "T") {
+                root.command("thumbs");
+                return accept;
+            }
+            if (event.text == "g" || event.text == "G") {
+                root.command("thumb-grid");
+                return accept;
+            }
+            if (event.text == "d" || event.text == "D") {
+                root.command("thumb-size");
+                return accept;
+            }
+            if (event.text == "i" || event.text == "I") {
+                root.command("thumb-meta");
+                return accept;
+            }
+            if (event.text == "p" || event.text == "P") {
+                root.command("contact-sheet");
                 return accept;
             }
             if (event.text == "h" || event.text == "H") {
@@ -597,6 +632,144 @@ export component ViewerImageView inherits Rectangle {
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center; vertical-alignment: center;
                         }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.thumb-strip != 0 ? Theme.surface-raised
+                        : thumbs-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    thumbs-ta := TouchArea {
+                        clicked => { root.command("thumbs"); img-keys.focus(); }
+                    }
+                    if thumbs-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: thumbs-hint.preferred-width + 12px;
+                        height: thumbs-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        thumbs-hint := Text { x: 6px; y: 3px; text: model.thumbs-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.thumbs-label;
+                            color: model.thumb-strip != 0 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.thumb-grid ? Theme.surface-raised
+                        : tgrid-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tgrid-ta := TouchArea {
+                        clicked => { root.command("thumb-grid"); img-keys.focus(); }
+                    }
+                    if tgrid-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: tgrid-hint.preferred-width + 12px;
+                        height: tgrid-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        tgrid-hint := Text { x: 6px; y: 3px; text: model.thumb-grid-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.thumb-grid-label;
+                            color: model.thumb-grid ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: tsize-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tsize-ta := TouchArea {
+                        clicked => { root.command("thumb-size"); img-keys.focus(); }
+                    }
+                    if tsize-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: tsize-hint.preferred-width + 12px;
+                        height: tsize-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        tsize-hint := Text { x: 6px; y: 3px; text: model.thumb-size-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.thumb-size-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.thumb-show-meta ? Theme.surface-raised
+                        : tmeta-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tmeta-ta := TouchArea {
+                        clicked => { root.command("thumb-meta"); img-keys.focus(); }
+                    }
+                    if tmeta-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: tmeta-hint.preferred-width + 12px;
+                        height: tmeta-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        tmeta-hint := Text { x: 6px; y: 3px; text: model.thumb-meta-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text {
+                            text: model.thumb-meta-label;
+                            color: model.thumb-show-meta ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: tsheet-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tsheet-ta := TouchArea {
+                        clicked => { root.command("contact-sheet"); img-keys.focus(); }
+                    }
+                    if tsheet-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: tsheet-hint.preferred-width + 12px;
+                        height: tsheet-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        tsheet-hint := Text { x: 6px; y: 3px; text: model.contact-sheet-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.contact-sheet-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
 
@@ -1322,6 +1495,62 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
+        if model.thumb-strip == 2 && !model.chrome-hidden && !model.thumb-grid && model.thumbs.length > 0 : Rectangle {
+            height: root.thumb-strip-h;
+            background: Theme.surface-base;
+            thumb-strip-top := Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: max(self.width, model.thumbs.length * (root.thumb-cell + 10px) + 8px);
+                viewport-height: self.height;
+                HorizontalLayout {
+                    padding: 4px;
+                    spacing: 6px;
+                    for item in model.thumbs : Rectangle {
+                        width: root.thumb-cell + 4px;
+                        height: parent.height - 8px;
+                        background: item.selected ? Theme.surface-raised : transparent;
+                        border-radius: Theme.radius-md;
+                        border-width: item.selected ? 2px : 0px;
+                        border-color: Theme.accent-brand;
+                        VerticalLayout {
+                            padding: 2px;
+                            spacing: 2px;
+                            Image {
+                                source: item.thumbnail;
+                                width: root.thumb-cell;
+                                height: root.thumb-cell;
+                                image-fit: contain;
+                            }
+                            if model.thumb-show-meta : Text {
+                                text: item.name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if model.thumb-show-meta : Text {
+                                text: item.size-text + " · " + item.date-text;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if model.thumb-show-meta && item.rating > 0 : Text {
+                                text: root.rating-stars(item.rating);
+                                color: Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
+                        TouchArea {
+                            clicked => {
+                                root.command("goto:" + item.index);
+                                img-keys.focus();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         canvas := Rectangle {
             background: root.canvas-bg;
             vertical-stretch: 1;
@@ -1499,6 +1728,64 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
 
+            if model.thumb-grid : thumb-grid-host := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: root.canvas-bg;
+                z: 60;
+                property <int> cols: max(1, floor((self.width - 8px) / (root.thumb-cell + 16px)));
+                property <length> tile-h: root.thumb-cell + (model.thumb-show-meta ? 48px : 8px);
+                Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: self.width;
+                    viewport-height: max(self.height, ceil(model.thumbs.length / thumb-grid-host.cols) * (thumb-grid-host.tile-h + 8px) + 8px);
+                    for item[i] in model.thumbs : Rectangle {
+                        x: 8px + mod(i, thumb-grid-host.cols) * (root.thumb-cell + 16px);
+                        y: 8px + floor(i / thumb-grid-host.cols) * (thumb-grid-host.tile-h + 8px);
+                        width: root.thumb-cell + 8px;
+                        height: thumb-grid-host.tile-h;
+                        background: item.selected ? Theme.surface-raised : Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: item.selected ? 2px : 1px;
+                        border-color: item.selected ? Theme.accent-brand : Theme.border-default;
+                        VerticalLayout {
+                            padding: 4px;
+                            spacing: 2px;
+                            Image {
+                                source: item.thumbnail;
+                                width: root.thumb-cell;
+                                height: root.thumb-cell;
+                                image-fit: contain;
+                            }
+                            if model.thumb-show-meta : Text {
+                                text: item.name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if model.thumb-show-meta : Text {
+                                text: item.size-text + " · " + item.date-text;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if model.thumb-show-meta && item.rating > 0 : Text {
+                                text: root.rating-stars(item.rating);
+                                color: Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
+                        TouchArea {
+                            clicked => {
+                                root.command("open-thumb:" + item.path);
+                                img-keys.focus();
+                            }
+                        }
+                    }
+                }
+            }
+
             if root.show-recent && model.recent-paths.length > 0 : Rectangle {
                 x: 8px;
                 y: 8px;
@@ -1531,6 +1818,62 @@ export component ViewerImageView inherits Rectangle {
                             vertical-alignment: center;
                             overflow: elide;
                             width: parent.width - 16px;
+                        }
+                    }
+                }
+            }
+        }
+
+        if model.thumb-strip == 1 && !model.chrome-hidden && !model.thumb-grid && model.thumbs.length > 0 : Rectangle {
+            height: root.thumb-strip-h;
+            background: Theme.surface-base;
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: max(self.width, model.thumbs.length * (root.thumb-cell + 10px) + 8px);
+                viewport-height: self.height;
+                HorizontalLayout {
+                    padding: 4px;
+                    spacing: 6px;
+                    for item in model.thumbs : Rectangle {
+                        width: root.thumb-cell + 4px;
+                        height: parent.height - 8px;
+                        background: item.selected ? Theme.surface-raised : transparent;
+                        border-radius: Theme.radius-md;
+                        border-width: item.selected ? 2px : 0px;
+                        border-color: Theme.accent-brand;
+                        VerticalLayout {
+                            padding: 2px;
+                            spacing: 2px;
+                            Image {
+                                source: item.thumbnail;
+                                width: root.thumb-cell;
+                                height: root.thumb-cell;
+                                image-fit: contain;
+                            }
+                            if model.thumb-show-meta : Text {
+                                text: item.name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if model.thumb-show-meta : Text {
+                                text: item.size-text + " · " + item.date-text;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if model.thumb-show-meta && item.rating > 0 : Text {
+                                text: root.rating-stars(item.rating);
+                                color: Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                            }
+                        }
+                        TouchArea {
+                            clicked => {
+                                root.command("goto:" + item.index);
+                                img-keys.focus();
+                            }
                         }
                     }
                 }

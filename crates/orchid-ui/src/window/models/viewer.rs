@@ -7,8 +7,8 @@ use std::sync::Arc;
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerDocumentModel, ViewerEmptyModel, ViewerHtmlModel,
-    ViewerImageModel, ViewerMediaModel, ViewerModel, ViewerPdfModel, ViewerStatusModel,
-    ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
+    ViewerImageModel, ViewerImageThumb, ViewerMediaModel, ViewerModel, ViewerPdfModel,
+    ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -30,7 +30,7 @@ thread_local! {
     static RGBA_IMAGE_CACHE: std::cell::RefCell<HashMap<RgbaCacheKey, RgbaImageCacheEntry>> =
         std::cell::RefCell::new(HashMap::new());
 }
-const RGBA_IMAGE_CACHE_CAP: usize = 8;
+const RGBA_IMAGE_CACHE_CAP: usize = 96;
 
 fn rgba_cache_key(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> RgbaCacheKey {
     RgbaCacheKey {
@@ -212,6 +212,16 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         lossless_crop_label: locale.tr("viewer-image-lossless-crop").into(),
         lossless_exif_label: locale.tr("viewer-image-lossless-exif").into(),
         lossless_folder_label: locale.tr("viewer-image-lossless-folder").into(),
+        thumbs: ModelRc::new(VecModel::default()),
+        thumb_strip: 1,
+        thumb_grid: false,
+        thumb_size: 1,
+        thumb_show_meta: true,
+        thumbs_label: locale.tr("viewer-image-thumbs").into(),
+        thumb_grid_label: locale.tr("viewer-image-thumb-grid").into(),
+        thumb_size_label: locale.tr("viewer-image-thumb-size").into(),
+        thumb_meta_label: locale.tr("viewer-image-thumb-meta").into(),
+        contact_sheet_label: locale.tr("viewer-image-contact-sheet").into(),
     }
 }
 
@@ -718,6 +728,29 @@ fn build_image_snapshot(
         info.push_str(&nav_index_label);
     }
     let recent: Vec<SharedString> = s.recent_paths.iter().map(|p| p.clone().into()).collect();
+    let thumbs: Vec<ViewerImageThumb> = s
+        .thumbs
+        .iter()
+        .map(|t| {
+            let thumb_img = match &t.rgba {
+                Some(rgba) if t.width > 0 && t.height > 0 => {
+                    slint_image_from_rgba(rgba, t.width, t.height)
+                }
+                _ => Image::default(),
+            };
+            ViewerImageThumb {
+                path: t.path.clone().into(),
+                name: t.name.clone().into(),
+                size_text: locale.format_byte_size(t.size_bytes).into(),
+                date_text: t.date_text.clone().into(),
+                rating: i32::from(t.rating),
+                has_image: t.rgba.is_some(),
+                thumbnail: thumb_img,
+                selected: t.selected,
+                index: t.index as i32,
+            }
+        })
+        .collect();
     ViewerImageModel {
         width_px: s.width_px as i32,
         height_px: s.height_px as i32,
@@ -773,6 +806,16 @@ fn build_image_snapshot(
         lossless_crop_label: locale.tr("viewer-image-lossless-crop").into(),
         lossless_exif_label: locale.tr("viewer-image-lossless-exif").into(),
         lossless_folder_label: locale.tr("viewer-image-lossless-folder").into(),
+        thumbs: ModelRc::new(VecModel::from(thumbs)),
+        thumb_strip: i32::from(s.thumb_strip),
+        thumb_grid: s.thumb_grid,
+        thumb_size: i32::from(s.thumb_size),
+        thumb_show_meta: s.thumb_show_meta,
+        thumbs_label: locale.tr("viewer-image-thumbs").into(),
+        thumb_grid_label: locale.tr("viewer-image-thumb-grid").into(),
+        thumb_size_label: locale.tr("viewer-image-thumb-size").into(),
+        thumb_meta_label: locale.tr("viewer-image-thumb-meta").into(),
+        contact_sheet_label: locale.tr("viewer-image-contact-sheet").into(),
     }
 }
 

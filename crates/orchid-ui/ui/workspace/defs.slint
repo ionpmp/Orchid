@@ -851,6 +851,18 @@ export struct ViewerSyntaxLine {
     segments: [ViewerSyntaxSegment],
 }
 
+export struct ViewerImageThumb {
+    path: string,
+    name: string,
+    size-text: string,
+    date-text: string,
+    rating: int,
+    has-image: bool,
+    thumbnail: image,
+    selected: bool,
+    index: int,
+}
+
 export struct ViewerImageModel {
     width-px: int,
     height-px: int,
@@ -908,6 +920,18 @@ export struct ViewerImageModel {
     lossless-crop-label: string,
     lossless-exif-label: string,
     lossless-folder-label: string,
+    thumbs: [ViewerImageThumb],
+    /// 0 hidden, 1 bottom, 2 top.
+    thumb-strip: int,
+    thumb-grid: bool,
+    /// 0 small, 1 medium, 2 large.
+    thumb-size: int,
+    thumb-show-meta: bool,
+    thumbs-label: string,
+    thumb-grid-label: string,
+    thumb-size-label: string,
+    thumb-meta-label: string,
+    contact-sheet-label: string,
 }
 
 export struct ViewerPdfModel {

@@ -130,6 +130,33 @@ pub struct ImageSnapshot {
     pub recent_paths: Vec<String>,
     /// Magnifier overlay follows the pointer.
     pub lens: bool,
+    /// Folder thumbnails for the strip / grid (`rgba` may still be empty).
+    pub thumbs: Vec<ImageThumbItem>,
+    /// 0 hidden, 1 bottom, 2 top.
+    pub thumb_strip: u8,
+    /// Full-folder thumbnail grid instead of the single image.
+    pub thumb_grid: bool,
+    /// 0 small, 1 medium, 2 large.
+    pub thumb_size: u8,
+    /// Show name / size / date / rating under each thumbnail.
+    pub thumb_show_meta: bool,
+}
+
+/// One folder sibling in the image thumbnail strip or grid.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct ImageThumbItem {
+    pub path: String,
+    pub name: String,
+    pub size_bytes: u64,
+    pub date_text: String,
+    pub rating: u8,
+    pub rgba: Option<Arc<Vec<u8>>>,
+    pub width: u32,
+    pub height: u32,
+    pub selected: bool,
+    /// 1-based playlist index.
+    pub index: u32,
 }
 
 /// PDF page snapshot.

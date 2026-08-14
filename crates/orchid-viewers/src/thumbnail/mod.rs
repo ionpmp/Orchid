@@ -1,6 +1,8 @@
 //! Thumbnail service.
 
 pub mod cache;
+pub mod contact_sheet;
+pub mod exif_preview;
 pub mod generator;
 
 use std::collections::{HashMap, VecDeque};
@@ -41,6 +43,36 @@ impl ThumbnailSize {
             Self::Small => "s",
             Self::Medium => "m",
             Self::Large => "l",
+        }
+    }
+
+    /// Persist / snapshot encoding (`0` small, `1` medium, `2` large).
+    #[must_use]
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Self::Small => 0,
+            Self::Medium => 1,
+            Self::Large => 2,
+        }
+    }
+
+    /// Inverse of [`Self::as_u8`]; unknown values become medium.
+    #[must_use]
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Self::Small,
+            2 => Self::Large,
+            _ => Self::Medium,
+        }
+    }
+
+    /// Cycle small → medium → large → small.
+    #[must_use]
+    pub fn cycle(self) -> Self {
+        match self {
+            Self::Small => Self::Medium,
+            Self::Medium => Self::Large,
+            Self::Large => Self::Small,
         }
     }
 }
