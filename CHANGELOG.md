@@ -53,7 +53,9 @@ release yet.
   Advanced tools: folder compare / sync / merge, byte-level file compare,
   split / join, checksums (MD5 / SHA-1 / SHA-256 / BLAKE3 / CRC32) with
   sidecar verify, Base64 / UUE encode–decode, bulk attributes / timestamps
-  / name case, chmod (and Unix chown), Windows ACL via icacls.
+  / name case, chmod (and Unix chown), Windows ACL via icacls. Properties
+  report (`Alt+Enter`) with EXIF, ID3, Office core metadata (editable),
+  and Windows Authenticode / PE certificate-table inspection.
 - Browse archives as folders (`archive:`), extract all or selected, create /
   add / delete / test; password, multi-volume, and SFX via 7-Zip. Formats:
   ZIP, RAR, 7z, TAR / TAR.GZ / TAR.XZ / TAR.BZ2, CAB, ISO, ACE, ARJ, LZH;

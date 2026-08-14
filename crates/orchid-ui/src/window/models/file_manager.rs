@@ -1571,6 +1571,7 @@ fn fm_action_shortcut(id: &str) -> &'static str {
         "fs.open-other-pane" => "Ctrl+Shift+Enter",
         "fs.branch-view" => "Ctrl+B",
         "fs.find" => "Alt+F7",
+        "fs.properties" => "Alt+Enter",
         _ => "",
     }
 }

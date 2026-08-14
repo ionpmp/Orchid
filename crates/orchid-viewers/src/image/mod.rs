@@ -2,6 +2,7 @@
 
 use std::any::Any;
 
+pub mod exif;
 pub mod loader;
 pub mod operations;
 pub mod transform;
@@ -40,7 +41,10 @@ pub struct ImageViewer {
 impl std::fmt::Debug for ImageViewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ImageViewer")
-            .field("path", &self.path.read().as_ref().map(|p| p.as_str().to_string()))
+            .field(
+                "path",
+                &self.path.read().as_ref().map(|p| p.as_str().to_string()),
+            )
             .finish_non_exhaustive()
     }
 }

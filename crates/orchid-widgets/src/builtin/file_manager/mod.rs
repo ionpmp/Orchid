@@ -4458,6 +4458,11 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.acl-view"
             | "fs.acl-grant"
             | "fs.acl-reset"
+            | "fs.properties"
+            | "fs.exif"
+            | "fs.id3"
+            | "fs.office-meta"
+            | "fs.signature"
     )
 }
 

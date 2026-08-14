@@ -706,6 +706,26 @@ fn tools_menu(
     let mut submenu = vec![
         item("fs.find", "fm-action-find", "action-select-all", true),
         item(
+            "fs.properties",
+            "fm-action-properties",
+            "action-copy",
+            has_selection || single_file,
+        ),
+        item("fs.exif", "fm-action-exif", "action-copy", single_file),
+        item("fs.id3", "fm-action-id3", "action-copy", single_file),
+        item(
+            "fs.office-meta",
+            "fm-action-office-meta",
+            "action-copy",
+            single_file,
+        ),
+        item(
+            "fs.signature",
+            "fm-action-signature",
+            "action-copy",
+            single_file,
+        ),
+        item(
             "fs.find-duplicates",
             "fm-action-find-duplicates",
             "action-copy",

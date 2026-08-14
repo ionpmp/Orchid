@@ -61,12 +61,224 @@ pub(super) async fn run(
         "fs.acl-view" => acl_view(inner, paths).await,
         "fs.acl-grant" => acl_grant_set(inner, paths, input).await,
         "fs.acl-reset" => acl_reset(inner, paths).await,
+        "fs.properties" => file_properties(inner, paths).await,
+        "fs.exif" => exif_report(inner, paths).await,
+        "fs.id3" => id3_report(inner, paths).await,
+        "fs.office-meta" => office_meta(inner, paths, input).await,
+        "fs.signature" => signature_report(inner, paths).await,
         _ => Ok(ActionOutcome::Done),
     }
 }
 
 fn report(title: String, body: String) -> ActionOutcome {
     ActionOutcome::NeedsReport { title, body }
+}
+
+fn file_ext(path: &orchid_fs::FsPath) -> String {
+    path.file_name()
+        .and_then(|n| n.rsplit_once('.'))
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn first_path(inner: &Arc<FileManagerInner>, paths: &[String]) -> Result<orchid_fs::FsPath, WidgetError> {
+    if let Some(raw) = paths.first().filter(|s| !s.is_empty()) {
+        return orchid_fs::FsPath::new(raw).map_err(map_fs_error);
+    }
+    orchid_fs::FsPath::new(active_pane_path(inner)).map_err(map_fs_error)
+}
+
+fn dash(s: Option<String>) -> String {
+    s.filter(|v| !v.is_empty()).unwrap_or_else(|| "—".into())
+}
+
+async fn file_properties(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fmt = inner.deps.orchid_config.read().locale.clone();
+    let fp = first_path(inner, paths)?;
+    let props = orchid_fs::inspect_path(&inner.deps.registry, &fp)
+        .await
+        .map_err(map_fs_error)?;
+    let kind = match props.kind {
+        orchid_fs::FsEntryKind::Directory => locale.tr("fm-properties-kind-folder"),
+        orchid_fs::FsEntryKind::File => locale.tr("fm-properties-kind-file"),
+        orchid_fs::FsEntryKind::Symlink => locale.tr("fm-properties-kind-symlink"),
+        orchid_fs::FsEntryKind::Other => locale.tr("fm-properties-kind-file"),
+    };
+    let attrs = [
+        props.readonly.then_some(locale.tr("fm-properties-attr-readonly")),
+        props.hidden.then_some(locale.tr("fm-properties-attr-hidden")),
+        props.system.then_some(locale.tr("fm-properties-attr-system")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(", ");
+    let mut body = String::new();
+    for (key, value) in [
+        ("fm-prop-name", props.name),
+        ("fm-prop-path", props.path),
+        ("fm-prop-type", kind),
+        ("fm-prop-size", locale.format_byte_size(props.size)),
+        (
+            "fm-prop-created",
+            dash(props.created.map(|t| fmt.format_datetime(t))),
+        ),
+        (
+            "fm-prop-modified",
+            dash(props.modified.map(|t| fmt.format_datetime(t))),
+        ),
+        (
+            "fm-prop-accessed",
+            dash(props.accessed.map(|t| fmt.format_datetime(t))),
+        ),
+        (
+            "fm-prop-attributes",
+            if attrs.is_empty() {
+                "—".into()
+            } else {
+                attrs
+            },
+        ),
+        ("fm-prop-mime", dash(props.mime)),
+    ] {
+        body.push_str(&locale.tr_args(key, &orchid_i18n::FluentArgs::new().with("value", value)));
+        body.push('\n');
+    }
+    append_content_metadata(&mut body, locale, &fp);
+    Ok(report(locale.tr("fm-properties-title"), body))
+}
+
+fn append_content_metadata(body: &mut String, locale: &orchid_i18n::LocaleManager, fp: &orchid_fs::FsPath) {
+    let Ok(os) = fp.to_local() else {
+        return;
+    };
+    let ext = file_ext(fp);
+    if orchid_viewers::is_exif_extension(&ext) {
+        match orchid_viewers::format_exif_report(&os) {
+            Ok(text) if !text.is_empty() => {
+                body.push('\n');
+                body.push_str(&locale.tr("fm-exif-title"));
+                body.push('\n');
+                body.push_str(&text);
+            }
+            _ => {}
+        }
+    }
+    if orchid_viewers::is_id3_extension(&ext) {
+        match orchid_viewers::format_id3_report(&os) {
+            Ok(text) if !text.is_empty() => {
+                body.push('\n');
+                body.push_str(&locale.tr("fm-id3-title"));
+                body.push('\n');
+                body.push_str(&text);
+            }
+            _ => {}
+        }
+    }
+    if orchid_viewers::is_office_extension(&ext) {
+        if let Ok(props) = orchid_viewers::read_office_core_props(&os) {
+            let text = orchid_viewers::format_office_report(&props);
+            if !text.is_empty() {
+                body.push('\n');
+                body.push_str(&locale.tr("fm-office-meta-title"));
+                body.push('\n');
+                body.push_str(&text);
+            }
+        }
+    }
+    if let Ok(sig) = orchid_fs::inspect_signature(fp) {
+        if sig.lines.iter().any(|l| {
+            l.contains("certificate table: yes") || l.contains("Authenticode: trusted")
+        }) {
+            body.push('\n');
+            body.push_str(&locale.tr("fm-signature-title"));
+            body.push('\n');
+            for line in sig.lines {
+                body.push_str(&line);
+                body.push('\n');
+            }
+        }
+    }
+}
+
+async fn exif_report(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fp = first_path(inner, paths)?;
+    let os = fp.to_local().map_err(map_fs_error)?;
+    let text = orchid_viewers::format_exif_report(&os).map_err(|e| {
+        WidgetError::InvalidStateForOperation(format!("{e}"))
+    })?;
+    let body = if text.is_empty() {
+        locale.tr("fm-exif-empty")
+    } else {
+        text
+    };
+    Ok(report(locale.tr("fm-exif-title"), body))
+}
+
+async fn id3_report(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fp = first_path(inner, paths)?;
+    let os = fp.to_local().map_err(map_fs_error)?;
+    let text = orchid_viewers::format_id3_report(&os).map_err(|e| {
+        WidgetError::InvalidStateForOperation(format!("{e}"))
+    })?;
+    let body = if text.is_empty() {
+        locale.tr("fm-id3-empty")
+    } else {
+        text
+    };
+    Ok(report(locale.tr("fm-id3-title"), body))
+}
+
+async fn office_meta(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fp = first_path(inner, paths)?;
+    let os = fp.to_local().map_err(map_fs_error)?;
+    let current = orchid_viewers::read_office_core_props(&os).map_err(|e| {
+        WidgetError::InvalidStateForOperation(format!("{e}"))
+    })?;
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.office-meta",
+            &[fp.as_str().to_string()],
+            &orchid_viewers::pack_office_props(&current),
+            locale.tr("fm-office-meta-title"),
+            locale.tr("fm-office-meta-hint"),
+        ));
+    };
+    let next = orchid_viewers::unpack_office_props(raw, current);
+    orchid_viewers::write_office_core_props(&os, &next).map_err(|e| {
+        WidgetError::InvalidStateForOperation(format!("{e}"))
+    })?;
+    Ok(report(
+        locale.tr("fm-office-meta-title"),
+        orchid_viewers::format_office_report(&next),
+    ))
+}
+
+async fn signature_report(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fp = first_path(inner, paths)?;
+    let sig = orchid_fs::inspect_signature(&fp).map_err(map_fs_error)?;
+    Ok(report(locale.tr("fm-signature-title"), sig.lines.join("\n")))
 }
 
 fn prompt(

@@ -3134,6 +3134,11 @@ impl MainWindowController {
                 self.spawn_fm_action(inst, "fs.find", Vec::new());
                 return;
             }
+            "properties" => {
+                let paths = self.fm_selected_paths(inst, p);
+                self.spawn_fm_action(inst, "fs.properties", paths);
+                return;
+            }
             "batch-rename" => {
                 let paths = self.fm_selected_paths(inst, p);
                 if !paths.is_empty() {

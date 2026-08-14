@@ -184,6 +184,11 @@ export component FmPane inherits Rectangle {
                 root.delete-selected();
                 return accept;
             }
+            if (!rename.active && !root.address-editing && event.modifiers.alt
+                && event.text == Key.Return) {
+                root.nav-command("properties");
+                return accept;
+            }
             if (event.text == Key.Return) {
                 if (!rename.active) {
                     root.open-selected();

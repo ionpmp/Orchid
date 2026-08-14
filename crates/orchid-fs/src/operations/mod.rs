@@ -6,7 +6,9 @@ pub mod compare;
 pub mod copy;
 pub mod delete;
 pub mod encode;
+pub mod inspect;
 pub mod link;
+pub mod signature;
 #[path = "move_.rs"]
 pub mod move_;
 pub mod progress;
@@ -29,7 +31,9 @@ pub use delete::{delete, DeleteOptions};
 pub use encode::{
     decode_base64, decode_uue, decoded_path, encode_base64, encode_uue, sidecar_path,
 };
+pub use inspect::{inspect_path, FileProperties};
 pub use link::{create_hard_link, create_junction, create_symlink};
+pub use signature::{inspect_signature, SignatureReport};
 pub use move_::move_;
 pub use progress::{OperationProgress, ProgressSink, TransferControl};
 pub use split::{discover_parts, join_files, join_output_name, split_file};

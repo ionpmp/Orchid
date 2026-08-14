@@ -54,6 +54,8 @@ quick-xml.workspace = true
 parley.workspace = true
 swash.workspace = true
 zip.workspace = true
+kamadak-exif.workspace = true
+id3.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true

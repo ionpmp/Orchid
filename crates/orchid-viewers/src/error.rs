@@ -81,6 +81,10 @@ pub enum ViewerError {
     #[error("failed to save document: {0}")]
     DocumentSave(String),
 
+    /// Failed to read or write content metadata (EXIF, ID3, Office).
+    #[error("metadata: {0}")]
+    Metadata(String),
+
     /// Archive entry missing.
     #[error("archive entry not found: {0}")]
     ArchiveEntryNotFound(String),

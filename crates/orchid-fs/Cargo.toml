@@ -57,6 +57,8 @@ features = [
     "Win32_UI_Controls",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Security_WinTrust",
+    "Win32_Security_Cryptography",
 ]
 
 [target.'cfg(unix)'.dependencies]
