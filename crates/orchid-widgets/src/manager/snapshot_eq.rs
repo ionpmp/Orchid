@@ -107,6 +107,12 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && text_lines_eq(&a.visible_lines, &b.visible_lines)
                 && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
                     || a.plain_text.as_ref() == b.plain_text.as_ref())
+                && a.display_mode == b.display_mode
+                && a.find_gen == b.find_gen
+                && a.find_match_index == b.find_match_index
+                && a.find_match_count == b.find_match_count
+                && a.can_undo == b.can_undo
+                && a.can_redo == b.can_redo
         }
         (Vs::Archive(a), Vs::Archive(b)) => {
             a.path_display == b.path_display
@@ -148,6 +154,14 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                     || a.plain_text.as_ref() == b.plain_text.as_ref())
                 && (std::sync::Arc::ptr_eq(&a.preview_rgba, &b.preview_rgba)
                     || a.preview_rgba.as_slice() == b.preview_rgba.as_slice())
+        }
+        (Vs::Media(a), Vs::Media(b)) => {
+            a.path_display == b.path_display && a.kind_label == b.kind_label
+        }
+        (Vs::Html(a), Vs::Html(b)) => {
+            a.path_display == b.path_display
+                && (std::sync::Arc::ptr_eq(&a.source_preview, &b.source_preview)
+                    || a.source_preview.as_ref() == b.source_preview.as_ref())
         }
         _ => false,
     }
@@ -974,6 +988,14 @@ mod tests {
                     selection: None,
                     info_text: String::new(),
                     plain_text: Arc::from(plain),
+                    display_mode: 0,
+                    find_gen: 0,
+                    find_anchor: 0,
+                    find_cursor: 0,
+                    find_match_index: 0,
+                    find_match_count: 0,
+                    can_undo: false,
+                    can_redo: false,
                 }),
             })
         };

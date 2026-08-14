@@ -5,7 +5,9 @@ use std::sync::Arc;
 use crate::archive::ArchiveViewer;
 use crate::document::DocumentViewer;
 use crate::error::{Result, ViewerError};
+use crate::html::HtmlViewer;
 use crate::image::ImageViewer;
+use crate::media::MediaViewer;
 use crate::pdf::PdfViewer;
 use crate::text::{SyntaxHighlighter, TextViewer};
 use crate::viewer_trait::Viewer;
@@ -19,6 +21,8 @@ pub enum ViewerKind {
     Text,
     Archive,
     Document,
+    Media,
+    Html,
 }
 
 /// Pick a viewer kind by sniffing magic bytes from `sample` with a fall
@@ -51,6 +55,8 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
             "pdf" => Some(ViewerKind::Pdf),
             "docx" | "docm" => Some(ViewerKind::Document),
             "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
+            other if crate::html::is_html_file_extension(other) => Some(ViewerKind::Html),
+            other if crate::media::is_media_file_extension(other) => Some(ViewerKind::Media),
             other if crate::image::loader::is_image_file_extension(other) => {
                 Some(ViewerKind::Image)
             }
@@ -95,6 +101,8 @@ pub async fn select_viewer(
         ViewerKind::Text => Box::new(TextViewer::new(highlighter)),
         ViewerKind::Archive => Box::new(ArchiveViewer::new()),
         ViewerKind::Document => Box::new(DocumentViewer::new()),
+        ViewerKind::Media => Box::new(MediaViewer::new()),
+        ViewerKind::Html => Box::new(HtmlViewer::new()),
     };
     Ok(viewer)
 }
@@ -106,10 +114,7 @@ fn extension_of(path: &orchid_fs::FsPath) -> Option<String> {
 }
 
 fn is_docx_path(path: &orchid_fs::FsPath) -> bool {
-    matches!(
-        extension_of(path).as_deref(),
-        Some("docx") | Some("docm")
-    )
+    matches!(extension_of(path).as_deref(), Some("docx") | Some("docm"))
 }
 
 fn looks_like_zip(sample: &[u8]) -> bool {
@@ -238,5 +243,17 @@ mod tests {
     fn avif_extension_still_routes_to_image() {
         let kind = kind_for(&path("local:/a/b.avif"), b"").unwrap();
         assert_eq!(kind, ViewerKind::Image);
+    }
+
+    #[test]
+    fn html_extension_routes_to_html() {
+        let kind = kind_for(&path("local:/a/b.html"), b"<html></html>").unwrap();
+        assert_eq!(kind, ViewerKind::Html);
+    }
+
+    #[test]
+    fn mp4_extension_routes_to_media() {
+        let kind = kind_for(&path("local:/a/b.mp4"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Media);
     }
 }

@@ -1,5 +1,6 @@
 //! Viewer widget: wraps an [`orchid_viewers::Viewer`] for any given path.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -106,6 +107,8 @@ struct ViewerWidgetInner {
     path: RwLock<Option<orchid_fs::FsPath>>,
     /// Path restored from persistence; opened in `on_create`.
     pending_path: RwLock<Option<orchid_fs::FsPath>>,
+    /// After the next successful open, switch a text viewer into edit mode.
+    pending_edit: AtomicBool,
     /// Floating overlay bounds when undocked from the canvas grid.
     floating: RwLock<Option<crate::layout::PixelBounds>>,
     bus: Arc<orchid_core::EventBus>,
@@ -163,6 +166,11 @@ impl ViewerWidgetInner {
             self.publish_refresh();
             return Ok(());
         }
+        if self.pending_edit.swap(false, Ordering::Relaxed) {
+            if let Some(tv) = viewer.as_any().downcast_ref::<TextViewer>() {
+                tv.set_mode(orchid_viewers::TextViewerMode::Edit);
+            }
+        }
         let snap = viewer.snapshot();
         *self.snapshot.write() = Some(snap);
         *self.viewer.lock().await = Some(viewer);
@@ -214,6 +222,7 @@ impl ViewerWidget {
                 snapshot: RwLock::new(None),
                 path: RwLock::new(None),
                 pending_path: RwLock::new(None),
+                pending_edit: AtomicBool::new(false),
                 floating: RwLock::new(None),
                 bus,
             }),
@@ -310,6 +319,13 @@ pub async fn open_path(instance_id: Uuid, path: orchid_fs::FsPath) -> WidgetResu
         .get(&instance_id)
         .map(|e| Arc::clone(e.value()))
         .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))?;
+    inner.open_path(path).await
+}
+
+/// Open `path` and enter text-edit mode when the file is a text document.
+pub async fn open_path_for_edit(instance_id: Uuid, path: orchid_fs::FsPath) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    inner.pending_edit.store(true, Ordering::Relaxed);
     inner.open_path(path).await
 }
 
@@ -803,6 +819,181 @@ pub async fn text_save(instance_id: Uuid) -> WidgetResult<()> {
     }
     inner.refresh_snapshot().await;
     Ok(())
+}
+
+/// Text: toolbar action (`text` / `hex` / `bin` / `undo` / `redo` / `print`).
+pub async fn text_action(instance_id: Uuid, action: String) -> WidgetResult<()> {
+    use orchid_viewers::TextDisplayMode;
+    let inner = live_inner(instance_id)?;
+    match action.as_str() {
+        "text" | "hex" | "bin" => {
+            let mode = match action.as_str() {
+                "hex" => TextDisplayMode::Hex,
+                "bin" => TextDisplayMode::Binary,
+                _ => TextDisplayMode::Text,
+            };
+            let guard = inner.viewer.lock().await;
+            if let Some(v) = guard.as_ref() {
+                if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                    tv.set_display_mode(mode);
+                }
+            }
+        }
+        "undo" => {
+            let guard = inner.viewer.lock().await;
+            if let Some(v) = guard.as_ref() {
+                if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                    tv.undo()
+                        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                }
+            }
+        }
+        "redo" => {
+            let guard = inner.viewer.lock().await;
+            if let Some(v) = guard.as_ref() {
+                if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                    tv.redo()
+                        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                }
+            }
+        }
+        "print" => {
+            text_print_locked(&inner).await?;
+            return Ok(());
+        }
+        _ => {}
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Text: re-decode with an explicit encoding label.
+pub async fn text_set_encoding(instance_id: Uuid, label: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                tv.set_encoding(&label)
+                    .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Text: find next (`forward`) / previous match.
+pub async fn text_find(
+    instance_id: Uuid,
+    query: String,
+    forward: bool,
+    regex: bool,
+    multiline: bool,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                tv.find(
+                    &query,
+                    forward,
+                    orchid_viewers::FindOptions { regex, multiline },
+                )
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Text: replace current match or all matches.
+pub async fn text_replace(
+    instance_id: Uuid,
+    query: String,
+    replacement: String,
+    all: bool,
+    regex: bool,
+    multiline: bool,
+) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(tv) = v.as_any().downcast_ref::<TextViewer>() {
+                let opts = orchid_viewers::FindOptions { regex, multiline };
+                if all {
+                    tv.replace_all(&query, &replacement, opts)
+                        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                } else {
+                    tv.replace_current(&query, &replacement, opts)
+                        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+                }
+            }
+        }
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+async fn text_print_locked(inner: &ViewerWidgetInner) -> WidgetResult<()> {
+    let text = {
+        let snap = inner.snapshot.read();
+        match snap.as_ref() {
+            Some(ViewerSnapshot::Text(t)) => t.plain_text.to_string(),
+            _ => String::new(),
+        }
+    };
+    if text.is_empty() {
+        return Err(WidgetError::InvalidStateForOperation(
+            "nothing to print".into(),
+        ));
+    }
+    let tmp = std::env::temp_dir().join(format!("orchid-print-{}.txt", inner.instance_id));
+    std::fs::write(&tmp, text.as_bytes())
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    print_path(&tmp)
+}
+
+fn print_path(path: &std::path::Path) -> WidgetResult<()> {
+    #[cfg(windows)]
+    {
+        let quoted = path.display().to_string().replace('\'', "''");
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                &format!("Start-Process -FilePath '{quoted}' -Verb Print"),
+            ])
+            .spawn()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new("lp")
+            .arg(path)
+            .spawn()
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Open the current viewer file in the system default app (player / browser).
+pub fn open_current_externally(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    let path = inner
+        .path
+        .read()
+        .clone()
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("no file open".into()))?;
+    let os = path
+        .to_local()
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    opener::open(&os).map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))
 }
 
 /// Document: apply a toolbar / shortcut action (`save`, `undo`, `redo`, `bold`, …).
@@ -1300,6 +1491,8 @@ impl Widget for ViewerWidget {
             ViewerSnapshot::Text(s) => title_from(&s.path_display),
             ViewerSnapshot::Archive(s) => title_from(&s.path_display),
             ViewerSnapshot::Document(s) => title_from(&s.path_display),
+            ViewerSnapshot::Media(s) => title_from(&s.path_display),
+            ViewerSnapshot::Html(s) => title_from(&s.path_display),
             ViewerSnapshot::Loading { path_display }
             | ViewerSnapshot::Error { path_display, .. } => title_from(path_display),
         };

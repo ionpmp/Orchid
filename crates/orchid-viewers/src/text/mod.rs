@@ -1,8 +1,10 @@
 //! Text viewer / editor.
 
 pub mod buffer;
+pub mod display;
 pub mod grammars;
 pub mod save;
+pub mod search;
 pub mod syntax;
 pub mod undo;
 
@@ -19,8 +21,10 @@ use crate::snapshot::{SelectionRange, TextSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use buffer::{LineEnding, TextBuffer};
+pub use display::{TextDisplayMode, VIEWER_ENCODINGS};
 pub use grammars::{detect_language, PLAINTEXT};
 pub use save::save_text;
+pub use search::FindOptions;
 pub use syntax::SyntaxHighlighter;
 pub use undo::{TextOp, TextOpKind, UndoStack};
 
@@ -72,6 +76,14 @@ pub struct TextViewer {
     mode: RwLock<TextViewerMode>,
     registry: RwLock<Option<Arc<orchid_fs::FsProviderRegistry>>>,
     size_limit: u64,
+    raw_bytes: RwLock<Vec<u8>>,
+    display_mode: RwLock<TextDisplayMode>,
+    display_cache: Mutex<Option<(TextDisplayMode, usize, Arc<str>)>>,
+    find_gen: Mutex<i32>,
+    find_anchor: Mutex<i32>,
+    find_cursor: Mutex<i32>,
+    find_match_index: Mutex<i32>,
+    find_match_count: Mutex<i32>,
 }
 
 impl std::fmt::Debug for TextViewer {
@@ -103,6 +115,14 @@ impl TextViewer {
             mode: RwLock::new(TextViewerMode::Read),
             registry: RwLock::new(None),
             size_limit: DEFAULT_SIZE_LIMIT,
+            raw_bytes: RwLock::new(Vec::new()),
+            display_mode: RwLock::new(TextDisplayMode::Text),
+            display_cache: Mutex::new(None),
+            find_gen: Mutex::new(0),
+            find_anchor: Mutex::new(0),
+            find_cursor: Mutex::new(0),
+            find_match_index: Mutex::new(0),
+            find_match_count: Mutex::new(0),
         }
     }
 
@@ -640,6 +660,210 @@ impl TextViewer {
         };
         *self.first_visible_line.write() = new;
     }
+
+    /// Switch text / hex / binary presentation.
+    pub fn set_display_mode(&self, mode: TextDisplayMode) {
+        if mode != TextDisplayMode::Text {
+            if let Some(buf) = self.buffer.read().as_ref() {
+                if let Ok(bytes) = buf.to_bytes() {
+                    *self.raw_bytes.write() = bytes;
+                }
+            }
+        }
+        *self.display_mode.write() = mode;
+        *self.display_cache.lock() = None;
+    }
+
+    /// Current presentation mode.
+    #[must_use]
+    pub fn display_mode(&self) -> TextDisplayMode {
+        *self.display_mode.read()
+    }
+
+    /// Re-decode the original bytes with `label` (`UTF-8`, `windows-1251`, …).
+    ///
+    /// # Errors
+    ///
+    /// Unknown encoding label.
+    pub fn set_encoding(&self, label: &str) -> Result<()> {
+        let bytes = self.raw_bytes.read().clone();
+        if bytes.is_empty() && self.buffer.read().is_none() {
+            return Err(ViewerError::EditOutOfBounds);
+        }
+        let mut buffer = TextBuffer::from_bytes_with_encoding(&bytes, label)?;
+        buffer.mark_dirty();
+        *self.buffer.write() = Some(buffer);
+        self.invalidate_parse_cache();
+        self.undo.lock().clear();
+        *self.display_cache.lock() = None;
+        *self.cursor.write() = CursorPos::default();
+        Ok(())
+    }
+
+    fn displayed_text(&self) -> Arc<str> {
+        let mode = *self.display_mode.read();
+        let raw = self.raw_bytes.read();
+        if mode != TextDisplayMode::Text {
+            if let Some((cached_mode, len, text)) = self.display_cache.lock().as_ref() {
+                if *cached_mode == mode && *len == raw.len() {
+                    return Arc::clone(text);
+                }
+            }
+            let dump: Arc<str> = Arc::from(match mode {
+                TextDisplayMode::Hex => display::format_hex_dump(&raw),
+                TextDisplayMode::Binary => display::format_binary_hex(&raw),
+                TextDisplayMode::Text => String::new(),
+            });
+            *self.display_cache.lock() = Some((mode, raw.len(), Arc::clone(&dump)));
+            return dump;
+        }
+        drop(raw);
+        let guard = self.buffer.read();
+        guard
+            .as_ref()
+            .map(|b| self.cached_plain_text(b))
+            .unwrap_or_default()
+    }
+
+    fn record_find(&self, start: usize, end: usize, index: i32, count: i32) {
+        *self.find_anchor.lock() = start as i32;
+        *self.find_cursor.lock() = end as i32;
+        *self.find_match_index.lock() = index;
+        *self.find_match_count.lock() = count;
+        *self.find_gen.lock() += 1;
+    }
+
+    fn clear_find(&self) {
+        *self.find_match_index.lock() = 0;
+        *self.find_match_count.lock() = 0;
+        *self.find_gen.lock() += 1;
+    }
+
+    /// Find the next / previous match in the current view (text or hex dump).
+    ///
+    /// # Errors
+    ///
+    /// Invalid regular expressions when `opts.regex` is set.
+    pub fn find(&self, query: &str, forward: bool, opts: FindOptions) -> Result<bool> {
+        if query.is_empty() {
+            return Ok(false);
+        }
+        let haystack = self.displayed_text();
+        let matches = search::collect_matches(&haystack, query, opts)?;
+        if matches.is_empty() {
+            self.clear_find();
+            return Ok(false);
+        }
+        let sel_lo = (*self.find_anchor.lock()).max(0) as usize;
+        let sel_hi = (*self.find_cursor.lock()).max(0) as usize;
+        let Some((start, end)) = search::pick_match(&matches, sel_lo, sel_hi, forward) else {
+            self.clear_find();
+            return Ok(false);
+        };
+        let index = matches
+            .iter()
+            .position(|&(s, _)| s == start)
+            .map(|i| (i + 1) as i32)
+            .unwrap_or(0);
+        self.record_find(start, end, index, matches.len() as i32);
+        Ok(true)
+    }
+
+    /// Replace the current match (or the next one) then advance.
+    ///
+    /// Hex / binary views are read-only. Switches to edit mode for text.
+    ///
+    /// # Errors
+    ///
+    /// Invalid regex, or the buffer cannot be edited.
+    pub fn replace_current(
+        &self,
+        query: &str,
+        replacement: &str,
+        opts: FindOptions,
+    ) -> Result<bool> {
+        if *self.display_mode.read() != TextDisplayMode::Text {
+            return Ok(false);
+        }
+        if query.is_empty() {
+            return Ok(false);
+        }
+        self.set_mode(TextViewerMode::Edit);
+        let haystack = self.displayed_text();
+        let lo = (*self.find_anchor.lock()).max(0) as usize;
+        let hi = (*self.find_cursor.lock()).max(0) as usize;
+        let selected = haystack.get(lo..hi).unwrap_or("");
+        let re = search::compile_query(query, opts)?;
+        let already = !selected.is_empty() && re.is_match(selected) && selected.len() == hi - lo;
+        if !already && !self.find(query, true, opts)? {
+            return Ok(false);
+        }
+        let lo = (*self.find_anchor.lock()).max(0) as usize;
+        let hi = (*self.find_cursor.lock()).max(0) as usize;
+        let start = self.cursor_at_byte(lo)?;
+        let end = self.cursor_at_byte(hi)?;
+        if start != end {
+            self.delete(start, end)?;
+        }
+        if !replacement.is_empty() {
+            *self.cursor.write() = start;
+            self.insert(replacement)?;
+        }
+        let _ = self.find(query, true, opts)?;
+        Ok(true)
+    }
+
+    /// Replace every match in the text view.
+    ///
+    /// # Errors
+    ///
+    /// Invalid regex, or the buffer cannot be edited.
+    pub fn replace_all(&self, query: &str, replacement: &str, opts: FindOptions) -> Result<usize> {
+        if *self.display_mode.read() != TextDisplayMode::Text {
+            return Ok(0);
+        }
+        if query.is_empty() {
+            return Ok(0);
+        }
+        self.set_mode(TextViewerMode::Edit);
+        let haystack = self.displayed_text();
+        let matches = search::collect_matches(&haystack, query, opts)?;
+        if matches.is_empty() {
+            self.clear_find();
+            return Ok(0);
+        }
+        let mut out = String::with_capacity(haystack.len());
+        let mut last = 0usize;
+        for (s, e) in &matches {
+            out.push_str(&haystack[last..*s]);
+            out.push_str(replacement);
+            last = *e;
+        }
+        out.push_str(&haystack[last..]);
+        self.replace_content(&out)?;
+        self.clear_find();
+        Ok(matches.len())
+    }
+
+    fn cursor_at_byte(&self, byte: usize) -> Result<CursorPos> {
+        let guard = self.buffer.read();
+        let buffer = guard.as_ref().ok_or(ViewerError::EditOutOfBounds)?;
+        let char_idx = buffer.byte_to_char(byte);
+        let (line, column) = buffer.line_col_at_char(char_idx);
+        Ok(CursorPos { line, column })
+    }
+
+    /// Whether undo has a frame.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        self.undo.lock().can_undo()
+    }
+
+    /// Whether redo has a frame.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        self.undo.lock().can_redo()
+    }
 }
 
 #[async_trait]
@@ -667,10 +891,18 @@ impl Viewer for TextViewer {
         let buffer = TextBuffer::from_bytes(&bytes)?;
         *self.language.write() = language.to_string();
         *self.buffer.write() = Some(buffer);
+        *self.raw_bytes.write() = bytes;
         *self.path.write() = Some(path);
         *self.registry.write() = Some(registry);
         *self.cursor.write() = CursorPos::default();
         *self.first_visible_line.write() = 0;
+        *self.display_mode.write() = TextDisplayMode::Text;
+        *self.display_cache.lock() = None;
+        *self.find_gen.lock() = 0;
+        *self.find_anchor.lock() = 0;
+        *self.find_cursor.lock() = 0;
+        *self.find_match_index.lock() = 0;
+        *self.find_match_count.lock() = 0;
         self.content_generation.store(0, Ordering::Relaxed);
         *self.parse_cache.lock() = None;
         *self.plain_cache.lock() = None;
@@ -682,6 +914,9 @@ impl Viewer for TextViewer {
         *self.buffer.write() = None;
         *self.path.write() = None;
         *self.registry.write() = None;
+        *self.raw_bytes.write() = Vec::new();
+        *self.display_mode.write() = TextDisplayMode::Text;
+        *self.display_cache.lock() = None;
         self.content_generation.store(0, Ordering::Relaxed);
         *self.parse_cache.lock() = None;
         *self.plain_cache.lock() = None;
@@ -701,19 +936,40 @@ impl Viewer for TextViewer {
         };
         let first = *self.first_visible_line.read();
         let count = *self.visible_line_count.read();
-        let language = self.language.read().clone();
-        let highlighted = self.highlight_visible(buffer, first, count);
+        let display_mode = *self.display_mode.read();
+        let hex_like = display_mode != TextDisplayMode::Text;
+        let language = if hex_like {
+            match display_mode {
+                TextDisplayMode::Hex => "hex".into(),
+                TextDisplayMode::Binary => "binary".into(),
+                TextDisplayMode::Text => self.language.read().clone(),
+            }
+        } else {
+            self.language.read().clone()
+        };
+        let highlighted = if hex_like {
+            Vec::new()
+        } else {
+            self.highlight_visible(buffer, first, count)
+        };
         let encoding = buffer.encoding().name().to_string();
         let line_ending = buffer.line_ending().label().to_string();
         let total = buffer.line_count();
+        let dirty = buffer.is_dirty();
         let cursor = *self.cursor.read();
+        drop(buffer_guard);
+        let undo = self.undo.lock();
+        let can_undo = undo.can_undo();
+        let can_redo = undo.can_redo();
+        drop(undo);
+        let plain_text = self.displayed_text();
         ViewerSnapshot::Text(TextSnapshot {
             path_display,
             language,
             encoding,
             line_ending,
-            dirty: buffer.is_dirty(),
-            read_only: *self.mode.read() == TextViewerMode::Read,
+            dirty,
+            read_only: hex_like || *self.mode.read() == TextViewerMode::Read,
             total_lines: total,
             visible_lines: highlighted,
             first_visible_line: first,
@@ -721,7 +977,15 @@ impl Viewer for TextViewer {
             cursor_column: cursor.column,
             selection: *self.selection.read(),
             info_text: String::new(),
-            plain_text: self.cached_plain_text(buffer),
+            plain_text,
+            display_mode: display_mode.as_u8(),
+            find_gen: *self.find_gen.lock(),
+            find_anchor: *self.find_anchor.lock(),
+            find_cursor: *self.find_cursor.lock(),
+            find_match_index: *self.find_match_index.lock(),
+            find_match_count: *self.find_match_count.lock(),
+            can_undo,
+            can_redo,
         })
     }
 
@@ -752,6 +1016,8 @@ impl Viewer for TextViewer {
         if let Some(buffer) = self.buffer.write().as_mut() {
             buffer.mark_clean();
         }
+        *self.raw_bytes.write() = bytes;
+        *self.display_cache.lock() = None;
         Ok(())
     }
 
@@ -946,5 +1212,59 @@ mod tests {
             cursor_after_insert(start, "a\nb\nc"),
             CursorPos { line: 4, column: 1 }
         );
+    }
+
+    #[test]
+    fn hex_mode_exposes_dump_and_forces_read_only() {
+        let tv = viewer();
+        *tv.buffer.write() = Some(TextBuffer::from_bytes(b"Hi").unwrap());
+        *tv.raw_bytes.write() = b"Hi".to_vec();
+        tv.set_mode(TextViewerMode::Edit);
+        tv.set_display_mode(TextDisplayMode::Hex);
+        let ViewerSnapshot::Text(t) = tv.snapshot() else {
+            panic!("expected text");
+        };
+        assert!(t.read_only);
+        assert_eq!(t.display_mode, 1);
+        assert!(t.plain_text.contains("48 69"));
+    }
+
+    #[test]
+    fn encoding_switch_redecodes_bytes() {
+        let tv = viewer();
+        // "Привет" in windows-1251
+        let bytes = [0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2];
+        *tv.buffer.write() =
+            Some(TextBuffer::from_bytes_with_encoding(&bytes, "windows-1251").unwrap());
+        *tv.raw_bytes.write() = bytes.to_vec();
+        tv.set_encoding("windows-1251").unwrap();
+        assert!(tv
+            .buffer
+            .read()
+            .as_ref()
+            .unwrap()
+            .plain_text()
+            .contains("Привет"));
+        tv.set_encoding("UTF-8").unwrap();
+        assert!(tv.buffer.read().as_ref().unwrap().is_dirty());
+    }
+
+    #[test]
+    fn regex_replace_all_multiline() {
+        let tv = viewer();
+        *tv.buffer.write() = Some(TextBuffer::from_bytes(b"foo\nbar\nfoo").unwrap());
+        *tv.raw_bytes.write() = b"foo\nbar\nfoo".to_vec();
+        let n = tv
+            .replace_all(
+                "foo",
+                "x",
+                FindOptions {
+                    regex: false,
+                    multiline: true,
+                },
+            )
+            .unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(tv.buffer.read().as_ref().unwrap().plain_text(), "x\nbar\nx");
     }
 }

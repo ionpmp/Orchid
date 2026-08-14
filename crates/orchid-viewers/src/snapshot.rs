@@ -27,6 +27,10 @@ pub enum ViewerSnapshot {
     Archive(ArchiveSnapshot),
     /// Rich-text document (DOCX).
     Document(DocumentSnapshot),
+    /// Audio / video — system player via Open.
+    Media(MediaSnapshot),
+    /// HTML source + open in the system browser.
+    Html(HtmlSnapshot),
 }
 
 /// Document (DOCX) snapshot for the UI layer.
@@ -79,6 +83,8 @@ pub struct DocumentSnapshot {
     pub find_match_count: i32,
     /// Preview pointer is over an external hyperlink (pointer cursor affordance).
     pub link_hover: bool,
+    /// External hyperlink URL at the selection caret (empty when none).
+    pub link_url: String,
 }
 
 /// Image snapshot.
@@ -142,6 +148,20 @@ pub struct TextSnapshot {
     /// Full LF-normalised file text (for plain edit / selectable read mode).
     /// Shared via `Arc` so snapshot pump ticks do not re-allocate the document.
     pub plain_text: Arc<str>,
+    /// `0` text, `1` hex dump, `2` binary hex stream.
+    pub display_mode: u8,
+    /// Bumped when find selects a match (Slint syncs `TextInput` selection).
+    pub find_gen: i32,
+    /// Find selection anchor (UTF-8 byte offset in [`Self::plain_text`]).
+    pub find_anchor: i32,
+    /// Find selection head (UTF-8 byte offset in [`Self::plain_text`]).
+    pub find_cursor: i32,
+    /// 1-based index of the current find match (`0` when none).
+    pub find_match_index: i32,
+    /// Total non-overlapping matches for the last find query.
+    pub find_match_count: i32,
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 
 /// A single highlighted line.
@@ -210,6 +230,25 @@ pub enum ArchiveStatus {
         /// Destination folder display.
         path: String,
     },
+}
+
+/// Audio / video snapshot (metadata + Play).
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct MediaSnapshot {
+    pub path_display: String,
+    /// `"audio"` or `"video"`.
+    pub kind_label: String,
+    pub info_text: String,
+}
+
+/// HTML snapshot (source preview + Open in browser).
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct HtmlSnapshot {
+    pub path_display: String,
+    pub source_preview: Arc<str>,
+    pub info_text: String,
 }
 
 /// Archive snapshot.

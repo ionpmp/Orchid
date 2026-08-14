@@ -440,6 +440,18 @@ fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
             }
             lines
         }
+        ViewerSnapshot::Media(m) => vec![
+            m.path_display.clone(),
+            m.kind_label.clone(),
+            m.info_text.clone(),
+        ],
+        ViewerSnapshot::Html(h) => {
+            let mut lines = vec![h.path_display.clone(), h.info_text.clone()];
+            for row in h.source_preview.lines().take(40) {
+                lines.push(row.to_string());
+            }
+            lines
+        }
         ViewerSnapshot::Archive(a) => {
             let mut lines = vec![
                 format!("{} — {}", a.path_display, a.format),

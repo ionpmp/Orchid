@@ -9,7 +9,9 @@ pub mod archive;
 pub mod dispatch;
 pub mod document;
 pub mod error;
+pub mod html;
 pub mod image;
+pub mod media;
 pub mod pdf;
 pub mod snapshot;
 pub mod text;
@@ -23,19 +25,21 @@ pub use document::{
     EditCommand, ListKind, UndoStack as DocumentUndoStack,
 };
 pub use error::{Result, ViewerError};
+pub use html::{is_html_file_extension, HtmlViewer};
 pub use image::{
     is_image_file_extension, ImageFormat, ImageViewer, LoadedImage, ViewTransform,
     IMAGE_FILE_EXTENSIONS,
 };
+pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, DocumentSnapshot,
-    ImageSnapshot, PdfSnapshot, SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment,
-    TextSnapshot, ViewerSnapshot,
+    HtmlSnapshot, ImageSnapshot, MediaSnapshot, PdfSnapshot, SelectionRange, SyntaxLine,
+    SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
 };
 pub use text::{
-    CursorPos, LineEnding, SyntaxHighlighter, TextBuffer, TextOp, TextOpKind, TextViewer,
-    TextViewerMode, UndoStack,
+    CursorPos, FindOptions, LineEnding, SyntaxHighlighter, TextBuffer, TextDisplayMode, TextOp,
+    TextOpKind, TextViewer, TextViewerMode, UndoStack, VIEWER_ENCODINGS,
 };
 pub use thumbnail::{Thumbnail, ThumbnailCache, ThumbnailService, ThumbnailSize};
 pub use viewer_trait::Viewer;

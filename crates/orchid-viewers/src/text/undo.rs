@@ -100,6 +100,18 @@ impl UndoStack {
     pub fn is_empty(&self) -> bool {
         self.past.is_empty()
     }
+
+    /// Whether [`Self::undo`] would return an op.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        !self.past.is_empty()
+    }
+
+    /// Whether [`Self::redo`] would return an op.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        !self.future.is_empty()
+    }
 }
 
 fn can_merge(prev: &TextOp, next: &TextOp, window: Duration) -> bool {

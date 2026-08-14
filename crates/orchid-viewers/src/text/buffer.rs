@@ -86,6 +86,35 @@ impl TextBuffer {
         })
     }
 
+    /// Decode `bytes` with an explicit encoding label (`UTF-8`, `windows-1251`, …).
+    ///
+    /// # Errors
+    ///
+    /// Unknown label or hard decode failure.
+    pub fn from_bytes_with_encoding(bytes: &[u8], label: &str) -> Result<Self> {
+        let encoding = encoding_rs::Encoding::for_label(label.as_bytes())
+            .ok_or_else(|| ViewerError::TextDecode(format!("unknown encoding: {label}")))?;
+        let (stripped, _) = strip_bom(bytes);
+        let (cow, _enc, had_errors) = encoding.decode(stripped);
+        if had_errors {
+            tracing::warn!(
+                encoding = encoding.name(),
+                "text buffer decoded with replacement characters"
+            );
+        }
+        let mut s: String = cow.into_owned();
+        let line_ending = detect_line_ending(&s);
+        if line_ending == LineEnding::Crlf {
+            s = s.replace("\r\n", "\n");
+        }
+        Ok(Self {
+            rope: Rope::from_str(&s),
+            line_ending,
+            encoding,
+            dirty: false,
+        })
+    }
+
     /// Re-encode the buffer back to bytes for writing.
     ///
     /// # Errors
@@ -139,6 +168,11 @@ impl TextBuffer {
     /// Mark the buffer clean (post-save).
     pub fn mark_clean(&mut self) {
         self.dirty = false;
+    }
+
+    /// Mark the buffer dirty (encoding change / rewrite).
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
     }
 
     /// Full buffer text (LF-normalised, without CRLF restoration).
