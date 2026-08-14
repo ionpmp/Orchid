@@ -32,6 +32,10 @@ pub use document::{
 };
 pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
+pub use image::edit::{
+    apply_edit, apply_edit_file, parse_canvas_line, parse_resize_line, parse_resize_spec,
+    save_sibling, CropKeep, EditOp, ResizeSpec,
+};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
 pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
 pub use image::meta_edit::{
@@ -44,13 +48,15 @@ pub use image::metadata::{
     inspect_image_bytes, inspect_image_file, render_histogram, ChannelHistogram, GpsFix, HistMode,
     ImageInspect,
 };
+pub use image::operations::ResizeFilter;
 pub use image::slideshow::{
     export_slideshow_pack, export_slideshow_video, is_slideshow_audio_extension, overlay_text,
     SlideTransition, SlideshowExport,
 };
 pub use image::{
-    is_image_file_extension, load_image, ImageBackground, ImageFitMode, ImageFormat, ImageViewer,
-    LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT, IMAGE_FILE_EXTENSIONS,
+    is_image_file_extension, load_image, load_image_file, ImageBackground, ImageFitMode,
+    ImageFormat, ImageViewer, LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT,
+    IMAGE_FILE_EXTENSIONS,
 };
 pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};
 pub use pdf::PdfViewer;

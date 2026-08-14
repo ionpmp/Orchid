@@ -1,8 +1,6 @@
-//! Destructive image operations used by the viewer's preview pipeline.
+//! Destructive image operations (crop / resize / canvas).
 //!
-//! These are preview-only — saving the result back to disk is **not** in
-//! MVP scope. Document the limitation prominently in the viewer UI once
-//! the editing toolbar ships.
+//! Pixel ops live here; save-as (never overwrite) is [`crate::image::edit`].
 
 use image::{imageops, ImageBuffer, Rgba, RgbaImage};
 
@@ -115,15 +113,155 @@ pub fn crop(src: &LoadedImage, x: u32, y: u32, w: u32, h: u32) -> Result<LoadedI
     })
 }
 
+/// Resize filter for [`resize_filtered`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResizeFilter {
+    /// Nearest neighbour.
+    Nearest,
+    /// Triangle / bilinear.
+    Bilinear,
+    /// Catmull-Rom (bicubic).
+    Bicubic,
+    /// Lanczos3 (default).
+    #[default]
+    Lanczos,
+}
+
+impl ResizeFilter {
+    fn to_image(self) -> imageops::FilterType {
+        match self {
+            Self::Nearest => imageops::FilterType::Nearest,
+            Self::Bilinear => imageops::FilterType::Triangle,
+            Self::Bicubic => imageops::FilterType::CatmullRom,
+            Self::Lanczos => imageops::FilterType::Lanczos3,
+        }
+    }
+
+    /// `nearest` / `bilinear` / `bicubic` / `lanczos`.
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "nearest" | "nn" | "point" => Some(Self::Nearest),
+            "bilinear" | "linear" | "triangle" => Some(Self::Bilinear),
+            "bicubic" | "cubic" | "catmull" => Some(Self::Bicubic),
+            "lanczos" | "lanczos3" | "" => Some(Self::Lanczos),
+            _ => None,
+        }
+    }
+}
+
 /// Resize to `(target_w, target_h)` with `Lanczos3`.
 ///
 /// # Errors
 ///
 /// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt.
 pub fn resize(src: &LoadedImage, target_w: u32, target_h: u32) -> Result<LoadedImage> {
+    resize_filtered(src, target_w, target_h, ResizeFilter::Lanczos)
+}
+
+/// Resize with an explicit filter.
+///
+/// # Errors
+///
+/// Returns [`ViewerError::ImageDecode`] when the RGBA buffer is corrupt or the
+/// target size is zero.
+pub fn resize_filtered(
+    src: &LoadedImage,
+    target_w: u32,
+    target_h: u32,
+    filter: ResizeFilter,
+) -> Result<LoadedImage> {
+    if target_w == 0 || target_h == 0 {
+        return Err(ViewerError::ImageDecode("resize target is zero".into()));
+    }
     let view = rgba_view(src)?;
-    let out = imageops::resize(&view, target_w, target_h, imageops::FilterType::Lanczos3);
+    let out = imageops::resize(&view, target_w, target_h, filter.to_image());
     Ok(from_rgba(out, src))
+}
+
+/// Expand or shrink the canvas. The source is pasted at `(ox, oy)`; new pixels
+/// use `fill` (RGBA).
+///
+/// # Errors
+///
+/// Zero destination size.
+pub fn canvas_resize(
+    src: &LoadedImage,
+    dest_w: u32,
+    dest_h: u32,
+    ox: i32,
+    oy: i32,
+    fill: [u8; 4],
+) -> Result<LoadedImage> {
+    if dest_w == 0 || dest_h == 0 {
+        return Err(ViewerError::ImageDecode("canvas size is zero".into()));
+    }
+    let mut out = vec![0u8; dest_w as usize * dest_h as usize * 4];
+    for px in out.chunks_exact_mut(4) {
+        px.copy_from_slice(&fill);
+    }
+    let src_w = src.width as i32;
+    let src_h = src.height as i32;
+    for sy in 0..src_h {
+        let dy = sy + oy;
+        if dy < 0 || dy >= dest_h as i32 {
+            continue;
+        }
+        for sx in 0..src_w {
+            let dx = sx + ox;
+            if dx < 0 || dx >= dest_w as i32 {
+                continue;
+            }
+            let si = ((sy as u32 * src.width + sx as u32) * 4) as usize;
+            let di = ((dy as u32 * dest_w + dx as u32) * 4) as usize;
+            if let (Some(s), Some(d)) = (src.rgba.get(si..si + 4), out.get_mut(di..di + 4)) {
+                d.copy_from_slice(s);
+            }
+        }
+    }
+    Ok(LoadedImage {
+        rgba: std::sync::Arc::new(out),
+        width: dest_w,
+        height: dest_h,
+        format: src.format,
+        original_size_bytes: src.original_size_bytes,
+        color_source: src.color_source.clone(),
+        color_dest: src.color_dest.clone(),
+        orientation: src.orientation,
+        bit_depth: src.bit_depth,
+        color_model: src.color_model.clone(),
+    })
+}
+
+/// Shrink `(x, y, w, h)` so its aspect matches `aspect` (width/height), staying
+/// inside the image. `None` leaves the rect unchanged (still clamped).
+#[must_use]
+pub fn fit_crop_rect(
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    img_w: u32,
+    img_h: u32,
+    aspect: Option<f32>,
+) -> (u32, u32, u32, u32) {
+    let mut x = x.min(img_w.saturating_sub(1));
+    let mut y = y.min(img_h.saturating_sub(1));
+    let mut w = w.min(img_w.saturating_sub(x)).max(1);
+    let mut h = h.min(img_h.saturating_sub(y)).max(1);
+    if let Some(a) = aspect.filter(|a| *a > 0.05) {
+        let cur = w as f32 / h as f32;
+        if cur > a {
+            let nw = ((h as f32) * a).round().max(1.0) as u32;
+            x += (w.saturating_sub(nw)) / 2;
+            w = nw.min(img_w.saturating_sub(x)).max(1);
+        } else if cur < a {
+            let nh = ((w as f32) / a).round().max(1.0) as u32;
+            y += (h.saturating_sub(nh)) / 2;
+            h = nh.min(img_h.saturating_sub(y)).max(1);
+        }
+    }
+    (x, y, w, h)
 }
 
 #[cfg(test)]
@@ -182,5 +320,26 @@ mod tests {
         assert_eq!(out.width, 1);
         assert_eq!(out.height, 1);
         assert_eq!(out.rgba.as_slice(), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn canvas_expands_and_fills() {
+        let src = two_by_two();
+        let out = canvas_resize(&src, 4, 3, 1, 1, [1, 2, 3, 255]).unwrap();
+        assert_eq!(out.width, 4);
+        assert_eq!(out.height, 3);
+        assert_eq!(out.rgba[0..4], [1, 2, 3, 255]);
+        assert_eq!(
+            out.rgba[(1 + 1 * 4) * 4..(1 + 1 * 4) * 4 + 4],
+            [255, 0, 0, 255]
+        );
+    }
+
+    #[test]
+    fn fit_crop_locks_square() {
+        let (x, y, w, h) = fit_crop_rect(0, 0, 4, 2, 4, 2, Some(1.0));
+        assert_eq!((w, h), (2, 2));
+        assert_eq!(x, 1);
+        assert_eq!(y, 0);
     }
 }

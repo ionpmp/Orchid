@@ -16,6 +16,19 @@ pub const IMAGE_FILE_EXTENSIONS: &[&str] = &[
     "heif", "cr2", "nef", "arw", "dng", "raf", "orf", "rw2",
 ];
 
+/// Decode a local image path (same pipeline as the viewer, including ICC).
+///
+/// # Errors
+///
+/// I/O or an unreadable file.
+pub fn load_image_file(path: &std::path::Path) -> Result<LoadedImage> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    decode_local_mmap(path, crate::image::DEFAULT_SIZE_LIMIT, ext.as_deref())
+}
+
 /// True when `ext` (no leading dot) is a known image extension.
 #[must_use]
 pub fn is_image_file_extension(ext: &str) -> bool {

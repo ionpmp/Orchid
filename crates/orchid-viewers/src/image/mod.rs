@@ -3,6 +3,7 @@
 use std::any::Any;
 
 pub mod color;
+pub mod edit;
 pub mod exif;
 pub mod loader;
 pub mod lossless;
@@ -25,7 +26,8 @@ use crate::snapshot::{ImageSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use loader::{
-    is_image_file_extension, load_image, rgba_arc, ImageFormat, LoadedImage, IMAGE_FILE_EXTENSIONS,
+    is_image_file_extension, load_image, load_image_file, rgba_arc, ImageFormat, LoadedImage,
+    IMAGE_FILE_EXTENSIONS,
 };
 pub use transform::{ImageBackground, ImageFitMode, ViewTransform};
 
@@ -281,6 +283,40 @@ impl ImageViewer {
         self.transform
             .write()
             .pan_to_image_fraction(nx, ny, iw, ih, rot);
+    }
+
+    /// Clone the decoded buffer when an edit needs pixels.
+    #[must_use]
+    pub fn clone_loaded(&self) -> Option<LoadedImage> {
+        self.image.read().clone()
+    }
+
+    /// Map a viewport point to image pixels.
+    #[must_use]
+    pub fn viewport_to_image(&self, x: f32, y: f32) -> Option<(f32, f32)> {
+        let image = self.image.read();
+        let img = image.as_ref()?;
+        let (iw, ih) = (img.width as f32, img.height as f32);
+        if iw < 1.0 || ih < 1.0 {
+            return None;
+        }
+        let t = *self.transform.read();
+        let (vw, vh) = *self.viewport.read();
+        let disp_w = iw * t.zoom;
+        let disp_h = ih * t.zoom;
+        let img_left = (vw - disp_w) * 0.5 + t.pan_x;
+        let img_top = (vh - disp_h) * 0.5 + t.pan_y;
+        let cx = img_left + disp_w * 0.5;
+        let cy = img_top + disp_h * 0.5;
+        let rad = -t.rotation_degrees.to_radians();
+        let (cos, sin) = (rad.cos(), rad.sin());
+        let mut dx = x - cx;
+        let mut dy = y - cy;
+        let rx = dx * cos - dy * sin;
+        let ry = dx * sin + dy * cos;
+        dx = if t.flipped_horizontal { -rx } else { rx };
+        dy = if t.flipped_vertical { -ry } else { ry };
+        Some((iw * 0.5 + dx / t.zoom, ih * 0.5 + dy / t.zoom))
     }
 
     /// Map a viewport rectangle to an image-pixel crop `(x, y, w, h)`.
