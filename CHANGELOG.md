@@ -49,6 +49,10 @@ release yet.
   split / join, checksums (MD5 / SHA-1 / SHA-256 / BLAKE3 / CRC32) with
   sidecar verify, Base64 / UUE encode–decode, bulk attributes / timestamps
   / name case, chmod (and Unix chown), Windows ACL via icacls.
+- Browse archives as folders (`archive:`), extract all or selected, create /
+  add / delete / test; password, multi-volume, and SFX via 7-Zip. Formats:
+  ZIP, RAR, 7z, TAR / TAR.GZ / TAR.XZ / TAR.BZ2, CAB, ISO, ACE, ARJ, LZH;
+  nested archives open after a temp extract.
 - Encrypted folders (age), managed folders with content-addressed ingest
   (BLAKE3 + FastCDC), rclone network mounts (SFTP / SMB / WebDAV / FTP).
 - Tantivy search with incremental FS watcher, PDF/text/DOCX extractors,

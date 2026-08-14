@@ -5,6 +5,7 @@
 //! covers `"local:"` paths; future network backends will slot in here
 //! transparently.
 
+pub mod archive;
 pub mod local;
 pub mod rclone;
 pub mod registry;
@@ -21,6 +22,7 @@ use crate::operations::copy::CopyOptions;
 use crate::operations::progress::ProgressSink;
 use crate::path::FsPath;
 
+pub use archive::{register_archive_provider, ArchiveProvider};
 pub use local::LocalProvider;
 pub use rclone::{normalize_mount_uri, register_rclone_providers, RcloneProvider, RCLONE_SCHEMES};
 pub use registry::FsProviderRegistry;
@@ -159,7 +161,15 @@ pub trait FsProvider: Send + Sync + 'static {
     async fn remove(&self, path: &FsPath, recursive: bool) -> Result<()>;
 
     /// Start a native watcher on `path` if supported.
-    async fn watch(&self, path: &FsPath) -> Result<Option<Box<dyn FsWatcherHandle>>>;
+    ///
+    /// When `recursive` is false, only the directory itself is watched (ideal
+    /// for file-manager listings). Recursive watches are for index roots and
+    /// managed folders — avoid them on large trees like a user home directory.
+    async fn watch(
+        &self,
+        path: &FsPath,
+        recursive: bool,
+    ) -> Result<Option<Box<dyn FsWatcherHandle>>>;
 
     /// Feature matrix.
     fn capabilities(&self) -> FsCapabilities;

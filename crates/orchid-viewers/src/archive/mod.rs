@@ -146,11 +146,7 @@ impl ArchiveViewer {
     /// # Errors
     ///
     /// Propagates [`orchid_fs::FsError`].
-    pub async fn extract_entry(
-        &self,
-        entry_path: &str,
-        output: &std::path::Path,
-    ) -> Result<()> {
+    pub async fn extract_entry(&self, entry_path: &str, output: &std::path::Path) -> Result<()> {
         let local = self
             .path
             .read()
@@ -177,13 +173,9 @@ impl ArchiveViewer {
 
     /// Extract the selected file next to the archive on disk.
     pub async fn extract_selected_to_sibling(&self) -> Result<std::path::PathBuf> {
-        let selected = self
-            .selected_entry
-            .read()
-            .clone()
-            .ok_or_else(|| {
-                ViewerError::ArchiveEntryNotFound("viewer-archive-nothing-selected".into())
-            })?;
+        let selected = self.selected_entry.read().clone().ok_or_else(|| {
+            ViewerError::ArchiveEntryNotFound("viewer-archive-nothing-selected".into())
+        })?;
         let entry = self
             .entries
             .read()
@@ -413,6 +405,16 @@ fn format_label(fmt: orchid_fs::ArchiveFormat) -> &'static str {
         orchid_fs::ArchiveFormat::Tar => "TAR",
         orchid_fs::ArchiveFormat::TarGz => "TAR.GZ",
         orchid_fs::ArchiveFormat::TarXz => "TAR.XZ",
+        orchid_fs::ArchiveFormat::TarBz2 => "TAR.BZ2",
+        orchid_fs::ArchiveFormat::Gzip => "GZIP",
+        orchid_fs::ArchiveFormat::Bzip2 => "BZIP2",
+        orchid_fs::ArchiveFormat::Xz => "XZ",
+        orchid_fs::ArchiveFormat::Rar => "RAR",
+        orchid_fs::ArchiveFormat::Cab => "CAB",
+        orchid_fs::ArchiveFormat::Iso => "ISO",
+        orchid_fs::ArchiveFormat::Ace => "ACE",
+        orchid_fs::ArchiveFormat::Arj => "ARJ",
+        orchid_fs::ArchiveFormat::Lzh => "LZH",
     }
 }
 

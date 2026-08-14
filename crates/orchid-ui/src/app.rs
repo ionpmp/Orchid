@@ -15,7 +15,10 @@ use orchid_core::{
     BackgroundJobQueue, CommandPalette, CommandRegistry, ConfigUpdated, Event, EventBus,
     EventBusConfig, EventFilter, HandlerPriority, SubscriptionHandle,
 };
-use orchid_fs::{register_rclone_providers, FsProvider, FsProviderRegistry, LocalProvider};
+use orchid_fs::{
+    register_archive_provider, register_rclone_providers, FsProvider, FsProviderRegistry,
+    LocalProvider,
+};
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
 use orchid_storage::{
     ConfigLoader, ConfigWatcher, NetworkMountConfig, OrchidConfig, OrchidPaths, StateStore,
@@ -427,6 +430,8 @@ impl OrchidApp {
         fs_registry
             .register(Arc::new(LocalProvider::new()) as Arc<dyn FsProvider>)
             .map_err(|e| UiError::Slint(format!("register local fs provider: {e}")))?;
+        register_archive_provider(&fs_registry)
+            .map_err(|e| UiError::Slint(format!("register archive provider: {e}")))?;
         let network_mounts = Arc::new(RwLock::new(
             config.read().file_manager.network_mounts.clone(),
         ));

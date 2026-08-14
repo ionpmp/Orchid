@@ -1,5 +1,6 @@
 //! File-manager widget.
 
+pub mod archive;
 pub mod batch_rename;
 pub mod clipboard;
 pub mod config;
@@ -168,6 +169,10 @@ pub enum PassphrasePurpose {
     Reveal,
     /// Reveal to temp and open in the built-in viewer.
     RevealInViewer,
+    /// Password for creating an encrypted archive.
+    ArchiveCreate,
+    /// Password to open / extract / test an archive.
+    ArchiveOpen,
 }
 
 /// Stable type id.
@@ -2885,6 +2890,13 @@ pub fn context_menu_for(
             .any(|p| inner.managed_root_for_path(p).is_some()),
         can_create,
         dual_pane: inner.state.lock().right_pane.is_some(),
+        in_archive: inner
+            .state
+            .lock()
+            .active_pane()
+            .active_tab()
+            .path
+            .is_archive(),
     };
     let fmt_locale = inner.deps.orchid_config.read().locale.clone();
     let info = info_for_selection(&selected_entries, &inner.deps.locale, &fmt_locale);
@@ -4222,6 +4234,9 @@ pub async fn run_action_with_opts(
                 purpose: PassphrasePurpose::Reveal,
             });
         }
+        id if archive::is_archive_action(id) => {
+            return archive::run(&inner, action_id, &target_paths, None).await;
+        }
         id if is_tools_action(id) => {
             return tools::run(&inner, action_id, &target_paths, opts, None).await;
         }
@@ -4284,6 +4299,9 @@ pub async fn complete_tool(
     input: &str,
 ) -> WidgetResult<ActionOutcome> {
     let inner = live_inner(instance_id)?;
+    if archive::is_archive_action(action_id) {
+        return archive::run(&inner, action_id, &paths, Some(input)).await;
+    }
     tools::run(
         &inner,
         action_id,
@@ -4507,6 +4525,9 @@ pub async fn apply_passphrase(
                 ActionOutcome::Done
             }
         }
+        PassphrasePurpose::ArchiveCreate | PassphrasePurpose::ArchiveOpen => {
+            archive::apply_passphrase(&inner, &paths, &passphrase, purpose).await?
+        }
     };
     let _ = inner
         .deps
@@ -4552,6 +4573,10 @@ pub async fn open_path(
             paths: vec![path.to_string()],
             purpose: PassphrasePurpose::RevealInViewer,
         });
+    }
+
+    if let Some(outcome) = archive::open_if_archive(&inner, instance_id, pane, &fp).await {
+        return outcome;
     }
 
     inner.record_recent(&fp);

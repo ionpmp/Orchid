@@ -190,6 +190,16 @@ pub(crate) fn fm_passphrase_dialog_labels(
             locale.tr("fm-passphrase-reveal-hint"),
             locale.tr("fm-action-reveal"),
         ),
+        PassphrasePurpose::ArchiveCreate => (
+            locale.tr("fm-archive-create-pw-title"),
+            locale.tr("fm-passphrase-archive-hint"),
+            locale.tr("fm-action-archive-create-password"),
+        ),
+        PassphrasePurpose::ArchiveOpen => (
+            locale.tr("fm-archive-open-title"),
+            locale.tr("fm-passphrase-archive-hint"),
+            locale.tr("fm-action-archive-extract"),
+        ),
     }
 }
 

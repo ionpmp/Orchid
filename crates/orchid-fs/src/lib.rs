@@ -20,7 +20,11 @@ pub mod provider;
 pub mod tag;
 pub mod watcher;
 
-pub use archive::{detect_format, open_archive, ArchiveEntry, ArchiveFormat, ArchiveReader};
+pub use archive::{
+    add_to_archive, create_archive, default_extract_dir, delete_from_archive, detect_format,
+    extract_archive, is_archive_file, looks_like_archive_name, open_archive, test_archive,
+    ArchiveEntry, ArchiveFormat, ArchiveReader, ArchiveTestReport, CreateArchiveOptions,
+};
 pub use encrypted::{
     EncryptedFolderConfig, EncryptedFolderEngine, EncryptedFolderRecord, EncryptedPathRegistered,
 };
@@ -44,9 +48,9 @@ pub use operations::{
 };
 pub use path::FsPath;
 pub use provider::{
-    normalize_mount_uri, read_prefix, register_rclone_providers, FsCapabilities, FsChange,
-    FsChangeKind, FsProvider, FsProviderRegistry, FsWatcherHandle, LocalProvider, ProviderId,
-    RcloneProvider, RCLONE_SCHEMES,
+    normalize_mount_uri, read_prefix, register_archive_provider, register_rclone_providers,
+    ArchiveProvider, FsCapabilities, FsChange, FsChangeKind, FsProvider, FsProviderRegistry,
+    FsWatcherHandle, LocalProvider, ProviderId, RcloneProvider, RCLONE_SCHEMES,
 };
 pub use tag::{TagManager, TagsChangedEvent};
 pub use watcher::{

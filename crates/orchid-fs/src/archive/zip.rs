@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 
-use crate::archive::types::{sanitise_entry_path, ArchiveEntry, ArchiveFormat};
 use crate::archive::reader::ArchiveReader;
+use crate::archive::types::{sanitise_entry_path, ArchiveEntry, ArchiveFormat};
 use crate::error::{FsError, Result};
 
 /// Reader around a `.zip` archive on disk.

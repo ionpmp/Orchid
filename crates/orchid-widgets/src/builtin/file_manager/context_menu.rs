@@ -48,6 +48,8 @@ pub struct ContextMenuInputs {
     pub can_create: bool,
     /// Dual-pane mode (compare / sync against the other pane).
     pub dual_pane: bool,
+    /// Current folder is inside an archive (`archive:`).
+    pub in_archive: bool,
 }
 
 /// Read-only header shown at the top of a file/folder context menu.
@@ -328,6 +330,16 @@ pub fn build_for_selection(
         inputs.dual_pane,
     ));
 
+    let any_archive = selection
+        .iter()
+        .any(|e| orchid_fs::looks_like_archive_name(&e.name));
+    items.push(archive_menu(
+        has_selection,
+        any_archive,
+        inputs.in_archive,
+        inputs.dual_pane,
+    ));
+
     items.push(ContextMenuItem {
         id: "fs.tag-add".into(),
         label_key: "fm-action-add-tag".into(),
@@ -571,6 +583,12 @@ fn background_menu(inputs: &ContextMenuInputs) -> Vec<ContextMenuItem> {
             "action-copy",
             true,
         ));
+    }
+    if inputs.in_archive {
+        if !items.is_empty() {
+            items.last_mut().unwrap().separator_after = true;
+        }
+        items.push(archive_menu(false, false, true, inputs.dual_pane));
     }
     items
 }
@@ -946,6 +964,91 @@ fn tools_menu(
     }
 }
 
+fn archive_menu(
+    has_selection: bool,
+    any_archive: bool,
+    in_archive: bool,
+    dual: bool,
+) -> ContextMenuItem {
+    let pack = has_selection && !in_archive;
+    let browse = any_archive;
+    let extract_all = any_archive || in_archive;
+    let extract_sel = in_archive && has_selection;
+    let add = if in_archive { dual } else { has_selection };
+    let delete = in_archive && has_selection;
+    let test = any_archive || in_archive;
+    ContextMenuItem {
+        id: "fs.archive".into(),
+        label_key: "fm-action-archive".into(),
+        icon: "action-copy",
+        swatch_color: None,
+        enabled: true,
+        separator_after: true,
+        submenu: vec![
+            item(
+                "fs.archive-open",
+                "fm-action-archive-open",
+                "action-open",
+                browse,
+            ),
+            item(
+                "fs.archive-extract",
+                "fm-action-archive-extract",
+                "action-copy",
+                extract_all,
+            ),
+            item(
+                "fs.archive-extract-selected",
+                "fm-action-archive-extract-selected",
+                "action-copy",
+                extract_sel,
+            ),
+            item(
+                "fs.archive-create",
+                "fm-action-archive-create",
+                "action-new-file",
+                pack,
+            ),
+            item(
+                "fs.archive-create-password",
+                "fm-action-archive-create-password",
+                "action-new-file",
+                pack,
+            ),
+            item(
+                "fs.archive-create-sfx",
+                "fm-action-archive-create-sfx",
+                "action-new-file",
+                pack,
+            ),
+            item(
+                "fs.archive-create-volume",
+                "fm-action-archive-create-volume",
+                "action-new-file",
+                pack,
+            ),
+            item(
+                "fs.archive-add",
+                "fm-action-archive-add",
+                "action-copy",
+                add,
+            ),
+            item(
+                "fs.archive-delete",
+                "fm-action-archive-delete",
+                "action-delete",
+                delete,
+            ),
+            item(
+                "fs.archive-test",
+                "fm-action-archive-test",
+                "action-copy",
+                test,
+            ),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1063,6 +1166,41 @@ mod tests {
         let open_sub: Vec<&str> = open.submenu.iter().map(|i| i.id.as_str()).collect();
         assert!(open_sub.contains(&"fs.open-tab"));
         assert!(open_sub.contains(&"fs.open-other-pane"));
+        let archive = menu.iter().find(|i| i.id == "fs.archive").unwrap();
+        let arc_ids: Vec<&str> = archive.submenu.iter().map(|i| i.id.as_str()).collect();
+        assert!(arc_ids.contains(&"fs.archive-create"));
+        assert!(arc_ids.contains(&"fs.archive-test"));
+    }
+
+    #[test]
+    fn archive_menu_inside_archive() {
+        let sel = vec![entry("a.txt", FsEntryKind::File, false)];
+        let menu = build_for_selection(
+            &sel,
+            ContextMenuInputs {
+                in_archive: true,
+                ..Default::default()
+            },
+        );
+        let archive = menu.iter().find(|i| i.id == "fs.archive").unwrap();
+        let extract_sel = archive
+            .submenu
+            .iter()
+            .find(|i| i.id == "fs.archive-extract-selected")
+            .unwrap();
+        assert!(extract_sel.enabled);
+        let create = archive
+            .submenu
+            .iter()
+            .find(|i| i.id == "fs.archive-create")
+            .unwrap();
+        assert!(!create.enabled);
+        let delete = archive
+            .submenu
+            .iter()
+            .find(|i| i.id == "fs.archive-delete")
+            .unwrap();
+        assert!(delete.enabled);
     }
 
     fn test_locale() -> (LocaleManager, LocaleConfig) {

@@ -1,11 +1,12 @@
 //! Unified archive reader trait and factory.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 
+use crate::archive::cli;
 use crate::archive::sevenz::SevenZArchiveReader;
-use crate::archive::tar::{TarGzReader, TarReader, TarXzReader};
+use crate::archive::tar::{TarBz2Reader, TarGzReader, TarReader, TarXzReader};
 use crate::archive::types::ArchiveFormat;
 use crate::archive::zip::ZipReader;
 use crate::error::{FsError, Result};
@@ -35,7 +36,10 @@ const XZ_MAGIC: &[u8] = &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
 /// Sniff the archive format from magic bytes at the start of the stream.
 #[must_use]
 pub fn detect_format(bytes: &[u8]) -> Option<ArchiveFormat> {
-    if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06") || bytes.starts_with(b"PK\x07\x08") {
+    if bytes.starts_with(b"PK\x03\x04")
+        || bytes.starts_with(b"PK\x05\x06")
+        || bytes.starts_with(b"PK\x07\x08")
+    {
         return Some(ArchiveFormat::Zip);
     }
     if bytes.starts_with(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) {
@@ -46,6 +50,30 @@ pub fn detect_format(bytes: &[u8]) -> Option<ArchiveFormat> {
     }
     if bytes.starts_with(&[0x1F, 0x8B]) {
         return Some(ArchiveFormat::TarGz);
+    }
+    if bytes.starts_with(b"BZh") {
+        return Some(ArchiveFormat::TarBz2);
+    }
+    if bytes.starts_with(b"Rar!\x1A\x07") {
+        return Some(ArchiveFormat::Rar);
+    }
+    if bytes.starts_with(b"MSCF") {
+        return Some(ArchiveFormat::Cab);
+    }
+    if bytes.len() > 0x8006 && &bytes[0x8001..0x8006] == b"CD001" {
+        return Some(ArchiveFormat::Iso);
+    }
+    if bytes.starts_with(&[0x60, 0xEA]) {
+        return Some(ArchiveFormat::Arj);
+    }
+    if bytes.windows(5).any(|w| w == b"**ACE") {
+        return Some(ArchiveFormat::Ace);
+    }
+    if bytes
+        .windows(5)
+        .any(|w| w[0] == b'-' && w[1] == b'l' && w[4] == b'-')
+    {
+        return Some(ArchiveFormat::Lzh);
     }
     if bytes.len() >= 262 && &bytes[257..262] == b"ustar" {
         return Some(ArchiveFormat::Tar);
@@ -67,8 +95,68 @@ pub fn open_archive(path: &Path) -> Result<Box<dyn ArchiveReader>> {
         ArchiveFormat::Tar => Box::new(TarReader::new(path.to_path_buf())),
         ArchiveFormat::TarGz => Box::new(TarGzReader::new(path.to_path_buf())),
         ArchiveFormat::TarXz => Box::new(TarXzReader::new(path.to_path_buf())),
+        ArchiveFormat::TarBz2 => Box::new(TarBz2Reader::new(path.to_path_buf())),
         ArchiveFormat::SevenZ => Box::new(SevenZArchiveReader::new(path.to_path_buf())),
+        other => {
+            if cli::find_7z().is_none() {
+                return Err(FsError::UnsupportedArchive(format!(
+                    "{other}: install 7-Zip or set ORCHID_7Z"
+                )));
+            }
+            Box::new(CliArchiveReader {
+                path: path.to_path_buf(),
+                format: other,
+            })
+        }
     })
+}
+
+struct CliArchiveReader {
+    path: PathBuf,
+    format: ArchiveFormat,
+}
+
+#[async_trait]
+impl ArchiveReader for CliArchiveReader {
+    fn format(&self) -> ArchiveFormat {
+        self.format
+    }
+
+    async fn list(&self) -> Result<Vec<crate::archive::types::ArchiveEntry>> {
+        let path = self.path.clone();
+        tokio::task::spawn_blocking(move || cli::list(&path))
+            .await
+            .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?
+    }
+
+    async fn read_entry(&self, inner: &str) -> Result<Vec<u8>> {
+        let path = self.path.clone();
+        let target = inner.to_string();
+        tokio::task::spawn_blocking(move || cli::read_entry(&path, &target, None))
+            .await
+            .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?
+    }
+
+    async fn extract_entry(&self, inner: &str, output: &Path) -> Result<()> {
+        let dest = output
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let path = self.path.clone();
+        let target = inner.to_string();
+        tokio::task::spawn_blocking(move || cli::extract(&path, &dest, &[&target], None))
+            .await
+            .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))??;
+        Ok(())
+    }
+
+    async fn extract_all(&self, output: &Path) -> Result<u64> {
+        let path = self.path.clone();
+        let dest = output.to_path_buf();
+        tokio::task::spawn_blocking(move || cli::extract(&path, &dest, &[], None))
+            .await
+            .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?
+    }
 }
 
 fn sniff_format(path: &Path) -> Result<ArchiveFormat> {
@@ -88,23 +176,7 @@ fn sniff_format(path: &Path) -> Result<ArchiveFormat> {
 /// Map a file path's extension(s) to an archive format.
 fn format_from_extension(path: &Path) -> Option<ArchiveFormat> {
     let name = path.file_name()?.to_str()?.to_ascii_lowercase();
-    if name.ends_with(".tar.xz") || name.ends_with(".txz") || name.ends_with(".xz") {
-        return Some(ArchiveFormat::TarXz);
-    }
-    if name.ends_with(".tar.gz") || name.ends_with(".tgz") || name.ends_with(".gz") {
-        return Some(ArchiveFormat::TarGz);
-    }
-    match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("zip") => Some(ArchiveFormat::Zip),
-        Some("7z") => Some(ArchiveFormat::SevenZ),
-        Some("tar") => Some(ArchiveFormat::Tar),
-        _ => None,
-    }
+    ArchiveFormat::from_file_name(&name)
 }
 
 #[cfg(test)]

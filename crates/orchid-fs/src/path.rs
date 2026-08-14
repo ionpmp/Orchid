@@ -21,20 +21,12 @@ use crate::error::{FsError, Result};
 /// Scheme used by the default local-disk provider.
 pub const SCHEME_LOCAL: &str = "local";
 
-/// Scheme used by archive-browsing pseudo-provider (read-only).
+/// Scheme used by the archive-browsing provider (`archive:<file>#<inner>`).
 pub const SCHEME_ARCHIVE: &str = "archive";
 
 /// Canonicalised path with an explicit scheme prefix.
 #[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    bincode::Encode,
-    bincode::Decode,
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Encode, bincode::Decode,
 )]
 pub struct FsPath(String);
 
@@ -98,13 +90,17 @@ impl FsPath {
         })?;
         let with_slashes = s.replace('\\', "/");
         // Normalise drive letter to lowercase.
-        let normalised = if let Some(rest) = with_slashes.strip_prefix(|c: char| c.is_ascii_alphabetic())
-        {
-            let first = with_slashes.chars().next().unwrap_or('x').to_ascii_lowercase();
-            format!("{first}{rest}")
-        } else {
-            with_slashes
-        };
+        let normalised =
+            if let Some(rest) = with_slashes.strip_prefix(|c: char| c.is_ascii_alphabetic()) {
+                let first = with_slashes
+                    .chars()
+                    .next()
+                    .unwrap_or('x')
+                    .to_ascii_lowercase();
+                format!("{first}{rest}")
+            } else {
+                with_slashes
+            };
         Self::new(format!("{SCHEME_LOCAL}:{normalised}"))
     }
 
@@ -147,6 +143,9 @@ impl FsPath {
     /// Parent path, or `None` for the scheme root.
     #[must_use]
     pub fn parent(&self) -> Option<FsPath> {
+        if self.scheme() == SCHEME_ARCHIVE {
+            return self.archive_parent();
+        }
         let body = self.without_scheme();
         let strip_hash = body.split_once('#').map_or(body, |(m, _)| m);
         let trimmed = strip_hash.trim_end_matches('/');
@@ -168,6 +167,17 @@ impl FsPath {
     /// Last path segment, or `None` if the body is empty.
     #[must_use]
     pub fn file_name(&self) -> Option<&str> {
+        if self.scheme() == SCHEME_ARCHIVE {
+            if let Some((_, inner)) = self.archive_parts() {
+                let trimmed = inner.trim_end_matches('/');
+                if !trimmed.is_empty() {
+                    return trimmed.rsplit('/').next();
+                }
+            }
+            let body = self.without_scheme();
+            let outer = body.split_once('#').map_or(body, |(m, _)| m);
+            return outer.rsplit('/').next().filter(|s| !s.is_empty());
+        }
         let body = self.without_scheme();
         let strip_hash = body.split_once('#').map_or(body, |(m, _)| m);
         let trimmed = strip_hash.trim_end_matches('/');
@@ -190,12 +200,29 @@ impl FsPath {
     /// Lowercased file extension, if any.
     #[must_use]
     pub fn extension(&self) -> Option<&str> {
-        self.file_name().and_then(|n| n.rsplit_once('.').map(|(_, ext)| ext))
+        self.file_name()
+            .and_then(|n| n.rsplit_once('.').map(|(_, ext)| ext))
     }
 
     /// Append a path segment. Slashes in `segment` are preserved.
     #[must_use]
     pub fn join(&self, segment: &str) -> FsPath {
+        if self.scheme() == SCHEME_ARCHIVE {
+            if let Some((outer, inner)) = self.archive_parts() {
+                let outer_body = outer.strip_prefix("archive:").unwrap_or(outer);
+                let seg = segment.trim_start_matches('/');
+                let new_inner = if inner.is_empty() {
+                    seg.to_string()
+                } else if inner.ends_with('/') {
+                    format!("{inner}{seg}")
+                } else {
+                    format!("{inner}/{seg}")
+                };
+                if let Ok(p) = Self::new(format!("archive:{outer_body}#{new_inner}")) {
+                    return p;
+                }
+            }
+        }
         let base_body = self.without_scheme();
         let mut body = if base_body.is_empty() {
             String::new()
@@ -214,20 +241,67 @@ impl FsPath {
         self.scheme() == SCHEME_LOCAL
     }
 
-    /// Whether this path refers to content inside an archive
-    /// (`archive:<file>#<inner>`).
+    /// Whether this path uses the archive-browsing scheme.
     #[must_use]
     pub fn is_archive(&self) -> bool {
-        self.scheme() == SCHEME_ARCHIVE && self.0.contains('#')
+        self.scheme() == SCHEME_ARCHIVE
     }
 
     /// For archive paths, split into `(outer archive path, inner entry)`.
+    ///
+    /// The first element includes the `archive:` scheme (`archive:c:/a.zip`).
     #[must_use]
     pub fn archive_parts(&self) -> Option<(&str, &str)> {
-        if !self.is_archive() {
+        if self.scheme() != SCHEME_ARCHIVE {
             return None;
         }
-        self.0.split_once('#')
+        match self.0.split_once('#') {
+            Some((outer, inner)) => Some((outer, inner)),
+            None => Some((self.0.as_str(), "")),
+        }
+    }
+
+    /// Local path of the archive file this `archive:` path refers to.
+    #[must_use]
+    pub fn archive_container(&self) -> Option<FsPath> {
+        let (outer, _) = self.archive_parts()?;
+        let body = outer.strip_prefix("archive:")?;
+        Self::new(format!("{SCHEME_LOCAL}:{body}")).ok()
+    }
+
+    /// Inner entry path (`dir/file.txt`), empty at the archive root.
+    #[must_use]
+    pub fn archive_inner(&self) -> Option<&str> {
+        self.archive_parts().map(|(_, inner)| inner)
+    }
+
+    /// Build `archive:<local-file>#<inner>` from a local archive file.
+    ///
+    /// # Errors
+    ///
+    /// Non-local `file` or invalid UTF-8.
+    pub fn archive_from_file(file: &FsPath, inner: &str) -> Result<Self> {
+        let os = file.to_local()?;
+        let s = os.to_str().ok_or_else(|| FsError::InvalidPath {
+            reason: format!("non-UTF8 archive path: {}", os.display()),
+        })?;
+        let body = s.replace('\\', "/");
+        Self::new(format!("{SCHEME_ARCHIVE}:{body}#{inner}"))
+    }
+
+    fn archive_parent(&self) -> Option<FsPath> {
+        let (outer, inner) = self.archive_parts()?;
+        let outer_body = outer.strip_prefix("archive:")?;
+        let trimmed = inner.trim_end_matches('/');
+        if trimmed.is_empty() {
+            return Self::new(format!("{SCHEME_LOCAL}:{outer_body}"))
+                .ok()
+                .and_then(|p| p.parent());
+        }
+        if let Some(slash) = trimmed.rfind('/') {
+            return Self::new(format!("archive:{outer_body}#{}", &trimmed[..slash])).ok();
+        }
+        Self::new(format!("archive:{outer_body}#")).ok()
     }
 }
 
@@ -356,12 +430,25 @@ mod tests {
 
     #[test]
     fn archive_parts_split_on_hash() {
-        let p =
-            FsPath::new("archive:c:/data/pack.zip#inside/leaf.txt").unwrap();
+        let p = FsPath::new("archive:c:/data/pack.zip#inside/leaf.txt").unwrap();
         assert!(p.is_archive());
         let (outer, inner) = p.archive_parts().unwrap();
         assert_eq!(outer, "archive:c:/data/pack.zip");
         assert_eq!(inner, "inside/leaf.txt");
+        assert_eq!(p.file_name(), Some("leaf.txt"));
+        assert_eq!(
+            p.parent().as_ref().map(FsPath::as_str),
+            Some("archive:c:/data/pack.zip#inside")
+        );
+        let root = p.parent().unwrap().parent().unwrap();
+        assert_eq!(root.as_str(), "archive:c:/data/pack.zip#");
+        assert_eq!(root.file_name(), Some("pack.zip"));
+        assert_eq!(
+            root.parent().as_ref().map(FsPath::as_str),
+            Some("local:c:/data")
+        );
+        let joined = root.join("inside").join("leaf.txt");
+        assert_eq!(joined.as_str(), p.as_str());
     }
 
     #[test]
