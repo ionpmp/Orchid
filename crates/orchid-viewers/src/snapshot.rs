@@ -120,6 +120,14 @@ pub struct ImageSnapshot {
     pub size_bytes: u64,
     /// Deprecated: UI builds the status strip from structured fields + Fluent.
     pub info_text: String,
+    /// 1-based index in the folder playlist (`0` when unknown).
+    pub folder_index: u32,
+    /// Image files in the same folder.
+    pub folder_count: u32,
+    /// Wrap next/prev at the folder ends.
+    pub loop_folder: bool,
+    /// Recently viewed image paths in this viewer (newest first).
+    pub recent_paths: Vec<String>,
 }
 
 /// PDF page snapshot.

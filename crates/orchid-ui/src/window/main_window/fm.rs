@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use orchid_storage::LifecycleState;
 use orchid_widgets::layout::PixelBounds;
-use orchid_widgets::WidgetPayload;
+use orchid_widgets::{CreateWidgetRequest, WidgetPayload};
 
 use crate::slint_generated::{
     FmConfirmDialog, FmConflictDialog, FmPassphraseState, FmPathSuggest, FmRenameState, FmTagState,
@@ -100,6 +100,48 @@ impl MainWindowController {
             .map(|inst| inst.id)
             .collect()
     }
+    pub(super) fn reveal_folder_in_fm(self: &Arc<Self>, folder: orchid_fs::FsPath) {
+        let pane = self.fm_focus.lock().map(|(_, p)| p).unwrap_or(0);
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            let fm = if let Some(id) = c.find_active_fm() {
+                id
+            } else {
+                let Ok(w) = c.workspace_manager.active() else {
+                    return;
+                };
+                let size = Self::minimal_widget_size(&c.widget_manager, "file-manager");
+                match c
+                    .widget_manager
+                    .create(CreateWidgetRequest {
+                        type_id: "file-manager".into(),
+                        workspace_id: w.id,
+                        position: None,
+                        size: Some(size),
+                        initial_lifecycle: None,
+                        config_bytes: None,
+                    })
+                    .await
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        warn!(?e, "create file manager for image folder");
+                        return;
+                    }
+                }
+            };
+            if let Err(e) = orchid_widgets::builtin::file_manager::navigate(fm, pane, folder).await
+            {
+                warn!(?e, "navigate file manager to image folder");
+            }
+            c.set_fm_focus(fm, pane);
+            c.schedule_rebuild();
+        });
+    }
+
     pub(super) fn find_active_fm(&self) -> Option<Uuid> {
         let fm_ids = self.fm_instances_on_active_workspace();
         if fm_ids.is_empty() {

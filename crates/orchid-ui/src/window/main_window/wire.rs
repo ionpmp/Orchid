@@ -1845,6 +1845,14 @@ impl MainWindowController {
                 if let Some(c) = t.upgrade() {
                     c.apply_viewer_window_command(cmd.as_str());
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        if cmd.as_str() == "reveal-folder" {
+                            if let Some(folder) =
+                                orchid_widgets::builtin::viewer::current_image_folder(inst)
+                            {
+                                c.reveal_folder_in_fm(folder);
+                            }
+                            return;
+                        }
                         c.bring_floating_to_front(inst);
                         let cmd = cmd.to_string();
                         spawn::spawn_local_compat(async move {

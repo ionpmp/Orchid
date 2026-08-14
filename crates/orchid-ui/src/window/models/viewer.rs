@@ -185,6 +185,20 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         fullscreen_label: locale.tr("viewer-image-fullscreen").into(),
         kiosk_label: locale.tr("viewer-image-kiosk").into(),
         next_monitor_label: locale.tr("viewer-image-next-monitor").into(),
+        folder_index: 0,
+        folder_count: 0,
+        loop_folder: true,
+        recent_paths: ModelRc::new(VecModel::default()),
+        nav_index_label: SharedString::new(),
+        prev_label: locale.tr("viewer-image-prev").into(),
+        next_label: locale.tr("viewer-image-next").into(),
+        first_label: locale.tr("viewer-image-first").into(),
+        last_label: locale.tr("viewer-image-last").into(),
+        random_label: locale.tr("viewer-image-random").into(),
+        loop_label: locale.tr("viewer-image-loop").into(),
+        folder_label: locale.tr("viewer-image-folder").into(),
+        recent_label: locale.tr("viewer-image-recent").into(),
+        goto_label: locale.tr("viewer-image-goto").into(),
     }
 }
 
@@ -676,6 +690,21 @@ fn build_image_snapshot(
         info.push_str(" · EXIF ");
         info.push_str(&s.orientation.to_string());
     }
+    let nav_index_label = if s.folder_count > 0 {
+        locale.tr_args(
+            "viewer-image-index",
+            &orchid_i18n::FluentArgs::new()
+                .with("current", s.folder_index.to_string())
+                .with("total", s.folder_count.to_string()),
+        )
+    } else {
+        String::new()
+    };
+    if !nav_index_label.is_empty() {
+        info.push_str(" · ");
+        info.push_str(&nav_index_label);
+    }
+    let recent: Vec<SharedString> = s.recent_paths.iter().map(|p| p.clone().into()).collect();
     ViewerImageModel {
         width_px: s.width_px as i32,
         height_px: s.height_px as i32,
@@ -704,6 +733,20 @@ fn build_image_snapshot(
         fullscreen_label: locale.tr("viewer-image-fullscreen").into(),
         kiosk_label: locale.tr("viewer-image-kiosk").into(),
         next_monitor_label: locale.tr("viewer-image-next-monitor").into(),
+        folder_index: s.folder_index as i32,
+        folder_count: s.folder_count as i32,
+        loop_folder: s.loop_folder,
+        recent_paths: ModelRc::new(VecModel::from(recent)),
+        nav_index_label: nav_index_label.into(),
+        prev_label: locale.tr("viewer-image-prev").into(),
+        next_label: locale.tr("viewer-image-next").into(),
+        first_label: locale.tr("viewer-image-first").into(),
+        last_label: locale.tr("viewer-image-last").into(),
+        random_label: locale.tr("viewer-image-random").into(),
+        loop_label: locale.tr("viewer-image-loop").into(),
+        folder_label: locale.tr("viewer-image-folder").into(),
+        recent_label: locale.tr("viewer-image-recent").into(),
+        goto_label: locale.tr("viewer-image-goto").into(),
     }
 }
 

@@ -285,6 +285,10 @@ impl Viewer for ImageViewer {
             format_label: image.format.label().to_string(),
             size_bytes: image.original_size_bytes,
             info_text: String::new(),
+            folder_index: 0,
+            folder_count: 0,
+            loop_folder: true,
+            recent_paths: Vec::new(),
         })
     }
 

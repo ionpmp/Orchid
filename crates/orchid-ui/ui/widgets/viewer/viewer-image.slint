@@ -20,7 +20,10 @@ export component ViewerImageView inherits Rectangle {
 
     property <length> last-mx: 0px;
     property <length> last-my: 0px;
+    property <length> swipe-x: 0px;
+    property <length> swipe-y: 0px;
     property <length> pan-step: 40px;
+    property <bool> show-recent: false;
     property <color> canvas-bg: model.bg-kind == 1 ? #000000
         : model.bg-kind == 2 ? #ffffff
         : model.bg-kind == 3 ? #808080
@@ -90,20 +93,61 @@ export component ViewerImageView inherits Rectangle {
                 }
                 return accept;
             }
-            if (event.text == "h" || event.text == "H") {
-                root.flip-h();
-                return accept;
-            }
             if (event.text == "v" || event.text == "V") {
                 root.flip-v();
                 return accept;
             }
+            if (event.text == Key.PageDown || event.text == Key.Space) {
+                root.command("next");
+                return accept;
+            }
+            if (event.text == Key.PageUp || event.text == Key.Backspace) {
+                root.command("prev");
+                return accept;
+            }
+            if (event.text == Key.Home) {
+                root.command("first");
+                return accept;
+            }
+            if (event.text == Key.End) {
+                root.command("last");
+                return accept;
+            }
+            if (event.text == "*" ) {
+                root.command("random");
+                return accept;
+            }
+            if (event.text == "l" || event.text == "L") {
+                root.command("loop");
+                return accept;
+            }
+            if (event.text == "o" || event.text == "O") {
+                root.command("reveal-folder");
+                return accept;
+            }
+            if (event.text == "h" || event.text == "H") {
+                // H is flip when not Shift? Keep H as flip; use Shift+H for recent.
+                if (event.modifiers.shift) {
+                    root.show-recent = !root.show-recent;
+                    return accept;
+                }
+                root.flip-h();
+                return accept;
+            }
             if (event.text == Key.LeftArrow) {
-                root.pan(root.pan-step, 0px);
+                if (model.fit-mode == 0) {
+                    root.pan(root.pan-step, 0px);
+                } else {
+                    root.command("prev");
+                }
                 return accept;
             }
             if (event.text == Key.RightArrow) {
-                root.pan(-root.pan-step, 0px);
+                if (model.fit-mode == 0) {
+                    root.pan(-root.pan-step, 0px);
+                } else {
+                    root.command("next");
+                }
                 return accept;
             }
             if (event.text == Key.UpArrow) {
@@ -208,6 +252,222 @@ export component ViewerImageView inherits Rectangle {
                         }
                     }
                     Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: prev-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    prev-ta := TouchArea {
+                        clicked => { root.command("prev"); img-keys.focus(); }
+                    }
+                    if prev-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: prev-hint.preferred-width + 12px;
+                        height: prev-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        prev-hint := Text { x: 6px; y: 3px; text: model.prev-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "⟨"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    min-width: 48px;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    goto-in := TextInput {
+                        text: "" + model.folder-index;
+                        input-type: number;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accepted => {
+                            root.command("goto:" + self.text);
+                            img-keys.focus();
+                        }
+                    }
+                }
+
+                Text {
+                    text: "/ " + model.folder-count;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: next-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    next-ta := TouchArea {
+                        clicked => { root.command("next"); img-keys.focus(); }
+                    }
+                    if next-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: next-hint.preferred-width + 12px;
+                        height: next-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        next-hint := Text { x: 6px; y: 3px; text: model.next-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "⟩"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: first-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    first-ta := TouchArea {
+                        clicked => { root.command("first"); img-keys.focus(); }
+                    }
+                    if first-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: first-hint.preferred-width + 12px;
+                        height: first-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        first-hint := Text { x: 6px; y: 3px; text: model.first-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "⟨⟨"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: last-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    last-ta := TouchArea {
+                        clicked => { root.command("last"); img-keys.focus(); }
+                    }
+                    if last-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: last-hint.preferred-width + 12px;
+                        height: last-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        last-hint := Text { x: 6px; y: 3px; text: model.last-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "⟩⟩"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: rnd-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    rnd-ta := TouchArea {
+                        clicked => { root.command("random"); img-keys.focus(); }
+                    }
+                    if rnd-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: rnd-hint.preferred-width + 12px;
+                        height: rnd-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        rnd-hint := Text { x: 6px; y: 3px; text: model.random-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text { text: "*"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.loop-folder ? Theme.surface-raised
+                        : loop-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    loop-ta := TouchArea {
+                        clicked => { root.command("loop"); img-keys.focus(); }
+                    }
+                    if loop-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: loop-hint.preferred-width + 12px;
+                        height: loop-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        loop-hint := Text { x: 6px; y: 3px; text: model.loop-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.loop-label;
+                            color: model.loop-folder ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: folder-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    folder-ta := TouchArea {
+                        clicked => { root.command("reveal-folder"); img-keys.focus(); }
+                    }
+                    if folder-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: folder-hint.preferred-width + 12px;
+                        height: folder-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        folder-hint := Text { x: 6px; y: 3px; text: model.folder-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { text: model.folder-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: root.show-recent ? Theme.surface-raised
+                        : recent-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    recent-ta := TouchArea {
+                        clicked => { root.show-recent = !root.show-recent; img-keys.focus(); }
+                    }
+                    if recent-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: recent-hint.preferred-width + 12px;
+                        height: recent-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        recent-hint := Text { x: 6px; y: 3px; text: model.recent-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.recent-label;
+                            color: root.show-recent ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
                 }
 
                 Rectangle { width: 8px; }
@@ -776,14 +1036,78 @@ export component ViewerImageView inherits Rectangle {
                     if (e.kind == PointerEventKind.down) {
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
+                        root.swipe-x = self.mouse-x;
+                        root.swipe-y = self.mouse-y;
                         img-keys.focus();
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        if (model.fit-mode != 0
+                            && abs(self.mouse-x - root.swipe-x) > 80px
+                            && abs(self.mouse-x - root.swipe-x) > abs(self.mouse-y - root.swipe-y) * 2) {
+                            if (self.mouse-x - root.swipe-x < 0px) {
+                                root.command("next");
+                            } else {
+                                root.command("prev");
+                            }
+                        }
                     }
                 }
                 moved => {
-                    if (self.pressed) {
+                    if (self.pressed && model.fit-mode == 0) {
                         root.pan(self.mouse-x - root.last-mx, self.mouse-y - root.last-my);
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
+                    }
+                }
+                scroll-event(event) => {
+                    if (event.modifiers.control) {
+                        if (event.delta-y < 0) {
+                            root.zoom-in();
+                        } else {
+                            root.zoom-out();
+                        }
+                    } else if (event.delta-y < 0 || event.delta-x < 0) {
+                        root.command("next");
+                    } else {
+                        root.command("prev");
+                    }
+                    return accept;
+                }
+            }
+
+            if root.show-recent && model.recent-paths.length > 0 : Rectangle {
+                x: 8px;
+                y: 8px;
+                width: min(parent.width - 16px, 360px);
+                height: min(parent.height - 16px, 8px + model.recent-paths.length * 28px);
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 50;
+                VerticalLayout {
+                    padding: 4px;
+                    spacing: 2px;
+                    for p in model.recent-paths : Rectangle {
+                        height: 26px;
+                        background: rec-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        rec-ta := TouchArea {
+                            clicked => {
+                                root.command("recent:" + p);
+                                root.show-recent = false;
+                                img-keys.focus();
+                            }
+                        }
+                        Text {
+                            x: 8px;
+                            text: p;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            width: parent.width - 16px;
+                        }
                     }
                 }
             }

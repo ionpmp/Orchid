@@ -1,5 +1,7 @@
 //! Viewer widget: wraps an [`orchid_viewers::Viewer`] for any given path.
 
+mod image_nav;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -30,7 +32,7 @@ use crate::{
 pub const TYPE_ID: &str = "viewer";
 
 /// Persisted viewer state (path + optional floating overlay rect).
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct ViewerPersisted {
     path: Option<String>,
     /// When true, the viewer renders in the floating overlay (not the grid).
@@ -44,6 +46,27 @@ struct ViewerPersisted {
     float_w: Option<f32>,
     #[serde(default)]
     float_h: Option<f32>,
+    /// Wrap folder playlist at the ends.
+    #[serde(default = "default_true")]
+    image_loop: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for ViewerPersisted {
+    fn default() -> Self {
+        Self {
+            path: None,
+            floating: false,
+            float_x: None,
+            float_y: None,
+            float_w: None,
+            float_h: None,
+            image_loop: true,
+        }
+    }
 }
 
 impl ViewerPersisted {
@@ -59,7 +82,11 @@ impl ViewerPersisted {
         })
     }
 
-    fn from_live(path: Option<String>, floating: Option<crate::layout::PixelBounds>) -> Self {
+    fn from_live(
+        path: Option<String>,
+        floating: Option<crate::layout::PixelBounds>,
+        image_loop: bool,
+    ) -> Self {
         match floating {
             Some(b) => Self {
                 path,
@@ -68,6 +95,7 @@ impl ViewerPersisted {
                 float_y: Some(b.y),
                 float_w: Some(b.width),
                 float_h: Some(b.height),
+                image_loop,
             },
             None => Self {
                 path,
@@ -76,6 +104,7 @@ impl ViewerPersisted {
                 float_y: None,
                 float_w: None,
                 float_h: None,
+                image_loop,
             },
         }
     }
@@ -111,6 +140,8 @@ struct ViewerWidgetInner {
     pending_edit: AtomicBool,
     /// Floating overlay bounds when undocked from the canvas grid.
     floating: RwLock<Option<crate::layout::PixelBounds>>,
+    /// Image folder playlist (next/prev, loop, recent).
+    image_nav: RwLock<image_nav::ImageFolderNav>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -174,7 +205,74 @@ impl ViewerWidgetInner {
         let snap = viewer.snapshot();
         *self.snapshot.write() = Some(snap);
         *self.viewer.lock().await = Some(viewer);
+        if is_image_path(&path) {
+            self.after_image_opened(&path).await;
+        }
+        self.overlay_image_nav();
         self.publish_refresh();
+        Ok(())
+    }
+
+    fn overlay_image_nav(&self) {
+        let Some(snap) = self.snapshot.write().take() else {
+            return;
+        };
+        *self.snapshot.write() = Some(apply_image_nav(snap, &self.image_nav.read()));
+    }
+
+    async fn after_image_opened(&self, path: &orchid_fs::FsPath) {
+        let parent = path.parent();
+        let need_list = {
+            let nav = self.image_nav.read();
+            nav.folder.as_ref() != parent.as_ref() || !nav.siblings.iter().any(|p| p == path)
+        };
+        if need_list {
+            if let Some(folder) = parent {
+                if let Some(list) =
+                    image_nav::list_image_siblings(&self.deps.registry, &folder).await
+                {
+                    self.image_nav.write().set_folder(folder, list, path);
+                }
+            }
+        } else {
+            self.image_nav.write().set_current(path);
+        }
+        self.image_nav.write().push_history(path);
+    }
+
+    async fn navigate_images(&self, step: image_nav::NavStep) -> WidgetResult<()> {
+        {
+            let path = self.path.read().clone();
+            if let Some(path) = path.as_ref() {
+                if is_image_path(path) {
+                    let need = {
+                        let nav = self.image_nav.read();
+                        nav.siblings.is_empty()
+                    };
+                    if need {
+                        self.after_image_opened(path).await;
+                    }
+                }
+            }
+        }
+        let n = self.image_nav.read().siblings.len().max(1);
+        for _ in 0..n {
+            let Some(idx) = self.image_nav.read().pick(step) else {
+                return Ok(());
+            };
+            let Some(next) = self.image_nav.read().siblings.get(idx).cloned() else {
+                return Ok(());
+            };
+            self.open_path(next.clone()).await?;
+            let failed = matches!(*self.snapshot.read(), Some(ViewerSnapshot::Error { .. }));
+            if failed {
+                let mut nav = self.image_nav.write();
+                nav.index = idx;
+                nav.mark_unreadable(&next);
+                continue;
+            }
+            return Ok(());
+        }
         Ok(())
     }
 
@@ -191,7 +289,7 @@ impl ViewerWidgetInner {
     async fn refresh_snapshot(&self) {
         let guard = self.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
-            *self.snapshot.write() = Some(v.snapshot());
+            *self.snapshot.write() = Some(apply_image_nav(v.snapshot(), &self.image_nav.read()));
         }
         drop(guard);
         self.publish_refresh();
@@ -224,6 +322,7 @@ impl ViewerWidget {
                 pending_path: RwLock::new(None),
                 pending_edit: AtomicBool::new(false),
                 floating: RwLock::new(None),
+                image_nav: RwLock::new(image_nav::ImageFolderNav::default()),
                 bus,
             }),
         }
@@ -327,6 +426,35 @@ pub async fn open_path_for_edit(instance_id: Uuid, path: orchid_fs::FsPath) -> W
     let inner = live_inner(instance_id)?;
     inner.pending_edit.store(true, Ordering::Relaxed);
     inner.open_path(path).await
+}
+
+fn is_image_path(path: &orchid_fs::FsPath) -> bool {
+    path.extension()
+        .is_some_and(orchid_viewers::is_image_file_extension)
+}
+
+fn apply_image_nav(snap: ViewerSnapshot, nav: &image_nav::ImageFolderNav) -> ViewerSnapshot {
+    match snap {
+        ViewerSnapshot::Image(mut s) => {
+            s.folder_index = nav.index.saturating_add(1) as u32;
+            s.folder_count = nav.siblings.len() as u32;
+            s.loop_folder = nav.loop_playlist;
+            s.recent_paths = nav.recent_paths();
+            ViewerSnapshot::Image(s)
+        }
+        other => other,
+    }
+}
+
+/// Parent folder of the current image, when known.
+#[must_use]
+pub fn current_image_folder(instance_id: Uuid) -> Option<orchid_fs::FsPath> {
+    let inner = VIEWER_LIVE.get(&instance_id)?;
+    if let Some(folder) = inner.value().image_nav.read().folder.clone() {
+        return Some(folder);
+    }
+    let path = inner.value().path.read().clone();
+    path.as_ref().and_then(orchid_fs::FsPath::parent)
 }
 
 fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<ViewerWidgetInner>> {
@@ -523,10 +651,34 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             "fullscreen" => img.toggle_chrome_hidden(),
             "kiosk" => img.toggle_kiosk(),
             "exit-immersive" => img.exit_immersive(),
+            "next" | "prev" | "first" | "last" | "random" | "loop" => {}
+            cmd if cmd.starts_with("goto:") || cmd.starts_with("recent:") => {}
             _ => {}
         }
     }
-    inner.refresh_snapshot().await;
+    match command {
+        "next" => inner.navigate_images(image_nav::NavStep::Next).await?,
+        "prev" => inner.navigate_images(image_nav::NavStep::Prev).await?,
+        "first" => inner.navigate_images(image_nav::NavStep::First).await?,
+        "last" => inner.navigate_images(image_nav::NavStep::Last).await?,
+        "random" => inner.navigate_images(image_nav::NavStep::Random).await?,
+        "loop" => {
+            let next = !inner.image_nav.read().loop_playlist;
+            inner.image_nav.write().loop_playlist = next;
+            inner.refresh_snapshot().await;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("goto:") => {
+            if let Ok(n) = raw.parse::<usize>() {
+                inner.navigate_images(image_nav::NavStep::Goto(n)).await?;
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("recent:") => {
+            if let Ok(path) = orchid_fs::FsPath::new(raw) {
+                inner.open_path(path).await?;
+            }
+        }
+        _ => inner.refresh_snapshot().await,
+    }
     Ok(())
 }
 
@@ -1530,7 +1682,9 @@ impl Widget for ViewerWidget {
             widget_type: TYPE_ID,
             title,
             status: WidgetStatus::Ready,
-            payload: WidgetPayload::Viewer(ViewerPayload { snapshot: snap }),
+            payload: WidgetPayload::Viewer(ViewerPayload {
+                snapshot: apply_image_nav(snap, &self.inner.image_nav.read()),
+            }),
         })
     }
     fn save_state(&self) -> WidgetResult<Vec<u8>> {
@@ -1541,7 +1695,8 @@ impl Widget for ViewerWidget {
             .as_ref()
             .map(|p| p.as_str().to_string());
         let floating = *self.inner.floating.read();
-        state_codec::save_state(&ViewerPersisted::from_live(path, floating))
+        let image_loop = self.inner.image_nav.read().loop_playlist;
+        state_codec::save_state(&ViewerPersisted::from_live(path, floating, image_loop))
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let persisted: ViewerPersisted = state_codec::restore_state(bytes)?;
@@ -1553,6 +1708,7 @@ impl Widget for ViewerWidget {
             }
         }
         *self.inner.floating.write() = floating;
+        self.inner.image_nav.write().loop_playlist = persisted.image_loop;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -1617,6 +1773,7 @@ pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
                 w
             }
         };
+        widget.inner.image_nav.write().loop_playlist = persisted.image_loop;
         Ok(Box::new(widget) as Box<dyn Widget>)
     });
     WidgetDescriptor {
