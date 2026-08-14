@@ -6,6 +6,7 @@ pub mod color;
 pub mod exif;
 pub mod loader;
 pub mod lossless;
+pub mod meta_edit;
 pub mod metadata;
 pub mod operations;
 pub mod slideshow;
@@ -468,6 +469,13 @@ impl Viewer for ImageViewer {
             probe_text: String::new(),
             gps_label: String::new(),
             has_gps: false,
+            meta_edit_title: String::new(),
+            meta_edit_creator: String::new(),
+            meta_edit_copyright: String::new(),
+            meta_edit_keywords: String::new(),
+            meta_edit_description: String::new(),
+            meta_edit_date: String::new(),
+            meta_edit_gps: String::new(),
         })
     }
 

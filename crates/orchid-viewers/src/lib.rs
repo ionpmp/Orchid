@@ -34,6 +34,11 @@ pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
 pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
+pub use image::meta_edit::{
+    apply_editable_meta, copy_image_metadata, export_metadata_csv, export_metadata_xml,
+    import_metadata_csv, inspect_to_edit, load_templates, pack_editable_meta, parse_gps_pair,
+    parse_shift, save_template, unpack_editable_meta, EditableMeta, MetaTemplate,
+};
 pub use image::metadata::{
     camera_overlay, compute_histogram, describe_pixel, format_inspect_panel, format_sidecar_report,
     inspect_image_bytes, inspect_image_file, render_histogram, ChannelHistogram, GpsFix, HistMode,

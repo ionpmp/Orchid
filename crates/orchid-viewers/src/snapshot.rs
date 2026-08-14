@@ -168,6 +168,13 @@ pub struct ImageSnapshot {
     pub probe_text: String,
     pub gps_label: String,
     pub has_gps: bool,
+    pub meta_edit_title: String,
+    pub meta_edit_creator: String,
+    pub meta_edit_copyright: String,
+    pub meta_edit_keywords: String,
+    pub meta_edit_description: String,
+    pub meta_edit_date: String,
+    pub meta_edit_gps: String,
 }
 
 /// One folder sibling in the image thumbnail strip or grid.

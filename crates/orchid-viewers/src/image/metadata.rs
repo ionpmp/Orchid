@@ -136,7 +136,32 @@ impl HistMode {
 /// I/O on the image file.
 pub fn inspect_image_file(path: &Path) -> Result<ImageInspect> {
     let bytes = std::fs::read(path)?;
-    Ok(inspect_image_bytes(&bytes, Some(path)))
+    let mut inspect = inspect_image_bytes(&bytes, Some(path));
+    if let Some(side) = sidecar_xmp_path(path).and_then(|p| std::fs::read(p).ok()) {
+        let extra = parse_xmp(&side);
+        merge_fields(&mut inspect.xmp, extra);
+        if inspect.gps.is_none() {
+            inspect.gps = gps_from_xmp_fields(&inspect.xmp);
+        }
+    }
+    Ok(inspect)
+}
+
+pub(crate) fn sidecar_xmp_path(path: &Path) -> Option<std::path::PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    Some(path.with_file_name(format!("{name}.xmp")))
+}
+
+fn merge_fields(dest: &mut Vec<(String, String)>, extra: Vec<(String, String)>) {
+    for (k, v) in extra {
+        if let Some((_, existing)) = dest.iter_mut().find(|(dk, _)| dk == &k) {
+            if existing.is_empty() {
+                *existing = v;
+            }
+        } else {
+            dest.push((k, v));
+        }
+    }
 }
 
 /// Same as [`inspect_image_file`] from an already-read buffer.
@@ -145,9 +170,11 @@ pub fn inspect_image_bytes(bytes: &[u8], path: Option<&Path>) -> ImageInspect {
     let exif = path
         .and_then(|p| read_exif_fields(p).ok())
         .unwrap_or_else(|| read_exif_from_bytes(bytes));
-    let gps = gps_from_exif(&exif).or_else(|| gps_from_bytes(bytes));
     let iptc = parse_iptc(bytes);
     let xmp = parse_xmp(bytes);
+    let gps = gps_from_exif(&exif)
+        .or_else(|| gps_from_bytes(bytes))
+        .or_else(|| gps_from_xmp_fields(&xmp));
     let icc_label = crate::image::color::embedded_icc_label(bytes).unwrap_or_default();
     let (md5, sha256) = file_hashes(bytes);
     let overlay = camera_overlay(&exif);
@@ -335,6 +362,40 @@ fn gps_from_bytes(bytes: &[u8]) -> Option<GpsFix> {
     Some(GpsFix { lat, lon })
 }
 
+pub(crate) fn gps_from_xmp_fields(fields: &[(String, String)]) -> Option<GpsFix> {
+    let lat = parse_gps_component(field(fields, "GPSLatitude")?)?;
+    let lon = parse_gps_component(field(fields, "GPSLongitude")?)?;
+    Some(GpsFix { lat, lon })
+}
+
+fn parse_gps_component(raw: &str) -> Option<f64> {
+    let t = raw.trim();
+    let sign = if t.contains('S') || t.contains('W') {
+        -1.0
+    } else {
+        1.0
+    };
+    let cleaned: String = t
+        .chars()
+        .map(|c| {
+            if c.is_ascii_digit() || c == '.' || c == ',' || c == '-' {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    if let Ok(v) = t
+        .trim_end_matches(|c: char| !c.is_ascii_digit() && c != '.')
+        .parse::<f64>()
+    {
+        if !t.contains(',') {
+            return Some(v * sign);
+        }
+    }
+    parse_dms(&cleaned).map(|v| v * sign)
+}
+
 fn dms_value(field: &exif::Field) -> Option<f64> {
     match &field.value {
         exif::Value::Rational(rs) if rs.len() >= 3 => {
@@ -361,7 +422,7 @@ fn parse_dms(raw: &str) -> Option<f64> {
     }
 }
 
-fn field<'a>(fields: &'a [(String, String)], name: &str) -> Option<&'a str> {
+pub(crate) fn field<'a>(fields: &'a [(String, String)], name: &str) -> Option<&'a str> {
     fields
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case(name))
@@ -408,7 +469,7 @@ pub fn camera_overlay(exif: &[(String, String)]) -> String {
     parts.join("\n")
 }
 
-fn parse_iptc(bytes: &[u8]) -> Vec<(String, String)> {
+pub(crate) fn parse_iptc(bytes: &[u8]) -> Vec<(String, String)> {
     let Some(irb) = find_iptc_irb(bytes) else {
         return Vec::new();
     };
@@ -518,7 +579,7 @@ fn iptc_from_photoshop8bim(data: &[u8]) -> Option<&[u8]> {
     None
 }
 
-fn parse_xmp(bytes: &[u8]) -> Vec<(String, String)> {
+pub(crate) fn parse_xmp(bytes: &[u8]) -> Vec<(String, String)> {
     let text = xmp_packet(bytes);
     if text.is_empty() {
         return Vec::new();
@@ -533,6 +594,17 @@ fn parse_xmp(bytes: &[u8]) -> Vec<(String, String)> {
     push_xmp(&mut out, "Credit", xmp_tag(&text, "photoshop:Credit"));
     push_xmp(&mut out, "Created", xmp_tag(&text, "xmp:CreateDate"));
     push_xmp(&mut out, "Modified", xmp_tag(&text, "xmp:ModifyDate"));
+    push_xmp(
+        &mut out,
+        "DateTimeOriginal",
+        xmp_tag(&text, "exif:DateTimeOriginal"),
+    );
+    push_xmp(&mut out, "GPSLatitude", xmp_tag(&text, "exif:GPSLatitude"));
+    push_xmp(
+        &mut out,
+        "GPSLongitude",
+        xmp_tag(&text, "exif:GPSLongitude"),
+    );
     out
 }
 
@@ -545,7 +617,7 @@ fn push_xmp(out: &mut Vec<(String, String)>, key: &str, value: Option<String>) {
     }
 }
 
-fn xmp_packet(bytes: &[u8]) -> String {
+pub(crate) fn xmp_packet(bytes: &[u8]) -> String {
     if let Some(i) = find_slice(bytes, b"<x:xmpmeta") {
         let rest = &bytes[i..];
         if let Some(end) = find_slice(rest, b"</x:xmpmeta>") {
