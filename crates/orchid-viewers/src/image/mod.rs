@@ -3,6 +3,7 @@
 use std::any::Any;
 
 pub mod adjust;
+pub mod annotate;
 pub mod color;
 pub mod edit;
 pub mod exif;
