@@ -92,7 +92,8 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
 - [~] Deduplication in managed folders — `Deduplicator` + add-to-managed in file manager; ingest failure UX + sidebar stats; policy dialog in FM
 
 ### Network Clients
-- [~] SFTP / SMB / WebDAV / FTP via rclone — browse + read/write via `RcloneProvider`; credentials via config or rclone.conf remote; network virtual folder in FM sidebar
+- [x] SFTP / SCP / SMB / FTP / FTPS / WebDAV / S3 via rclone — browse + read/write; `rclone-remote` or inline creds; remote↔remote copy; FTP resume retries; `rclone sync` cloud sync; runtime bookmarks (`network-bookmarks.toml`); letterless Windows UNC in Network
+- [~] OAuth clouds (Drive / OneDrive / Dropbox) — named `rclone-remote` in rclone.conf (no in-app OAuth wizard yet)
 
 ### Search
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown

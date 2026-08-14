@@ -36,7 +36,7 @@ pub async fn move_(
                     Some(17 /* EEXIST */) | Some(18 /* EXDEV */) | Some(5 /* EIO */)
                 ) =>
             {
-                // Fall back to copy + delete.
+                // Fall back to native cross-scheme move or copy + delete.
             }
             Err(FsError::AlreadyExists(_)) | Err(FsError::InvalidPath { .. }) => {
                 return Err(FsError::AlreadyExists(to.to_string()));
@@ -45,7 +45,8 @@ pub async fn move_(
             // cross-volume renames on Windows (ERROR_NOT_SAME_DEVICE = 17).
             Err(_) => {}
         }
-    } else {
+    }
+    if !from.is_local() || !to.is_local() {
         if let Some(provider) = registry.for_path(from) {
             if provider
                 .move_cross_scheme(registry, from, to, progress)

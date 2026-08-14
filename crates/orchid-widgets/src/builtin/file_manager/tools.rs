@@ -27,6 +27,9 @@ pub(super) async fn run(
         "fs.sync-to-other" => sync_dirs(inner, SyncMode::ToRight, opts).await,
         "fs.sync-from-other" => sync_dirs(inner, SyncMode::ToLeft, opts).await,
         "fs.sync-both" => sync_dirs(inner, SyncMode::Both, opts).await,
+        "fs.cloud-sync" => cloud_sync(inner, opts).await,
+        "fs.network-bookmark" => network_bookmark(inner, input).await,
+        "fs.network-connect" => network_connect(inner, input).await,
         "fs.merge-to-other" => sync_dirs(inner, SyncMode::MergeToRight, opts).await,
         "fs.split" => split_file(inner, paths, input).await,
         "fs.join" => join_files(inner, paths).await,
@@ -208,6 +211,175 @@ async fn sync_dirs(
                 .with("left", stats.to_left.to_string()),
         ),
     ))
+}
+
+fn is_network_place(path: &orchid_fs::FsPath) -> bool {
+    orchid_fs::is_rclone_scheme(path.scheme())
+        || (path.is_local() && path.without_scheme().starts_with("//"))
+}
+
+fn persist_network_place(
+    inner: &Arc<FileManagerInner>,
+    mount: orchid_storage::NetworkMountConfig,
+) -> Result<(), WidgetError> {
+    if let Some(path) = inner.deps.network_bookmarks_file.as_ref() {
+        let mut marks = orchid_storage::load_network_bookmarks(path);
+        if let Some(existing) = marks
+            .iter_mut()
+            .find(|m| m.uri.trim() == mount.uri.trim())
+        {
+            *existing = mount.clone();
+        } else {
+            marks.push(mount.clone());
+        }
+        orchid_storage::save_network_bookmarks(path, &marks).map_err(|e| {
+            WidgetError::InvalidStateForOperation(format!("network bookmark save: {e}"))
+        })?;
+    }
+    let mut live = inner.deps.network_mounts.write();
+    if let Some(existing) = live
+        .iter_mut()
+        .find(|m| m.uri.trim() == mount.uri.trim())
+    {
+        *existing = mount;
+    } else {
+        live.push(mount);
+    }
+    Ok(())
+}
+
+async fn cloud_sync(
+    inner: &Arc<FileManagerInner>,
+    opts: RunActionOpts,
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let (left, right) = pane_dirs(inner)?;
+    if !is_network_place(&left) && !is_network_place(&right) {
+        return Err(WidgetError::InvalidStateForOperation(
+            "fm-cloud-sync-need-remote".into(),
+        ));
+    }
+    if !opts.skip_confirm {
+        return Ok(ActionOutcome::NeedsConfirmation {
+            message: locale.tr("fm-confirm-cloud-sync"),
+            action_id: "fs.cloud-sync".into(),
+            paths: Vec::new(),
+        });
+    }
+    orchid_fs::rclone_sync(&inner.deps.registry, &left, &right, None)
+        .await
+        .map_err(map_fs_error)?;
+    inner.refresh_all_tabs().await;
+    Ok(report(
+        locale.tr("fm-cloud-sync-title"),
+        locale.tr("fm-cloud-sync-done"),
+    ))
+}
+
+async fn network_bookmark(
+    inner: &Arc<FileManagerInner>,
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let path = orchid_fs::FsPath::new(active_pane_path(inner)).map_err(map_fs_error)?;
+    if !is_network_place(&path) {
+        return Err(WidgetError::InvalidStateForOperation(
+            "fm-network-bookmark-need-remote".into(),
+        ));
+    }
+    let proposed = path
+        .file_name()
+        .map(String::from)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| path.as_str().to_string());
+    let Some(name) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.network-bookmark",
+            &[],
+            &proposed,
+            inner.deps.locale.tr("fm-network-bookmark-title"),
+            inner.deps.locale.tr("fm-network-bookmark-hint"),
+        ));
+    };
+    persist_network_place(
+        inner,
+        orchid_storage::NetworkMountConfig {
+            name: name.to_string(),
+            uri: path.as_str().to_string(),
+            ..orchid_storage::NetworkMountConfig::default()
+        },
+    )?;
+    inner.refresh_all_tabs().await;
+    Ok(ActionOutcome::Done)
+}
+
+async fn network_connect(
+    inner: &Arc<FileManagerInner>,
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.network-connect",
+            &[],
+            "Name | sftp:host/path | user | rclone-remote",
+            inner.deps.locale.tr("fm-network-connect-title"),
+            inner.deps.locale.tr("fm-network-connect-hint"),
+        ));
+    };
+    let mount = parse_connect_line(raw).ok_or_else(|| {
+        WidgetError::InvalidStateForOperation("fm-network-connect-bad".into())
+    })?;
+    persist_network_place(inner, mount)?;
+    inner.refresh_all_tabs().await;
+    Ok(ActionOutcome::Done)
+}
+
+fn parse_connect_line(input: &str) -> Option<orchid_storage::NetworkMountConfig> {
+    let parts: Vec<&str> = input.split('|').map(str::trim).collect();
+    if parts.is_empty() || parts.iter().all(|p| p.is_empty()) {
+        return None;
+    }
+    let (name, uri, user, remote) = match parts.as_slice() {
+        [uri] => (String::new(), *uri, None, None),
+        [name, uri] => ((*name).to_string(), *uri, None, None),
+        [name, uri, user] => ((*name).to_string(), *uri, nonempty(user), None),
+        [name, uri, user, remote, ..] => {
+            ((*name).to_string(), *uri, nonempty(user), nonempty(remote))
+        }
+        _ => return None,
+    };
+    if uri.is_empty() {
+        return None;
+    }
+    let name = if name.is_empty() {
+        uri.to_string()
+    } else {
+        name
+    };
+    Some(orchid_storage::NetworkMountConfig {
+        name,
+        uri: uri.to_string(),
+        user: user.map(str::to_string),
+        rclone_remote: remote.map(str::to_string),
+        ..orchid_storage::NetworkMountConfig::default()
+    })
+}
+
+fn nonempty(s: &str) -> Option<&str> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(t)
+    }
+}
+
+fn active_pane_path(inner: &Arc<FileManagerInner>) -> String {
+    let state = inner.state.lock();
+    let pane = match state.active_pane {
+        super::ActivePane::Left => &state.left_pane,
+        super::ActivePane::Right => state.right_pane.as_ref().unwrap_or(&state.left_pane),
+    };
+    pane.active_tab().path.as_str().to_string()
 }
 
 async fn split_file(
@@ -543,4 +715,23 @@ async fn acl_reset(inner: &Arc<FileManagerInner>, paths: &[String]) -> WidgetRes
     }
     inner.refresh_all_tabs().await;
     Ok(report(inner.deps.locale.tr("fm-acl-title"), body))
+}
+
+#[cfg(test)]
+mod connect_parse_tests {
+    use super::parse_connect_line;
+
+    #[test]
+    fn parses_uri_only_and_packed() {
+        let a = parse_connect_line("sftp:host/home").unwrap();
+        assert_eq!(a.uri, "sftp:host/home");
+        assert_eq!(a.name, "sftp:host/home");
+        let b = parse_connect_line("Lab | sftp:host/tmp | alice | myserver").unwrap();
+        assert_eq!(b.name, "Lab");
+        assert_eq!(b.uri, "sftp:host/tmp");
+        assert_eq!(b.user.as_deref(), Some("alice"));
+        assert_eq!(b.rclone_remote.as_deref(), Some("myserver"));
+        assert!(parse_connect_line("").is_none());
+        assert!(parse_connect_line("Name |").is_none());
+    }
 }

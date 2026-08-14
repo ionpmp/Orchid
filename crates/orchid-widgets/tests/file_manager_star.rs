@@ -39,6 +39,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         managed: None,
         encrypted: None,
         network_mounts: Arc::new(RwLock::new(Vec::new())),
+        network_bookmarks_file: None,
         recent_files: RecentFilesStore::new(50),
         fm_passphrase_vault: orchid_crypto::FmPassphraseVault::new(
             tempfile::tempdir().unwrap().path().to_path_buf(),

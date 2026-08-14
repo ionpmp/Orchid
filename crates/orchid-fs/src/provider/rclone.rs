@@ -19,7 +19,23 @@ use crate::path::FsPath;
 use crate::provider::{FsCapabilities, FsProvider, FsProviderRegistry, ProviderId};
 
 /// Schemes served by [`RcloneProvider`].
-pub const RCLONE_SCHEMES: &[&str] = &["sftp", "smb", "webdav", "ftp"];
+///
+/// `ftps` uses rclone's `ftp` backend with explicit TLS. `scp` uses `sftp`
+/// (OpenSSH `scp` is SFTP-based). Cloud backends (`s3`, `drive`, `onedrive`,
+/// `dropbox`) prefer a named `rclone-remote`.
+pub const RCLONE_SCHEMES: &[&str] = &[
+    "sftp", "smb", "webdav", "ftp", "ftps", "scp", "s3", "drive", "onedrive", "dropbox",
+];
+
+/// rclone backend name for an Orchid URI scheme.
+#[must_use]
+pub fn rclone_backend(scheme: &str) -> &str {
+    match scheme {
+        "ftps" => "ftp",
+        "scp" => "sftp",
+        other => other,
+    }
+}
 
 /// Network provider backed by `rclone lsjson` / `rclone cat`.
 pub struct RcloneProvider {
@@ -45,6 +61,18 @@ impl RcloneProvider {
     }
 
     fn resolve_mount(&self, path: &FsPath) -> Result<ResolvedMount> {
+        self.resolve_mount_for_scheme(path, Some(self.scheme))
+    }
+
+    fn resolve_any_mount(&self, path: &FsPath) -> Result<ResolvedMount> {
+        self.resolve_mount_for_scheme(path, None)
+    }
+
+    fn resolve_mount_for_scheme(
+        &self,
+        path: &FsPath,
+        scheme_filter: Option<&str>,
+    ) -> Result<ResolvedMount> {
         let path_key = path.as_str();
         let mounts = self.mounts.read();
         let mut winner: Option<(usize, String, usize)> = None;
@@ -58,7 +86,11 @@ impl RcloneProvider {
             let Ok(root_path) = FsPath::new(&root) else {
                 continue;
             };
-            if root_path.scheme() != self.scheme {
+            if let Some(want) = scheme_filter {
+                if root_path.scheme() != want {
+                    continue;
+                }
+            } else if !RCLONE_SCHEMES.contains(&root_path.scheme()) {
                 continue;
             }
             if path_key == root {
@@ -87,7 +119,7 @@ impl RcloneProvider {
 
     async fn remote_for_path(&self, path: &FsPath) -> Result<String> {
         let resolved = self.resolve_mount(path)?;
-        self.rclone_remote_spec(&resolved).await
+        self.rclone_remote_spec(&resolved)
     }
 
     async fn run_rclone(&self, args: &[&str]) -> Result<()> {
@@ -208,7 +240,7 @@ impl RcloneProvider {
         }
     }
 
-    async fn rclone_remote_spec(&self, resolved: &ResolvedMount) -> Result<String> {
+    fn rclone_remote_spec(&self, resolved: &ResolvedMount) -> Result<String> {
         if let Some(remote) = resolved.mount.rclone_remote.as_deref() {
             let tail = resolved.relative_path.trim_start_matches('/');
             return if tail.is_empty() {
@@ -227,50 +259,72 @@ impl RcloneProvider {
                 reason: format!("invalid mount uri: {}", resolved.mount.uri),
             });
         };
-        let body = root_path.as_str()[root_path.scheme().len() + 1..].trim_start_matches('/');
+        let scheme = root_path.scheme();
+        let backend = rclone_backend(scheme);
+        if matches!(scheme, "drive" | "onedrive" | "dropbox") {
+            return Err(FsError::InvalidPath {
+                reason: format!(
+                    "mount `{}` ({scheme}) needs rclone-remote (OAuth remote in rclone.conf)",
+                    resolved.mount.name
+                ),
+            });
+        }
+        let body = root_path.as_str()[scheme.len() + 1..].trim_start_matches('/');
+        if scheme == "s3" {
+            let params = inline_backend_params(scheme, "", &resolved.mount)?;
+            let subpath = join_rel(body, &resolved.relative_path);
+            return Ok(format_inline_remote(backend, &params, &subpath));
+        }
         let (host_part, root_tail) = body.split_once('/').unwrap_or((body, ""));
-        let mut params = vec![format!("host={host_part}")];
-        if let Some(user) = resolved.mount.user.as_deref().filter(|u| !u.is_empty()) {
-            params.push(format!("user={user}"));
-        }
-        if let Some(pass) = resolved.mount.password.as_deref().filter(|p| !p.is_empty()) {
-            let plaintext = orchid_crypto::resolve_stored_secret(pass).map_err(|e| {
-                FsError::InvalidPath {
-                    reason: format!(
-                        "mount `{}` password decrypt failed: {e}",
-                        resolved.mount.name
-                    ),
-                }
-            })?;
-            if !orchid_crypto::is_protected(pass) && resolved.mount.rclone_remote.is_none() {
-                tracing::warn!(
-                    mount = %resolved.mount.name,
-                    "network mount uses plaintext inline password; prefer rclone-remote \
-                     or let Orchid DPAPI-protect it on next config save \
-                     (password is still visible in rclone argv)"
-                );
-            }
-            params.push(format!("pass={plaintext}"));
-        }
-        let subpath = if !resolved.relative_path.is_empty() {
-            if root_tail.is_empty() {
-                resolved.relative_path.trim_start_matches('/').to_string()
-            } else {
-                format!(
-                    "{}/{}",
-                    root_tail.trim_end_matches('/'),
-                    resolved.relative_path.trim_start_matches('/')
-                )
-            }
+        let params = inline_backend_params(scheme, host_part, &resolved.mount)?;
+        let subpath = join_rel(root_tail, &resolved.relative_path);
+        Ok(format_inline_remote(backend, &params, &subpath))
+    }
+
+    fn try_remote_spec(&self, path: &FsPath) -> Result<String> {
+        let resolved = self.resolve_any_mount(path)?;
+        self.rclone_remote_spec(&resolved)
+    }
+
+    fn local_os_arg(path: &FsPath) -> Result<String> {
+        let os = path.to_local()?;
+        os.to_str()
+            .map(str::to_string)
+            .ok_or_else(|| FsError::InvalidPath {
+                reason: format!("non-UTF8 local path: {}", os.display()),
+            })
+    }
+
+    fn transfer_spec(&self, path: &FsPath) -> Result<String> {
+        if path.is_local() {
+            Self::local_os_arg(path)
         } else {
-            root_tail.trim_start_matches('/').to_string()
-        };
-        let param_str = params.join(",");
-        if subpath.is_empty() {
-            Ok(format!(":{},{}:", self.scheme, param_str))
-        } else {
-            Ok(format!(":{},{}:{subpath}", self.scheme, param_str))
+            self.try_remote_spec(path)
         }
+    }
+
+    /// One-way `rclone sync` (destination mirrors source). At least one side
+    /// must be an rclone mount.
+    pub async fn sync_paths(
+        &self,
+        from: &FsPath,
+        to: &FsPath,
+        progress: Option<&ProgressSink>,
+    ) -> Result<()> {
+        if from.is_local() && to.is_local() {
+            return Err(FsError::InvalidPath {
+                reason: "rclone sync needs a network mount on at least one side".into(),
+            });
+        }
+        let src = self.transfer_spec(from)?;
+        let dst = self.transfer_spec(to)?;
+        let args = [
+            "sync",
+            src.as_str(),
+            dst.as_str(),
+            "--create-empty-src-dirs",
+        ];
+        self.run_rclone_with_progress(&args, progress, to).await
     }
 
     async fn run_lsjson(&self, remote: &str) -> Result<Vec<RcloneEntry>> {
@@ -309,10 +363,7 @@ impl RcloneProvider {
     fn entry_from_rclone(&self, parent: &FsPath, row: &RcloneEntry) -> Result<FsEntry> {
         let name = row.name.clone();
         let child = parent.join(&name);
-        let modified = row
-            .mod_time
-            .as_deref()
-            .and_then(parse_rclone_time);
+        let modified = row.mod_time.as_deref().and_then(parse_rclone_time);
         Ok(FsEntry {
             name: name.clone(),
             path: child,
@@ -367,7 +418,7 @@ impl FsProvider for RcloneProvider {
 
     async fn list(&self, path: &FsPath) -> Result<Vec<FsEntry>> {
         let resolved = self.resolve_mount(path)?;
-        let remote = self.rclone_remote_spec(&resolved).await?;
+        let remote = self.rclone_remote_spec(&resolved)?;
         let rows = self.run_lsjson(&remote).await?;
         rows.iter()
             .map(|row| self.entry_from_rclone(path, row))
@@ -399,7 +450,7 @@ impl FsProvider for RcloneProvider {
 
     async fn read(&self, path: &FsPath) -> Result<Vec<u8>> {
         let resolved = self.resolve_mount(path)?;
-        let remote = self.rclone_remote_spec(&resolved).await?;
+        let remote = self.rclone_remote_spec(&resolved)?;
         let output = Command::new(&self.rclone_bin)
             .args(["cat", &remote])
             .stdout(Stdio::piped())
@@ -469,12 +520,9 @@ impl FsProvider for RcloneProvider {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(FsError::Io)?;
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| FsError::InvalidPath {
-                reason: "rclone rcat stdin unavailable".into(),
-            })?;
+        let stdin = child.stdin.take().ok_or_else(|| FsError::InvalidPath {
+            reason: "rclone rcat stdin unavailable".into(),
+        })?;
         Ok(Box::new(RcloneWriteHandle { child, stdin }))
     }
 
@@ -506,6 +554,7 @@ impl FsProvider for RcloneProvider {
     async fn watch(
         &self,
         _path: &FsPath,
+        _recursive: bool,
     ) -> Result<Option<Box<dyn crate::provider::FsWatcherHandle>>> {
         Ok(None)
     }
@@ -530,87 +579,8 @@ impl FsProvider for RcloneProvider {
         options: CopyOptions,
         progress: Option<&ProgressSink>,
     ) -> Result<bool> {
-        let (_local_path, remote_path, local_is_src) = match (from.is_local(), to.is_local()) {
-            (true, false) if to.scheme() == self.scheme && self.resolve_mount(to).is_ok() => {
-                (from, to, true)
-            }
-            (false, true) if from.scheme() == self.scheme && self.resolve_mount(from).is_ok() => {
-                (from, to, false)
-            }
-            _ => return Ok(false),
-        };
-
-        if !options.overwrite {
-            let dst = registry
-                .for_path(to)
-                .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
-            if dst.exists(to).await? {
-                return Err(FsError::AlreadyExists(to.to_string()));
-            }
-        }
-
-        let meta = if local_is_src {
-            registry
-                .for_path(from)
-                .ok_or_else(|| FsError::ProviderNotMounted(from.to_string()))?
-                .metadata(from)
-                .await?
-        } else {
-            self.metadata(from).await?
-        };
-
-        let local_os = if local_is_src {
-            from.to_local()?
-        } else {
-            to.to_local()?
-        };
-        let local_arg = local_os
-            .to_str()
-            .ok_or_else(|| FsError::InvalidPath {
-                reason: format!("non-UTF8 local path: {}", local_os.display()),
-            })?;
-        let remote_spec = self.remote_for_path(remote_path).await?;
-
-        let is_dir = matches!(meta.kind, FsEntryKind::Directory);
-        let args: Vec<String> = if is_dir {
-            if local_is_src {
-                vec![
-                    "copy".into(),
-                    local_arg.into(),
-                    remote_spec,
-                    "--create-empty-src-dirs".into(),
-                ]
-            } else {
-                vec![
-                    "copy".into(),
-                    remote_spec,
-                    local_arg.into(),
-                    "--create-empty-src-dirs".into(),
-                ]
-            }
-        } else if local_is_src {
-            vec!["copyto".into(), local_arg.into(), remote_spec]
-        } else {
-            vec!["copyto".into(), remote_spec, local_arg.into()]
-        };
-
-        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        if is_dir {
-            self.run_rclone_with_progress(&arg_refs, progress, to).await?;
-        } else {
-            self.run_rclone(&arg_refs).await?;
-            if let Some(p) = progress {
-                let size = meta.size;
-                p.send(OperationProgress {
-                    total_bytes: size,
-                    processed_bytes: size,
-                    current_path: to.clone(),
-                    items_processed: 1,
-                    items_total: 1,
-                });
-            }
-        }
-        Ok(true)
+        self.transfer_cross_scheme(registry, from, to, false, Some(options), progress)
+            .await
     }
 
     async fn move_cross_scheme(
@@ -620,71 +590,78 @@ impl FsProvider for RcloneProvider {
         to: &FsPath,
         progress: Option<&ProgressSink>,
     ) -> Result<bool> {
-        let (_local_path, remote_path, local_is_src) = match (from.is_local(), to.is_local()) {
-            (true, false) if to.scheme() == self.scheme && self.resolve_mount(to).is_ok() => {
-                (from, to, true)
-            }
-            (false, true) if from.scheme() == self.scheme && self.resolve_mount(from).is_ok() => {
-                (from, to, false)
-            }
-            _ => return Ok(false),
+        self.transfer_cross_scheme(registry, from, to, true, None, progress)
+            .await
+    }
+
+    async fn sync_cross_scheme(
+        &self,
+        from: &FsPath,
+        to: &FsPath,
+        progress: Option<&ProgressSink>,
+    ) -> Result<bool> {
+        if from.is_local() && to.is_local() {
+            return Ok(false);
+        }
+        if !from.is_local() && self.try_remote_spec(from).is_err() {
+            return Ok(false);
+        }
+        if !to.is_local() && self.try_remote_spec(to).is_err() {
+            return Ok(false);
+        }
+        self.sync_paths(from, to, progress).await?;
+        Ok(true)
+    }
+}
+
+impl RcloneProvider {
+    async fn transfer_cross_scheme(
+        &self,
+        registry: &FsProviderRegistry,
+        from: &FsPath,
+        to: &FsPath,
+        is_move: bool,
+        options: Option<CopyOptions>,
+        progress: Option<&ProgressSink>,
+    ) -> Result<bool> {
+        if from.is_local() && to.is_local() {
+            return Ok(false);
+        }
+        let src_spec = match self.transfer_spec(from) {
+            Ok(s) => s,
+            Err(_) => return Ok(false),
+        };
+        let dst_spec = match self.transfer_spec(to) {
+            Ok(s) => s,
+            Err(_) => return Ok(false),
         };
 
-        let dst = registry
-            .for_path(to)
-            .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
-        if dst.exists(to).await? {
-            return Err(FsError::AlreadyExists(to.to_string()));
+        let overwrite = options.map(|o| o.overwrite).unwrap_or(false);
+        if !overwrite || is_move {
+            let dst = registry
+                .for_path(to)
+                .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
+            if dst.exists(to).await? {
+                return Err(FsError::AlreadyExists(to.to_string()));
+            }
         }
 
-        let meta = if local_is_src {
-            registry
-                .for_path(from)
-                .ok_or_else(|| FsError::ProviderNotMounted(from.to_string()))?
-                .metadata(from)
-                .await?
-        } else {
-            self.metadata(from).await?
-        };
-
-        let local_os = if local_is_src {
-            from.to_local()?
-        } else {
-            to.to_local()?
-        };
-        let local_arg = local_os
-            .to_str()
-            .ok_or_else(|| FsError::InvalidPath {
-                reason: format!("non-UTF8 local path: {}", local_os.display()),
-            })?;
-        let remote_spec = self.remote_for_path(remote_path).await?;
-
+        let src_provider = registry
+            .for_path(from)
+            .ok_or_else(|| FsError::ProviderNotMounted(from.to_string()))?;
+        let meta = src_provider.metadata(from).await?;
         let is_dir = matches!(meta.kind, FsEntryKind::Directory);
-        let args: Vec<String> = if is_dir {
-            if local_is_src {
-                vec![
-                    "move".into(),
-                    local_arg.into(),
-                    remote_spec,
-                    "--create-empty-src-dirs".into(),
-                ]
-            } else {
-                vec![
-                    "move".into(),
-                    remote_spec,
-                    local_arg.into(),
-                    "--create-empty-src-dirs".into(),
-                ]
-            }
-        } else if local_is_src {
-            vec!["moveto".into(), local_arg.into(), remote_spec]
-        } else {
-            vec!["moveto".into(), remote_spec, local_arg.into()]
-        };
-
+        let args = rclone_transfer_args(
+            src_spec,
+            dst_spec,
+            is_dir,
+            is_move,
+            options.unwrap_or_default(),
+        );
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
         if is_dir {
-            self.run_rclone_with_progress(&arg_refs, progress, to).await?;
+            self.run_rclone_with_progress(&arg_refs, progress, to)
+                .await?;
         } else {
             self.run_rclone(&arg_refs).await?;
             if let Some(p) = progress {
@@ -737,6 +714,153 @@ impl Drop for RcloneWriteHandle {
     }
 }
 
+/// True when `scheme` is served by [`RcloneProvider`].
+#[must_use]
+pub fn is_rclone_scheme(scheme: &str) -> bool {
+    RCLONE_SCHEMES.contains(&scheme)
+}
+
+/// One-way `rclone sync` when at least one path is a configured rclone mount.
+///
+/// # Errors
+///
+/// Missing provider, unresolvable mount, or rclone failure.
+pub async fn rclone_sync(
+    registry: &FsProviderRegistry,
+    from: &FsPath,
+    to: &FsPath,
+    progress: Option<&ProgressSink>,
+) -> Result<()> {
+    if let Some(provider) = registry.for_path(from) {
+        if provider.sync_cross_scheme(from, to, progress).await? {
+            return Ok(());
+        }
+    }
+    if let Some(provider) = registry.for_path(to) {
+        if provider.sync_cross_scheme(from, to, progress).await? {
+            return Ok(());
+        }
+    }
+    Err(FsError::InvalidPath {
+        reason: "rclone sync needs a network mount on at least one side".into(),
+    })
+}
+
+fn join_rel(root_tail: &str, relative: &str) -> String {
+    let root = root_tail.trim_start_matches('/');
+    let rel = relative.trim_start_matches('/');
+    if rel.is_empty() {
+        root.to_string()
+    } else if root.is_empty() {
+        rel.to_string()
+    } else {
+        format!("{}/{rel}", root.trim_end_matches('/'))
+    }
+}
+
+fn format_inline_remote(backend: &str, params: &[String], subpath: &str) -> String {
+    let param_str = params.join(",");
+    if subpath.is_empty() {
+        format!(":{backend},{param_str}:")
+    } else {
+        format!(":{backend},{param_str}:{subpath}")
+    }
+}
+
+fn inline_backend_params(
+    scheme: &str,
+    host_part: &str,
+    mount: &orchid_storage::NetworkMountConfig,
+) -> Result<Vec<String>> {
+    let mut params = Vec::new();
+    match scheme {
+        "s3" => {
+            let user = mount.user.as_deref().filter(|u| !u.is_empty());
+            let pass = mount.password.as_deref().filter(|p| !p.is_empty());
+            match (user, pass) {
+                (Some(access), Some(secret)) => {
+                    let plaintext = resolve_mount_secret(mount, secret)?;
+                    params.push(format!("access_key_id={access}"));
+                    params.push(format!("secret_access_key={plaintext}"));
+                }
+                _ => params.push("env_auth=true".into()),
+            }
+        }
+        "ftps" => {
+            params.push(format!("host={host_part}"));
+            params.push("explicit_tls=true".into());
+            push_user_pass(&mut params, mount)?;
+        }
+        _ => {
+            params.push(format!("host={host_part}"));
+            push_user_pass(&mut params, mount)?;
+        }
+    }
+    Ok(params)
+}
+
+fn push_user_pass(
+    params: &mut Vec<String>,
+    mount: &orchid_storage::NetworkMountConfig,
+) -> Result<()> {
+    if let Some(user) = mount.user.as_deref().filter(|u| !u.is_empty()) {
+        params.push(format!("user={user}"));
+    }
+    if let Some(pass) = mount.password.as_deref().filter(|p| !p.is_empty()) {
+        let plaintext = resolve_mount_secret(mount, pass)?;
+        params.push(format!("pass={plaintext}"));
+    }
+    Ok(())
+}
+
+fn resolve_mount_secret(mount: &orchid_storage::NetworkMountConfig, stored: &str) -> Result<String> {
+    let plaintext =
+        orchid_crypto::resolve_stored_secret(stored).map_err(|e| FsError::InvalidPath {
+            reason: format!("mount `{}` password decrypt failed: {e}", mount.name),
+        })?;
+    if !orchid_crypto::is_protected(stored) && mount.rclone_remote.is_none() {
+        tracing::warn!(
+            mount = %mount.name,
+            "network mount uses plaintext inline password; prefer rclone-remote \
+             or let Orchid DPAPI-protect it on next config save \
+             (password is still visible in rclone argv)"
+        );
+    }
+    Ok(plaintext)
+}
+
+fn rclone_transfer_args(
+    src: String,
+    dst: String,
+    is_dir: bool,
+    is_move: bool,
+    options: CopyOptions,
+) -> Vec<String> {
+    let mut args = if is_dir {
+        vec![
+            if is_move { "move" } else { "copy" }.into(),
+            src,
+            dst,
+            "--create-empty-src-dirs".into(),
+        ]
+    } else {
+        vec![
+            if is_move { "moveto" } else { "copyto" }.into(),
+            src,
+            dst,
+        ]
+    };
+    if options.resume {
+        args.extend([
+            "--retries".into(),
+            "8".into(),
+            "--low-level-retries".into(),
+            "20".into(),
+        ]);
+    }
+    args
+}
+
 /// Parse `Transferred: …, 42%, …` from `rclone --stats-one-line` stderr.
 fn parse_rclone_stats_percent(line: &str) -> Option<u64> {
     if !line.contains("Transferred:") {
@@ -758,10 +882,15 @@ fn redact_secrets(text: &str) -> String {
         // Match `pass=` case-insensitively and redact until `,` / `:` / whitespace / end.
         let rest = &text[i..];
         let lower = rest.to_ascii_lowercase();
-        if let Some(rel) = lower.find("pass=") {
+        if let Some((rel, key)) = ["secret_access_key=", "password=", "pass="]
+            .into_iter()
+            .filter_map(|key| lower.find(key).map(|rel| (rel, key)))
+            .min_by_key(|(rel, _)| *rel)
+        {
             out.push_str(&text[i..i + rel]);
-            out.push_str("pass=***");
-            i += rel + "pass=".len();
+            out.push_str(key);
+            out.push_str("***");
+            i += rel + key.len();
             while i < bytes.len() {
                 let c = bytes[i] as char;
                 if c == ',' || c == ':' || c.is_whitespace() {
@@ -800,8 +929,9 @@ pub fn register_rclone_providers(
     mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
 ) -> Result<()> {
     for scheme in RCLONE_SCHEMES {
-        registry.register(Arc::new(RcloneProvider::new(scheme, mounts.clone()))
-            as Arc<dyn FsProvider>)?;
+        registry.register(
+            Arc::new(RcloneProvider::new(scheme, mounts.clone())) as Arc<dyn FsProvider>
+        )?;
     }
     Ok(())
 }
@@ -831,9 +961,7 @@ pub fn normalize_mount_uri(raw: &str) -> Option<String> {
         };
         return FsPath::new(&candidate).ok().map(|p| p.as_str().to_string());
     }
-    FsPath::new(trimmed)
-        .ok()
-        .map(|p| p.as_str().to_string())
+    FsPath::new(trimmed).ok().map(|p| p.as_str().to_string())
 }
 
 fn split_auth_host_path(rest: &str) -> (&str, &str) {
@@ -875,6 +1003,23 @@ mod tests {
             normalize_mount_uri("sftp:myserver/home/alice"),
             Some("sftp:myserver/home/alice".into())
         );
+    }
+
+    #[test]
+    fn backend_aliases() {
+        assert_eq!(rclone_backend("ftps"), "ftp");
+        assert_eq!(rclone_backend("scp"), "sftp");
+        assert_eq!(rclone_backend("s3"), "s3");
+        assert!(is_rclone_scheme("s3"));
+        assert!(is_rclone_scheme("ftps"));
+        assert!(!is_rclone_scheme("local"));
+    }
+
+    #[test]
+    fn join_rel_composes() {
+        assert_eq!(join_rel("home", "alice"), "home/alice");
+        assert_eq!(join_rel("", "alice"), "alice");
+        assert_eq!(join_rel("home", ""), "home");
     }
 
     #[test]

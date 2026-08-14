@@ -102,7 +102,7 @@ pub async fn copy_with_control(
         .for_path(to)
         .ok_or_else(|| FsError::ProviderNotMounted(to.to_string()))?;
 
-    if from.scheme() != to.scheme() {
+    if !from.is_local() || !to.is_local() {
         if let Some(provider) = registry.for_path(from) {
             if provider
                 .copy_cross_scheme(registry, from, to, options, progress)

@@ -21,7 +21,8 @@ use orchid_fs::{
 };
 use orchid_i18n::{default_language, LocaleId, LocaleManager};
 use orchid_storage::{
-    ConfigLoader, ConfigWatcher, NetworkMountConfig, OrchidConfig, OrchidPaths, StateStore,
+    load_network_bookmarks, merge_network_places, ConfigLoader, ConfigWatcher, NetworkMountConfig,
+    OrchidConfig, OrchidPaths, StateStore,
 };
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
@@ -432,9 +433,10 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("register local fs provider: {e}")))?;
         register_archive_provider(&fs_registry)
             .map_err(|e| UiError::Slint(format!("register archive provider: {e}")))?;
-        let network_mounts = Arc::new(RwLock::new(
-            config.read().file_manager.network_mounts.clone(),
-        ));
+        let network_mounts = Arc::new(RwLock::new(merge_network_places(
+            &config.read().file_manager.network_mounts,
+            &load_network_bookmarks(&paths.network_bookmarks_file),
+        )));
         register_rclone_providers(&fs_registry, network_mounts.clone())
             .map_err(|e| UiError::Slint(format!("register rclone providers: {e}")))?;
         let syntax_highlighter = Arc::new(orchid_viewers::SyntaxHighlighter::new());
@@ -603,6 +605,7 @@ impl OrchidApp {
             managed: Some(managed_engine),
             encrypted: Some(encrypted_engine),
             network_mounts: network_mounts.clone(),
+            network_bookmarks_file: Some(paths.network_bookmarks_file.clone()),
             recent_files: recent_files.clone(),
             fm_passphrase_vault: fm_passphrase_vault.clone(),
             orchid_config: config.clone(),
@@ -719,6 +722,7 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("config watcher: {e}")))?;
         let config_reload = config.clone();
         let mounts_reload = network_mounts.clone();
+        let bookmarks_reload = paths.network_bookmarks_file.clone();
         let bus_reload = bus.clone();
         tokio::spawn(async move {
             loop {
@@ -726,7 +730,10 @@ impl OrchidApp {
                     Ok(new_cfg) => {
                         info!("config.toml reloaded");
                         *config_reload.write() = new_cfg.clone();
-                        *mounts_reload.write() = new_cfg.file_manager.network_mounts.clone();
+                        *mounts_reload.write() = merge_network_places(
+                            &new_cfg.file_manager.network_mounts,
+                            &load_network_bookmarks(&bookmarks_reload),
+                        );
                         orchid_widgets::builtin::file_manager::refresh_all_instances().await;
                         bus_reload.publish(orchid_core::EventSource::System, ConfigUpdated);
                     }

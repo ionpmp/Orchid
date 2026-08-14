@@ -53,6 +53,8 @@ pub struct OrchidPaths {
     pub passwords_db_path: PathBuf,
     /// File path of the main TOML configuration file.
     pub config_file: PathBuf,
+    /// Runtime network-place bookmarks (TOML), distinct from `config.toml`.
+    pub network_bookmarks_file: PathBuf,
 }
 
 impl OrchidPaths {
@@ -128,6 +130,7 @@ impl OrchidPaths {
         let state_db_path = data_dir.join("state.redb");
         let passwords_db_path = data_dir.join("passwords.kdbx");
         let config_file = config_dir.join("config.toml");
+        let network_bookmarks_file = data_dir.join("network-bookmarks.toml");
 
         Self {
             config_dir,
@@ -142,6 +145,7 @@ impl OrchidPaths {
             state_db_path,
             passwords_db_path,
             config_file,
+            network_bookmarks_file,
         }
     }
 
@@ -195,8 +199,15 @@ mod tests {
         assert!(paths.themes_dir.starts_with(&paths.config_dir));
         assert!(paths.chunks_dir.starts_with(&paths.data_dir));
         assert_eq!(paths.state_db_path.file_name().unwrap(), "state.redb");
-        assert_eq!(paths.passwords_db_path.file_name().unwrap(), "passwords.kdbx");
+        assert_eq!(
+            paths.passwords_db_path.file_name().unwrap(),
+            "passwords.kdbx"
+        );
         assert_eq!(paths.config_file.file_name().unwrap(), "config.toml");
+        assert_eq!(
+            paths.network_bookmarks_file.file_name().unwrap(),
+            "network-bookmarks.toml"
+        );
     }
 
     #[test]

@@ -308,8 +308,15 @@ impl FsPath {
 fn normalise_body(body: &str) -> String {
     // Convert backslashes to forward slashes.
     let slashed = body.replace('\\', "/");
+    // UNC `//server/share`: keep the leading double slash, collapse the rest.
+    let (unc_prefix, slashed) = if let Some(rest) = slashed.strip_prefix("//") {
+        ("//", rest.to_string())
+    } else {
+        ("", slashed)
+    };
     // Collapse repeated slashes.
-    let mut collapsed = String::with_capacity(slashed.len());
+    let mut collapsed = String::with_capacity(unc_prefix.len() + slashed.len());
+    collapsed.push_str(unc_prefix);
     let mut prev_slash = false;
     for c in slashed.chars() {
         if c == '/' {
@@ -352,6 +359,14 @@ fn normalise_body(body: &str) -> String {
 /// Split a normalised body into (anchor, rest) where the anchor is the
 /// leading drive / root that must be preserved verbatim.
 fn split_anchor(body: &str) -> (&str, &str) {
+    // UNC `//server/` or `//server`.
+    if let Some(rest) = body.strip_prefix("//") {
+        return if let Some(slash) = rest.find('/') {
+            body.split_at(2 + slash + 1)
+        } else {
+            (body, "")
+        };
+    }
     // Leading slash (POSIX root).
     if let Some(stripped) = body.strip_prefix('/') {
         return ("/", stripped);
@@ -455,6 +470,15 @@ mod tests {
     fn normalisation_collapses_dots_and_slashes() {
         let p = FsPath::new("local:c:/a/./b//c/../d").unwrap();
         assert_eq!(p.as_str(), "local:c:/a/b/d");
+    }
+
+    #[test]
+    fn unc_path_keeps_double_slash() {
+        let p = FsPath::new(r"local:\\server\share\docs").unwrap();
+        assert_eq!(p.as_str(), "local://server/share/docs");
+        assert_eq!(p.to_local().unwrap(), PathBuf::from("//server/share/docs"));
+        let from_os = FsPath::from_local(Path::new(r"\\server\share")).unwrap();
+        assert_eq!(from_os.as_str(), "local://server/share");
     }
 
     #[test]

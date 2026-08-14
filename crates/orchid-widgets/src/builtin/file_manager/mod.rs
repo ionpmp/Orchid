@@ -53,7 +53,8 @@ pub use context_menu::{
 pub use find::{is_search_virtual, search_session_id, FindSpec, SearchSession};
 pub use navigation::{
     coerce_typed_path, complete_parent_and_prefix, drive_root, list_local_drives,
-    BreadcrumbSegment, DriveItem, NavigationResult, Navigator, PathCompleteItem,
+    list_mapped_network_shares, parse_net_use, BreadcrumbSegment, DriveItem, NavigationResult,
+    Navigator, PathCompleteItem,
 };
 pub use selection::{parse_byte_size, MaskOp, SelectFilter, SelectionModel};
 pub use state::{ActivePane, FileManagerState, PaneState, TabState};
@@ -218,6 +219,8 @@ pub struct FileManagerDeps {
     pub encrypted: Option<Arc<orchid_fs::EncryptedFolderEngine>>,
     /// Configured remote mounts from `config.toml` `[file-manager]`.
     pub network_mounts: Arc<RwLock<Vec<orchid_storage::NetworkMountConfig>>>,
+    /// Sidecar for runtime network-place bookmarks (`network-bookmarks.toml`).
+    pub network_bookmarks_file: Option<std::path::PathBuf>,
     /// Application-wide recent-files list.
     pub recent_files: Arc<crate::recent_files::RecentFilesStore>,
     /// DPAPI-backed passphrase for Windows Hello unlock of encrypted files.
@@ -1903,7 +1906,8 @@ impl FileManagerInner {
     }
 
     fn list_network_mounts(&self) -> Vec<orchid_fs::FsEntry> {
-        self.enabled_network_mounts()
+        let mut entries: Vec<orchid_fs::FsEntry> = self
+            .enabled_network_mounts()
             .into_iter()
             .filter_map(|m| {
                 let uri = orchid_fs::normalize_mount_uri(&m.uri)?;
@@ -1925,7 +1929,32 @@ impl FileManagerInner {
                     path,
                 })
             })
-            .collect()
+            .collect();
+        for share in list_mapped_network_shares() {
+            if entries.iter().any(|e| e.path.as_str() == share.path) {
+                continue;
+            }
+            let Ok(path) = orchid_fs::FsPath::new(&share.path) else {
+                continue;
+            };
+            entries.push(orchid_fs::FsEntry {
+                name: share.label,
+                metadata: orchid_fs::FsMetadata {
+                    kind: orchid_fs::FsEntryKind::Directory,
+                    size: 0,
+                    created: None,
+                    modified: None,
+                    accessed: None,
+                    readonly: false,
+                    hidden: false,
+                    system: false,
+                    mime: None,
+                    extended: orchid_fs::ExtendedAttributes::default(),
+                },
+                path,
+            });
+        }
+        entries
     }
 
     async fn list_tagged_paths(&self) -> Vec<orchid_fs::FsEntry> {
@@ -4395,6 +4424,9 @@ fn is_tools_action(id: &str) -> bool {
             | "fs.sync-to-other"
             | "fs.sync-from-other"
             | "fs.sync-both"
+            | "fs.cloud-sync"
+            | "fs.network-bookmark"
+            | "fs.network-connect"
             | "fs.merge-to-other"
             | "fs.split"
             | "fs.join"

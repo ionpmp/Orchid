@@ -256,6 +256,58 @@ pub fn list_local_drives() -> Vec<DriveItem> {
     out
 }
 
+/// Windows `net use` shares that have no drive letter (UNC-only mappings).
+#[must_use]
+pub fn list_mapped_network_shares() -> Vec<DriveItem> {
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("net").arg("use").output();
+        let Ok(output) = output else {
+            return Vec::new();
+        };
+        parse_net_use(&String::from_utf8_lossy(&output.stdout))
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}
+
+/// Parse `net use` stdout for UNC paths that are not assigned a drive letter.
+#[must_use]
+pub fn parse_net_use(text: &str) -> Vec<DriveItem> {
+    let mut out: Vec<DriveItem> = Vec::new();
+    for line in text.lines() {
+        let Some(idx) = line.find(r"\\") else {
+            continue;
+        };
+        let rest = &line[idx..];
+        let unc = rest.split_whitespace().next().unwrap_or("");
+        if !unc.starts_with(r"\\") {
+            continue;
+        }
+        let before = line[..idx].trim();
+        let has_letter = before.split_whitespace().any(|w| {
+            let b = w.as_bytes();
+            b.len() == 2 && b[1] == b':' && b[0].is_ascii_alphabetic()
+        });
+        if has_letter {
+            continue;
+        }
+        let Ok(fp) = orchid_fs::FsPath::from_local(std::path::Path::new(unc)) else {
+            continue;
+        };
+        if out.iter().any(|d| d.path == fp.as_str()) {
+            continue;
+        }
+        out.push(DriveItem {
+            path: fp.as_str().to_string(),
+            label: unc.replace('/', "\\"),
+        });
+    }
+    out
+}
+
 fn relative_display_name(root: &orchid_fs::FsPath, entry: &orchid_fs::FsPath) -> String {
     let root_s = root.as_str().trim_end_matches('/');
     let entry_s = entry.as_str();
@@ -310,5 +362,19 @@ mod complete_tests {
     #[test]
     fn list_local_drives_does_not_panic() {
         let _ = list_local_drives();
+    }
+
+    #[test]
+    fn parse_net_use_skips_lettered_keeps_unc() {
+        let sample = "\
+Status       Local     Remote                    Network\r
+-------------------------------------------------------------------------------\r
+OK           Z:        \\\\files\\docs            Microsoft Windows Network\r
+OK                     \\\\nas\\photos            Microsoft Windows Network\r
+The command completed successfully.\r
+";
+        let items = parse_net_use(sample);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].path, "local://nas/photos");
     }
 }

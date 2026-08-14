@@ -738,6 +738,24 @@ fn tools_menu(
             dual,
         ),
         item("fs.sync-both", "fm-action-sync-both", "action-copy", dual),
+        item(
+            "fs.cloud-sync",
+            "fm-action-cloud-sync",
+            "action-copy",
+            dual,
+        ),
+        item(
+            "fs.network-bookmark",
+            "fm-action-network-bookmark",
+            "action-copy",
+            true,
+        ),
+        item(
+            "fs.network-connect",
+            "fm-action-network-connect",
+            "action-copy",
+            true,
+        ),
         item("fs.merge-to-other", "fm-action-merge", "action-copy", dual),
         item(
             "fs.split",

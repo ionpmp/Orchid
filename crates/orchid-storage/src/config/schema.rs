@@ -320,7 +320,7 @@ impl Default for SearchConfig {
     }
 }
 
-/// One configured remote mount (SFTP, SMB, WebDAV, …).
+/// One configured remote mount (SFTP, SCP, SMB, FTP, FTPS, WebDAV, S3, …).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct NetworkMountConfig {
@@ -497,7 +497,10 @@ mod tests {
         let cfg = ShortcutsConfig::default();
         assert_eq!(cfg.leader_key.as_deref(), Some("Ctrl+Shift+Space"));
         assert_eq!(cfg.leader_timeout_ms, 1200);
-        assert_eq!(cfg.leader_bindings.get("p").map(String::as_str), Some("command-palette"));
+        assert_eq!(
+            cfg.leader_bindings.get("p").map(String::as_str),
+            Some("command-palette")
+        );
     }
 
     #[test]

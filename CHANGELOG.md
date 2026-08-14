@@ -59,7 +59,10 @@ release yet.
   ZIP, RAR, 7z, TAR / TAR.GZ / TAR.XZ / TAR.BZ2, CAB, ISO, ACE, ARJ, LZH;
   nested archives open after a temp extract.
 - Encrypted folders (age), managed folders with content-addressed ingest
-  (BLAKE3 + FastCDC), rclone network mounts (SFTP / SMB / WebDAV / FTP).
+  (BLAKE3 + FastCDC), rclone network mounts (SFTP / SCP / SMB / FTP / FTPS /
+  WebDAV / S3 and OAuth clouds via `rclone-remote`), remote-to-remote copy,
+  FTP resume retries, `rclone sync` cloud sync, runtime network bookmarks,
+  and letterless Windows UNC mappings.
 - Tantivy search with incremental FS watcher, PDF/text/DOCX extractors,
   universal search (files + commands + settings).
 

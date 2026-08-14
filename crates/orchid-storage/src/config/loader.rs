@@ -81,9 +81,12 @@ hint-mode-enabled = false
 
 # [file-manager]
 # Remote mounts shown under the file manager Network sidebar.
+# Schemes: sftp, scp (via sftp), smb, ftp, ftps, webdav, s3, plus OAuth
+# clouds (drive, onedrive, dropbox) which require `rclone-remote`.
 # Prefer `rclone-remote` (credentials stay in rclone.conf). Inline `password`
-# is supported for quick tests but is stored in plaintext and may appear in
-# the rclone process command line — avoid it on shared machines.
+# is supported for quick tests but may appear in the rclone process command
+# line — avoid it on shared machines. Orchid DPAPI-protects inline secrets
+# on save. Runtime bookmarks live in data/network-bookmarks.toml.
 # [[file-manager.network-mounts]]
 # name = "Home SFTP"
 # uri = "sftp://myserver/home/alice"
@@ -91,6 +94,16 @@ hint-mode-enabled = false
 # # password = "secret"   # discouraged — prefer rclone-remote
 # rclone-remote = "myserver"
 # enabled = true
+# [[file-manager.network-mounts]]
+# name = "Photos S3"
+# uri = "s3:my-bucket/photos"
+# user = "AKIA..."          # access_key_id; omit both user+password for env_auth
+# # password = "secret"
+# enabled = true
+# [[file-manager.network-mounts]]
+# name = "FTPS inbox"
+# uri = "ftps://files.example.com/inbox"
+# rclone-remote = "ftps-inbox"
 
 # [search]
 # Tantivy index roots (Orchid FsPath strings). Empty = user Documents folder.
@@ -273,11 +286,7 @@ mod tests {
     fn load_rejects_semantically_invalid_config() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("config.toml");
-        fs::write(
-            &path,
-            "[appearance]\nfont-scale = 10.0\n",
-        )
-        .unwrap();
+        fs::write(&path, "[appearance]\nfont-scale = 10.0\n").unwrap();
         let err = ConfigLoader::load(&path).unwrap_err();
         assert!(matches!(err, StorageError::ConfigValidation(_)));
     }

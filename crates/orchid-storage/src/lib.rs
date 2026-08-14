@@ -36,10 +36,10 @@ pub mod paths;
 pub mod state;
 
 pub use config::{
-    AppearanceConfig, Config, ConfigLoader, ConfigWatcher, Density, FileManagerSectionConfig,
-    GeneralConfig, Hand, InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig,
-    OrchidConfig, PenDoubleTapAction, PrivacyConfig, SearchConfig, ShortcutsConfig,
-    DEFAULT_CONFIG_TOML,
+    load_network_bookmarks, merge_network_places, save_network_bookmarks, AppearanceConfig, Config,
+    ConfigLoader, ConfigWatcher, Density, FileManagerSectionConfig, GeneralConfig, Hand,
+    InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig,
+    PenDoubleTapAction, PrivacyConfig, SearchConfig, ShortcutsConfig, DEFAULT_CONFIG_TOML,
 };
 pub use error::{Result, StorageError};
 pub use paths::OrchidPaths;
@@ -48,7 +48,8 @@ pub use state::{
     GridPosition, HistoryEntry, LifecycleState, Migration, NotificationCenterItem,
     NotificationCenterState, PixelRect, ReadTransaction, SchemaMeta, SessionState, StateStore,
     TerminalBackend, TerminalSession, Value, ViewMode, WidgetInstance, WidgetSize, WindowPlacement,
-    WindowState, Workspace, WriteTransaction, CURRENT_SCHEMA_VERSION, NOTIFICATION_CENTER_CACHE_KEY,
+    WindowState, Workspace, WriteTransaction, CURRENT_SCHEMA_VERSION,
+    NOTIFICATION_CENTER_CACHE_KEY,
 };
 
 /// Returns the version of this crate.

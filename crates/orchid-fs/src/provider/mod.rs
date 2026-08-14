@@ -24,7 +24,10 @@ use crate::path::FsPath;
 
 pub use archive::{register_archive_provider, ArchiveProvider};
 pub use local::LocalProvider;
-pub use rclone::{normalize_mount_uri, register_rclone_providers, RcloneProvider, RCLONE_SCHEMES};
+pub use rclone::{
+    is_rclone_scheme, normalize_mount_uri, rclone_backend, rclone_sync, register_rclone_providers,
+    RcloneProvider, RCLONE_SCHEMES,
+};
 pub use registry::FsProviderRegistry;
 
 /// Identifier for a registered provider.
@@ -193,6 +196,17 @@ pub trait FsProvider: Send + Sync + 'static {
     async fn move_cross_scheme(
         &self,
         _registry: &FsProviderRegistry,
+        _from: &FsPath,
+        _to: &FsPath,
+        _progress: Option<&ProgressSink>,
+    ) -> Result<bool> {
+        Ok(false)
+    }
+
+    /// One-way backend sync (rclone `sync`) when this provider can run it.
+    /// Returns `Ok(true)` when handled.
+    async fn sync_cross_scheme(
+        &self,
         _from: &FsPath,
         _to: &FsPath,
         _progress: Option<&ProgressSink>,
