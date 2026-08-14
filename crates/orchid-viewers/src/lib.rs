@@ -32,6 +32,10 @@ pub use document::{
 };
 pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
+pub use image::adjust::{
+    apply_adjust, apply_adjust_file, pack_adjust_params, parse_adjust_line, AdjustOp, AdjustParams,
+    CurveSet, SelectiveBand,
+};
 pub use image::edit::{
     apply_edit, apply_edit_file, parse_canvas_line, parse_resize_line, parse_resize_spec,
     save_sibling, CropKeep, EditOp, ResizeSpec,

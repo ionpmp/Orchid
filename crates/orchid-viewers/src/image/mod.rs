@@ -2,6 +2,7 @@
 
 use std::any::Any;
 
+pub mod adjust;
 pub mod color;
 pub mod edit;
 pub mod exif;
