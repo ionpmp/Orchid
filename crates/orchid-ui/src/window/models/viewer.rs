@@ -247,6 +247,21 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         slideshow_export_video_label: locale.tr("viewer-image-slideshow-export-video").into(),
         slideshow_export_exe_label: locale.tr("viewer-image-slideshow-export-exe").into(),
         slideshow_export_scr_label: locale.tr("viewer-image-slideshow-export-scr").into(),
+        meta_panel: false,
+        meta_overlay: false,
+        meta_text: SharedString::new(),
+        meta_overlay_text: SharedString::new(),
+        hist_image: Image::default(),
+        hist_width: 0,
+        hist_height: 0,
+        hist_mode: 0,
+        probe_text: SharedString::new(),
+        gps_label: SharedString::new(),
+        has_gps: false,
+        meta_label: locale.tr("viewer-image-meta").into(),
+        meta_overlay_label: locale.tr("viewer-image-meta-overlay").into(),
+        histogram_label: locale.tr("viewer-image-histogram").into(),
+        gps_map_label: locale.tr("viewer-image-gps-map").into(),
     }
 }
 
@@ -726,6 +741,14 @@ fn build_image_snapshot(
         .with("size", locale.format_byte_size(s.size_bytes))
         .with("format", viewer_image_format_label(locale, &s.format_label));
     let mut info = locale.tr_args("viewer-image-info", &args);
+    if s.bit_depth > 0 {
+        info.push_str(" · ");
+        info.push_str(&format!("{}-bit", s.bit_depth));
+        if !s.color_model.is_empty() {
+            info.push(' ');
+            info.push_str(&s.color_model);
+        }
+    }
     if !s.color_source.is_empty() {
         info.push_str(" · ");
         info.push_str(&s.color_source);
@@ -875,6 +898,26 @@ fn build_image_snapshot(
         slideshow_export_video_label: locale.tr("viewer-image-slideshow-export-video").into(),
         slideshow_export_exe_label: locale.tr("viewer-image-slideshow-export-exe").into(),
         slideshow_export_scr_label: locale.tr("viewer-image-slideshow-export-scr").into(),
+        meta_panel: s.meta_panel,
+        meta_overlay: s.meta_overlay,
+        meta_text: s.meta_text.clone().into(),
+        meta_overlay_text: s.meta_overlay_text.clone().into(),
+        hist_image: match &s.hist_rgba {
+            Some(rgba) if s.hist_width > 0 && s.hist_height > 0 => {
+                slint_image_from_rgba(rgba, s.hist_width, s.hist_height)
+            }
+            _ => Image::default(),
+        },
+        hist_width: s.hist_width as i32,
+        hist_height: s.hist_height as i32,
+        hist_mode: i32::from(s.hist_mode),
+        probe_text: s.probe_text.clone().into(),
+        gps_label: s.gps_label.clone().into(),
+        has_gps: s.has_gps,
+        meta_label: locale.tr("viewer-image-meta").into(),
+        meta_overlay_label: locale.tr("viewer-image-meta-overlay").into(),
+        histogram_label: locale.tr("viewer-image-histogram").into(),
+        gps_map_label: locale.tr("viewer-image-gps-map").into(),
     }
 }
 

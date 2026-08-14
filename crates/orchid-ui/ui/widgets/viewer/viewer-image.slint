@@ -216,7 +216,9 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == "o" || event.text == "O") {
-                if (event.modifiers.shift) {
+                if (event.modifiers.control && event.modifiers.shift) {
+                    root.command("meta-overlay");
+                } else if (event.modifiers.shift) {
                     root.command("slideshow-overlay");
                 } else {
                     root.command("reveal-folder");
@@ -248,7 +250,11 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == "i" || event.text == "I") {
-                root.command("thumb-meta");
+                if (event.modifiers.shift) {
+                    root.command("meta-panel");
+                } else {
+                    root.command("thumb-meta");
+                }
                 return accept;
             }
             if (event.text == "p" || event.text == "P") {
@@ -280,6 +286,10 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == "h" || event.text == "H") {
+                if (event.modifiers.control) {
+                    root.command("hist-mode");
+                    return accept;
+                }
                 // H is flip when not Shift? Keep H as flip; use Shift+H for recent.
                 if (event.modifiers.shift) {
                     root.show-recent = !root.show-recent;
@@ -818,6 +828,50 @@ export component ViewerImageView inherits Rectangle {
                     HorizontalLayout {
                         padding-left: 6px; padding-right: 6px;
                         Text { text: model.contact-sheet-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.meta-panel ? Theme.surface-raised
+                        : meta-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    meta-ta := TouchArea {
+                        clicked => { root.command("meta-panel"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.meta-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.meta-overlay ? Theme.surface-raised
+                        : movl-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    movl-ta := TouchArea {
+                        clicked => { root.command("meta-overlay"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.meta-overlay-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: hist-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hist-ta := TouchArea {
+                        clicked => { root.command("hist-mode"); img-keys.focus(); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 6px;
+                        Text { text: model.histogram-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
 
@@ -1828,6 +1882,25 @@ export component ViewerImageView inherits Rectangle {
                 transform-scale-y: model.flipped-v ? -1 : 1;
             }
 
+            if model.meta-overlay && model.meta-overlay-text != "" : Rectangle {
+                x: 16px;
+                y: 16px;
+                width: min(parent.width - 32px, meta-ovl.preferred-width + 20px);
+                height: meta-ovl.preferred-height + 12px;
+                background: #000000aa;
+                border-radius: Theme.radius-md;
+                z: 25;
+                meta-ovl := Text {
+                    x: 10px;
+                    y: 6px;
+                    width: parent.width - 20px;
+                    text: model.meta-overlay-text;
+                    color: #ffffff;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
+            }
+
             if model.slideshow-playing && model.slideshow-overlay && model.slideshow-overlay-text != "" : Rectangle {
                 x: 16px;
                 y: parent.height - self.height - 16px;
@@ -1904,6 +1977,12 @@ export component ViewerImageView inherits Rectangle {
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
                     }
+                    if (model.meta-panel || model.meta-overlay) {
+                        root.command("probe:"
+                            + floor((self.mouse-x - canvas.img-left) / 1px / max(0.01, model.zoom))
+                            + ":"
+                            + floor((self.mouse-y - canvas.img-top) / 1px / max(0.01, model.zoom)));
+                    }
                 }
                 scroll-event(event) => {
                     if (event.modifiers.control) {
@@ -1952,6 +2031,84 @@ export component ViewerImageView inherits Rectangle {
                     transform-rotation: model.rotation-deg * 1deg;
                     transform-scale-x: model.flipped-h ? -1 : 1;
                     transform-scale-y: model.flipped-v ? -1 : 1;
+                }
+            }
+
+            if (model.meta-panel || model.meta-overlay) && model.probe-text != "" : Rectangle {
+                x: min(pan-area.mouse-x + 14px, parent.width - self.width - 8px);
+                y: min(pan-area.mouse-y + 14px, parent.height - self.height - 8px);
+                width: probe-txt.preferred-width + 16px;
+                height: probe-txt.preferred-height + 10px;
+                background: #000000cc;
+                border-radius: Theme.radius-md;
+                z: 60;
+                probe-txt := Text {
+                    x: 8px;
+                    y: 5px;
+                    text: model.probe-text;
+                    color: #ffffff;
+                    font-size: Theme.font-size-sm;
+                    font-family: Theme.font-family-mono;
+                }
+            }
+
+            if model.meta-panel : Rectangle {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: min(320px, parent.width * 0.46);
+                height: min(parent.height - 16px, 560px);
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+                z: 55;
+                clip: true;
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+                    if model.hist-width > 0 : Image {
+                        source: model.hist-image;
+                        width: parent.width;
+                        height: 72px;
+                        image-fit: fill;
+                    }
+                    if model.probe-text != "" : Text {
+                        text: model.probe-text;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-mono;
+                        wrap: word-wrap;
+                    }
+                    if model.has-gps : Rectangle {
+                        height: 26px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TouchArea {
+                            clicked => { root.command("gps-map"); img-keys.focus(); }
+                        }
+                        Text {
+                            text: model.gps-map-label + "  " + model.gps-label;
+                            color: Theme.accent-brand;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                    }
+                    Flickable {
+                        vertical-stretch: 1;
+                        viewport-width: self.width;
+                        viewport-height: max(self.height, meta-body.preferred-height);
+                        meta-body := Text {
+                            width: parent.width;
+                            text: model.meta-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-mono;
+                            wrap: word-wrap;
+                        }
+                    }
                 }
             }
 

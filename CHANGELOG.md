@@ -114,6 +114,11 @@ release yet.
   duration (J / Shift+J), loop, name/date/EXIF overlay (Shift+O), folder
   background music (Shift+M / ffplay), and export to HTML player, ffmpeg
   MP4, optional self-running EXE, and `.scr` screensaver.
+- Image metadata inspector: EXIF (camera / lens / exposure / date), IPTC,
+  XMP, GPS with OpenStreetMap, file size / dimensions / bit depth / ICC,
+  MD5 and SHA-256, brightness+RGB histogram, and RGB/HSL/HEX/CMYK under
+  the cursor. Shift+I opens the panel; Ctrl+Shift+O overlays EXIF;
+  Ctrl+H cycles the histogram (`Shift+I` / `Ctrl+Shift+O` / `Ctrl+H`).
 - FM **F3** opens the Lister (view), **F4** opens the built-in editor;
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find

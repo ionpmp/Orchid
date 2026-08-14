@@ -1,5 +1,6 @@
 //! Viewer widget: wraps an [`orchid_viewers::Viewer`] for any given path.
 
+mod image_inspect;
 mod image_nav;
 mod image_slideshow;
 mod image_thumbs;
@@ -14,7 +15,7 @@ use dashmap::DashMap;
 use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
-    apply_lossless, format_from_extension, ArchiveViewer, DocumentViewer, ImageFitMode,
+    apply_lossless, format_from_extension, ArchiveViewer, DocumentViewer, HistMode, ImageFitMode,
     ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
     TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
 };
@@ -76,6 +77,10 @@ struct ViewerPersisted {
     slide_transition_ms: u32,
     #[serde(default = "default_true")]
     slide_overlay: bool,
+    #[serde(default)]
+    meta_overlay: bool,
+    #[serde(default)]
+    hist_mode: u8,
 }
 
 fn default_true() -> bool {
@@ -126,6 +131,8 @@ impl Default for ViewerPersisted {
             slide_transition: 1,
             slide_transition_ms: 500,
             slide_overlay: true,
+            meta_overlay: false,
+            hist_mode: 0,
         }
     }
 }
@@ -149,6 +156,7 @@ impl ViewerPersisted {
         image_loop: bool,
         thumbs: &image_thumbs::ImageThumbState,
         slide: &image_slideshow::SlideshowState,
+        inspect: &image_inspect::InspectState,
     ) -> Self {
         let (floating_on, float_x, float_y, float_w, float_h) = match floating {
             Some(b) => (true, Some(b.x), Some(b.y), Some(b.width), Some(b.height)),
@@ -172,6 +180,8 @@ impl ViewerPersisted {
             slide_transition: slide.transition.as_u8(),
             slide_transition_ms: slide.transition_ms,
             slide_overlay: slide.overlay,
+            meta_overlay: inspect.overlay,
+            hist_mode: inspect.hist_mode.as_u8(),
         }
     }
 }
@@ -221,6 +231,8 @@ struct ViewerWidgetInner {
     slideshow: RwLock<image_slideshow::SlideshowState>,
     slide_tick: AtomicU64,
     music_child: parking_lot::Mutex<Option<std::process::Child>>,
+    inspect: RwLock<image_inspect::InspectState>,
+    inspect_gen: AtomicU64,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -414,6 +426,7 @@ impl ViewerWidgetInner {
             &self.image_nav.read(),
             Some(&self.image_thumbs.read()),
             Some(&self.slideshow.read()),
+            Some(&self.inspect.read()),
         ));
     }
 
@@ -438,6 +451,46 @@ impl ViewerWidgetInner {
         if self.slideshow.read().overlay {
             self.slideshow.write().overlay_text = image_slideshow::overlay_for_path(path);
         }
+        self.schedule_inspect(path);
+    }
+
+    fn schedule_inspect(&self, path: &orchid_fs::FsPath) {
+        let gen = self.inspect_gen.fetch_add(1, Ordering::Relaxed) + 1;
+        let path = path.clone();
+        let inner = {
+            let Some(entry) = VIEWER_LIVE.get(&self.instance_id) else {
+                return;
+            };
+            Arc::clone(entry.value())
+        };
+        let snap = match self.snapshot.read().clone() {
+            Some(ViewerSnapshot::Image(s)) => Some(s),
+            _ => None,
+        };
+        tokio::task::spawn_blocking(move || {
+            if inner.inspect_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            let inspect = match image_inspect::inspect_local(&path) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(error = %e, "image inspect failed");
+                    return;
+                }
+            };
+            if inner.inspect_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            let hist = snap.as_ref().map(image_inspect::histogram_from_snap);
+            {
+                let mut st = inner.inspect.write();
+                st.apply_inspect(path.as_str(), inspect, snap.as_ref());
+                if let Some(h) = hist {
+                    st.set_histogram(h);
+                }
+            }
+            inner.publish_refresh();
+        });
     }
 
     async fn navigate_images(&self, step: image_nav::NavStep) -> WidgetResult<()> {
@@ -509,6 +562,7 @@ impl ViewerWidgetInner {
                 &self.image_nav.read(),
                 Some(&self.image_thumbs.read()),
                 Some(&self.slideshow.read()),
+                Some(&self.inspect.read()),
             ));
         }
         drop(guard);
@@ -916,6 +970,8 @@ impl ViewerWidget {
                 slideshow: RwLock::new(image_slideshow::SlideshowState::default()),
                 slide_tick: AtomicU64::new(0),
                 music_child: parking_lot::Mutex::new(None),
+                inspect: RwLock::new(image_inspect::InspectState::default()),
+                inspect_gen: AtomicU64::new(0),
                 bus,
             }),
         }
@@ -1031,6 +1087,7 @@ fn apply_image_overlay(
     nav: &image_nav::ImageFolderNav,
     thumbs: Option<&image_thumbs::ImageThumbState>,
     slide: Option<&image_slideshow::SlideshowState>,
+    inspect: Option<&image_inspect::InspectState>,
 ) -> ViewerSnapshot {
     match snap {
         ViewerSnapshot::Image(mut s) => {
@@ -1059,6 +1116,24 @@ fn apply_image_overlay(
                 s.prev_rgba = sl.prev_rgba.clone();
                 s.prev_width = sl.prev_w;
                 s.prev_height = sl.prev_h;
+            }
+            if let Some(ins) = inspect {
+                s.meta_panel = ins.panel;
+                s.meta_overlay = ins.overlay;
+                s.meta_text = ins.report.clone();
+                s.meta_overlay_text = ins.overlay_text.clone();
+                s.hist_rgba = ins.hist_rgba.clone();
+                s.hist_width = if ins.hist_rgba.is_some() { 256 } else { 0 };
+                s.hist_height = if ins.hist_rgba.is_some() { 72 } else { 0 };
+                s.hist_mode = ins.hist_mode.as_u8();
+                s.probe_text = ins.probe.clone();
+                s.gps_label = ins
+                    .inspect
+                    .as_ref()
+                    .and_then(|i| i.gps)
+                    .map(|g| g.label())
+                    .unwrap_or_default();
+                s.has_gps = ins.inspect.as_ref().and_then(|i| i.gps).is_some();
             }
             ViewerSnapshot::Image(s)
         }
@@ -1315,14 +1390,19 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             | "slideshow-export-html"
             | "slideshow-export-video"
             | "slideshow-export-exe"
-            | "slideshow-export-scr" => {}
+            | "slideshow-export-scr"
+            | "meta-panel"
+            | "meta-overlay"
+            | "hist-mode"
+            | "gps-map" => {}
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
                 || cmd.starts_with("lossless")
                 || cmd.starts_with("preload:")
                 || cmd.starts_with("open-thumb:")
                 || cmd.starts_with("slideshow-interval:")
-                || cmd.starts_with("slideshow-music:") => {}
+                || cmd.starts_with("slideshow-music:")
+                || cmd.starts_with("probe:") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -1556,6 +1636,44 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 }
             }
             inner.refresh_snapshot().await;
+        }
+        "meta-panel" => {
+            let next = !inner.inspect.read().panel;
+            inner.inspect.write().panel = next;
+            inner.refresh_snapshot().await;
+        }
+        "meta-overlay" => {
+            let next = !inner.inspect.read().overlay;
+            inner.inspect.write().overlay = next;
+            inner.refresh_snapshot().await;
+        }
+        "hist-mode" => {
+            inner.inspect.write().cycle_hist_mode();
+            inner.refresh_snapshot().await;
+        }
+        "gps-map" => {
+            if let Some(url) = inner.inspect.read().gps_url() {
+                let _ = opener::open(url);
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("probe:") => {
+            let parts: Vec<&str> = raw.split(':').collect();
+            if parts.len() == 2 {
+                if let (Ok(x), Ok(y)) = (parts[0].parse::<i32>(), parts[1].parse::<i32>()) {
+                    let changed = {
+                        let Some(ViewerSnapshot::Image(s)) = inner.snapshot.read().clone() else {
+                            return Ok(());
+                        };
+                        inner.inspect.write().probe_pixel(&s, x, y)
+                    };
+                    if changed {
+                        if let Some(ViewerSnapshot::Image(s)) = inner.snapshot.write().as_mut() {
+                            s.probe_text = inner.inspect.read().probe.clone();
+                        }
+                        inner.publish_refresh();
+                    }
+                }
+            }
         }
         _ => inner.refresh_snapshot().await,
     }
@@ -2568,6 +2686,7 @@ impl Widget for ViewerWidget {
                     &self.inner.image_nav.read(),
                     Some(&self.inner.image_thumbs.read()),
                     Some(&self.inner.slideshow.read()),
+                    Some(&self.inner.inspect.read()),
                 ),
             }),
         })
@@ -2583,8 +2702,9 @@ impl Widget for ViewerWidget {
         let image_loop = self.inner.image_nav.read().loop_playlist;
         let thumbs = self.inner.image_thumbs.read().clone();
         let slide = self.inner.slideshow.read().clone();
+        let inspect = self.inner.inspect.read().clone();
         state_codec::save_state(&ViewerPersisted::from_live(
-            path, floating, image_loop, &thumbs, &slide,
+            path, floating, image_loop, &thumbs, &slide, &inspect,
         ))
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
@@ -2600,6 +2720,7 @@ impl Widget for ViewerWidget {
         self.inner.image_nav.write().loop_playlist = persisted.image_loop;
         apply_persisted_thumbs(&self.inner, &persisted);
         apply_persisted_slideshow(&self.inner, &persisted);
+        apply_persisted_inspect(&self.inner, &persisted);
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -2645,6 +2766,12 @@ fn apply_persisted_slideshow(inner: &ViewerWidgetInner, persisted: &ViewerPersis
     sl.overlay = persisted.slide_overlay;
 }
 
+fn apply_persisted_inspect(inner: &ViewerWidgetInner, persisted: &ViewerPersisted) {
+    let mut ins = inner.inspect.write();
+    ins.overlay = persisted.meta_overlay;
+    ins.hist_mode = HistMode::from_u8(persisted.hist_mode);
+}
+
 /// Descriptor for the viewer widget. The caller injects shared deps
 /// (provider registry + syntax highlighter).
 #[must_use]
@@ -2685,6 +2812,7 @@ pub fn descriptor(deps: ViewerDeps) -> WidgetDescriptor {
         widget.inner.image_nav.write().loop_playlist = persisted.image_loop;
         apply_persisted_thumbs(&widget.inner, &persisted);
         apply_persisted_slideshow(&widget.inner, &persisted);
+        apply_persisted_inspect(&widget.inner, &persisted);
         Ok(Box::new(widget) as Box<dyn Widget>)
     });
     WidgetDescriptor {
