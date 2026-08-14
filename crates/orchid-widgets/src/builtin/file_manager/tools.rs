@@ -62,6 +62,10 @@ pub(super) async fn run(
         "fs.acl-grant" => acl_grant_set(inner, paths, input).await,
         "fs.acl-reset" => acl_reset(inner, paths).await,
         "fs.properties" => file_properties(inner, paths).await,
+        "fs.share" | "fs.share-view" => share_report(inner, paths).await,
+        "fs.share-add" => share_add(inner, paths, input).await,
+        "fs.share-remove" => share_remove(inner, paths, opts).await,
+        "fs.share-os" => share_os_tab(inner, paths).await,
         "fs.exif" => exif_report(inner, paths).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
@@ -81,7 +85,10 @@ fn file_ext(path: &orchid_fs::FsPath) -> String {
         .unwrap_or_default()
 }
 
-fn first_path(inner: &Arc<FileManagerInner>, paths: &[String]) -> Result<orchid_fs::FsPath, WidgetError> {
+fn first_path(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> Result<orchid_fs::FsPath, WidgetError> {
     if let Some(raw) = paths.first().filter(|s| !s.is_empty()) {
         return orchid_fs::FsPath::new(raw).map_err(map_fs_error);
     }
@@ -109,9 +116,15 @@ async fn file_properties(
         orchid_fs::FsEntryKind::Other => locale.tr("fm-properties-kind-file"),
     };
     let attrs = [
-        props.readonly.then_some(locale.tr("fm-properties-attr-readonly")),
-        props.hidden.then_some(locale.tr("fm-properties-attr-hidden")),
-        props.system.then_some(locale.tr("fm-properties-attr-system")),
+        props
+            .readonly
+            .then_some(locale.tr("fm-properties-attr-readonly")),
+        props
+            .hidden
+            .then_some(locale.tr("fm-properties-attr-hidden")),
+        props
+            .system
+            .then_some(locale.tr("fm-properties-attr-system")),
     ]
     .into_iter()
     .flatten()
@@ -149,10 +162,182 @@ async fn file_properties(
         body.push('\n');
     }
     append_content_metadata(&mut body, locale, &fp);
+    append_sharing(&mut body, locale, &fp).await;
     Ok(report(locale.tr("fm-properties-title"), body))
 }
 
-fn append_content_metadata(body: &mut String, locale: &orchid_i18n::LocaleManager, fp: &orchid_fs::FsPath) {
+async fn append_sharing(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    fp: &orchid_fs::FsPath,
+) {
+    body.push('\n');
+    body.push_str(&locale.tr("fm-share-title"));
+    body.push('\n');
+    match orchid_fs::shares_for_path(fp).await {
+        Ok(shares) if shares.is_empty() => {
+            body.push_str(&locale.tr("fm-share-not-shared"));
+            body.push('\n');
+        }
+        Ok(shares) => {
+            for share in shares {
+                push_share_lines(body, locale, &share);
+            }
+        }
+        Err(_) => {
+            body.push_str(&locale.tr("fm-share-unsupported"));
+            body.push('\n');
+        }
+    }
+}
+
+fn push_share_lines(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    share: &orchid_fs::FolderShare,
+) {
+    let args = |key: &str, value: String| {
+        locale.tr_args(key, &orchid_i18n::FluentArgs::new().with("value", value))
+    };
+    body.push_str(&args("fm-share-name", share.name.clone()));
+    body.push('\n');
+    body.push_str(&args("fm-share-unc", share.unc.clone()));
+    body.push('\n');
+    if !share.remark.is_empty() {
+        body.push_str(&args("fm-share-remark", share.remark.clone()));
+        body.push('\n');
+    }
+    if !share.exact {
+        body.push_str(&locale.tr("fm-share-via-parent"));
+        body.push('\n');
+    }
+    if share.administrative {
+        body.push_str(&locale.tr("fm-share-admin"));
+        body.push('\n');
+    }
+    let users = if let Some(max) = share.max_uses {
+        locale.tr_args(
+            "fm-share-users",
+            &orchid_i18n::FluentArgs::new()
+                .with("current", share.current_uses.to_string())
+                .with("max", max.to_string()),
+        )
+    } else {
+        locale.tr_args(
+            "fm-share-users-unlimited",
+            &orchid_i18n::FluentArgs::new().with("current", share.current_uses.to_string()),
+        )
+    };
+    body.push_str(&users);
+    body.push('\n');
+}
+
+async fn share_report(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fp = first_path(inner, paths)?;
+    let mut body = String::new();
+    append_sharing(&mut body, locale, &fp).await;
+    Ok(report(locale.tr("fm-share-title"), body))
+}
+
+async fn share_add(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    let default_name = fp.file_name().unwrap_or("share").to_string();
+    let Some(raw) = input else {
+        return Ok(prompt(
+            "fs.share-add",
+            paths,
+            &default_name,
+            inner.deps.locale.tr("fm-share-add-title"),
+            inner.deps.locale.tr("fm-share-add-hint"),
+        ));
+    };
+    let (name, remark) = parse_share_spec(raw, &default_name);
+    let share = orchid_fs::add_folder_share(&fp, name, remark)
+        .await
+        .map_err(map_fs_error)?;
+    Ok(report(
+        inner.deps.locale.tr("fm-share-title"),
+        inner.deps.locale.tr_args(
+            "fm-share-add-done",
+            &orchid_i18n::FluentArgs::new().with("name", share.name),
+        ),
+    ))
+}
+
+fn parse_share_spec<'a>(raw: &'a str, fallback: &'a str) -> (&'a str, &'a str) {
+    let t = raw.trim();
+    if t.is_empty() {
+        return (fallback, "");
+    }
+    if let Some((name, remark)) = t.split_once('|') {
+        let name = name.trim();
+        (if name.is_empty() { fallback } else { name }, remark.trim())
+    } else {
+        (t, "")
+    }
+}
+
+async fn share_remove(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    opts: RunActionOpts,
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    let shares = orchid_fs::shares_for_path(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    let Some(share) = orchid_fs::exact_user_share(&shares) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "fm-error-share-not-shared".into(),
+        ));
+    };
+    if !opts.skip_confirm {
+        return Ok(ActionOutcome::NeedsConfirmation {
+            message: inner.deps.locale.tr_args(
+                "fm-confirm-share-remove",
+                &orchid_i18n::FluentArgs::new().with("name", share.name.clone()),
+            ),
+            action_id: "fs.share-remove".into(),
+            paths: vec![fp.as_str().to_string()],
+        });
+    }
+    let name = share.name.clone();
+    orchid_fs::remove_folder_share(&name)
+        .await
+        .map_err(map_fs_error)?;
+    Ok(report(
+        inner.deps.locale.tr("fm-share-title"),
+        inner.deps.locale.tr_args(
+            "fm-share-remove-done",
+            &orchid_i18n::FluentArgs::new().with("name", name),
+        ),
+    ))
+}
+
+async fn share_os_tab(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    orchid_fs::open_sharing_tab(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    Ok(ActionOutcome::Done)
+}
+
+fn append_content_metadata(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    fp: &orchid_fs::FsPath,
+) {
     let Ok(os) = fp.to_local() else {
         return;
     };
@@ -191,9 +376,11 @@ fn append_content_metadata(body: &mut String, locale: &orchid_i18n::LocaleManage
         }
     }
     if let Ok(sig) = orchid_fs::inspect_signature(fp) {
-        if sig.lines.iter().any(|l| {
-            l.contains("certificate table: yes") || l.contains("Authenticode: trusted")
-        }) {
+        if sig
+            .lines
+            .iter()
+            .any(|l| l.contains("certificate table: yes") || l.contains("Authenticode: trusted"))
+        {
             body.push('\n');
             body.push_str(&locale.tr("fm-signature-title"));
             body.push('\n');
@@ -212,9 +399,8 @@ async fn exif_report(
     let locale = inner.deps.locale.as_ref();
     let fp = first_path(inner, paths)?;
     let os = fp.to_local().map_err(map_fs_error)?;
-    let text = orchid_viewers::format_exif_report(&os).map_err(|e| {
-        WidgetError::InvalidStateForOperation(format!("{e}"))
-    })?;
+    let text = orchid_viewers::format_exif_report(&os)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
     let body = if text.is_empty() {
         locale.tr("fm-exif-empty")
     } else {
@@ -230,9 +416,8 @@ async fn id3_report(
     let locale = inner.deps.locale.as_ref();
     let fp = first_path(inner, paths)?;
     let os = fp.to_local().map_err(map_fs_error)?;
-    let text = orchid_viewers::format_id3_report(&os).map_err(|e| {
-        WidgetError::InvalidStateForOperation(format!("{e}"))
-    })?;
+    let text = orchid_viewers::format_id3_report(&os)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
     let body = if text.is_empty() {
         locale.tr("fm-id3-empty")
     } else {
@@ -249,9 +434,8 @@ async fn office_meta(
     let locale = inner.deps.locale.as_ref();
     let fp = first_path(inner, paths)?;
     let os = fp.to_local().map_err(map_fs_error)?;
-    let current = orchid_viewers::read_office_core_props(&os).map_err(|e| {
-        WidgetError::InvalidStateForOperation(format!("{e}"))
-    })?;
+    let current = orchid_viewers::read_office_core_props(&os)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
     let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(prompt(
             "fs.office-meta",
@@ -262,9 +446,8 @@ async fn office_meta(
         ));
     };
     let next = orchid_viewers::unpack_office_props(raw, current);
-    orchid_viewers::write_office_core_props(&os, &next).map_err(|e| {
-        WidgetError::InvalidStateForOperation(format!("{e}"))
-    })?;
+    orchid_viewers::write_office_core_props(&os, &next)
+        .map_err(|e| WidgetError::InvalidStateForOperation(format!("{e}")))?;
     Ok(report(
         locale.tr("fm-office-meta-title"),
         orchid_viewers::format_office_report(&next),
@@ -278,7 +461,10 @@ async fn signature_report(
     let locale = inner.deps.locale.as_ref();
     let fp = first_path(inner, paths)?;
     let sig = orchid_fs::inspect_signature(&fp).map_err(map_fs_error)?;
-    Ok(report(locale.tr("fm-signature-title"), sig.lines.join("\n")))
+    Ok(report(
+        locale.tr("fm-signature-title"),
+        sig.lines.join("\n"),
+    ))
 }
 
 fn prompt(
@@ -436,10 +622,7 @@ fn persist_network_place(
 ) -> Result<(), WidgetError> {
     if let Some(path) = inner.deps.network_bookmarks_file.as_ref() {
         let mut marks = orchid_storage::load_network_bookmarks(path);
-        if let Some(existing) = marks
-            .iter_mut()
-            .find(|m| m.uri.trim() == mount.uri.trim())
-        {
+        if let Some(existing) = marks.iter_mut().find(|m| m.uri.trim() == mount.uri.trim()) {
             *existing = mount.clone();
         } else {
             marks.push(mount.clone());
@@ -449,10 +632,7 @@ fn persist_network_place(
         })?;
     }
     let mut live = inner.deps.network_mounts.write();
-    if let Some(existing) = live
-        .iter_mut()
-        .find(|m| m.uri.trim() == mount.uri.trim())
-    {
+    if let Some(existing) = live.iter_mut().find(|m| m.uri.trim() == mount.uri.trim()) {
         *existing = mount;
     } else {
         live.push(mount);
@@ -537,9 +717,8 @@ async fn network_connect(
             inner.deps.locale.tr("fm-network-connect-hint"),
         ));
     };
-    let mount = parse_connect_line(raw).ok_or_else(|| {
-        WidgetError::InvalidStateForOperation("fm-network-connect-bad".into())
-    })?;
+    let mount = parse_connect_line(raw)
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-network-connect-bad".into()))?;
     persist_network_place(inner, mount)?;
     inner.refresh_all_tabs().await;
     Ok(ActionOutcome::Done)

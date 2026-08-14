@@ -1,4 +1,4 @@
-//! File operations (copy, move, delete, recycle, compare, hash, encode, attributes).
+//! File operations (copy, move, delete, recycle, share, compare, hash, encode, attributes).
 
 pub mod attrs;
 pub mod checksum;
@@ -12,6 +12,7 @@ pub mod link;
 pub mod move_;
 pub mod progress;
 pub mod recycle;
+pub mod share;
 pub mod signature;
 pub mod split;
 
@@ -40,6 +41,10 @@ pub use recycle::{
     empty_recycle, is_recycle_item, is_recycle_listing, is_recycle_virtual, list_recycle,
     purge_recycle, recycle_entries, recycle_item_id, recycle_listing_supported,
     recycle_original_path, restore_recycle, RecycleItem, RECYCLE_PATH,
+};
+pub use share::{
+    add_folder_share, exact_user_share, is_admin_share_name, open_sharing_tab, remove_folder_share,
+    share_covers_path, shares_for_path, FolderShare,
 };
 pub use signature::{inspect_signature, SignatureReport};
 pub use split::{discover_parts, join_files, join_output_name, split_file};

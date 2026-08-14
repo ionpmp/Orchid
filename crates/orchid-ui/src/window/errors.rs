@@ -182,7 +182,14 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-join-failed"
         | "fm-error-recycle-unsupported"
         | "fm-error-recycle-collision"
-        | "fm-error-recycle-twins" => return locale.tr(msg),
+        | "fm-error-recycle-twins"
+        | "fm-error-share-unsupported"
+        | "fm-error-share-not-folder"
+        | "fm-error-share-not-shared"
+        | "fm-error-share-admin"
+        | "fm-error-share-denied"
+        | "fm-error-share-exists"
+        | "fm-error-share-os" => return locale.tr(msg),
         "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
         "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
         "file-manager widget not live" => return locale.tr("fm-error-unavailable"),

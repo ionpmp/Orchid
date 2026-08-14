@@ -1054,6 +1054,40 @@ fn tools_menu(
             "action-copy",
             has_selection,
         ));
+        submenu.push(ContextMenuItem {
+            id: "fs.share".into(),
+            label_key: "fm-action-share".into(),
+            icon: "action-copy",
+            swatch_color: None,
+            enabled: has_selection,
+            separator_after: false,
+            submenu: vec![
+                item(
+                    "fs.share-view",
+                    "fm-action-share-view",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.share-add",
+                    "fm-action-share-add",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.share-remove",
+                    "fm-action-share-remove",
+                    "action-delete",
+                    has_selection,
+                ),
+                item(
+                    "fs.share-os",
+                    "fm-action-share-os",
+                    "action-copy",
+                    has_selection,
+                ),
+            ],
+        });
     }
     ContextMenuItem {
         id: "fs.tools".into(),
@@ -1294,6 +1328,8 @@ mod tests {
         assert!(tool_ids.contains(&"fs.compare-dirs"));
         assert!(tool_ids.contains(&"fs.split"));
         assert!(tool_ids.contains(&"fs.hash"));
+        #[cfg(windows)]
+        assert!(tool_ids.contains(&"fs.share"));
         let hash = tools.submenu.iter().find(|i| i.id == "fs.hash").unwrap();
         assert!(hash.submenu.iter().any(|i| i.id == "fs.hash-sha256"));
         let open = menu.iter().find(|i| i.id == "fs.open").unwrap();
