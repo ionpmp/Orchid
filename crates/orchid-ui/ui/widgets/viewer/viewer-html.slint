@@ -1,0 +1,76 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerHtmlModel } from "../../workspace/defs.slint";
+
+export component ViewerHtmlView inherits Rectangle {
+    in property <ViewerHtmlModel> model;
+    callback open-browser();
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 8px;
+                alignment: start;
+
+                Text {
+                    text: model.source-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Rectangle {
+                    width: max(96px, open-label.preferred-width + 16px);
+                    height: 28px;
+                    background: open-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    open-ta := TouchArea { clicked => { root.open-browser(); } }
+                    open-label := Text {
+                        text: model.open-label;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Text {
+            height: 20px;
+            text: model.hint-label;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.surface-base;
+            clip: true;
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: max(self.height, src.preferred-height + 8px);
+                src := Text {
+                    x: 8px;
+                    width: parent.width - 16px;
+                    text: model.source-preview;
+                    wrap: no-wrap;
+                    color: Theme.text-primary;
+                    font-family: Theme.font-family-mono;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+        }
+    }
+}

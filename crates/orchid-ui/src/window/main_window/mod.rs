@@ -1382,6 +1382,28 @@ do shell script "open -a " & quoted form of appPath & " " & quoted form of "{esc
     Ok(())
 }
 
+pub(super) fn open_file_associations(path: &str) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        let _ = path;
+        std::process::Command::new("explorer.exe")
+            .arg("ms-settings:defaultapps")
+            .spawn()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = path;
+        std::process::Command::new("open")
+            .args(["x-apple.systempreferences:com.apple.preference.defaultapp"])
+            .spawn()?;
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        opener::open(path).map_err(|e| std::io::Error::other(e.to_string()))?;
+    }
+    Ok(())
+}
+
 /// Replace all rows in a `VecModel` wrapped by `ModelRc` without creating a new `ModelRc`, so
 /// `for` loops in Slint keep the same item instances and retain focus/scroll state.
 pub(crate) fn sync_vec_model<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {

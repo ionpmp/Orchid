@@ -2134,6 +2134,97 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_text_action({
+            let t = t.clone();
+            move |id, action| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let action = action.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::text_action(inst, action)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_text_set_encoding({
+            let t = t.clone();
+            move |id, label| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let label = label.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::text_set_encoding(inst, label)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_text_find_request({
+            let t = t.clone();
+            move |id, query, forward, regex, multiline| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let query = query.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::text_find(
+                                inst, query, forward, regex, multiline
+                            )
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_text_replace_request({
+            let t = t.clone();
+            move |id, query, replacement, all, regex, multiline| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let query = query.to_string();
+                        let replacement = replacement.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::text_replace(
+                                inst,
+                                query,
+                                replacement,
+                                all,
+                                regex,
+                                multiline
+                            )
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_open_external({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        if let Err(e) =
+                            orchid_widgets::builtin::viewer::open_current_externally(inst)
+                        {
+                            warn!(?e, "viewer open external");
+                            let title = c.locale.tr("widget-viewer-name");
+                            let body = e.to_string();
+                            c.push_notification(&title, &body, 3);
+                        }
+                    }
+                }
+            }
+        });
 
         self.window.on_viewer_document_action({
             let t = t.clone();

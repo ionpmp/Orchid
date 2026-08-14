@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
-    ViewerArchiveEntry, ViewerArchiveModel, ViewerDocumentModel, ViewerEmptyModel,
-    ViewerImageModel, ViewerModel, ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine,
-    ViewerSyntaxSegment, ViewerTextModel,
+    ViewerArchiveEntry, ViewerArchiveModel, ViewerDocumentModel, ViewerEmptyModel, ViewerHtmlModel,
+    ViewerImageModel, ViewerMediaModel, ViewerModel, ViewerPdfModel, ViewerStatusModel,
+    ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -196,8 +196,70 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
     }
 }
 
+fn text_chrome_labels(
+    locale: &LocaleManager,
+) -> (
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+    SharedString,
+) {
+    (
+        locale.tr("viewer-text-mode-text").into(),
+        locale.tr("viewer-text-mode-hex").into(),
+        locale.tr("viewer-text-mode-binary").into(),
+        locale.tr("viewer-text-wrap").into(),
+        locale.tr("viewer-text-no-wrap").into(),
+        locale.tr("viewer-text-find").into(),
+        locale.tr("viewer-text-find-placeholder").into(),
+        locale.tr("viewer-text-find-no-match").into(),
+        locale.tr("viewer-text-replace").into(),
+        locale.tr("viewer-text-replace-placeholder").into(),
+        locale.tr("viewer-text-replace-one").into(),
+        locale.tr("viewer-text-replace-all").into(),
+        locale.tr("viewer-text-regex").into(),
+        locale.tr("viewer-text-multiline").into(),
+        locale.tr("viewer-text-print").into(),
+        locale.tr("viewer-text-undo").into(),
+    )
+}
+
 fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
     let lines_args = orchid_i18n::FluentArgs::new().with("count", "0");
+    let encodings: Vec<SharedString> = orchid_viewers::VIEWER_ENCODINGS
+        .iter()
+        .map(|e| SharedString::from(*e))
+        .collect();
+    let (
+        mode_text_label,
+        mode_hex_label,
+        mode_bin_label,
+        wrap_label,
+        no_wrap_label,
+        find_label,
+        find_placeholder,
+        find_no_match_label,
+        replace_label,
+        replace_placeholder,
+        replace_one_label,
+        replace_all_label,
+        regex_label,
+        multiline_label,
+        print_label,
+        undo_label,
+    ) = text_chrome_labels(locale);
     ViewerTextModel {
         language: viewer_syntax_label(locale, "plaintext"),
         encoding: viewer_encoding_label(locale, "UTF-8"),
@@ -215,6 +277,32 @@ fn empty_viewer_text_model(locale: &LocaleManager) -> ViewerTextModel {
         mode_label: locale.tr("viewer-text-read-only").into(),
         save_label: locale.tr("viewer-text-save").into(),
         lines_label: locale.tr_args("viewer-text-lines", &lines_args).into(),
+        display_mode: 0,
+        can_undo: false,
+        can_redo: false,
+        find_gen: 0,
+        find_anchor: 0,
+        find_cursor: 0,
+        find_match_index: 0,
+        find_match_count: 0,
+        encodings: ModelRc::new(VecModel::from(encodings)),
+        mode_text_label,
+        mode_hex_label,
+        mode_bin_label,
+        wrap_label,
+        no_wrap_label,
+        find_label,
+        find_placeholder,
+        find_no_match_label,
+        replace_label,
+        replace_placeholder,
+        replace_one_label,
+        replace_all_label,
+        regex_label,
+        multiline_label,
+        print_label,
+        undo_label,
+        redo_label: locale.tr("viewer-text-redo").into(),
     }
 }
 
@@ -237,6 +325,25 @@ fn empty_viewer_archive_model(locale: &LocaleManager) -> ViewerArchiveModel {
         preview_binary_size: SharedString::new(),
         info_text: SharedString::new(),
         path_display: SharedString::new(),
+    }
+}
+
+fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
+    ViewerMediaModel {
+        path_display: SharedString::new(),
+        kind_label: SharedString::new(),
+        play_label: locale.tr("viewer-media-play").into(),
+        hint_label: locale.tr("viewer-media-hint").into(),
+    }
+}
+
+fn empty_viewer_html_model(locale: &LocaleManager) -> ViewerHtmlModel {
+    ViewerHtmlModel {
+        path_display: SharedString::new(),
+        source_preview: SharedString::new(),
+        open_label: locale.tr("viewer-html-open").into(),
+        hint_label: locale.tr("viewer-html-hint").into(),
+        source_label: locale.tr("viewer-html-source").into(),
     }
 }
 
@@ -337,6 +444,8 @@ pub(crate) fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         text: empty_viewer_text_model(locale),
         archive: empty_viewer_archive_model(locale),
         document: empty_viewer_document_model(locale),
+        media: empty_viewer_media_model(locale),
+        html: empty_viewer_html_model(locale),
     }
 }
 
@@ -409,6 +518,25 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
         Vs::Document(s) => {
             model.kind = 7;
             model.document = build_document_snapshot(s, locale);
+        }
+        Vs::Media(s) => {
+            model.kind = 8;
+            model.media = ViewerMediaModel {
+                path_display: s.path_display.clone().into(),
+                kind_label: s.kind_label.clone().into(),
+                play_label: locale.tr("viewer-media-play").into(),
+                hint_label: locale.tr("viewer-media-hint").into(),
+            };
+        }
+        Vs::Html(s) => {
+            model.kind = 9;
+            model.html = ViewerHtmlModel {
+                path_display: s.path_display.clone().into(),
+                source_preview: SharedString::from(s.source_preview.as_ref()),
+                open_label: locale.tr("viewer-html-open").into(),
+                hint_label: locale.tr("viewer-html-hint").into(),
+                source_label: locale.tr("viewer-html-source").into(),
+            };
         }
     }
 
@@ -573,6 +701,28 @@ fn build_text_snapshot(
         "CRLF" => "viewer-text-line-ending-crlf",
         _ => "viewer-text-line-ending-lf",
     };
+    let encodings: Vec<SharedString> = orchid_viewers::VIEWER_ENCODINGS
+        .iter()
+        .map(|e| SharedString::from(*e))
+        .collect();
+    let (
+        mode_text_label,
+        mode_hex_label,
+        mode_bin_label,
+        wrap_label,
+        no_wrap_label,
+        find_label,
+        find_placeholder,
+        find_no_match_label,
+        replace_label,
+        replace_placeholder,
+        replace_one_label,
+        replace_all_label,
+        regex_label,
+        multiline_label,
+        print_label,
+        undo_label,
+    ) = text_chrome_labels(locale);
     ViewerTextModel {
         language: viewer_syntax_label(locale, &s.language),
         encoding: viewer_encoding_label(locale, &s.encoding),
@@ -599,6 +749,32 @@ fn build_text_snapshot(
                 &orchid_i18n::FluentArgs::new().with("count", s.total_lines.to_string()),
             )
             .into(),
+        display_mode: i32::from(s.display_mode),
+        can_undo: s.can_undo,
+        can_redo: s.can_redo,
+        find_gen: s.find_gen,
+        find_anchor: s.find_anchor,
+        find_cursor: s.find_cursor,
+        find_match_index: s.find_match_index,
+        find_match_count: s.find_match_count,
+        encodings: ModelRc::new(VecModel::from(encodings)),
+        mode_text_label,
+        mode_hex_label,
+        mode_bin_label,
+        wrap_label,
+        no_wrap_label,
+        find_label,
+        find_placeholder,
+        find_no_match_label,
+        replace_label,
+        replace_placeholder,
+        replace_one_label,
+        replace_all_label,
+        regex_label,
+        multiline_label,
+        print_label,
+        undo_label,
+        redo_label: locale.tr("viewer-text-redo").into(),
     }
 }
 

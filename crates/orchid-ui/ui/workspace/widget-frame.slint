@@ -249,6 +249,11 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-text-save(string);
     callback viewer-text-edited(string, string);
     callback viewer-text-scroll(string, int);
+    callback viewer-text-action(string, string);
+    callback viewer-text-set-encoding(string, string);
+    callback viewer-text-find-request(string, string, bool, bool, bool);
+    callback viewer-text-replace-request(string, string, string, bool, bool, bool);
+    callback viewer-open-external(string);
 
     callback viewer-document-action(string, string);
     callback viewer-document-text-edited(string, string);
@@ -1039,6 +1044,11 @@ export component WidgetFrame inherits Rectangle {
                         text-save => { root.viewer-text-save(root.model.instance-id); }
                         text-edited(t) => { root.viewer-text-edited(root.model.instance-id, t); }
                         text-scroll(d) => { root.viewer-text-scroll(root.model.instance-id, d); }
+                        text-action(a) => { root.viewer-text-action(root.model.instance-id, a); }
+                        text-set-encoding(e) => { root.viewer-text-set-encoding(root.model.instance-id, e); }
+                        text-find-request(q, fwd, rx, ml) => { root.viewer-text-find-request(root.model.instance-id, q, fwd, rx, ml); }
+                        text-replace-request(q, r, all, rx, ml) => { root.viewer-text-replace-request(root.model.instance-id, q, r, all, rx, ml); }
+                        open-external => { root.viewer-open-external(root.model.instance-id); }
 
                         document-action(a) => { root.viewer-document-action(root.model.instance-id, a); }
                         document-text-edited(t) => { root.viewer-document-text-edited(root.model.instance-id, t); }

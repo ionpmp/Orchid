@@ -38,7 +38,7 @@ impl MainWindowController {
         let path_label = s.to_string();
         let ctrl = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true).await {
+            if let Err(e) = Self::open_in_viewer_for_controller(ctrl, fp, true, false).await {
                 warn!(?e, path = %path_label, "open recent file in viewer");
             }
         });
@@ -240,7 +240,7 @@ impl MainWindowController {
         let clamped = if count == 0 {
             -1
         } else {
-            new_idx.clamp(0, (count - 1) as i32)
+            new_idx.clamp(0, count - 1)
         };
         self.search_selection.write().insert(instance_id, clamped);
         let _ = self.patch_workspace_frames(&[instance_id]);

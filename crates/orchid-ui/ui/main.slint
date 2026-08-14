@@ -290,6 +290,11 @@ export component MainWindow inherits Window {
     callback viewer-text-save(string);
     callback viewer-text-edited(string, string);
     callback viewer-text-scroll(string, int);
+    callback viewer-text-action(string, string);
+    callback viewer-text-set-encoding(string, string);
+    callback viewer-text-find-request(string, string, bool, bool, bool);
+    callback viewer-text-replace-request(string, string, string, bool, bool, bool);
+    callback viewer-open-external(string);
 
     callback viewer-document-action(string, string);
     callback viewer-document-text-edited(string, string);
@@ -718,6 +723,11 @@ export component MainWindow inherits Window {
             viewer-text-save(id) => { root.viewer-text-save(id); }
             viewer-text-edited(id, t) => { root.viewer-text-edited(id, t); }
             viewer-text-scroll(id, d) => { root.viewer-text-scroll(id, d); }
+            viewer-text-action(id, a) => { root.viewer-text-action(id, a); }
+            viewer-text-set-encoding(id, e) => { root.viewer-text-set-encoding(id, e); }
+            viewer-text-find-request(id, q, fwd, rx, ml) => { root.viewer-text-find-request(id, q, fwd, rx, ml); }
+            viewer-text-replace-request(id, q, r, all, rx, ml) => { root.viewer-text-replace-request(id, q, r, all, rx, ml); }
+            viewer-open-external(id) => { root.viewer-open-external(id); }
 
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
             viewer-document-text-edited(id, t) => { root.viewer-document-text-edited(id, t); }

@@ -1,21 +1,21 @@
 //! Floating windows, taskbar, and document/viewer opening logic for [`MainWindowController`].
 
+use slint::{ComponentHandle, ModelRc, SharedString};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use uuid::Uuid;
 use tracing::warn;
-use slint::{SharedString, ModelRc, ComponentHandle};
+use uuid::Uuid;
 
-use orchid_storage::{WindowState, WidgetSize};
-use orchid_widgets::{SharedInstance, PlacedWidget, CreateWidgetRequest};
+use orchid_storage::{WidgetSize, WindowState};
 use orchid_widgets::layout::{PixelBounds, ViewportSize};
+use orchid_widgets::{CreateWidgetRequest, PlacedWidget, SharedInstance};
 
-use crate::slint_generated::{WindowTaskbarItem, WidgetFrameModel};
 use crate::error::{Result, UiError};
+use crate::slint_generated::{WidgetFrameModel, WindowTaskbarItem};
 use crate::window::spawn;
 
-use super::{MainWindowController, sync_vec_model, AddWidgetPlacement};
+use super::{sync_vec_model, AddWidgetPlacement, MainWindowController};
 
 impl MainWindowController {
     /// Instances that participate in the canvas grid (excludes windowed widgets).
@@ -164,7 +164,10 @@ impl MainWindowController {
         frames
     }
 
-    pub(super) fn build_window_taskbar_items(&self, instances: &[SharedInstance]) -> Vec<WindowTaskbarItem> {
+    pub(super) fn build_window_taskbar_items(
+        &self,
+        instances: &[SharedInstance],
+    ) -> Vec<WindowTaskbarItem> {
         let top = self.floating_z_stack.lock().last().copied();
         let mut items = Vec::new();
         for inst in instances {
@@ -178,9 +181,7 @@ impl MainWindowController {
                 .map(|s| s.title.clone())
                 .filter(|t| !t.is_empty())
                 .unwrap_or_else(|| inst.type_id.clone());
-            let state = inst
-                .window_state()
-                .unwrap_or(WindowState::Normal);
+            let state = inst.window_state().unwrap_or(WindowState::Normal);
             items.push(WindowTaskbarItem {
                 instance_id: inst.id.to_string().into(),
                 title: title.into(),
@@ -208,7 +209,8 @@ impl MainWindowController {
             sy = (bounds.y + bounds.height - vh).max(0.0);
         }
         *self.canvas_scroll.lock() = (sx, sy);
-        self.canvas_scroll_gen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.canvas_scroll_gen
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub(super) fn focus_viewer(self: &Arc<Self>, id: Uuid) {
@@ -355,6 +357,7 @@ impl MainWindowController {
         ctrl: Weak<MainWindowController>,
         path: orchid_fs::FsPath,
         schedule_rebuild: bool,
+        edit: bool,
     ) -> Result<(Uuid, bool)> {
         let Some(c) = ctrl.upgrade() else {
             return Err(UiError::Slint("controller gone".into()));
@@ -408,9 +411,12 @@ impl MainWindowController {
         }
         c.raise_floating(id);
 
-        orchid_widgets::builtin::viewer::open_path(id, path.clone())
-            .await
-            .map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
+        let open = if edit {
+            orchid_widgets::builtin::viewer::open_path_for_edit(id, path.clone()).await
+        } else {
+            orchid_widgets::builtin::viewer::open_path(id, path.clone()).await
+        };
+        open.map_err(|e| UiError::Slint(format!("viewer open: {e}")))?;
         c.recent_files.touch(&path, Some(&c.bus));
         if schedule_rebuild {
             if let Some(c2) = ctrl.upgrade() {

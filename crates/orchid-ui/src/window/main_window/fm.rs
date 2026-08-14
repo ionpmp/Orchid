@@ -30,7 +30,7 @@ use crate::window::models::{
 };
 use crate::window::spawn;
 
-use super::{open_with_application_picker, MainWindowController};
+use super::{open_file_associations, open_with_application_picker, MainWindowController};
 
 impl MainWindowController {
     pub(super) fn notify_fm_action_failed(self: &Arc<Self>, err: &impl std::fmt::Display) {
@@ -406,7 +406,7 @@ impl MainWindowController {
                 }
                 // Multi-file open: one viewer per path; rebuild once after the batch.
                 // Cap counts only newly created viewers (focus of already-open does not).
-                match Self::open_in_viewer_for_controller(tw.clone(), fp, false).await {
+                match Self::open_in_viewer_for_controller(tw.clone(), fp, false, false).await {
                     Ok((_, true)) => {
                         opened += 1;
                     }
@@ -2176,9 +2176,36 @@ impl MainWindowController {
                 };
                 let tw2 = Arc::downgrade(self);
                 spawn::spawn_local_compat(async move {
-                    let _ = MainWindowController::open_in_viewer_for_controller(tw2, fs_path, true)
-                        .await;
+                    let _ = MainWindowController::open_in_viewer_for_controller(
+                        tw2, fs_path, true, false,
+                    )
+                    .await;
                 });
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::OpenInEditor { path } => {
+                let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
+                    warn!(path = %path, "open in editor: invalid path");
+                    return;
+                };
+                let tw2 = Arc::downgrade(self);
+                spawn::spawn_local_compat(async move {
+                    let _ = MainWindowController::open_in_viewer_for_controller(
+                        tw2, fs_path, true, true,
+                    )
+                    .await;
+                });
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::OpenFileAssociations { path } => {
+                let open_path = match orchid_fs::FsPath::new(&path) {
+                    Ok(fp) => fp
+                        .to_local()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or(path),
+                    Err(_) => path,
+                };
+                if let Err(e) = open_file_associations(&open_path) {
+                    warn!(?e, path = %open_path, "file associations");
+                }
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewerMany { paths } => {
                 let tw2 = Arc::downgrade(self);
@@ -2197,6 +2224,7 @@ impl MainWindowController {
                         match MainWindowController::open_in_viewer_for_controller(
                             tw2.clone(),
                             fs_path,
+                            false,
                             false,
                         )
                         .await
@@ -2987,6 +3015,20 @@ impl MainWindowController {
             }
             "new-file" => {
                 self.spawn_fm_action(inst, "fs.new-file", Vec::new());
+                return;
+            }
+            "view" => {
+                let paths = self.fm_selected_paths(inst, p);
+                if !paths.is_empty() {
+                    self.spawn_fm_action(inst, "viewer.open", paths);
+                }
+                return;
+            }
+            "edit" => {
+                let paths = self.fm_selected_paths(inst, p);
+                if !paths.is_empty() {
+                    self.spawn_fm_action(inst, "viewer.edit", paths);
+                }
                 return;
             }
             "batch-rename" => {

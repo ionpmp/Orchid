@@ -1520,6 +1520,8 @@ fn fm_action_shortcut(id: &str) -> &'static str {
         "fs.delete-permanent" => "Shift+Del",
         "fs.new-folder" => "F7",
         "fs.new-file" => "Shift+F4",
+        "viewer.open" => "F3",
+        "viewer.edit" => "F4",
         "fs.copy-to-other" => "F5",
         "fs.move-to-other" => "F6",
         "fs.open-tab" => "Ctrl+Shift+T",

@@ -59,8 +59,14 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
-- Image, PDF (pdfium), syntax-highlighted text (Tree-sitter, MVP edit),
+- Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
+- FM **F3** opens the Lister (view), **F4** opens the built-in editor;
+  context menu **File associations…** opens the OS default-apps settings.
+- Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find
+  (F7) with regex + multiline replace, print, undo/redo.
+- Media files open a Play handoff to the system player; HTML shows source
+  plus Open in browser.
 - **Tier-1 DOCX document editor**: OOXML read/write, Preview/Source,
   parley+swash canvas, selection and keyboard editing, tables (cell nav,
   insert/delete row/col, `tblGrid` widths), inline images (body + cells),

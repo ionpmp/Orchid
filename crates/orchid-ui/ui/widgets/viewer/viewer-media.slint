@@ -1,0 +1,53 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerMediaModel } from "../../workspace/defs.slint";
+
+export component ViewerMediaView inherits Rectangle {
+    in property <ViewerMediaModel> model;
+    callback play();
+
+    background: transparent;
+
+    VerticalLayout {
+        alignment: center;
+        padding: 24px;
+        spacing: 12px;
+
+        Text {
+            text: model.kind-label;
+            color: Theme.accent-brand;
+            font-size: Theme.font-size-md;
+            font-weight: Theme.weight-semibold;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: model.path-display;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        Text {
+            text: model.hint-label;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        Rectangle {
+            width: max(96px, play-label.preferred-width + 24px);
+            height: 32px;
+            background: play-ta.has-hover ? Theme.surface-raised : Theme.surface-base;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border-default;
+            play-ta := TouchArea { clicked => { root.play(); } }
+            play-label := Text {
+                text: model.play-label;
+                color: Theme.accent-brand;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

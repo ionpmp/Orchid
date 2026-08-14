@@ -194,6 +194,18 @@ pub fn build_for_selection(
                 single_file,
             ),
             item(
+                "viewer.edit",
+                "fm-action-edit-in-viewer",
+                "widget-viewer",
+                single_file,
+            ),
+            item(
+                "fs.file-assoc",
+                "fm-action-file-assoc",
+                "action-open-with",
+                single_file,
+            ),
+            item(
                 "fs.open-tab",
                 "fm-action-open-tab",
                 "action-new-tab",

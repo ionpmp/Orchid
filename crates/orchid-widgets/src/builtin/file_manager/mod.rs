@@ -93,6 +93,14 @@ pub enum ActionOutcome {
     OpenInViewer {
         path: String,
     },
+    /// Open in the built-in viewer already in edit mode (F4).
+    OpenInEditor {
+        path: String,
+    },
+    /// Open the OS file-association / default-app settings for `path`.
+    OpenFileAssociations {
+        path: String,
+    },
     /// Open each file path in the viewer (directories are skipped).
     OpenInViewerMany {
         paths: Vec<String>,
@@ -3788,6 +3796,25 @@ pub async fn run_action_with_opts(
                 });
             }
             return Ok(ActionOutcome::OpenInViewer { path: p.clone() });
+        }
+        "viewer.edit" => {
+            let Some(p) = target_paths.first() else {
+                return Ok(ActionOutcome::Done);
+            };
+            let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
+            if inner.is_path_encrypted(&fp) {
+                return Ok(ActionOutcome::NeedsPassphrase {
+                    paths: vec![p.clone()],
+                    purpose: PassphrasePurpose::RevealInViewer,
+                });
+            }
+            return Ok(ActionOutcome::OpenInEditor { path: p.clone() });
+        }
+        "fs.file-assoc" => {
+            let Some(p) = target_paths.first() else {
+                return Ok(ActionOutcome::Done);
+            };
+            return Ok(ActionOutcome::OpenFileAssociations { path: p.clone() });
         }
         "fs.open-external" => {
             let mut files = Vec::new();

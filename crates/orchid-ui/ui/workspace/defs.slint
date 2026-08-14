@@ -905,6 +905,32 @@ export struct ViewerTextModel {
     mode-label: string,
     save-label: string,
     lines-label: string,
+    display-mode: int,
+    can-undo: bool,
+    can-redo: bool,
+    find-gen: int,
+    find-anchor: int,
+    find-cursor: int,
+    find-match-index: int,
+    find-match-count: int,
+    encodings: [string],
+    mode-text-label: string,
+    mode-hex-label: string,
+    mode-bin-label: string,
+    wrap-label: string,
+    no-wrap-label: string,
+    find-label: string,
+    find-placeholder: string,
+    find-no-match-label: string,
+    replace-label: string,
+    replace-placeholder: string,
+    replace-one-label: string,
+    replace-all-label: string,
+    regex-label: string,
+    multiline-label: string,
+    print-label: string,
+    undo-label: string,
+    redo-label: string,
 }
 
 export struct ViewerArchiveEntry {
@@ -1027,6 +1053,21 @@ export struct ViewerDocumentModel {
     link-hover: bool,
 }
 
+export struct ViewerMediaModel {
+    path-display: string,
+    kind-label: string,
+    play-label: string,
+    hint-label: string,
+}
+
+export struct ViewerHtmlModel {
+    path-display: string,
+    source-preview: string,
+    open-label: string,
+    hint-label: string,
+    source-label: string,
+}
+
 export struct ViewerEmptyModel {
     placeholder-text: string,
 }
@@ -1046,6 +1087,8 @@ export struct ViewerModel {
     text: ViewerTextModel,
     archive: ViewerArchiveModel,
     document: ViewerDocumentModel,
+    media: ViewerMediaModel,
+    html: ViewerHtmlModel,
 }
 
 export struct FmTagChip {

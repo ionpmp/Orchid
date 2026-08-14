@@ -5639,6 +5639,7 @@ dependencies = [
  "parley",
  "pdfium-render",
  "quick-xml 0.41.0",
+ "regex",
  "resvg",
  "ropey",
  "serde",
