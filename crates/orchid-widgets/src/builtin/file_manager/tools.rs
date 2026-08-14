@@ -66,6 +66,10 @@ pub(super) async fn run(
         "fs.share-add" => share_add(inner, paths, input).await,
         "fs.share-remove" => share_remove(inner, paths, opts).await,
         "fs.share-os" => share_os_tab(inner, paths).await,
+        "fs.versions" | "fs.versions-view" => versions_report(inner, paths).await,
+        "fs.versions-restore" => versions_restore(inner, paths, opts, input).await,
+        "fs.versions-copy" => versions_copy(inner, paths, input).await,
+        "fs.versions-os" => versions_os_tab(inner, paths).await,
         "fs.exif" => exif_report(inner, paths).await,
         "fs.id3" => id3_report(inner, paths).await,
         "fs.office-meta" => office_meta(inner, paths, input).await,
@@ -163,6 +167,7 @@ async fn file_properties(
     }
     append_content_metadata(&mut body, locale, &fp);
     append_sharing(&mut body, locale, &fp).await;
+    append_previous_versions(&mut body, locale, &fmt, &fp).await;
     Ok(report(locale.tr("fm-properties-title"), body))
 }
 
@@ -328,6 +333,179 @@ async fn share_os_tab(
 ) -> WidgetResult<ActionOutcome> {
     let fp = first_path(inner, paths)?;
     orchid_fs::open_sharing_tab(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    Ok(ActionOutcome::Done)
+}
+
+async fn append_previous_versions(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    fmt: &orchid_storage::LocaleConfig,
+    fp: &orchid_fs::FsPath,
+) {
+    body.push('\n');
+    body.push_str(&locale.tr("fm-versions-title"));
+    body.push('\n');
+    match orchid_fs::previous_versions(fp).await {
+        Ok(versions) if versions.is_empty() => {
+            body.push_str(&locale.tr("fm-versions-none"));
+            body.push('\n');
+        }
+        Ok(versions) => push_version_lines(body, locale, fmt, &versions),
+        Err(_) => {
+            body.push_str(&locale.tr("fm-versions-unsupported"));
+            body.push('\n');
+        }
+    }
+}
+
+async fn versions_report(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let locale = inner.deps.locale.as_ref();
+    let fmt = inner.deps.orchid_config.read().locale.clone();
+    let fp = first_path(inner, paths)?;
+    let versions = orchid_fs::previous_versions(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    let mut body = String::new();
+    body.push_str(&locale.tr("fm-versions-title"));
+    body.push('\n');
+    if versions.is_empty() {
+        body.push_str(&locale.tr("fm-versions-none"));
+        body.push('\n');
+    } else {
+        push_version_lines(&mut body, locale, &fmt, &versions);
+    }
+    Ok(report(locale.tr("fm-versions-title"), body))
+}
+
+fn push_version_lines(
+    body: &mut String,
+    locale: &orchid_i18n::LocaleManager,
+    fmt: &orchid_storage::LocaleConfig,
+    versions: &[orchid_fs::PreviousVersion],
+) {
+    for (i, ver) in versions.iter().enumerate() {
+        let when = fmt.format_datetime(ver.created);
+        let line = if ver.is_dir {
+            locale.tr_args(
+                "fm-versions-item-dir",
+                &orchid_i18n::FluentArgs::new()
+                    .with("n", (i + 1).to_string())
+                    .with("when", when),
+            )
+        } else {
+            locale.tr_args(
+                "fm-versions-item",
+                &orchid_i18n::FluentArgs::new()
+                    .with("n", (i + 1).to_string())
+                    .with("when", when)
+                    .with("size", locale.format_byte_size(ver.size)),
+            )
+        };
+        body.push_str(&line);
+        body.push('\n');
+    }
+}
+
+fn versions_spec(paths: &[String], input: Option<&str>) -> Option<String> {
+    if let Some(s) = input.map(str::trim).filter(|s| !s.is_empty()) {
+        return Some(s.to_string());
+    }
+    paths
+        .get(1)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+async fn versions_restore(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    opts: RunActionOpts,
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    let Some(spec) = versions_spec(paths, input) else {
+        return Ok(prompt(
+            "fs.versions-restore",
+            paths,
+            "1",
+            inner.deps.locale.tr("fm-versions-restore-title"),
+            inner.deps.locale.tr("fm-versions-restore-hint"),
+        ));
+    };
+    let versions = orchid_fs::previous_versions(&fp)
+        .await
+        .map_err(map_fs_error)?;
+    let ver = orchid_fs::pick_previous_version(&versions, &spec).map_err(map_fs_error)?;
+    let confirmed = opts.skip_confirm && paths.get(1).is_some();
+    if !confirmed {
+        let fmt = inner.deps.orchid_config.read().locale.clone();
+        return Ok(ActionOutcome::NeedsConfirmation {
+            message: inner.deps.locale.tr_args(
+                "fm-confirm-versions-restore",
+                &orchid_i18n::FluentArgs::new().with("when", fmt.format_datetime(ver.created)),
+            ),
+            action_id: "fs.versions-restore".into(),
+            paths: vec![fp.as_str().to_string(), spec],
+        });
+    }
+    let restored = orchid_fs::restore_previous_version(&fp, &spec)
+        .await
+        .map_err(map_fs_error)?;
+    let fmt = inner.deps.orchid_config.read().locale.clone();
+    Ok(report(
+        inner.deps.locale.tr("fm-versions-title"),
+        inner.deps.locale.tr_args(
+            "fm-versions-restore-done",
+            &orchid_i18n::FluentArgs::new().with("when", fmt.format_datetime(restored.created)),
+        ),
+    ))
+}
+
+async fn versions_copy(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    let Some(spec) = versions_spec(paths, input) else {
+        return Ok(prompt(
+            "fs.versions-copy",
+            paths,
+            "1",
+            inner.deps.locale.tr("fm-versions-copy-title"),
+            inner.deps.locale.tr("fm-versions-copy-hint"),
+        ));
+    };
+    let (ver, dest) = orchid_fs::copy_previous_version(&fp, &spec)
+        .await
+        .map_err(map_fs_error)?;
+    let fmt = inner.deps.orchid_config.read().locale.clone();
+    let name = dest
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| dest.display().to_string());
+    Ok(report(
+        inner.deps.locale.tr("fm-versions-title"),
+        inner.deps.locale.tr_args(
+            "fm-versions-copy-done",
+            &orchid_i18n::FluentArgs::new()
+                .with("when", fmt.format_datetime(ver.created))
+                .with("name", name),
+        ),
+    ))
+}
+
+async fn versions_os_tab(
+    inner: &Arc<FileManagerInner>,
+    paths: &[String],
+) -> WidgetResult<ActionOutcome> {
+    let fp = first_path(inner, paths)?;
+    orchid_fs::open_previous_versions_tab(&fp)
         .await
         .map_err(map_fs_error)?;
     Ok(ActionOutcome::Done)

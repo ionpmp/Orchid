@@ -189,7 +189,13 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-error-share-admin"
         | "fm-error-share-denied"
         | "fm-error-share-exists"
-        | "fm-error-share-os" => return locale.tr(msg),
+        | "fm-error-share-os"
+        | "fm-error-versions-unsupported"
+        | "fm-error-versions-none"
+        | "fm-error-versions-bad-index"
+        | "fm-error-versions-denied"
+        | "fm-error-versions-collision"
+        | "fm-error-versions-os" => return locale.tr(msg),
         "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
         "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
         "file-manager widget not live" => return locale.tr("fm-error-unavailable"),

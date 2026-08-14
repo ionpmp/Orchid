@@ -60,8 +60,10 @@ release yet.
   sidecar verify, Base64 / UUE encode–decode, bulk attributes / timestamps
   / name case, chmod (and Unix chown), Windows ACL via icacls. Properties
   report (`Alt+Enter`) with EXIF, ID3, Office core metadata (editable),
-  Windows Authenticode / PE certificate-table inspection, and a Sharing
-  section (SMB name, UNC, share / unshare, Windows Sharing tab).
+  Windows Authenticode / PE certificate-table inspection, a Sharing
+  section (SMB name, UNC, share / unshare, Windows Sharing tab), and
+  Previous Versions (Volume Shadow Copy list, restore, copy beside,
+  Windows Previous Versions tab).
 - System clipboard file copy/paste (`CF_HDROP` + Preferred DropEffect) so
   Ctrl+C / Ctrl+X / Ctrl+V exchange files with Explorer and other apps.
 - Browse archives as folders (`archive:`), extract all or selected, create /

@@ -1088,6 +1088,40 @@ fn tools_menu(
                 ),
             ],
         });
+        submenu.push(ContextMenuItem {
+            id: "fs.versions".into(),
+            label_key: "fm-action-versions".into(),
+            icon: "action-copy",
+            swatch_color: None,
+            enabled: has_selection,
+            separator_after: false,
+            submenu: vec![
+                item(
+                    "fs.versions-view",
+                    "fm-action-versions-view",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.versions-restore",
+                    "fm-action-versions-restore",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.versions-copy",
+                    "fm-action-versions-copy",
+                    "action-copy",
+                    has_selection,
+                ),
+                item(
+                    "fs.versions-os",
+                    "fm-action-versions-os",
+                    "action-copy",
+                    has_selection,
+                ),
+            ],
+        });
     }
     ContextMenuItem {
         id: "fs.tools".into(),
@@ -1330,6 +1364,8 @@ mod tests {
         assert!(tool_ids.contains(&"fs.hash"));
         #[cfg(windows)]
         assert!(tool_ids.contains(&"fs.share"));
+        #[cfg(windows)]
+        assert!(tool_ids.contains(&"fs.versions"));
         let hash = tools.submenu.iter().find(|i| i.id == "fs.hash").unwrap();
         assert!(hash.submenu.iter().any(|i| i.id == "fs.hash-sha256"));
         let open = menu.iter().find(|i| i.id == "fs.open").unwrap();

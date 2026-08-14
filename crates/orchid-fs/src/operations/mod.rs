@@ -1,4 +1,4 @@
-//! File operations (copy, move, delete, recycle, share, compare, hash, encode, attributes).
+//! File operations (copy, move, delete, recycle, share, versions, compare, hash, encode, attributes).
 
 pub mod attrs;
 pub mod checksum;
@@ -15,6 +15,7 @@ pub mod recycle;
 pub mod share;
 pub mod signature;
 pub mod split;
+pub mod versions;
 
 pub use attrs::{
     acl_grant, acl_reset, acl_text, apply_attr_patch, apply_name_case, chmod, chown, parse_mode,
@@ -48,3 +49,7 @@ pub use share::{
 };
 pub use signature::{inspect_signature, SignatureReport};
 pub use split::{discover_parts, join_files, join_output_name, split_file};
+pub use versions::{
+    copy_previous_version, open_previous_versions_tab, pick_previous_version,
+    previous_version_file_stamp, previous_versions, restore_previous_version, PreviousVersion,
+};
