@@ -98,6 +98,7 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
 - [x] Tantivy indexing — `orchid-search::SearchEngine` with full schema, batched writer, commit/optimize/shutdown
 - [x] File watcher for incremental updates — `IndexFsSubscriber` + `FileWatcher` on `[search].included-roots` (default: Documents), bootstrap crawl, text/PDF extract → `IndexScheduler` (wired in `OrchidApp::bootstrap`)
 - [x] Universal search (files + commands + settings) — live settings editor for theme/locale/density/bools; complex shortcut/leader fields stay read-only; search debouncer hardening + `SEARCH_LIVE` miss metrics; file hits show Tantivy content snippets in the subtitle when available
+- [x] File-manager Find — name / mask / regex, size, date, attributes, content grep, case toggle, archives, Windows Search + Tantivy indexed fallback, save as `virtual:search`, duplicates by BLAKE3, large files (`Alt+F7`)
 
 ### UX
 - [x] Theming (light/dark, density modes, hot-reload) — theme, locale, and density hot-reload from config.toml (main window + startup window)

@@ -151,6 +151,11 @@ export component FmPane inherits Rectangle {
                 root.nav-command("move-other");
                 return accept;
             }
+            if (!rename.active && !root.address-editing && event.modifiers.alt
+                && event.text == Key.F7) {
+                root.nav-command("find");
+                return accept;
+            }
             if (!rename.active && !root.address-editing && event.text == Key.F7) {
                 root.new-folder();
                 return accept;

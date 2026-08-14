@@ -25,7 +25,12 @@ release yet.
 #### File manager & storage
 - Dual-pane FM with icons / list / details / gallery, tabs, breadcrumbs,
   drag-and-drop (including OS drop and FM→viewer), tags, colour labels, quick
-  filter, virtual folders (Recent, Starred, Tags, categories, network).
+  filter, virtual folders (Recent, Starred, Tags, Search results, categories,
+  network).
+- Find files (`Alt+F7` / Tools): name / mask / regex, size, date, attributes,
+  content grep (literal or regex), case sensitivity, archives, indexed search
+  (Windows Search then Tantivy), save results as a virtual folder; find
+  duplicates by BLAKE3 content hash and find large files.
 - Toolbar **visited folders** menu: top 5 most frequent paths, then recent;
   persisted with the widget.
 - Address bar switches to an editable path with folder autocomplete; focus

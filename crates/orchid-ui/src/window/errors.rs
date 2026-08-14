@@ -153,6 +153,8 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         "virtual-empty-starred" => return locale.tr("fm-virtual-starred-empty"),
         "virtual-empty-tags" => return locale.tr("fm-virtual-tags-empty"),
         "virtual-empty-category" => return locale.tr("fm-virtual-category-empty"),
+        "virtual-empty-search" => return locale.tr("fm-virtual-search-empty"),
+        "virtual-empty-search-results" => return locale.tr("fm-virtual-search-results-empty"),
         "fm-transfer-virtual-dest"
         | "fm-virtual-create-denied"
         | "fm-encryption-unavailable"

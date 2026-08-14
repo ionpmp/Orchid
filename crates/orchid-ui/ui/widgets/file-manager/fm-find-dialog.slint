@@ -1,0 +1,370 @@
+import { Theme } from "../../theme_global.slint";
+import { FmFindState } from "../../workspace/defs.slint";
+
+export component FmFindDialog inherits Rectangle {
+    in property <FmFindState> state;
+    callback commit(string);
+    callback cancel();
+
+    property <string> name-text: "";
+    property <string> content-text: "";
+    property <string> size-min: "";
+    property <string> size-max: "";
+    property <string> days: "";
+    property <bool> name-regex-on: false;
+    property <bool> content-regex-on: false;
+    property <bool> case-on: false;
+    property <bool> recursive-on: true;
+    property <bool> archives-on: false;
+    property <bool> indexed-on: false;
+    property <bool> save-on: true;
+    property <bool> files-on: true;
+    property <bool> folders-on: true;
+    property <bool> hidden-on: false;
+    property <bool> readonly-on: false;
+    property <bool> system-on: false;
+
+    background: #00000080;
+
+    backdrop-ta := TouchArea {
+        clicked => { root.cancel(); }
+    }
+
+    function packed-payload() -> string {
+        return root.name-text + "\n"
+            + root.content-text + "\n"
+            + (root.name-regex-on ? "1" : "0") + "\n"
+            + (root.content-regex-on ? "1" : "0") + "\n"
+            + (root.case-on ? "1" : "0") + "\n"
+            + (root.recursive-on ? "1" : "0") + "\n"
+            + (root.archives-on ? "1" : "0") + "\n"
+            + (root.indexed-on ? "1" : "0") + "\n"
+            + (root.save-on ? "1" : "0") + "\n"
+            + root.size-min + "\n"
+            + root.size-max + "\n"
+            + root.days + "\n"
+            + (root.files-on ? "1" : "0") + "\n"
+            + (root.folders-on ? "1" : "0") + "\n"
+            + (root.hidden-on ? "1" : "0") + "\n"
+            + (root.readonly-on ? "1" : "0") + "\n"
+            + (root.system-on ? "1" : "0") + "\n";
+    }
+
+    function toggle-row(on: bool, label: string) -> string {
+        return (on ? "☑ " : "☐ ") + label;
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 440px;
+        height: min(lay.preferred-height + 16px, parent.height - 24px);
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
+        drop-shadow-color: #00000080;
+
+        lay := VerticalLayout {
+            padding: 16px;
+            spacing: 8px;
+
+            Text {
+                text: state.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-lg;
+                font-weight: Theme.weight-semibold;
+            }
+
+            if state.hint != "" : Text {
+                text: state.hint;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
+            Text {
+                text: state.name-label;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+            }
+            Rectangle {
+                height: 32px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                TextInput {
+                    text: root.name-text;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    vertical-alignment: center;
+                    single-line: true;
+                    edited => { root.name-text = self.text; }
+                }
+            }
+
+            Text {
+                text: state.content-label;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+            }
+            Rectangle {
+                height: 32px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                TextInput {
+                    text: root.content-text;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    vertical-alignment: center;
+                    single-line: true;
+                    edited => { root.content-text = self.text; }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 26px;
+                    name-re-ta := TouchArea { clicked => { root.name-regex-on = !root.name-regex-on; } }
+                    Text {
+                        text: root.toggle-row(root.name-regex-on, state.name-regex-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 26px;
+                    content-re-ta := TouchArea { clicked => { root.content-regex-on = !root.content-regex-on; } }
+                    Text {
+                        text: root.toggle-row(root.content-regex-on, state.content-regex-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 26px;
+                    case-ta := TouchArea { clicked => { root.case-on = !root.case-on; } }
+                    Text {
+                        text: root.toggle-row(root.case-on, state.case-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 26px;
+                    rec-ta := TouchArea { clicked => { root.recursive-on = !root.recursive-on; } }
+                    Text {
+                        text: root.toggle-row(root.recursive-on, state.recursive-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 26px;
+                    arch-ta := TouchArea { clicked => { root.archives-on = !root.archives-on; } }
+                    Text {
+                        text: root.toggle-row(root.archives-on, state.archives-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 26px;
+                    idx-ta := TouchArea { clicked => { root.indexed-on = !root.indexed-on; } }
+                    Text {
+                        text: root.toggle-row(root.indexed-on, state.indexed-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 26px;
+                save-ta := TouchArea { clicked => { root.save-on = !root.save-on; } }
+                Text {
+                    text: root.toggle-row(root.save-on, state.save-label);
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 26px;
+                    files-ta := TouchArea { clicked => { root.files-on = !root.files-on; } }
+                    Text {
+                        text: root.toggle-row(root.files-on, state.files-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 26px;
+                    folders-ta := TouchArea { clicked => { root.folders-on = !root.folders-on; } }
+                    Text {
+                        text: root.toggle-row(root.folders-on, state.folders-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: state.size-min-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 28px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TextInput {
+                            text: root.size-min;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.size-min = self.text; }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: state.size-max-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 28px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TextInput {
+                            text: root.size-max;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.size-max = self.text; }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 26px;
+                    hidden-ta := TouchArea { clicked => { root.hidden-on = !root.hidden-on; } }
+                    Text {
+                        text: root.toggle-row(root.hidden-on, state.hidden-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 26px;
+                    ro-ta := TouchArea { clicked => { root.readonly-on = !root.readonly-on; } }
+                    Text {
+                        text: root.toggle-row(root.readonly-on, state.readonly-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 26px;
+                    sys-ta := TouchArea { clicked => { root.system-on = !root.system-on; } }
+                    Text {
+                        text: root.toggle-row(root.system-on, state.system-label);
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: state.days-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                }
+                Rectangle {
+                    height: 28px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    TextInput {
+                        text: root.days;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        single-line: true;
+                        edited => { root.days = self.text; }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: cancel-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    cancel-ta := TouchArea { clicked => { root.cancel(); } }
+                    Text {
+                        text: state.cancel-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 96px;
+                    height: 32px;
+                    background: ok-ta.has-hover ? Theme.accent-brand : #4d82ff88;
+                    border-radius: Theme.radius-md;
+                    ok-ta := TouchArea {
+                        clicked => { root.commit(root.packed-payload()); }
+                    }
+                    Text {
+                        text: state.ok-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

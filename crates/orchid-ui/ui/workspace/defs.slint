@@ -1228,6 +1228,31 @@ export struct FmConflictDialog {
     cancel-label: string,
 }
 
+export struct FmFindState {
+    active: bool,
+    title: string,
+    hint: string,
+    name-label: string,
+    content-label: string,
+    name-regex-label: string,
+    content-regex-label: string,
+    case-label: string,
+    recursive-label: string,
+    archives-label: string,
+    indexed-label: string,
+    save-label: string,
+    files-label: string,
+    folders-label: string,
+    size-min-label: string,
+    size-max-label: string,
+    hidden-label: string,
+    readonly-label: string,
+    system-label: string,
+    days-label: string,
+    ok-label: string,
+    cancel-label: string,
+}
+
 export struct FmRenameState {
     active: bool,
     path: string,
@@ -1319,6 +1344,7 @@ export struct FileManagerModel {
     confirm-dialog: FmConfirmDialog,
     conflict-dialog: FmConflictDialog,
     rename: FmRenameState,
+    find: FmFindState,
     tag: FmTagState,
     passphrase: FmPassphraseState,
     managed-policy: FmManagedPolicyState,

@@ -9,9 +9,9 @@ use uuid::Uuid;
 use super::super::errors::fm_localized_error;
 use crate::slint_generated::{
     FileManagerModel, FmBreadcrumb, FmConfirmDialog, FmConflictDialog, FmContextAction,
-    FmContextMenu, FmContextSubitem, FmEntry, FmManagedPolicyRow, FmManagedPolicyState, FmPane,
-    FmPassphraseState, FmPathSuggest, FmRenameState, FmSidebarItem, FmTab, FmTagChip, FmTagState,
-    FmVisitHistoryItem,
+    FmContextMenu, FmContextSubitem, FmEntry, FmFindState, FmManagedPolicyRow,
+    FmManagedPolicyState, FmPane, FmPassphraseState, FmPathSuggest, FmRenameState, FmSidebarItem,
+    FmTab, FmTagChip, FmTagState, FmVisitHistoryItem,
 };
 
 /// Reuse Slint thumb images when the underlying RGBA `Arc` is unchanged.
@@ -115,6 +115,7 @@ pub(crate) struct FileManagerOverlays {
     pub(crate) confirm_dialog: FmConfirmDialog,
     pub(crate) conflict_dialog: FmConflictDialog,
     pub(crate) rename: FmRenameState,
+    pub(crate) find: FmFindState,
     pub(crate) tag: FmTagState,
     pub(crate) tag_paths: Vec<String>,
     pub(crate) passphrase: FmPassphraseState,
@@ -155,6 +156,7 @@ pub(crate) fn empty_file_manager_model(locale: &LocaleManager) -> FileManagerMod
         confirm_dialog: empty_confirm_dialog(),
         conflict_dialog: empty_conflict_dialog(),
         rename: empty_rename_state(),
+        find: empty_find_state(),
         tag: empty_tag_state(),
         passphrase: empty_passphrase_state(),
         managed_policy: empty_managed_policy_state(),
@@ -334,6 +336,7 @@ pub(crate) fn empty_fm_overlays() -> FileManagerOverlays {
         confirm_dialog: empty_confirm_dialog(),
         conflict_dialog: empty_conflict_dialog(),
         rename: empty_rename_state(),
+        find: empty_find_state(),
         tag: empty_tag_state(),
         tag_paths: Vec::new(),
         passphrase: empty_passphrase_state(),
@@ -350,6 +353,33 @@ pub(crate) fn empty_fm_overlays() -> FileManagerOverlays {
         batch_rename_paths: Vec::new(),
         tool_action: None,
         tool_paths: Vec::new(),
+    }
+}
+
+pub(crate) fn empty_find_state() -> FmFindState {
+    FmFindState {
+        active: false,
+        title: SharedString::new(),
+        hint: SharedString::new(),
+        name_label: SharedString::new(),
+        content_label: SharedString::new(),
+        name_regex_label: SharedString::new(),
+        content_regex_label: SharedString::new(),
+        case_label: SharedString::new(),
+        recursive_label: SharedString::new(),
+        archives_label: SharedString::new(),
+        indexed_label: SharedString::new(),
+        save_label: SharedString::new(),
+        files_label: SharedString::new(),
+        folders_label: SharedString::new(),
+        size_min_label: SharedString::new(),
+        size_max_label: SharedString::new(),
+        hidden_label: SharedString::new(),
+        readonly_label: SharedString::new(),
+        system_label: SharedString::new(),
+        days_label: SharedString::new(),
+        ok_label: SharedString::new(),
+        cancel_label: SharedString::new(),
     }
 }
 
@@ -378,6 +408,7 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
         "virtual:recent" => Some("fav:recent"),
         "virtual:starred" => Some("fav:starred"),
         "virtual:tags" => Some("fav:tags"),
+        "virtual:search" => Some("fav:search"),
         "virtual:categories/images" => Some("cat:images"),
         "virtual:categories/documents" => Some("cat:documents"),
         "virtual:categories/video" => Some("cat:video"),
@@ -666,6 +697,15 @@ pub(crate) fn build_sidebar_items(
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("fav:recent"),
+        },
+        FmSidebarItem {
+            id: "fav:search".into(),
+            label: locale.tr("fm-virtual-search").into(),
+            icon: "sidebar-search".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: active_id == Some("fav:search")
+                || active_path.starts_with("virtual:search/"),
         },
         FmSidebarItem {
             id: "section:categories".into(),
@@ -1223,6 +1263,7 @@ fn apply_fm_shell_scalars(
         || model.confirm_dialog.visible != overlays.confirm_dialog.visible
         || model.conflict_dialog.visible != overlays.conflict_dialog.visible
         || model.rename.active != overlays.rename.active
+        || model.find.active != overlays.find.active
         || model.tag.active != overlays.tag.active
         || model.passphrase.active != overlays.passphrase.active
         || model.managed_policy.active != overlays.managed_policy.active;
@@ -1248,6 +1289,7 @@ fn apply_fm_shell_scalars(
     model.confirm_dialog = overlays.confirm_dialog;
     model.conflict_dialog = overlays.conflict_dialog;
     model.rename = overlays.rename;
+    model.find = overlays.find;
     model.tag = overlays.tag;
     model.passphrase = overlays.passphrase;
     model.managed_policy = overlays.managed_policy;
@@ -1482,6 +1524,7 @@ pub(crate) fn build_file_manager_model(
         confirm_dialog: empty_confirm_dialog(),
         conflict_dialog: empty_conflict_dialog(),
         rename: empty_rename_state(),
+        find: empty_find_state(),
         tag: empty_tag_state(),
         passphrase: empty_passphrase_state(),
         managed_policy: empty_managed_policy_state(),
@@ -1527,6 +1570,7 @@ fn fm_action_shortcut(id: &str) -> &'static str {
         "fs.open-tab" => "Ctrl+Shift+T",
         "fs.open-other-pane" => "Ctrl+Shift+Enter",
         "fs.branch-view" => "Ctrl+B",
+        "fs.find" => "Alt+F7",
         _ => "",
     }
 }

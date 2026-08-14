@@ -23,8 +23,8 @@ use crate::slint_generated::{
 use crate::window::errors::{fm_localized_error, is_passphrase_retryable};
 use crate::window::models::{
     build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_conflict_dialog,
-    empty_context_menu, empty_fm_overlays, empty_managed_policy_state, empty_passphrase_state,
-    empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
+    empty_context_menu, empty_find_state, empty_fm_overlays, empty_managed_policy_state,
+    empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
     fm_passphrase_dialog_labels, patch_fm_selection, sync_fm_path_suggestions, FileManagerOverlays,
     FmViewport,
 };
@@ -1819,6 +1819,7 @@ impl MainWindowController {
                 entry.confirm_dialog = empty_confirm_dialog();
                 entry.conflict_dialog = empty_conflict_dialog();
                 entry.rename = empty_rename_state();
+                entry.find = empty_find_state();
                 entry.tag = empty_tag_state();
                 entry.tag_paths.clear();
                 entry.batch_rename_paths.clear();
@@ -2267,6 +2268,78 @@ impl MainWindowController {
                     }
                 }
             }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NeedsFindDialog { root: _ } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.find = crate::slint_generated::FmFindState {
+                    active: true,
+                    title: self.locale.tr("fm-find-title").into(),
+                    hint: self.locale.tr("fm-find-hint").into(),
+                    name_label: self.locale.tr("fm-find-name").into(),
+                    content_label: self.locale.tr("fm-find-content").into(),
+                    name_regex_label: self.locale.tr("fm-find-name-regex").into(),
+                    content_regex_label: self.locale.tr("fm-find-content-regex").into(),
+                    case_label: self.locale.tr("fm-find-case").into(),
+                    recursive_label: self.locale.tr("fm-find-recursive").into(),
+                    archives_label: self.locale.tr("fm-find-archives").into(),
+                    indexed_label: self.locale.tr("fm-find-indexed").into(),
+                    save_label: self.locale.tr("fm-find-save").into(),
+                    files_label: self.locale.tr("fm-find-files").into(),
+                    folders_label: self.locale.tr("fm-find-folders").into(),
+                    size_min_label: self.locale.tr("fm-find-size-min").into(),
+                    size_max_label: self.locale.tr("fm-find-size-max").into(),
+                    hidden_label: self.locale.tr("fm-find-hidden").into(),
+                    readonly_label: self.locale.tr("fm-find-readonly").into(),
+                    system_label: self.locale.tr("fm-find-system").into(),
+                    days_label: self.locale.tr("fm-find-days").into(),
+                    ok_label: self.locale.tr("fm-rename-ok").into(),
+                    cancel_label: self.locale.tr("fm-rename-cancel").into(),
+                };
+                entry.rename = FmRenameState {
+                    active: true,
+                    path: "orchid:find".into(),
+                    proposed_name: SharedString::new(),
+                    title: SharedString::new(),
+                    hint: SharedString::new(),
+                    show_filter: false,
+                    files_label: SharedString::new(),
+                    folders_label: SharedString::new(),
+                    size_min_label: SharedString::new(),
+                    size_max_label: SharedString::new(),
+                    hidden_label: SharedString::new(),
+                    readonly_label: SharedString::new(),
+                    days_label: SharedString::new(),
+                    ok_label: SharedString::new(),
+                    cancel_label: SharedString::new(),
+                };
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                self.schedule_rebuild();
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::NavigateSearch { path } => {
+                let mut over = self.fm_overlays.write();
+                let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                entry.rename = empty_rename_state();
+                entry.find = empty_find_state();
+                entry.context_menu = empty_context_menu();
+                drop(over);
+                let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
+                    warn!(path = %path, "navigate search: invalid path");
+                    return;
+                };
+                let pane = orchid_widgets::builtin::file_manager::focused_pane(inst).unwrap_or(0);
+                let tw = Arc::downgrade(self);
+                spawn::spawn_local_compat(async move {
+                    if let Err(e) =
+                        orchid_widgets::builtin::file_manager::navigate(inst, pane, fs_path).await
+                    {
+                        warn!(?e, "fm navigate search");
+                    }
+                    if let Some(c) = tw.upgrade() {
+                        c.schedule_rebuild();
+                    }
+                });
+            }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenExternally { paths } => {
                 for path in paths {
                     let open_path = match orchid_fs::FsPath::new(&path) {
@@ -2422,6 +2495,31 @@ impl MainWindowController {
             });
             return;
         }
+        if old_path.as_str() == "orchid:find" {
+            let packed = new_name.to_string();
+            let tw = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                match orchid_widgets::builtin::file_manager::complete_find(inst, &packed).await {
+                    Ok(outcome) => {
+                        if let Some(c) = tw.upgrade() {
+                            let mut over = c.fm_overlays.write();
+                            let entry = over.entry(inst).or_insert_with(default_fm_overlays);
+                            entry.rename = empty_rename_state();
+                            entry.find = empty_find_state();
+                            drop(over);
+                            c.apply_fm_action_outcome(inst, outcome);
+                        }
+                    }
+                    Err(e) => {
+                        warn!(?e, "fm find");
+                        if let Some(c) = tw.upgrade() {
+                            c.notify_fm_action_failed(&e);
+                        }
+                    }
+                }
+            });
+            return;
+        }
         if old_path.as_str() == "orchid:tool" {
             let (action, paths) = self
                 .fm_overlays
@@ -2564,6 +2662,7 @@ impl MainWindowController {
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         let restore_conflict = entry.rename.path.as_str() == "orchid:conflict-rename";
         entry.rename = empty_rename_state();
+        entry.find = empty_find_state();
         entry.create_folder_parent = None;
         entry.create_item_is_file = false;
         entry.select_mask_op = None;
@@ -3029,6 +3128,10 @@ impl MainWindowController {
                 if !paths.is_empty() {
                     self.spawn_fm_action(inst, "viewer.edit", paths);
                 }
+                return;
+            }
+            "find" => {
+                self.spawn_fm_action(inst, "fs.find", Vec::new());
                 return;
             }
             "batch-rename" => {

@@ -10,6 +10,7 @@ import { FmTagDialog } from "fm-tag-dialog.slint";
 import { FmPassphraseDialog } from "fm-passphrase-dialog.slint";
 import { FmManagedPolicyDialog } from "fm-managed-policy-dialog.slint";
 import { FmRenameDialog } from "fm-rename-dialog.slint";
+import { FmFindDialog } from "fm-find-dialog.slint";
 
 export component FileManagerView inherits Rectangle {
     in property <FileManagerModel> model;
@@ -477,6 +478,15 @@ export component FileManagerView inherits Rectangle {
         height: parent.height;
         state: model.managed-policy;
         close => { root.managed-policy-close(); }
+    }
+
+    if model.find.active : FmFindDialog {
+        x: 0; y: 0;
+        width: parent.width;
+        height: parent.height;
+        state: model.find;
+        commit(packed) => { root.rename-commit("orchid:find", packed); }
+        cancel => { root.rename-cancel(); }
     }
 
     if model.rename.active && (model.rename.path == "" || model.rename.path == "orchid:select-mask" || model.rename.path == "orchid:batch-rename" || model.rename.path == "orchid:conflict-rename" || model.rename.path == "orchid:tool") : FmRenameDialog {
