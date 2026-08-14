@@ -28,6 +28,8 @@ fn from_rgba(src: RgbaImage, template: &LoadedImage) -> LoadedImage {
         color_source: template.color_source.clone(),
         color_dest: template.color_dest.clone(),
         orientation: template.orientation,
+        bit_depth: template.bit_depth,
+        color_model: template.color_model.clone(),
     }
 }
 
@@ -108,6 +110,8 @@ pub fn crop(src: &LoadedImage, x: u32, y: u32, w: u32, h: u32) -> Result<LoadedI
         color_source: src.color_source.clone(),
         color_dest: src.color_dest.clone(),
         orientation: src.orientation,
+        bit_depth: src.bit_depth,
+        color_model: src.color_model.clone(),
     })
 }
 

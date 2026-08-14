@@ -39,6 +39,10 @@ pub struct LoadedImage {
     pub color_dest: String,
     /// EXIF orientation that was applied (`1` = none).
     pub orientation: u32,
+    /// Bits per channel before conversion to 8-bit RGBA.
+    pub bit_depth: u8,
+    /// `RGB`, `RGBA`, `L`, …
+    pub color_model: String,
 }
 
 impl LoadedImage {
@@ -52,6 +56,8 @@ impl LoadedImage {
             color_source: String::new(),
             color_dest: String::new(),
             orientation: 1,
+            bit_depth: 8,
+            color_model: "RGB".into(),
         }
     }
 }
@@ -214,6 +220,7 @@ fn finish_decoded(
     format: ImageFormat,
 ) -> LoadedImage {
     let orientation = crate::image::exif::orientation_from_bytes(file_bytes);
+    let (bit_depth, color_model) = crate::image::metadata::color_type_label(&img);
     let img = crate::image::exif::apply_orientation(img, orientation);
     let (w, h) = img.dimensions();
     let mut rgba = img.to_rgba8().into_raw();
@@ -227,6 +234,8 @@ fn finish_decoded(
         color_source: color.source_profile,
         color_dest: color.dest_profile,
         orientation,
+        bit_depth,
+        color_model: color_model.to_string(),
     }
 }
 

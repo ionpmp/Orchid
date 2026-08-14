@@ -58,6 +58,9 @@ kamadak-exif.workspace = true
 libjpeg-turbo-rs.workspace = true
 qcms.workspace = true
 id3.workspace = true
+sha2.workspace = true
+md-5.workspace = true
+hex.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true

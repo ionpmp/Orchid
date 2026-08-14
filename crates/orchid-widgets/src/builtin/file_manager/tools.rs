@@ -698,6 +698,11 @@ fn append_content_metadata(
             }
             _ => {}
         }
+        let sidecar = orchid_viewers::format_sidecar_report(&os);
+        if !sidecar.is_empty() {
+            body.push('\n');
+            body.push_str(&sidecar);
+        }
     }
     if orchid_viewers::is_id3_extension(&ext) {
         match orchid_viewers::format_id3_report(&os) {

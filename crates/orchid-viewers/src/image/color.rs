@@ -65,6 +65,13 @@ pub fn apply_embedded_icc(rgba: &mut [u8], file_bytes: &[u8]) -> ColorManageInfo
     }
 }
 
+/// Description of an embedded ICC profile, when the file carries one.
+#[must_use]
+pub fn embedded_icc_label(bytes: &[u8]) -> Option<String> {
+    let icc = extract_icc(bytes)?;
+    profile_description(&icc).or_else(|| Some("embedded ICC".into()))
+}
+
 fn extract_icc(bytes: &[u8]) -> Option<Vec<u8>> {
     let cursor = Cursor::new(bytes);
     let reader = image::ImageReader::new(cursor).with_guessed_format().ok()?;

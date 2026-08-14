@@ -155,6 +155,19 @@ pub struct ImageSnapshot {
     pub prev_rgba: Option<Arc<Vec<u8>>>,
     pub prev_width: u32,
     pub prev_height: u32,
+    pub bit_depth: u8,
+    pub color_model: String,
+    pub meta_panel: bool,
+    pub meta_overlay: bool,
+    pub meta_text: String,
+    pub meta_overlay_text: String,
+    pub hist_rgba: Option<Arc<Vec<u8>>>,
+    pub hist_width: u32,
+    pub hist_height: u32,
+    pub hist_mode: u8,
+    pub probe_text: String,
+    pub gps_label: String,
+    pub has_gps: bool,
 }
 
 /// One folder sibling in the image thumbnail strip or grid.

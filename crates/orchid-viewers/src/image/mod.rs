@@ -6,6 +6,7 @@ pub mod color;
 pub mod exif;
 pub mod loader;
 pub mod lossless;
+pub mod metadata;
 pub mod operations;
 pub mod slideshow;
 pub mod transform;
@@ -454,6 +455,19 @@ impl Viewer for ImageViewer {
             prev_rgba: None,
             prev_width: 0,
             prev_height: 0,
+            bit_depth: image.bit_depth,
+            color_model: image.color_model.clone(),
+            meta_panel: false,
+            meta_overlay: false,
+            meta_text: String::new(),
+            meta_overlay_text: String::new(),
+            hist_rgba: None,
+            hist_width: 0,
+            hist_height: 0,
+            hist_mode: 0,
+            probe_text: String::new(),
+            gps_label: String::new(),
+            has_gps: false,
         })
     }
 

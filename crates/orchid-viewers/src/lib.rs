@@ -34,6 +34,11 @@ pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
 pub use image::exif::{format_exif_report, is_exif_extension, read_exif_fields};
 pub use image::lossless::{apply_lossless, format_from_extension, LosslessOp};
+pub use image::metadata::{
+    camera_overlay, compute_histogram, describe_pixel, format_inspect_panel, format_sidecar_report,
+    inspect_image_bytes, inspect_image_file, render_histogram, ChannelHistogram, GpsFix, HistMode,
+    ImageInspect,
+};
 pub use image::slideshow::{
     export_slideshow_pack, export_slideshow_video, is_slideshow_audio_extension, overlay_text,
     SlideTransition, SlideshowExport,
