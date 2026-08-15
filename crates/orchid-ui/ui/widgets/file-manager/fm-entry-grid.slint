@@ -16,9 +16,11 @@ export component FmEntryGrid inherits Rectangle {
     in property <int> selection-count;
 
     property <string> pressing-path: "";
+    property <string> pending-exclusive: "";
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
+    property <bool> press-empty: false;
     property <bool> marquee-active: false;
     property <length> marquee-x0: 0px;
     property <length> marquee-y0: 0px;
@@ -41,6 +43,7 @@ export component FmEntryGrid inherits Rectangle {
     callback drag-scroll-changed(length, length, length, length);
     callback viewport-changed(length, length, length);
     callback marquee-select(int, int, bool, int);
+    callback empty-clicked();
 
     property <length> tile-size: large ? 220px : 100px;
     property <length> tile-height: large ? 240px : 120px;
@@ -50,10 +53,87 @@ export component FmEntryGrid inherits Rectangle {
     property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
     property <int> first-index: virtualized ? max(0, virtual-first-index) : 0;
 
-    function grid-index-at(x: length, y: length) -> int {
-        return max(0, min(max(0, total-count - 1),
-            max(0, floor((y - tile-spacing) / (tile-height + tile-spacing))) * columns
-            + max(0, min(columns - 1, floor((x - tile-spacing) / (tile-size + tile-spacing))))));
+    function row-top(r: int) -> length {
+        return tile-spacing + r * (tile-height + tile-spacing);
+    }
+
+    function col-left(c: int) -> length {
+        return tile-spacing + c * (tile-size + tile-spacing);
+    }
+
+    function row-count() -> int {
+        if (total-count <= 0 || columns <= 0) { return 0; }
+        return floor((total-count + columns - 1) / columns);
+    }
+
+    function first-overlap-row(ry0: length, ry1: length) -> int {
+        let n = row-count();
+        if (n <= 0) { return -1; }
+        let guess = max(0, min(n - 1, floor((ry0 - tile-spacing) / (tile-height + tile-spacing))));
+        if (ry0 < row-top(guess) + tile-height && ry1 > row-top(guess)) {
+            return guess;
+        }
+        if (guess + 1 < n && ry0 < row-top(guess + 1) + tile-height && ry1 > row-top(guess + 1)) {
+            return guess + 1;
+        }
+        return -1;
+    }
+
+    function last-overlap-row(ry0: length, ry1: length) -> int {
+        let n = row-count();
+        if (n <= 0) { return -1; }
+        let guess = max(0, min(n - 1, floor((ry1 - tile-spacing - 0.5px) / (tile-height + tile-spacing))));
+        if (ry0 < row-top(guess) + tile-height && ry1 > row-top(guess)) {
+            return guess;
+        }
+        if (guess > 0 && ry0 < row-top(guess - 1) + tile-height && ry1 > row-top(guess - 1)) {
+            return guess - 1;
+        }
+        return -1;
+    }
+
+    function first-overlap-col(rx0: length, rx1: length) -> int {
+        let guess = max(0, min(columns - 1, floor((rx0 - tile-spacing) / (tile-size + tile-spacing))));
+        if (rx0 < col-left(guess) + tile-size && rx1 > col-left(guess)) {
+            return guess;
+        }
+        if (guess + 1 < columns && rx0 < col-left(guess + 1) + tile-size && rx1 > col-left(guess + 1)) {
+            return guess + 1;
+        }
+        return -1;
+    }
+
+    function last-overlap-col(rx0: length, rx1: length) -> int {
+        let guess = max(0, min(columns - 1, floor((rx1 - tile-spacing - 0.5px) / (tile-size + tile-spacing))));
+        if (rx0 < col-left(guess) + tile-size && rx1 > col-left(guess)) {
+            return guess;
+        }
+        if (guess > 0 && rx0 < col-left(guess - 1) + tile-size && rx1 > col-left(guess - 1)) {
+            return guess - 1;
+        }
+        return -1;
+    }
+
+    function finish-empty-gesture() {
+        root.press-empty = false;
+        root.marquee-active = false;
+        let rx0 = min(root.marquee-x0, root.marquee-x1);
+        let rx1 = max(root.marquee-x0, root.marquee-x1);
+        let ry0 = min(root.marquee-y0, root.marquee-y1);
+        let ry1 = max(root.marquee-y0, root.marquee-y1);
+        let r0 = root.first-overlap-row(ry0, ry1);
+        let r1 = root.last-overlap-row(ry0, ry1);
+        let c0 = root.first-overlap-col(rx0, rx1);
+        let c1 = root.last-overlap-col(rx0, rx1);
+        if (abs(rx1 - rx0) >= 4px || abs(ry1 - ry0) >= 4px) {
+            if (r0 >= 0 && r1 >= 0 && c0 >= 0 && c1 >= 0) {
+                root.marquee-select(r0 * columns + c0, r1 * columns + c1, root.marquee-additive, columns);
+            } else if (!root.marquee-additive) {
+                root.empty-clicked();
+            }
+        } else if (!root.marquee-additive) {
+            root.empty-clicked();
+        }
     }
 
     background: transparent;
@@ -65,7 +145,7 @@ export component FmEntryGrid inherits Rectangle {
     grid-flick := Flickable {
         width: parent.width;
         height: parent.height;
-        interactive: !root.drag-active && !root.marquee-active;
+        interactive: !root.drag-active && !root.press-empty && !root.marquee-active;
         viewport-width: self.width;
         viewport-height: virtualized
             ? max(self.height, virtual-content-height)
@@ -95,7 +175,8 @@ export component FmEntryGrid inherits Rectangle {
                 }
                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left
                     && !root.drag-active) {
-                    root.marquee-active = true;
+                    root.press-empty = true;
+                    root.marquee-active = false;
                     root.marquee-x0 = self.mouse-x;
                     root.marquee-y0 = self.mouse-y;
                     root.marquee-x1 = self.mouse-x;
@@ -119,10 +200,10 @@ export component FmEntryGrid inherits Rectangle {
             width: tile-size;
             height: tile-height;
             background: entry.is-selected
-                ? Theme.accent-brand
+                ? #4d82ff44
                 : (tile-ta.has-hover ? Theme.surface-raised : transparent);
             border-radius: Theme.radius-md;
-            border-width: drag-active && entry.is-dir && entry.path == drag-drop-target ? 2px : 0px;
+            border-width: entry.is-selected || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 2px : 0px;
             border-color: Theme.accent-brand;
 
             VerticalLayout {
@@ -207,7 +288,7 @@ export component FmEntryGrid inherits Rectangle {
                 font-size: Theme.font-size-sm;
             }
 
-            if root.selection-count > 0 || tile-ta.has-hover : Text {
+            if root.selection-count > 0 || tile-ta.has-hover || entry.is-selected : Text {
                 x: 6px;
                 y: 4px;
                 text: entry.is-selected ? "☑" : "☐";
@@ -221,16 +302,22 @@ export component FmEntryGrid inherits Rectangle {
                 enabled: !(rename.active && entry.path == rename.path);
                 double-clicked => {
                     root.pressing-path = "";
+                    root.pending-exclusive = "";
                     root.entry-double-clicked(entry.path, entry.is-dir);
                 }
                 pointer-event(e) => {
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                        if (self.mouse-x < 24px && self.mouse-y < 24px) {
-                            root.entry-clicked(entry.path, true);
-                        } else if (e.modifiers.shift) {
+                        if (e.modifiers.shift) {
                             root.entry-shift-clicked(entry.path);
+                            root.pending-exclusive = "";
+                        } else if (e.modifiers.control) {
+                            root.entry-clicked(entry.path, true);
+                            root.pending-exclusive = "";
+                        } else if (entry.is-selected) {
+                            root.pending-exclusive = entry.path;
                         } else {
-                            root.entry-clicked(entry.path, e.modifiers.control);
+                            root.entry-clicked(entry.path, false);
+                            root.pending-exclusive = "";
                         }
                         root.pressing-path = entry.path;
                         root.press-x = self.mouse-x;
@@ -239,6 +326,7 @@ export component FmEntryGrid inherits Rectangle {
                     if (pressing-path != "" && e.kind == PointerEventKind.move) {
                         if (abs(self.mouse-x - press-x) >= drag-threshold
                             || abs(self.mouse-y - press-y) >= drag-threshold) {
+                            root.pending-exclusive = "";
                             root.entry-drag-start(pressing-path);
                             root.pressing-path = "";
                         }
@@ -255,11 +343,28 @@ export component FmEntryGrid inherits Rectangle {
                         if (drag-active && !entry.is-dir) {
                             root.drop-on-current-dir();
                         }
+                        if (root.pending-exclusive == entry.path && !root.drag-active) {
+                            root.entry-clicked(entry.path, false);
+                        }
+                        root.pending-exclusive = "";
                         root.pressing-path = "";
                     }
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                         root.entry-context(entry.path, self.mouse-x, self.mouse-y);
                     }
+                }
+            }
+
+            check-ta := TouchArea {
+                x: 2px;
+                y: 2px;
+                width: 22px;
+                height: 22px;
+                enabled: root.selection-count > 0 || tile-ta.has-hover || entry.is-selected;
+                clicked => {
+                    root.pending-exclusive = "";
+                    root.pressing-path = "";
+                    root.entry-clicked(entry.path, true);
                 }
             }
         }
@@ -275,26 +380,22 @@ export component FmEntryGrid inherits Rectangle {
         border-color: Theme.accent-brand;
     }
 
-    if root.marquee-active : TouchArea {
+    if root.press-empty : TouchArea {
         width: 100%;
         height: 100%;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.move) {
                 root.marquee-x1 = self.mouse-x;
                 root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
+                if (abs(root.marquee-x1 - root.marquee-x0) >= 4px
+                    || abs(root.marquee-y1 - root.marquee-y0) >= 4px) {
+                    root.marquee-active = true;
+                }
             }
             if (e.kind == PointerEventKind.up) {
                 root.marquee-x1 = self.mouse-x;
                 root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
-                root.marquee-active = false;
-                if (abs(root.marquee-x1 - root.marquee-x0) >= 4px
-                    || abs(root.marquee-y1 - root.marquee-y0) >= 4px) {
-                    root.marquee-select(
-                        root.grid-index-at(root.marquee-x0, root.marquee-y0),
-                        root.grid-index-at(root.marquee-x1, root.marquee-y1),
-                        root.marquee-additive,
-                        root.columns);
-                }
+                root.finish-empty-gesture();
             }
         }
     }

@@ -4898,11 +4898,14 @@ pub async fn select_index_range(
     additive: bool,
     columns: i32,
 ) -> WidgetResult<()> {
+    if from < 0 || to < 0 {
+        return Ok(());
+    }
     let inner = live_inner(instance_id)?;
     inner.select_index_range_in_pane(
         pane,
-        from.max(0) as usize,
-        to.max(0) as usize,
+        from as usize,
+        to as usize,
         additive,
         columns.max(1) as usize,
     );

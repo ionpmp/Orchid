@@ -234,7 +234,17 @@ impl SelectionModel {
             self.selected.insert(path.to_string());
             self.anchor = Some(path.to_string());
             self.lead = Some(path.to_string());
-        } else if self.lead.as_deref() == Some(path) {
+            return;
+        }
+        if self.selected.is_empty() {
+            self.anchor = None;
+            self.lead = None;
+            return;
+        }
+        if self.anchor.as_deref() == Some(path) {
+            self.anchor = self.selected.iter().next().cloned();
+        }
+        if self.lead.as_deref() == Some(path) {
             self.lead = self.anchor.clone();
         }
     }
@@ -455,6 +465,19 @@ mod tests {
         assert!(s.is_selected("a"));
         s.toggle("a");
         assert!(!s.is_selected("a"));
+        assert_eq!(s.anchor(), None);
+        assert_eq!(s.count(), 0);
+    }
+
+    #[test]
+    fn toggle_off_keeps_remaining_anchor() {
+        let mut s = SelectionModel::new();
+        s.toggle("a");
+        s.toggle("b");
+        s.toggle("a");
+        assert_eq!(s.count(), 1);
+        assert!(s.is_selected("b"));
+        assert_eq!(s.anchor(), Some("b"));
     }
 
     #[test]

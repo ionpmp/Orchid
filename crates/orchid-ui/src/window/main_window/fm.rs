@@ -1608,7 +1608,7 @@ impl MainWindowController {
             }
         });
 
-        if behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
+        if ctrl || behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
             return;
         }
         let is_dir = self.fm_entry_is_dir(inst, p, &ps);

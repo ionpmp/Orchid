@@ -432,6 +432,7 @@ export component FmPane inherits Rectangle {
                         drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
                         marquee-select(a, b, add) => { root.marquee-select(a, b, add, 1); }
+                        empty-clicked => { root.deselect-all(); }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -478,6 +479,7 @@ export component FmPane inherits Rectangle {
                         drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
                         marquee-select(a, b, add, cols) => { root.marquee-select(a, b, add, cols); }
+                        empty-clicked => { root.deselect-all(); }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {

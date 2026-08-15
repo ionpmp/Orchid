@@ -42,9 +42,10 @@ release yet.
   loss restores breadcrumb buttons.
 - File/folder context menu shows name, type, size, modified, and MIME at the
   top instead of a separate Properties item.
-- Selection: Shift+click / Ctrl+click, invert (`*`), name mask (`+` / `-`),
-  files-only / folders-only, attribute filter, rectangular marquee, and
-  hover checkboxes; status bar shows selected size.
+- Selection: click to select, Shift+click range, Ctrl+click / checkbox toggle,
+  invert (`*`), name mask (`+` / `-`), files-only / folders-only, attribute
+  filter, rectangular marquee (tile intersection), click empty to clear;
+  status bar shows selected size.
 - Navigation: Ctrl+PgUp goes up, Alt+F1 / toolbar drive menu switches
   volumes, Ctrl+Shift+T opens the selection in a new tab, Ctrl+Shift+Enter
   opens it in the other pane, Ctrl+B flattens nested files (branch view).
@@ -249,6 +250,11 @@ release yet.
   visible window resets on navigate / tab / filter / sort, and small folders
   always ship a full slice. Scroll virtualization mutates the entry model in
   place instead of remounting the widget (which made selection jump).
+- File-manager selection: click empty space clears; marquee only hits tiles
+  that intersect the rectangle (empty drag no longer selects the last file);
+  checkbox is a dedicated hit target; click-drag of an already-selected set
+  keeps the multi-selection; selected rows use a translucent fill so names
+  stay readable; Ctrl+click in single-click-open mode no longer opens.
 - File-manager background right-click works on empty space and empty folders,
   and shows only relevant actions (new folder / file, paste, select all).
 - File-manager context-menu icons render as geometric glyphs (the previous

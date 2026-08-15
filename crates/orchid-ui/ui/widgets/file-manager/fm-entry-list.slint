@@ -36,20 +36,65 @@ export component FmEntryList inherits Rectangle {
     callback drag-scroll-changed(length, length, length, length);
     callback viewport-changed(length, length, length);
     callback marquee-select(int, int, bool);
+    callback empty-clicked();
 
     background: transparent;
 
     property <string> pressing-path: "";
+    property <string> pending-exclusive: "";
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
+    property <bool> press-empty: false;
     property <bool> marquee-active: false;
     property <length> marquee-y0: 0px;
     property <length> marquee-y1: 0px;
     property <bool> marquee-additive: false;
+    property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
 
-    function list-index-at(y: length) -> int {
-        return max(0, min(max(0, entry-total-count - 1), floor((details ? y - header-height : y) / row-height)));
+    function list-body-y(y: length) -> length {
+        return details ? y - header-height : y;
+    }
+
+    function first-list-hit(y0: length, y1: length) -> int {
+        if (total-count <= 0) { return -1; }
+        let top = min(y0, y1);
+        let bot = max(y0, y1);
+        let body0 = list-body-y(top);
+        let body1 = list-body-y(bot);
+        if (body1 <= 0px) { return -1; }
+        let start = max(0, floor(body0 / row-height));
+        let end = min(total-count - 1, floor((body1 - 0.5px) / row-height));
+        if (start > end) { return -1; }
+        return start;
+    }
+
+    function last-list-hit(y0: length, y1: length) -> int {
+        if (total-count <= 0) { return -1; }
+        let top = min(y0, y1);
+        let bot = max(y0, y1);
+        let body0 = list-body-y(top);
+        let body1 = list-body-y(bot);
+        if (body1 <= 0px) { return -1; }
+        let start = max(0, floor(body0 / row-height));
+        let end = min(total-count - 1, floor((body1 - 0.5px) / row-height));
+        if (start > end) { return -1; }
+        return end;
+    }
+
+    function finish-empty-gesture() {
+        root.press-empty = false;
+        root.marquee-active = false;
+        if (abs(root.marquee-y1 - root.marquee-y0) >= 4px
+            && root.first-list-hit(root.marquee-y0, root.marquee-y1) >= 0
+            && root.last-list-hit(root.marquee-y0, root.marquee-y1) >= 0) {
+            root.marquee-select(
+                root.first-list-hit(root.marquee-y0, root.marquee-y1),
+                root.last-list-hit(root.marquee-y0, root.marquee-y1),
+                root.marquee-additive);
+        } else if (!root.marquee-additive) {
+            root.empty-clicked();
+        }
     }
 
     property <length> row-height: 28px;
@@ -66,7 +111,7 @@ export component FmEntryList inherits Rectangle {
     list-flick := Flickable {
         width: parent.width;
         height: parent.height;
-        interactive: !root.drag-active && !root.marquee-active;
+        interactive: !root.drag-active && !root.press-empty && !root.marquee-active;
         viewport-width: self.width;
         viewport-height: virtualized
             ? max(self.height, virtual-content-height)
@@ -96,7 +141,8 @@ export component FmEntryList inherits Rectangle {
                 }
                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left
                     && !root.drag-active) {
-                    root.marquee-active = true;
+                    root.press-empty = true;
+                    root.marquee-active = false;
                     root.marquee-y0 = self.mouse-y;
                     root.marquee-y1 = self.mouse-y;
                     root.marquee-additive = e.modifiers.control;
@@ -214,9 +260,9 @@ export component FmEntryList inherits Rectangle {
             for entry[i] in entries : Rectangle {
                 height: row-height;
                 background: entry.is-selected
-                    ? Theme.accent-brand
+                    ? #4d82ff44
                     : (row-ta.has-hover ? Theme.surface-raised : transparent);
-                border-width: drag-active && entry.is-dir && entry.path == drag-drop-target ? 1px : 0px;
+                border-width: entry.is-selected || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 1px : 0px;
                 border-color: Theme.accent-brand;
 
                 HorizontalLayout {
@@ -224,12 +270,13 @@ export component FmEntryList inherits Rectangle {
                     padding-right: 8px;
                     spacing: 8px;
 
-                    if root.selection-count > 0 || row-ta.has-hover : Text {
+                    Text {
                         text: entry.is-selected ? "☑" : "☐";
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
-                        width: 16px;
+                        horizontal-alignment: center;
+                        width: 20px;
                     }
 
                     if entry.color-label != "" : Rectangle {
@@ -352,12 +399,17 @@ export component FmEntryList inherits Rectangle {
                     }
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                            if (self.mouse-x < 24px) {
-                                root.entry-clicked(entry.path, true);
-                            } else if (e.modifiers.shift) {
+                            if (e.modifiers.shift) {
                                 root.entry-shift-clicked(entry.path);
+                                root.pending-exclusive = "";
+                            } else if (e.modifiers.control) {
+                                root.entry-clicked(entry.path, true);
+                                root.pending-exclusive = "";
+                            } else if (entry.is-selected) {
+                                root.pending-exclusive = entry.path;
                             } else {
-                                root.entry-clicked(entry.path, e.modifiers.control);
+                                root.entry-clicked(entry.path, false);
+                                root.pending-exclusive = "";
                             }
                             root.pressing-path = entry.path;
                             root.press-x = self.mouse-x;
@@ -366,6 +418,7 @@ export component FmEntryList inherits Rectangle {
                         if (pressing-path != "" && e.kind == PointerEventKind.move) {
                             if (abs(self.mouse-x - press-x) >= drag-threshold
                                 || abs(self.mouse-y - press-y) >= drag-threshold) {
+                                root.pending-exclusive = "";
                                 root.entry-drag-start(pressing-path);
                                 root.pressing-path = "";
                             }
@@ -382,11 +435,26 @@ export component FmEntryList inherits Rectangle {
                             if (drag-active && !entry.is-dir) {
                                 root.drop-on-current-dir();
                             }
+                            if (root.pending-exclusive == entry.path && !root.drag-active) {
+                                root.entry-clicked(entry.path, false);
+                            }
+                            root.pending-exclusive = "";
                             root.pressing-path = "";
                         }
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                             root.entry-context(entry.path, self.mouse-x, self.mouse-y);
                         }
+                    }
+                }
+
+                check-ta := TouchArea {
+                    x: 8px;
+                    width: 20px;
+                    height: 100%;
+                    clicked => {
+                        root.pending-exclusive = "";
+                        root.pressing-path = "";
+                        root.entry-clicked(entry.path, true);
                     }
                 }
             }
@@ -412,22 +480,19 @@ export component FmEntryList inherits Rectangle {
         }
     }
 
-    if root.marquee-active : TouchArea {
+    if root.press-empty : TouchArea {
         width: 100%;
         height: 100%;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.move) {
                 root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
+                if (abs(root.marquee-y1 - root.marquee-y0) >= 4px) {
+                    root.marquee-active = true;
+                }
             }
             if (e.kind == PointerEventKind.up) {
                 root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
-                root.marquee-active = false;
-                if (abs(root.marquee-y1 - root.marquee-y0) >= 4px) {
-                    root.marquee-select(
-                        root.list-index-at(root.marquee-y0),
-                        root.list-index-at(root.marquee-y1),
-                        root.marquee-additive);
-                }
+                root.finish-empty-gesture();
             }
         }
     }
