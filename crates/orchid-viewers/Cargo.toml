@@ -12,6 +12,7 @@ authors.workspace = true
 image.workspace = true
 jxl-oxide.workspace = true
 psd.workspace = true
+rawler.workspace = true
 resvg.workspace = true
 flate2.workspace = true
 tree-sitter.workspace = true

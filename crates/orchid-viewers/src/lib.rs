@@ -76,6 +76,7 @@ pub use image::print::{
     parse_print_line, render_print_files, render_print_pages, send_to_printer, write_print_preview,
     write_print_temps, PaperSize, PrintFit, PrintItem, PrintSpec,
 };
+pub use image::raw::{develop_raw_file, is_raw_file_extension, RawDevelop, RAW_FILE_EXTENSIONS};
 pub use image::slideshow::{
     export_slideshow_pack, export_slideshow_video, is_slideshow_audio_extension, overlay_text,
     SlideTransition, SlideshowExport,

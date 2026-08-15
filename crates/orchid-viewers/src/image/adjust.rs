@@ -176,8 +176,16 @@ pub fn apply_adjust(src: &LoadedImage, op: &AdjustOp) -> Result<LoadedImage> {
 ///
 /// I/O or decode.
 pub fn apply_adjust_file(path: &Path, op: &AdjustOp) -> Result<PathBuf> {
-    let src = load_image_file(path)?;
-    let out = apply_adjust(&src, op)?;
+    let out = if path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(crate::image::raw::is_raw_file_extension)
+    {
+        crate::image::raw::apply_adjust_raw_file(path, op)?
+    } else {
+        let src = load_image_file(path)?;
+        apply_adjust(&src, op)?
+    };
     save_sibling(path, &out, op.suffix())
 }
 
@@ -198,6 +206,10 @@ pub fn parse_adjust_line(raw: &str) -> Option<AdjustOp> {
             "auto-levels" | "autolevels" | "auto_levels" => Some(AdjustOp::AutoLevels),
             "auto-contrast" | "autocontrast" => Some(AdjustOp::AutoContrast),
             "auto-color" | "autocolor" | "auto-wb" => Some(AdjustOp::AutoColor),
+            "develop" | "demosaic" | "raw" => Some(AdjustOp::Params(AdjustParams {
+                exposure: Some(0.0),
+                ..AdjustParams::default()
+            })),
             _ => None,
         };
     }
@@ -1028,6 +1040,10 @@ mod tests {
         assert_eq!(piped.contrast, Some(5.0));
         assert!(piped.mixer.is_some());
         assert!(parse_adjust_line("nope").is_none());
+        assert!(matches!(
+            parse_adjust_line("develop"),
+            Some(AdjustOp::Params(p)) if p.exposure == Some(0.0)
+        ));
     }
 
     #[test]

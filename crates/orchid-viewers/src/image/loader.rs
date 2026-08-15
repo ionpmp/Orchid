@@ -3,7 +3,8 @@
 //! Raster formats use the [`image`](image) crate's built-in decoders. SVG is
 //! rasterized via [`resvg`]. On Windows, HEIC/HEIF is decoded through WIC when
 //! the OS HEIF codec is installed; otherwise we return a clear unsupported
-//! error. Camera RAW opens via the largest embedded JPEG preview when present.
+//! error. Camera RAW demosaics via `rawler` when the camera is known, and
+//! otherwise shows the largest embedded JPEG preview.
 
 use std::sync::Arc;
 
@@ -13,9 +14,10 @@ use image::GenericImageView;
 /// Extensions the image viewer / FM treat as images (including pending HEIC/RAW).
 pub const IMAGE_FILE_EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "jpe", "webp", "bmp", "gif", "tiff", "tif", "avif", "tga", "svg", "heic",
-    "heif", "jxl", "dng", "cr2", "nef", "arw", "raf", "orf", "rw2", "psd", "xcf", "pcx", "ico",
-    "cur", "pbm", "pgm", "ppm", "pnm", "jp2", "j2k", "jpx", "jpf", "dds", "exr", "hdr", "rgbe",
-    "svgz", "ai", "eps", "ps", "wmf", "emf", "cdr",
+    "heif", "jxl", "dng", "cr2", "cr3", "nef", "nrw", "arw", "raf", "orf", "pef", "rw2", "srw",
+    "x3f", "rwl", "dcr", "kdc", "psd", "xcf", "pcx", "ico", "cur", "pbm", "pgm", "ppm", "pnm",
+    "jp2", "j2k", "jpx", "jpf", "dds", "exr", "hdr", "rgbe", "svgz", "ai", "eps", "ps", "wmf",
+    "emf", "cdr",
 ];
 
 /// Decode a local image path (same pipeline as the viewer, including ICC).
@@ -281,7 +283,11 @@ fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<Load
         return crate::image::extra::decode_jp2(bytes, size);
     }
     if looks_like_raw(bytes) || is_raw_extension(extension) {
-        return decode_raw_preview(bytes, size);
+        return crate::image::raw::decode_raw(
+            bytes,
+            size,
+            crate::image::raw::RawDevelop::default(),
+        );
     }
     let guessed = image::guess_format(bytes)
         .map(ImageFormat::from_image_crate)
@@ -342,57 +348,7 @@ fn decode_avif(bytes: &[u8], size: u64) -> Result<LoadedImage> {
 }
 
 fn is_raw_extension(extension: Option<&str>) -> bool {
-    matches!(
-        extension,
-        Some("cr2" | "nef" | "arw" | "dng" | "raf" | "orf" | "rw2")
-    )
-}
-
-/// Show camera RAW via the largest embedded JPEG preview when present.
-///
-/// Full demosaic is deferred; most CR2/NEF/ARW/DNG files ship a usable JPEG
-/// that file managers already rely on for quick look.
-fn decode_raw_preview(bytes: &[u8], size: u64) -> Result<LoadedImage> {
-    let Some(jpeg) = largest_embedded_jpeg(bytes) else {
-        return Err(ViewerError::UnsupportedRaw);
-    };
-    let img = image::load_from_memory(jpeg).map_err(|e| {
-        tracing::debug!(error = %e, "RAW embedded JPEG decode failed");
-        ViewerError::UnsupportedRaw
-    })?;
-    Ok(finish_decoded(img, jpeg, size, ImageFormat::Raw))
-}
-
-/// Scan for JPEG SOI…EOI segments and return the largest one (preview > thumb).
-fn largest_embedded_jpeg(data: &[u8]) -> Option<&[u8]> {
-    const MIN_PREVIEW_BYTES: usize = 4 * 1024;
-    let mut best: Option<&[u8]> = None;
-    let mut i = 0;
-    while i + 1 < data.len() {
-        if data[i] != 0xFF || data[i + 1] != 0xD8 {
-            i += 1;
-            continue;
-        }
-        let start = i;
-        i += 2;
-        let mut end = None;
-        while i + 1 < data.len() {
-            if data[i] == 0xFF && data[i + 1] == 0xD9 {
-                end = Some(i + 2);
-                break;
-            }
-            i += 1;
-        }
-        let Some(end) = end else {
-            break;
-        };
-        let slice = &data[start..end];
-        if slice.len() >= MIN_PREVIEW_BYTES && best.is_none_or(|b| slice.len() > b.len()) {
-            best = Some(slice);
-        }
-        i = end;
-    }
-    best
+    extension.is_some_and(crate::image::raw::is_raw_file_extension)
 }
 
 /// True when `bytes` look like an SVG document (XML sniff).
@@ -431,7 +387,7 @@ pub fn looks_like_avif(bytes: &[u8]) -> bool {
 /// True when `bytes` match a common camera-RAW magic sequence.
 #[must_use]
 pub fn looks_like_raw(bytes: &[u8]) -> bool {
-    sniff_unsupported_image(bytes) == Some(ImageFormat::Raw)
+    crate::image::raw::looks_like_raw(bytes)
 }
 
 /// Sniff HEIC/HEIF, AVIF, or common RAW containers. Returns `None` when unknown.
@@ -440,7 +396,7 @@ pub fn sniff_unsupported_image(bytes: &[u8]) -> Option<ImageFormat> {
     if let Some(fmt) = sniff_ftyp(bytes) {
         return Some(fmt);
     }
-    if is_raw_magic(bytes) {
+    if crate::image::raw::looks_like_raw(bytes) {
         return Some(ImageFormat::Raw);
     }
     None
@@ -477,28 +433,6 @@ fn sniff_ftyp(bytes: &[u8]) -> Option<ImageFormat> {
     } else {
         None
     }
-}
-
-fn is_raw_magic(bytes: &[u8]) -> bool {
-    // Fujifilm RAF
-    if bytes.starts_with(b"FUJIFILMCCD-RAW") {
-        return true;
-    }
-    // Olympus ORF
-    if bytes.starts_with(b"IIRO") || bytes.starts_with(b"MMOR") || bytes.starts_with(b"IIRS") {
-        return true;
-    }
-    // Panasonic RW2
-    if bytes.starts_with(b"IIU\0") {
-        return true;
-    }
-    // Canon CR2: TIFF header + "CR" magic at offset 8.
-    if bytes.len() >= 10
-        && ((bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*")) && &bytes[8..10] == b"CR")
-    {
-        return true;
-    }
-    false
 }
 
 pub(crate) fn decode_svg_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
@@ -710,7 +644,7 @@ mod tests {
         container.extend_from_slice(&[0, 1, 2, 3]);
         container.extend_from_slice(&big);
 
-        let found = largest_embedded_jpeg(&container).unwrap();
+        let found = crate::image::raw::largest_embedded_jpeg(&container).unwrap();
         assert_eq!(found.len(), big.len());
         assert!(found.starts_with(&[0xFF, 0xD8]));
         assert!(found.ends_with(&[0xFF, 0xD9]));
@@ -736,7 +670,12 @@ mod tests {
         container.extend_from_slice(b"II*\0\x08\0\0\0CR");
         container.extend_from_slice(&jpeg);
 
-        let loaded = decode_raw_preview(&container, container.len() as u64).unwrap();
+        let loaded = crate::image::raw::decode_raw(
+            &container,
+            container.len() as u64,
+            crate::image::raw::RawDevelop::default(),
+        )
+        .unwrap();
         assert_eq!(loaded.format, ImageFormat::Raw);
         assert_eq!(loaded.width, 256);
         assert_eq!(loaded.height, 256);
@@ -759,6 +698,9 @@ mod tests {
     fn image_file_extension_list_covers_heic_and_raw() {
         assert!(is_image_file_extension("HEIC"));
         assert!(is_image_file_extension("nef"));
+        assert!(is_image_file_extension("cr3"));
+        assert!(is_image_file_extension("pef"));
+        assert!(is_image_file_extension("x3f"));
         assert!(is_image_file_extension("svg"));
         assert!(is_image_file_extension("ai"));
         assert!(is_image_file_extension("eps"));

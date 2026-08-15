@@ -227,7 +227,10 @@ mod tests {
 
     #[test]
     fn raw_extension_routes_to_image() {
-        for ext in ["cr2", "nef", "arw", "dng", "raf", "orf", "rw2"] {
+        for ext in [
+            "cr2", "cr3", "nef", "arw", "dng", "raf", "orf", "pef", "rw2", "srw", "x3f", "rwl",
+            "dcr",
+        ] {
             let kind = kind_for(&path(&format!("local:/a/b.{ext}")), b"").unwrap();
             assert_eq!(kind, ViewerKind::Image, "{ext}");
         }
@@ -248,6 +251,15 @@ mod tests {
     fn raw_magic_routes_to_image() {
         let kind = kind_for(&path("local:/a/b.unknown"), b"FUJIFILMCCD-RAW \x00").unwrap();
         assert_eq!(kind, ViewerKind::Image);
+        let mut cr3 = vec![0, 0, 0, 0x18];
+        cr3.extend_from_slice(b"ftyp");
+        cr3.extend_from_slice(b"crx ");
+        cr3.extend_from_slice(&[0, 0, 0, 0]);
+        cr3.extend_from_slice(b"isom");
+        assert_eq!(
+            kind_for(&path("local:/a/b.bin"), &cr3).unwrap(),
+            ViewerKind::Image
+        );
     }
 
     #[test]

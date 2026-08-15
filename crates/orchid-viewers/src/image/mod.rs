@@ -17,6 +17,7 @@ pub mod meta_edit;
 pub mod metadata;
 pub mod operations;
 pub mod print;
+pub mod raw;
 pub mod slideshow;
 pub mod transform;
 pub mod vector;

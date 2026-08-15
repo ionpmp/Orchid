@@ -1001,8 +1001,17 @@ impl ViewerWidgetInner {
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
         let suffix = op.suffix();
         let dest = tokio::task::spawn_blocking(move || {
-            let out = apply_adjust(&img, &op)?;
-            orchid_viewers::save_sibling(&os, &out, suffix)
+            if os
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(orchid_viewers::is_raw_file_extension)
+            {
+                let _ = img;
+                orchid_viewers::apply_adjust_file(&os, &op)
+            } else {
+                let out = apply_adjust(&img, &op)?;
+                orchid_viewers::save_sibling(&os, &out, suffix)
+            }
         })
         .await
         .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
