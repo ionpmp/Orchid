@@ -33,6 +33,19 @@ impl GpsFix {
     pub fn label(self) -> String {
         format!("{:.5}, {:.5}", self.lat, self.lon)
     }
+
+    /// Great-circle distance in kilometres (WGS-84 sphere).
+    #[must_use]
+    pub fn distance_km(self, other: Self) -> f64 {
+        const EARTH_KM: f64 = 6371.0;
+        let dlat = (other.lat - self.lat).to_radians();
+        let dlon = (other.lon - self.lon).to_radians();
+        let a = (dlat * 0.5).sin().powi(2)
+            + self.lat.to_radians().cos()
+                * other.lat.to_radians().cos()
+                * (dlon * 0.5).sin().powi(2);
+        2.0 * EARTH_KM * a.sqrt().asin()
+    }
 }
 
 /// File + sidecar metadata gathered without decoding pixels.
@@ -127,6 +140,43 @@ impl HistMode {
             Self::Blue => Self::Luma,
         }
     }
+}
+
+/// EXIF / IPTC / XMP / GPS without hashing or a full-file read (Find Files).
+#[must_use]
+pub fn inspect_image_tags(path: &Path) -> ImageInspect {
+    const PREFIX: usize = 4 * 1024 * 1024;
+    let exif = read_exif_fields(path).unwrap_or_default();
+    let bytes = read_prefix_bytes(path, PREFIX);
+    let iptc = parse_iptc(&bytes);
+    let mut xmp = parse_xmp(&bytes);
+    if let Some(side) = sidecar_xmp_path(path).and_then(|p| std::fs::read(p).ok()) {
+        merge_fields(&mut xmp, parse_xmp(&side));
+    }
+    let gps = gps_from_exif(&exif)
+        .or_else(|| gps_from_bytes(&bytes))
+        .or_else(|| gps_from_xmp_fields(&xmp));
+    let overlay = camera_overlay(&exif);
+    ImageInspect {
+        exif,
+        iptc,
+        xmp,
+        gps,
+        md5: String::new(),
+        sha256: String::new(),
+        icc_label: String::new(),
+        overlay,
+    }
+}
+
+fn read_prefix_bytes(path: &Path, max: usize) -> Vec<u8> {
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let mut buf = vec![0_u8; max];
+    let n = std::io::Read::read(&mut file, &mut buf).unwrap_or(0);
+    buf.truncate(n);
+    buf
 }
 
 /// Read EXIF, IPTC, XMP, GPS, ICC label, and file hashes from `path`.
@@ -898,6 +948,15 @@ mod tests {
         let url = g.map_url();
         assert!(url.contains("51.477"));
         assert!(url.contains("openstreetmap.org"));
+    }
+
+    #[test]
+    fn haversine_one_degree_latitude() {
+        let a = GpsFix { lat: 0.0, lon: 0.0 };
+        let b = GpsFix { lat: 1.0, lon: 0.0 };
+        let km = a.distance_km(b);
+        assert!((km - 111.2).abs() < 0.5, "{km}");
+        assert!(a.distance_km(a) < 1e-9);
     }
 
     #[test]

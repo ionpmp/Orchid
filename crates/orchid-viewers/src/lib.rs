@@ -68,8 +68,8 @@ pub use image::meta_edit::{
 };
 pub use image::metadata::{
     camera_overlay, compute_histogram, describe_pixel, format_inspect_panel, format_sidecar_report,
-    inspect_image_bytes, inspect_image_file, render_histogram, ChannelHistogram, GpsFix, HistMode,
-    ImageInspect,
+    inspect_image_bytes, inspect_image_file, inspect_image_tags, render_histogram,
+    ChannelHistogram, GpsFix, HistMode, ImageInspect,
 };
 pub use image::operations::ResizeFilter;
 pub use image::print::{

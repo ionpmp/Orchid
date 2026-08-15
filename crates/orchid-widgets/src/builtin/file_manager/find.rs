@@ -57,6 +57,10 @@ pub struct FindSpec {
     pub indexed: bool,
     /// Keep the result folder in `virtual:search`.
     pub save_as_virtual: bool,
+    /// EXIF / IPTC / XMP needle (`Canon`, `Make=Canon`).
+    pub exif: String,
+    /// GPS circle `lat,lon,km` (km defaults to 1).
+    pub gps: String,
 }
 
 impl FindSpec {
@@ -76,7 +80,7 @@ impl FindSpec {
     #[must_use]
     pub fn pack(&self) -> String {
         format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             self.name,
             self.content,
             flag(self.name_regex),
@@ -94,6 +98,8 @@ impl FindSpec {
             flag(self.hidden),
             flag(self.readonly),
             flag(self.system),
+            self.exif,
+            self.gps,
             self.root,
         )
     }
@@ -120,6 +126,8 @@ impl FindSpec {
         let hidden = next(&mut lines) == "1";
         let readonly = next(&mut lines) == "1";
         let system = next(&mut lines) == "1";
+        let exif = next(&mut lines);
+        let gps = next(&mut lines);
         let root = {
             let r = next(&mut lines);
             if r.is_empty() {
@@ -147,6 +155,8 @@ impl FindSpec {
             in_archives,
             indexed,
             save_as_virtual,
+            exif,
+            gps,
         }
     }
 
@@ -241,6 +251,136 @@ impl FindSpec {
         } else {
             text.to_lowercase().contains(&q.to_lowercase())
         }
+    }
+
+    /// Whether EXIF or GPS predicates are set.
+    #[must_use]
+    pub fn needs_image_meta(&self) -> bool {
+        !self.exif.trim().is_empty() || !self.gps.trim().is_empty()
+    }
+
+    /// EXIF / IPTC / XMP / GPS predicates. Empty fields match everything.
+    #[must_use]
+    pub fn matches_image_meta(&self, inspect: &orchid_viewers::ImageInspect) -> bool {
+        self.matches_exif(inspect) && self.matches_gps(inspect.gps)
+    }
+
+    fn matches_exif(&self, inspect: &orchid_viewers::ImageInspect) -> bool {
+        let q = self.exif.trim();
+        if q.is_empty() {
+            return true;
+        }
+        if let Some((key, val)) = split_exif_pair(q) {
+            return field_value_contains(inspect, key, val, self.case_sensitive);
+        }
+        haystack_contains(inspect, q, self.case_sensitive)
+    }
+
+    fn matches_gps(&self, gps: Option<orchid_viewers::GpsFix>) -> bool {
+        let raw = self.gps.trim();
+        if raw.is_empty() {
+            return true;
+        }
+        let Some((center, radius_km)) = parse_gps_radius(raw) else {
+            return false;
+        };
+        gps.is_some_and(|fix| fix.distance_km(center) <= radius_km)
+    }
+}
+
+/// Parse `lat,lon,km`, `lat,lon km`, or `lat lon km`. Missing km defaults to 1.
+#[must_use]
+pub fn parse_gps_radius(raw: &str) -> Option<(orchid_viewers::GpsFix, f64)> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let comma: Vec<&str> = t
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    let (lat, lon, km) = match comma.as_slice() {
+        [lat, lon, km] => (*lat, *lon, km.parse::<f64>().ok()?),
+        [lat, rest] => {
+            let mut it = rest.split_whitespace();
+            let lon = it.next()?;
+            let km = it.next().and_then(|s| s.parse().ok()).unwrap_or(1.0);
+            (*lat, lon, km)
+        }
+        [one] => {
+            let mut it = one.split_whitespace();
+            let lat = it.next()?;
+            let lon = it.next()?;
+            let km = it.next().and_then(|s| s.parse().ok()).unwrap_or(1.0);
+            (lat, lon, km)
+        }
+        _ => return None,
+    };
+    let lat: f64 = lat.parse().ok()?;
+    let lon: f64 = lon.parse().ok()?;
+    if !lat.is_finite() || !lon.is_finite() || !km.is_finite() || km < 0.0 {
+        return None;
+    }
+    Some((orchid_viewers::GpsFix { lat, lon }, km))
+}
+
+fn split_exif_pair(q: &str) -> Option<(&str, &str)> {
+    let (k, v) = q.split_once('=').or_else(|| q.split_once(':'))?;
+    let k = k.trim();
+    let v = v.trim();
+    if k.is_empty() || v.is_empty() {
+        return None;
+    }
+    Some((k, v))
+}
+
+fn field_value_contains(
+    inspect: &orchid_viewers::ImageInspect,
+    key: &str,
+    val: &str,
+    case_sensitive: bool,
+) -> bool {
+    inspect
+        .exif
+        .iter()
+        .chain(inspect.iptc.iter())
+        .chain(inspect.xmp.iter())
+        .any(|(tag, value)| tag_matches(tag, key) && text_contains(value, val, case_sensitive))
+}
+
+fn haystack_contains(
+    inspect: &orchid_viewers::ImageInspect,
+    q: &str,
+    case_sensitive: bool,
+) -> bool {
+    if !inspect.overlay.is_empty() && text_contains(&inspect.overlay, q, case_sensitive) {
+        return true;
+    }
+    if let Some(g) = inspect.gps {
+        if text_contains(&g.label(), q, case_sensitive) {
+            return true;
+        }
+    }
+    inspect
+        .exif
+        .iter()
+        .chain(inspect.iptc.iter())
+        .chain(inspect.xmp.iter())
+        .any(|(tag, value)| {
+            text_contains(tag, q, case_sensitive) || text_contains(value, q, case_sensitive)
+        })
+}
+
+fn tag_matches(tag: &str, key: &str) -> bool {
+    tag.eq_ignore_ascii_case(key) || tag.to_ascii_lowercase().contains(&key.to_ascii_lowercase())
+}
+
+fn text_contains(hay: &str, needle: &str, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        hay.contains(needle)
+    } else {
+        hay.to_lowercase().contains(&needle.to_lowercase())
     }
 }
 
@@ -428,6 +568,10 @@ pub(super) async fn run_find_large(
 fn find_label(spec: &FindSpec, n: usize) -> String {
     let needle = if !spec.name.trim().is_empty() {
         spec.name.trim()
+    } else if !spec.exif.trim().is_empty() {
+        spec.exif.trim()
+    } else if !spec.gps.trim().is_empty() {
+        spec.gps.trim()
     } else if !spec.content.trim().is_empty() {
         spec.content.trim()
     } else {
@@ -440,7 +584,7 @@ async fn collect_hits(
     inner: &Arc<FileManagerInner>,
     spec: &FindSpec,
 ) -> WidgetResult<Vec<orchid_fs::FsEntry>> {
-    if spec.indexed {
+    if spec.indexed && !spec.needs_image_meta() {
         if let Ok(hits) = indexed_hits(inner, spec).await {
             if !hits.is_empty() {
                 return Ok(hits);
@@ -456,6 +600,18 @@ async fn collect_hits(
     if spec.in_archives {
         entries.extend(scan_archives(&raw, spec).await);
     }
+    if spec.needs_image_meta() {
+        let mut kept = Vec::new();
+        for e in entries {
+            if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
+                continue;
+            }
+            if image_meta_matches(&e, spec) {
+                kept.push(e);
+            }
+        }
+        entries = kept;
+    }
     if spec.content.trim().is_empty() {
         return Ok(entries);
     }
@@ -469,6 +625,17 @@ async fn collect_hits(
         }
     }
     Ok(kept)
+}
+
+fn image_meta_matches(entry: &orchid_fs::FsEntry, spec: &FindSpec) -> bool {
+    let Ok(os) = entry.path.to_local() else {
+        return false;
+    };
+    let ext = os.extension().and_then(|e| e.to_str()).unwrap_or_default();
+    if !orchid_viewers::is_image_file_extension(ext) {
+        return false;
+    }
+    spec.matches_image_meta(&orchid_viewers::inspect_image_tags(&os))
 }
 
 async fn walk_entries(
@@ -818,6 +985,8 @@ mod tests {
             save_as_virtual: true,
             files: true,
             folders: false,
+            exif: "Make=Canon".into(),
+            gps: "55.75,37.62,5".into(),
             ..FindSpec::default()
         };
         let back = FindSpec::unpack(&s.pack(), "local:/other");
@@ -828,6 +997,18 @@ mod tests {
         assert!(back.content_regex);
         assert_eq!(back.root, "local:/docs");
         assert!(!back.folders);
+        assert_eq!(back.exif, "Make=Canon");
+        assert_eq!(back.gps, "55.75,37.62,5");
+    }
+
+    #[test]
+    fn unpack_legacy_payload_keeps_fallback_root() {
+        let raw = "*.jpg\n\n0\n0\n0\n1\n0\n0\n1\n\n\n0\n1\n0\n0\n0\n0\n";
+        let back = FindSpec::unpack(raw, "local:/photos");
+        assert_eq!(back.name, "*.jpg");
+        assert!(back.exif.is_empty());
+        assert!(back.gps.is_empty());
+        assert_eq!(back.root, "local:/photos");
     }
 
     #[test]
@@ -856,5 +1037,43 @@ mod tests {
         assert!(s.matches_content("say Hello"));
         s.case_sensitive = true;
         assert!(!s.matches_content("say hello"));
+    }
+
+    fn inspect(make: &str, gps: Option<(f64, f64)>) -> orchid_viewers::ImageInspect {
+        orchid_viewers::ImageInspect {
+            exif: vec![
+                ("Make".into(), make.into()),
+                ("Model".into(), "EOS R5".into()),
+            ],
+            overlay: format!("{make} EOS R5"),
+            gps: gps.map(|(lat, lon)| orchid_viewers::GpsFix { lat, lon }),
+            ..orchid_viewers::ImageInspect::default()
+        }
+    }
+
+    #[test]
+    fn exif_substring_and_field() {
+        let mut s = FindSpec::in_root("local:/");
+        s.exif = "canon".into();
+        assert!(s.matches_image_meta(&inspect("Canon", None)));
+        assert!(!s.matches_image_meta(&inspect("Nikon", None)));
+        s.exif = "Make=Canon".into();
+        assert!(s.matches_image_meta(&inspect("Canon", None)));
+        s.case_sensitive = true;
+        assert!(!s.matches_image_meta(&inspect("canon", None)));
+    }
+
+    #[test]
+    fn gps_radius_keeps_nearby() {
+        let mut s = FindSpec::in_root("local:/");
+        s.gps = "55.75,37.62,5".into();
+        assert!(s.matches_image_meta(&inspect("Canon", Some((55.752, 37.618)))));
+        assert!(!s.matches_image_meta(&inspect("Canon", Some((59.93, 30.31)))));
+        assert!(!s.matches_image_meta(&inspect("Canon", None)));
+        let (c, km) = parse_gps_radius("55.75,37.62 2").unwrap();
+        assert!((c.lat - 55.75).abs() < 1e-9);
+        assert!((km - 2.0).abs() < 1e-9);
+        let (_, def) = parse_gps_radius("55.75,37.62").unwrap();
+        assert!((def - 1.0).abs() < 1e-9);
     }
 }
