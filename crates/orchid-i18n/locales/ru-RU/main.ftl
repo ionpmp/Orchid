@@ -511,7 +511,7 @@ viewer-image-edit-auto-straighten = Авто-горизонт
 viewer-image-edit-perspective = Перспектива (4 угла)
 viewer-image-adjust = Цвет / тон (копия)
 viewer-image-adjust-apply = Применить
-viewer-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
+viewer-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128 | RAW: develop | exposure= | temp= | tint=
 viewer-image-adjust-auto-levels = Авто-уровни
 viewer-image-adjust-auto-contrast = Авто-контраст
 viewer-image-adjust-auto-color = Авто-цвет / баланс белого

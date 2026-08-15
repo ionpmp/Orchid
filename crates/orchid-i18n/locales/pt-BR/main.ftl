@@ -521,7 +521,7 @@ viewer-image-edit-auto-straighten = Auto-straighten horizon
 viewer-image-edit-perspective = Perspective (click 4 corners)
 viewer-image-adjust = Color / tone (save a copy)
 viewer-image-adjust-apply = Apply
-viewer-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
+viewer-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128 | RAW: develop | exposure= | temp= | tint=
 viewer-image-adjust-auto-levels = Auto-levels
 viewer-image-adjust-auto-contrast = Auto-contrast
 viewer-image-adjust-auto-color = Auto-color / white balance
