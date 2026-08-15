@@ -2344,6 +2344,8 @@ impl MainWindowController {
                     readonly_label: self.locale.tr("fm-find-readonly").into(),
                     system_label: self.locale.tr("fm-find-system").into(),
                     days_label: self.locale.tr("fm-find-days").into(),
+                    exif_label: self.locale.tr("fm-find-exif").into(),
+                    gps_label: self.locale.tr("fm-find-gps").into(),
                     ok_label: self.locale.tr("fm-rename-ok").into(),
                     cancel_label: self.locale.tr("fm-rename-cancel").into(),
                 };

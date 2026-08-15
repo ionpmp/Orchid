@@ -1177,7 +1177,7 @@ fm-select-filter-hidden = 숨김만
 fm-select-filter-readonly = 읽기 전용만
 fm-select-filter-days = 수정일 (일) 이내
 fm-find-title = 파일 찾기
-fm-find-hint = 이름, 마스크(*.txt) 또는 정규식. 비우면 모든 이름과 일치합니다.
+fm-find-hint = 이름, 마스크(*.txt) 또는 정규식. EXIF: Canon 또는 Make=Canon. GPS: 55.75,37.62,5
 fm-find-name = 이름
 fm-find-content = 내용
 fm-find-name-regex = 이름은 정규식
@@ -1195,6 +1195,8 @@ fm-find-hidden = 숨김
 fm-find-readonly = 읽기 전용
 fm-find-system = 시스템
 fm-find-days = 수정일 (일) 이내
+fm-find-exif = EXIF 메타데이터
+fm-find-gps = GPS 반경 (위도,경도,km)
 fm-find-large-title = 큰 파일
 fm-find-large-hint = 최소 크기(예: 100MB)
 fm-rename-title = 이름 바꾸기

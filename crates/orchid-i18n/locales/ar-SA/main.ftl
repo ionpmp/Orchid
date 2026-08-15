@@ -1178,7 +1178,7 @@ fm-select-filter-hidden = المخفي فقط
 fm-select-filter-readonly = للقراءة فقط
 fm-select-filter-days = عُدِّل خلال (أيام)
 fm-find-title = البحث عن ملفات
-fm-find-hint = الاسم أو القناع (*.txt) أو تعبير منتظم. الاسم الفارغ يطابق الكل.
+fm-find-hint = الاسم أو القناع (*.txt) أو تعبير منتظم. EXIF: Canon أو Make=Canon. GPS: 55.75,37.62,5
 fm-find-name = الاسم
 fm-find-content = المحتوى
 fm-find-name-regex = الاسم تعبير منتظم
@@ -1196,6 +1196,8 @@ fm-find-hidden = مخفية
 fm-find-readonly = للقراءة فقط
 fm-find-system = نظام
 fm-find-days = عُدِّل خلال (أيام)
+fm-find-exif = بيانات EXIF
+fm-find-gps = نصف قطر GPS (lat,lon,km)
 fm-find-large-title = ملفات كبيرة
 fm-find-large-hint = الحجم الأدنى (مثل 100MB)
 fm-rename-title = إعادة تسمية

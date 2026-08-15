@@ -378,6 +378,8 @@ pub(crate) fn empty_find_state() -> FmFindState {
         readonly_label: SharedString::new(),
         system_label: SharedString::new(),
         days_label: SharedString::new(),
+        exif_label: SharedString::new(),
+        gps_label: SharedString::new(),
         ok_label: SharedString::new(),
         cancel_label: SharedString::new(),
     }

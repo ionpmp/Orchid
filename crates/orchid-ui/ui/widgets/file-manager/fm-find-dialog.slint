@@ -11,6 +11,8 @@ export component FmFindDialog inherits Rectangle {
     property <string> size-min: "";
     property <string> size-max: "";
     property <string> days: "";
+    property <string> exif-text: "";
+    property <string> gps-text: "";
     property <bool> name-regex-on: false;
     property <bool> content-regex-on: false;
     property <bool> case-on: false;
@@ -47,7 +49,9 @@ export component FmFindDialog inherits Rectangle {
             + (root.folders-on ? "1" : "0") + "\n"
             + (root.hidden-on ? "1" : "0") + "\n"
             + (root.readonly-on ? "1" : "0") + "\n"
-            + (root.system-on ? "1" : "0") + "\n";
+            + (root.system-on ? "1" : "0") + "\n"
+            + root.exif-text + "\n"
+            + root.gps-text + "\n";
     }
 
     function toggle-row(on: bool, label: string) -> string {
@@ -325,6 +329,52 @@ export component FmFindDialog inherits Rectangle {
                         vertical-alignment: center;
                         single-line: true;
                         edited => { root.days = self.text; }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: state.exif-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 28px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TextInput {
+                            text: root.exif-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.exif-text = self.text; }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: state.gps-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                    Rectangle {
+                        height: 28px;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        TextInput {
+                            text: root.gps-text;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            single-line: true;
+                            edited => { root.gps-text = self.text; }
+                        }
                     }
                 }
             }

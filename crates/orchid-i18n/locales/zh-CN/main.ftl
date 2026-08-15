@@ -1177,7 +1177,7 @@ fm-select-filter-hidden = 仅隐藏项
 fm-select-filter-readonly = 仅只读项
 fm-select-filter-days = 最近修改（天）
 fm-find-title = 查找文件
-fm-find-hint = 名称、掩码 (*.txt) 或正则。留空则匹配所有名称。
+fm-find-hint = 名称、掩码 (*.txt) 或正则。EXIF：Canon 或 Make=Canon。GPS：55.75,37.62,5
 fm-find-name = 名称
 fm-find-content = 内容
 fm-find-name-regex = 名称为正则
@@ -1195,6 +1195,8 @@ fm-find-hidden = 隐藏
 fm-find-readonly = 只读
 fm-find-system = 系统
 fm-find-days = 最近修改（天）
+fm-find-exif = EXIF 元数据
+fm-find-gps = GPS 半径（纬度,经度,km）
 fm-find-large-title = 大文件
 fm-find-large-hint = 最小大小（例如 100MB）
 fm-rename-title = 重命名

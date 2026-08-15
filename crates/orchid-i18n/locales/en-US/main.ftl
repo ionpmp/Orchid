@@ -1450,7 +1450,7 @@ fm-select-filter-hidden = Hidden only
 fm-select-filter-readonly = Read-only only
 fm-select-filter-days = Modified within (days)
 fm-find-title = Find files
-fm-find-hint = Name, mask (*.txt), or regex. Leave empty to match all names.
+fm-find-hint = Name, mask (*.txt), or regex. EXIF: Canon or Make=Canon. GPS: 55.75,37.62,5
 fm-find-name = Name
 fm-find-content = Content
 fm-find-name-regex = Name is regex
@@ -1468,6 +1468,8 @@ fm-find-hidden = Hidden
 fm-find-readonly = Read-only
 fm-find-system = System
 fm-find-days = Modified within (days)
+fm-find-exif = EXIF metadata
+fm-find-gps = GPS radius (lat,lon,km)
 fm-find-large-title = Find large files
 fm-find-large-hint = Minimum size (e.g. 100MB)
 fm-rename-title = Rename

@@ -1177,7 +1177,7 @@ fm-select-filter-hidden = 隠しのみ
 fm-select-filter-readonly = 読み取り専用のみ
 fm-select-filter-days = 更新日が（日）以内
 fm-find-title = ファイルを検索
-fm-find-hint = 名前、マスク (*.txt)、または正規表現。空ならすべての名前に一致します。
+fm-find-hint = 名前、マスク (*.txt)、正規表現。EXIF: Canon または Make=Canon。GPS: 55.75,37.62,5
 fm-find-name = 名前
 fm-find-content = 内容
 fm-find-name-regex = 名前は正規表現
@@ -1195,6 +1195,8 @@ fm-find-hidden = 隠し
 fm-find-readonly = 読み取り専用
 fm-find-system = システム
 fm-find-days = 更新日が（日）以内
+fm-find-exif = EXIF メタデータ
+fm-find-gps = GPS 半径 (緯度,経度,km)
 fm-find-large-title = 大きなファイル
 fm-find-large-hint = 最小サイズ（例: 100MB）
 fm-rename-title = 名前を変更

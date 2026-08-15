@@ -33,7 +33,8 @@ release yet.
   delete selected items, or empty the bin.
 - Find files (`Alt+F7` / Tools): name / mask / regex, size, date, attributes,
   content grep (literal or regex), case sensitivity, archives, indexed search
-  (Windows Search then Tantivy), save results as a virtual folder; find
+  (Windows Search then Tantivy), EXIF / IPTC / XMP (`Canon` or `Make=Canon`),
+  GPS radius (`lat,lon,km`), save results as a virtual folder; find
   duplicates by BLAKE3 content hash and find large files.
 - Toolbar **visited folders** menu: top 5 most frequent paths, then recent;
   persisted with the widget.
