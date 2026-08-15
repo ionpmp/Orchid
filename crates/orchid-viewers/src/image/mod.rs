@@ -755,6 +755,14 @@ impl Viewer for ImageViewer {
             anim_label,
             anim_thumbs,
             anim_can_play,
+            browse_mode: 0,
+            overlay_autohide: true,
+            cal_title: String::new(),
+            cal_year: 0,
+            cal_month: 0,
+            cal_days: Vec::new(),
+            map_pins: Vec::new(),
+            timeline: Vec::new(),
         })
     }
 

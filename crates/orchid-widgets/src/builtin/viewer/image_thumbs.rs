@@ -26,6 +26,12 @@ pub struct ImageThumbState {
     /// How many siblings ahead to decode fully.
     pub preload_n: u8,
     pub items: Vec<ImageThumbItem>,
+    /// 0 photo, 1 timeline, 2 map, 3 calendar.
+    pub browse: u8,
+    /// Hide chrome after idle time.
+    pub overlay_autohide: bool,
+    pub cal_year: i32,
+    pub cal_month: u8,
 }
 
 impl Default for ImageThumbState {
@@ -37,6 +43,10 @@ impl Default for ImageThumbState {
             show_meta: true,
             preload_n: 2,
             items: Vec::new(),
+            browse: 0,
+            overlay_autohide: true,
+            cal_year: 0,
+            cal_month: 0,
         }
     }
 }
@@ -54,6 +64,22 @@ impl ImageThumbState {
     pub fn cycle_size(&mut self) {
         self.size = self.size.cycle();
         self.items.clear();
+    }
+
+    /// Toggle `mode` on, or return to the single-image view.
+    pub fn toggle_browse(&mut self, mode: u8) {
+        self.browse = if self.browse == mode { 0 } else { mode };
+        if self.browse == 3 && (self.cal_year == 0 || self.cal_month == 0) {
+            let date = self
+                .items
+                .iter()
+                .find(|t| t.selected)
+                .map(|t| t.date_text.as_str())
+                .unwrap_or("");
+            let (y, m) = super::image_browse::month_from_date(date);
+            self.cal_year = y;
+            self.cal_month = m as u8;
+        }
     }
 }
 
@@ -172,19 +198,23 @@ fn rating_from_local(path: &std::path::Path) -> u8 {
     rating_from_bytes(&buf[..n])
 }
 
-/// Size / mtime / rating for a playlist path.
-pub async fn sibling_meta(registry: &FsProviderRegistry, path: &FsPath) -> (u64, i64, String, u8) {
+/// Size / mtime / rating / EXIF date / GPS for a playlist path.
+pub async fn sibling_meta(registry: &FsProviderRegistry, path: &FsPath) -> SiblingBrowseMeta {
     let name = path.file_name().unwrap_or_default().to_string();
+    let empty = SiblingBrowseMeta {
+        name,
+        ..SiblingBrowseMeta::default()
+    };
     let provider = match registry.for_path(path) {
         Some(p) => p,
-        None => return (0, 0, name, 0),
+        None => return empty,
     };
     let meta = match provider.metadata(path).await {
         Ok(m) => m,
-        Err(_) => return (0, 0, name, 0),
+        Err(_) => return empty,
     };
     let modified_ms = meta.modified.map(|t| t.timestamp_millis()).unwrap_or(0);
-    let date_text = meta
+    let mut date_text = meta
         .modified
         .map(|t| {
             t.with_timezone(&chrono::Local)
@@ -192,15 +222,63 @@ pub async fn sibling_meta(registry: &FsProviderRegistry, path: &FsPath) -> (u64,
                 .to_string()
         })
         .unwrap_or_default();
+    let mut taken_ms = modified_ms;
+    let mut has_gps = false;
+    let mut gps_lat = 0.0;
+    let mut gps_lon = 0.0;
     let rating = if path.scheme() == "local" {
-        path.to_local()
-            .ok()
-            .map(|os| rating_from_local(&os))
-            .unwrap_or(0)
+        if let Ok(os) = path.to_local() {
+            let tags = orchid_viewers::inspect_image_tags(&os);
+            if let Some(g) = tags.gps {
+                has_gps = true;
+                gps_lat = g.lat as f32;
+                gps_lon = g.lon as f32;
+            }
+            for (k, v) in tags.exif.iter().chain(tags.xmp.iter()) {
+                if k.eq_ignore_ascii_case("DateTimeOriginal") || k.eq_ignore_ascii_case("DateTime")
+                {
+                    if let Some((y, m, d)) = super::image_browse::parse_ymd(v) {
+                        date_text = format!("{y:04}-{m:02}-{d:02}");
+                        taken_ms = super::image_browse::taken_ms_from_date(&date_text);
+                    }
+                    break;
+                }
+            }
+            rating_from_local(&os)
+        } else {
+            0
+        }
     } else {
         0
     };
-    (meta.size, modified_ms, date_text, rating)
+    SiblingBrowseMeta {
+        size_bytes: meta.size,
+        modified_ms,
+        date_text,
+        rating,
+        taken_ms,
+        has_gps,
+        gps_lat,
+        gps_lon,
+        name: empty.name,
+    }
+}
+
+/// Folder-sibling facts used by the strip and browse views.
+#[derive(Debug, Clone, Default)]
+pub struct SiblingBrowseMeta {
+    /// File size.
+    pub size_bytes: u64,
+    /// Filesystem mtime (cache key).
+    pub modified_ms: i64,
+    /// `YYYY-MM-DD` (EXIF when present).
+    pub date_text: String,
+    pub rating: u8,
+    pub taken_ms: i64,
+    pub has_gps: bool,
+    pub gps_lat: f32,
+    pub gps_lon: f32,
+    pub name: String,
 }
 
 /// Decode `path` for the preload cache (best-effort).

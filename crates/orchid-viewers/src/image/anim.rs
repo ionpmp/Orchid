@@ -254,6 +254,10 @@ fn with_thumbs(frames: Vec<AnimFrame>, kind: AnimKind) -> AnimSequence {
                 height,
                 selected: false,
                 index: (i + 1) as u32,
+                taken_ms: 0,
+                has_gps: false,
+                gps_lat: 0.0,
+                gps_lon: 0.0,
             }
         })
         .collect();

@@ -91,9 +91,9 @@ pub use image::{
 pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};
 pub use pdf::PdfViewer;
 pub use snapshot::{
-    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, DocumentSnapshot,
-    HtmlSnapshot, ImageSnapshot, ImageThumbItem, MediaSnapshot, PdfSnapshot, SelectionRange,
-    SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
+    ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, CalDayItem, DocumentSnapshot,
+    HtmlSnapshot, ImageSnapshot, ImageThumbItem, MapPinItem, MediaSnapshot, PdfSnapshot,
+    SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
 };
 pub use text::{
     CursorPos, FindOptions, LineEnding, SyntaxHighlighter, TextBuffer, TextDisplayMode, TextOp,

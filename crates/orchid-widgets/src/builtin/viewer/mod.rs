@@ -1,5 +1,6 @@
 //! Viewer widget: wraps an [`orchid_viewers::Viewer`] for any given path.
 
+mod image_browse;
 mod image_inspect;
 mod image_nav;
 mod image_slideshow;
@@ -73,6 +74,10 @@ struct ViewerPersisted {
     thumb_meta: bool,
     #[serde(default = "default_preload_n")]
     preload_n: u8,
+    #[serde(default)]
+    browse_mode: u8,
+    #[serde(default = "default_true")]
+    overlay_autohide: bool,
     #[serde(default = "default_slide_interval")]
     slide_interval_ms: u32,
     #[serde(default)]
@@ -132,6 +137,8 @@ impl Default for ViewerPersisted {
             thumb_size: 1,
             thumb_meta: true,
             preload_n: 2,
+            browse_mode: 0,
+            overlay_autohide: true,
             slide_interval_ms: 4000,
             slide_random: false,
             slide_transition: 1,
@@ -181,6 +188,8 @@ impl ViewerPersisted {
             thumb_size: thumbs.size.as_u8(),
             thumb_meta: thumbs.show_meta,
             preload_n: thumbs.preload_n,
+            browse_mode: thumbs.browse,
+            overlay_autohide: thumbs.overlay_autohide,
             slide_interval_ms: slide.interval_ms,
             slide_random: slide.random,
             slide_transition: slide.transition.as_u8(),
@@ -614,22 +623,25 @@ impl ViewerWidgetInner {
             if self.thumb_gen.load(Ordering::Relaxed) != gen {
                 return;
             }
-            let (size_bytes, modified_ms, date_text, rating) =
-                image_thumbs::sibling_meta(&self.deps.registry, path).await;
-            let key = ThumbnailService::cache_key(path, modified_ms);
+            let meta = image_thumbs::sibling_meta(&self.deps.registry, path).await;
+            let key = ThumbnailService::cache_key(path, meta.modified_ms);
             let thumb =
                 image_thumbs::load_one_thumb(&service, &self.deps.registry, path, key, size).await;
             items.push(ImageThumbItem {
                 path: path.as_str().to_string(),
                 name: path.file_name().unwrap_or_default().to_string(),
-                size_bytes,
-                date_text,
-                rating,
+                size_bytes: meta.size_bytes,
+                date_text: meta.date_text,
+                rating: meta.rating,
                 rgba: thumb.as_ref().map(|t| Arc::clone(&t.rgba)),
                 width: thumb.as_ref().map(|t| t.width).unwrap_or(0),
                 height: thumb.as_ref().map(|t| t.height).unwrap_or(0),
                 selected: current_key.as_deref() == Some(path.as_str()),
                 index: (i + 1) as u32,
+                taken_ms: meta.taken_ms,
+                has_gps: meta.has_gps,
+                gps_lat: meta.gps_lat,
+                gps_lon: meta.gps_lon,
             });
             if items.len() % 8 == 0 {
                 if self.thumb_gen.load(Ordering::Relaxed) != gen {
@@ -1798,6 +1810,26 @@ fn apply_image_overlay(
                 s.thumb_grid = th.grid;
                 s.thumb_size = th.size.as_u8();
                 s.thumb_show_meta = th.show_meta;
+                s.browse_mode = th.browse;
+                s.overlay_autohide = th.overlay_autohide;
+                s.timeline = image_browse::timeline_items(&th.items);
+                s.map_pins = image_browse::map_pins(&th.items);
+                let (cy, cm) = if th.cal_year == 0 || th.cal_month == 0 {
+                    let date = th
+                        .items
+                        .iter()
+                        .find(|t| t.selected)
+                        .map(|t| t.date_text.as_str())
+                        .unwrap_or("");
+                    image_browse::month_from_date(date)
+                } else {
+                    (th.cal_year, u32::from(th.cal_month))
+                };
+                let (title, days) = image_browse::calendar_days(&th.items, cy, cm);
+                s.cal_title = title;
+                s.cal_year = cy;
+                s.cal_month = cm as u8;
+                s.cal_days = days;
             }
             if let Some(sl) = slide {
                 s.slideshow_playing = sl.playing;
@@ -2097,6 +2129,13 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             | "thumb-meta"
             | "thumb-refresh"
             | "contact-sheet"
+            | "browse-timeline"
+            | "browse-map"
+            | "browse-calendar"
+            | "browse-off"
+            | "cal-prev"
+            | "cal-next"
+            | "overlay-autohide"
             | "slideshow"
             | "slideshow-stop"
             | "slideshow-pause"
@@ -2425,6 +2464,52 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         "contact-sheet" => {
             inner.write_contact_sheet().await?;
         }
+        "browse-timeline" => {
+            inner
+                .image_thumbs
+                .write()
+                .toggle_browse(image_browse::BROWSE_TIMELINE);
+            inner.refresh_snapshot().await;
+        }
+        "browse-map" => {
+            inner
+                .image_thumbs
+                .write()
+                .toggle_browse(image_browse::BROWSE_MAP);
+            inner.refresh_snapshot().await;
+        }
+        "browse-calendar" => {
+            inner
+                .image_thumbs
+                .write()
+                .toggle_browse(image_browse::BROWSE_CALENDAR);
+            inner.refresh_snapshot().await;
+        }
+        "browse-off" => {
+            inner.image_thumbs.write().browse = image_browse::BROWSE_PHOTO;
+            inner.refresh_snapshot().await;
+        }
+        "cal-prev" => {
+            let mut th = inner.image_thumbs.write();
+            let (y, m) = image_browse::shift_month(th.cal_year, u32::from(th.cal_month.max(1)), -1);
+            th.cal_year = y;
+            th.cal_month = m as u8;
+            drop(th);
+            inner.refresh_snapshot().await;
+        }
+        "cal-next" => {
+            let mut th = inner.image_thumbs.write();
+            let (y, m) = image_browse::shift_month(th.cal_year, u32::from(th.cal_month.max(1)), 1);
+            th.cal_year = y;
+            th.cal_month = m as u8;
+            drop(th);
+            inner.refresh_snapshot().await;
+        }
+        "overlay-autohide" => {
+            let next = !inner.image_thumbs.read().overlay_autohide;
+            inner.image_thumbs.write().overlay_autohide = next;
+            inner.refresh_snapshot().await;
+        }
         cmd if let Some(raw) = cmd.strip_prefix("preload:") => {
             if let Ok(n) = raw.parse::<u8>() {
                 inner.image_thumbs.write().preload_n = n.min(8);
@@ -2434,6 +2519,7 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         cmd if let Some(raw) = cmd.strip_prefix("open-thumb:") => {
             if let Ok(path) = orchid_fs::FsPath::new(raw) {
                 inner.image_thumbs.write().grid = false;
+                inner.image_thumbs.write().browse = image_browse::BROWSE_PHOTO;
                 inner.open_path(path).await?;
             }
         }
@@ -3728,6 +3814,8 @@ fn apply_persisted_thumbs(inner: &ViewerWidgetInner, persisted: &ViewerPersisted
     thumbs.size = ThumbnailSize::from_u8(persisted.thumb_size);
     thumbs.show_meta = persisted.thumb_meta;
     thumbs.preload_n = persisted.preload_n.min(8);
+    thumbs.browse = persisted.browse_mode.min(3);
+    thumbs.overlay_autohide = persisted.overlay_autohide;
 }
 
 fn apply_persisted_slideshow(inner: &ViewerWidgetInner, persisted: &ViewerPersisted) {

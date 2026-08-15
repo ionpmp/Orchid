@@ -187,6 +187,16 @@ pub struct ImageSnapshot {
     pub anim_thumbs: Vec<ImageThumbItem>,
     /// GIF / APNG / WebP can auto-play; TIFF / ICO pages cannot.
     pub anim_can_play: bool,
+    /// 0 photo, 1 timeline, 2 map, 3 calendar.
+    pub browse_mode: u8,
+    /// Hide toolbar / strip after idle pointer time.
+    pub overlay_autohide: bool,
+    pub cal_title: String,
+    pub cal_year: i32,
+    pub cal_month: u8,
+    pub cal_days: Vec<CalDayItem>,
+    pub map_pins: Vec<MapPinItem>,
+    pub timeline: Vec<ImageThumbItem>,
 }
 
 /// One folder sibling in the image thumbnail strip or grid.
@@ -204,6 +214,38 @@ pub struct ImageThumbItem {
     pub selected: bool,
     /// 1-based playlist index.
     pub index: u32,
+    /// Shoot date (EXIF) or mtime, milliseconds since epoch.
+    pub taken_ms: i64,
+    pub has_gps: bool,
+    pub gps_lat: f32,
+    pub gps_lon: f32,
+}
+
+/// GPS pin on the folder map browse canvas (x/y in 0…1, north up).
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct MapPinItem {
+    pub path: String,
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub selected: bool,
+    pub rgba: Option<Arc<Vec<u8>>>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One cell in the folder calendar browse grid (`day == 0` is padding).
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct CalDayItem {
+    pub day: u8,
+    pub count: u32,
+    pub selected: bool,
+    pub path: String,
+    pub rgba: Option<Arc<Vec<u8>>>,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// PDF page snapshot.
