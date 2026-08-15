@@ -220,6 +220,56 @@ pub async fn load_image(
         .map_err(|e| ViewerError::ImageDecode(e.to_string()))?
 }
 
+/// Load an image and, when the file is animated, every composited frame.
+///
+/// Folder thumbs and edit pipelines should keep using [`load_image`] so a
+/// long GIF is not expanded just to draw a 64 px cell.
+///
+/// # Errors
+///
+/// Same as [`load_image`].
+pub async fn load_viewer_image(
+    path: &orchid_fs::FsPath,
+    registry: Arc<orchid_fs::FsProviderRegistry>,
+    size_limit_bytes: u64,
+) -> Result<(LoadedImage, Option<Arc<crate::image::anim::AnimSequence>>)> {
+    let provider = registry
+        .for_path(path)
+        .ok_or_else(|| orchid_fs::FsError::ProviderNotFound(path.scheme().to_string()))?;
+    let ext = path.extension().map(|e| e.to_ascii_lowercase());
+
+    if path.is_local() {
+        let os_path = path.to_local()?;
+        let meta = tokio::fs::metadata(&os_path)
+            .await
+            .map_err(orchid_fs::FsError::Io)?;
+        let size = meta.len();
+        if size > size_limit_bytes {
+            return Err(ViewerError::FileTooLarge {
+                size,
+                limit: size_limit_bytes,
+            });
+        }
+        return tokio::task::spawn_blocking(move || {
+            decode_local_mmap_viewer(&os_path, size_limit_bytes, ext.as_deref())
+        })
+        .await
+        .map_err(|e| ViewerError::ImageDecode(e.to_string()))?;
+    }
+
+    let bytes = provider.read(path).await?;
+    let size = bytes.len() as u64;
+    if size > size_limit_bytes {
+        return Err(ViewerError::FileTooLarge {
+            size,
+            limit: size_limit_bytes,
+        });
+    }
+    tokio::task::spawn_blocking(move || decode_bytes_viewer(&bytes, size, ext.as_deref()))
+        .await
+        .map_err(|e| ViewerError::ImageDecode(e.to_string()))?
+}
+
 fn decode_local_mmap(
     os_path: &std::path::Path,
     size_limit_bytes: u64,
@@ -245,6 +295,47 @@ fn decode_local_mmap(
         });
     }
     decode_bytes(&map, size, extension)
+}
+
+fn decode_local_mmap_viewer(
+    os_path: &std::path::Path,
+    size_limit_bytes: u64,
+    extension: Option<&str>,
+) -> Result<(LoadedImage, Option<Arc<crate::image::anim::AnimSequence>>)> {
+    let meta = std::fs::metadata(os_path).map_err(orchid_fs::FsError::Io)?;
+    let size = meta.len();
+    if size > size_limit_bytes {
+        return Err(ViewerError::FileTooLarge {
+            size,
+            limit: size_limit_bytes,
+        });
+    }
+    let file = std::fs::File::open(os_path).map_err(orchid_fs::FsError::Io)?;
+    // SAFETY: same contract as [`decode_local_mmap`].
+    let map = unsafe { memmap2::Mmap::map(&file) }.map_err(orchid_fs::FsError::Io)?;
+    if map.len() as u64 > size_limit_bytes {
+        return Err(ViewerError::FileTooLarge {
+            size: map.len() as u64,
+            limit: size_limit_bytes,
+        });
+    }
+    decode_bytes_viewer(&map, size, extension)
+}
+
+fn decode_bytes_viewer(
+    bytes: &[u8],
+    size: u64,
+    extension: Option<&str>,
+) -> Result<(LoadedImage, Option<Arc<crate::image::anim::AnimSequence>>)> {
+    if let Some(seq) = crate::image::anim::decode_animation(bytes) {
+        let image = seq.first_loaded(size);
+        return Ok((image, Some(Arc::new(seq))));
+    }
+    if let Some(seq) = crate::image::pages::decode_pages(bytes) {
+        let image = seq.first_loaded(size);
+        return Ok((image, Some(Arc::new(seq))));
+    }
+    Ok((decode_bytes(bytes, size, extension)?, None))
 }
 
 fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<LoadedImage> {

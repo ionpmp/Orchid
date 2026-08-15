@@ -175,6 +175,18 @@ pub struct ImageSnapshot {
     pub meta_edit_description: String,
     pub meta_edit_date: String,
     pub meta_edit_gps: String,
+    /// Animated frame count (`0` when the file is a still).
+    pub anim_count: u32,
+    /// 1-based current frame (`0` when still).
+    pub anim_index: u32,
+    pub anim_playing: bool,
+    pub anim_delay_ms: u32,
+    /// `GIF` / `APNG` / `WebP`.
+    pub anim_label: String,
+    /// Frame-strip thumbs for the current animation.
+    pub anim_thumbs: Vec<ImageThumbItem>,
+    /// GIF / APNG / WebP can auto-play; TIFF / ICO pages cannot.
+    pub anim_can_play: bool,
 }
 
 /// One folder sibling in the image thumbnail strip or grid.

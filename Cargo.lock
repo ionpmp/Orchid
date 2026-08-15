@@ -6035,6 +6035,7 @@ dependencies = [
  "swash",
  "tempfile",
  "thiserror 2.0.19",
+ "tiff",
  "tokio",
  "tracing",
  "tree-sitter",

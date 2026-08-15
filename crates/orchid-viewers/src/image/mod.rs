@@ -3,6 +3,7 @@
 use std::any::Any;
 
 pub mod adjust;
+pub mod anim;
 pub mod annotate;
 pub mod batch;
 pub mod color;
@@ -16,6 +17,7 @@ pub mod lossless;
 pub mod meta_edit;
 pub mod metadata;
 pub mod operations;
+pub mod pages;
 pub mod print;
 pub mod raw;
 pub mod slideshow;
@@ -34,10 +36,15 @@ use crate::error::{Result, ViewerError};
 use crate::snapshot::{ImageSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
-pub use loader::{
-    is_image_file_extension, load_image, load_image_file, rgba_arc, ImageFormat, LoadedImage,
-    IMAGE_FILE_EXTENSIONS,
+pub use anim::{
+    decode_animation, export_anim_frame, export_anim_frames, extract_frame_suffix,
+    is_animation_extension, load_animation_file, AnimFrame, AnimKind, AnimSequence,
 };
+pub use loader::{
+    is_image_file_extension, load_image, load_image_file, load_viewer_image, rgba_arc, ImageFormat,
+    LoadedImage, IMAGE_FILE_EXTENSIONS,
+};
+pub use pages::decode_pages;
 pub use transform::{ImageBackground, ImageFitMode, ViewTransform};
 
 /// Max image size this viewer accepts. 128 MiB.
@@ -55,6 +62,9 @@ pub struct ImageViewer {
     chrome_hidden: RwLock<bool>,
     kiosk: RwLock<bool>,
     lens: RwLock<bool>,
+    anim: RwLock<Option<Arc<AnimSequence>>>,
+    anim_index: RwLock<usize>,
+    anim_playing: RwLock<bool>,
     size_limit: u64,
 }
 
@@ -90,6 +100,9 @@ impl ImageViewer {
             chrome_hidden: RwLock::new(false),
             kiosk: RwLock::new(false),
             lens: RwLock::new(false),
+            anim: RwLock::new(None),
+            anim_index: RwLock::new(0),
+            anim_playing: RwLock::new(false),
             size_limit: DEFAULT_SIZE_LIMIT,
         }
     }
@@ -413,9 +426,207 @@ impl ImageViewer {
 
     /// Install an already-decoded image (preload cache hit).
     pub fn open_loaded(&mut self, path: orchid_fs::FsPath, loaded: LoadedImage) {
+        self.clear_anim();
         *self.image.write() = Some(loaded);
         *self.path.write() = Some(path);
         self.fit_to_viewport();
+    }
+
+    /// Attach a decoded animation and show the first frame.
+    pub fn attach_anim(&self, seq: Option<Arc<AnimSequence>>) {
+        let playing = seq
+            .as_ref()
+            .is_some_and(|s| s.kind.is_playback() && s.frames.len() >= 2);
+        let has_pages = seq.as_ref().is_some_and(|s| s.frames.len() >= 2);
+        *self.anim.write() = seq;
+        *self.anim_index.write() = 0;
+        *self.anim_playing.write() = playing;
+        if has_pages {
+            self.show_anim_frame(0);
+        }
+    }
+
+    /// Drop animation state (still image remains).
+    pub fn clear_anim(&self) {
+        *self.anim.write() = None;
+        *self.anim_index.write() = 0;
+        *self.anim_playing.write() = false;
+    }
+
+    /// Frame count (`0` when the file is a still).
+    #[must_use]
+    pub fn anim_count(&self) -> usize {
+        self.anim
+            .read()
+            .as_ref()
+            .map(|s| s.frames.len())
+            .unwrap_or(0)
+    }
+
+    /// Whether playback is advancing.
+    #[must_use]
+    pub fn anim_playing(&self) -> bool {
+        *self.anim_playing.read()
+    }
+
+    /// Delay of the current frame in milliseconds.
+    #[must_use]
+    pub fn anim_delay_ms(&self) -> u32 {
+        let idx = *self.anim_index.read();
+        self.anim
+            .read()
+            .as_ref()
+            .and_then(|s| s.frames.get(idx))
+            .map(|f| f.delay_ms)
+            .unwrap_or(100)
+    }
+
+    /// Start or stop playback.
+    pub fn set_anim_playing(&self, playing: bool) {
+        let can_play = self
+            .anim
+            .read()
+            .as_ref()
+            .is_some_and(|s| s.kind.is_playback() && s.frames.len() >= 2);
+        *self.anim_playing.write() = playing && can_play;
+    }
+
+    /// True when the sequence is a GIF / APNG / WebP loop.
+    #[must_use]
+    pub fn anim_can_play(&self) -> bool {
+        self.anim
+            .read()
+            .as_ref()
+            .is_some_and(|s| s.kind.is_playback() && s.frames.len() >= 2)
+    }
+
+    /// Toggle play / pause.
+    pub fn toggle_anim(&self) {
+        let next = !self.anim_playing();
+        self.set_anim_playing(next);
+    }
+
+    /// Advance while playing (wraps, does not pause).
+    pub fn anim_advance(&self) {
+        self.offset_anim_frame(1);
+    }
+
+    /// Step `delta` frames and pause (wraps).
+    pub fn anim_step(&self, delta: i32) {
+        *self.anim_playing.write() = false;
+        self.offset_anim_frame(delta);
+    }
+
+    /// Jump to a 1-based frame and pause.
+    pub fn anim_goto(&self, index_1based: usize) {
+        let count = self.anim_count();
+        if count < 2 {
+            return;
+        }
+        *self.anim_playing.write() = false;
+        let idx = index_1based.saturating_sub(1).min(count - 1);
+        self.show_anim_frame(idx);
+    }
+
+    /// Clone frames for a blocking export.
+    #[must_use]
+    pub fn anim_export_plan(&self) -> Option<(std::path::PathBuf, Arc<AnimSequence>)> {
+        let path = self.path.read().clone()?;
+        let os = path.to_local().ok()?;
+        let seq = self.anim.read().clone()?;
+        if seq.frames.len() < 2 {
+            return None;
+        }
+        Some((os, seq))
+    }
+
+    /// Current frame plus a sibling suffix for extract-one-page.
+    #[must_use]
+    pub fn anim_extract_plan(&self) -> Option<(std::path::PathBuf, AnimFrame, String)> {
+        let path = self.path.read().clone()?;
+        let os = path.to_local().ok()?;
+        let seq = self.anim.read().clone()?;
+        let idx = *self.anim_index.read();
+        let frame = seq.frames.get(idx)?.clone();
+        let suffix = extract_frame_suffix(seq.kind, idx, &frame);
+        Some((os, frame, suffix))
+    }
+
+    fn offset_anim_frame(&self, delta: i32) {
+        let count = self.anim_count();
+        if count < 2 {
+            return;
+        }
+        let cur = *self.anim_index.read();
+        let next = (cur as i32 + delta).rem_euclid(count as i32) as usize;
+        self.show_anim_frame(next);
+    }
+
+    fn show_anim_frame(&self, index: usize) {
+        let Some(seq) = self.anim.read().clone() else {
+            return;
+        };
+        let Some(frame) = seq.frames.get(index) else {
+            return;
+        };
+        *self.anim_index.write() = index;
+        let dim_changed = {
+            let mut image = self.image.write();
+            if image.is_none() {
+                *image = Some(seq.first_loaded(0));
+            }
+            let Some(img) = image.as_mut() else {
+                return;
+            };
+            let changed = img.width != frame.width || img.height != frame.height;
+            img.rgba = Arc::clone(&frame.rgba);
+            img.width = frame.width;
+            img.height = frame.height;
+            changed
+        };
+        if dim_changed && self.fit_mode.read().tracks_viewport() {
+            self.apply_fit_transform();
+        }
+    }
+
+    fn anim_snapshot_fields(
+        &self,
+    ) -> (
+        u32,
+        u32,
+        bool,
+        u32,
+        String,
+        Vec<crate::snapshot::ImageThumbItem>,
+        bool,
+    ) {
+        let Some(seq) = self.anim.read().clone() else {
+            return (0, 0, false, 0, String::new(), Vec::new(), false);
+        };
+        if seq.frames.len() < 2 {
+            return (0, 0, false, 0, String::new(), Vec::new(), false);
+        }
+        let idx = *self.anim_index.read();
+        let delay = seq.frames.get(idx).map(|f| f.delay_ms).unwrap_or(100);
+        let thumbs = seq
+            .thumbs
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let mut t = t.clone();
+                t.selected = i == idx;
+                t
+            })
+            .collect();
+        (
+            seq.frames.len() as u32,
+            (idx + 1) as u32,
+            *self.anim_playing.read(),
+            delay,
+            seq.kind.label().to_string(),
+            thumbs,
+            seq.kind.is_playback(),
+        )
     }
 }
 
@@ -430,12 +641,14 @@ impl Viewer for ImageViewer {
         path: orchid_fs::FsPath,
         registry: Arc<orchid_fs::FsProviderRegistry>,
     ) -> Result<()> {
-        let loaded = load_image(&path, registry, self.size_limit).await?;
+        let (loaded, anim) = load_viewer_image(&path, registry, self.size_limit).await?;
         self.open_loaded(path, loaded);
+        self.attach_anim(anim);
         Ok(())
     }
 
     async fn close(&mut self) -> Result<()> {
+        self.clear_anim();
         *self.image.write() = None;
         *self.path.write() = None;
         *self.transform.write() = ViewTransform::default();
@@ -454,6 +667,20 @@ impl Viewer for ImageViewer {
         };
         let transform = *self.transform.read();
         let (bg_r, bg_g, bg_b) = *self.custom_bg.read();
+        let (
+            anim_count,
+            anim_index,
+            anim_playing,
+            anim_delay_ms,
+            anim_label,
+            anim_thumbs,
+            anim_can_play,
+        ) = self.anim_snapshot_fields();
+        let format_label = if anim_count > 1 && !anim_label.is_empty() {
+            anim_label.clone()
+        } else {
+            image.format.label().to_string()
+        };
         ViewerSnapshot::Image(ImageSnapshot {
             path_display,
             width_px: image.width,
@@ -475,7 +702,7 @@ impl Viewer for ImageViewer {
             color_source: image.color_source.clone(),
             color_dest: image.color_dest.clone(),
             orientation: image.orientation,
-            format_label: image.format.label().to_string(),
+            format_label,
             size_bytes: image.original_size_bytes,
             info_text: String::new(),
             folder_index: 0,
@@ -521,6 +748,13 @@ impl Viewer for ImageViewer {
             meta_edit_description: String::new(),
             meta_edit_date: String::new(),
             meta_edit_gps: String::new(),
+            anim_count,
+            anim_index,
+            anim_playing,
+            anim_delay_ms,
+            anim_label,
+            anim_thumbs,
+            anim_can_play,
         })
     }
 
@@ -589,5 +823,43 @@ mod tests {
         assert!(t.rotation_degrees.abs() < 1e-3);
         assert!(!t.flipped_horizontal);
         assert!(!t.flipped_vertical);
+    }
+
+    #[test]
+    fn anim_step_wraps_and_pauses() {
+        let gif = {
+            use image::codecs::gif::{GifEncoder, Repeat};
+            use image::{Delay, Rgba, RgbaImage};
+            let mut buf = Vec::new();
+            {
+                let mut enc = GifEncoder::new(&mut buf);
+                enc.set_repeat(Repeat::Infinite).unwrap();
+                for rgb in [[255, 0, 0], [0, 255, 0], [0, 0, 255]] {
+                    let mut img = RgbaImage::new(1, 1);
+                    img.put_pixel(0, 0, Rgba([rgb[0], rgb[1], rgb[2], 255]));
+                    enc.encode_frame(image::Frame::from_parts(
+                        img,
+                        0,
+                        0,
+                        Delay::from_numer_denom_ms(50, 1),
+                    ))
+                    .unwrap();
+                }
+            }
+            buf
+        };
+        let seq = crate::image::anim::decode_animation(&gif).expect("gif");
+        let v = ImageViewer::new();
+        v.attach_anim(Some(std::sync::Arc::new(seq)));
+        assert_eq!(v.anim_count(), 3);
+        assert!(v.anim_playing());
+        v.anim_step(1);
+        assert!(!v.anim_playing());
+        assert_eq!(v.clone_loaded().unwrap().rgba[0..3], [0, 255, 0]);
+        v.anim_step(1);
+        v.anim_step(1);
+        assert_eq!(v.clone_loaded().unwrap().rgba[0..3], [255, 0, 0]);
+        v.anim_goto(3);
+        assert_eq!(v.clone_loaded().unwrap().rgba[0..3], [0, 0, 255]);
     }
 }

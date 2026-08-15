@@ -82,8 +82,10 @@ pub use image::slideshow::{
     SlideTransition, SlideshowExport,
 };
 pub use image::{
-    is_image_file_extension, load_image, load_image_file, ImageBackground, ImageFitMode,
-    ImageFormat, ImageViewer, LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT,
+    decode_animation, decode_pages, export_anim_frame, export_anim_frames, extract_frame_suffix,
+    is_animation_extension, is_image_file_extension, load_animation_file, load_image,
+    load_image_file, load_viewer_image, AnimFrame, AnimKind, AnimSequence, ImageBackground,
+    ImageFitMode, ImageFormat, ImageViewer, LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT,
     IMAGE_FILE_EXTENSIONS,
 };
 pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};

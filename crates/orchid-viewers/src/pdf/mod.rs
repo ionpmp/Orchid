@@ -196,6 +196,26 @@ impl PdfViewer {
         Ok(())
     }
 
+    /// Write the current rasterized page as a sibling PNG `{stem}-p007.png`.
+    ///
+    /// # Errors
+    ///
+    /// No document, a non-local path, or encode / I/O failure.
+    pub fn extract_current_page(&self) -> Result<std::path::PathBuf> {
+        let path = self.path.read().clone().ok_or(ViewerError::PdfEmpty)?;
+        let os = path.to_local().map_err(ViewerError::Fs)?;
+        let rendered = self.rendered.read().clone().ok_or(ViewerError::PdfEmpty)?;
+        let img = crate::image::loader::LoadedImage {
+            rgba: Arc::clone(&rendered.rgba),
+            width: rendered.width_px,
+            height: rendered.height_px,
+            format: crate::image::loader::ImageFormat::Png,
+            original_size_bytes: rendered.rgba.len() as u64,
+            ..crate::image::loader::LoadedImage::meta_defaults()
+        };
+        crate::image::edit::save_sibling(&os, &img, &format!("p{:03}", rendered.current_page))
+    }
+
     /// Extract Unicode text for the current page (for clipboard copy).
     ///
     /// # Errors

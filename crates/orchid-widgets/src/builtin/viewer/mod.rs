@@ -16,13 +16,14 @@ use orchid_storage::{LifecycleState, WidgetSize};
 use orchid_viewers::ViewerSnapshot;
 use orchid_viewers::{
     apply_adjust, apply_edit, apply_filter, apply_lossless, encode_png, export_file,
-    format_from_extension, parse_adjust_line, parse_annotate_line, parse_canvas_line,
-    parse_export_line, parse_filter_line_in, parse_print_line, parse_resize_line,
-    parse_screenshot_line, prepare_mail_attachment, set_wallpaper, share_intent_url,
-    unique_export_dest, write_mail_eml, write_screenshot, AdjustOp, AnnotateOp, ArchiveViewer,
-    CropKeep, DocumentViewer, EditOp, ExportFormat, ExportSpec, FilterOp, HistMode, ImageFitMode,
-    ImageThumbItem, ImageViewer, LosslessOp, PdfViewer, SlideTransition, SyntaxHighlighter,
-    TextViewer, ThumbnailService, ThumbnailSize, ViewTransform, Viewer,
+    format_from_extension, is_animation_extension, load_animation_file, parse_adjust_line,
+    parse_annotate_line, parse_canvas_line, parse_export_line, parse_filter_line_in,
+    parse_print_line, parse_resize_line, parse_screenshot_line, prepare_mail_attachment,
+    set_wallpaper, share_intent_url, unique_export_dest, write_mail_eml, write_screenshot,
+    AdjustOp, AnnotateOp, ArchiveViewer, CropKeep, DocumentViewer, EditOp, ExportFormat,
+    ExportSpec, FilterOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer, LosslessOp,
+    PdfViewer, SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService, ThumbnailSize,
+    ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -235,6 +236,7 @@ struct ViewerWidgetInner {
     thumb_gen: AtomicU64,
     slideshow: RwLock<image_slideshow::SlideshowState>,
     slide_tick: AtomicU64,
+    anim_tick: AtomicU64,
     music_child: parking_lot::Mutex<Option<std::process::Child>>,
     inspect: RwLock<image_inspect::InspectState>,
     inspect_gen: AtomicU64,
@@ -353,6 +355,7 @@ impl ViewerWidgetInner {
     /// Open a path: picks the right viewer kind, opens it, and caches the
     /// first snapshot.
     async fn open_path(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
+        self.anim_tick.fetch_add(1, Ordering::Relaxed);
         self.remember_current_image_view().await;
         let registry = self.deps.registry.clone();
         let highlighter = self.deps.highlighter.clone();
@@ -411,6 +414,7 @@ impl ViewerWidgetInner {
         if is_image_path(&path) {
             self.after_image_opened(&path).await;
             self.restore_image_view(&path).await;
+            self.attach_animation_if_needed(&path).await;
             let guard = self.viewer.lock().await;
             if let Some(v) = guard.as_ref() {
                 *self.snapshot.write() = Some(v.snapshot());
@@ -784,6 +788,105 @@ impl ViewerWidgetInner {
         });
     }
 
+    async fn attach_animation_if_needed(&self, path: &orchid_fs::FsPath) {
+        let has_anim = {
+            let guard = self.viewer.lock().await;
+            guard
+                .as_ref()
+                .and_then(|v| v.as_any().downcast_ref::<ImageViewer>())
+                .is_some_and(|img| img.anim_count() >= 2)
+        };
+        if !has_anim {
+            let ext = path.extension().unwrap_or_default();
+            if is_animation_extension(&ext) {
+                let os = path.to_local().ok();
+                let seq = if let Some(os) = os {
+                    tokio::task::spawn_blocking(move || load_animation_file(&os))
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+                let guard = self.viewer.lock().await;
+                if let Some(v) = guard.as_ref() {
+                    if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+                        img.attach_anim(seq);
+                    }
+                }
+            }
+        }
+        self.schedule_anim_ticks();
+    }
+
+    fn schedule_anim_ticks(&self) {
+        let gen = self.anim_tick.fetch_add(1, Ordering::Relaxed) + 1;
+        let inner = {
+            let Some(entry) = VIEWER_LIVE.get(&self.instance_id) else {
+                return;
+            };
+            Arc::clone(entry.value())
+        };
+        tokio::spawn(async move {
+            loop {
+                if inner.anim_tick.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                let delay = {
+                    if inner.slideshow.read().playing {
+                        None
+                    } else {
+                        let guard = inner.viewer.lock().await;
+                        guard.as_ref().and_then(|v| {
+                            let img = v.as_any().downcast_ref::<ImageViewer>()?;
+                            if img.anim_count() < 2 || !img.anim_playing() {
+                                None
+                            } else {
+                                Some(img.anim_delay_ms())
+                            }
+                        })
+                    }
+                };
+                match delay {
+                    None => {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        continue;
+                    }
+                    Some(ms) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(u64::from(ms.max(20))))
+                            .await;
+                    }
+                }
+                if inner.anim_tick.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                if inner.slideshow.read().playing {
+                    continue;
+                }
+                let advanced = {
+                    let guard = inner.viewer.lock().await;
+                    if let Some(v) = guard.as_ref() {
+                        if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+                            if img.anim_playing() {
+                                img.anim_advance();
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                };
+                if advanced {
+                    inner.refresh_snapshot().await;
+                }
+            }
+        });
+    }
+
     async fn start_slideshow(&self) -> WidgetResult<()> {
         {
             let path = self.path.read().clone();
@@ -808,6 +911,14 @@ impl ViewerWidgetInner {
                 None
             }
         };
+        {
+            let guard = self.viewer.lock().await;
+            if let Some(v) = guard.as_ref() {
+                if let Some(img) = v.as_any().downcast_ref::<ImageViewer>() {
+                    img.set_anim_playing(false);
+                }
+            }
+        }
         {
             let nav = self.image_nav.read().clone();
             let mut sl = self.slideshow.write();
@@ -977,6 +1088,52 @@ impl ViewerWidgetInner {
         let next = orchid_fs::FsPath::from_local(&dest)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
         self.open_path(next).await
+    }
+
+    async fn export_anim_frames(&self) -> WidgetResult<()> {
+        let plan = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            img.anim_export_plan()
+        };
+        let Some((os, seq)) = plan else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || orchid_viewers::export_anim_frames(&os, &seq.frames))
+            .await
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+            .map_err(map_viewer_err)?;
+        self.refresh_snapshot().await;
+        Ok(())
+    }
+
+    async fn extract_anim_frame(&self) -> WidgetResult<()> {
+        let plan = {
+            let guard = self.viewer.lock().await;
+            let Some(v) = guard.as_ref() else {
+                return Ok(());
+            };
+            let Some(img) = v.as_any().downcast_ref::<ImageViewer>() else {
+                return Ok(());
+            };
+            img.anim_extract_plan()
+        };
+        let Some((os, frame, suffix)) = plan else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || {
+            orchid_viewers::export_anim_frame(&os, &frame, &suffix)
+        })
+        .await
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
+        .map_err(map_viewer_err)?;
+        self.refresh_snapshot().await;
+        Ok(())
     }
 
     async fn apply_adjust_current(&self, op: AdjustOp) -> WidgetResult<()> {
@@ -1508,6 +1665,7 @@ impl ViewerWidget {
                 thumb_gen: AtomicU64::new(0),
                 slideshow: RwLock::new(image_slideshow::SlideshowState::default()),
                 slide_tick: AtomicU64::new(0),
+                anim_tick: AtomicU64::new(0),
                 music_child: parking_lot::Mutex::new(None),
                 inspect: RwLock::new(image_inspect::InspectState::default()),
                 inspect_gen: AtomicU64::new(0),
@@ -1965,7 +2123,21 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             | "copy-image"
             | "paste-image"
             | "wallpaper"
-            | "screenshot" => {}
+            | "screenshot"
+            | "anim-export"
+            | "anim-extract" => {}
+            "anim-play" => img.set_anim_playing(true),
+            "anim-pause" => img.set_anim_playing(false),
+            "anim-toggle" => img.toggle_anim(),
+            "anim-next" => img.anim_step(1),
+            "anim-prev" => img.anim_step(-1),
+            "anim-first" => img.anim_goto(1),
+            "anim-last" => img.anim_goto(img.anim_count()),
+            cmd if let Some(raw) = cmd.strip_prefix("anim-goto:") => {
+                if let Ok(n) = raw.parse::<usize>() {
+                    img.anim_goto(n);
+                }
+            }
             cmd if cmd.starts_with("goto:")
                 || cmd.starts_with("recent:")
                 || cmd.starts_with("lossless")
@@ -1984,7 +2156,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 || cmd.starts_with("screenshot")
                 || cmd.starts_with("email")
                 || cmd.starts_with("share")
-                || cmd.starts_with("save-as") => {}
+                || cmd.starts_with("save-as")
+                || cmd.starts_with("anim-") => {}
             cmd if let Some(raw) = cmd.strip_prefix("rotate:") => {
                 if let Ok(deg) = raw.parse::<f32>() {
                     img.set_rotation(deg);
@@ -2041,6 +2214,9 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             }
             _ => {}
         }
+    }
+    if matches!(command, "anim-play" | "anim-toggle") {
+        inner.schedule_anim_ticks();
     }
     match command {
         "next" => inner.navigate_images(image_nav::NavStep::Next).await?,
@@ -2261,6 +2437,8 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
                 inner.open_path(path).await?;
             }
         }
+        "anim-export" => inner.export_anim_frames().await?,
+        "anim-extract" => inner.extract_anim_frame().await?,
         "slideshow" => inner.toggle_slideshow().await?,
         "slideshow-stop" => {
             inner.stop_slideshow();
@@ -2595,6 +2773,24 @@ pub async fn pdf_current_page_text(instance_id: Uuid) -> WidgetResult<String> {
         ));
     };
     pdf.current_page_text().await.map_err(map_viewer_err)
+}
+
+/// PDF: write the current page as a sibling PNG.
+pub async fn pdf_extract_page(instance_id: Uuid) -> WidgetResult<String> {
+    let inner = live_inner(instance_id)?;
+    let dest = {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "not a pdf viewer".into(),
+            ));
+        };
+        pdf.extract_current_page().map_err(map_viewer_err)?
+    };
+    Ok(dest.to_string_lossy().into_owned())
 }
 
 /// Archive: open folder.
