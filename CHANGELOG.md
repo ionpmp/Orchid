@@ -196,7 +196,8 @@ release yet.
 - **Tier-1 DOCX document editor**: OOXML read/write, Preview/Source,
   parley+swash canvas, selection and keyboard editing, tables (cell nav,
   insert/delete row/col, `tblGrid` widths), inline images (body + cells),
-  Find/Replace (`Ctrl+F` / F3, `n/m` status), catalog **Document** launcher,
+  Find/Replace (`Ctrl+F` / F3, `n/m` status), insert/edit/remove hyperlinks
+  (Link toolbar / Ctrl+K), catalog **Document** launcher,
   canvas dock; Word/LibreOffice fixtures and round-trip tests.
 - Spec draft for native **`.orchid`** container — see
   [`docs/ORCHID_FORMAT.md`](docs/ORCHID_FORMAT.md) (not implemented yet).

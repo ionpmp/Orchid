@@ -2,8 +2,8 @@
 
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
-    Alignment, Block, CellImage, Document, InlineImage, ListKind, Paragraph, Run, RunStyle, Table,
-    TableCell, TableRow,
+    Alignment, Block, CellImage, Document, Hyperlink, InlineImage, ListKind, Paragraph, Run,
+    RunStyle, Table, TableCell, TableRow,
 };
 use crate::error::{Result, ViewerError};
 
@@ -178,6 +178,8 @@ pub struct RunStylePatch {
     pub font_family: Option<Option<String>>,
     /// Set font size.
     pub font_size_pt: Option<Option<f32>>,
+    /// Set external hyperlink (`Some(None)` clears).
+    pub hyperlink: Option<Option<Hyperlink>>,
 }
 
 impl RunStylePatch {
@@ -195,6 +197,7 @@ impl RunStylePatch {
             color: Some(None),
             font_family: Some(None),
             font_size_pt: Some(None),
+            hyperlink: Some(None),
         }
     }
 
@@ -235,6 +238,14 @@ impl RunStylePatch {
         }
         if let Some(s) = self.font_size_pt {
             style.font_size_pt = s;
+        }
+    }
+
+    /// Apply character style and optional hyperlink onto `run`.
+    pub fn apply_to_run(&self, run: &mut Run) {
+        self.apply_to(&mut run.style);
+        if let Some(ref hl) = self.hyperlink {
+            run.hyperlink = hl.clone();
         }
     }
 }
@@ -765,8 +776,8 @@ fn apply_set_run_style(doc: &mut Document, range: Selection, patch: &RunStylePat
             p.runs.push(Run {
                 text: String::new(),
                 style: RunStyle::default(),
-            ..Default::default()
-        });
+                ..Default::default()
+            });
         }
         let (run_start, byte_start) = if bi == start.block_idx {
             (start.run_idx, start.byte_offset)
@@ -787,7 +798,7 @@ fn apply_set_run_style(doc: &mut Document, range: Selection, patch: &RunStylePat
         {
             let idx = run_start.min(p.runs.len().saturating_sub(1));
             if let Some(run) = p.runs.get_mut(idx) {
-                patch.apply_to(&mut run.style);
+                patch.apply_to_run(run);
             }
             continue;
         }
@@ -817,7 +828,7 @@ fn apply_set_run_style_one_para(
     if run_start == run_end && byte_start == byte_end {
         let idx = run_start.min(p.runs.len().saturating_sub(1));
         if let Some(run) = p.runs.get_mut(idx) {
-            patch.apply_to(&mut run.style);
+            patch.apply_to_run(run);
         }
         return Ok(());
     }
@@ -863,7 +874,7 @@ fn apply_style_to_paragraph_range(
     let last = end_run.min(p.runs.len().saturating_sub(1));
     for idx in start_run..=last {
         if let Some(run) = p.runs.get_mut(idx) {
-            patch.apply_to(&mut run.style);
+            patch.apply_to_run(run);
         }
     }
     let _ = end_byte;
@@ -937,8 +948,8 @@ mod tests {
                 runs: vec![Run {
                     text: "Hello".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             })],
             ..Default::default()
@@ -1223,16 +1234,16 @@ mod tests {
                             runs: vec![Run {
                                 text: "A".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }]),
                         TableCell::from_paragraphs(vec![Paragraph {
                             runs: vec![Run {
                                 text: "B".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }]),
                     ],
@@ -1286,16 +1297,16 @@ mod tests {
                             runs: vec![Run {
                                 text: "A".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }]),
                         TableCell::from_paragraphs(vec![Paragraph {
                             runs: vec![Run {
                                 text: "B".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }]),
                     ],
@@ -1603,8 +1614,8 @@ mod tests {
                             runs: vec![Run {
                                 text: "Hi".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }],
                         images: vec![image.clone()],

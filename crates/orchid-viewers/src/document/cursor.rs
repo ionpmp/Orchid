@@ -485,9 +485,70 @@ pub fn is_safe_external_url(url: &str) -> bool {
         return false;
     }
     let lower = trimmed.to_ascii_lowercase();
-    lower.starts_with("https://")
-        || lower.starts_with("http://")
-        || lower.starts_with("mailto:")
+    lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:")
+}
+
+/// Normalize a user-entered external URL for insert/edit.
+///
+/// Accepts `http`/`https`/`mailto`, or a bare host/path (prefixed with `https://`).
+/// Rejects empty input and other schemes (`javascript:`, `file:`, …).
+#[must_use]
+pub fn normalize_external_link_url(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:")
+    {
+        return Some(trimmed.to_string());
+    }
+    if lower.contains(':') || trimmed.chars().any(char::is_whitespace) {
+        return None;
+    }
+    Some(format!("https://{trimmed}"))
+}
+
+/// Expand a caret on a hyperlink to the contiguous run span sharing that URL.
+#[must_use]
+pub fn expand_selection_to_hyperlink_span(doc: &Document, cursor: Cursor) -> Option<Selection> {
+    let url = hyperlink_at_cursor(doc, cursor)?.url.clone();
+    let p = paragraph_ref(doc, cursor)?;
+    if p.runs.is_empty() {
+        return None;
+    }
+    let mut start = cursor.run_idx.min(p.runs.len() - 1);
+    while start > 0
+        && p.runs[start - 1]
+            .hyperlink
+            .as_ref()
+            .is_some_and(|hl| hl.url == url)
+    {
+        start -= 1;
+    }
+    let mut end = cursor.run_idx.min(p.runs.len() - 1);
+    while end + 1 < p.runs.len()
+        && p.runs[end + 1]
+            .hyperlink
+            .as_ref()
+            .is_some_and(|hl| hl.url == url)
+    {
+        end += 1;
+    }
+    Some(Selection {
+        anchor: Cursor {
+            block_idx: cursor.block_idx,
+            cell: cursor.cell,
+            run_idx: start,
+            byte_offset: 0,
+        },
+        head: Cursor {
+            block_idx: cursor.block_idx,
+            cell: cursor.cell,
+            run_idx: end,
+            byte_offset: p.runs[end].text.len(),
+        },
+    })
 }
 
 /// Step among paragraphs and cell images in document order within one cell.
@@ -739,8 +800,8 @@ mod tests {
             runs: vec![Run {
                 text: text.into(),
                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                ..Default::default()
+            }],
             ..Default::default()
         }
     }
@@ -991,6 +1052,17 @@ mod tests {
         assert!(!is_safe_external_url("javascript:alert(1)"));
         assert!(!is_safe_external_url("file:///tmp/x"));
         assert!(!is_safe_external_url(""));
+
+        assert_eq!(
+            normalize_external_link_url("example.com/x").as_deref(),
+            Some("https://example.com/x")
+        );
+        assert_eq!(
+            normalize_external_link_url("https://a.test").as_deref(),
+            Some("https://a.test")
+        );
+        assert!(normalize_external_link_url("javascript:alert(1)").is_none());
+        assert!(normalize_external_link_url("").is_none());
 
         let doc = Document {
             blocks: vec![Block::Paragraph(Paragraph {

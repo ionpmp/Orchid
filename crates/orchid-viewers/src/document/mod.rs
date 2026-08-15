@@ -20,10 +20,11 @@ use crate::snapshot::{DocumentSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cursor::{
-    adjacent_cell_cursor, adjacent_in_cell, cursor_from_plain_offset, hyperlink_at_cursor,
-    is_image_cursor, is_safe_external_url, paragraph_cursors_in_selection,
-    paragraph_indices_in_selection, paragraph_mut, paragraph_mut_in_blocks, paragraph_ref,
-    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
+    adjacent_cell_cursor, adjacent_in_cell, cursor_from_plain_offset,
+    expand_selection_to_hyperlink_span, hyperlink_at_cursor, is_image_cursor, is_safe_external_url,
+    normalize_external_link_url, paragraph_cursors_in_selection, paragraph_indices_in_selection,
+    paragraph_mut, paragraph_mut_in_blocks, paragraph_ref, plain_offset_from_cursor,
+    selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
@@ -1349,14 +1350,115 @@ impl DocumentViewer {
 
     /// Clear character formatting on the effective selection (Ctrl+Space).
     ///
-    /// Resets bold/italic/underline/strike/highlight/super/sub, colour, font family, and size.
-    /// Paragraph alignment and list markers are left unchanged.
+    /// Resets bold/italic/underline/strike/highlight/super/sub, colour, font family, size,
+    /// and external hyperlink. Paragraph alignment and list markers are left unchanged.
     ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn clear_formatting_selection(&self) -> Result<()> {
         self.apply_style_patch_selection(RunStylePatch::clear_character())
+    }
+
+    /// Apply (or replace) an external hyperlink on the selection.
+    ///
+    /// Collapsed caret on an existing link updates that link span. Collapsed caret
+    /// elsewhere inserts `url` as display text and links it. Non-empty selection
+    /// links the selected text. URL is normalized (`https://` for bare hosts).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] or invalid/unsafe URL
+    /// ([`ViewerError::EditOutOfBounds`]).
+    pub fn set_hyperlink_selection(&self, url: &str) -> Result<()> {
+        let Some(url) = normalize_external_link_url(url) else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        let hl = Hyperlink {
+            url: url.clone(),
+            r_id: None,
+        };
+
+        let range = {
+            let doc_guard = self.document.read();
+            let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let sel = *self.selection.lock();
+            if !sel.is_collapsed() {
+                let (a, b) = sel.normalized();
+                Some(Selection { anchor: a, head: b })
+            } else if let Some(span) = expand_selection_to_hyperlink_span(doc, sel.head) {
+                Some(span)
+            } else {
+                None
+            }
+        };
+
+        let range = if let Some(range) = range {
+            range
+        } else {
+            let start_off = {
+                let doc_guard = self.document.read();
+                let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+                plain_offset_from_cursor(doc, self.selection.lock().head)
+            };
+            self.preview_insert_text(&url)?;
+            let doc_guard = self.document.read();
+            let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let range = selection_from_plain_offsets(doc, start_off, start_off + url.len());
+            *self.selection.lock() = range;
+            range
+        };
+
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        self.undo.lock().push(
+            doc,
+            EditCommand::SetRunStyle {
+                range,
+                style: RunStylePatch {
+                    hyperlink: Some(Some(hl)),
+                    ..Default::default()
+                },
+            },
+        )?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Remove external hyperlinks from the selection (or the link span under the caret).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn remove_hyperlink_selection(&self) -> Result<()> {
+        let range = {
+            let doc_guard = self.document.read();
+            let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            let sel = *self.selection.lock();
+            if sel.is_collapsed() {
+                expand_selection_to_hyperlink_span(doc, sel.head).unwrap_or(sel)
+            } else {
+                let (a, b) = sel.normalized();
+                Selection { anchor: a, head: b }
+            }
+        };
+        if range.is_collapsed() {
+            return Ok(());
+        }
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        self.undo.lock().push(
+            doc,
+            EditCommand::SetRunStyle {
+                range,
+                style: RunStylePatch {
+                    hyperlink: Some(None),
+                    ..Default::default()
+                },
+            },
+        )?;
+        self.invalidate_preview();
+        Ok(())
     }
 
     /// Step font size up (`direction > 0`) or down on the selection.
@@ -1902,8 +2004,8 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     runs: vec![Run {
                         text: line.to_string(),
                         style,
-            ..Default::default()
-        }],
+                        ..Default::default()
+                    }],
                     alignment: prev.alignment,
                     list: prev.list,
                     list_level: prev.list_level,
@@ -1915,8 +2017,8 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     runs: vec![Run {
                         text: line.to_string(),
                         style: RunStyle::default(),
-            ..Default::default()
-        }],
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 })
             }
@@ -2599,6 +2701,9 @@ impl Viewer for DocumentViewer {
         let sel = *self.selection.lock();
         let caret = sel.normalized().0;
         let style = style_at_cursor(doc, caret);
+        let link_url = hyperlink_at_cursor(doc, sel.head)
+            .map(|hl| hl.url.clone())
+            .unwrap_or_default();
         let para = paragraph_ref(doc, caret).or_else(|| first_paragraph(doc));
         let (
             bold,
@@ -2703,6 +2808,7 @@ impl Viewer for DocumentViewer {
             find_match_index: *self.find_match_index.lock(),
             find_match_count: *self.find_match_count.lock(),
             link_hover: *self.link_hover.lock(),
+            link_url,
         })
     }
 

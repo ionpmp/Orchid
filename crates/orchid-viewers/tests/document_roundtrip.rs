@@ -57,8 +57,8 @@ async fn roundtrip_styles_align_lists() {
                 runs: vec![Run {
                     text: "Right aligned".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 alignment: Alignment::Right,
                 ..Default::default()
             }),
@@ -108,8 +108,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Bullet one".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),
@@ -117,8 +117,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Bullet two".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),
@@ -126,8 +126,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Number one".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 list: ListKind::Numbered,
                 ..Default::default()
             }),
@@ -135,8 +135,8 @@ async fn roundtrip_bullet_and_numbered_lists() {
                 runs: vec![Run {
                     text: "Plain".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
         ],
@@ -185,16 +185,16 @@ fn list_toggle_in_memory() {
                 runs: vec![Run {
                     text: "Item".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Other".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
         ],
@@ -293,16 +293,16 @@ fn preview_paste_cut_and_vertical_move() {
                 runs: vec![Run {
                     text: "Alpha".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Beta".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
         ],
@@ -343,8 +343,8 @@ fn preview_typing_insert_backspace_and_return() {
             runs: vec![Run {
                 text: "Hi".into(),
                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                ..Default::default()
+            }],
             ..Default::default()
         })],
         ..Default::default()
@@ -390,16 +390,16 @@ fn preview_select_all_home_end_and_font_color() {
                 runs: vec![Run {
                     text: "Hello".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "World".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
         ],
@@ -465,16 +465,16 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
                 runs: vec![Run {
                     text: "First".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
             Block::Paragraph(Paragraph {
                 runs: vec![Run {
                     text: "Second".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
         ],
@@ -494,6 +494,57 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
     match &doc.blocks[1] {
         Block::Paragraph(p) => assert!(p.runs[0].style.bold, "second should be bold"),
         _ => panic!("p1"),
+    }
+}
+
+#[test]
+fn set_and_remove_hyperlink_on_selection() {
+    use orchid_viewers::document::model::Document as Doc;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc {
+        blocks: vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "hello world".into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        })],
+        ..Default::default()
+    });
+    viewer.set_selection_plain_offsets(0, 5); // "hello"
+    viewer.set_hyperlink_selection("example.com").unwrap();
+
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                let hl = p.runs[0].hyperlink.as_ref().expect("link on hello");
+                assert_eq!(hl.url, "https://example.com");
+                assert_eq!(p.runs[0].text, "hello");
+            }
+            _ => panic!("p0"),
+        }
+    }
+
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("snapshot");
+    };
+    assert_eq!(snap.link_url, "https://example.com");
+
+    viewer.set_selection_plain_offsets(0, 0);
+    viewer.remove_hyperlink_selection().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        match &doc.blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs.iter().all(|r| r.hyperlink.is_none()));
+            }
+            _ => panic!("p0"),
+        }
     }
 }
 
@@ -519,24 +570,11 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
     });
     viewer.set_source_mode(false);
     let before = viewer.selected_plain_text();
-    let outcome = viewer.preview_pointer(
-        0,
-        PREVIEW_PADDING + 8.0,
-        PREVIEW_PADDING + 8.0,
-        true,
-    );
-    assert_eq!(
-        outcome.open_url.as_deref(),
-        Some("https://example.com/doc")
-    );
+    let outcome = viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, true);
+    assert_eq!(outcome.open_url.as_deref(), Some("https://example.com/doc"));
     assert_eq!(viewer.selected_plain_text(), before);
 
-    let blocked = viewer.preview_pointer(
-        0,
-        PREVIEW_PADDING + 8.0,
-        PREVIEW_PADDING + 8.0,
-        false,
-    );
+    let blocked = viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, false);
     assert!(blocked.open_url.is_none());
 
     // Hover sets link_hover; leave clears it.
@@ -569,8 +607,7 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
         })],
         ..Default::default()
     });
-    let unsafe_out =
-        viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, true);
+    let unsafe_out = viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, true);
     assert!(unsafe_out.open_url.is_none());
 }
 
