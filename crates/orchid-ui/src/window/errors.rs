@@ -14,6 +14,9 @@ pub(crate) fn viewer_localized_error(locale: &LocaleManager, err: &str) -> Strin
         "viewer-image-heic-unsupported"
         | "viewer-image-avif-unsupported"
         | "viewer-image-jp2-unsupported"
+        | "viewer-image-eps-unsupported"
+        | "viewer-image-cdr-unsupported"
+        | "viewer-image-emf-unsupported"
         | "viewer-image-raw-unsupported"
         | "viewer-archive-nothing-selected"
         | "viewer-archive-cannot-extract-folder" => locale.tr(msg),

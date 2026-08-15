@@ -1502,6 +1502,9 @@ viewer-image-heic-unsupported = HEIC-Bilder werden noch nicht unterstÃ¼tzt
 viewer-image-raw-unsupported = RAW-Bilder werden noch nicht unterstÃ¼tzt
 viewer-image-avif-unsupported = AVIF needs the Windows HEIF / AV1 image extension
 viewer-image-jp2-unsupported = JPEG 2000 needs a Windows Imaging codec
+viewer-image-eps-unsupported = EPS / PostScript needs an embedded preview or Ghostscript
+viewer-image-cdr-unsupported = This CorelDRAW file has no preview image
+viewer-image-emf-unsupported = WMF / EMF could not be rendered
 viewer-archive-select-preview = Datei zur Vorschau auswÃ¤hlen
 viewer-archive-binary-preview = BinÃ¤rdatei, { $size }
 

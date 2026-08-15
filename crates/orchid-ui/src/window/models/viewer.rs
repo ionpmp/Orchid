@@ -654,6 +654,9 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
         } if *message == ViewerError::UnsupportedHeic.to_string()
             || *message == ViewerError::UnsupportedAvif.to_string()
             || *message == ViewerError::UnsupportedJpeg2000.to_string()
+            || *message == ViewerError::UnsupportedEps.to_string()
+            || *message == ViewerError::UnsupportedCdr.to_string()
+            || *message == ViewerError::UnsupportedEmf.to_string()
             || *message == ViewerError::UnsupportedRaw.to_string()
             || message == "viewer-archive-nothing-selected"
             || message == "viewer-archive-cannot-extract-folder" =>

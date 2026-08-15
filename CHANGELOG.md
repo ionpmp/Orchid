@@ -161,9 +161,11 @@ release yet.
   (`Shift+P` / ⌨ Ctrl+P / ⎙); FM **Tools → Image edit**.
 - Image formats: JPEG, PNG, GIF, BMP, TIFF, WebP, TGA, ICO/CUR, PNM
   (PBM/PGM/PPM), DDS, Radiance HDR, OpenEXR, plus JPEG-XL, Photoshop PSD,
-  GIMP XCF, and PCX. HEIC/AVIF and JPEG 2000 use Windows Imaging codecs
-  when installed; DNG and other camera RAW still open via the embedded
-  JPEG preview.
+  GIMP XCF, and PCX. Vector: SVG/SVGZ (`resvg`), Illustrator AI (Pdfium
+  first page or EPS preview), EPS/PS (embedded TIFF/WMF/EPSI or Ghostscript),
+  WMF/EMF (GDI), and CorelDRAW CDR (embedded preview). HEIC/AVIF and JPEG
+  2000 use Windows Imaging codecs when installed; DNG and other camera RAW
+  still open via the embedded JPEG preview.
 - Image share / export: save-as with JPEG quality and PNG compression,
   optional max-edge resize, ICO and favicon, pixel copy / paste, set as
   wallpaper, email attachment (auto-resized JPEG + `.eml`), social share
