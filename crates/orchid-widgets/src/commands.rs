@@ -45,9 +45,7 @@ pub fn build_command_set(
 // widget.create
 // ---------------------------------------------------------------------------
 
-fn widget_create_command(
-    widget_manager: Arc<WidgetManager>,
-) -> (CommandDescriptor, ActionFactory) {
+fn widget_create_command(widget_manager: Arc<WidgetManager>) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.create".into(),
         display_name_key: "command-widget-create-name".into(),
@@ -82,7 +80,10 @@ fn widget_create_command(
                 .first()
                 .cloned()
                 .unwrap_or_else(|| "terminal".into()),
-            workspace_id: args.options.get("workspace").and_then(|s| Uuid::parse_str(s).ok()),
+            workspace_id: args
+                .options
+                .get("workspace")
+                .and_then(|s| Uuid::parse_str(s).ok()),
         }) as Box<dyn Action>)
     });
     (descriptor, factory)
@@ -135,9 +136,7 @@ impl Action for WidgetCreateAction {
 // widget.close
 // ---------------------------------------------------------------------------
 
-fn widget_close_command(
-    widget_manager: Arc<WidgetManager>,
-) -> (CommandDescriptor, ActionFactory) {
+fn widget_close_command(widget_manager: Arc<WidgetManager>) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.close".into(),
         display_name_key: "command-widget-close-name".into(),
@@ -198,9 +197,7 @@ impl Action for WidgetCloseAction {
 // widget.move / widget.resize
 // ---------------------------------------------------------------------------
 
-fn widget_move_command(
-    widget_manager: Arc<WidgetManager>,
-) -> (CommandDescriptor, ActionFactory) {
+fn widget_move_command(widget_manager: Arc<WidgetManager>) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.move".into(),
         display_name_key: "command-widget-move-name".into(),
@@ -218,7 +215,12 @@ fn widget_move_command(
         let id = parse_uuid_positional(&args, 0);
         let col = parse_u16_positional(&args, 1);
         let row = parse_u16_positional(&args, 2);
-        Ok(Box::new(WidgetMoveAction { manager, id, col, row }) as Box<dyn Action>)
+        Ok(Box::new(WidgetMoveAction {
+            manager,
+            id,
+            col,
+            row,
+        }) as Box<dyn Action>)
     });
     (descriptor, factory)
 }
@@ -244,7 +246,13 @@ impl Action for WidgetMoveAction {
     async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
         match self
             .manager
-            .move_to(self.id, orchid_storage::GridPosition { col: self.col, row: self.row })
+            .move_to(
+                self.id,
+                orchid_storage::GridPosition {
+                    col: self.col,
+                    row: self.row,
+                },
+            )
             .await
         {
             Ok(()) => Ok(ActionOutcome::ok()),
@@ -253,9 +261,7 @@ impl Action for WidgetMoveAction {
     }
 }
 
-fn widget_resize_command(
-    widget_manager: Arc<WidgetManager>,
-) -> (CommandDescriptor, ActionFactory) {
+fn widget_resize_command(widget_manager: Arc<WidgetManager>) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.resize".into(),
         display_name_key: "command-widget-resize-name".into(),
@@ -624,9 +630,7 @@ impl Action for WorkspaceRelativeSwitchAction {
 // Group dissolve
 // ---------------------------------------------------------------------------
 
-fn group_dissolve_command(
-    group_manager: Arc<GroupManager>,
-) -> (CommandDescriptor, ActionFactory) {
+fn group_dissolve_command(group_manager: Arc<GroupManager>) -> (CommandDescriptor, ActionFactory) {
     let descriptor = CommandDescriptor {
         id: "widget.group.dissolve".into(),
         display_name_key: "command-widget-group-dissolve-name".into(),

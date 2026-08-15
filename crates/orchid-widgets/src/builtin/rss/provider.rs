@@ -72,7 +72,11 @@ async fn fetch_one(
     client: &reqwest::Client,
     source: &FeedSource,
 ) -> std::result::Result<Vec<FeedItem>, String> {
-    let resp = client.get(&source.url).send().await.map_err(|e| e.to_string())?;
+    let resp = client
+        .get(&source.url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
@@ -81,10 +85,7 @@ async fn fetch_one(
 }
 
 /// Parse raw feed bytes; factored out for testing against fixtures.
-pub fn parse_bytes(
-    bytes: &[u8],
-    source_name: &str,
-) -> std::result::Result<Vec<FeedItem>, String> {
+pub fn parse_bytes(bytes: &[u8], source_name: &str) -> std::result::Result<Vec<FeedItem>, String> {
     let feed = parser::parse(bytes).map_err(|e| e.to_string())?;
     let items = feed
         .entries

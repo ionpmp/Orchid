@@ -551,7 +551,11 @@ fn jyotish_profile_search_hits(p: &orchid_widgets::JyotishPayload) -> Vec<Jyotis
 }
 
 fn profile_cal_title(p: &orchid_widgets::JyotishPayload, locale: &LocaleManager) -> String {
-    format!("{} {}", locale.tr(p.profile_cal_month_key), p.profile_cal_year)
+    format!(
+        "{} {}",
+        locale.tr(p.profile_cal_month_key),
+        p.profile_cal_year
+    )
 }
 
 fn profile_cal_cells(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileCalCell> {

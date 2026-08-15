@@ -126,14 +126,16 @@ pub fn list_sessions(
     }
     Ok(by_session
         .into_iter()
-        .map(|(session_id, (process_count, memory_bytes, user_name))| UserRowView {
-            session_id,
-            user_name,
-            state: String::new(),
-            process_count,
-            memory_bytes,
-            memory_text: String::new(),
-        })
+        .map(
+            |(session_id, (process_count, memory_bytes, user_name))| UserRowView {
+                session_id,
+                user_name,
+                state: String::new(),
+                process_count,
+                memory_bytes,
+                memory_text: String::new(),
+            },
+        )
         .collect())
 }
 

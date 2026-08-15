@@ -505,11 +505,7 @@ impl MainWindowController {
         self.refresh_jyotish(inst);
     }
 
-    pub(super) fn on_jyotish_set_profile_cal_day(
-        self: &Arc<Self>,
-        id: &SharedString,
-        day: i32,
-    ) {
+    pub(super) fn on_jyotish_set_profile_cal_day(self: &Arc<Self>, id: &SharedString, day: i32) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
         };
@@ -517,11 +513,7 @@ impl MainWindowController {
         self.refresh_jyotish(inst);
     }
 
-    pub(super) fn on_jyotish_nudge_profile_time(
-        self: &Arc<Self>,
-        id: &SharedString,
-        minutes: i32,
-    ) {
+    pub(super) fn on_jyotish_nudge_profile_time(self: &Arc<Self>, id: &SharedString, minutes: i32) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
         };
@@ -541,6 +533,7 @@ impl MainWindowController {
         self.refresh_jyotish(inst);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn on_jyotish_upsert_profile(
         self: &Arc<Self>,
         id: &SharedString,

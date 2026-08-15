@@ -45,8 +45,8 @@ pub mod secret;
 pub mod vault;
 
 pub use age_encryption::{
-    Decryptor, EncryptedFileMeta, Encryptor, Identity, IdentityKind, RevealClosed,
-    RevealDuration, RevealExpired, RevealManager, RevealSession, RevealStarted,
+    Decryptor, EncryptedFileMeta, Encryptor, Identity, IdentityKind, RevealClosed, RevealDuration,
+    RevealExpired, RevealManager, RevealSession, RevealStarted,
 };
 pub use biometric::{
     check_availability as check_biometric_availability, verify_user as verify_biometric_user,
@@ -60,8 +60,7 @@ pub use content::{
 pub use error::{CryptoError, Result};
 pub use kdbx::{
     generate_code, parse_otpauth_uri, to_otpauth_uri, PasswordDatabase, PasswordEntry,
-    PasswordGroup, SearchQuery, SearchResult, SecureClipboard, TotpAlgorithm, TotpCode,
-    TotpConfig,
+    PasswordGroup, SearchQuery, SearchResult, SecureClipboard, TotpAlgorithm, TotpCode, TotpConfig,
 };
 pub use random::{
     fill_secure, generate_password, generate_password_default, random_bytes, random_uuid,

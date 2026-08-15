@@ -45,8 +45,7 @@ fn populate_save_reopen_preserves_entries_and_groups() {
     db.change_master(SecretString::from("master")).unwrap();
     drop(db);
 
-    let reopened =
-        PasswordDatabase::open(&path, SecretString::from("master")).unwrap();
+    let reopened = PasswordDatabase::open(&path, SecretString::from("master")).unwrap();
     let entries = reopened.list_entries(None).unwrap();
     assert_eq!(entries.len(), 100, "all 100 entries survived");
 

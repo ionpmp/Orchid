@@ -55,8 +55,8 @@ pub fn sample_document() -> Document {
                 runs: vec![Run {
                     text: "Bullet item — Tab / Shift+Tab changes indent.".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),

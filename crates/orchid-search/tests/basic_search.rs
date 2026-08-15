@@ -2,7 +2,13 @@
 
 use orchid_search::{DocumentKind, IndexDocument, QueryBuilder, SearchEngine};
 
-fn mk_doc(path: &str, name: &str, ext: &str, content: Option<&str>, tags: Vec<&str>) -> IndexDocument {
+fn mk_doc(
+    path: &str,
+    name: &str,
+    ext: &str,
+    content: Option<&str>,
+    tags: Vec<&str>,
+) -> IndexDocument {
     IndexDocument {
         path: path.to_string(),
         name: name.to_string(),
@@ -69,7 +75,10 @@ async fn upsert_then_search_by_name_and_extension() {
     let q = QueryBuilder::new().extension("md").build();
     let hits = engine.search(q).await.unwrap();
     assert_eq!(hits.hits.len(), 10);
-    assert!(hits.hits.iter().all(|h| h.extension.as_deref() == Some("md")));
+    assert!(hits
+        .hits
+        .iter()
+        .all(|h| h.extension.as_deref() == Some("md")));
 
     // Doc count.
     assert_eq!(engine.doc_count().unwrap(), 20);
@@ -80,8 +89,20 @@ async fn remove_drops_from_doc_count() {
     let td = tempfile::tempdir().unwrap();
     let engine = SearchEngine::open(td.path()).unwrap();
 
-    engine.upsert(mk_doc("local:/a.txt", "a.txt", "txt", Some("alpha"), vec![])).await.unwrap();
-    engine.upsert(mk_doc("local:/b.txt", "b.txt", "txt", Some("beta"), vec![])).await.unwrap();
+    engine
+        .upsert(mk_doc(
+            "local:/a.txt",
+            "a.txt",
+            "txt",
+            Some("alpha"),
+            vec![],
+        ))
+        .await
+        .unwrap();
+    engine
+        .upsert(mk_doc("local:/b.txt", "b.txt", "txt", Some("beta"), vec![]))
+        .await
+        .unwrap();
     engine.commit().await.unwrap();
     assert_eq!(engine.doc_count().unwrap(), 2);
 

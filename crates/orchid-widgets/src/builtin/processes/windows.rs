@@ -26,7 +26,8 @@ mod win {
     use windows::Win32::Foundation::{HWND, LPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowThreadProcessId,
-        IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WINDOW_EX_STYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+        IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WINDOW_EX_STYLE, WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW,
     };
 
     struct State {
@@ -63,7 +64,10 @@ mod win {
             return false;
         }
         // Owned windows (dialogs, popups) are not independent Apps.
-        if GetWindow(hwnd, GW_OWNER).ok().is_some_and(|o| !o.is_invalid()) {
+        if GetWindow(hwnd, GW_OWNER)
+            .ok()
+            .is_some_and(|o| !o.is_invalid())
+        {
             return false;
         }
         let ex = WINDOW_EX_STYLE(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32);

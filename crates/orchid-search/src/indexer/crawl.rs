@@ -112,10 +112,7 @@ async fn build_document(
     let modified = meta.modified.map(|t| t.timestamp()).unwrap_or(0);
 
     let tag_row = tags.get(path).unwrap_or_default();
-    let tags_vec = tag_row
-        .as_ref()
-        .map(|t| t.tags.clone())
-        .unwrap_or_default();
+    let tags_vec = tag_row.as_ref().map(|t| t.tags.clone()).unwrap_or_default();
     let color = tag_row
         .and_then(|t| t.color_label)
         .map(|c| format!("{c:?}"));

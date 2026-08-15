@@ -62,7 +62,7 @@ fn is_windows_process(name: &str, path: &str) -> bool {
         "secure system",
         "explorer.exe",
     ];
-    if SYSTEM_NAMES.iter().any(|n| name == *n) {
+    if SYSTEM_NAMES.contains(&name) {
         return true;
     }
     path.contains("\\windows\\system32\\")
@@ -117,12 +117,7 @@ mod tests {
     #[test]
     fn explorer_stays_windows_even_with_window() {
         assert_eq!(
-            classify_process(
-                "explorer.exe",
-                r"C:\Windows\explorer.exe",
-                Some(1),
-                true,
-            ),
+            classify_process("explorer.exe", r"C:\Windows\explorer.exe", Some(1), true,),
             ProcessGroup::Windows
         );
     }

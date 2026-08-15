@@ -22,15 +22,27 @@ impl CalculatorSource {
 
 #[async_trait]
 impl SearchSource for CalculatorSource {
-    fn id(&self) -> &'static str { SOURCE_ID }
-    fn name_key(&self) -> &'static str { "search-source-calculator" }
-    fn icon(&self) -> &'static str { "calculator" }
+    fn id(&self) -> &'static str {
+        SOURCE_ID
+    }
+    fn name_key(&self) -> &'static str {
+        "search-source-calculator"
+    }
+    fn icon(&self) -> &'static str {
+        "calculator"
+    }
     async fn search(&self, query: &str, limit: usize) -> Vec<SearchCandidate> {
-        if limit == 0 { return Vec::new(); }
+        if limit == 0 {
+            return Vec::new();
+        }
         let trimmed = query.trim();
-        let Some(rest) = trimmed.strip_prefix('=') else { return Vec::new(); };
+        let Some(rest) = trimmed.strip_prefix('=') else {
+            return Vec::new();
+        };
         let expr = rest.trim();
-        if expr.is_empty() { return Vec::new(); }
+        if expr.is_empty() {
+            return Vec::new();
+        }
         match evaluate_expression(expr, AngleMode::Degrees) {
             Ok(v) => {
                 let result = format_result(v);

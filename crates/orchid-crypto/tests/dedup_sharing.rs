@@ -25,9 +25,7 @@ fn make_payload(seed: u32, len: usize) -> Vec<u8> {
 async fn overlapping_files_share_chunks() {
     let td = tempfile::tempdir().unwrap();
     let storage = Arc::new(orchid_storage::StateStore::open_in_memory("0").unwrap());
-    let store = Arc::new(
-        ChunkStore::new(td.path().join("chunks"), Arc::clone(&storage)).unwrap(),
-    );
+    let store = Arc::new(ChunkStore::new(td.path().join("chunks"), Arc::clone(&storage)).unwrap());
     let dedup = Deduplicator::new(Arc::clone(&store), tiny_config());
 
     // Payload A: 10 MiB of deterministic bytes.
@@ -70,9 +68,7 @@ async fn overlapping_files_share_chunks() {
 async fn release_decrements_and_re_ingest_shares() {
     let td = tempfile::tempdir().unwrap();
     let storage = Arc::new(orchid_storage::StateStore::open_in_memory("0").unwrap());
-    let store = Arc::new(
-        ChunkStore::new(td.path().join("chunks"), Arc::clone(&storage)).unwrap(),
-    );
+    let store = Arc::new(ChunkStore::new(td.path().join("chunks"), Arc::clone(&storage)).unwrap());
     let dedup = Deduplicator::new(Arc::clone(&store), tiny_config());
 
     let payload = make_payload(42, 4 * 1024 * 1024);
@@ -91,7 +87,10 @@ async fn release_decrements_and_re_ingest_shares() {
     // Releasing one manifest keeps chunks alive for the other.
     dedup.release(&m1).await.unwrap();
     let size_after_release = store.total_bytes().unwrap();
-    assert_eq!(size_after_release, size1, "chunks retained for second manifest");
+    assert_eq!(
+        size_after_release, size1,
+        "chunks retained for second manifest"
+    );
 
     // Releasing the last manifest frees everything.
     dedup.release(&m2).await.unwrap();

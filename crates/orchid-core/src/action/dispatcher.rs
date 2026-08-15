@@ -91,7 +91,8 @@ impl ActionDispatcher {
         let action_id = action.id();
         let cmd_text = action.command_text();
         let corr = ctx.correlation_id;
-        let span = tracing::info_span!("action.dispatch", action.id = action_id, correlation_id = ?corr);
+        let span =
+            tracing::info_span!("action.dispatch", action.id = action_id, correlation_id = ?corr);
         let _enter = span.enter();
 
         // 1) before middlewares. We track the index so that on failure we
@@ -141,10 +142,7 @@ impl ActionDispatcher {
 /// which would require `'static` ownership of the action. Instead, we wrap
 /// the future in [`AssertUnwindSafe`] + a poll shim that catches panics at
 /// each poll.
-async fn run_with_panic_catch(
-    action: &dyn Action,
-    ctx: &ActionContext,
-) -> Result<ActionOutcome> {
+async fn run_with_panic_catch(action: &dyn Action, ctx: &ActionContext) -> Result<ActionOutcome> {
     use std::future::Future;
     use std::pin::Pin;
     use std::task::{Context, Poll};
@@ -209,12 +207,7 @@ mod tests {
             }
             Ok(())
         }
-        async fn after(
-            &self,
-            _: &dyn Action,
-            _: &ActionContext,
-            _: &Result<ActionOutcome>,
-        ) {
+        async fn after(&self, _: &dyn Action, _: &ActionContext, _: &Result<ActionOutcome>) {
             self.log.lock().push(self.after_tag);
         }
     }
@@ -257,8 +250,9 @@ mod tests {
     fn ctx() -> ActionContext {
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
         let storage = Arc::new(orchid_storage::StateStore::open_in_memory("0").unwrap());
-        let config =
-            Arc::new(parking_lot::RwLock::new(orchid_storage::OrchidConfig::default()));
+        let config = Arc::new(parking_lot::RwLock::new(
+            orchid_storage::OrchidConfig::default(),
+        ));
         ActionContext::new(bus, storage, config)
     }
 
@@ -342,12 +336,7 @@ mod tests {
             async fn before(&self, _: &dyn Action, _: &ActionContext) -> Result<()> {
                 Ok(())
             }
-            async fn after(
-                &self,
-                _: &dyn Action,
-                _: &ActionContext,
-                _: &Result<ActionOutcome>,
-            ) {
+            async fn after(&self, _: &dyn Action, _: &ActionContext, _: &Result<ActionOutcome>) {
                 self.0.fetch_add(1, Ordering::Relaxed);
             }
         }

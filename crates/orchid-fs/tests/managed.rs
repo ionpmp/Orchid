@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use orchid_core::EventBus;
 use orchid_crypto::{ChunkStore, ChunkerConfig, Deduplicator};
+use orchid_fs::{FileWatcher, FsPath, FsProvider, FsProviderRegistry, LocalProvider};
 use orchid_fs::{
     ManagedFolderConfig, ManagedFolderEngine, ManagedFolderPolicy, ManagedFolderStats,
 };
-use orchid_fs::{FileWatcher, FsPath, FsProvider, FsProviderRegistry, LocalProvider};
 
 fn bus() -> Arc<EventBus> {
     Arc::new(EventBus::new(orchid_core::EventBusConfig::default()))
@@ -26,9 +26,8 @@ fn registry_with_local() -> Arc<FsProviderRegistry> {
 
 fn engine(storage: &Arc<orchid_storage::StateStore>) -> ManagedFolderEngine {
     let td = tempfile::tempdir().unwrap();
-    let chunk_store = Arc::new(
-        ChunkStore::new(td.path().join("chunks"), Arc::clone(storage)).unwrap(),
-    );
+    let chunk_store =
+        Arc::new(ChunkStore::new(td.path().join("chunks"), Arc::clone(storage)).unwrap());
     let dedup = Arc::new(Deduplicator::new(
         Arc::clone(&chunk_store),
         ChunkerConfig::default(),
@@ -98,10 +97,7 @@ async fn managed_engine_skips_excluded_ingest() {
         .unwrap();
 
     let err = engine.ingest(&file).await.unwrap_err();
-    assert!(matches!(
-        err,
-        orchid_fs::FsError::ManagedIngestExcluded(_)
-    ));
+    assert!(matches!(err, orchid_fs::FsError::ManagedIngestExcluded(_)));
 }
 
 #[tokio::test]

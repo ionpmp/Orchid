@@ -46,12 +46,7 @@ impl SyntaxHighlighter {
 
     /// Parse `source` with an optional previous tree for incremental updates.
     #[must_use]
-    pub fn parse(
-        &self,
-        language: &str,
-        source: &str,
-        old_tree: Option<&Tree>,
-    ) -> Option<Tree> {
+    pub fn parse(&self, language: &str, source: &str, old_tree: Option<&Tree>) -> Option<Tree> {
         let ts_lang = language_for_id(language)?;
         let mut parser = Parser::new();
         parser.set_language(&ts_lang).ok()?;
@@ -71,8 +66,7 @@ impl SyntaxHighlighter {
         if line_count == 0 {
             return Vec::new();
         }
-        let Some((window_start, window_end)) =
-            visible_byte_window(source, first_line, line_count)
+        let Some((window_start, window_end)) = visible_byte_window(source, first_line, line_count)
         else {
             return Vec::new();
         };
@@ -223,12 +217,9 @@ fn scope_for_node(language: &str, node: &Node) -> Option<SyntaxScope> {
         | "double_quote_scalar"
         | "single_quote_scalar"
         | "block_scalar" => Some(SyntaxScope::String),
-        "integer"
-        | "integer_literal"
-        | "float"
-        | "float_literal"
-        | "number"
-        | "number_literal" => Some(SyntaxScope::Number),
+        "integer" | "integer_literal" | "float" | "float_literal" | "number" | "number_literal" => {
+            Some(SyntaxScope::Number)
+        }
         "boolean" | "true" | "false" | "null" | "undefined" => Some(SyntaxScope::Constant),
         "attribute_item" | "attribute" | "annotation" => Some(SyntaxScope::Attribute),
         "preproc" | "preproc_def" | "preproc_call" | "preproc_if" | "preproc_elif" => {
@@ -306,8 +297,11 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
                 Some(SyntaxScope::Variable)
             }
             "regex" | "regex_pattern" => Some(SyntaxScope::String),
-            "jsx_element" | "jsx_self_closing_element" | "jsx_opening_element"
-            | "jsx_closing_element" | "jsx_attribute" => Some(SyntaxScope::Tag),
+            "jsx_element"
+            | "jsx_self_closing_element"
+            | "jsx_opening_element"
+            | "jsx_closing_element"
+            | "jsx_attribute" => Some(SyntaxScope::Tag),
             _ => None,
         },
         "yaml" => match kind {
@@ -323,9 +317,7 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             "function_declaration" | "method_declaration" | "func_literal" => {
                 Some(SyntaxScope::Function)
             }
-            "field_identifier" | "identifier" | "package_identifier" => {
-                Some(SyntaxScope::Variable)
-            }
+            "field_identifier" | "identifier" | "package_identifier" => Some(SyntaxScope::Variable),
             "interpreted_string_literal" | "raw_string_literal" | "rune_literal" => {
                 Some(SyntaxScope::String)
             }
@@ -333,8 +325,11 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
         },
         "bash" => match kind {
             "command_name" | "function_definition" => Some(SyntaxScope::Function),
-            "variable_name" | "special_variable_name" | "simple_expansion"
-            | "expansion" | "variable_assignment" => Some(SyntaxScope::Variable),
+            "variable_name"
+            | "special_variable_name"
+            | "simple_expansion"
+            | "expansion"
+            | "variable_assignment" => Some(SyntaxScope::Variable),
             "string" | "raw_string" | "ansi_c_string" | "translated_string" => {
                 Some(SyntaxScope::String)
             }
@@ -440,80 +435,28 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             _ => None,
         },
         "sql" => match kind {
-            "keyword"
-            | "keyword_select"
-            | "keyword_from"
-            | "keyword_where"
-            | "keyword_insert"
-            | "keyword_update"
-            | "keyword_delete"
-            | "keyword_create"
-            | "keyword_drop"
-            | "keyword_alter"
-            | "keyword_table"
-            | "keyword_into"
-            | "keyword_values"
-            | "keyword_set"
-            | "keyword_join"
-            | "keyword_on"
-            | "keyword_as"
-            | "keyword_and"
-            | "keyword_or"
-            | "keyword_not"
-            | "keyword_null"
-            | "keyword_order"
-            | "keyword_by"
-            | "keyword_group"
-            | "keyword_having"
-            | "keyword_limit"
-            | "keyword_offset"
-            | "keyword_union"
-            | "keyword_all"
-            | "keyword_distinct"
-            | "keyword_inner"
-            | "keyword_left"
-            | "keyword_right"
-            | "keyword_full"
-            | "keyword_outer"
-            | "keyword_cross"
-            | "keyword_primary"
-            | "keyword_key"
-            | "keyword_foreign"
-            | "keyword_references"
-            | "keyword_index"
-            | "keyword_view"
-            | "keyword_database"
-            | "keyword_schema"
-            | "keyword_if"
-            | "keyword_exists"
-            | "keyword_cascade"
-            | "keyword_restrict"
-            | "keyword_default"
-            | "keyword_constraint"
-            | "keyword_unique"
-            | "keyword_check"
-            | "keyword_with"
-            | "keyword_recursive"
-            | "keyword_case"
-            | "keyword_when"
-            | "keyword_then"
-            | "keyword_else"
-            | "keyword_end"
-            | "keyword_in"
-            | "keyword_is"
-            | "keyword_like"
-            | "keyword_between"
-            | "keyword_cast"
-            | "keyword_asc"
-            | "keyword_desc" => Some(SyntaxScope::Keyword),
-            "type" | "keyword_int" | "keyword_bigint" | "keyword_smallint"
-            | "keyword_tinyint" | "keyword_boolean" | "keyword_bool" | "keyword_text"
-            | "keyword_varchar" | "keyword_char" | "keyword_date" | "keyword_datetime"
-            | "keyword_timestamp" | "keyword_time" | "keyword_numeric" | "keyword_decimal"
-            | "keyword_float" | "keyword_real" | "keyword_double" | "keyword_json"
-            | "keyword_uuid" | "keyword_bytea" | "keyword_blob" | "keyword_serial" => {
-                Some(SyntaxScope::Type)
-            }
+            "keyword" | "keyword_select" | "keyword_from" | "keyword_where" | "keyword_insert"
+            | "keyword_update" | "keyword_delete" | "keyword_create" | "keyword_drop"
+            | "keyword_alter" | "keyword_table" | "keyword_into" | "keyword_values"
+            | "keyword_set" | "keyword_join" | "keyword_on" | "keyword_as" | "keyword_and"
+            | "keyword_or" | "keyword_not" | "keyword_null" | "keyword_order" | "keyword_by"
+            | "keyword_group" | "keyword_having" | "keyword_limit" | "keyword_offset"
+            | "keyword_union" | "keyword_all" | "keyword_distinct" | "keyword_inner"
+            | "keyword_left" | "keyword_right" | "keyword_full" | "keyword_outer"
+            | "keyword_cross" | "keyword_primary" | "keyword_key" | "keyword_foreign"
+            | "keyword_references" | "keyword_index" | "keyword_view" | "keyword_database"
+            | "keyword_schema" | "keyword_if" | "keyword_exists" | "keyword_cascade"
+            | "keyword_restrict" | "keyword_default" | "keyword_constraint" | "keyword_unique"
+            | "keyword_check" | "keyword_with" | "keyword_recursive" | "keyword_case"
+            | "keyword_when" | "keyword_then" | "keyword_else" | "keyword_end" | "keyword_in"
+            | "keyword_is" | "keyword_like" | "keyword_between" | "keyword_cast"
+            | "keyword_asc" | "keyword_desc" => Some(SyntaxScope::Keyword),
+            "type" | "keyword_int" | "keyword_bigint" | "keyword_smallint" | "keyword_tinyint"
+            | "keyword_boolean" | "keyword_bool" | "keyword_text" | "keyword_varchar"
+            | "keyword_char" | "keyword_date" | "keyword_datetime" | "keyword_timestamp"
+            | "keyword_time" | "keyword_numeric" | "keyword_decimal" | "keyword_float"
+            | "keyword_real" | "keyword_double" | "keyword_json" | "keyword_uuid"
+            | "keyword_bytea" | "keyword_blob" | "keyword_serial" => Some(SyntaxScope::Type),
             "identifier" | "dotted_name" | "field" | "column_definition" => {
                 Some(SyntaxScope::Variable)
             }
@@ -525,21 +468,35 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             _ => None,
         },
         "php" => match kind {
-            "name" | "qualified_name" | "namespace_name" | "class_declaration"
-            | "interface_declaration" | "trait_declaration" | "enum_declaration"
-            | "primitive_type" | "cast_type" | "named_type" | "optional_type"
-            | "union_type" | "intersection_type" => Some(SyntaxScope::Type),
+            "name"
+            | "qualified_name"
+            | "namespace_name"
+            | "class_declaration"
+            | "interface_declaration"
+            | "trait_declaration"
+            | "enum_declaration"
+            | "primitive_type"
+            | "cast_type"
+            | "named_type"
+            | "optional_type"
+            | "union_type"
+            | "intersection_type" => Some(SyntaxScope::Type),
             "function_definition"
             | "method_declaration"
             | "function_call_expression"
             | "member_call_expression"
             | "scoped_call_expression"
             | "nullsafe_member_call_expression" => Some(SyntaxScope::Function),
-            "variable_name" | "dynamic_variable_name" | "member_access_expression"
-            | "nullsafe_member_access_expression" | "scoped_property_access_expression" => {
-                Some(SyntaxScope::Variable)
-            }
-            "string" | "encapsed_string" | "string_content" | "heredoc" | "nowdoc"
+            "variable_name"
+            | "dynamic_variable_name"
+            | "member_access_expression"
+            | "nullsafe_member_access_expression"
+            | "scoped_property_access_expression" => Some(SyntaxScope::Variable),
+            "string"
+            | "encapsed_string"
+            | "string_content"
+            | "heredoc"
+            | "nowdoc"
             | "shell_command_expression" => Some(SyntaxScope::String),
             "integer" | "float" => Some(SyntaxScope::Number),
             "null" | "true" | "false" => Some(SyntaxScope::Constant),
@@ -562,7 +519,9 @@ fn scope_for_language_node(language: &str, kind: &str, _node: &Node) -> Option<S
             | "call_expression"
             | "navigation_expression" => Some(SyntaxScope::Function),
             "simple_identifier" | "identifier" => Some(SyntaxScope::Variable),
-            "string_literal" | "character_literal" | "line_string_literal"
+            "string_literal"
+            | "character_literal"
+            | "line_string_literal"
             | "multi_line_string_literal" => Some(SyntaxScope::String),
             "integer_literal" | "real_literal" | "hex_literal" | "bin_literal" => {
                 Some(SyntaxScope::Number)
@@ -867,10 +826,7 @@ fn line_to_segments(line: &str, scopes: &[SyntaxScope]) -> Vec<SyntaxSegment> {
         let mut text = ch.to_string();
 
         while let Some(&(next_byte, next_ch)) = chars.peek() {
-            let next_scope = scopes
-                .get(next_byte)
-                .copied()
-                .unwrap_or(SyntaxScope::Plain);
+            let next_scope = scopes.get(next_byte).copied().unwrap_or(SyntaxScope::Plain);
             if next_scope != scope {
                 break;
             }
@@ -983,7 +939,8 @@ mod tests {
     #[test]
     fn typescript_highlighting_produces_non_plain_segments() {
         let h = SyntaxHighlighter::new();
-        let source = "type Id = string;\nfunction greet(name: string): string {\n  return name;\n}\n";
+        let source =
+            "type Id = string;\nfunction greet(name: string): string {\n  return name;\n}\n";
         let lines = h.highlight_lines("typescript", source, 0, 4);
         assert_eq!(lines.len(), 4);
         assert!(
@@ -1067,7 +1024,8 @@ mod tests {
     #[test]
     fn cpp_highlighting_produces_non_plain_segments() {
         let h = SyntaxHighlighter::new();
-        let source = "#include <string>\nstd::string greet(const std::string& name) {\n  return name;\n}\n";
+        let source =
+            "#include <string>\nstd::string greet(const std::string& name) {\n  return name;\n}\n";
         let lines = h.highlight_lines("cpp", source, 0, 4);
         assert_eq!(lines.len(), 4);
         assert!(

@@ -11,8 +11,8 @@ fn sample_doc() -> Doc {
             runs: vec![Run {
                 text: text.into(),
                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                ..Default::default()
+            }],
             ..Default::default()
         }])
     }
@@ -22,8 +22,8 @@ fn sample_doc() -> Doc {
                 runs: vec![Run {
                     text: "Alpha Hello world".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
             Block::Table(Table {
@@ -36,8 +36,8 @@ fn sample_doc() -> Doc {
                 runs: vec![Run {
                     text: "Trailing HELLO".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             }),
         ],

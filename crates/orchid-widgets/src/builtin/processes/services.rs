@@ -11,11 +11,11 @@ mod win {
         CloseServiceHandle, ControlService, EnumServicesStatusExW, OpenSCManagerW, OpenServiceW,
         QueryServiceConfigW, StartServiceW, ENUM_SERVICE_STATUS_PROCESSW, QUERY_SERVICE_CONFIGW,
         SC_ENUM_PROCESS_INFO, SC_HANDLE, SC_MANAGER_CONNECT, SC_MANAGER_ENUMERATE_SERVICE,
-        SERVICE_AUTO_START, SERVICE_BOOT_START, SERVICE_CONTROL_STOP, SERVICE_CONTINUE_PENDING,
-        SERVICE_DEMAND_START, SERVICE_DISABLED, SERVICE_PAUSE_PENDING, SERVICE_PAUSED,
+        SERVICE_AUTO_START, SERVICE_BOOT_START, SERVICE_CONTINUE_PENDING, SERVICE_CONTROL_STOP,
+        SERVICE_DEMAND_START, SERVICE_DISABLED, SERVICE_PAUSED, SERVICE_PAUSE_PENDING,
         SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
         SERVICE_START_PENDING, SERVICE_START_TYPE, SERVICE_STATE_ALL, SERVICE_STATUS,
-        SERVICE_STATUS_CURRENT_STATE, SERVICE_STOP, SERVICE_STOP_PENDING, SERVICE_STOPPED,
+        SERVICE_STATUS_CURRENT_STATE, SERVICE_STOP, SERVICE_STOPPED, SERVICE_STOP_PENDING,
         SERVICE_SYSTEM_START, SERVICE_WIN32,
     };
 
@@ -30,8 +30,12 @@ mod win {
 
     pub fn list_services() -> Result<Vec<ServiceRowView>, String> {
         unsafe {
-            let scm = OpenSCManagerW(None, None, SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE)
-                .map_err(|e| format!("OpenSCManager: {e}"))?;
+            let scm = OpenSCManagerW(
+                None,
+                None,
+                SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE,
+            )
+            .map_err(|e| format!("OpenSCManager: {e}"))?;
             let scm = ScHandle(scm);
 
             let mut bytes_needed = 0u32;

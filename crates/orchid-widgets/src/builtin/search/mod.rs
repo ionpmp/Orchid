@@ -61,7 +61,7 @@ fn record_search_live_miss(instance_id: Uuid) {
     let count = SEARCH_LIVE_MISS_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
     let now = now_epoch_ms();
     let last_warn = SEARCH_LIVE_MISS_LAST_WARN_MS.load(Ordering::Relaxed);
-    let periodic = count == 1 || count % SEARCH_LIVE_MISS_WARN_EVERY_N == 0;
+    let periodic = count == 1 || count.is_multiple_of(SEARCH_LIVE_MISS_WARN_EVERY_N);
     let timed = now.saturating_sub(last_warn) >= SEARCH_LIVE_MISS_WARN_INTERVAL_MS;
     if periodic || timed {
         SEARCH_LIVE_MISS_LAST_WARN_MS.store(now, Ordering::Relaxed);
@@ -324,7 +324,7 @@ impl Widget for UniversalSearchWidget {
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
-            title: self.inner.locale.tr("widget-search-name").into(),
+            title: self.inner.locale.tr("widget-search-name"),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::UniversalSearch(UniversalSearchPayload {
                 query,

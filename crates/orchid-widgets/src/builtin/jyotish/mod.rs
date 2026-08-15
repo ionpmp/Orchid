@@ -250,14 +250,7 @@ fn apply_profile_timezone_offset(ui: &mut JyotishUiState) {
     ui.profile_edit_offset = offset_mins.clamp(-14 * 60, 14 * 60);
 }
 
-fn profile_cal_view(
-    ui: &JyotishUiState,
-) -> (
-    &'static str,
-    i32,
-    u8,
-    Vec<JyotishProfileCalCell>,
-) {
+fn profile_cal_view(ui: &JyotishUiState) -> (&'static str, i32, u8, Vec<JyotishProfileCalCell>) {
     let year = if ui.profile_cal_year == 0 {
         chrono::Local::now().year()
     } else {
@@ -801,12 +794,8 @@ impl JyotishHandle {
         let ui = self.ui.read().clone();
         let current = self.current_loc.read().clone();
         let (cities, search_results, active_city_index) = cities_and_search(&cfg, &ui, &current);
-        let (
-            profile_cal_month_key,
-            profile_cal_year,
-            profile_cal_first_weekday,
-            profile_cal_cells,
-        ) = profile_cal_view(&ui);
+        let (profile_cal_month_key, profile_cal_year, profile_cal_first_weekday, profile_cal_cells) =
+            profile_cal_view(&ui);
 
         JyotishPayload {
             date_text,
@@ -1388,13 +1377,7 @@ impl JyotishHandle {
         self.publish();
     }
 
-    fn set_draft_birth_place(
-        &self,
-        name: String,
-        latitude: f64,
-        longitude: f64,
-        timezone: String,
-    ) {
+    fn set_draft_birth_place(&self, name: String, latitude: f64, longitude: f64, timezone: String) {
         let mut ui = self.ui.write();
         ui.profile_edit_place = JyotishLocation {
             name,
@@ -1469,6 +1452,7 @@ impl JyotishHandle {
         self.publish();
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn upsert_profile(
         &self,
         index: Option<usize>,
@@ -2163,6 +2147,7 @@ pub fn nudge_profile_offset(instance_id: Uuid, minutes: i32) {
 /// Create or update a birth profile and make it active.
 ///
 /// `index < 0` creates a new profile. Empty `place_name` keeps the draft place.
+#[allow(clippy::too_many_arguments)]
 pub fn upsert_profile(
     instance_id: Uuid,
     index: i32,
@@ -2439,12 +2424,8 @@ fn loading_payload(
     current: &CurrentLocState,
 ) -> JyotishPayload {
     let (cities, search_results, active_city_index) = cities_and_search(cfg, ui, current);
-    let (
-        profile_cal_month_key,
-        profile_cal_year,
-        profile_cal_first_weekday,
-        profile_cal_cells,
-    ) = profile_cal_view(ui);
+    let (profile_cal_month_key, profile_cal_year, profile_cal_first_weekday, profile_cal_cells) =
+        profile_cal_view(ui);
     JyotishPayload {
         date_text: String::new(),
         location_name: if cfg.use_current {
@@ -3021,12 +3002,7 @@ mod search_tests {
         let h = JYOTISH_LIVE.get(&id).expect("live handle");
         h.begin_edit_profile(None);
         h.set_profile_cal_day(15);
-        h.set_draft_birth_place(
-            "Delhi".into(),
-            28.6139,
-            77.2090,
-            "Asia/Kolkata".into(),
-        );
+        h.set_draft_birth_place("Delhi".into(), 28.6139, 77.2090, "Asia/Kolkata".into());
         let ui = h.ui.read().clone();
         assert_eq!(ui.profile_edit_place.name, "Delhi");
         assert!((ui.profile_edit_place.latitude - 28.6139).abs() < 1e-6);

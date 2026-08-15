@@ -80,10 +80,7 @@ impl VisitLog {
                 .cmp(&a.visit_count)
                 .then_with(|| b.last_seq.cmp(&a.last_seq))
         });
-        let frequent: Vec<PathVisit> = by_freq
-            .into_iter()
-            .take(Self::FREQUENT_COUNT)
-            .collect();
+        let frequent: Vec<PathVisit> = by_freq.into_iter().take(Self::FREQUENT_COUNT).collect();
         let frequent_paths: std::collections::HashSet<&str> =
             frequent.iter().map(|e| e.path.as_str()).collect();
 

@@ -91,11 +91,10 @@ impl Decryptor {
         reader.read_to_end(&mut ciphertext).await?;
 
         let identity = self.identity.clone();
-        let plaintext = tokio::task::spawn_blocking(move || {
-            decrypt_bytes_sync(&identity, &ciphertext)
-        })
-        .await
-        .map_err(|e| CryptoError::AgeDecrypt(format!("join error: {e}")))??;
+        let plaintext =
+            tokio::task::spawn_blocking(move || decrypt_bytes_sync(&identity, &ciphertext))
+                .await
+                .map_err(|e| CryptoError::AgeDecrypt(format!("join error: {e}")))??;
 
         let hash = hash_bytes(plaintext.as_slice());
         writer.write_all(plaintext.as_slice()).await?;
@@ -128,11 +127,9 @@ impl Decryptor {
         let identity = self.identity.clone();
         let input = input_dir.to_path_buf();
         let output = output_dir.to_path_buf();
-        tokio::task::spawn_blocking(move || {
-            decrypt_directory_blocking(&identity, &input, &output)
-        })
-        .await
-        .map_err(|e| CryptoError::AgeDecrypt(format!("join error: {e}")))?
+        tokio::task::spawn_blocking(move || decrypt_directory_blocking(&identity, &input, &output))
+            .await
+            .map_err(|e| CryptoError::AgeDecrypt(format!("join error: {e}")))?
     }
 
     /// Read the sidecar metadata file without decrypting the payload.
@@ -143,9 +140,9 @@ impl Decryptor {
     /// sidecar file.
     pub async fn read_metadata(&self, input_path: &Path) -> Result<EncryptedFileMeta> {
         let meta_path = input_path.with_extension(META_EXT);
-        let bytes = tokio::fs::read(&meta_path)
-            .await
-            .map_err(|e| CryptoError::MetadataUnreadable(format!("{}: {e}", meta_path.display())))?;
+        let bytes = tokio::fs::read(&meta_path).await.map_err(|e| {
+            CryptoError::MetadataUnreadable(format!("{}: {e}", meta_path.display()))
+        })?;
         EncryptedFileMeta::from_bytes(&bytes)
     }
 }
@@ -174,8 +171,7 @@ fn map_decrypt_error(e: age::DecryptError, identity: &Identity) -> CryptoError {
     // public API, so we detect it by string match. False positives
     // downgrade to the generic `AgeDecrypt` variant.
     let is_passphrase = matches!(identity, Identity::Passphrase(_));
-    if is_passphrase && (msg.contains("incorrect passphrase") || msg.contains("no matching keys"))
-    {
+    if is_passphrase && (msg.contains("incorrect passphrase") || msg.contains("no matching keys")) {
         CryptoError::InvalidPassphrase
     } else {
         CryptoError::AgeDecrypt(msg)

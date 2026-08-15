@@ -248,12 +248,14 @@ fn format_day_detail(d: &orchid_widgets::WeatherForecastDay, locale: &LocaleMana
         ));
     }
     match (d.sunrise_text.as_deref(), d.sunset_text.as_deref()) {
-        (Some(rise), Some(set)) => parts.push(locale.tr_args(
-            "weather-sun-line",
-            &orchid_i18n::FluentArgs::new()
-                .with("rise", rise)
-                .with("set", set),
-        )),
+        (Some(rise), Some(set)) => parts.push(
+            locale.tr_args(
+                "weather-sun-line",
+                &orchid_i18n::FluentArgs::new()
+                    .with("rise", rise)
+                    .with("set", set),
+            ),
+        ),
         (Some(rise), None) => parts.push(locale.tr_args(
             "weather-sunrise-line",
             &orchid_i18n::FluentArgs::new().with("rise", rise),

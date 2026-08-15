@@ -23,7 +23,11 @@ impl MainWindowController {
         self.refresh_processes(inst_id);
     }
 
-    pub(super) fn on_processes_search_changed(self: &Arc<Self>, id: &SharedString, q: &SharedString) {
+    pub(super) fn on_processes_search_changed(
+        self: &Arc<Self>,
+        id: &SharedString,
+        q: &SharedString,
+    ) {
         let Some(inst_id) = Self::parse_processes_id(id) else {
             return;
         };
@@ -59,9 +63,7 @@ impl MainWindowController {
             return;
         };
         orchid_widgets::builtin::processes::select_process(inst_id, pid as u32);
-        self.processes_context
-            .write()
-            .insert(inst_id, (true, x, y));
+        self.processes_context.write().insert(inst_id, (true, x, y));
         self.refresh_processes(inst_id);
     }
 
@@ -88,11 +90,7 @@ impl MainWindowController {
             return;
         }
         if let Err(e) = orchid_widgets::builtin::processes::open_file_location(inst_id, pid) {
-            self.push_notification(
-                &self.locale.tr("widget-processes-name"),
-                &e,
-                1,
-            );
+            self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
         }
         self.hide_processes_context(inst_id);
         self.refresh_processes(inst_id);
@@ -127,7 +125,11 @@ impl MainWindowController {
         self.refresh_processes(inst_id);
     }
 
-    pub(super) fn on_processes_service_clicked(self: &Arc<Self>, id: &SharedString, name: &SharedString) {
+    pub(super) fn on_processes_service_clicked(
+        self: &Arc<Self>,
+        id: &SharedString,
+        name: &SharedString,
+    ) {
         let Some(inst_id) = Self::parse_processes_id(id) else {
             return;
         };
@@ -153,7 +155,11 @@ impl MainWindowController {
         });
     }
 
-    pub(super) fn on_processes_startup_clicked(self: &Arc<Self>, id: &SharedString, entry: &SharedString) {
+    pub(super) fn on_processes_startup_clicked(
+        self: &Arc<Self>,
+        id: &SharedString,
+        entry: &SharedString,
+    ) {
         let Some(inst_id) = Self::parse_processes_id(id) else {
             return;
         };
@@ -175,11 +181,7 @@ impl MainWindowController {
             entry.as_str(),
             enabled,
         ) {
-            self.push_notification(
-                &self.locale.tr("widget-processes-name"),
-                &e,
-                1,
-            );
+            self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
         }
         self.refresh_processes(inst_id);
     }
@@ -195,11 +197,7 @@ impl MainWindowController {
         if let Err(e) =
             orchid_widgets::builtin::processes::startup_open_location(inst_id, entry.as_str())
         {
-            self.push_notification(
-                &self.locale.tr("widget-processes-name"),
-                &e,
-                1,
-            );
+            self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
         }
     }
 
@@ -220,11 +218,7 @@ impl MainWindowController {
             return;
         }
         if let Err(e) = orchid_widgets::builtin::processes::user_disconnect(inst_id, session) {
-            self.push_notification(
-                &self.locale.tr("widget-processes-name"),
-                &e,
-                1,
-            );
+            self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
         }
         self.refresh_processes(inst_id);
     }
@@ -251,11 +245,7 @@ impl MainWindowController {
                 let pid = self.selected_process_pid(inst_id);
                 if pid != 0 {
                     if let Err(e) = orchid_widgets::builtin::processes::kill_process(inst_id, pid) {
-                        self.push_notification(
-                            &self.locale.tr("widget-processes-name"),
-                            &e,
-                            1,
-                        );
+                        self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
                     }
                 }
             }
@@ -265,11 +255,7 @@ impl MainWindowController {
                     if let Err(e) =
                         orchid_widgets::builtin::processes::kill_process_tree(inst_id, pid)
                     {
-                        self.push_notification(
-                            &self.locale.tr("widget-processes-name"),
-                            &e,
-                            1,
-                        );
+                        self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
                     }
                 }
             }
@@ -279,11 +265,7 @@ impl MainWindowController {
                     if let Err(e) =
                         orchid_widgets::builtin::processes::user_sign_out(inst_id, session)
                     {
-                        self.push_notification(
-                            &self.locale.tr("widget-processes-name"),
-                            &e,
-                            1,
-                        );
+                        self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
                     }
                 }
             }
@@ -379,11 +361,7 @@ impl MainWindowController {
             return;
         }
         if let Err(e) = f(inst_id, &name) {
-            self.push_notification(
-                &self.locale.tr("widget-processes-name"),
-                &e,
-                1,
-            );
+            self.push_notification(&self.locale.tr("widget-processes-name"), &e, 1);
         }
         self.refresh_processes(inst_id);
     }
@@ -470,11 +448,7 @@ impl MainWindowController {
                 );
             }
             Err(e) => {
-                self.push_notification(
-                    &self.locale.tr("widget-processes-name"),
-                    &e.to_string(),
-                    1,
-                );
+                self.push_notification(&self.locale.tr("widget-processes-name"), &e.to_string(), 1);
             }
         }
     }

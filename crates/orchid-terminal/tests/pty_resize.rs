@@ -8,7 +8,9 @@ use orchid_terminal::{BackendSpec, PtySize, SessionManager};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resize_updates_emulator_dimensions() {
-    let bus = Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()));
+    let bus = Arc::new(orchid_core::EventBus::new(
+        orchid_core::EventBusConfig::default(),
+    ));
     let storage = Arc::new(orchid_storage::StateStore::open_in_memory("0").unwrap());
     let manager = SessionManager::new(bus, storage);
 

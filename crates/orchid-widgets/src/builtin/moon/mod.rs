@@ -58,9 +58,7 @@ impl MoonHandle {
 /// Snapshot the live moon config for the settings dialog.
 #[must_use]
 pub fn current_config(instance_id: Uuid) -> Option<MoonConfig> {
-    MOON_LIVE
-        .get(&instance_id)
-        .map(|h| h.config.read().clone())
+    MOON_LIVE.get(&instance_id).map(|h| h.config.read().clone())
 }
 
 /// Apply a settings-dialog mutation to the live moon config.

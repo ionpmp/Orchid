@@ -195,7 +195,7 @@ async fn copy_with_verify_hash() {
             overwrite: false,
             verify_content_hash: true,
             preserve_timestamps: false,
-            follow_symlinks: true,
+            ..CopyOptions::default()
         },
         None,
         None,

@@ -49,7 +49,11 @@ pub fn read_id3_fields(path: &Path) -> Result<Vec<AudioTagField>> {
             value: t.to_string(),
         });
     }
-    push(&mut out, "Comment", tag.comments().next().map(|c| c.text.as_str()));
+    push(
+        &mut out,
+        "Comment",
+        tag.comments().next().map(|c| c.text.as_str()),
+    );
     Ok(out)
 }
 
@@ -96,7 +100,9 @@ mod tests {
         tag.set_artist("Orchid");
         tag.write_to_path(&path, id3::Version::Id3v23).unwrap();
         let fields = read_id3_fields(&path).unwrap();
-        assert!(fields.iter().any(|f| f.label == "Title" && f.value == "Hello"));
+        assert!(fields
+            .iter()
+            .any(|f| f.label == "Title" && f.value == "Hello"));
         assert!(fields
             .iter()
             .any(|f| f.label == "Artist" && f.value == "Orchid"));

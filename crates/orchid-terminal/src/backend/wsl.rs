@@ -77,7 +77,11 @@ fn utf16le_to_string(bytes: &[u8]) -> Option<String> {
         return None;
     }
     // Skip BOM if present.
-    let start = if bytes[0] == 0xFF && bytes[1] == 0xFE { 2 } else { 0 };
+    let start = if bytes[0] == 0xFF && bytes[1] == 0xFE {
+        2
+    } else {
+        0
+    };
     let mut units: Vec<u16> = Vec::with_capacity((bytes.len() - start) / 2);
     for pair in bytes[start..].chunks_exact(2) {
         units.push(u16::from_le_bytes([pair[0], pair[1]]));

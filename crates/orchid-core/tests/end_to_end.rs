@@ -88,16 +88,11 @@ async fn command_parsed_and_dispatched_end_to_end() {
 
     // Subscriber for the echo event.
     let (_handle, mut rx) = bus
-        .subscribe(
-            EventFilter::of_type("test.echo"),
-            HandlerPriority::Normal,
-        )
+        .subscribe(EventFilter::of_type("test.echo"), HandlerPriority::Normal)
         .unwrap();
 
-    let dispatcher = ActionDispatcher::new().with_middleware(Arc::new(HistoryRecorder::new(
-        Arc::clone(&storage),
-        true,
-    )) as _);
+    let dispatcher = ActionDispatcher::new()
+        .with_middleware(Arc::new(HistoryRecorder::new(Arc::clone(&storage), true)) as _);
 
     // Parse → registry → action
     let (parsed, descriptor) =

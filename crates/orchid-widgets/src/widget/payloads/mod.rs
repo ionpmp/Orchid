@@ -23,7 +23,7 @@ pub mod viewer;
 pub mod weather;
 
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
-pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload};
+pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
 pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,

@@ -20,8 +20,9 @@ pub use event::{
     InputEvent, KeyEventKind, KeyboardEvent, MouseButton, MouseButtons, MouseEvent, MouseEventKind,
     PenEvent, Point, TouchEvent, TouchPhase,
 };
-pub use gesture::{
-    Edge, GestureConfig, GestureRecognizer, RecognizedGesture, SwipeDirection,
+pub use gesture::{Edge, GestureConfig, GestureRecognizer, RecognizedGesture, SwipeDirection};
+pub use mapper::{
+    default_bindings, default_bindings_mirrored, edge_panels_mirrored, GesturePattern,
+    InputBindings, InputMapper,
 };
-pub use mapper::{default_bindings, default_bindings_mirrored, edge_panels_mirrored, GesturePattern, InputBindings, InputMapper};
 pub use zone::{ScreenBounds, ScreenZone};

@@ -38,17 +38,18 @@ pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
     CalcHistoryRow, CalculatorPayload, CalendarDayCell, CalendarEventRow, CalendarPayload,
-    ClockCityView, ClockPayload, ClockSearchHit, EntryPayload, FileManagerPayload, FmViewMode,
-    IndicatorStatus, JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip,
-    JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
-    JyotishProfileEntry, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary, ManagedFolderSidebarPayload,
+    CalendarUpcomingRow, ClockCityView, ClockPayload, ClockSearchHit, EntryPayload,
+    FileManagerPayload, FmViewMode, IndicatorStatus, JyotishAntarRow, JyotishCityEntry,
+    JyotishDashaNow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary,
+    JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell, JyotishProfileEntry,
+    JyotishRectifyView, JyotishSearchHit, JyotishYearSummary, ManagedFolderSidebarPayload,
     MediaPlayerPayload, MoonPayload, NetworkMountPayload, NotesPayload, NotesTabRow, PanePayload,
     PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload, ProcessGroup,
     ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab, RecentFileItemView,
     RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
     StartupRowView, SystemIndicator, SystemIndicatorKind, SystemPayload, TabPayload,
-    UniversalSearchPayload, UserRowView, ViewerPayload, VisitHistoryItemPayload, WeatherCityEntry, WeatherForecastDay,
-    WeatherPayload, WeatherSearchHit, WeatherStatusTag,
+    UniversalSearchPayload, UserRowView, ViewerPayload, VisitHistoryItemPayload, WeatherCityEntry,
+    WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 

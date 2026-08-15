@@ -296,12 +296,11 @@ impl EventBus {
         }
         let id = SubscriptionId::new();
         let seq = self.inner.next_seq.fetch_add(1, Ordering::Relaxed);
-        let wrapped: Arc<
-            dyn Fn(EventEnvelope) -> futures_core::BoxFuture + Send + Sync,
-        > = Arc::new(move |env| {
-            let fut = handler(env);
-            Box::pin(fut) as futures_core::BoxFuture
-        });
+        let wrapped: Arc<dyn Fn(EventEnvelope) -> futures_core::BoxFuture + Send + Sync> =
+            Arc::new(move |env| {
+                let fut = handler(env);
+                Box::pin(fut) as futures_core::BoxFuture
+            });
         self.inner.subs.insert(
             id,
             SubscriptionEntry {
@@ -384,10 +383,7 @@ impl EventBus {
     // Internal dispatch
     // ------------------------------------------------------------------
 
-    fn dispatch_internal(
-        &self,
-        envelope: &EventEnvelope,
-    ) -> (usize, Vec<JoinHandle<()>>) {
+    fn dispatch_internal(&self, envelope: &EventEnvelope) -> (usize, Vec<JoinHandle<()>>) {
         self.inner.published.fetch_add(1, Ordering::Relaxed);
 
         // Snapshot matching entries and sort by (priority rank, registration
@@ -489,4 +485,3 @@ impl EventBus {
         }
     }
 }
-

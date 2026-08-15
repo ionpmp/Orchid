@@ -642,12 +642,7 @@ fn local_tz_name() -> String {
 }
 
 fn city_label(label: &str) -> String {
-    label
-        .split(',')
-        .next()
-        .unwrap_or(label)
-        .trim()
-        .to_string()
+    label.split(',').next().unwrap_or(label).trim().to_string()
 }
 
 /// Prefer a geolocated IANA id when its current offset matches the OS clock.
@@ -718,8 +713,7 @@ fn city_from_iana(tz: &str) -> Option<String> {
 /// Descriptor ready to register on a widget registry.
 #[must_use]
 pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
-    let provider: Arc<dyn WeatherProvider> =
-        Arc::new(OpenMeteoProvider::new(http_client.clone()));
+    let provider: Arc<dyn WeatherProvider> = Arc::new(OpenMeteoProvider::new(http_client.clone()));
     let factory: WidgetFactory = Arc::new(move |ctx: WidgetContext, state_bytes| {
         let cfg = match state_bytes {
             Some(bytes) => decode_config(bytes).unwrap_or_default(),

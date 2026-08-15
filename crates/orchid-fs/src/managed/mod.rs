@@ -19,8 +19,8 @@ pub(crate) mod index;
 pub mod policy;
 
 pub use config::{ManagedFolderConfig, ManagedFolderStats};
-pub use policy::ManagedFolderPolicy;
 pub use engine::{
     ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
     ManagedFolderEngine,
 };
+pub use policy::ManagedFolderPolicy;

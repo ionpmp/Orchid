@@ -100,10 +100,7 @@ impl MainWindowController {
             .unwrap_or_else(empty_widget_settings_dialog);
         let needle = id.to_string();
         for model in [&self.workspace_widgets, &self.workspace_floating_widgets] {
-            let Some(v) = model
-                .as_any()
-                .downcast_ref::<VecModel<WidgetFrameModel>>()
-            else {
+            let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
                 continue;
             };
             for r in 0..v.row_count() {

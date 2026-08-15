@@ -49,7 +49,7 @@ async fn snapshot_and_restore_preserves_widgets() {
             config.clone(),
             test_locale(),
             Arc::new(orchid_core::BackgroundJobQueue::new()),
-        WidgetManagerOptions::default(),
+            WidgetManagerOptions::default(),
         );
         let mut ids = Vec::new();
         for _ in 0..3 {
@@ -128,7 +128,7 @@ async fn shutdown_keeps_widgets_and_grid_position_on_disk() {
             config.clone(),
             test_locale(),
             Arc::new(orchid_core::BackgroundJobQueue::new()),
-        WidgetManagerOptions::default(),
+            WidgetManagerOptions::default(),
         );
         manager.start().await.unwrap();
         let id = manager

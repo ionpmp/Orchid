@@ -28,9 +28,7 @@ pub fn visible_instance_ids(
     for inst in widget_manager.instances_for_workspace(ws.id) {
         let id = inst.id;
         let hidden_by_group = workspace_groups.iter().any(|g| {
-            g.members.len() >= 2
-                && g.members.contains(&id)
-                && g.active_instance() != Some(id)
+            g.members.len() >= 2 && g.members.contains(&id) && g.active_instance() != Some(id)
         });
         if !hidden_by_group {
             out.push(id);

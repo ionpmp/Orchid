@@ -5,9 +5,9 @@ use std::time::Instant;
 use chrono::Utc;
 use parking_lot::Mutex;
 use starship_battery::{Manager, State};
-use sysinfo::{Disks, Networks, System};
 #[cfg(not(windows))]
 use sysinfo::MINIMUM_CPU_UPDATE_INTERVAL;
+use sysinfo::{Disks, Networks, System};
 
 use super::types::{BatteryStatus, DiskUsage, NetworkRate, SystemSnapshot};
 
@@ -163,7 +163,7 @@ impl SystemProvider {
         #[cfg(windows)]
         {
             let mut state = self.cpu_windows.lock();
-            return super::cpu_windows::sample_cpu(&mut state);
+            super::cpu_windows::sample_cpu(&mut state)
         }
         #[cfg(not(windows))]
         {

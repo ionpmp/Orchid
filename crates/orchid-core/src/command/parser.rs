@@ -14,8 +14,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::command::registry::CommandRegistry;
 use crate::command::descriptor::CommandDescriptor;
+use crate::command::registry::CommandRegistry;
 use crate::error::{CoreError, Result};
 
 /// Structured form of a parsed command line.
@@ -146,17 +146,12 @@ fn tokenise(input: &str) -> Result<Vec<String>> {
     Ok(tokens)
 }
 
-fn build_parsed(
-    tokens: Vec<String>,
-    registry: Option<&CommandRegistry>,
-) -> Result<ParsedCommand> {
+fn build_parsed(tokens: Vec<String>, registry: Option<&CommandRegistry>) -> Result<ParsedCommand> {
     // Split the leading tokens into "verb tokens" (no leading dash) and
     // arguments. Arguments start at the first token beginning with `-` or
     // after the longest registered verb prefix, whichever comes first.
     let mut non_flag_prefix_end = 0;
-    while non_flag_prefix_end < tokens.len()
-        && !tokens[non_flag_prefix_end].starts_with('-')
-    {
+    while non_flag_prefix_end < tokens.len() && !tokens[non_flag_prefix_end].starts_with('-') {
         non_flag_prefix_end += 1;
     }
     let verb_candidates = &tokens[..non_flag_prefix_end];
@@ -204,10 +199,7 @@ fn build_parsed(
                 // Look ahead: if the next token exists and does not start
                 // with '-', treat this as `--key value`. Otherwise it's a
                 // flag.
-                let next_is_value = it
-                    .peek()
-                    .map(|n| !n.starts_with('-'))
-                    .unwrap_or(false);
+                let next_is_value = it.peek().map(|n| !n.starts_with('-')).unwrap_or(false);
                 if next_is_value {
                     let value = it.next().expect("peeked above");
                     options.insert(rest.to_string(), value);
@@ -241,9 +233,8 @@ mod tests {
 
     #[test]
     fn tokenise_quotes_and_escapes() {
-        let p =
-            parse_command_line(r#"orc fs move "C:\\Users\\a.txt" "D:\\backup\\" --verbose"#)
-                .unwrap();
+        let p = parse_command_line(r#"orc fs move "C:\\Users\\a.txt" "D:\\backup\\" --verbose"#)
+            .unwrap();
         assert_eq!(p.verb, "fs");
         assert_eq!(
             p.positional,

@@ -56,9 +56,7 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
             in_month: d.in_month,
             is_today: d.is_today,
             is_selected: d.is_selected,
-            dot_colors: ModelRc::new(VecModel::from(
-                d.dot_colors.iter().copied().collect::<Vec<i32>>(),
-            )),
+            dot_colors: ModelRc::new(VecModel::from(d.dot_colors.to_vec())),
             event_count: d.event_count,
         })
         .collect();

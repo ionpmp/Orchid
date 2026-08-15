@@ -25,14 +25,15 @@ async fn file_manager_lists_temp_dir_entries() {
 
     let fm_id = timeout(
         Duration::from_secs(45),
-        app.widget_manager().create(orchid_widgets::CreateWidgetRequest {
-            type_id: "file-manager".to_string(),
-            workspace_id: ws_id,
-            position: None,
-            size: None,
-            initial_lifecycle: None,
-            config_bytes: None,
-        }),
+        app.widget_manager()
+            .create(orchid_widgets::CreateWidgetRequest {
+                type_id: "file-manager".to_string(),
+                workspace_id: ws_id,
+                position: None,
+                size: None,
+                initial_lifecycle: None,
+                config_bytes: None,
+            }),
     )
     .await
     .expect("create fm timed out")
@@ -62,4 +63,3 @@ async fn file_manager_lists_temp_dir_entries() {
 
     panic!("did not observe 3 entries after navigation");
 }
-

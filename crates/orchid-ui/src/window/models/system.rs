@@ -92,8 +92,14 @@ fn indicator_entries(
         .collect()
 }
 
-fn sync_system_indicators(model: &ModelRc<SystemIndicatorEntry>, new_rows: Vec<SystemIndicatorEntry>) {
-    let Some(v) = model.as_any().downcast_ref::<VecModel<SystemIndicatorEntry>>() else {
+fn sync_system_indicators(
+    model: &ModelRc<SystemIndicatorEntry>,
+    new_rows: Vec<SystemIndicatorEntry>,
+) {
+    let Some(v) = model
+        .as_any()
+        .downcast_ref::<VecModel<SystemIndicatorEntry>>()
+    else {
         return;
     };
     while v.row_count() > new_rows.len() {
@@ -124,9 +130,7 @@ fn segment_values(model: &ModelRc<f32>) -> Vec<f32> {
     let Some(v) = model.as_any().downcast_ref::<VecModel<f32>>() else {
         return Vec::new();
     };
-    (0..v.row_count())
-        .filter_map(|i| v.row_data(i))
-        .collect()
+    (0..v.row_count()).filter_map(|i| v.row_data(i)).collect()
 }
 
 fn sync_f32_segments(model: &ModelRc<f32>, new_rows: Vec<f32>) {

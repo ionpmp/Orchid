@@ -159,16 +159,15 @@ fn migrate_v1_to_v2_window_placement(txn: &WriteTransaction) -> Result<()> {
                 created_at: v1.created_at,
                 updated_at: v1.updated_at,
             },
-            _ => bincode::decode_from_slice::<WidgetInstance, _>(
-                &bytes,
-                bincode::config::standard(),
-            )
-            .map(|(row, _)| row)
-            .map_err(|e| StorageError::MigrationFailed {
-                from: 1,
-                to: 2,
-                reason: format!("decode widget row: {e}"),
-            })?,
+            _ => {
+                bincode::decode_from_slice::<WidgetInstance, _>(&bytes, bincode::config::standard())
+                    .map(|(row, _)| row)
+                    .map_err(|e| StorageError::MigrationFailed {
+                        from: 1,
+                        to: 2,
+                        reason: format!("decode widget row: {e}"),
+                    })?
+            }
         };
         upgraded.push((uuid_key(v2.id), bincode_encode(&v2)?));
     }

@@ -15,7 +15,9 @@ async fn fs_event_triggers_indexing() {
     let watch_dir = td.path().join("watch");
     std::fs::create_dir_all(&watch_dir).unwrap();
 
-    let bus = Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()));
+    let bus = Arc::new(orchid_core::EventBus::new(
+        orchid_core::EventBusConfig::default(),
+    ));
     let storage = Arc::new(orchid_storage::StateStore::open_in_memory("0").unwrap());
 
     let registry = Arc::new(FsProviderRegistry::new());
@@ -48,7 +50,7 @@ async fn fs_event_triggers_indexing() {
     });
     subscriber.start().await.unwrap();
 
-    let _watch = watcher.watch(watch_fs.clone()).await.unwrap();
+    let _watch = watcher.watch(watch_fs.clone(), true).await.unwrap();
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     // Create a file that is in scope.

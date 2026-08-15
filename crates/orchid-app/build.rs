@@ -14,8 +14,7 @@ fn main() {
 /// runtime binding via `Pdfium::bind_to_library()` finds it beside `orchid.exe`.
 fn stage_pdfium_library() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let source = manifest_dir
-        .join("../../third-party/pdfium/win-x64/pdfium.dll");
+    let source = manifest_dir.join("../../third-party/pdfium/win-x64/pdfium.dll");
 
     println!("cargo:rerun-if-changed={}", source.display());
 
@@ -35,7 +34,10 @@ fn stage_pdfium_library() {
 
     let dest = target_profile_dir.join("pdfium.dll");
     if let Err(e) = fs::copy(&source, &dest) {
-        println!("cargo:warning=Failed to copy Pdfium to {}: {e}", dest.display());
+        println!(
+            "cargo:warning=Failed to copy Pdfium to {}: {e}",
+            dest.display()
+        );
         return;
     }
 

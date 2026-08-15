@@ -20,8 +20,8 @@ fn preview_insert_image_after_caret_block() {
                 runs: vec![orchid_viewers::document::model::Run {
                     text: "Hello".into(),
                     style: Default::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 ..Default::default()
             },
         )],

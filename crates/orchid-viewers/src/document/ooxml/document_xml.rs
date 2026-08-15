@@ -760,12 +760,7 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
             let url = hl.url.as_str();
             let rid = hl.r_id.as_deref().unwrap_or("rId0");
             let mut j = i + 1;
-            while j < p.runs.len()
-                && p.runs[j]
-                    .hyperlink
-                    .as_ref()
-                    .is_some_and(|h| h.url == url)
-            {
+            while j < p.runs.len() && p.runs[j].hyperlink.as_ref().is_some_and(|h| h.url == url) {
                 j += 1;
             }
             let mut start = BytesStart::new("w:hyperlink");
@@ -990,8 +985,7 @@ fn write_table(
                 .write_event(Event::Start(BytesStart::new("w:tc")))
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             let width = t.column_widths_twips.get(ci).copied();
-            let need_tc_pr =
-                width.is_some() || cell.grid_span.is_some() || cell.v_merge.is_some();
+            let need_tc_pr = width.is_some() || cell.grid_span.is_some() || cell.v_merge.is_some();
             if need_tc_pr {
                 writer
                     .write_event(Event::Start(BytesStart::new("w:tcPr")))
@@ -1763,16 +1757,16 @@ mod tests {
                             runs: vec![Run {
                                 text: "A".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }]),
                         TableCell::from_paragraphs(vec![Paragraph {
                             runs: vec![Run {
                                 text: "B".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }]),
                     ],

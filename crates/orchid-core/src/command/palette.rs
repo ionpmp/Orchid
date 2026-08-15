@@ -76,7 +76,9 @@ impl CommandPalette {
             let candidates = [
                 desc.display_name_key.clone(),
                 desc.id.clone(),
-                desc.terminal_invocation.as_ref().map_or(String::new(), |t| t.verb.clone()),
+                desc.terminal_invocation
+                    .as_ref()
+                    .map_or(String::new(), |t| t.verb.clone()),
             ];
 
             let mut best_score: Option<u32> = None;
@@ -185,10 +187,16 @@ mod tests {
     #[test]
     fn ranked_results_put_exact_match_first() {
         let reg = Arc::new(CommandRegistry::new());
-        reg.register(make_desc("fs.move", "Move File", Some("fs move")), factory())
-            .unwrap();
-        reg.register(make_desc("fs.copy", "Copy File", Some("fs copy")), factory())
-            .unwrap();
+        reg.register(
+            make_desc("fs.move", "Move File", Some("fs move")),
+            factory(),
+        )
+        .unwrap();
+        reg.register(
+            make_desc("fs.copy", "Copy File", Some("fs copy")),
+            factory(),
+        )
+        .unwrap();
         reg.register(
             make_desc("widget.create", "Create Widget", Some("widget create")),
             factory(),
@@ -204,7 +212,8 @@ mod tests {
     #[test]
     fn empty_query_returns_no_hits() {
         let reg = Arc::new(CommandRegistry::new());
-        reg.register(make_desc("a", "Alpha", None), factory()).unwrap();
+        reg.register(make_desc("a", "Alpha", None), factory())
+            .unwrap();
         let palette = CommandPalette::new(reg);
         assert!(palette.search("", 5).is_empty());
     }
@@ -212,8 +221,10 @@ mod tests {
     #[test]
     fn browse_returns_all_sorted() {
         let reg = Arc::new(CommandRegistry::new());
-        reg.register(make_desc("a", "Alpha", None), factory()).unwrap();
-        reg.register(make_desc("b", "Beta", None), factory()).unwrap();
+        reg.register(make_desc("a", "Alpha", None), factory())
+            .unwrap();
+        reg.register(make_desc("b", "Beta", None), factory())
+            .unwrap();
         let palette = CommandPalette::new(reg);
         let browse = palette.browse();
         assert_eq!(browse.len(), 2);

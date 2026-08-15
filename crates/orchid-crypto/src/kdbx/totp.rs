@@ -39,7 +39,9 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<TotpConfig> {
         return Err(CryptoError::TotpSetup("not an otpauth:// URI".into()));
     }
     if parsed.host_str() != Some("totp") {
-        return Err(CryptoError::TotpSetup("only otpauth://totp is supported".into()));
+        return Err(CryptoError::TotpSetup(
+            "only otpauth://totp is supported".into(),
+        ));
     }
 
     // Path is "/label" or "/issuer:account"
@@ -86,7 +88,8 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<TotpConfig> {
         }
     }
 
-    let secret = secret.ok_or_else(|| CryptoError::TotpSetup("missing `secret` query parameter".into()))?;
+    let secret =
+        secret.ok_or_else(|| CryptoError::TotpSetup("missing `secret` query parameter".into()))?;
 
     Ok(TotpConfig {
         secret: SecretString::from(secret),
@@ -140,10 +143,7 @@ pub fn to_otpauth_uri(cfg: &TotpConfig) -> String {
 
 /// Percent-encode a label while keeping the `:` separator intact.
 fn encode_label(s: &str) -> String {
-    s.split(':')
-        .map(urlencode)
-        .collect::<Vec<_>>()
-        .join(":")
+    s.split(':').map(urlencode).collect::<Vec<_>>().join(":")
 }
 
 fn urlencode(s: &str) -> String {
@@ -201,10 +201,8 @@ pub fn generate_code(cfg: &TotpConfig, now: DateTime<Utc>) -> Result<TotpCode> {
     )
     .map_err(|e| CryptoError::TotpGeneration(e.to_string()))?;
     let ts = now.timestamp() as u64;
-    let code = totp
-        .generate(ts);
-    let remaining =
-        (cfg.period_seconds as u64 - ts % cfg.period_seconds as u64) as u32;
+    let code = totp.generate(ts);
+    let remaining = (cfg.period_seconds as u64 - ts % cfg.period_seconds as u64) as u32;
     Ok(TotpCode {
         code,
         remaining_seconds: remaining,
@@ -226,7 +224,10 @@ mod tests {
 
         let rendered = to_otpauth_uri(&cfg);
         let parsed_again = parse_otpauth_uri(&rendered).unwrap();
-        assert_eq!(parsed_again.secret.expose_secret(), cfg.secret.expose_secret());
+        assert_eq!(
+            parsed_again.secret.expose_secret(),
+            cfg.secret.expose_secret()
+        );
         assert_eq!(parsed_again.issuer, cfg.issuer);
         assert_eq!(parsed_again.account, cfg.account);
     }

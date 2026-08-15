@@ -47,8 +47,7 @@ pub fn verify_user(message: &str) -> Result<BiometricVerification> {
 mod imp {
     use windows::core::HSTRING;
     use windows::Security::Credentials::UI::{
-        UserConsentVerificationResult, UserConsentVerifier,
-        UserConsentVerifierAvailability,
+        UserConsentVerificationResult, UserConsentVerifier, UserConsentVerifierAvailability,
     };
     use windows_future::IAsyncOperation;
 

@@ -15,9 +15,7 @@ pub(crate) fn sanitise_paste(text: &str) -> Result<String> {
     if text.contains("\x1b[201~") {
         return Err(TerminalError::PasteRejected);
     }
-    let normalised: String = text
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
+    let normalised: String = text.replace("\r\n", "\n").replace('\r', "\n");
     for c in normalised.chars() {
         if c == '\n' || c == '\t' {
             continue;

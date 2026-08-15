@@ -16,13 +16,21 @@ pub struct PersistedHistoryEntry {
 
 impl From<&HistoryEntry> for PersistedHistoryEntry {
     fn from(h: &HistoryEntry) -> Self {
-        Self { expression: h.expression.clone(), result: h.result.clone(), value: h.value }
+        Self {
+            expression: h.expression.clone(),
+            result: h.result.clone(),
+            value: h.value,
+        }
     }
 }
 
 impl From<PersistedHistoryEntry> for HistoryEntry {
     fn from(h: PersistedHistoryEntry) -> Self {
-        Self { expression: h.expression, result: h.result, value: h.value }
+        Self {
+            expression: h.expression,
+            result: h.result,
+            value: h.value,
+        }
     }
 }
 
@@ -54,7 +62,11 @@ impl Default for CalculatorConfig {
 
 impl CalculatorConfig {
     #[must_use]
-    pub fn calc_mode(&self) -> CalcMode { CalcMode::from_index(i32::from(self.mode)) }
+    pub fn calc_mode(&self) -> CalcMode {
+        CalcMode::from_index(i32::from(self.mode))
+    }
     #[must_use]
-    pub fn angle(&self) -> AngleMode { AngleMode::from_index(i32::from(self.angle_mode)) }
+    pub fn angle(&self) -> AngleMode {
+        AngleMode::from_index(i32::from(self.angle_mode))
+    }
 }

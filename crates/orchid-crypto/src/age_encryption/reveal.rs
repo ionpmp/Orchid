@@ -33,9 +33,7 @@ use crate::content::store::{Clock, SystemClock};
 use crate::error::{CryptoError, Result};
 
 /// How long a reveal session stays open.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RevealDuration {
     /// Expire after 5 minutes.
     FiveMinutes,
@@ -217,7 +215,9 @@ impl RevealManager {
         })?;
 
         let revealed_path = session_dir.join(&meta.original_name);
-        decryptor.decrypt_file(encrypted_path, &revealed_path).await?;
+        decryptor
+            .decrypt_file(encrypted_path, &revealed_path)
+            .await?;
 
         let now = self.inner.clock.now();
         let expires_at = duration
@@ -278,12 +278,16 @@ impl RevealManager {
     }
 
     fn register(&self, session: RevealSession) {
-        self.inner.sessions.lock().insert(session.id, session.clone());
         self.inner
-            .bus
-            .publish(orchid_core::EventSource::Subsystem("crypto".into()), RevealStarted {
+            .sessions
+            .lock()
+            .insert(session.id, session.clone());
+        self.inner.bus.publish(
+            orchid_core::EventSource::Subsystem("crypto".into()),
+            RevealStarted {
                 session_id: session.id,
-            });
+            },
+        );
     }
 
     /// Snapshot of every active session.
@@ -306,11 +310,10 @@ impl RevealManager {
             return Err(CryptoError::RevealNotFound(session_id));
         };
         wipe_session(&session).await;
-        self.inner
-            .bus
-            .publish(orchid_core::EventSource::Subsystem("crypto".into()), RevealClosed {
-                session_id,
-            });
+        self.inner.bus.publish(
+            orchid_core::EventSource::Subsystem("crypto".into()),
+            RevealClosed { session_id },
+        );
         Ok(())
     }
 
@@ -358,16 +361,14 @@ impl RevealManager {
                 continue;
             };
             wipe_session(&session).await;
-            self.inner
-                .bus
-                .publish(orchid_core::EventSource::Subsystem("crypto".into()), RevealExpired {
-                    session_id: id,
-                });
-            self.inner
-                .bus
-                .publish(orchid_core::EventSource::Subsystem("crypto".into()), RevealClosed {
-                    session_id: id,
-                });
+            self.inner.bus.publish(
+                orchid_core::EventSource::Subsystem("crypto".into()),
+                RevealExpired { session_id: id },
+            );
+            self.inner.bus.publish(
+                orchid_core::EventSource::Subsystem("crypto".into()),
+                RevealClosed { session_id: id },
+            );
         }
     }
 
@@ -382,13 +383,7 @@ impl RevealManager {
         if let Some(handle) = self.inner.sweeper.lock().take() {
             handle.abort();
         }
-        let ids: Vec<Uuid> = self
-            .inner
-            .sessions
-            .lock()
-            .keys()
-            .copied()
-            .collect();
+        let ids: Vec<Uuid> = self.inner.sessions.lock().keys().copied().collect();
         let mut first_err: Option<CryptoError> = None;
         for id in ids {
             if let Err(e) = self.close(id).await {
@@ -408,7 +403,12 @@ async fn wipe_session(session: &RevealSession) {
         // Walk the directory and wipe each file before removing.
         if let Ok(mut rd) = tokio::fs::read_dir(&session.revealed_path).await {
             while let Ok(Some(entry)) = rd.next_entry().await {
-                if entry.file_type().await.map(|t| t.is_file()).unwrap_or(false) {
+                if entry
+                    .file_type()
+                    .await
+                    .map(|t| t.is_file())
+                    .unwrap_or(false)
+                {
                     wipe_file(entry.path().as_path()).await;
                 }
             }
@@ -436,11 +436,7 @@ async fn wipe_file(path: &Path) {
         let _ = tokio::fs::remove_file(path).await;
         return;
     }
-    if let Ok(mut f) = tokio::fs::OpenOptions::new()
-        .write(true)
-        .open(path)
-        .await
-    {
+    if let Ok(mut f) = tokio::fs::OpenOptions::new().write(true).open(path).await {
         let zeros = vec![0u8; BLOCK.min(len as usize).max(1)];
         let mut remaining = len;
         while remaining > 0 {

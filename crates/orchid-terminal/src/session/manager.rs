@@ -29,10 +29,7 @@ impl std::fmt::Debug for SessionManager {
 impl SessionManager {
     /// Construct a manager bound to a bus and a state store.
     #[must_use]
-    pub fn new(
-        bus: Arc<orchid_core::EventBus>,
-        storage: Arc<orchid_storage::StateStore>,
-    ) -> Self {
+    pub fn new(bus: Arc<orchid_core::EventBus>, storage: Arc<orchid_storage::StateStore>) -> Self {
         Self {
             sessions: DashMap::new(),
             bus,
@@ -157,9 +154,7 @@ impl SessionManager {
     ///
     /// Propagates [`TerminalError::BackendUnavailable`] for malformed custom
     /// entries.
-    pub fn spec_from_persisted(
-        record: &orchid_storage::TerminalSession,
-    ) -> Result<BackendSpec> {
+    pub fn spec_from_persisted(record: &orchid_storage::TerminalSession) -> Result<BackendSpec> {
         let kind = backend_kind_from_storage(&record.backend)?;
         // The persisted `title` field is advisory only; it isn't used to
         // reconstruct the spec (re-spawned shells produce their own title).

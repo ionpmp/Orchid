@@ -99,10 +99,7 @@ async fn viewer_created_without_undock_stays_on_grid() {
         .await
         .expect("open");
     assert!(
-        !app.widget_manager()
-            .get_instance(id)
-            .unwrap()
-            .is_windowed(),
+        !app.widget_manager().get_instance(id).unwrap().is_windowed(),
         "catalog Document path must leave the viewer on the canvas grid"
     );
 }

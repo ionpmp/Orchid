@@ -406,10 +406,9 @@ impl WidgetManager {
             ) && canonical_type == crate::builtin::viewer::TYPE_ID
             {
                 if let Some(bounds) = crate::builtin::viewer::floating_bounds(row.id) {
-                    *runtime.placement.write() =
-                        orchid_storage::WindowPlacement::floating_normal(
-                            crate::widget::instance::pixel_rect_from_bounds(bounds),
-                        );
+                    *runtime.placement.write() = orchid_storage::WindowPlacement::floating_normal(
+                        crate::widget::instance::pixel_rect_from_bounds(bounds),
+                    );
                     let _ = crate::builtin::viewer::set_floating_bounds(row.id, None);
                     let bytes = {
                         let w = runtime.widget.lock().await;

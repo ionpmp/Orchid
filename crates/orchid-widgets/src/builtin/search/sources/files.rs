@@ -94,10 +94,7 @@ mod tests {
 
     #[test]
     fn subtitle_falls_back_to_path_without_snippet() {
-        assert_eq!(
-            file_hit_subtitle("local:/a/b.txt", None),
-            "local:/a/b.txt"
-        );
+        assert_eq!(file_hit_subtitle("local:/a/b.txt", None), "local:/a/b.txt");
     }
 
     #[test]

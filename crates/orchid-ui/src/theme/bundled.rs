@@ -71,7 +71,7 @@ pub fn solarized_dark_theme() -> Theme {
         ColorTokens {
             surface_base: Color::rgb(0x00, 0x2B, 0x36),   // base03
             surface_raised: Color::rgb(0x07, 0x36, 0x42), // base02
-            text_primary: Color::rgb(0x83, 0x94, 0x96),    // base0
+            text_primary: Color::rgb(0x83, 0x94, 0x96),   // base0
             text_secondary: Color::rgb(0x65, 0x7B, 0x83), // base00
             text_tertiary: Color::rgb(0x58, 0x6E, 0x75),  // base01
             accent_brand: Color::rgb(0x26, 0x8B, 0xD2),   // blue
@@ -92,10 +92,10 @@ pub fn solarized_light_theme() -> Theme {
         ColorTokens {
             surface_base: Color::rgb(0xFD, 0xF6, 0xE3),   // base3
             surface_raised: Color::rgb(0xEE, 0xE8, 0xD5), // base2
-            text_primary: Color::rgb(0x65, 0x7B, 0x83),  // base00
+            text_primary: Color::rgb(0x65, 0x7B, 0x83),   // base00
             text_secondary: Color::rgb(0x58, 0x6E, 0x75), // base01
-            text_tertiary: Color::rgb(0x93, 0xA2, 0xA1), // base1
-            accent_brand: Color::rgb(0x26, 0x8B, 0xD2),  // blue
+            text_tertiary: Color::rgb(0x93, 0xA2, 0xA1),  // base1
+            accent_brand: Color::rgb(0x26, 0x8B, 0xD2),   // blue
             border_default: Color::rgba(0x58, 0x6E, 0x75, 0x40), // base01 @ 25%
         },
     )
@@ -113,10 +113,10 @@ pub fn nord_dark_theme() -> Theme {
         ColorTokens {
             surface_base: Color::rgb(0x2E, 0x34, 0x40),   // nord0
             surface_raised: Color::rgb(0x3B, 0x42, 0x52), // nord1
-            text_primary: Color::rgb(0xEC, 0xEF, 0xF4),  // nord6
+            text_primary: Color::rgb(0xEC, 0xEF, 0xF4),   // nord6
             text_secondary: Color::rgb(0xD8, 0xDE, 0xE9), // nord4
-            text_tertiary: Color::rgb(0x4C, 0x56, 0x6A), // nord3
-            accent_brand: Color::rgb(0x88, 0xC0, 0xD0),  // nord8
+            text_tertiary: Color::rgb(0x4C, 0x56, 0x6A),  // nord3
+            accent_brand: Color::rgb(0x88, 0xC0, 0xD0),   // nord8
             border_default: Color::rgba(0xD8, 0xDE, 0xE9, 0x30), // nord4 @ ~19%
         },
     )
@@ -134,10 +134,10 @@ pub fn catppuccin_mocha_theme() -> Theme {
         ColorTokens {
             surface_base: Color::rgb(0x1E, 0x1E, 0x2E),   // base
             surface_raised: Color::rgb(0x31, 0x32, 0x44), // surface0
-            text_primary: Color::rgb(0xCD, 0xD6, 0xF4),  // text
+            text_primary: Color::rgb(0xCD, 0xD6, 0xF4),   // text
             text_secondary: Color::rgb(0xBA, 0xC2, 0xDE), // subtext1
-            text_tertiary: Color::rgb(0xA6, 0xAD, 0xC8), // subtext0
-            accent_brand: Color::rgb(0xCB, 0xA6, 0xF7),  // mauve
+            text_tertiary: Color::rgb(0xA6, 0xAD, 0xC8),  // subtext0
+            accent_brand: Color::rgb(0xCB, 0xA6, 0xF7),   // mauve
             border_default: Color::rgba(0xCD, 0xD6, 0xF4, 0x20),
         },
     )
@@ -155,10 +155,10 @@ pub fn catppuccin_latte_theme() -> Theme {
         ColorTokens {
             surface_base: Color::rgb(0xEF, 0xF1, 0xF5),   // base
             surface_raised: Color::rgb(0xCC, 0xD0, 0xDA), // surface0
-            text_primary: Color::rgb(0x4C, 0x4F, 0x69),  // text
+            text_primary: Color::rgb(0x4C, 0x4F, 0x69),   // text
             text_secondary: Color::rgb(0x5C, 0x5F, 0x77), // subtext1
-            text_tertiary: Color::rgb(0x6C, 0x6F, 0x85), // subtext0
-            accent_brand: Color::rgb(0x88, 0x39, 0xEF),  // mauve
+            text_tertiary: Color::rgb(0x6C, 0x6F, 0x85),  // subtext0
+            accent_brand: Color::rgb(0x88, 0x39, 0xEF),   // mauve
             border_default: Color::rgba(0x4C, 0x4F, 0x69, 0x20),
         },
     )

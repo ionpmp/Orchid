@@ -3,18 +3,20 @@
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
-use orchid_crypto::{
-    Decryptor, Encryptor, FixedClock, Identity, RevealDuration, RevealManager,
-};
+use orchid_crypto::{Decryptor, Encryptor, FixedClock, Identity, RevealDuration, RevealManager};
 
 fn fresh_bus() -> Arc<orchid_core::EventBus> {
-    Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()))
+    Arc::new(orchid_core::EventBus::new(
+        orchid_core::EventBusConfig::default(),
+    ))
 }
 
 async fn encrypt_sample(td: &std::path::Path) -> std::path::PathBuf {
     let plain = td.join("plain.txt");
     let encrypted = td.join("plain.txt.age");
-    tokio::fs::write(&plain, b"top secret reveal payload").await.unwrap();
+    tokio::fs::write(&plain, b"top secret reveal payload")
+        .await
+        .unwrap();
     let enc = Encryptor::new(Identity::passphrase("pw"));
     enc.encrypt_file(&plain, &encrypted).await.unwrap();
     encrypted
@@ -26,12 +28,11 @@ async fn bounded_reveal_expires_through_sweeper() {
     let encrypted = encrypt_sample(td.path()).await;
     let dec = Decryptor::new(Identity::passphrase("pw"));
 
-    let clock = Arc::new(FixedClock::new(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()));
-    let manager = RevealManager::with_clock(
-        td.path().join("reveal-root"),
-        fresh_bus(),
-        clock.clone(),
-    );
+    let clock = Arc::new(FixedClock::new(
+        Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+    ));
+    let manager =
+        RevealManager::with_clock(td.path().join("reveal-root"), fresh_bus(), clock.clone());
 
     let session = manager
         .reveal(&dec, &encrypted, RevealDuration::FiveMinutes)
@@ -57,12 +58,11 @@ async fn until_closed_session_persists_across_sweeps() {
     let encrypted = encrypt_sample(td.path()).await;
     let dec = Decryptor::new(Identity::passphrase("pw"));
 
-    let clock = Arc::new(FixedClock::new(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()));
-    let manager = RevealManager::with_clock(
-        td.path().join("reveal-root"),
-        fresh_bus(),
-        clock.clone(),
-    );
+    let clock = Arc::new(FixedClock::new(
+        Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+    ));
+    let manager =
+        RevealManager::with_clock(td.path().join("reveal-root"), fresh_bus(), clock.clone());
     let session = manager
         .reveal(&dec, &encrypted, RevealDuration::UntilClosed)
         .await
@@ -71,7 +71,11 @@ async fn until_closed_session_persists_across_sweeps() {
     // Advance clock a long way; the sweep must still not close it.
     clock.set(Utc.with_ymd_and_hms(2030, 1, 1, 0, 0, 0).unwrap());
     manager.sweep_once().await;
-    assert_eq!(manager.list_active().len(), 1, "until-closed survives sweep");
+    assert_eq!(
+        manager.list_active().len(),
+        1,
+        "until-closed survives sweep"
+    );
 
     // Explicit close wipes it.
     manager.close(session.id).await.unwrap();

@@ -102,7 +102,7 @@ impl SearchSource for SettingsSource {
                 action_target: ActionTarget::OpenSettings(sec.id.to_string()),
             });
         }
-        hits.sort_by(|a, b| b.score.cmp(&a.score));
+        hits.sort_by_key(|b| std::cmp::Reverse(b.score));
         hits.truncate(limit);
         hits
     }

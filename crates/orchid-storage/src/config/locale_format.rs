@@ -21,10 +21,7 @@ impl LocaleConfig {
             .date_format
             .as_deref()
             .unwrap_or(Self::DEFAULT_DATETIME_DATE);
-        let time_fmt = self
-            .time_format
-            .as_deref()
-            .unwrap_or(Self::DEFAULT_TIME);
+        let time_fmt = self.time_format.as_deref().unwrap_or(Self::DEFAULT_TIME);
 
         if self.date_format.is_some() || self.time_format.is_some() {
             if let Some(s) = try_format_pair(&local, date_fmt, time_fmt) {
@@ -84,7 +81,11 @@ where
     write!(buf, "{}", dt.format(fmt)).ok().map(|()| buf)
 }
 
-fn try_format_pair<Tz: TimeZone>(dt: &DateTime<Tz>, date_fmt: &str, time_fmt: &str) -> Option<String>
+fn try_format_pair<Tz: TimeZone>(
+    dt: &DateTime<Tz>,
+    date_fmt: &str,
+    time_fmt: &str,
+) -> Option<String>
 where
     Tz::Offset: std::fmt::Display,
 {
@@ -140,11 +141,7 @@ mod tests {
         assert_eq!(locale.format_time(dt), local.format("%I:%M %p").to_string());
         assert_eq!(
             locale.format_datetime(dt),
-            format!(
-                "{} {}",
-                local.format("%d.%m.%Y"),
-                local.format("%I:%M %p")
-            )
+            format!("{} {}", local.format("%d.%m.%Y"), local.format("%I:%M %p"))
         );
     }
 

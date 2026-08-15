@@ -202,8 +202,7 @@ impl InputEncoder {
                     MouseAction::Press | MouseAction::Move => b'M',
                     MouseAction::Release => b'm',
                 };
-                format!("\x1b[<{code};{};{}{}", col + 1, row + 1, final_byte as char)
-                    .into_bytes()
+                format!("\x1b[<{code};{};{}{}", col + 1, row + 1, final_byte as char).into_bytes()
             }
             MouseMode::Normal => {
                 // Legacy X10 — cap coordinates at 223 (94 + 128).
@@ -239,11 +238,7 @@ fn push_char(buf: &mut Vec<u8>, c: char) {
 }
 
 fn cursor_sequence(application: bool, final_byte: u8, modifiers: Modifiers) -> Vec<u8> {
-    let prefix: &[u8] = if application {
-        b"\x1bO"
-    } else {
-        b"\x1b["
-    };
+    let prefix: &[u8] = if application { b"\x1bO" } else { b"\x1b[" };
     let mod_code = modifier_code(modifiers);
     let mut out = Vec::with_capacity(8);
     out.extend_from_slice(prefix);
@@ -353,14 +348,8 @@ mod tests {
     #[test]
     fn enter_and_backspace() {
         let e = InputEncoder::new();
-        assert_eq!(
-            e.encode_key(Key::Enter, Modifiers::empty()),
-            vec![b'\r']
-        );
-        assert_eq!(
-            e.encode_key(Key::Backspace, Modifiers::empty()),
-            vec![0x7F]
-        );
+        assert_eq!(e.encode_key(Key::Enter, Modifiers::empty()), vec![b'\r']);
+        assert_eq!(e.encode_key(Key::Backspace, Modifiers::empty()), vec![0x7F]);
     }
 
     #[test]

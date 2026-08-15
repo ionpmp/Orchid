@@ -120,8 +120,7 @@ mod tests {
 
     #[test]
     fn random_uuids_differ() {
-        let ids: std::collections::HashSet<_> =
-            (0..16).map(|_| random_uuid()).collect();
+        let ids: std::collections::HashSet<_> = (0..16).map(|_| random_uuid()).collect();
         assert_eq!(ids.len(), 16);
     }
 

@@ -26,10 +26,7 @@ impl std::fmt::Debug for TagManager {
 impl TagManager {
     /// Construct a manager.
     #[must_use]
-    pub fn new(
-        storage: Arc<orchid_storage::StateStore>,
-        bus: Arc<orchid_core::EventBus>,
-    ) -> Self {
+    pub fn new(storage: Arc<orchid_storage::StateStore>, bus: Arc<orchid_core::EventBus>) -> Self {
         Self { storage, bus }
     }
 
@@ -288,4 +285,3 @@ fn normalise_tag_list(raw: Vec<String>) -> Result<Vec<String>> {
     }
     Ok(set.into_iter().collect())
 }
-

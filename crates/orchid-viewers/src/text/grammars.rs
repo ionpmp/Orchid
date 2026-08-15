@@ -66,8 +66,14 @@ fn by_shebang(bytes: &[u8]) -> Option<&'static str> {
     if !bytes.starts_with(b"#!") {
         return None;
     }
-    let end = bytes.iter().take(256).position(|b| *b == b'\n').unwrap_or(bytes.len().min(256));
-    let line = std::str::from_utf8(&bytes[..end]).ok()?.to_ascii_lowercase();
+    let end = bytes
+        .iter()
+        .take(256)
+        .position(|b| *b == b'\n')
+        .unwrap_or(bytes.len().min(256));
+    let line = std::str::from_utf8(&bytes[..end])
+        .ok()?
+        .to_ascii_lowercase();
     for (needle, lang) in [
         ("python", "python"),
         ("node", "javascript"),
@@ -163,7 +169,10 @@ mod tests {
         assert_eq!(detect_language(&path("local:/a/b.sql"), b""), "sql");
         assert_eq!(detect_language(&path("local:/a/b.php"), b""), "php");
         assert_eq!(detect_language(&path("local:/a/b.kt"), b""), "kotlin");
-        assert_eq!(detect_language(&path("local:/a/unknown.xyz"), b""), PLAINTEXT);
+        assert_eq!(
+            detect_language(&path("local:/a/unknown.xyz"), b""),
+            PLAINTEXT
+        );
     }
 
     #[test]

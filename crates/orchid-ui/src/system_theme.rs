@@ -43,9 +43,7 @@ fn windows_prefers_dark_apps() -> Option<bool> {
     use std::mem::MaybeUninit;
 
     use windows::core::w;
-    use windows::Win32::System::Registry::{
-        RegGetValueW, RRF_RT_REG_DWORD, HKEY_CURRENT_USER,
-    };
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 
     let mut data = MaybeUninit::<u32>::uninit();
     let mut size = std::mem::size_of::<u32>() as u32;

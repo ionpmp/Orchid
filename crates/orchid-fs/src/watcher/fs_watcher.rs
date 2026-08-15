@@ -12,9 +12,7 @@ use uuid::Uuid;
 use crate::error::{FsError, Result};
 use crate::path::FsPath;
 use crate::provider::{FsChangeKind, FsProviderRegistry};
-use crate::watcher::events::{
-    FsCreatedEvent, FsDeletedEvent, FsModifiedEvent, FsRenamedEvent,
-};
+use crate::watcher::events::{FsCreatedEvent, FsDeletedEvent, FsModifiedEvent, FsRenamedEvent};
 
 /// Watcher handle — unregisters the underlying watch on drop.
 pub struct WatchHandle {
@@ -75,10 +73,7 @@ impl FileWatcher {
     /// Construct a new watcher tied to an [`EventBus`](orchid_core::EventBus)
     /// and a provider registry.
     #[must_use]
-    pub fn new(
-        bus: Arc<orchid_core::EventBus>,
-        registry: Arc<FsProviderRegistry>,
-    ) -> Self {
+    pub fn new(bus: Arc<orchid_core::EventBus>, registry: Arc<FsProviderRegistry>) -> Self {
         Self {
             inner: Arc::new(FileWatcherInner {
                 bus,
@@ -92,11 +87,14 @@ impl FileWatcher {
     /// Start watching `path`. Drop the returned handle (or let the
     /// `FileWatcher` shut down) to stop.
     ///
+    /// Prefer `recursive = false` for directory listings (file manager). Use
+    /// recursive watches only for bounded trees (search roots, managed folders).
+    ///
     /// # Errors
     ///
     /// * [`FsError::ProviderNotMounted`] if no provider serves the scheme.
     /// * Underlying notify errors.
-    pub async fn watch(&self, path: FsPath) -> Result<WatchHandle> {
+    pub async fn watch(&self, path: FsPath, recursive: bool) -> Result<WatchHandle> {
         if self.inner.shutdown.load(Ordering::SeqCst) {
             return Err(FsError::Cancelled);
         }
@@ -105,17 +103,16 @@ impl FileWatcher {
             .registry
             .for_path(&path)
             .ok_or_else(|| FsError::ProviderNotMounted(path.to_string()))?;
-        let mut handle = provider
-            .watch(&path)
-            .await?
-            .ok_or_else(|| {
-                FsError::InvalidPath {
+        let mut handle =
+            provider
+                .watch(&path, recursive)
+                .await?
+                .ok_or_else(|| FsError::InvalidPath {
                     reason: format!(
                         "provider for `{}` does not implement a native watcher",
                         path
                     ),
-                }
-            })?;
+                })?;
 
         let id = Uuid::new_v4();
         let inner_weak = Arc::downgrade(&self.inner);

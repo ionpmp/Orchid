@@ -77,12 +77,7 @@ impl RecentFilesStore {
     /// Return the most recent paths, newest first.
     #[must_use]
     pub fn list(&self, limit: usize) -> Vec<RecentFileEntry> {
-        self.inner
-            .read()
-            .iter()
-            .take(limit)
-            .cloned()
-            .collect()
+        self.inner.read().iter().take(limit).cloned().collect()
     }
 
     /// Paths only, for virtual-folder listing.

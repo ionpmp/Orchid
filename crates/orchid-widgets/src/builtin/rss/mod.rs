@@ -104,23 +104,22 @@ impl RssHandle {
         let data_slot = self.data.clone();
         let bus = self.bus.clone();
         let instance_id = self.instance_id;
-        self.jobs
-            .spawn_coalesced(job_key(instance_id), move || {
-                let provider = provider.clone();
-                let config = config.clone();
-                let data_slot = data_slot.clone();
-                let bus = bus.clone();
-                async move {
-                    let feeds: Vec<FeedSource> = config
-                        .read()
-                        .feeds
-                        .iter()
-                        .filter(|f| f.enabled)
-                        .cloned()
-                        .collect();
-                    RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
-                }
-            });
+        self.jobs.spawn_coalesced(job_key(instance_id), move || {
+            let provider = provider.clone();
+            let config = config.clone();
+            let data_slot = data_slot.clone();
+            let bus = bus.clone();
+            async move {
+                let feeds: Vec<FeedSource> = config
+                    .read()
+                    .feeds
+                    .iter()
+                    .filter(|f| f.enabled)
+                    .cloned()
+                    .collect();
+                RssWidget::fetch_once(provider, feeds, data_slot, bus, instance_id).await;
+            }
+        });
     }
 
     async fn fetch_now(&self) {
@@ -307,7 +306,7 @@ impl Widget for RssWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: self.handle.locale.tr("widget-rss-name").into(),
+            title: self.handle.locale.tr("widget-rss-name"),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::RssFeed(RssPayload {
                 items,

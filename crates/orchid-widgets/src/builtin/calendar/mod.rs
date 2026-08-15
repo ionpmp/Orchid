@@ -783,7 +783,12 @@ impl CalendarWidget {
             .min(1);
         let today = format_date(Local::now().date_naive());
         let visible_events: Vec<CalendarEvent> = match ui.color_filter {
-            Some(c) => cfg.events.iter().filter(|e| e.color == c).cloned().collect(),
+            Some(c) => cfg
+                .events
+                .iter()
+                .filter(|e| e.color == c)
+                .cloned()
+                .collect(),
             None => cfg.events.clone(),
         };
         let days = build_month_grid(
@@ -1121,7 +1126,10 @@ mod tests {
             parse_date_input("20260721"),
             NaiveDate::from_ymd_opt(2026, 7, 21)
         );
-        assert_eq!(parse_date_input(" 2026-07-21 "), NaiveDate::from_ymd_opt(2026, 7, 21));
+        assert_eq!(
+            parse_date_input(" 2026-07-21 "),
+            NaiveDate::from_ymd_opt(2026, 7, 21)
+        );
         assert!(parse_date_input("2026-13-01").is_none());
         assert!(parse_date_input("not-a-date").is_none());
     }
@@ -1133,10 +1141,12 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-01-01".into();
-        cfg.view_year = 2026;
-        cfg.view_month = 1;
+        let cfg = CalendarConfig {
+            selected_date: "2026-01-01".into(),
+            view_year: 2026,
+            view_month: 1,
+            ..Default::default()
+        };
         let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
         select_date(id, "20260721");
         let snap = widget.snapshot().expect("snapshot");
@@ -1154,10 +1164,12 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-07-21".into();
-        cfg.view_year = 2026;
-        cfg.view_month = 7;
+        let cfg = CalendarConfig {
+            selected_date: "2026-07-21".into(),
+            view_year: 2026,
+            view_month: 7,
+            ..Default::default()
+        };
         let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
 
         open_new_editor(id);
@@ -1279,10 +1291,12 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-07-21".into();
-        cfg.view_year = 2026;
-        cfg.view_month = 7;
+        let cfg = CalendarConfig {
+            selected_date: "2026-07-21".into(),
+            view_year: 2026,
+            view_month: 7,
+            ..Default::default()
+        };
         let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
 
         open_new_editor(id);
@@ -1319,32 +1333,34 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-07-21".into();
-        cfg.view_year = 2026;
-        cfg.view_month = 7;
-        cfg.events = vec![
-            CalendarEvent {
-                id: "blue".into(),
-                title: "Blue".into(),
-                date: "2026-07-21".into(),
-                all_day: true,
-                start_minutes: 0,
-                end_minutes: 0,
-                notes: String::new(),
-                color: 0,
-            },
-            CalendarEvent {
-                id: "green".into(),
-                title: "Green".into(),
-                date: "2026-07-21".into(),
-                all_day: true,
-                start_minutes: 0,
-                end_minutes: 0,
-                notes: String::new(),
-                color: 1,
-            },
-        ];
+        let cfg = CalendarConfig {
+            selected_date: "2026-07-21".into(),
+            view_year: 2026,
+            view_month: 7,
+            events: vec![
+                CalendarEvent {
+                    id: "blue".into(),
+                    title: "Blue".into(),
+                    date: "2026-07-21".into(),
+                    all_day: true,
+                    start_minutes: 0,
+                    end_minutes: 0,
+                    notes: String::new(),
+                    color: 0,
+                },
+                CalendarEvent {
+                    id: "green".into(),
+                    title: "Green".into(),
+                    date: "2026-07-21".into(),
+                    all_day: true,
+                    start_minutes: 0,
+                    end_minutes: 0,
+                    notes: String::new(),
+                    color: 1,
+                },
+            ],
+            ..Default::default()
+        };
         let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
         set_color_filter(id, 1);
         let snap = widget.snapshot().expect("snapshot");
@@ -1370,10 +1386,12 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-07-21".into();
-        cfg.default_all_day = false;
-        cfg.default_duration_minutes = 90;
+        let cfg = CalendarConfig {
+            selected_date: "2026-07-21".into(),
+            default_all_day: false,
+            default_duration_minutes: 90,
+            ..Default::default()
+        };
         let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
         open_new_editor(id);
         let snap = widget.snapshot().expect("snapshot");
@@ -1394,18 +1412,20 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-07-21".into();
-        cfg.events.push(CalendarEvent {
-            id: "e1".into(),
-            title: "Dentist".into(),
-            date: "2026-07-22".into(),
-            all_day: false,
-            start_minutes: 600,
-            end_minutes: 660,
-            notes: "bring insurance card".into(),
-            color: 0,
-        });
+        let cfg = CalendarConfig {
+            selected_date: "2026-07-21".into(),
+            events: vec![CalendarEvent {
+                id: "e1".into(),
+                title: "Dentist".into(),
+                date: "2026-07-22".into(),
+                all_day: false,
+                start_minutes: 600,
+                end_minutes: 660,
+                notes: "bring insurance card".into(),
+                color: 0,
+            }],
+            ..Default::default()
+        };
         let _widget = CalendarWidget::new(id, cfg, bus, orchid_config);
         let by_title = search_all_events("dent", 10);
         assert_eq!(by_title.len(), 1);
@@ -1421,10 +1441,12 @@ mod tests {
         ));
         let orchid_config = Arc::new(RwLock::new(orchid_storage::OrchidConfig::default()));
         let id = Uuid::new_v4();
-        let mut cfg = CalendarConfig::default();
-        cfg.selected_date = "2026-07-21".into();
-        cfg.view_year = 2026;
-        cfg.view_month = 7;
+        let cfg = CalendarConfig {
+            selected_date: "2026-07-21".into(),
+            view_year: 2026,
+            view_month: 7,
+            ..Default::default()
+        };
         let widget = CalendarWidget::new(id, cfg, bus, orchid_config);
 
         open_new_editor(id);

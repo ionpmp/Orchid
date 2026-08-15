@@ -34,7 +34,7 @@ mod imp {
     use windows::Win32::Foundation::LocalFree;
     use windows::Win32::Foundation::HLOCAL;
     use windows::Win32::Security::Cryptography::{
-        CryptProtectData, CryptUnprotectData, CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN,
+        CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
     };
 
     use crate::error::{CryptoError, Result};

@@ -341,27 +341,26 @@ impl WeatherHandle {
         let instance_id = self.instance_id;
         // Trailing coalesce: overlapping requests collapse to one re-run that
         // re-reads `config` after the in-flight fetch finishes.
-        self.jobs
-            .spawn_coalesced(job_key(instance_id), move || {
-                let provider = provider.clone();
-                let config = config.clone();
-                let cache = cache.clone();
-                let last_error = last_error.clone();
-                let is_fetching = is_fetching.clone();
-                let bus = bus.clone();
-                async move {
-                    fetch_all_locations(
-                        provider,
-                        config,
-                        cache,
-                        last_error,
-                        is_fetching,
-                        bus,
-                        instance_id,
-                    )
-                    .await;
-                }
-            });
+        self.jobs.spawn_coalesced(job_key(instance_id), move || {
+            let provider = provider.clone();
+            let config = config.clone();
+            let cache = cache.clone();
+            let last_error = last_error.clone();
+            let is_fetching = is_fetching.clone();
+            let bus = bus.clone();
+            async move {
+                fetch_all_locations(
+                    provider,
+                    config,
+                    cache,
+                    last_error,
+                    is_fetching,
+                    bus,
+                    instance_id,
+                )
+                .await;
+            }
+        });
     }
 }
 
@@ -746,23 +745,6 @@ fn wind_direction_index(deg: u16) -> usize {
     (((deg as f32 + 11.25) / 22.5) as usize) % 16
 }
 
-#[cfg(test)]
-mod wind_tests {
-    use super::*;
-
-    #[test]
-    fn wind_direction_buckets_cardinals_and_intermediates() {
-        assert_eq!(wind_direction_ftl_key(0), "weather-wind-n");
-        assert_eq!(wind_direction_ftl_key(45), "weather-wind-ne");
-        assert_eq!(wind_direction_ftl_key(90), "weather-wind-e");
-        assert_eq!(wind_direction_ftl_key(180), "weather-wind-s");
-        assert_eq!(wind_direction_ftl_key(270), "weather-wind-w");
-        assert_eq!(wind_direction_ftl_key(359), "weather-wind-n");
-        assert_eq!(wind_direction_index(22), 1); // NNE
-        assert_eq!(wind_direction_index(337), 15); // NNW
-    }
-}
-
 /// Build the descriptor ready to register on a
 /// [`crate::WidgetRegistry`].
 #[must_use]
@@ -796,5 +778,22 @@ pub fn descriptor(http_client: reqwest::Client) -> WidgetDescriptor {
         default_lifecycle: LifecycleState::Active,
         allows_multiple_instances: true,
         factory,
+    }
+}
+
+#[cfg(test)]
+mod wind_tests {
+    use super::*;
+
+    #[test]
+    fn wind_direction_buckets_cardinals_and_intermediates() {
+        assert_eq!(wind_direction_ftl_key(0), "weather-wind-n");
+        assert_eq!(wind_direction_ftl_key(45), "weather-wind-ne");
+        assert_eq!(wind_direction_ftl_key(90), "weather-wind-e");
+        assert_eq!(wind_direction_ftl_key(180), "weather-wind-s");
+        assert_eq!(wind_direction_ftl_key(270), "weather-wind-w");
+        assert_eq!(wind_direction_ftl_key(359), "weather-wind-n");
+        assert_eq!(wind_direction_index(22), 1); // NNE
+        assert_eq!(wind_direction_index(337), 15); // NNW
     }
 }

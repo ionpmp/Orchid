@@ -22,7 +22,9 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-fn paragraphs(doc: &orchid_viewers::document::model::Document) -> Vec<&orchid_viewers::document::model::Paragraph> {
+fn paragraphs(
+    doc: &orchid_viewers::document::model::Document,
+) -> Vec<&orchid_viewers::document::model::Paragraph> {
     let mut out = Vec::new();
     for block in &doc.blocks {
         match block {
@@ -68,11 +70,20 @@ fn basic_formatting_styles() {
     assert!(plain.contains("italic run"), "{plain}");
     assert!(plain.contains("underlined run"), "{plain}");
     assert!(plain.contains("colored run"), "{plain}");
-    assert!(plain.contains("Courier New") || plain.contains("custom font"), "{plain}");
+    assert!(
+        plain.contains("Courier New") || plain.contains("custom font"),
+        "{plain}"
+    );
 
-    let runs: Vec<_> = paragraphs(&doc).iter().flat_map(|p| p.runs.iter()).collect();
+    let runs: Vec<_> = paragraphs(&doc)
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .collect();
     assert!(runs.iter().any(|r| r.style.bold), "expected a bold run");
-    assert!(runs.iter().any(|r| r.style.italic), "expected an italic run");
+    assert!(
+        runs.iter().any(|r| r.style.italic),
+        "expected an italic run"
+    );
     assert!(
         runs.iter().any(|r| r.style.underline),
         "expected an underlined run"
@@ -82,8 +93,7 @@ fn basic_formatting_styles() {
         "expected a coloured run"
     );
     assert!(
-        runs
-            .iter()
+        runs.iter()
             .any(|r| r.style.font_family.as_deref() == Some("Courier New")),
         "expected Courier New font family"
     );
@@ -116,10 +126,7 @@ fn alignment_paragraphs() {
 fn lists_bullet_and_numbered() {
     let doc = open_document(&fixture("lists.docx")).unwrap();
     let paras = paragraphs(&doc);
-    let bullets = paras
-        .iter()
-        .filter(|p| p.list == ListKind::Bullet)
-        .count();
+    let bullets = paras.iter().filter(|p| p.list == ListKind::Bullet).count();
     let numbered = paras
         .iter()
         .filter(|p| p.list == ListKind::Numbered)
@@ -176,7 +183,10 @@ fn inline_image_opens_and_keeps_text() {
         })
         .expect("expected Block::Image from w:drawing");
     assert!(!img.bytes.is_empty(), "image bytes empty");
-    assert!(img.width_px > 0 && img.height_px > 0, "missing display size");
+    assert!(
+        img.width_px > 0 && img.height_px > 0,
+        "missing display size"
+    );
     assert!(
         img.part_path
             .as_deref()

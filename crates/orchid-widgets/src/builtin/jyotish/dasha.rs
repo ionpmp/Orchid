@@ -222,13 +222,8 @@ pub fn dasha_at(
     birth: NaiveDate,
     date: NaiveDate,
 ) -> Option<(DashaLord, DashaLord, DashaLord)> {
-    dasha_stack_at(natal_moon_lon, birth, date).map(|s| {
-        (
-            s.maha.lord,
-            s.antar.lord,
-            s.pratyantar.lord,
-        )
-    })
+    dasha_stack_at(natal_moon_lon, birth, date)
+        .map(|s| (s.maha.lord, s.antar.lord, s.pratyantar.lord))
 }
 
 #[cfg(test)]

@@ -19,12 +19,12 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{
-    PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
-};
+use crate::widget::payloads::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload};
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 /// Non-secret UI prefs (search filter + last selection). Never stores credentials.
@@ -39,8 +39,7 @@ pub const TYPE_ID: &str = "password-manager";
 
 /// Live password widget cores keyed by instance id (for UI-side callbacks
 /// without holding `WidgetManager` locks).
-static PASSWORD_LIVE: LazyLock<DashMap<Uuid, Arc<PasswordHandle>>> =
-    LazyLock::new(DashMap::new);
+static PASSWORD_LIVE: LazyLock<DashMap<Uuid, Arc<PasswordHandle>>> = LazyLock::new(DashMap::new);
 
 /// Push a search query into the live password widget.
 pub fn update_search(instance_id: Uuid, query: String) {
@@ -318,7 +317,9 @@ impl PasswordHandle {
         self.refresh_entries(Some(query));
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
-            WidgetSnapshotUpdated { instance_id: self.instance_id },
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
         );
     }
 
@@ -329,7 +330,9 @@ impl PasswordHandle {
         self.state.write().selected_id = Some(id);
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
-            WidgetSnapshotUpdated { instance_id: self.instance_id },
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
         );
     }
 
@@ -340,12 +343,13 @@ impl PasswordHandle {
             .database()
             .ok_or_else(|| "vault locked".to_string())?;
         let id = Uuid::parse_str(id_str).map_err(|e| e.to_string())?;
-        let entry = db
-            .get_entry(id)
-            .map_err(|e| e.to_string())?;
+        let entry = db.get_entry(id).map_err(|e| e.to_string())?;
         self.deps
             .clipboard
-            .copy_with_auto_clear(entry.password.clone(), clipboard_clear_duration(clear_after_secs))
+            .copy_with_auto_clear(
+                entry.password.clone(),
+                clipboard_clear_duration(clear_after_secs),
+            )
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -496,7 +500,7 @@ impl Widget for PasswordManagerWidget {
         Some(WidgetSnapshot {
             instance_id: self.inner.instance_id,
             widget_type: TYPE_ID,
-            title: self.inner.locale.tr("widget-password-name").into(),
+            title: self.inner.locale.tr("widget-password-name"),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::PasswordManager(payload),
         })
@@ -603,7 +607,9 @@ fn clipboard_clear_duration(clear_after_secs: u32) -> Duration {
 }
 
 fn extract_host(url: &str) -> Option<String> {
-    url::Url::parse(url).ok().and_then(|u| u.host_str().map(String::from))
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(String::from))
 }
 
 fn relative_from(locale: &orchid_i18n::LocaleManager, at: chrono::DateTime<chrono::Utc>) -> String {
@@ -679,7 +685,10 @@ mod tests {
 
     #[test]
     fn extracts_host_from_urls() {
-        assert_eq!(extract_host("https://example.com/path"), Some("example.com".into()));
+        assert_eq!(
+            extract_host("https://example.com/path"),
+            Some("example.com".into())
+        );
         assert_eq!(extract_host("notaurl"), None);
     }
 }

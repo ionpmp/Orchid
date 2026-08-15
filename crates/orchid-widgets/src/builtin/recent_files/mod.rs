@@ -11,7 +11,9 @@ use crate::events::WidgetSnapshotUpdated;
 use crate::recent_files::{RecentFilesStore, RecentFilesUpdated};
 use crate::widget::payloads::RecentFilesPayload;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
-use crate::{Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory};
+use crate::{
+    Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
+};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 /// Stable type id.
@@ -111,7 +113,7 @@ impl Widget for RecentFilesWidget {
         Some(WidgetSnapshot {
             instance_id: self.instance_id,
             widget_type: TYPE_ID,
-            title: self.locale.tr("widget-recent-files-name").into(),
+            title: self.locale.tr("widget-recent-files-name"),
             status: WidgetStatus::Ready,
             payload: WidgetPayload::RecentFiles(payload),
         })

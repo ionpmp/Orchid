@@ -265,10 +265,9 @@ fn pattern_matches(
             RecognizedGesture::LongPress { position, .. },
         ) => ScreenZone::classify(*position, bounds) == *zone,
 
-        (
-            GesturePattern::DoubleTapInZone { zone },
-            RecognizedGesture::DoubleTap { position },
-        ) => ScreenZone::classify(*position, bounds) == *zone,
+        (GesturePattern::DoubleTapInZone { zone }, RecognizedGesture::DoubleTap { position }) => {
+            ScreenZone::classify(*position, bounds) == *zone
+        }
 
         _ => false,
     }

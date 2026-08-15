@@ -88,11 +88,7 @@ impl Encryptor {
     /// # Errors
     ///
     /// Propagates I/O and age errors.
-    pub async fn encrypt_stream<R, W>(
-        &self,
-        mut reader: R,
-        mut writer: W,
-    ) -> Result<[u8; 32]>
+    pub async fn encrypt_stream<R, W>(&self, mut reader: R, mut writer: W) -> Result<[u8; 32]>
     where
         R: tokio::io::AsyncRead + Unpin + Send,
         W: tokio::io::AsyncWrite + Unpin + Send,
@@ -102,11 +98,10 @@ impl Encryptor {
         let hash = hash_bytes(&plaintext);
 
         let identity = self.identity.clone();
-        let ciphertext = tokio::task::spawn_blocking(move || {
-            encrypt_bytes_sync(&identity, &plaintext)
-        })
-        .await
-        .map_err(|e| CryptoError::AgeEncrypt(format!("join error: {e}")))??;
+        let ciphertext =
+            tokio::task::spawn_blocking(move || encrypt_bytes_sync(&identity, &plaintext))
+                .await
+                .map_err(|e| CryptoError::AgeEncrypt(format!("join error: {e}")))??;
 
         writer.write_all(&ciphertext).await?;
         writer.flush().await?;
@@ -232,9 +227,8 @@ fn encrypt_directory_blocking(
     std::fs::write(&tmp, &ciphertext)?;
     std::fs::rename(&tmp, &archive_path)?;
 
-    let meta =
-        EncryptedFileMeta::new(&original_name, original_size, identity, plaintext_hash)
-            .with_content_type_hint("directory");
+    let meta = EncryptedFileMeta::new(&original_name, original_size, identity, plaintext_hash)
+        .with_content_type_hint("directory");
     let meta_path = output_dir.join(DIR_META_NAME);
     std::fs::write(&meta_path, meta.to_bytes()?)?;
 

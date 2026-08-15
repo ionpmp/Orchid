@@ -216,9 +216,7 @@ pub fn is_reserved(s: &Shortcut) -> Option<&'static str> {
     if s.modifiers == (Modifiers::CTRL | Modifiers::ALT) {
         if let Key::Char(c) = s.key {
             if c.is_ascii_alphabetic() {
-                return Some(
-                    "Ctrl+Alt+<letter> collides with AltGr on European keyboard layouts",
-                );
+                return Some("Ctrl+Alt+<letter> collides with AltGr on European keyboard layouts");
             }
         }
     }

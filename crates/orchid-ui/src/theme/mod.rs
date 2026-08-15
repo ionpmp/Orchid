@@ -16,12 +16,9 @@ use parking_lot::RwLock;
 
 use crate::error::{Result, UiError};
 pub use loader::{
-    ColorTokensJson, DesignTokensJson, HexColor, ThemeDocument, ThemeMetaJson,
-    load_themes_from_dir,
+    load_themes_from_dir, ColorTokensJson, DesignTokensJson, HexColor, ThemeDocument, ThemeMetaJson,
 };
-pub use tokens::{
-    Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, TypographyTokens,
-};
+pub use tokens::{Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, TypographyTokens};
 
 /// Identifying metadata attached to every theme.
 #[derive(Debug, Clone)]
@@ -181,7 +178,10 @@ mod tests {
         let re_json = serde_json::to_string(&re_doc).unwrap();
         let parsed: ThemeDocument = serde_json::from_str(&re_json).unwrap();
         assert_eq!(parsed.meta.id, source.meta.id);
-        assert_eq!(parsed.tokens.color.surface_base.0, source.tokens.color.surface_base);
+        assert_eq!(
+            parsed.tokens.color.surface_base.0,
+            source.tokens.color.surface_base
+        );
     }
 
     #[test]

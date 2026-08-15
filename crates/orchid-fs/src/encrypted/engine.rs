@@ -46,7 +46,8 @@ pub struct EncryptedFolderEngine {
 
 impl std::fmt::Debug for EncryptedFolderEngine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EncryptedFolderEngine").finish_non_exhaustive()
+        f.debug_struct("EncryptedFolderEngine")
+            .finish_non_exhaustive()
     }
 }
 
@@ -83,9 +84,7 @@ impl EncryptedFolderEngine {
             enabled: cfg.enabled,
         };
         let db = self.storage.raw_database();
-        let txn = db
-            .begin_write()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_write().map_err(|e| FsError::Storage(e.into()))?;
         {
             let mut table = txn
                 .open_table(ENCRYPTED_PATHS)
@@ -113,9 +112,7 @@ impl EncryptedFolderEngine {
     /// Returns [`FsError::NotEncryptedPath`] if the path is unknown.
     pub async fn unmark(&self, path: &FsPath) -> Result<()> {
         let db = self.storage.raw_database();
-        let txn = db
-            .begin_write()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_write().map_err(|e| FsError::Storage(e.into()))?;
         let existed = {
             let mut table = txn
                 .open_table(ENCRYPTED_PATHS)
@@ -138,11 +135,7 @@ impl EncryptedFolderEngine {
     /// # Errors
     ///
     /// Propagates crypto and I/O errors.
-    pub async fn encrypt_in_place(
-        &self,
-        path: &FsPath,
-        identity: Identity,
-    ) -> Result<()> {
+    pub async fn encrypt_in_place(&self, path: &FsPath, identity: Identity) -> Result<()> {
         let src = path.to_local()?;
         let target_str = format!("{}.{AGE_EXT}", path.as_str());
         let target = FsPath::new(target_str)?;
@@ -211,7 +204,10 @@ impl EncryptedFolderEngine {
         }
 
         let encryptor = Encryptor::new(identity.clone());
-        encryptor.encrypt_directory(&src, &temp).await.map_err(|e| FsError::EncryptedOp(e.to_string()))?;
+        encryptor
+            .encrypt_directory(&src, &temp)
+            .await
+            .map_err(|e| FsError::EncryptedOp(e.to_string()))?;
 
         tokio::fs::remove_dir_all(&src).await?;
         tokio::fs::rename(&temp, &src).await?;
@@ -231,11 +227,7 @@ impl EncryptedFolderEngine {
     /// # Errors
     ///
     /// Propagates crypto and I/O errors.
-    pub async fn reveal(
-        &self,
-        path: &FsPath,
-        identity: Identity,
-    ) -> Result<RevealSession> {
+    pub async fn reveal(&self, path: &FsPath, identity: Identity) -> Result<RevealSession> {
         let record = self.lookup(path).await?;
         let duration: RevealDuration = record.reveal_duration.into();
         if record.identity_kind != identity.kind() {
@@ -347,9 +339,7 @@ impl EncryptedFolderEngine {
     /// Propagates storage errors.
     pub async fn list_encrypted(&self) -> Result<Vec<EncryptedFolderRecord>> {
         let db = self.storage.raw_database();
-        let txn = db
-            .begin_read()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_read().map_err(|e| FsError::Storage(e.into()))?;
         let table = match txn.open_table(ENCRYPTED_PATHS) {
             Ok(t) => t,
             Err(redb::TableError::TableDoesNotExist(_)) => return Ok(Vec::new()),
@@ -384,9 +374,7 @@ impl EncryptedFolderEngine {
 
     async fn lookup(&self, path: &FsPath) -> Result<EncryptedFolderRecord> {
         let db = self.storage.raw_database();
-        let txn = db
-            .begin_read()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_read().map_err(|e| FsError::Storage(e.into()))?;
         let table = match txn.open_table(ENCRYPTED_PATHS) {
             Ok(t) => t,
             Err(redb::TableError::TableDoesNotExist(_)) => {

@@ -28,8 +28,9 @@ async fn many_publishers_and_subscribers_deliver_cleanly() {
     const PUBLISHERS: usize = 10;
     const EVENTS_PER_PUBLISHER: usize = 1_000;
 
-    let counters: Vec<Arc<AtomicUsize>> =
-        (0..SUBSCRIBERS).map(|_| Arc::new(AtomicUsize::new(0))).collect();
+    let counters: Vec<Arc<AtomicUsize>> = (0..SUBSCRIBERS)
+        .map(|_| Arc::new(AtomicUsize::new(0)))
+        .collect();
 
     for counter in &counters {
         let c = Arc::clone(counter);
@@ -74,9 +75,7 @@ async fn many_publishers_and_subscribers_deliver_cleanly() {
             break;
         }
         if std::time::Instant::now() >= deadline {
-            panic!(
-                "did not reach {expected} per subscriber, smallest = {min}"
-            );
+            panic!("did not reach {expected} per subscriber, smallest = {min}");
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }

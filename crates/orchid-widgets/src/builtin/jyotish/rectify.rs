@@ -268,8 +268,7 @@ impl RectifySession {
             }
             _ => (0u16, 24 * 60),
         };
-        let base_candidates =
-            clip_intervals(&intervals, win_lo, win_hi);
+        let base_candidates = clip_intervals(&intervals, win_lo, win_hi);
         Self {
             birth_date,
             lat,
@@ -288,8 +287,13 @@ impl RectifySession {
     }
 
     fn rebuild_candidates(&mut self) {
-        let intervals =
-            lagna_intervals(self.birth_date, self.lat, self.lon, self.utc_offset_minutes, self.ayanamsa);
+        let intervals = lagna_intervals(
+            self.birth_date,
+            self.lat,
+            self.lon,
+            self.utc_offset_minutes,
+            self.ayanamsa,
+        );
         let (win_lo, win_hi) = match (self.approx_minute, self.window_half) {
             (Some(mid), Some(half)) => {
                 let lo = mid.saturating_sub(half);
@@ -323,7 +327,7 @@ impl RectifySession {
         };
         let mid = (u32::from(best.from_minute) + u32::from(best.to_minute)) / 2;
         self.approx_minute = Some(mid as u16);
-        self.window_half = Some(half_minutes.max(15).min(180));
+        self.window_half = Some(half_minutes.clamp(15, 180));
         self.rebuild_candidates();
         self.step = 4;
         true
@@ -515,11 +519,7 @@ impl RectifySession {
     }
 }
 
-fn clip_intervals(
-    intervals: &[(u16, u16, u8)],
-    win_lo: u16,
-    win_hi: u16,
-) -> Vec<(u16, u16, u8)> {
+fn clip_intervals(intervals: &[(u16, u16, u8)], win_lo: u16, win_hi: u16) -> Vec<(u16, u16, u8)> {
     intervals
         .iter()
         .copied()
@@ -688,7 +688,7 @@ mod tests {
         // so just ensure the API runs and returns confidences summing ~100.
         let results = s.results();
         let conf: u32 = results.iter().map(|c| u32::from(c.confidence_pct)).sum();
-        assert!(conf >= 90 && conf <= 110, "confidence sum={conf}");
+        assert!((90..=110).contains(&conf), "confidence sum={conf}");
     }
 
     #[test]

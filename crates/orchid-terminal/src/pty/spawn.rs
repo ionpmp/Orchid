@@ -123,7 +123,9 @@ fn assign_kill_on_close_job(
 }
 
 #[cfg(windows)]
-fn open_process_for_job(pid: u32) -> std::result::Result<windows::Win32::Foundation::HANDLE, String> {
+fn open_process_for_job(
+    pid: u32,
+) -> std::result::Result<windows::Win32::Foundation::HANDLE, String> {
     use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 
     unsafe {

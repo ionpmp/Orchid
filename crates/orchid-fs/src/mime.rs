@@ -19,9 +19,12 @@ use crate::path::FsPath;
 /// ```
 pub async fn guess_mime(path: &FsPath, sample_bytes: Option<&[u8]>) -> Option<String> {
     // Extension-based guess has the lowest cost; try it first.
-    let ext_guess = path
-        .extension()
-        .map(|e| mime_guess::from_ext(e).first_or_octet_stream().essence_str().to_string());
+    let ext_guess = path.extension().map(|e| {
+        mime_guess::from_ext(e)
+            .first_or_octet_stream()
+            .essence_str()
+            .to_string()
+    });
 
     // If we have a sample, verify against magic bytes and promote a
     // content-based answer when it differs from the extension guess.

@@ -390,13 +390,13 @@ mod tests {
                 Run {
                     text: "Hello ".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        },
+                    ..Default::default()
+                },
                 Run {
                     text: "world".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        },
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };

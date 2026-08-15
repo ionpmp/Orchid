@@ -38,9 +38,7 @@ impl MainWindowController {
             return;
         };
         if ctrl && matches!(text.as_str(), "c" | "C") {
-            if let Some(display) =
-                orchid_widgets::builtin::calculator::current_display(inst_id)
-            {
+            if let Some(display) = orchid_widgets::builtin::calculator::current_display(inst_id) {
                 if !display.is_empty() {
                     self.copy_calculator_display(&display);
                 }

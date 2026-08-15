@@ -129,8 +129,8 @@ pub fn parse_numbering_xml(bytes: &[u8]) -> Result<NumberingDefs> {
                 let local = local_name(e.name().as_ref());
                 match local.as_str() {
                     "abstractNum" => {
-                        current_abstract = attr_val(&e, "abstractNumId")
-                            .and_then(|v| v.parse().ok());
+                        current_abstract =
+                            attr_val(&e, "abstractNumId").and_then(|v| v.parse().ok());
                     }
                     "lvl" => {
                         current_level = attr_val(&e, "ilvl").and_then(|v| v.parse().ok());
@@ -193,10 +193,7 @@ pub fn parse_numbering_xml(bytes: &[u8]) -> Result<NumberingDefs> {
                 } else if local == "abstractNumId" {
                     if let (Some(nid), Some(aid_s)) = (pending_num, attr_val(&e, "val")) {
                         if let Ok(aid) = aid_s.parse::<u32>() {
-                            let kind = abstract_kinds
-                                .get(&aid)
-                                .copied()
-                                .unwrap_or(ListKind::None);
+                            let kind = abstract_kinds.get(&aid).copied().unwrap_or(ListKind::None);
                             defs.by_num_id.insert(nid, kind);
                         }
                     }

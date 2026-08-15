@@ -1,18 +1,18 @@
 //! Widget Catalog handlers for [`MainWindowController`].
 
+use slint::{ComponentHandle, SharedString};
 use std::sync::Arc;
+use tracing::{info, warn};
 use uuid::Uuid;
-use tracing::{warn, info};
-use slint::{SharedString, ComponentHandle};
 
 use orchid_i18n::LocaleManager;
 use orchid_storage::WidgetSize;
 use orchid_widgets::{CreateWidgetRequest, WidgetManager};
 
-use crate::slint_generated::{WidgetCatalog, DockWidgetType};
+use crate::slint_generated::{DockWidgetType, WidgetCatalog};
 use crate::window::spawn;
 
-use super::{MainWindowController, AddWidgetPlacement, fallback_widget_title};
+use super::{fallback_widget_title, AddWidgetPlacement, MainWindowController};
 
 impl MainWindowController {
     pub(super) fn on_catalog_dismiss(self: &Arc<Self>) {
@@ -223,10 +223,7 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
     )
 }
 
-fn apply_catalog_row_visibility(
-    g: &WidgetCatalog,
-    visible_ids: &std::collections::HashSet<&str>,
-) {
+fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collections::HashSet<&str>) {
     g.set_show_terminal(visible_ids.contains("terminal"));
     g.set_show_weather(visible_ids.contains("weather"));
     g.set_show_moon(visible_ids.contains("moon"));

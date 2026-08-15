@@ -10,7 +10,9 @@ use tempfile::TempDir;
 async fn default_gesture_bindings_are_registered() {
     let tmp = TempDir::new().expect("temp dir");
     let paths = OrchidPaths::for_testing(tmp.path());
-    let app = OrchidApp::bootstrap(paths).await.expect("bootstrap succeeds");
+    let app = OrchidApp::bootstrap(paths)
+        .await
+        .expect("bootstrap succeeds");
     let registry = app.command_registry();
 
     let bindings = default_bindings();

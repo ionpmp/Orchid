@@ -8,8 +8,8 @@
 use async_trait::async_trait;
 
 use crate::error::{Result, SearchError};
-use crate::extractors::ContentExtractor;
 use crate::extractors::text::MAX_CONTENT_BYTES;
+use crate::extractors::ContentExtractor;
 
 /// Soft ceiling for mapping a PDF during search indexing (keeps RSS bounded).
 /// Content extracted into the index is still capped at [`MAX_CONTENT_BYTES`].
@@ -23,7 +23,9 @@ pub struct PdfExtractor;
 impl ContentExtractor for PdfExtractor {
     fn can_handle(&self, mime: Option<&str>, extension: Option<&str>) -> bool {
         mime.map(|m| m == "application/pdf").unwrap_or(false)
-            || extension.map(|e| e.eq_ignore_ascii_case("pdf")).unwrap_or(false)
+            || extension
+                .map(|e| e.eq_ignore_ascii_case("pdf"))
+                .unwrap_or(false)
     }
 
     async fn extract(
@@ -84,12 +86,13 @@ fn extract_sync(bytes: &[u8], path: &str) -> Result<String> {
             });
         }
     };
-    let document = pdfium
-        .load_pdf_from_byte_slice(bytes, None)
-        .map_err(|e| SearchError::Extraction {
-            path: path.to_string(),
-            reason: format!("load: {e}"),
-        })?;
+    let document =
+        pdfium
+            .load_pdf_from_byte_slice(bytes, None)
+            .map_err(|e| SearchError::Extraction {
+                path: path.to_string(),
+                reason: format!("load: {e}"),
+            })?;
     let mut out = String::new();
     for page in document.pages().iter() {
         let text = page

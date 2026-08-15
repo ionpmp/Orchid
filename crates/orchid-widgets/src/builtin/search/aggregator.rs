@@ -69,7 +69,7 @@ impl SearchAggregator {
             }
         }
 
-        merged.sort_by(|a, b| b.score.cmp(&a.score));
+        merged.sort_by_key(|b| std::cmp::Reverse(b.score));
         let cap = (limit_per_source * 4).max(4);
         merged.truncate(cap);
         merged

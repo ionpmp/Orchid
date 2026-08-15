@@ -10,7 +10,9 @@ async fn workspace_bootstrap_with_terminal() {
     let tmp = TempDir::new().expect("temp dir");
     let paths = OrchidPaths::for_testing(tmp.path());
 
-    let app = OrchidApp::bootstrap(paths).await.expect("bootstrap succeeds");
+    let app = OrchidApp::bootstrap(paths)
+        .await
+        .expect("bootstrap succeeds");
 
     assert_eq!(app.workspace_manager().list().len(), 0);
     assert_eq!(app.widget_manager().list_instances().len(), 0);
@@ -29,7 +31,11 @@ async fn workspace_bootstrap_with_terminal() {
         initial_lifecycle: None,
         config_bytes: None,
     };
-    let widget_id = app.widget_manager().create(request).await.expect("create widget");
+    let widget_id = app
+        .widget_manager()
+        .create(request)
+        .await
+        .expect("create widget");
 
     assert_eq!(app.widget_manager().list_instances().len(), 1);
     let inst = app
@@ -38,9 +44,6 @@ async fn workspace_bootstrap_with_terminal() {
         .expect("instance");
     assert_eq!(inst.type_id, "terminal");
 
-    app.widget_manager()
-        .close(widget_id)
-        .await
-        .expect("close");
+    app.widget_manager().close(widget_id).await.expect("close");
     assert_eq!(app.widget_manager().list_instances().len(), 0);
 }

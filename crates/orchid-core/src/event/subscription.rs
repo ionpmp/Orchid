@@ -196,36 +196,62 @@ mod tests {
 
     #[test]
     fn any_matches_everything() {
-        let env = EventEnvelope::new(EventSource::System, AppStarted { version: "x".into() });
+        let env = EventEnvelope::new(
+            EventSource::System,
+            AppStarted {
+                version: "x".into(),
+            },
+        );
         assert!(EventFilter::any().matches(&env));
     }
 
     #[test]
     fn of_type_filter() {
-        let env = EventEnvelope::new(EventSource::System, AppStarted { version: "x".into() });
+        let env = EventEnvelope::new(
+            EventSource::System,
+            AppStarted {
+                version: "x".into(),
+            },
+        );
         assert!(EventFilter::of_type("app.started").matches(&env));
         assert!(!EventFilter::of_type("fs.moved").matches(&env));
     }
 
     #[test]
     fn from_source_filter() {
-        let env = EventEnvelope::new(EventSource::System, AppStarted { version: "x".into() });
+        let env = EventEnvelope::new(
+            EventSource::System,
+            AppStarted {
+                version: "x".into(),
+            },
+        );
         assert!(EventFilter::from_source(EventSource::System).matches(&env));
         assert!(!EventFilter::from_source(EventSource::User).matches(&env));
     }
 
     #[test]
     fn predicate_filter() {
-        let env = EventEnvelope::new(EventSource::System, AppStarted { version: "1.0".into() });
+        let env = EventEnvelope::new(
+            EventSource::System,
+            AppStarted {
+                version: "1.0".into(),
+            },
+        );
         let f = EventFilter::with_predicate(|e| {
-            e.downcast::<AppStarted>().is_some_and(|a| a.version.starts_with('1'))
+            e.downcast::<AppStarted>()
+                .is_some_and(|a| a.version.starts_with('1'))
         });
         assert!(f.matches(&env));
     }
 
     #[test]
     fn combined_filter_requires_all_criteria() {
-        let env = EventEnvelope::new(EventSource::User, AppStarted { version: "1.0".into() });
+        let env = EventEnvelope::new(
+            EventSource::User,
+            AppStarted {
+                version: "1.0".into(),
+            },
+        );
         let f = EventFilter::of_type("app.started").add_source(EventSource::User);
         assert!(f.matches(&env));
 

@@ -4,9 +4,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use age::x25519;
-use secrecy::SecretString;
 #[cfg(test)]
 use secrecy::ExposeSecret;
+use secrecy::SecretString;
 
 use crate::error::{CryptoError, Result};
 

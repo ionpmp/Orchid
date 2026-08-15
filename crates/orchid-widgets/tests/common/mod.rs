@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use orchid_widgets::{
-    Result, Widget, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetPayload,
-    WidgetRegistry, WidgetSnapshot, WidgetStatus,
+    Result, Widget, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetPayload, WidgetRegistry,
+    WidgetSnapshot, WidgetStatus,
 };
 use uuid::Uuid;
 
@@ -97,6 +97,7 @@ impl Widget for DummyWidget {
 /// Register a dummy widget type with the given registry.
 ///
 /// Returns a shared handle to the counters so the test can inspect them.
+#[allow(clippy::result_large_err)]
 pub fn register_dummy(registry: &WidgetRegistry) -> Arc<DummyCounters> {
     let counters = Arc::new(DummyCounters::default());
     let counters_for_factory = counters.clone();

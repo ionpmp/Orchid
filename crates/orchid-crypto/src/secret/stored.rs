@@ -47,8 +47,8 @@ pub fn resolve_stored_secret(value: &str) -> Result<String> {
     let Some(hex_blob) = value.strip_prefix(DPAPI_PREFIX) else {
         return Ok(value.to_string());
     };
-    let blob = hex::decode(hex_blob)
-        .map_err(|e| CryptoError::Dpapi(format!("invalid dpapi hex: {e}")))?;
+    let blob =
+        hex::decode(hex_blob).map_err(|e| CryptoError::Dpapi(format!("invalid dpapi hex: {e}")))?;
     let plain = dpapi::unprotect(&blob)?;
     String::from_utf8(plain.into_inner()).map_err(|e| CryptoError::Dpapi(e.to_string()))
 }

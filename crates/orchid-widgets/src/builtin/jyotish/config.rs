@@ -722,6 +722,9 @@ mod tests {
         let decoded = decode_config(&bytes).expect("decode");
         assert_eq!(decoded.profiles.len(), 2);
         assert_eq!(decoded.active_profile_index, 1);
-        assert_eq!(decoded.active_profile().map(|p| p.name.as_str()), Some("Bob"));
+        assert_eq!(
+            decoded.active_profile().map(|p| p.name.as_str()),
+            Some("Bob")
+        );
     }
 }

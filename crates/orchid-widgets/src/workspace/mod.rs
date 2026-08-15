@@ -12,9 +12,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::error::{Result, WidgetError};
-use crate::events::{
-    WorkspaceCreated, WorkspaceDeleted, WorkspaceRenamed, WorkspaceSwitched,
-};
+use crate::events::{WorkspaceCreated, WorkspaceDeleted, WorkspaceRenamed, WorkspaceSwitched};
 
 /// Maximum number of simultaneous workspaces.
 pub const MAX_WORKSPACES: usize = 9;

@@ -9,7 +9,9 @@ use std::time::{Duration, Instant};
 use orchid_terminal::{BackendSpec, PtySize, SessionManager};
 
 fn bus() -> Arc<orchid_core::EventBus> {
-    Arc::new(orchid_core::EventBus::new(orchid_core::EventBusConfig::default()))
+    Arc::new(orchid_core::EventBus::new(
+        orchid_core::EventBusConfig::default(),
+    ))
 }
 
 fn storage() -> Arc<orchid_storage::StateStore> {

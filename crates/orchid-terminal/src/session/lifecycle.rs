@@ -82,8 +82,7 @@ impl TerminalSession {
         // Start the reader → emulator pump. The pump owns `bytes_rx`
         // directly so it can block on recv without fighting the close path
         // for the `io` mutex.
-        let reader_task =
-            spawn_reader_task(Arc::clone(&session), Arc::clone(&bus), bytes_rx);
+        let reader_task = spawn_reader_task(Arc::clone(&session), Arc::clone(&bus), bytes_rx);
         *session.reader_task.lock() = Some(reader_task);
 
         *session.state.write() = SessionState::Running;

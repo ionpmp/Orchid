@@ -26,8 +26,8 @@ pub mod stored_layout;
 pub mod view;
 pub mod widget;
 
-pub use commands::build_terminal_command_set;
 pub use clipboard::ArboardClipboard;
+pub use commands::build_terminal_command_set;
 pub use palette::{palette_from_flavor, palette_from_theme, ThemeFlavor};
 pub use render::{snapshot_to_cells, RenderCell};
 pub use view::TerminalWidgetView;

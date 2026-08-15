@@ -11,7 +11,9 @@ async fn bootstrap_builds_all_subsystems() {
     let tmp = TempDir::new().expect("temp dir");
     let paths = OrchidPaths::for_testing(tmp.path());
 
-    let app = OrchidApp::bootstrap(paths).await.expect("bootstrap succeeds");
+    let app = OrchidApp::bootstrap(paths)
+        .await
+        .expect("bootstrap succeeds");
 
     assert!(!app.theme().current().meta.id.is_empty());
     assert!(!app.locale().current().as_str().is_empty());

@@ -61,9 +61,7 @@ impl CalcHandle {
 /// Snapshot the live config for the settings dialog.
 #[must_use]
 pub fn current_config(instance_id: Uuid) -> Option<CalculatorConfig> {
-    CALC_LIVE
-        .get(&instance_id)
-        .map(|h| h.config.read().clone())
+    CALC_LIVE.get(&instance_id).map(|h| h.config.read().clone())
 }
 
 /// Apply a settings-dialog mutation to the live config.
@@ -290,11 +288,10 @@ pub fn descriptor() -> WidgetDescriptor {
             }
             None => CalculatorConfig::default(),
         };
-        Ok(Box::new(CalculatorWidget::new(
-            ctx.instance_id,
-            cfg,
-            ctx.bus.clone(),
-        )) as Box<dyn Widget>)
+        Ok(
+            Box::new(CalculatorWidget::new(ctx.instance_id, cfg, ctx.bus.clone()))
+                as Box<dyn Widget>,
+        )
     });
     WidgetDescriptor {
         type_id: TYPE_ID,

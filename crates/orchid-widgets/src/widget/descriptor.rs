@@ -12,9 +12,8 @@ use orchid_storage::{LifecycleState, WidgetSize};
 ///
 /// The factory receives a [`WidgetContext`] and optionally serialised state
 /// bytes produced by a previous [`Widget::save_state`] call.
-pub type WidgetFactory = Arc<
-    dyn Fn(WidgetContext, Option<&[u8]>) -> Result<Box<dyn Widget>> + Send + Sync + 'static,
->;
+pub type WidgetFactory =
+    Arc<dyn Fn(WidgetContext, Option<&[u8]>) -> Result<Box<dyn Widget>> + Send + Sync + 'static>;
 
 /// Category shown in the dock / palette to group related widgets.
 #[allow(missing_docs)]

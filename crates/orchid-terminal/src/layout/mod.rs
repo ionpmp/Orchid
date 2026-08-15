@@ -70,7 +70,9 @@ impl LayoutRoot {
     /// Returns [`TerminalError::LayoutInvariant`] on invalid indices.
     pub fn move_tab(&mut self, from: usize, to: usize) -> Result<()> {
         if from >= self.tabs.tabs.len() || to >= self.tabs.tabs.len() {
-            return Err(TerminalError::LayoutInvariant("tab index out of range".into()));
+            return Err(TerminalError::LayoutInvariant(
+                "tab index out of range".into(),
+            ));
         }
         let tab = self.tabs.tabs.remove(from);
         self.tabs.tabs.insert(to, tab);
@@ -83,11 +85,7 @@ impl LayoutRoot {
     ///
     /// Propagates [`TerminalError::LayoutInvariant`] when the layout has no
     /// active tab.
-    pub fn split(
-        &mut self,
-        direction: SplitDirection,
-        new_session: Uuid,
-    ) -> Result<()> {
+    pub fn split(&mut self, direction: SplitDirection, new_session: Uuid) -> Result<()> {
         let tab = self
             .tabs
             .tabs
@@ -292,21 +290,17 @@ fn close_leaf(node: &mut SplitNode, target: Uuid) -> bool {
     match node {
         SplitNode::Leaf { .. } => false,
         SplitNode::Split { first, second, .. } => {
-            let first_is_leaf = matches!(first.as_ref(), SplitNode::Leaf { session } if *session == target);
-            let second_is_leaf = matches!(second.as_ref(), SplitNode::Leaf { session } if *session == target);
+            let first_is_leaf =
+                matches!(first.as_ref(), SplitNode::Leaf { session } if *session == target);
+            let second_is_leaf =
+                matches!(second.as_ref(), SplitNode::Leaf { session } if *session == target);
             if first_is_leaf {
-                let keep = std::mem::replace(
-                    second.as_mut(),
-                    SplitNode::leaf(Uuid::nil()),
-                );
+                let keep = std::mem::replace(second.as_mut(), SplitNode::leaf(Uuid::nil()));
                 *node = keep;
                 return true;
             }
             if second_is_leaf {
-                let keep = std::mem::replace(
-                    first.as_mut(),
-                    SplitNode::leaf(Uuid::nil()),
-                );
+                let keep = std::mem::replace(first.as_mut(), SplitNode::leaf(Uuid::nil()));
                 *node = keep;
                 return true;
             }
@@ -366,11 +360,7 @@ fn set_split_ratio_between(
 
 const DIVIDER_HIT_EPS: f32 = 0.008;
 
-fn divider_snapshot(
-    node: &SplitNode,
-    start: (f32, f32),
-    end: (f32, f32),
-) -> Vec<DividerSnapshot> {
+fn divider_snapshot(node: &SplitNode, start: (f32, f32), end: (f32, f32)) -> Vec<DividerSnapshot> {
     match node {
         SplitNode::Leaf { .. } => Vec::new(),
         SplitNode::Split {
@@ -386,16 +376,20 @@ fn divider_snapshot(
                 right: end.0,
                 bottom: end.1,
             };
-            let mut out = divider_snapshot(first, start, match direction {
-                SplitDirection::Horizontal => {
-                    let mid = start.0 + (end.0 - start.0) * r;
-                    (mid, end.1)
-                }
-                SplitDirection::Vertical => {
-                    let mid = start.1 + (end.1 - start.1) * r;
-                    (end.0, mid)
-                }
-            });
+            let mut out = divider_snapshot(
+                first,
+                start,
+                match direction {
+                    SplitDirection::Horizontal => {
+                        let mid = start.0 + (end.0 - start.0) * r;
+                        (mid, end.1)
+                    }
+                    SplitDirection::Vertical => {
+                        let mid = start.1 + (end.1 - start.1) * r;
+                        (end.0, mid)
+                    }
+                },
+            );
             out.extend(divider_snapshot(
                 second,
                 match direction {
@@ -445,11 +439,7 @@ fn divider_snapshot(
     }
 }
 
-fn pane_snapshot(
-    node: &SplitNode,
-    start: (f32, f32),
-    end: (f32, f32),
-) -> Vec<PaneSnapshot> {
+fn pane_snapshot(node: &SplitNode, start: (f32, f32), end: (f32, f32)) -> Vec<PaneSnapshot> {
     match node {
         SplitNode::Leaf { session } => vec![PaneSnapshot {
             session: *session,

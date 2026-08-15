@@ -45,9 +45,12 @@ fn desc(id: &str, default_shortcut: Option<&str>) -> CommandDescriptor {
 #[test]
 fn per_entry_outcomes_reported() {
     let reg = CommandRegistry::new();
-    reg.register(desc("cmd.one", Some("Ctrl+1")), factory()).unwrap();
-    reg.register(desc("cmd.two", Some("Ctrl+2")), factory()).unwrap();
-    reg.register(desc("cmd.three", Some("Ctrl+3")), factory()).unwrap();
+    reg.register(desc("cmd.one", Some("Ctrl+1")), factory())
+        .unwrap();
+    reg.register(desc("cmd.two", Some("Ctrl+2")), factory())
+        .unwrap();
+    reg.register(desc("cmd.three", Some("Ctrl+3")), factory())
+        .unwrap();
 
     let mut overrides = HashMap::new();
     overrides.insert("cmd.one".to_string(), "Ctrl+Shift+1".to_string());

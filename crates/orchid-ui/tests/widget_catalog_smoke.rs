@@ -49,10 +49,14 @@ async fn catalog_widgets_can_be_created() {
             initial_lifecycle: None,
             config_bytes: None,
         };
-        timeout(Duration::from_secs(45), app.widget_manager().create(req))
-            .await
-            .unwrap_or_else(|_| panic!("timed out after 45s while creating {type_id}"))
-            .unwrap_or_else(|e| panic!("failed to create {type_id}: {e}"));
+        let created = match timeout(Duration::from_secs(45), app.widget_manager().create(req)).await
+        {
+            Ok(result) => result,
+            Err(_) => panic!("timed out after 45s while creating {type_id}"),
+        };
+        if let Err(e) = created {
+            panic!("failed to create {type_id}: {e}");
+        }
     }
 
     assert_eq!(app.widget_manager().list_instances().len(), 13);

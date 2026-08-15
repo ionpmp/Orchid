@@ -10,11 +10,7 @@ use super::config::AyanamsaSystem;
 
 /// Soft year/month tint from −2 (challenging) to +2 (supportive).
 #[must_use]
-pub fn gochara_modifier(
-    natal_moon_rashi: u8,
-    at: DateTime<Utc>,
-    ayanamsa: AyanamsaSystem,
-) -> i8 {
+pub fn gochara_modifier(natal_moon_rashi: u8, at: DateTime<Utc>, ayanamsa: AyanamsaSystem) -> i8 {
     let jd = julian_day(at);
     let t = (jd - 2_451_545.0) / 36_525.0;
     let aya = ayanamsa_deg(jd, ayanamsa);

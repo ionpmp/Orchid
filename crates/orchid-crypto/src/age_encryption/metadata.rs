@@ -38,17 +38,7 @@ pub struct EncryptedFileMeta {
 }
 
 /// Which [`Identity`] variant produced an encrypted payload.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    Encode,
-    Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 #[serde(rename_all = "kebab-case")]
 pub enum IdentityKind {
     /// Passphrase / scrypt.

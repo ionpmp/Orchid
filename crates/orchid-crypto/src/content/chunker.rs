@@ -13,13 +13,7 @@ use crate::secret::zeroizing::ZeroizingBytes;
 /// Tunables for [`Chunker`]. `avg_size` is a target; actual chunks vary
 /// between `min_size` and `max_size` depending on content.
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    serde::Serialize,
-    serde::Deserialize,
-    bincode::Encode,
-    bincode::Decode,
+    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode,
 )]
 pub struct ChunkerConfig {
     /// Lower bound on a single chunk's length in bytes.
@@ -97,11 +91,7 @@ impl Chunker {
     /// # Errors
     ///
     /// Propagates I/O errors and whatever the sink returns.
-    pub async fn chunk_file<F, Fut>(
-        &self,
-        path: &Path,
-        mut sink: F,
-    ) -> Result<Vec<Chunk>>
+    pub async fn chunk_file<F, Fut>(&self, path: &Path, mut sink: F) -> Result<Vec<Chunk>>
     where
         F: FnMut(Chunk, ZeroizingBytes) -> Fut + Send,
         Fut: Future<Output = Result<()>> + Send,
@@ -121,7 +111,8 @@ impl Chunker {
 
         let mut out = Vec::new();
         for result in cdc {
-            let chunk = result.map_err(|e| crate::error::CryptoError::Io(std::io::Error::other(e)))?;
+            let chunk =
+                result.map_err(|e| crate::error::CryptoError::Io(std::io::Error::other(e)))?;
             let data = ZeroizingBytes::new(chunk.data);
             let meta = Chunk {
                 offset: chunk.offset,
@@ -181,8 +172,16 @@ mod tests {
         let chunker = Chunker::new(test_cfg());
         let data = test_data();
 
-        let a: Vec<_> = chunker.chunk_bytes(&data).into_iter().map(|(c, _)| c.hash).collect();
-        let b: Vec<_> = chunker.chunk_bytes(&data).into_iter().map(|(c, _)| c.hash).collect();
+        let a: Vec<_> = chunker
+            .chunk_bytes(&data)
+            .into_iter()
+            .map(|(c, _)| c.hash)
+            .collect();
+        let b: Vec<_> = chunker
+            .chunk_bytes(&data)
+            .into_iter()
+            .map(|(c, _)| c.hash)
+            .collect();
         assert_eq!(a, b);
     }
 }

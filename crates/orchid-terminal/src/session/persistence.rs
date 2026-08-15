@@ -29,9 +29,7 @@ pub fn backend_kind_to_storage(k: &BackendKind) -> orchid_storage::TerminalBacke
 ///
 /// Returns [`TerminalError::BackendUnavailable`] when a persisted Custom
 /// entry cannot be parsed.
-pub fn backend_kind_from_storage(
-    k: &orchid_storage::TerminalBackend,
-) -> Result<BackendKind> {
+pub fn backend_kind_from_storage(k: &orchid_storage::TerminalBackend) -> Result<BackendKind> {
     Ok(match k {
         orchid_storage::TerminalBackend::PowerShell => BackendKind::PowerShell,
         orchid_storage::TerminalBackend::Cmd => BackendKind::Cmd,

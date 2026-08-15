@@ -35,9 +35,8 @@ fn settings_open_command() -> (CommandDescriptor, ActionFactory) {
         }),
         icon_name: Some("settings".into()),
     };
-    let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
-        Ok(Box::new(SettingsOpenAction) as Box<dyn Action>)
-    });
+    let factory: ActionFactory =
+        Arc::new(|_: ParsedCommand| Ok(Box::new(SettingsOpenAction) as Box<dyn Action>));
     (descriptor, factory)
 }
 
@@ -54,9 +53,8 @@ fn settings_open_config_file_command() -> (CommandDescriptor, ActionFactory) {
         }),
         icon_name: Some("settings".into()),
     };
-    let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
-        Ok(Box::new(SettingsOpenConfigFileAction) as Box<dyn Action>)
-    });
+    let factory: ActionFactory =
+        Arc::new(|_: ParsedCommand| Ok(Box::new(SettingsOpenConfigFileAction) as Box<dyn Action>));
     (descriptor, factory)
 }
 
@@ -73,9 +71,8 @@ fn password_lock_command() -> (CommandDescriptor, ActionFactory) {
         }),
         icon_name: Some("password".into()),
     };
-    let factory: ActionFactory = Arc::new(|_: ParsedCommand| {
-        Ok(Box::new(PasswordLockAction) as Box<dyn Action>)
-    });
+    let factory: ActionFactory =
+        Arc::new(|_: ParsedCommand| Ok(Box::new(PasswordLockAction) as Box<dyn Action>));
     (descriptor, factory)
 }
 

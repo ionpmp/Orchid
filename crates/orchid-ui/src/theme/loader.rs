@@ -165,15 +165,16 @@ pub fn load_themes_from_dir(dir: &Path) -> Vec<Theme> {
 }
 
 fn load_theme_file(path: &Path) -> Result<Theme, String> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|e| format!("read failed: {e}"))?;
+    let contents = std::fs::read_to_string(path).map_err(|e| format!("read failed: {e}"))?;
     let doc: ThemeDocument =
         serde_json::from_str(&contents).map_err(|e| format!("parse failed: {e}"))?;
     Ok(Theme::from(doc))
 }
 
 fn parse_hex_color(s: &str) -> Result<Color, String> {
-    let hex = s.strip_prefix('#').ok_or_else(|| format!("expected leading '#': {s}"))?;
+    let hex = s
+        .strip_prefix('#')
+        .ok_or_else(|| format!("expected leading '#': {s}"))?;
     match hex.len() {
         6 => {
             let r = u8::from_str_radix(&hex[0..2], 16).map_err(|e| e.to_string())?;
@@ -196,6 +197,9 @@ fn color_to_hex(color: Color) -> String {
     if color.a == 0xFF {
         format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b)
     } else {
-        format!("#{:02X}{:02X}{:02X}{:02X}", color.r, color.g, color.b, color.a)
+        format!(
+            "#{:02X}{:02X}{:02X}{:02X}",
+            color.r, color.g, color.b, color.a
+        )
     }
 }

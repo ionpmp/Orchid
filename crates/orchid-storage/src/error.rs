@@ -83,9 +83,7 @@ pub enum StorageError {
 
     /// The database on disk was written by a newer build of Orchid than this
     /// one supports.
-    #[error(
-        "database schema version {found} is newer than supported maximum {supported_max}"
-    )]
+    #[error("database schema version {found} is newer than supported maximum {supported_max}")]
     UnsupportedSchemaVersion {
         /// Version read from the on-disk schema metadata.
         found: u32,

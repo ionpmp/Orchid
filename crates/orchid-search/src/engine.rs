@@ -353,8 +353,7 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
         ));
     }
     if let Some(prefix) = q.path_prefix.as_ref().filter(|s| !s.is_empty()) {
-        let parser =
-            QueryParser::for_index(&inner.index, vec![inner.schema.field_path]);
+        let parser = QueryParser::for_index(&inner.index, vec![inner.schema.field_path]);
         let wildcard = format!("{prefix}*");
         if let Ok(p) = parser.parse_query(&wildcard) {
             clauses.push((Occur::Must, p));
@@ -362,34 +361,26 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
     }
     if q.min_size.is_some() || q.max_size.is_some() {
         let lo = match q.min_size {
-            Some(v) => std::ops::Bound::Included(Term::from_field_u64(
-                inner.schema.field_size,
-                v,
-            )),
+            Some(v) => std::ops::Bound::Included(Term::from_field_u64(inner.schema.field_size, v)),
             None => std::ops::Bound::Unbounded,
         };
         let hi = match q.max_size {
-            Some(v) => std::ops::Bound::Included(Term::from_field_u64(
-                inner.schema.field_size,
-                v,
-            )),
+            Some(v) => std::ops::Bound::Included(Term::from_field_u64(inner.schema.field_size, v)),
             None => std::ops::Bound::Unbounded,
         };
         clauses.push((Occur::Must, Box::new(RangeQuery::new(lo, hi))));
     }
     if q.modified_after.is_some() || q.modified_before.is_some() {
         let lo = match q.modified_after {
-            Some(v) => std::ops::Bound::Included(Term::from_field_i64(
-                inner.schema.field_modified,
-                v,
-            )),
+            Some(v) => {
+                std::ops::Bound::Included(Term::from_field_i64(inner.schema.field_modified, v))
+            }
             None => std::ops::Bound::Unbounded,
         };
         let hi = match q.modified_before {
-            Some(v) => std::ops::Bound::Included(Term::from_field_i64(
-                inner.schema.field_modified,
-                v,
-            )),
+            Some(v) => {
+                std::ops::Bound::Included(Term::from_field_i64(inner.schema.field_modified, v))
+            }
             None => std::ops::Bound::Unbounded,
         };
         clauses.push((Occur::Must, Box::new(RangeQuery::new(lo, hi))));
@@ -504,7 +495,8 @@ fn snippet_from_doc(
 
 fn get_str(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<String> {
     use tantivy::schema::Value;
-    d.get_first(field).and_then(|v| v.as_str().map(ToOwned::to_owned))
+    d.get_first(field)
+        .and_then(|v| v.as_str().map(ToOwned::to_owned))
 }
 fn get_u64(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<u64> {
     use tantivy::schema::Value;
@@ -514,4 +506,3 @@ fn get_i64(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<i64> {
     use tantivy::schema::Value;
     d.get_first(field).and_then(|v| v.as_i64())
 }
-

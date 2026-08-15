@@ -140,8 +140,7 @@ impl DocumentLayout {
             } else {
                 (base_pt, 0.0)
             };
-            if run.style.font_size_pt.is_some() || run.style.superscript || run.style.subscript
-            {
+            if run.style.font_size_pt.is_some() || run.style.superscript || run.style.subscript {
                 builder.push(StyleProperty::FontSize(effective_pt), offset..end);
             }
             if let Some(ref family) = run.style.font_family {
@@ -1646,16 +1645,16 @@ mod tests {
                     runs: vec![Run {
                         text: "First".into(),
                         style: RunStyle::default(),
-            ..Default::default()
-        }],
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 }),
                 Block::Paragraph(Paragraph {
                     runs: vec![Run {
                         text: "Second line here".into(),
                         style: RunStyle::default(),
-            ..Default::default()
-        }],
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 }),
             ],
@@ -1711,8 +1710,8 @@ mod tests {
             runs: vec![Run {
                 text: text.into(),
                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                ..Default::default()
+            }],
             ..Default::default()
         }])
     }
@@ -1875,8 +1874,8 @@ mod tests {
                                 runs: vec![Run {
                                     text: "Pic".into(),
                                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                    ..Default::default()
+                                }],
                                 ..Default::default()
                             }],
                             images: vec![CellImage {
@@ -1926,8 +1925,8 @@ mod tests {
                             runs: vec![Run {
                                 text: "Pic".into(),
                                 style: RunStyle::default(),
-            ..Default::default()
-        }],
+                                ..Default::default()
+                            }],
                             ..Default::default()
                         }],
                         images: vec![CellImage {

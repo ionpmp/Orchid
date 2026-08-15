@@ -164,7 +164,9 @@ impl GroupManager {
     /// Propagates redb errors.
     pub fn restore_from_storage(&self) -> Result<usize> {
         let db = self.storage.raw_database();
-        let txn = db.begin_read().map_err(orchid_storage::StorageError::from)?;
+        let txn = db
+            .begin_read()
+            .map_err(orchid_storage::StorageError::from)?;
         let table = match txn.open_table(GROUPS_TABLE) {
             Ok(t) => t,
             Err(redb::TableError::TableDoesNotExist(_)) => return Ok(0),
@@ -183,9 +185,13 @@ impl GroupManager {
     /// Persist a single group (insert or overwrite).
     pub(crate) fn persist(&self, group: &WidgetGroup) -> Result<()> {
         let db = self.storage.raw_database();
-        let txn = db.begin_write().map_err(orchid_storage::StorageError::from)?;
+        let txn = db
+            .begin_write()
+            .map_err(orchid_storage::StorageError::from)?;
         {
-            let mut table = txn.open_table(GROUPS_TABLE).map_err(orchid_storage::StorageError::from)?;
+            let mut table = txn
+                .open_table(GROUPS_TABLE)
+                .map_err(orchid_storage::StorageError::from)?;
             let key = uuid_key(group.id);
             table
                 .insert(&key, group)
@@ -197,7 +203,9 @@ impl GroupManager {
 
     pub(crate) fn delete_persisted(&self, id: Uuid) -> Result<()> {
         let db = self.storage.raw_database();
-        let txn = db.begin_write().map_err(orchid_storage::StorageError::from)?;
+        let txn = db
+            .begin_write()
+            .map_err(orchid_storage::StorageError::from)?;
         let key = uuid_key(id);
         let missing_table = {
             match txn.open_table(GROUPS_TABLE) {
@@ -355,12 +363,7 @@ impl GroupManager {
     /// # Errors
     ///
     /// Returns [`WidgetError::GroupNotFound`] or [`WidgetError::GroupMoveError`].
-    pub async fn reorder_members(
-        &self,
-        group_id: Uuid,
-        from: usize,
-        to: usize,
-    ) -> Result<()> {
+    pub async fn reorder_members(&self, group_id: Uuid, from: usize, to: usize) -> Result<()> {
         let mut entry = self
             .groups
             .get_mut(&group_id)

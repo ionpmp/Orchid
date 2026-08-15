@@ -125,10 +125,7 @@ impl ChunkStore {
     /// # Errors
     ///
     /// Returns [`CryptoError::Io`] if the directory cannot be created.
-    pub fn new(
-        chunks_dir: PathBuf,
-        storage: Arc<orchid_storage::StateStore>,
-    ) -> Result<Self> {
+    pub fn new(chunks_dir: PathBuf, storage: Arc<orchid_storage::StateStore>) -> Result<Self> {
         Self::with_clock(chunks_dir, storage, Arc::new(SystemClock))
     }
 
@@ -151,9 +148,7 @@ impl ChunkStore {
         // Touch the table so it exists before the first read.
         let db = store.raw_db();
         let txn = db.begin_write().map_err(to_crypto)?;
-        let _ = txn
-            .open_table(CHUNK_REFS_TABLE)
-            .map_err(to_crypto)?;
+        let _ = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
         txn.commit().map_err(to_crypto)?;
         Ok(store)
     }
@@ -195,9 +190,7 @@ impl ChunkStore {
             let db = self.raw_db();
             let txn = db.begin_write().map_err(to_crypto)?;
             let existing: Option<ChunkRefInfo> = {
-                let table = txn
-                    .open_table(CHUNK_REFS_TABLE)
-                    .map_err(to_crypto)?;
+                let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
                 let got = table.get(key.as_str()).map_err(to_crypto)?;
                 got.map(|g| g.value())
             };
@@ -205,12 +198,8 @@ impl ChunkStore {
                 info.refcount = info.refcount.saturating_add(1);
                 info.last_accessed_at = now;
                 {
-                    let mut table = txn
-                        .open_table(CHUNK_REFS_TABLE)
-                        .map_err(to_crypto)?;
-                    table
-                        .insert(key.as_str(), &info)
-                        .map_err(to_crypto)?;
+                    let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+                    table.insert(key.as_str(), &info).map_err(to_crypto)?;
                 }
                 txn.commit().map_err(to_crypto)?;
                 return Ok(());
@@ -241,12 +230,8 @@ impl ChunkStore {
             let db = self.raw_db();
             let txn = db.begin_write().map_err(to_crypto)?;
             {
-                let mut table = txn
-                    .open_table(CHUNK_REFS_TABLE)
-                    .map_err(to_crypto)?;
-                table
-                    .insert(key.as_str(), &info)
-                    .map_err(to_crypto)?;
+                let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+                table.insert(key.as_str(), &info).map_err(to_crypto)?;
             }
             txn.commit().map_err(to_crypto)?;
             Ok(())
@@ -282,14 +267,8 @@ impl ChunkStore {
         {
             let db = self.raw_db();
             let txn = db.begin_read().map_err(to_crypto)?;
-            let table = txn
-                .open_table(CHUNK_REFS_TABLE)
-                .map_err(to_crypto)?;
-            if table
-                .get(key.as_str())
-                .map_err(to_crypto)?
-                .is_none()
-            {
+            let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+            if table.get(key.as_str()).map_err(to_crypto)?.is_none() {
                 return Err(CryptoError::ChunkNotFound(key));
             }
         }
@@ -317,16 +296,12 @@ impl ChunkStore {
         let db = self.raw_db();
         let txn = db.begin_write().map_err(to_crypto)?;
         {
-            let mut table = txn
-                .open_table(CHUNK_REFS_TABLE)
-                .map_err(to_crypto)?;
+            let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
             let got = table.get(key).map_err(to_crypto)?;
             let current: Option<ChunkRefInfo> = got.map(|g| g.value());
             if let Some(mut info) = current {
                 info.last_accessed_at = now;
-                table
-                    .insert(key, &info)
-                    .map_err(to_crypto)?;
+                table.insert(key, &info).map_err(to_crypto)?;
             }
         }
         txn.commit().map_err(to_crypto)?;
@@ -353,9 +328,7 @@ impl ChunkStore {
             let db = self.raw_db();
             let txn = db.begin_write().map_err(to_crypto)?;
             let info: Option<ChunkRefInfo> = {
-                let table = txn
-                    .open_table(CHUNK_REFS_TABLE)
-                    .map_err(to_crypto)?;
+                let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
                 let got = table.get(key.as_str()).map_err(to_crypto)?;
                 got.map(|g| g.value())
             };
@@ -367,20 +340,12 @@ impl ChunkStore {
             }
             info.refcount -= 1;
             let act = if info.refcount == 0 {
-                let mut table = txn
-                    .open_table(CHUNK_REFS_TABLE)
-                    .map_err(to_crypto)?;
-                let _ = table
-                    .remove(key.as_str())
-                    .map_err(to_crypto)?;
+                let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+                let _ = table.remove(key.as_str()).map_err(to_crypto)?;
                 Action::DeletedAtZero
             } else {
-                let mut table = txn
-                    .open_table(CHUNK_REFS_TABLE)
-                    .map_err(to_crypto)?;
-                table
-                    .insert(key.as_str(), &info)
-                    .map_err(to_crypto)?;
+                let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+                table.insert(key.as_str(), &info).map_err(to_crypto)?;
                 Action::Decremented(info.refcount)
             };
             txn.commit().map_err(to_crypto)?;
@@ -405,13 +370,8 @@ impl ChunkStore {
         let key = hex(hash);
         let db = self.raw_db();
         let txn = db.begin_read().map_err(to_crypto)?;
-        let table = txn
-            .open_table(CHUNK_REFS_TABLE)
-            .map_err(to_crypto)?;
-        Ok(table
-            .get(key.as_str())
-            .map_err(to_crypto)?
-            .is_some())
+        let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+        Ok(table.get(key.as_str()).map_err(to_crypto)?.is_some())
     }
 
     /// Total bytes tracked by the table. Does not stat the filesystem.
@@ -422,9 +382,7 @@ impl ChunkStore {
     pub fn total_bytes(&self) -> Result<u64> {
         let db = self.raw_db();
         let txn = db.begin_read().map_err(to_crypto)?;
-        let table = txn
-            .open_table(CHUNK_REFS_TABLE)
-            .map_err(to_crypto)?;
+        let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
         let mut total = 0_u64;
         for item in table.iter().map_err(to_crypto)? {
             let (_, v) = item.map_err(to_crypto)?;
@@ -455,7 +413,10 @@ impl ChunkStore {
                 Some(s) if s.len() == 2 => s.to_string(),
                 _ => continue,
             };
-            for entry in walkdir::WalkDir::new(outer.path()).min_depth(1).max_depth(1) {
+            for entry in walkdir::WalkDir::new(outer.path())
+                .min_depth(1)
+                .max_depth(1)
+            {
                 let entry = entry.map_err(|e| CryptoError::Io(std::io::Error::other(e)))?;
                 if !entry.file_type().is_file() {
                     continue;
@@ -470,13 +431,8 @@ impl ChunkStore {
                 let referenced = {
                     let db = self.raw_db();
                     let txn = db.begin_read().map_err(to_crypto)?;
-                    let table = txn
-                        .open_table(CHUNK_REFS_TABLE)
-                        .map_err(to_crypto)?;
-                    table
-                        .get(hex_hash.as_str())
-                        .map_err(to_crypto)?
-                        .is_some()
+                    let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
+                    table.get(hex_hash.as_str()).map_err(to_crypto)?.is_some()
                 };
                 if !referenced {
                     let size = entry

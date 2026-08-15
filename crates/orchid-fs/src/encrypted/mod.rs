@@ -18,4 +18,6 @@ pub mod marker;
 
 pub use engine::{EncryptedFolderConfig, EncryptedFolderEngine, EncryptedPathRegistered};
 pub use index::EncryptedFolderRecord;
-pub use marker::{looks_encrypted, looks_encrypted_directory, AGE_EXT, DIR_ARCHIVE_NAME, DIR_META_NAME};
+pub use marker::{
+    looks_encrypted, looks_encrypted_directory, AGE_EXT, DIR_ARCHIVE_NAME, DIR_META_NAME,
+};

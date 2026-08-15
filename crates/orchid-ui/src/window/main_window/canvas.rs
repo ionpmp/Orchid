@@ -1247,8 +1247,7 @@ impl MainWindowController {
             }
             // Prefer min size when docking so Large floating viewers fit the grid.
             let preferred = MainWindowController::minimal_widget_size(&wm, &inst.type_id);
-            let all =
-                MainWindowController::docked_instances(&wm.instances_for_workspace(w.id));
+            let all = MainWindowController::docked_instances(&wm.instances_for_workspace(w.id));
             let pos = match le.auto_place_excluding_with_growth(w.id, preferred, &all, u) {
                 Ok(p) => p,
                 Err(e) => {

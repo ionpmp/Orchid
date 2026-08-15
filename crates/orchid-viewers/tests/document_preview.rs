@@ -73,8 +73,8 @@ fn layout_respects_alignment_and_lists() {
                 runs: vec![Run {
                     text: "Bullet item".into(),
                     style: RunStyle::default(),
-            ..Default::default()
-        }],
+                    ..Default::default()
+                }],
                 list: ListKind::Bullet,
                 ..Default::default()
             }),

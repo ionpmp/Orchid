@@ -18,10 +18,8 @@ pub struct DocxExtractor;
 #[async_trait]
 impl ContentExtractor for DocxExtractor {
     fn can_handle(&self, mime: Option<&str>, extension: Option<&str>) -> bool {
-        mime.map(|m| {
-            m == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        })
-        .unwrap_or(false)
+        mime.map(|m| m == "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            .unwrap_or(false)
             || extension
                 .map(|e| e.eq_ignore_ascii_case("docx") || e.eq_ignore_ascii_case("docm"))
                 .unwrap_or(false)

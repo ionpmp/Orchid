@@ -1,4 +1,4 @@
-﻿//! Clock-widget handlers for [`MainWindowController`].
+//! Clock-widget handlers for [`MainWindowController`].
 
 use std::sync::Arc;
 
@@ -38,12 +38,7 @@ impl MainWindowController {
         self.persist_and_refresh_clock(inst_id);
     }
 
-    pub(super) fn on_clock_move_city(
-        self: &Arc<Self>,
-        id: &SharedString,
-        index: i32,
-        delta: i32,
-    ) {
+    pub(super) fn on_clock_move_city(self: &Arc<Self>, id: &SharedString, index: i32, delta: i32) {
         let Some(inst_id) = parse_uuid(id) else {
             return;
         };
@@ -85,11 +80,7 @@ impl MainWindowController {
         let Some(inst_id) = parse_uuid(id) else {
             return;
         };
-        orchid_widgets::builtin::clock::add_city(
-            inst_id,
-            name.to_string(),
-            timezone.to_string(),
-        );
+        orchid_widgets::builtin::clock::add_city(inst_id, name.to_string(), timezone.to_string());
         self.persist_and_refresh_clock(inst_id);
     }
 

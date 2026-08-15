@@ -747,8 +747,8 @@ mod tests {
                     runs: vec![Run {
                         text: "Caption".into(),
                         style: RunStyle::default(),
-            ..Default::default()
-        }],
+                        ..Default::default()
+                    }],
                     ..Default::default()
                 }),
                 Block::Image(InlineImage {

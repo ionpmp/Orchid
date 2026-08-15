@@ -22,7 +22,8 @@ pub struct LifecycleController {
 
 impl std::fmt::Debug for LifecycleController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LifecycleController").finish_non_exhaustive()
+        f.debug_struct("LifecycleController")
+            .finish_non_exhaustive()
     }
 }
 
@@ -106,7 +107,8 @@ impl LifecycleController {
                 .unwrap_or(Duration::ZERO);
             if idle_for >= idle {
                 let ctx = ctx_for(instance);
-                self.transition(instance, &ctx, LifecycleState::Sleeping).await?;
+                self.transition(instance, &ctx, LifecycleState::Sleeping)
+                    .await?;
                 count += 1;
             }
         }
@@ -138,7 +140,8 @@ impl LifecycleController {
                 .unwrap_or(Duration::ZERO);
             if sleeping_for >= since {
                 let ctx = ctx_for(instance);
-                self.transition(instance, &ctx, LifecycleState::Unloaded).await?;
+                self.transition(instance, &ctx, LifecycleState::Unloaded)
+                    .await?;
                 count += 1;
             }
         }

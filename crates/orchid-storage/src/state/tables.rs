@@ -26,8 +26,7 @@ pub const META_KEY_CURRENT: &str = "current";
 pub const SESSION_KEY_CURRENT: &str = "current";
 
 /// Singleton metadata table (schema version, timestamps, app version).
-pub const META_TABLE: TableDefinition<&str, Value<SchemaMeta>> =
-    TableDefinition::new("meta");
+pub const META_TABLE: TableDefinition<&str, Value<SchemaMeta>> = TableDefinition::new("meta");
 
 /// Primary history table, keyed by the raw 16 bytes of the entry UUID.
 pub const HISTORY_TABLE: TableDefinition<&[u8; 16], Value<HistoryEntry>> =

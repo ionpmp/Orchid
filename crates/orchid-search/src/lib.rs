@@ -22,8 +22,8 @@ pub mod schema;
 pub use engine::{DocumentKind, IndexDocument, SearchEngine};
 pub use error::{Result, SearchError};
 pub use extractors::{ContentExtractor, Extractor};
-pub use indexer::{scheduler::IndexTask, watcher::IndexScope, IndexFsSubscriber, IndexScheduler};
 pub use indexer::crawl_roots;
+pub use indexer::{scheduler::IndexTask, watcher::IndexScope, IndexFsSubscriber, IndexScheduler};
 pub use query::{Query, QueryBuilder, SearchHit, SearchResults, Snippet};
 pub use schema::Schema;
 

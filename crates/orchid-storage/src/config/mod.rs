@@ -14,9 +14,7 @@ pub mod loader;
 pub mod schema;
 pub mod watcher;
 
-pub use network_bookmarks::{
-    load_network_bookmarks, merge_network_places, save_network_bookmarks,
-};
+pub use network_bookmarks::{load_network_bookmarks, merge_network_places, save_network_bookmarks};
 
 pub use loader::{ConfigLoader, DEFAULT_CONFIG_TOML};
 pub use schema::{

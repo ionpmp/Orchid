@@ -56,7 +56,9 @@ impl WeatherConfig {
     /// Active city (after normalize).
     #[must_use]
     pub fn active_location(&self) -> &Location {
-        &self.locations[self.active_index.min(self.locations.len().saturating_sub(1))]
+        &self.locations[self
+            .active_index
+            .min(self.locations.len().saturating_sub(1))]
     }
 }
 

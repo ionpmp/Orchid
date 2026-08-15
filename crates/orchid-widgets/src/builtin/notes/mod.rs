@@ -238,10 +238,7 @@ pub fn find(instance_id: Uuid, query: &str, forward: bool) {
 #[must_use]
 pub fn text_stats(body: &str) -> (i32, i32, i32) {
     let chars = body.chars().count() as i32;
-    let words = body
-        .split_whitespace()
-        .filter(|w| !w.is_empty())
-        .count() as i32;
+    let words = body.split_whitespace().filter(|w| !w.is_empty()).count() as i32;
     let lines = if body.is_empty() {
         1
     } else {
@@ -448,11 +445,7 @@ pub fn descriptor() -> WidgetDescriptor {
             None => NotesConfig::default(),
         };
         cfg.normalize();
-        Ok(Box::new(NotesWidget::new(
-            ctx.instance_id,
-            cfg,
-            ctx.bus.clone(),
-        )) as Box<dyn Widget>)
+        Ok(Box::new(NotesWidget::new(ctx.instance_id, cfg, ctx.bus.clone())) as Box<dyn Widget>)
     });
     WidgetDescriptor {
         type_id: TYPE_ID,

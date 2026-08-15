@@ -5,22 +5,22 @@
 #![allow(clippy::result_large_err)]
 
 pub mod app;
+mod autostart;
 mod commands;
 pub mod error;
 mod slint_generated;
-mod autostart;
 mod system_theme;
-pub mod theme;
 mod terminal_font_metrics;
 mod terminal_raster;
+pub mod theme;
 pub mod widgets;
 pub mod window;
 
 pub use app::OrchidApp;
 pub use error::{Result, UiError};
 pub use theme::{
-    Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, Theme, ThemeManager,
-    ThemeMeta, TypographyTokens,
+    Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, Theme, ThemeManager, ThemeMeta,
+    TypographyTokens,
 };
 pub use widgets::terminal::{
     palette_from_flavor, palette_from_theme, snapshot_to_cells, terminal_descriptor,

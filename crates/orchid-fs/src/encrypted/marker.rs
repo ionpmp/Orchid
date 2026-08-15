@@ -15,7 +15,9 @@ pub const DIR_META_NAME: &str = ".orchid-encrypted.meta";
 /// extension and a matching sidecar is expected nearby).
 #[must_use]
 pub fn looks_encrypted(path: &FsPath) -> bool {
-    path.extension().map(|e| e.eq_ignore_ascii_case(AGE_EXT)).unwrap_or(false)
+    path.extension()
+        .map(|e| e.eq_ignore_ascii_case(AGE_EXT))
+        .unwrap_or(false)
 }
 
 /// Returns true when `path` is a directory containing Orchid's encrypted-folder

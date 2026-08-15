@@ -152,8 +152,7 @@ mod tests {
     fn sample_db() -> (tempfile::TempDir, PasswordDatabase, Uuid) {
         let td = tempfile::tempdir().unwrap();
         let db =
-            PasswordDatabase::create(&td.path().join("db.kdbx"), SecretString::from("pw"))
-                .unwrap();
+            PasswordDatabase::create(&td.path().join("db.kdbx"), SecretString::from("pw")).unwrap();
         let root = db.root_group().unwrap().id;
         for (title, tag) in [
             ("GitHub", "work"),

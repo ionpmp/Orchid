@@ -96,18 +96,30 @@ pub struct MoonData {
 pub fn julian_day(at: DateTime<Utc>) -> f64 {
     // Standard conversion (Meeus eq. 7.1).
     let naive = at.naive_utc();
-    let y = naive.date().format("%Y").to_string().parse::<i32>().unwrap_or(2000);
-    let m = naive.date().format("%m").to_string().parse::<i32>().unwrap_or(1);
-    let d = naive.date().format("%d").to_string().parse::<i32>().unwrap_or(1);
+    let y = naive
+        .date()
+        .format("%Y")
+        .to_string()
+        .parse::<i32>()
+        .unwrap_or(2000);
+    let m = naive
+        .date()
+        .format("%m")
+        .to_string()
+        .parse::<i32>()
+        .unwrap_or(1);
+    let d = naive
+        .date()
+        .format("%d")
+        .to_string()
+        .parse::<i32>()
+        .unwrap_or(1);
     let frac = (naive.time().num_seconds_from_midnight() as f64) / 86_400.0;
 
     let (y2, m2) = if m <= 2 { (y - 1, m + 12) } else { (y, m) };
     let a = (y2 as f64 / 100.0).floor();
     let b = 2.0 - a + (a / 4.0).floor();
-    (365.25 * (y2 as f64 + 4716.0)).floor()
-        + (30.6001 * (m2 as f64 + 1.0)).floor()
-        + d as f64
-        + b
+    (365.25 * (y2 as f64 + 4716.0)).floor() + (30.6001 * (m2 as f64 + 1.0)).floor() + d as f64 + b
         - 1524.5
         + frac
 }
@@ -131,12 +143,9 @@ pub fn compute_moon(lat_deg: f64, lon_deg: f64, at: DateTime<Utc>) -> MoonData {
 
     // Mean distance + perigee/apogee oscillation (Meeus ch.47 simplified).
     let t = (jd - 2_451_545.0) / 36_525.0;
-    let d_mean_anomaly =
-        357.5291092 + 35_999.050_290_9 * t - 0.000_153_7 * t * t;
-    let moon_mean_anomaly =
-        134.963_411_4 + 477_198.867_631_3 * t + 0.008_997 * t * t;
-    let mean_elongation =
-        297.850_192_1 + 445_267.111_40 * t - 0.001_881 * t * t;
+    let d_mean_anomaly = 357.5291092 + 35_999.050_290_9 * t - 0.000_153_7 * t * t;
+    let moon_mean_anomaly = 134.963_411_4 + 477_198.867_631_3 * t + 0.008_997 * t * t;
+    let mean_elongation = 297.850_192_1 + 445_267.111_40 * t - 0.001_881 * t * t;
 
     let mm = moon_mean_anomaly.to_radians();
     let d = mean_elongation.to_radians();
@@ -149,7 +158,8 @@ pub fn compute_moon(lat_deg: f64, lon_deg: f64, at: DateTime<Utc>) -> MoonData {
             - 2_955.968 * (2.0 * d).cos()
             - 569.925 * (2.0 * mm).cos()
             + 246.158 * (2.0 * mm - 2.0 * d).cos()
-            - 152.138 * (2.0 * d + m).cos()) / 1.0;
+            - 152.138 * (2.0 * d + m).cos())
+            / 1.0;
 
     // Angular diameter = 2 * atan(R_moon / distance) ≈ 1737.4*2 / d * 206265 arcsec.
     let ang_diam_arcmin = 2.0 * 1737.4 / distance_km * 206_265.0 / 60.0;
@@ -272,9 +282,7 @@ fn altitude(body: SolarBody, lat_deg: f64, lon_deg: f64, at: DateTime<Utc>) -> f
     };
 
     // Greenwich sidereal time (Meeus eq. 12.4).
-    let gmst_deg = (280.460_618_4
-        + 360.985_647_366_29 * (jd - 2_451_545.0))
-        .rem_euclid(360.0);
+    let gmst_deg = (280.460_618_4 + 360.985_647_366_29 * (jd - 2_451_545.0)).rem_euclid(360.0);
     let lst_deg = (gmst_deg + lon_deg).rem_euclid(360.0);
     let hour_angle_deg = (lst_deg - ra_deg).rem_euclid(360.0);
 
@@ -294,7 +302,11 @@ fn sun_equatorial(t: f64) -> (f64, f64) {
     let epsilon = 23.439 - 0.000_000_4 * t;
     let lam = lambda.to_radians();
     let eps = epsilon.to_radians();
-    let ra = lam.sin().mul_add(eps.cos(), 0.0).atan2(lam.cos()).to_degrees();
+    let ra = lam
+        .sin()
+        .mul_add(eps.cos(), 0.0)
+        .atan2(lam.cos())
+        .to_degrees();
     let dec = (eps.sin() * lam.sin()).asin().to_degrees();
     ((ra + 360.0).rem_euclid(360.0), dec)
 }
@@ -302,15 +314,21 @@ fn sun_equatorial(t: f64) -> (f64, f64) {
 fn moon_equatorial(t: f64) -> (f64, f64) {
     // Very simplified Moon position (Meeus ch.47, main terms only).
     let l_prime = (218.316_4 + 481_267.881_4 * t).rem_euclid(360.0);
-    let mp = (134.963_4 + 477_198.867_6 * t).rem_euclid(360.0).to_radians();
-    let m = (357.529_1 + 35_999.050_3 * t).rem_euclid(360.0).to_radians();
-    let d = (297.850_2 + 445_267.111_5 * t).rem_euclid(360.0).to_radians();
-    let f = (93.272_1 + 483_202.017_5 * t).rem_euclid(360.0).to_radians();
+    let mp = (134.963_4 + 477_198.867_6 * t)
+        .rem_euclid(360.0)
+        .to_radians();
+    let m = (357.529_1 + 35_999.050_3 * t)
+        .rem_euclid(360.0)
+        .to_radians();
+    let d = (297.850_2 + 445_267.111_5 * t)
+        .rem_euclid(360.0)
+        .to_radians();
+    let f = (93.272_1 + 483_202.017_5 * t)
+        .rem_euclid(360.0)
+        .to_radians();
 
     // Longitude correction (main periodic terms).
-    let lambda = l_prime
-        + 6.289 * mp.sin()
-        - 1.274 * (2.0 * d - mp).sin()
+    let lambda = l_prime + 6.289 * mp.sin() - 1.274 * (2.0 * d - mp).sin()
         + 0.658 * (2.0 * d).sin()
         - 0.186 * m.sin();
     // Latitude (from eclipticF).
@@ -354,7 +372,10 @@ mod tests {
         let at = Utc.with_ymd_and_hms(2024, 1, 11, 11, 57, 0).unwrap();
         let data = compute_moon(0.0, 0.0, at);
         assert!(
-            matches!(data.phase_name, MoonPhase::NewMoon | MoonPhase::WaningCrescent | MoonPhase::WaxingCrescent),
+            matches!(
+                data.phase_name,
+                MoonPhase::NewMoon | MoonPhase::WaningCrescent | MoonPhase::WaxingCrescent
+            ),
             "phase was {:?} (angle={})",
             data.phase_name,
             data.phase_angle_deg

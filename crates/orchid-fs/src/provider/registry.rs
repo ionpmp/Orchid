@@ -88,7 +88,10 @@ impl FsProviderRegistry {
     /// Resolve the provider responsible for `path`'s scheme.
     #[must_use]
     pub fn for_path(&self, path: &FsPath) -> Option<Arc<dyn FsProvider>> {
-        let id = self.by_scheme.get(path.scheme()).map(|e| e.value().clone())?;
+        let id = self
+            .by_scheme
+            .get(path.scheme())
+            .map(|e| e.value().clone())?;
         self.get(&id)
     }
 

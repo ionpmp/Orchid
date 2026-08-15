@@ -36,6 +36,7 @@ debug/
 # ---------------------------------------------------------------------------
 orchid_err.txt
 orchid_out.txt
+clippy-*.txt
 *.log
 perf.data
 perf.data.old

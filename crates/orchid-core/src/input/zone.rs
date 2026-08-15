@@ -103,7 +103,10 @@ mod tests {
 
     #[test]
     fn corners_classify_as_cold() {
-        assert_eq!(ScreenZone::classify(Point::new(0.0, 0.0), b()), ScreenZone::Cold);
+        assert_eq!(
+            ScreenZone::classify(Point::new(0.0, 0.0), b()),
+            ScreenZone::Cold
+        );
         assert_eq!(
             ScreenZone::classify(Point::new(1920.0, 0.0), b()),
             ScreenZone::Cold

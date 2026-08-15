@@ -75,7 +75,12 @@ mod tests {
         let (_h, mut rx) = bus
             .subscribe(EventFilter::of_type("fs.moved"), HandlerPriority::Normal)
             .unwrap();
-        bus.publish(EventSource::System, AppStarted { version: "x".into() });
+        bus.publish(
+            EventSource::System,
+            AppStarted {
+                version: "x".into(),
+            },
+        );
         let r = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await;
         assert!(r.is_err(), "should time out with no deliveries");
     }
@@ -105,15 +110,19 @@ mod tests {
             })
             .unwrap();
 
-        bus.publish(EventSource::System, AppStarted { version: "1".into() });
+        bus.publish(
+            EventSource::System,
+            AppStarted {
+                version: "1".into(),
+            },
+        );
         assert_eq!(order.lock().clone(), vec!["critical", "normal", "audit"]);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn same_priority_fires_in_fifo_order() {
         let bus = bus();
-        let order: Arc<parking_lot::Mutex<Vec<u8>>> =
-            Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let order: Arc<parking_lot::Mutex<Vec<u8>>> = Arc::new(parking_lot::Mutex::new(Vec::new()));
         for i in 0..5_u8 {
             let o = Arc::clone(&order);
             bus.subscribe_sync(EventFilter::any(), HandlerPriority::Normal, move |_| {
@@ -122,7 +131,12 @@ mod tests {
             .unwrap()
             .leak();
         }
-        bus.publish(EventSource::System, AppStarted { version: "1".into() });
+        bus.publish(
+            EventSource::System,
+            AppStarted {
+                version: "1".into(),
+            },
+        );
         assert_eq!(order.lock().clone(), vec![0, 1, 2, 3, 4]);
     }
 
@@ -137,10 +151,20 @@ mod tests {
                     c.fetch_add(1, Ordering::Relaxed);
                 })
                 .unwrap();
-            bus.publish(EventSource::System, AppStarted { version: "1".into() });
+            bus.publish(
+                EventSource::System,
+                AppStarted {
+                    version: "1".into(),
+                },
+            );
             assert_eq!(counter.load(Ordering::Relaxed), 1);
         }
-        bus.publish(EventSource::System, AppStarted { version: "2".into() });
+        bus.publish(
+            EventSource::System,
+            AppStarted {
+                version: "2".into(),
+            },
+        );
         // No subscriber should remain; metrics record the publish but nothing
         // is delivered.
         assert_eq!(bus.metrics().active_subscriptions, 0);
@@ -159,7 +183,12 @@ mod tests {
                 .unwrap();
             h.leak();
         }
-        bus.publish(EventSource::System, AppStarted { version: "x".into() });
+        bus.publish(
+            EventSource::System,
+            AppStarted {
+                version: "x".into(),
+            },
+        );
         assert_eq!(counter.load(Ordering::Relaxed), 1);
     }
 
@@ -177,9 +206,14 @@ mod tests {
                 }
             })
             .unwrap();
-        bus.publish_and_flush(EventSource::System, AppStarted { version: "1".into() })
-            .await
-            .unwrap();
+        bus.publish_and_flush(
+            EventSource::System,
+            AppStarted {
+                version: "1".into(),
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(counter.load(Ordering::Relaxed), 1);
     }
 
@@ -192,11 +226,21 @@ mod tests {
         // still valid and reflects the state.
         assert!(bus.is_shutdown());
         assert_eq!(
-            bus.publish(EventSource::System, AppStarted { version: "x".into() }),
+            bus.publish(
+                EventSource::System,
+                AppStarted {
+                    version: "x".into()
+                }
+            ),
             0
         );
         let err = bus
-            .publish_and_flush(EventSource::System, AppStarted { version: "x".into() })
+            .publish_and_flush(
+                EventSource::System,
+                AppStarted {
+                    version: "x".into(),
+                },
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, crate::CoreError::BusShutdown));
@@ -225,7 +269,11 @@ mod tests {
         // Buffer holds the two newest events (3 and 4).
         let first = rx.recv().await.expect("first");
         let second = rx.recv().await.expect("second");
-        let v1 = first.downcast::<AppStarted>().expect("AppStarted").version.as_str();
+        let v1 = first
+            .downcast::<AppStarted>()
+            .expect("AppStarted")
+            .version
+            .as_str();
         let v2 = second
             .downcast::<AppStarted>()
             .expect("AppStarted")

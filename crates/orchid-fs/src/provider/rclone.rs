@@ -813,7 +813,10 @@ fn push_user_pass(
     Ok(())
 }
 
-fn resolve_mount_secret(mount: &orchid_storage::NetworkMountConfig, stored: &str) -> Result<String> {
+fn resolve_mount_secret(
+    mount: &orchid_storage::NetworkMountConfig,
+    stored: &str,
+) -> Result<String> {
     let plaintext =
         orchid_crypto::resolve_stored_secret(stored).map_err(|e| FsError::InvalidPath {
             reason: format!("mount `{}` password decrypt failed: {e}", mount.name),
@@ -844,11 +847,7 @@ fn rclone_transfer_args(
             "--create-empty-src-dirs".into(),
         ]
     } else {
-        vec![
-            if is_move { "moveto" } else { "copyto" }.into(),
-            src,
-            dst,
-        ]
+        vec![if is_move { "moveto" } else { "copyto" }.into(), src, dst]
     };
     if options.resume {
         args.extend([

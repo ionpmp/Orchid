@@ -236,10 +236,7 @@ impl GestureRecognizer {
     /// let out = rec.feed(&InputEvent::Touch(ended));
     /// assert!(matches!(out.first(), Some(RecognizedGesture::Tap { .. })));
     /// ```
-    pub fn feed(
-        &mut self,
-        event: &InputEvent,
-    ) -> SmallVec<[RecognizedGesture; 2]> {
+    pub fn feed(&mut self, event: &InputEvent) -> SmallVec<[RecognizedGesture; 2]> {
         match event {
             InputEvent::Touch(t) => self.feed_touch(t),
             InputEvent::Pen(p) => self.feed_pen(p),
@@ -250,10 +247,7 @@ impl GestureRecognizer {
 
     /// Drive time-based gestures (currently: [`RecognizedGesture::LongPress`])
     /// without requiring additional pointer motion.
-    pub fn tick(
-        &mut self,
-        now: Instant,
-    ) -> SmallVec<[RecognizedGesture; 2]> {
+    pub fn tick(&mut self, now: Instant) -> SmallVec<[RecognizedGesture; 2]> {
         let long_press_ms = self.config.read().long_press_ms;
         let threshold = Duration::from_millis(long_press_ms as u64);
         let mut out: SmallVec<[RecognizedGesture; 2]> = SmallVec::new();
@@ -420,18 +414,15 @@ impl GestureRecognizer {
             positions.push(s.last_position);
         }
         let initial_distance = positions[0].distance_to(positions[1]);
-        let initial_angle = (positions[1].y - positions[0].y)
-            .atan2(positions[1].x - positions[0].x);
+        let initial_angle =
+            (positions[1].y - positions[0].y).atan2(positions[1].x - positions[0].x);
         PairBaseline {
             initial_distance,
             initial_angle,
         }
     }
 
-    fn detect_pinch_rotate(
-        &self,
-        baseline: PairBaseline,
-    ) -> Option<RecognizedGesture> {
+    fn detect_pinch_rotate(&self, baseline: PairBaseline) -> Option<RecognizedGesture> {
         let mut positions: SmallVec<[Point; 2]> = smallvec![];
         for s in self.pointers.values() {
             positions.push(s.last_position);
@@ -453,8 +444,7 @@ impl GestureRecognizer {
             );
             return Some(RecognizedGesture::Pinch { center, scale });
         }
-        let angle = (positions[1].y - positions[0].y)
-            .atan2(positions[1].x - positions[0].x);
+        let angle = (positions[1].y - positions[0].y).atan2(positions[1].x - positions[0].x);
         let delta = angle - baseline.initial_angle;
         if delta.abs() >= cfg.rotate_min_radians {
             let center = Point::new(
@@ -518,10 +508,7 @@ mod tests {
     use super::*;
 
     fn recognizer() -> GestureRecognizer {
-        GestureRecognizer::new(
-            GestureConfig::default(),
-            ScreenBounds::new(1920.0, 1080.0),
-        )
+        GestureRecognizer::new(GestureConfig::default(), ScreenBounds::new(1920.0, 1080.0))
     }
 
     fn touch(id: u32, phase: TouchPhase, x: f32, y: f32, at: Instant) -> InputEvent {
@@ -555,7 +542,13 @@ mod tests {
         let mut r = recognizer();
         let t0 = Instant::now();
         r.feed(&touch(1, TouchPhase::Began, 100.0, 100.0, t0));
-        r.feed(&touch(1, TouchPhase::Ended, 100.0, 100.0, t0 + Duration::from_millis(30)));
+        r.feed(&touch(
+            1,
+            TouchPhase::Ended,
+            100.0,
+            100.0,
+            t0 + Duration::from_millis(30),
+        ));
         let t1 = t0 + Duration::from_millis(80);
         r.feed(&touch(2, TouchPhase::Began, 101.0, 100.0, t1));
         let out = r.feed(&touch(
@@ -565,7 +558,10 @@ mod tests {
             100.0,
             t1 + Duration::from_millis(30),
         ));
-        assert!(matches!(out.first(), Some(RecognizedGesture::DoubleTap { .. })));
+        assert!(matches!(
+            out.first(),
+            Some(RecognizedGesture::DoubleTap { .. })
+        ));
     }
 
     #[test]
@@ -576,7 +572,10 @@ mod tests {
         let out = r.tick(t0 + Duration::from_millis(550));
         assert!(matches!(
             out.first(),
-            Some(RecognizedGesture::LongPress { duration_ms: 500, .. })
+            Some(RecognizedGesture::LongPress {
+                duration_ms: 500,
+                ..
+            })
         ));
     }
 
@@ -594,7 +593,9 @@ mod tests {
         ));
         match out.first() {
             Some(RecognizedGesture::Swipe {
-                direction, velocity, ..
+                direction,
+                velocity,
+                ..
             }) => {
                 assert_eq!(*direction, SwipeDirection::Right);
                 assert!(*velocity > 0.5);
@@ -617,7 +618,10 @@ mod tests {
         ));
         assert!(matches!(
             out.first(),
-            Some(RecognizedGesture::EdgeSwipe { edge: Edge::Left, .. })
+            Some(RecognizedGesture::EdgeSwipe {
+                edge: Edge::Left,
+                ..
+            })
         ));
     }
 

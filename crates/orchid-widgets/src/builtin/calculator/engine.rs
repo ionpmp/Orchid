@@ -74,7 +74,7 @@ impl AngleMode {
         }
     }
 
-    pub(crate) fn from_radians(self, x: f64) -> f64 {
+    pub(crate) fn radians_to(self, x: f64) -> f64 {
         match self {
             Self::Degrees => x.to_degrees(),
             Self::Radians => x,
@@ -244,11 +244,7 @@ impl BinOp {
 #[derive(Debug, Clone)]
 enum Frame {
     /// Value waiting for a binary op (and expression prefix for display).
-    Pending {
-        value: f64,
-        op: BinOp,
-        expr: String,
-    },
+    Pending { value: f64, op: BinOp, expr: String },
     /// Open parenthesis: saved pending chain + display prefix.
     Paren {
         pending: Option<(f64, BinOp, String)>,
@@ -382,7 +378,7 @@ impl Calculator {
                 let angle = self.angle;
                 if self.second {
                     self.second = false;
-                    self.unary("sin⁻¹", |x| finite(angle.from_radians(x.asin())));
+                    self.unary("sin⁻¹", |x| finite(angle.radians_to(x.asin())));
                 } else {
                     self.unary("sin", |x| finite(angle.to_radians(x).sin()));
                 }
@@ -391,7 +387,7 @@ impl Calculator {
                 let angle = self.angle;
                 if self.second {
                     self.second = false;
-                    self.unary("cos⁻¹", |x| finite(angle.from_radians(x.acos())));
+                    self.unary("cos⁻¹", |x| finite(angle.radians_to(x.acos())));
                 } else {
                     self.unary("cos", |x| finite(angle.to_radians(x).cos()));
                 }
@@ -400,22 +396,22 @@ impl Calculator {
                 let angle = self.angle;
                 if self.second {
                     self.second = false;
-                    self.unary("tan⁻¹", |x| finite(angle.from_radians(x.atan())));
+                    self.unary("tan⁻¹", |x| finite(angle.radians_to(x.atan())));
                 } else {
                     self.unary("tan", |x| finite(angle.to_radians(x).tan()));
                 }
             }
             CalcKey::Asin => {
                 let angle = self.angle;
-                self.unary("sin⁻¹", |x| finite(angle.from_radians(x.asin())));
+                self.unary("sin⁻¹", |x| finite(angle.radians_to(x.asin())));
             }
             CalcKey::Acos => {
                 let angle = self.angle;
-                self.unary("cos⁻¹", |x| finite(angle.from_radians(x.acos())));
+                self.unary("cos⁻¹", |x| finite(angle.radians_to(x.acos())));
             }
             CalcKey::Atan => {
                 let angle = self.angle;
-                self.unary("tan⁻¹", |x| finite(angle.from_radians(x.atan())));
+                self.unary("tan⁻¹", |x| finite(angle.radians_to(x.atan())));
             }
             CalcKey::Sinh => self.unary("sinh", |x| finite(x.sinh())),
             CalcKey::Cosh => self.unary("cosh", |x| finite(x.cosh())),
@@ -1086,11 +1082,7 @@ fn parse_entry(s: &str) -> Option<f64> {
     if s.ends_with('e') || s.ends_with('E') {
         return s[..s.len() - 1].parse().ok().or(Some(0.0));
     }
-    if s.ends_with("e-")
-        || s.ends_with("E-")
-        || s.ends_with("e+")
-        || s.ends_with("E+")
-    {
+    if s.ends_with("e-") || s.ends_with("E-") || s.ends_with("e+") || s.ends_with("E+") {
         return s[..s.len() - 2].parse().ok().or(Some(0.0));
     }
     s.parse().ok()

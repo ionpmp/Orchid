@@ -17,7 +17,7 @@ mod win {
         HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE, REG_BINARY, REG_SZ,
     };
     use windows::Win32::UI::Shell::{
-        SHGetKnownFolderPath, FOLDERID_CommonStartup, FOLDERID_Startup, KF_FLAG_DEFAULT,
+        FOLDERID_CommonStartup, FOLDERID_Startup, SHGetKnownFolderPath, KF_FLAG_DEFAULT,
     };
 
     use super::StartupRowView;
@@ -58,7 +58,11 @@ mod win {
             "Common Startup",
             "common-folder",
         ));
-        out.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+        out.sort_by(|a, b| {
+            a.name
+                .to_ascii_lowercase()
+                .cmp(&b.name.to_ascii_lowercase())
+        });
         Ok(out)
     }
 
@@ -95,8 +99,13 @@ mod win {
             RegOpenKeyExW(root, approved_path, Some(0), KEY_SET_VALUE, &mut key)
                 .ok()
                 .map_err(|e| format!("open StartupApproved: {e}"))?;
-            let status =
-                RegSetValueExW(key, PCWSTR(name_wide.as_ptr()), Some(0), REG_BINARY, Some(&data));
+            let status = RegSetValueExW(
+                key,
+                PCWSTR(name_wide.as_ptr()),
+                Some(0),
+                REG_BINARY,
+                Some(&data),
+            );
             let _ = RegCloseKey(key);
             status
                 .ok()
@@ -128,8 +137,14 @@ mod win {
         let mut out = Vec::new();
         unsafe {
             let mut key = HKEY::default();
-            if RegOpenKeyExW(root, PCWSTR(path_wide.as_ptr()), Some(0), KEY_READ, &mut key)
-                .is_err()
+            if RegOpenKeyExW(
+                root,
+                PCWSTR(path_wide.as_ptr()),
+                Some(0),
+                KEY_READ,
+                &mut key,
+            )
+            .is_err()
             {
                 return out;
             }

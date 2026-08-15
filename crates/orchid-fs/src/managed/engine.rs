@@ -83,7 +83,8 @@ struct ManagedEngineInner {
 
 impl std::fmt::Debug for ManagedFolderEngine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ManagedFolderEngine").finish_non_exhaustive()
+        f.debug_struct("ManagedFolderEngine")
+            .finish_non_exhaustive()
     }
 }
 
@@ -128,9 +129,7 @@ impl ManagedFolderEngine {
     /// Propagates storage errors.
     pub async fn add_folder(&self, cfg: ManagedFolderConfig) -> Result<()> {
         let db = self.inner.storage.raw_database();
-        let txn = db
-            .begin_write()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_write().map_err(|e| FsError::Storage(e.into()))?;
         {
             let mut table = txn
                 .open_table(MANAGED_FOLDERS)
@@ -151,9 +150,7 @@ impl ManagedFolderEngine {
     /// Propagates storage errors.
     pub async fn remove_folder(&self, path: &FsPath) -> Result<()> {
         let db = self.inner.storage.raw_database();
-        let txn = db
-            .begin_write()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_write().map_err(|e| FsError::Storage(e.into()))?;
         {
             let mut table = txn
                 .open_table(MANAGED_FOLDERS)
@@ -173,9 +170,7 @@ impl ManagedFolderEngine {
     /// Propagates storage errors.
     pub async fn list_folders(&self) -> Result<Vec<ManagedFolderConfig>> {
         let db = self.inner.storage.raw_database();
-        let txn = db
-            .begin_read()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_read().map_err(|e| FsError::Storage(e.into()))?;
         let table = match txn.open_table(MANAGED_FOLDERS) {
             Ok(t) => t,
             Err(redb::TableError::TableDoesNotExist(_)) => return Ok(Vec::new()),
@@ -217,18 +212,14 @@ impl ManagedFolderEngine {
 
         self.inner.bus.publish(
             orchid_core::EventSource::Subsystem("fs.managed".into()),
-            ManagedFileIngestStartedEvent {
-                path: path.clone(),
-            },
+            ManagedFileIngestStartedEvent { path: path.clone() },
         );
         let os_path = match path.to_local() {
             Ok(p) => p,
             Err(e) => {
                 self.inner.bus.publish(
                     orchid_core::EventSource::Subsystem("fs.managed".into()),
-                    ManagedFileIngestFailedEvent {
-                        path: path.clone(),
-                    },
+                    ManagedFileIngestFailedEvent { path: path.clone() },
                 );
                 return Err(e);
             }
@@ -238,9 +229,7 @@ impl ManagedFolderEngine {
             Err(e) => {
                 self.inner.bus.publish(
                     orchid_core::EventSource::Subsystem("fs.managed".into()),
-                    ManagedFileIngestFailedEvent {
-                        path: path.clone(),
-                    },
+                    ManagedFileIngestFailedEvent { path: path.clone() },
                 );
                 return Err(e.into());
             }
@@ -248,9 +237,7 @@ impl ManagedFolderEngine {
         let manifest_id = manifest.id;
 
         let db = self.inner.storage.raw_database();
-        let txn = db
-            .begin_write()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_write().map_err(|e| FsError::Storage(e.into()))?;
         {
             let mut table = txn
                 .open_table(MANAGED_MANIFESTS)
@@ -262,9 +249,7 @@ impl ManagedFolderEngine {
         if let Err(e) = txn.commit().map_err(|e| FsError::Storage(e.into())) {
             self.inner.bus.publish(
                 orchid_core::EventSource::Subsystem("fs.managed".into()),
-                ManagedFileIngestFailedEvent {
-                    path: path.clone(),
-                },
+                ManagedFileIngestFailedEvent { path: path.clone() },
             );
             return Err(e);
         }
@@ -292,9 +277,7 @@ impl ManagedFolderEngine {
         }
         let prefix = path.as_str();
         let db = self.inner.storage.raw_database();
-        let txn = db
-            .begin_read()
-            .map_err(|e| FsError::Storage(e.into()))?;
+        let txn = db.begin_read().map_err(|e| FsError::Storage(e.into()))?;
         let table = match txn.open_table(MANAGED_MANIFESTS) {
             Ok(t) => t,
             Err(redb::TableError::TableDoesNotExist(_)) => return Ok(ManagedFolderStats::default()),
@@ -351,7 +334,7 @@ impl ManagedFolderEngine {
         // actually reach the bus.
         let folders = self.list_folders().await?;
         for f in folders {
-            if let Ok(wh) = self.inner.watcher.watch(f.path.clone()).await {
+            if let Ok(wh) = self.inner.watcher.watch(f.path.clone(), true).await {
                 self.inner.watch_handles.lock().push(wh);
             }
         }
@@ -365,7 +348,11 @@ impl ManagedFolderEngine {
                 let maybe_path = envelope
                     .downcast::<FsCreatedEvent>()
                     .map(|e| e.path.clone())
-                    .or_else(|| envelope.downcast::<FsModifiedEvent>().map(|e| e.path.clone()));
+                    .or_else(|| {
+                        envelope
+                            .downcast::<FsModifiedEvent>()
+                            .map(|e| e.path.clone())
+                    });
                 if let Some(path) = maybe_path {
                     if engine.path_is_under_managed(&path).await.unwrap_or(false) {
                         if let Err(e) = engine.ingest(&path).await {
@@ -406,9 +393,9 @@ impl ManagedFolderEngine {
     async fn config_for_path(&self, path: &FsPath) -> Result<Option<ManagedFolderConfig>> {
         let folders = self.list_folders().await?;
         let p = path.as_str();
-        Ok(folders.into_iter().find(|f| {
-            f.enabled && f.auto_ingest && p.starts_with(f.path.as_str())
-        }))
+        Ok(folders
+            .into_iter()
+            .find(|f| f.enabled && f.auto_ingest && p.starts_with(f.path.as_str())))
     }
 }
 

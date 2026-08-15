@@ -7,19 +7,17 @@ use slint::SharedString;
 use tracing::warn;
 use uuid::Uuid;
 
-
 use crate::window::errors::password_localized_error;
-use crate::window::spawn;
 use crate::window::models::PasswordAddDialogOverlay;
-
+use crate::window::spawn;
 
 use super::{MainWindowController, PasswordCopyKind};
 
 impl MainWindowController {
-        pub(super) fn touch_vault_activity(self: &Arc<Self>) {
+    pub(super) fn touch_vault_activity(self: &Arc<Self>) {
         *self.vault_last_activity.lock() = Some(Instant::now());
     }
-        pub(super) fn check_vault_auto_lock(self: &Arc<Self>) {
+    pub(super) fn check_vault_auto_lock(self: &Arc<Self>) {
         let timeout_secs = self.config.read().privacy.vault_auto_lock_seconds;
         if timeout_secs == 0 {
             return;
@@ -43,7 +41,7 @@ impl MainWindowController {
             self.on_password_lock_vault();
         }
     }
-        pub(super) fn on_password_search_changed(self: &Arc<Self>, q: &SharedString) {
+    pub(super) fn on_password_search_changed(self: &Arc<Self>, q: &SharedString) {
         let query = q.to_string();
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
@@ -59,7 +57,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_password_entry_clicked(self: &Arc<Self>, id: &SharedString) {
+    pub(super) fn on_password_entry_clicked(self: &Arc<Self>, id: &SharedString) {
         let entry_id = id.to_string();
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
@@ -75,7 +73,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_password_copy(self: &Arc<Self>, id: &SharedString, kind: PasswordCopyKind) {
+    pub(super) fn on_password_copy(self: &Arc<Self>, id: &SharedString, kind: PasswordCopyKind) {
         let entry_id = id.to_string();
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
@@ -133,7 +131,9 @@ impl MainWindowController {
             };
             let msg = locale.tr(toast_key).to_string();
             let title = locale.tr("widget-password-name");
-            c.password_toasts.write().insert(inst_id, (msg.clone(), true));
+            c.password_toasts
+                .write()
+                .insert(inst_id, (msg.clone(), true));
             c.push_notification(&title, &msg, 1);
             c.schedule_rebuild();
 
@@ -145,7 +145,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_password_open_url(self: &Arc<Self>, url: &SharedString) {
+    pub(super) fn on_password_open_url(self: &Arc<Self>, url: &SharedString) {
         let url_str = url.to_string();
         if url_str.is_empty() {
             return;
@@ -154,7 +154,7 @@ impl MainWindowController {
             warn!(?e, "failed to open URL");
         }
     }
-        pub(super) fn on_password_unlock_submit(self: &Arc<Self>, passphrase: &SharedString) {
+    pub(super) fn on_password_unlock_submit(self: &Arc<Self>, passphrase: &SharedString) {
         let pass = passphrase.to_string();
         if pass.is_empty() {
             return;
@@ -167,7 +167,7 @@ impl MainWindowController {
         }
         self.schedule_rebuild_after_password_unlock();
     }
-        pub(super) fn on_password_unlock_biometric(self: &Arc<Self>) {
+    pub(super) fn on_password_unlock_biometric(self: &Arc<Self>) {
         let prompt = self.locale.tr("password-unlock-biometric-prompt");
         let vault = self.password_vault.clone();
         let bus = self.bus.clone();
@@ -177,7 +177,7 @@ impl MainWindowController {
         }
         self.schedule_rebuild_after_password_unlock();
     }
-        pub(super) fn schedule_rebuild_after_password_unlock(self: &Arc<Self>) {
+    pub(super) fn schedule_rebuild_after_password_unlock(self: &Arc<Self>) {
         let Some(inst_id) = self.find_active_password_widget() else {
             self.schedule_rebuild();
             return;
@@ -191,7 +191,7 @@ impl MainWindowController {
             }
         });
     }
-        pub(super) fn on_password_lock_vault(self: &Arc<Self>) {
+    pub(super) fn on_password_lock_vault(self: &Arc<Self>) {
         orchid_widgets::builtin::password::lock_vault(
             self.password_vault.clone(),
             self.bus.clone(),
@@ -199,7 +199,7 @@ impl MainWindowController {
         *self.vault_last_activity.lock() = None;
         self.schedule_rebuild_after_password_unlock();
     }
-        pub(super) fn on_password_add_entry_request(self: &Arc<Self>) {
+    pub(super) fn on_password_add_entry_request(self: &Arc<Self>) {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
@@ -215,7 +215,7 @@ impl MainWindowController {
         );
         self.schedule_rebuild_after_password_unlock();
     }
-        pub(super) fn on_password_add_entry_commit(
+    pub(super) fn on_password_add_entry_commit(
         self: &Arc<Self>,
         title: &SharedString,
         username: &SharedString,
@@ -273,14 +273,14 @@ impl MainWindowController {
             }
         }
     }
-        pub(super) fn on_password_add_entry_cancel(self: &Arc<Self>) {
+    pub(super) fn on_password_add_entry_cancel(self: &Arc<Self>) {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
         self.password_add_dialogs.write().remove(&inst_id);
         self.schedule_rebuild_after_password_unlock();
     }
-        pub(super) fn on_password_add_entry_generate_password(self: &Arc<Self>) {
+    pub(super) fn on_password_add_entry_generate_password(self: &Arc<Self>) {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
@@ -299,7 +299,7 @@ impl MainWindowController {
         self.password_add_dialogs.write().insert(inst_id, overlay);
         self.schedule_rebuild_after_password_unlock();
     }
-        pub(super) fn find_active_password_widget(&self) -> Option<Uuid> {
+    pub(super) fn find_active_password_widget(&self) -> Option<Uuid> {
         let w = self.workspace_manager.active().ok()?;
         for inst in self.widget_manager.instances_for_workspace(w.id) {
             if inst.type_id == "password-manager" {

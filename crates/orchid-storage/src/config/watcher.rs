@@ -66,9 +66,7 @@ impl ConfigWatcher {
     /// }
     /// # Ok(()) }
     /// ```
-    pub async fn start(
-        path: PathBuf,
-    ) -> Result<(Self, broadcast::Receiver<OrchidConfig>)> {
+    pub async fn start(path: PathBuf) -> Result<(Self, broadcast::Receiver<OrchidConfig>)> {
         let (tx, rx) = broadcast::channel(BROADCAST_BUFFER);
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
 
@@ -101,8 +99,7 @@ impl ConfigWatcher {
             .filter(|p| !p.as_os_str().is_empty())
             .map(std::path::Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
-        debouncer
-            .watch(&watch_target, RecursiveMode::NonRecursive)?;
+        debouncer.watch(&watch_target, RecursiveMode::NonRecursive)?;
 
         let tx_for_task = tx.clone();
         let path_for_task = path.clone();

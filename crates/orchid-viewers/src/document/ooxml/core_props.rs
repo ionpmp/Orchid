@@ -241,12 +241,15 @@ mod tests {
             let mut zip = ZipWriter::new(f);
             let opts = SimpleFileOptions::default();
             zip.start_file("docProps/core.xml", opts).unwrap();
-            zip.write_all(write_core_xml(&OfficeCoreProps {
-                title: "Old".into(),
-                creator: "A".into(),
-                ..OfficeCoreProps::default()
-            }).as_bytes())
-                .unwrap();
+            zip.write_all(
+                write_core_xml(&OfficeCoreProps {
+                    title: "Old".into(),
+                    creator: "A".into(),
+                    ..OfficeCoreProps::default()
+                })
+                .as_bytes(),
+            )
+            .unwrap();
             zip.finish().unwrap();
         }
         let mut props = read_office_core_props(&path).unwrap();

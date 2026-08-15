@@ -360,11 +360,8 @@ impl WidgetManager {
         bounds: crate::layout::PixelBounds,
     ) -> Result<()> {
         let rect = crate::widget::instance::pixel_rect_from_bounds(bounds);
-        self.set_window_placement(
-            id,
-            orchid_storage::WindowPlacement::floating_normal(rect),
-        )
-        .await
+        self.set_window_placement(id, orchid_storage::WindowPlacement::floating_normal(rect))
+            .await
     }
 
     /// Dock a floating widget back onto the grid (placement becomes [`WindowPlacement::Grid`]).

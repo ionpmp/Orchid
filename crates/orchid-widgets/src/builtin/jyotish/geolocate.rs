@@ -68,7 +68,7 @@ where
 pub async fn resolve_current_location(
     client: &reqwest::Client,
 ) -> Result<ResolvedLocation, GeolocateError> {
-    resolve_with_gps_fallback(|| resolve_windows_gps(), client).await
+    resolve_with_gps_fallback(resolve_windows_gps, client).await
 }
 
 /// Approximate location from the client's public IP (`ipwho.is`, no API key).
@@ -157,8 +157,6 @@ async fn resolve_windows_gps() -> Result<ResolvedLocation, GeolocateError> {
 fn windows_gps_blocking() -> Result<ResolvedLocation, GeolocateError> {
     use windows::Devices::Geolocation::{GeolocationAccessStatus, Geolocator};
     use windows::Foundation::TimeSpan;
-    use windows_future::IAsyncOperation as _;
-
     let access = Geolocator::RequestAccessAsync()
         .map_err(|e| GeolocateError::Unavailable(e.to_string()))?
         .join()

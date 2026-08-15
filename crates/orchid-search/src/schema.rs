@@ -126,10 +126,7 @@ mod tests {
             "kind",
             "in_archive",
         ] {
-            assert!(
-                t.get_field(name).is_ok(),
-                "schema missing field `{name}`"
-            );
+            assert!(t.get_field(name).is_ok(), "schema missing field `{name}`");
         }
     }
 }

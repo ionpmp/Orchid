@@ -132,11 +132,7 @@ async fn browse_local(
         .map(|()| ActionOutcome::Done)
 }
 
-async fn open_inner(
-    instance_id: uuid::Uuid,
-    pane: u8,
-    fp: &FsPath,
-) -> WidgetResult<ActionOutcome> {
+async fn open_inner(instance_id: uuid::Uuid, pane: u8, fp: &FsPath) -> WidgetResult<ActionOutcome> {
     let name = fp.file_name().unwrap_or("file");
     match materialize_inner(fp, None).await {
         Ok(local) => {
