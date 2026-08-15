@@ -110,6 +110,12 @@ release yet.
   shared on-disk thumbnail cache (mtime-keyed; refreshes when the file
   changes), fast EXIF/embedded-JPEG thumbs, and a contact-sheet PNG
   (`T`/`G`/`D`/`I`/`P`).
+- Image folder browse: Timeline (EXIF/mtime), Map (GPS pins), and Calendar
+  month grid (`Ctrl+Shift+T` / `M` / `C`, Esc). People view by faces is
+  planned for v1.x.
+- Image chrome auto-hides after idle time (tap or vertical swipe to
+  peek); mouse swipe / right-drag next-prev, double-click fit/actual;
+  touch pinch, two-finger pan, swipe, tap, and double-tap.
 - Image slideshow: auto-advance every N seconds (F5), pause/resume (Space),
   speed (`,`/`.`), random order (Y), fade/slide/dissolve/wipe with adjustable
   duration (J / Shift+J), loop, name/date/EXIF overlay (Shift+O), folder

@@ -94,6 +94,16 @@ export component ViewerImageView inherits Rectangle {
     property <length> sel-y1: 0px;
     property <bool> nav-hidden: false;
     property <bool> middle-pan: false;
+    property <bool> pointer-right: false;
+    property <bool> overlay-peek: true;
+    property <int> activity-gen: 0;
+    property <int> hide-seen: 0;
+    property <bool> chrome-on: !model.chrome-hidden && (root.overlay-peek || !model.overlay-autohide);
+
+    function bump-overlay() {
+        root.overlay-peek = true;
+        root.activity-gen = root.activity-gen + 1;
+    }
     property <length> thumb-cell: model.thumb-size == 0 ? 64px
         : model.thumb-size == 2 ? 256px
         : 128px;
@@ -107,12 +117,27 @@ export component ViewerImageView inherits Rectangle {
         : model.bg-kind == 5 ? rgb(model.bg-r, model.bg-g, model.bg-b)
         : Theme.surface-base;
 
+    hide-chrome-timer := Timer {
+        interval: 2800ms;
+        running: model.overlay-autohide && root.overlay-peek && !model.chrome-hidden
+            && !root.show-adjust && !root.show-filter && !root.show-annotate
+            && !root.show-print && !root.show-share && model.browse-mode == 0;
+        triggered => {
+            if (root.activity-gen == root.hide-seen) {
+                root.overlay-peek = false;
+            } else {
+                root.hide-seen = root.activity-gen;
+            }
+        }
+    }
+
     img-keys := FocusScope {
         width: 100%;
         height: 100%;
         init => { self.focus(); }
 
         key-pressed(event) => {
+            root.bump-overlay();
             if (event.text == "+" || event.text == "=") {
                 root.zoom-in();
                 return accept;
@@ -174,8 +199,24 @@ export component ViewerImageView inherits Rectangle {
                 root.command("slideshow-stop");
                 return accept;
             }
+            if (event.text == Key.Escape && model.browse-mode != 0) {
+                root.command("browse-off");
+                return accept;
+            }
             if (event.text == Key.Escape && (model.chrome-hidden || model.kiosk)) {
                 root.command("exit-immersive");
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "t" || event.text == "T")) {
+                root.command("browse-timeline");
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "m" || event.text == "M")) {
+                root.command("browse-map");
+                return accept;
+            }
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "c" || event.text == "C")) {
+                root.command("browse-calendar");
                 return accept;
             }
             if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
@@ -455,7 +496,7 @@ export component ViewerImageView inherits Rectangle {
     VerticalLayout {
         spacing: 0;
 
-        if !model.chrome-hidden : Rectangle {
+        if root.chrome-on : Rectangle {
             height: 36px;
             background: Theme.surface-base;
             border-radius: Theme.radius-md;
@@ -874,6 +915,126 @@ export component ViewerImageView inherits Rectangle {
                         Text {
                             text: model.thumb-grid-label;
                             color: model.thumb-grid ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.browse-mode == 1 ? Theme.surface-raised
+                        : time-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    time-ta := TouchArea {
+                        clicked => { root.command("browse-timeline"); img-keys.focus(); }
+                    }
+                    if time-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: time-hint.preferred-width + 12px;
+                        height: time-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        time-hint := Text { x: 6px; y: 3px; text: model.timeline-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.timeline-label;
+                            color: model.browse-mode == 1 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.browse-mode == 2 ? Theme.surface-raised
+                        : mapv-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    mapv-ta := TouchArea {
+                        clicked => { root.command("browse-map"); img-keys.focus(); }
+                    }
+                    if mapv-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: mapv-hint.preferred-width + 12px;
+                        height: mapv-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        mapv-hint := Text { x: 6px; y: 3px; text: model.map-view-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.map-view-label;
+                            color: model.browse-mode == 2 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 40px;
+                    height: 28px;
+                    background: model.browse-mode == 3 ? Theme.surface-raised
+                        : calv-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    calv-ta := TouchArea {
+                        clicked => { root.command("browse-calendar"); img-keys.focus(); }
+                    }
+                    if calv-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: calv-hint.preferred-width + 12px;
+                        height: calv-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        calv-hint := Text { x: 6px; y: 3px; text: model.calendar-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.calendar-label;
+                            color: model.browse-mode == 3 ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 36px;
+                    height: 28px;
+                    background: model.overlay-autohide ? Theme.surface-raised
+                        : hide-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hide-ta := TouchArea {
+                        clicked => { root.command("overlay-autohide"); img-keys.focus(); }
+                    }
+                    if hide-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: hide-hint.preferred-width + 12px;
+                        height: hide-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        hide-hint := Text { x: 6px; y: 3px; text: model.overlay-autohide-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text {
+                            text: model.overlay-autohide-label;
+                            color: model.overlay-autohide ? Theme.accent-brand : Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center; vertical-alignment: center;
                         }
@@ -2271,7 +2432,7 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        if model.thumb-strip == 2 && !model.chrome-hidden && !model.thumb-grid && !model.slideshow-playing && model.thumbs.length > 0 : Rectangle {
+        if model.thumb-strip == 2 && root.chrome-on && !model.thumb-grid && model.browse-mode == 0 && !model.slideshow-playing && model.thumbs.length > 0 : Rectangle {
             height: root.thumb-strip-h;
             background: Theme.surface-base;
             thumb-strip-top := Flickable {
@@ -2425,13 +2586,19 @@ export component ViewerImageView inherits Rectangle {
             pan-area := TouchArea {
                 width: parent.width;
                 height: parent.height;
+                double-clicked => {
+                    if (model.fit-mode == 0) { root.fit(); } else { root.actual-size(); }
+                    img-keys.focus();
+                }
                 pointer-event(e) => {
                     if (e.kind == PointerEventKind.down) {
+                        root.bump-overlay();
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
                         root.swipe-x = self.mouse-x;
                         root.swipe-y = self.mouse-y;
                         root.middle-pan = e.button == PointerEventButton.middle;
+                        root.pointer-right = e.button == PointerEventButton.right;
                         if (root.select-perspective) {
                             if (root.persp-n == 0) { root.persp-x0 = self.mouse-x; root.persp-y0 = self.mouse-y; }
                             if (root.persp-n == 1) { root.persp-x1 = self.mouse-x; root.persp-y1 = self.mouse-y; }
@@ -2527,7 +2694,7 @@ export component ViewerImageView inherits Rectangle {
                             root.select-crop = false;
                             root.select-edit-crop = false;
                             root.select-straighten = false;
-                        } else if (model.fit-mode != 0
+                        } else if ((model.fit-mode != 0 || root.pointer-right)
                             && abs(self.mouse-x - root.swipe-x) > 80px
                             && abs(self.mouse-x - root.swipe-x) > abs(self.mouse-y - root.swipe-y) * 2) {
                             if (self.mouse-x - root.swipe-x < 0px) {
@@ -2535,7 +2702,15 @@ export component ViewerImageView inherits Rectangle {
                             } else {
                                 root.command("prev");
                             }
+                        } else if (abs(self.mouse-y - root.swipe-y) > 80px
+                            && abs(self.mouse-y - root.swipe-y) > abs(self.mouse-x - root.swipe-x) * 2) {
+                            root.overlay-peek = self.mouse-y - root.swipe-y > 0px;
+                        } else if (model.overlay-autohide
+                            && abs(self.mouse-x - root.swipe-x) < 12px
+                            && abs(self.mouse-y - root.swipe-y) < 12px) {
+                            root.overlay-peek = !root.overlay-peek;
                         }
+                        root.pointer-right = false;
                     }
                 }
                 moved => {
@@ -2576,7 +2751,7 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
 
-            if model.anim-count > 1 && !model.slideshow-playing && !model.chrome-hidden : Rectangle {
+            if model.anim-count > 1 && !model.slideshow-playing && root.chrome-on : Rectangle {
                 x: 8px;
                 y: parent.height - self.height - 8px;
                 width: parent.width - 16px;
@@ -3464,7 +3639,7 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
 
-            if model.thumb-grid && !model.slideshow-playing : thumb-grid-host := Rectangle {
+            if model.thumb-grid && model.browse-mode == 0 && !model.slideshow-playing : thumb-grid-host := Rectangle {
                 width: parent.width;
                 height: parent.height;
                 background: root.canvas-bg;
@@ -3522,6 +3697,166 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
 
+            if model.browse-mode == 1 && !model.slideshow-playing : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: root.canvas-bg;
+                z: 61;
+                if model.timeline.length == 0 : Text {
+                    text: model.browse-empty-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                if model.timeline.length > 0 : Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: self.width;
+                    viewport-height: max(self.height, model.timeline.length * 76px + 16px);
+                    for item[i] in model.timeline : Rectangle {
+                        x: 8px;
+                        y: 8px + i * 76px;
+                        width: parent.width - 16px;
+                        height: 70px;
+                        background: item.selected ? Theme.surface-raised : Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: item.selected ? 2px : 1px;
+                        border-color: item.selected ? Theme.accent-brand : Theme.border-default;
+                        HorizontalLayout {
+                            padding: 6px;
+                            spacing: 10px;
+                            Image {
+                                source: item.thumbnail;
+                                width: 58px;
+                                height: 58px;
+                                image-fit: contain;
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 2px;
+                                Text { text: item.name; color: Theme.text-primary; font-size: Theme.font-size-sm; overflow: elide; }
+                                Text { text: item.date-text + " · " + item.size-text; color: Theme.text-tertiary; font-size: Theme.font-size-sm; overflow: elide; }
+                            }
+                        }
+                        TouchArea {
+                            clicked => { root.command("open-thumb:" + item.path); img-keys.focus(); }
+                        }
+                    }
+                }
+            }
+
+            if model.browse-mode == 2 && !model.slideshow-playing : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: #1a2430;
+                z: 61;
+                if model.map-pins.length == 0 : Text {
+                    text: model.map-empty-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                for pin in model.map-pins : Rectangle {
+                    x: pin.x * parent.width - 18px;
+                    y: pin.y * parent.height - 18px;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 18px;
+                    background: pin.selected ? Theme.accent-brand : Theme.surface-raised;
+                    border-width: 2px;
+                    border-color: #ffffffaa;
+                    Image {
+                        source: pin.thumbnail;
+                        width: 28px;
+                        height: 28px;
+                        x: 4px;
+                        y: 4px;
+                        image-fit: cover;
+                    }
+                    TouchArea {
+                        clicked => { root.command("open-thumb:" + pin.path); img-keys.focus(); }
+                    }
+                }
+            }
+
+            if model.browse-mode == 3 && !model.slideshow-playing : calendar-host := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: root.canvas-bg;
+                z: 61;
+                property <length> cell-w: max(36px, (self.width - 24px) / 7);
+                property <length> cell-h: max(36px, (self.height - 52px) / max(1, ceil(model.cal-days.length / 7)));
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Rectangle {
+                            width: 48px; height: 28px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("cal-prev"); } }
+                            Text { text: model.cal-prev-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text {
+                            text: model.cal-title;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-semibold;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                        Rectangle {
+                            width: 48px; height: 28px;
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("cal-next"); } }
+                            Text { text: model.cal-next-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        for day[i] in model.cal-days : Rectangle {
+                            x: mod(i, 7) * calendar-host.cell-w;
+                            y: floor(i / 7) * calendar-host.cell-h;
+                            width: calendar-host.cell-w - 4px;
+                            height: calendar-host.cell-h - 4px;
+                            background: day.day == 0 ? transparent
+                                : day.selected ? Theme.surface-raised
+                                : day.count > 0 ? Theme.surface-base
+                                : transparent;
+                            border-radius: Theme.radius-md;
+                            border-width: day.selected ? 2px : 0px;
+                            border-color: Theme.accent-brand;
+                            if day.day > 0 : VerticalLayout {
+                                padding: 3px;
+                                spacing: 2px;
+                                Text {
+                                    text: day.day;
+                                    color: day.count > 0 ? Theme.text-primary : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                }
+                                if day.has-image : Image {
+                                    source: day.thumbnail;
+                                    height: min(48px, parent.height - 22px);
+                                    image-fit: cover;
+                                }
+                                if day.count > 1 : Text {
+                                    text: day.count;
+                                    color: Theme.accent-brand;
+                                    font-size: Theme.font-size-sm;
+                                }
+                            }
+                            if day.count > 0 : TouchArea {
+                                clicked => { root.command("open-thumb:" + day.path); img-keys.focus(); }
+                            }
+                        }
+                    }
+                }
+            }
+
             if root.show-recent && model.recent-paths.length > 0 : Rectangle {
                 x: 8px;
                 y: 8px;
@@ -3560,7 +3895,7 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        if model.thumb-strip == 1 && !model.chrome-hidden && !model.thumb-grid && !model.slideshow-playing && model.thumbs.length > 0 : Rectangle {
+        if model.thumb-strip == 1 && root.chrome-on && !model.thumb-grid && model.browse-mode == 0 && !model.slideshow-playing && model.thumbs.length > 0 : Rectangle {
             height: root.thumb-strip-h;
             background: Theme.surface-base;
             Flickable {
@@ -3616,7 +3951,7 @@ export component ViewerImageView inherits Rectangle {
             }
         }
 
-        if model.info-text != "" && !model.chrome-hidden : Rectangle {
+        if model.info-text != "" && root.chrome-on : Rectangle {
             height: 24px;
             background: Theme.surface-base;
             HorizontalLayout {

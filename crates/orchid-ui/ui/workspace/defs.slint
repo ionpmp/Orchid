@@ -861,6 +861,28 @@ export struct ViewerImageThumb {
     thumbnail: image,
     selected: bool,
     index: int,
+    has-gps: bool,
+    gps-lat: float,
+    gps-lon: float,
+}
+
+export struct ViewerMapPin {
+    path: string,
+    name: string,
+    x: float,
+    y: float,
+    selected: bool,
+    has-image: bool,
+    thumbnail: image,
+}
+
+export struct ViewerCalDay {
+    day: int,
+    count: int,
+    selected: bool,
+    path: string,
+    has-image: bool,
+    thumbnail: image,
 }
 
 export struct ViewerImageModel {
@@ -1072,6 +1094,22 @@ export struct ViewerImageModel {
     anim-extract-label: string,
     anim-hint-label: string,
     anim-can-play: bool,
+    /// 0 photo, 1 timeline, 2 map, 3 calendar.
+    browse-mode: int,
+    overlay-autohide: bool,
+    timeline: [ViewerImageThumb],
+    map-pins: [ViewerMapPin],
+    cal-days: [ViewerCalDay],
+    cal-title: string,
+    timeline-label: string,
+    map-view-label: string,
+    calendar-label: string,
+    browse-empty-label: string,
+    map-empty-label: string,
+    cal-empty-label: string,
+    cal-prev-label: string,
+    cal-next-label: string,
+    overlay-autohide-label: string,
 }
 
 export struct ViewerPdfModel {

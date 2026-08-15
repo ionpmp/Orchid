@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
-    ViewerArchiveEntry, ViewerArchiveModel, ViewerDocumentModel, ViewerEmptyModel, ViewerHtmlModel,
-    ViewerImageModel, ViewerImageThumb, ViewerMediaModel, ViewerModel, ViewerPdfModel,
-    ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
+    ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel, ViewerEmptyModel,
+    ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin, ViewerMediaModel,
+    ViewerModel, ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment,
+    ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -362,6 +363,21 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         anim_extract_label: locale.tr("viewer-image-page-extract").into(),
         anim_hint_label: locale.tr("viewer-image-anim-hint").into(),
         anim_can_play: false,
+        browse_mode: 0,
+        overlay_autohide: true,
+        timeline: ModelRc::new(VecModel::default()),
+        map_pins: ModelRc::new(VecModel::default()),
+        cal_days: ModelRc::new(VecModel::default()),
+        cal_title: SharedString::new(),
+        timeline_label: locale.tr("viewer-image-timeline").into(),
+        map_view_label: locale.tr("viewer-image-map-view").into(),
+        calendar_label: locale.tr("viewer-image-calendar").into(),
+        browse_empty_label: locale.tr("viewer-image-browse-empty").into(),
+        map_empty_label: locale.tr("viewer-image-map-empty").into(),
+        cal_empty_label: locale.tr("viewer-image-cal-empty").into(),
+        cal_prev_label: locale.tr("viewer-image-cal-prev").into(),
+        cal_next_label: locale.tr("viewer-image-cal-next").into(),
+        overlay_autohide_label: locale.tr("viewer-image-overlay-autohide").into(),
     }
 }
 
@@ -903,23 +919,51 @@ fn build_image_snapshot(
     let thumbs: Vec<ViewerImageThumb> = s
         .thumbs
         .iter()
-        .map(|t| {
-            let thumb_img = match &t.rgba {
-                Some(rgba) if t.width > 0 && t.height > 0 => {
-                    slint_image_from_rgba(rgba, t.width, t.height)
+        .map(|t| slint_folder_thumb(t, locale))
+        .collect();
+    let timeline: Vec<ViewerImageThumb> = s
+        .timeline
+        .iter()
+        .map(|t| slint_folder_thumb(t, locale))
+        .collect();
+    let map_pins: Vec<ViewerMapPin> = s
+        .map_pins
+        .iter()
+        .map(|p| {
+            let thumbnail = match &p.rgba {
+                Some(rgba) if p.width > 0 && p.height > 0 => {
+                    slint_image_from_rgba(rgba, p.width, p.height)
                 }
                 _ => Image::default(),
             };
-            ViewerImageThumb {
-                path: t.path.clone().into(),
-                name: t.name.clone().into(),
-                size_text: locale.format_byte_size(t.size_bytes).into(),
-                date_text: t.date_text.clone().into(),
-                rating: i32::from(t.rating),
-                has_image: t.rgba.is_some(),
-                thumbnail: thumb_img,
-                selected: t.selected,
-                index: t.index as i32,
+            ViewerMapPin {
+                path: p.path.clone().into(),
+                name: p.name.clone().into(),
+                x: p.x,
+                y: p.y,
+                selected: p.selected,
+                has_image: p.rgba.is_some(),
+                thumbnail,
+            }
+        })
+        .collect();
+    let cal_days: Vec<ViewerCalDay> = s
+        .cal_days
+        .iter()
+        .map(|d| {
+            let thumbnail = match &d.rgba {
+                Some(rgba) if d.width > 0 && d.height > 0 => {
+                    slint_image_from_rgba(rgba, d.width, d.height)
+                }
+                _ => Image::default(),
+            };
+            ViewerCalDay {
+                day: i32::from(d.day),
+                count: d.count as i32,
+                selected: d.selected,
+                path: d.path.clone().into(),
+                has_image: d.rgba.is_some(),
+                thumbnail,
             }
         })
         .collect();
@@ -1151,6 +1195,9 @@ fn build_image_snapshot(
                         thumbnail: thumb_img,
                         selected: t.selected,
                         index: t.index as i32,
+                        has_gps: false,
+                        gps_lat: 0.0,
+                        gps_lon: 0.0,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -1165,6 +1212,45 @@ fn build_image_snapshot(
         anim_extract_label: locale.tr("viewer-image-page-extract").into(),
         anim_hint_label: locale.tr("viewer-image-anim-hint").into(),
         anim_can_play: s.anim_can_play,
+        browse_mode: i32::from(s.browse_mode),
+        overlay_autohide: s.overlay_autohide,
+        timeline: ModelRc::new(VecModel::from(timeline)),
+        map_pins: ModelRc::new(VecModel::from(map_pins)),
+        cal_days: ModelRc::new(VecModel::from(cal_days)),
+        cal_title: s.cal_title.clone().into(),
+        timeline_label: locale.tr("viewer-image-timeline").into(),
+        map_view_label: locale.tr("viewer-image-map-view").into(),
+        calendar_label: locale.tr("viewer-image-calendar").into(),
+        browse_empty_label: locale.tr("viewer-image-browse-empty").into(),
+        map_empty_label: locale.tr("viewer-image-map-empty").into(),
+        cal_empty_label: locale.tr("viewer-image-cal-empty").into(),
+        cal_prev_label: locale.tr("viewer-image-cal-prev").into(),
+        cal_next_label: locale.tr("viewer-image-cal-next").into(),
+        overlay_autohide_label: locale.tr("viewer-image-overlay-autohide").into(),
+    }
+}
+
+fn slint_folder_thumb(
+    t: &orchid_viewers::ImageThumbItem,
+    locale: &LocaleManager,
+) -> ViewerImageThumb {
+    let thumbnail = match &t.rgba {
+        Some(rgba) if t.width > 0 && t.height > 0 => slint_image_from_rgba(rgba, t.width, t.height),
+        _ => Image::default(),
+    };
+    ViewerImageThumb {
+        path: t.path.clone().into(),
+        name: t.name.clone().into(),
+        size_text: locale.format_byte_size(t.size_bytes).into(),
+        date_text: t.date_text.clone().into(),
+        rating: i32::from(t.rating),
+        has_image: t.rgba.is_some(),
+        thumbnail,
+        selected: t.selected,
+        index: t.index as i32,
+        has_gps: t.has_gps,
+        gps_lat: t.gps_lat,
+        gps_lon: t.gps_lon,
     }
 }
 
