@@ -168,7 +168,12 @@ release yet.
   ARW, RAF, ORF, PEF, RW2, SRW, X3F, RWL, DNG, DCR) demosaics via `rawler`
   when the camera is known, otherwise shows the embedded JPEG preview.
   Shift+L `develop` / `exposure=` / `temp=` / `tint=` re-develops from the
-  sensor (camera WB + EV).
+  sensor (camera WB + EV). Animated GIF, APNG, and WebP play in the viewer
+  (play/pause, frame step, frame strip); export writes sibling
+  `stem-f001.png` files and never overwrites the original. Multi-page
+  TIFF and multi-size ICO/CUR step like still pages (Shift+←/→, strip);
+  Extract page writes `stem-p002.png` or `stem-32x32.png`. Multi-page
+  PDF stays in the PDF widget; Extract page writes `stem-p007.png`.
 - Image share / export: save-as with JPEG quality and PNG compression,
   optional max-edge resize, ICO and favicon, pixel copy / paste, set as
   wallpaper, email attachment (auto-resized JPEG + `.eml`), social share

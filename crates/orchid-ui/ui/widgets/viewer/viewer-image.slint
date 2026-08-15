@@ -274,6 +274,8 @@ export component ViewerImageView inherits Rectangle {
             if (event.text == Key.Space) {
                 if (model.slideshow-playing) {
                     root.command("slideshow-pause");
+                } else if (model.anim-can-play && model.anim-count > 1) {
+                    root.command("anim-toggle");
                 } else {
                     root.command("next");
                 }
@@ -420,7 +422,9 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == Key.LeftArrow) {
-                if (model.fit-mode == 0) {
+                if (event.modifiers.shift && model.anim-count > 1) {
+                    root.command("anim-prev");
+                } else if (model.fit-mode == 0) {
                     root.pan(root.pan-step, 0px);
                 } else {
                     root.command("prev");
@@ -428,7 +432,9 @@ export component ViewerImageView inherits Rectangle {
                 return accept;
             }
             if (event.text == Key.RightArrow) {
-                if (model.fit-mode == 0) {
+                if (event.modifiers.shift && model.anim-count > 1) {
+                    root.command("anim-next");
+                } else if (model.fit-mode == 0) {
                     root.pan(-root.pan-step, 0px);
                 } else {
                     root.command("next");
@@ -1933,6 +1939,33 @@ export component ViewerImageView inherits Rectangle {
                     }
                 }
 
+                if model.anim-count > 1 && model.anim-can-play : Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: model.anim-playing ? Theme.surface-raised
+                        : ed-anim-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ed-anim-ta := TouchArea {
+                        clicked => { root.command("anim-toggle"); img-keys.focus(); }
+                    }
+                    if ed-anim-ta.has-hover : Rectangle {
+                        x: parent.x; y: parent.height + 2px;
+                        width: ed-anim-hint.preferred-width + 12px;
+                        height: ed-anim-hint.preferred-height + 6px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px; border-color: Theme.border-default; z: 100;
+                        ed-anim-hint := Text { x: 6px; y: 3px; text: model.anim-playing ? model.anim-pause-label : model.anim-play-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                    }
+                    Text {
+                        text: model.anim-playing ? "❚❚" : "▶";
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+
                 Rectangle {
                     min-width: 36px;
                     height: 28px;
@@ -2540,6 +2573,111 @@ export component ViewerImageView inherits Rectangle {
                         root.command("prev");
                     }
                     return accept;
+                }
+            }
+
+            if model.anim-count > 1 && !model.slideshow-playing && !model.chrome-hidden : Rectangle {
+                x: 8px;
+                y: parent.height - self.height - 8px;
+                width: parent.width - 16px;
+                height: 86px;
+                background: #00000099;
+                border-radius: Theme.radius-md;
+                z: 40;
+                VerticalLayout {
+                    padding: 6px;
+                    spacing: 4px;
+                    HorizontalLayout {
+                        spacing: 4px;
+                        height: 24px;
+                        if model.anim-can-play : Rectangle {
+                            width: 28px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-toggle"); img-keys.focus(); } }
+                            Text { text: model.anim-playing ? "❚❚" : "▶"; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                        Rectangle {
+                            width: 28px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-first"); img-keys.focus(); } }
+                            Text { text: "⏮"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                        Rectangle {
+                            width: 28px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-prev"); img-keys.focus(); } }
+                            Text { text: "◀"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                        Rectangle {
+                            width: 28px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-next"); img-keys.focus(); } }
+                            Text { text: "▶"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                        Rectangle {
+                            width: 28px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-last"); img-keys.focus(); } }
+                            Text { text: "⏭"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                        Text {
+                            text: model.anim-label + "  " + model.anim-index-label;
+                            color: #ffffff;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            min-width: 72px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-extract"); img-keys.focus(); } }
+                            Text { text: model.anim-extract-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                        if model.anim-can-play : Rectangle {
+                            min-width: 72px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            TouchArea { clicked => { root.command("anim-export"); img-keys.focus(); } }
+                            Text { text: model.anim-export-label; color: Theme.accent-brand; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; width: parent.width; height: parent.height; }
+                        }
+                    }
+                    Flickable {
+                        height: 44px;
+                        viewport-width: max(self.width, model.anim-thumbs.length * 40px + 8px);
+                        viewport-height: self.height;
+                        HorizontalLayout {
+                            spacing: 4px;
+                            for item in model.anim-thumbs : Rectangle {
+                                width: 36px;
+                                height: 40px;
+                                background: item.selected ? Theme.surface-raised : transparent;
+                                border-radius: Theme.radius-md;
+                                border-width: item.selected ? 2px : 0px;
+                                border-color: Theme.accent-brand;
+                                TouchArea { clicked => { root.command("anim-goto:" + item.index); img-keys.focus(); } }
+                                VerticalLayout {
+                                    Image {
+                                        source: item.thumbnail;
+                                        width: 32px;
+                                        height: 24px;
+                                        image-fit: contain;
+                                    }
+                                    Text {
+                                        text: item.name;
+                                        color: #ffffff;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

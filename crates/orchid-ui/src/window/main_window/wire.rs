@@ -2048,6 +2048,43 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_pdf_extract_page({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        spawn::spawn_local_compat(async move {
+                            match orchid_widgets::builtin::viewer::pdf_extract_page(inst).await {
+                                Ok(path) => {
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let body = c.locale.tr_args(
+                                            "viewer-pdf-extracted",
+                                            &orchid_i18n::FluentArgs::new().with("path", path),
+                                        );
+                                        c.push_notification(&title, &body, 2);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(?e, "viewer pdf extract page");
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let reason =
+                                            viewer_localized_error(&c.locale, &e.to_string());
+                                        let body = c.locale.tr_args(
+                                            "viewer-action-failed",
+                                            &orchid_i18n::FluentArgs::new().with("reason", reason),
+                                        );
+                                        c.push_notification(&title, &body, 3);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
         self.window.on_viewer_archive_navigate_into({
             let t = t.clone();
             move |id, path| {

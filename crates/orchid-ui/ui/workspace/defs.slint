@@ -1055,6 +1055,23 @@ export struct ViewerImageModel {
     meta-description-field-label: string,
     meta-date-field-label: string,
     meta-gps-field-label: string,
+    anim-count: int,
+    anim-index: int,
+    anim-playing: bool,
+    anim-delay-ms: int,
+    anim-label: string,
+    anim-index-label: string,
+    anim-thumbs: [ViewerImageThumb],
+    anim-play-label: string,
+    anim-pause-label: string,
+    anim-prev-label: string,
+    anim-next-label: string,
+    anim-first-label: string,
+    anim-last-label: string,
+    anim-export-label: string,
+    anim-extract-label: string,
+    anim-hint-label: string,
+    anim-can-play: bool,
 }
 
 export struct ViewerPdfModel {
@@ -1075,6 +1092,7 @@ export struct ViewerPdfModel {
     fit-page-label: string,
     go-label: string,
     copy-text-label: string,
+    extract-page-label: string,
 }
 
 export struct ViewerTextModel {

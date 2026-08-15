@@ -345,6 +345,23 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         meta_description_field_label: locale.tr("viewer-image-meta-description-field").into(),
         meta_date_field_label: locale.tr("viewer-image-meta-date-field").into(),
         meta_gps_field_label: locale.tr("viewer-image-meta-gps-field").into(),
+        anim_count: 0,
+        anim_index: 0,
+        anim_playing: false,
+        anim_delay_ms: 0,
+        anim_label: SharedString::new(),
+        anim_index_label: SharedString::new(),
+        anim_thumbs: ModelRc::new(VecModel::default()),
+        anim_play_label: locale.tr("viewer-image-anim-play").into(),
+        anim_pause_label: locale.tr("viewer-image-anim-pause").into(),
+        anim_prev_label: locale.tr("viewer-image-anim-prev").into(),
+        anim_next_label: locale.tr("viewer-image-anim-next").into(),
+        anim_first_label: locale.tr("viewer-image-anim-first").into(),
+        anim_last_label: locale.tr("viewer-image-anim-last").into(),
+        anim_export_label: locale.tr("viewer-image-anim-export").into(),
+        anim_extract_label: locale.tr("viewer-image-page-extract").into(),
+        anim_hint_label: locale.tr("viewer-image-anim-hint").into(),
+        anim_can_play: false,
     }
 }
 
@@ -366,6 +383,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
         go_label: locale.tr("viewer-pdf-go").into(),
         copy_text_label: locale.tr("viewer-pdf-copy-text").into(),
+        extract_page_label: locale.tr("viewer-pdf-extract-page").into(),
     }
 }
 
@@ -863,6 +881,24 @@ fn build_image_snapshot(
         info.push_str(" · ");
         info.push_str(&nav_index_label);
     }
+    let anim_index_label = if s.anim_count > 1 {
+        locale.tr_args(
+            "viewer-image-anim-index",
+            &orchid_i18n::FluentArgs::new()
+                .with("current", s.anim_index.to_string())
+                .with("total", s.anim_count.to_string()),
+        )
+    } else {
+        String::new()
+    };
+    if !anim_index_label.is_empty() {
+        info.push_str(" · ");
+        if !s.anim_label.is_empty() {
+            info.push_str(&s.anim_label);
+            info.push(' ');
+        }
+        info.push_str(&anim_index_label);
+    }
     let recent: Vec<SharedString> = s.recent_paths.iter().map(|p| p.clone().into()).collect();
     let thumbs: Vec<ViewerImageThumb> = s
         .thumbs
@@ -1089,6 +1125,46 @@ fn build_image_snapshot(
         meta_description_field_label: locale.tr("viewer-image-meta-description-field").into(),
         meta_date_field_label: locale.tr("viewer-image-meta-date-field").into(),
         meta_gps_field_label: locale.tr("viewer-image-meta-gps-field").into(),
+        anim_count: s.anim_count as i32,
+        anim_index: s.anim_index as i32,
+        anim_playing: s.anim_playing,
+        anim_delay_ms: s.anim_delay_ms as i32,
+        anim_label: s.anim_label.clone().into(),
+        anim_index_label: anim_index_label.into(),
+        anim_thumbs: ModelRc::new(VecModel::from({
+            s.anim_thumbs
+                .iter()
+                .map(|t| {
+                    let thumb_img = match &t.rgba {
+                        Some(rgba) if t.width > 0 && t.height > 0 => {
+                            slint_image_from_rgba(rgba, t.width, t.height)
+                        }
+                        _ => Image::default(),
+                    };
+                    ViewerImageThumb {
+                        path: t.path.clone().into(),
+                        name: t.name.clone().into(),
+                        size_text: t.date_text.clone().into(),
+                        date_text: SharedString::new(),
+                        rating: 0,
+                        has_image: t.rgba.is_some(),
+                        thumbnail: thumb_img,
+                        selected: t.selected,
+                        index: t.index as i32,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })),
+        anim_play_label: locale.tr("viewer-image-anim-play").into(),
+        anim_pause_label: locale.tr("viewer-image-anim-pause").into(),
+        anim_prev_label: locale.tr("viewer-image-anim-prev").into(),
+        anim_next_label: locale.tr("viewer-image-anim-next").into(),
+        anim_first_label: locale.tr("viewer-image-anim-first").into(),
+        anim_last_label: locale.tr("viewer-image-anim-last").into(),
+        anim_export_label: locale.tr("viewer-image-anim-export").into(),
+        anim_extract_label: locale.tr("viewer-image-page-extract").into(),
+        anim_hint_label: locale.tr("viewer-image-anim-hint").into(),
+        anim_can_play: s.anim_can_play,
     }
 }
 
@@ -1131,6 +1207,7 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         fit_page_label: locale.tr("viewer-pdf-fit-page").into(),
         go_label: locale.tr("viewer-pdf-go").into(),
         copy_text_label: locale.tr("viewer-pdf-copy-text").into(),
+        extract_page_label: locale.tr("viewer-pdf-extract-page").into(),
     }
 }
 
