@@ -15,6 +15,7 @@ pub const IMAGE_FILE_EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "jpe", "webp", "bmp", "gif", "tiff", "tif", "avif", "tga", "svg", "heic",
     "heif", "jxl", "dng", "cr2", "nef", "arw", "raf", "orf", "rw2", "psd", "xcf", "pcx", "ico",
     "cur", "pbm", "pgm", "ppm", "pnm", "jp2", "j2k", "jpx", "jpf", "dds", "exr", "hdr", "rgbe",
+    "svgz", "ai", "eps", "ps", "wmf", "emf", "cdr",
 ];
 
 /// Decode a local image path (same pipeline as the viewer, including ICC).
@@ -101,6 +102,11 @@ pub enum ImageFormat {
     Xcf,
     Pcx,
     Jpeg2000,
+    Ai,
+    Eps,
+    Wmf,
+    Emf,
+    Cdr,
     Unknown,
 }
 
@@ -130,6 +136,11 @@ impl ImageFormat {
             Self::Xcf => "XCF",
             Self::Pcx => "PCX",
             Self::Jpeg2000 => "JPEG 2000",
+            Self::Ai => "AI",
+            Self::Eps => "EPS",
+            Self::Wmf => "WMF",
+            Self::Emf => "EMF",
+            Self::Cdr => "CDR",
             Self::Unknown => "Image",
         }
     }
@@ -235,8 +246,16 @@ fn decode_local_mmap(
 }
 
 fn decode_bytes(bytes: &[u8], size: u64, extension: Option<&str>) -> Result<LoadedImage> {
+    if matches!(extension, Some("svgz")) {
+        return crate::image::vector::decode_svgz(bytes, size);
+    }
     if looks_like_svg(bytes) {
         return decode_svg(bytes, size);
+    }
+    if crate::image::vector::looks_like_vector(bytes)
+        || extension.is_some_and(crate::image::vector::is_vector_extension)
+    {
+        return crate::image::vector::decode(bytes, size, extension);
     }
     if looks_like_avif(bytes) || matches!(extension, Some("avif" | "avifs")) {
         return decode_avif(bytes, size);
@@ -480,6 +499,10 @@ fn is_raw_magic(bytes: &[u8]) -> bool {
         return true;
     }
     false
+}
+
+pub(crate) fn decode_svg_bytes(bytes: &[u8], size: u64) -> Result<LoadedImage> {
+    decode_svg(bytes, size)
 }
 
 fn decode_svg(bytes: &[u8], size: u64) -> Result<LoadedImage> {
@@ -737,6 +760,9 @@ mod tests {
         assert!(is_image_file_extension("HEIC"));
         assert!(is_image_file_extension("nef"));
         assert!(is_image_file_extension("svg"));
+        assert!(is_image_file_extension("ai"));
+        assert!(is_image_file_extension("eps"));
+        assert!(is_image_file_extension("cdr"));
         assert!(!is_image_file_extension("pdf"));
     }
 
@@ -808,7 +834,8 @@ mod tests {
     #[test]
     fn extra_extensions_are_images() {
         for ext in [
-            "jxl", "psd", "xcf", "pcx", "ico", "cur", "jp2", "dds", "exr", "hdr",
+            "jxl", "psd", "xcf", "pcx", "ico", "cur", "jp2", "dds", "exr", "hdr", "ai", "eps",
+            "wmf", "emf", "cdr", "svgz",
         ] {
             assert!(is_image_file_extension(ext), "{ext}");
         }

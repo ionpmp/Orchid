@@ -54,6 +54,24 @@ pub enum ViewerError {
     #[error("viewer-image-raw-unsupported")]
     UnsupportedRaw,
 
+    /// EPS / PostScript has no embedded preview and Ghostscript is missing.
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-eps-unsupported")]
+    UnsupportedEps,
+
+    /// CorelDRAW file has no embedded preview bitmap.
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-cdr-unsupported")]
+    UnsupportedCdr,
+
+    /// WMF / EMF could not be played (missing GDI or a corrupt metafile).
+    ///
+    /// Display string is the Fluent key so the UI can localise it.
+    #[error("viewer-image-emf-unsupported")]
+    UnsupportedEmf,
+
     /// PDF page render failed.
     #[error("failed to render PDF page {page}: {reason}")]
     PdfRender {

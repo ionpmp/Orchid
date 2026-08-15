@@ -17,6 +17,11 @@ use crate::viewer_trait::Viewer;
 
 use render::RenderedPage;
 
+/// Rasterize page 1 of a PDF (or PDF-based AI) to RGBA8.
+pub(crate) fn rasterize_first_page(bytes: &[u8], max_edge: u32) -> Result<(Vec<u8>, u32, u32)> {
+    render::rasterize_first_page(bytes, max_edge)
+}
+
 /// Default viewport until the UI reports the widget frame size.
 const DEFAULT_VIEWPORT: (f32, f32) = (800.0, 600.0);
 
@@ -45,7 +50,10 @@ pub struct PdfViewer {
 impl std::fmt::Debug for PdfViewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PdfViewer")
-            .field("path", &self.path.read().as_ref().map(|p| p.as_str().to_string()))
+            .field(
+                "path",
+                &self.path.read().as_ref().map(|p| p.as_str().to_string()),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -169,10 +177,7 @@ impl PdfViewer {
     }
 
     async fn rerender_at_page(&self, page: u32) -> Result<()> {
-        let session = self
-            .session
-            .read()
-            .ok_or(ViewerError::PdfEmpty)?;
+        let session = self.session.read().ok_or(ViewerError::PdfEmpty)?;
         let viewport = *self.viewport.read();
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();

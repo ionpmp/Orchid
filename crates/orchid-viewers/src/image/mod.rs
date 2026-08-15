@@ -19,6 +19,7 @@ pub mod operations;
 pub mod print;
 pub mod slideshow;
 pub mod transform;
+pub mod vector;
 
 #[cfg(windows)]
 mod heic_wic;

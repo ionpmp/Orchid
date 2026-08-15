@@ -5866,6 +5866,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "encoding_rs",
+ "flate2",
  "hex",
  "id3",
  "image",

@@ -106,6 +106,18 @@ fn unsupported_image_errors_expose_ftl_keys() {
         ViewerError::UnsupportedJpeg2000.to_string(),
         "viewer-image-jp2-unsupported"
     );
+    assert_eq!(
+        ViewerError::UnsupportedEps.to_string(),
+        "viewer-image-eps-unsupported"
+    );
+    assert_eq!(
+        ViewerError::UnsupportedCdr.to_string(),
+        "viewer-image-cdr-unsupported"
+    );
+    assert_eq!(
+        ViewerError::UnsupportedEmf.to_string(),
+        "viewer-image-emf-unsupported"
+    );
 }
 
 #[tokio::test]

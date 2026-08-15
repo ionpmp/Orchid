@@ -329,6 +329,51 @@ pub fn extract_page_text(session: PdfSessionId, page: u32) -> Result<String> {
     reply_rx.recv().map_err(|_| ViewerError::PdfUnavailable)?
 }
 
+/// Rasterize the first page to RGBA8 with the long edge capped at `max_edge`.
+pub(crate) fn rasterize_first_page(bytes: &[u8], max_edge: u32) -> Result<(Vec<u8>, u32, u32)> {
+    with_pdfium(|pdfium| {
+        let document =
+            pdfium
+                .load_pdf_from_byte_slice(bytes, None)
+                .map_err(|e| ViewerError::PdfRender {
+                    page: 1,
+                    reason: format!("load document: {e}"),
+                })?;
+        let count = page_count_u32(document.pages().len());
+        if count == 0 {
+            return Err(ViewerError::PdfEmpty);
+        }
+        let pdf_page = document
+            .pages()
+            .get(0)
+            .map_err(|e| ViewerError::PdfRender {
+                page: 1,
+                reason: format!("open page: {e}"),
+            })?;
+        let page_w = pdf_page.width().value.max(1.0);
+        let page_h = pdf_page.height().value.max(1.0);
+        let long = page_w.max(page_h);
+        let cap = max_edge.max(1) as f32;
+        let target_width = ((page_w / long) * cap).round().clamp(1.0, cap) as i32;
+        let config = PdfRenderConfig::new().set_target_width(target_width);
+        let bitmap = pdf_page
+            .render_with_config(&config)
+            .map_err(|e| ViewerError::PdfRender {
+                page: 1,
+                reason: format!("render: {e}"),
+            })?;
+        let image = bitmap
+            .as_image()
+            .map_err(|e| ViewerError::PdfRender {
+                page: 1,
+                reason: format!("image: {e}"),
+            })?
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        Ok((image.into_raw(), width, height))
+    })
+}
+
 /// One-shot helper for tests: open bytes, render, then close.
 ///
 /// # Errors

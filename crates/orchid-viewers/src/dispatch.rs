@@ -35,6 +35,10 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
     if is_docx_path(path) && looks_like_zip(sample) {
         return Some(ViewerKind::Document);
     }
+    // PDF-based .ai and ZIP-based .cdr / .svgz must not steal the PDF / archive viewers.
+    if is_vector_image_path(path) {
+        return Some(ViewerKind::Image);
+    }
     // Archive signatures win outright.
     if orchid_fs::detect_format(sample).is_some() {
         return Some(ViewerKind::Archive);
@@ -48,6 +52,7 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
         || crate::image::loader::looks_like_avif(sample)
         || crate::image::loader::looks_like_raw(sample)
         || crate::image::extra::looks_like_extra_image(sample)
+        || crate::image::vector::looks_like_vector(sample)
     {
         return Some(ViewerKind::Image);
     }
@@ -117,6 +122,10 @@ fn extension_of(path: &orchid_fs::FsPath) -> Option<String> {
 
 fn is_docx_path(path: &orchid_fs::FsPath) -> bool {
     matches!(extension_of(path).as_deref(), Some("docx") | Some("docm"))
+}
+
+fn is_vector_image_path(path: &orchid_fs::FsPath) -> bool {
+    extension_of(path).is_some_and(|ext| crate::image::vector::is_vector_extension(&ext))
 }
 
 fn looks_like_zip(sample: &[u8]) -> bool {
@@ -255,6 +264,30 @@ mod tests {
             let kind = kind_for(&path(&format!("local:/a/b.{ext}")), b"").unwrap();
             assert_eq!(kind, ViewerKind::Image, "{ext}");
         }
+    }
+
+    #[test]
+    fn vector_extensions_route_to_image_not_pdf_or_archive() {
+        assert_eq!(
+            kind_for(&path("local:/a/b.ai"), b"%PDF-1.4\n").unwrap(),
+            ViewerKind::Image
+        );
+        assert_eq!(
+            kind_for(&path("local:/a/b.cdr"), b"PK\x03\x04rest").unwrap(),
+            ViewerKind::Image
+        );
+        assert_eq!(
+            kind_for(&path("local:/a/b.svgz"), b"\x1f\x8b\x08").unwrap(),
+            ViewerKind::Image
+        );
+        assert_eq!(
+            kind_for(&path("local:/a/b.eps"), b"%!PS-Adobe-3.0\n").unwrap(),
+            ViewerKind::Image
+        );
+        assert_eq!(
+            kind_for(&path("local:/a/b.emf"), b"").unwrap(),
+            ViewerKind::Image
+        );
     }
 
     #[test]
