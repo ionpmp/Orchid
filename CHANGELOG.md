@@ -237,6 +237,10 @@ release yet.
   without RGBA unwrap-clone, and real in-flight coalescing.
 
 ### Fixed
+- Image viewer toolbar: compact geometric icons (not font symbols),
+  overflow scroll, a hint strip with the action name on hover, extra
+  tools behind **⋯**, and slideshow extras only while a slideshow is
+  playing. Hover labels no longer fly off-button.
 - System CPU sampling via `GetSystemTimes`; process-list refresh spikes.
 - FM Type labels for long extensions; delete-to-recycle / show-extensions;
   transfer and rename failure toasts.

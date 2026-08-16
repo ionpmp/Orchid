@@ -488,6 +488,7 @@ viewer-image-first = Primeira imagem
 viewer-image-last = Última imagem
 viewer-image-random = Imagem aleatória
 viewer-image-loop = Repetir pasta
+viewer-image-more = Mais ferramentas
 viewer-image-folder = Ir à pasta
 viewer-image-recent = Vistas recentemente
 viewer-image-goto = Ir à imagem

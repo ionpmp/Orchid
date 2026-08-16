@@ -488,6 +488,7 @@ viewer-image-first = 最初の画像
 viewer-image-last = 最後の画像
 viewer-image-random = ランダム
 viewer-image-loop = フォルダーをループ
+viewer-image-more = その他
 viewer-image-folder = フォルダーへ
 viewer-image-recent = 最近表示した画像
 viewer-image-goto = 番号へ移動

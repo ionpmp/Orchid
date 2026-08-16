@@ -1,0 +1,1047 @@
+import { Theme } from "../../theme_global.slint";
+
+/// Image-viewer toolbar glyphs. Drawn with rectangles so they stay visible
+/// on Windows (Slint's default font has no emoji / many Unicode symbols).
+export component ViewerBarIcon inherits Rectangle {
+    in property <string> icon-id;
+    in property <length> icon-size: 16px;
+    in property <color> ink: Theme.text-primary;
+
+    width: icon-size;
+    height: icon-size;
+    background: transparent;
+
+    // --- zoom / chrome ---
+    if icon-id == "zoom-out" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.44;
+            width: parent.width * 0.64; height: 2px;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "zoom-in" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.44;
+            width: parent.width * 0.64; height: 2px;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.44; y: parent.height * 0.18;
+            width: 2px; height: parent.height * 0.64;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "zoom-sel" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.12;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.6; y: parent.height * 0.12;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.86; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.86;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.6;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.6; y: parent.height * 0.86;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.86; y: parent.height * 0.6;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+    }
+    if icon-id == "lens" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.08;
+            width: parent.width * 0.56; height: parent.height * 0.56;
+            border-radius: parent.width;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.58; y: parent.height * 0.58;
+            width: parent.width * 0.28; height: 2.5px;
+            background: root.ink; border-radius: 1px;
+            transform-rotation: 45deg;
+        }
+    }
+    if icon-id == "more" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.42;
+            width: parent.width * 0.16; height: parent.height * 0.16;
+            border-radius: parent.width; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.42; y: parent.height * 0.42;
+            width: parent.width * 0.16; height: parent.height * 0.16;
+            border-radius: parent.width; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.72; y: parent.height * 0.42;
+            width: parent.width * 0.16; height: parent.height * 0.16;
+            border-radius: parent.width; background: root.ink;
+        }
+    }
+
+    // --- folder nav ---
+    if icon-id == "prev" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.22;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: -42deg;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.36;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: 42deg;
+        }
+    }
+    if icon-id == "next" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.56; y: parent.height * 0.22;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: 42deg;
+        }
+        Rectangle {
+            x: parent.width * 0.56; y: parent.height * 0.36;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: -42deg;
+        }
+    }
+    if icon-id == "first" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.14; y: parent.height * 0.2;
+            width: 2px; height: parent.height * 0.6; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.42; y: parent.height * 0.22;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: -42deg;
+        }
+        Rectangle {
+            x: parent.width * 0.42; y: parent.height * 0.36;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: 42deg;
+        }
+    }
+    if icon-id == "last" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.74; y: parent.height * 0.2;
+            width: 2px; height: parent.height * 0.6; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.38; y: parent.height * 0.22;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: 42deg;
+        }
+        Rectangle {
+            x: parent.width * 0.38; y: parent.height * 0.36;
+            width: 2.5px; height: parent.height * 0.42;
+            background: root.ink; transform-rotation: -42deg;
+        }
+    }
+    if icon-id == "random" || icon-id == "slide-random" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.28;
+            width: parent.width * 0.52; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.36; y: parent.height * 0.68;
+            width: parent.width * 0.52; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.58; y: parent.height * 0.16;
+            width: parent.width * 0.22; height: 2px;
+            background: root.ink; transform-rotation: -40deg;
+        }
+        Rectangle {
+            x: parent.width * 0.58; y: parent.height * 0.32;
+            width: parent.width * 0.22; height: 2px;
+            background: root.ink; transform-rotation: 40deg;
+        }
+        Rectangle {
+            x: parent.width * 0.2; y: parent.height * 0.56;
+            width: parent.width * 0.22; height: 2px;
+            background: root.ink; transform-rotation: 40deg;
+        }
+        Rectangle {
+            x: parent.width * 0.2; y: parent.height * 0.72;
+            width: parent.width * 0.22; height: 2px;
+            background: root.ink; transform-rotation: -40deg;
+        }
+    }
+
+    // --- browse / extra ---
+    if icon-id == "loop" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.16; y: parent.height * 0.22;
+            width: parent.width * 0.68; height: parent.height * 0.56;
+            border-radius: parent.width * 0.2;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.62; y: parent.height * 0.12;
+            width: parent.width * 0.2; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.74; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.2; background: root.ink;
+        }
+    }
+    if icon-id == "folder" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.22;
+            width: parent.width * 0.36; height: parent.height * 0.16;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.34;
+            width: parent.width * 0.84; height: parent.height * 0.5;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "recent" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.12;
+            width: parent.width * 0.76; height: parent.height * 0.76;
+            border-radius: parent.width;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.28;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.52;
+            width: parent.width * 0.22; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "thumbs" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.28;
+            width: parent.width * 0.38; height: parent.height * 0.44;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.54; y: parent.height * 0.28;
+            width: parent.width * 0.38; height: parent.height * 0.44;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+    }
+    if icon-id == "grid" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.1;
+            width: parent.width * 0.34; height: parent.height * 0.34;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.56; y: parent.height * 0.1;
+            width: parent.width * 0.34; height: parent.height * 0.34;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.56;
+            width: parent.width * 0.34; height: parent.height * 0.34;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.56; y: parent.height * 0.56;
+            width: parent.width * 0.34; height: parent.height * 0.34;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "timeline" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.46;
+            width: parent.width * 0.84; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.16; y: parent.height * 0.28;
+            width: 2px; height: parent.height * 0.36; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.48; y: parent.height * 0.22;
+            width: 2px; height: parent.height * 0.48; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.76; y: parent.height * 0.32;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+    }
+    if icon-id == "map" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.08;
+            width: parent.width * 0.44; height: parent.height * 0.44;
+            border-radius: parent.width; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.36; y: parent.height * 0.4;
+            width: parent.width * 0.28; height: parent.height * 0.42;
+            background: root.ink;
+        }
+    }
+    if icon-id == "calendar" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.18;
+            width: parent.width * 0.76; height: parent.height * 0.7;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.18;
+            width: parent.width * 0.76; height: parent.height * 0.2;
+            background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.1;
+            width: 2px; height: parent.height * 0.16; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.64; y: parent.height * 0.1;
+            width: 2px; height: parent.height * 0.16; background: root.ink;
+        }
+    }
+    if icon-id == "autohide" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.12;
+            width: parent.width * 0.76; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.36;
+            width: 2.5px; height: parent.height * 0.36;
+            background: root.ink; transform-rotation: 42deg;
+        }
+        Rectangle {
+            x: parent.width * 0.54; y: parent.height * 0.36;
+            width: 2.5px; height: parent.height * 0.36;
+            background: root.ink; transform-rotation: -42deg;
+        }
+    }
+    if icon-id == "thumb-size" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.08;
+            width: parent.width * 0.84; height: parent.height * 0.84;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.28;
+            width: parent.width * 0.44; height: parent.height * 0.44;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "info" || icon-id == "thumb-meta" || icon-id == "meta" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.14; y: parent.height * 0.14;
+            width: parent.width * 0.72; height: parent.height * 0.72;
+            border-radius: parent.width;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.28;
+            width: 2px; height: parent.height * 0.14; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.48;
+            width: 2px; height: parent.height * 0.26; background: root.ink;
+        }
+    }
+    if icon-id == "contact" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.18;
+            width: parent.width * 0.22; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.39; y: parent.height * 0.18;
+            width: parent.width * 0.22; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.68; y: parent.height * 0.18;
+            width: parent.width * 0.22; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.54;
+            width: parent.width * 0.22; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.39; y: parent.height * 0.54;
+            width: parent.width * 0.22; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.68; y: parent.height * 0.54;
+            width: parent.width * 0.22; height: parent.height * 0.28; background: root.ink;
+        }
+    }
+    if icon-id == "overlay" || icon-id == "slide-overlay" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.16;
+            width: parent.width * 0.8; height: parent.height * 0.68;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.62;
+            width: parent.width * 0.5; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.74;
+            width: parent.width * 0.32; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "histogram" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.5;
+            width: parent.width * 0.18; height: parent.height * 0.36; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.4; y: parent.height * 0.22;
+            width: parent.width * 0.18; height: parent.height * 0.64; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.68; y: parent.height * 0.36;
+            width: parent.width * 0.18; height: parent.height * 0.5; background: root.ink;
+        }
+    }
+
+    // --- slideshow ---
+    if icon-id == "play" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.22;
+            width: parent.width * 0.16; height: parent.height * 0.16; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.34;
+            width: parent.width * 0.32; height: parent.height * 0.14; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.46;
+            width: parent.width * 0.44; height: parent.height * 0.12; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.56;
+            width: parent.width * 0.32; height: parent.height * 0.14; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.66;
+            width: parent.width * 0.16; height: parent.height * 0.16; background: root.ink;
+        }
+    }
+    if icon-id == "pause" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.26; y: parent.height * 0.2;
+            width: parent.width * 0.16; height: parent.height * 0.6; background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.58; y: parent.height * 0.2;
+            width: parent.width * 0.16; height: parent.height * 0.6; background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "speed" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.16;
+            width: parent.width * 0.76; height: parent.height * 0.68;
+            border-radius: parent.width;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.42;
+            width: 2px; height: parent.height * 0.28;
+            background: root.ink; transform-rotation: 35deg;
+        }
+    }
+    if icon-id == "transition" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.22;
+            width: parent.width * 0.5; height: parent.height * 0.56;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.42; y: parent.height * 0.22;
+            width: parent.width * 0.5; height: parent.height * 0.56;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "music" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.58; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.58; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.32; y: parent.height * 0.12;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.58;
+            width: parent.width * 0.28; height: parent.height * 0.24;
+            border-radius: parent.width; background: root.ink;
+        }
+    }
+    if icon-id == "export-html" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.1;
+            width: parent.width * 0.64; height: parent.height * 0.8;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.38;
+            width: parent.width * 0.4; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.54;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "export-video" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.28;
+            width: parent.width * 0.8; height: parent.height * 0.44;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.18;
+            width: parent.width * 0.12; height: parent.height * 0.12; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.66; y: parent.height * 0.18;
+            width: parent.width * 0.12; height: parent.height * 0.12; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.7;
+            width: parent.width * 0.12; height: parent.height * 0.12; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.66; y: parent.height * 0.7;
+            width: parent.width * 0.12; height: parent.height * 0.12; background: root.ink;
+        }
+    }
+    if icon-id == "export-exe" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.16;
+            width: parent.width * 0.76; height: parent.height * 0.68;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.16;
+            width: parent.width * 0.76; height: parent.height * 0.18; background: root.ink;
+        }
+    }
+    if icon-id == "export-scr" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.12;
+            width: parent.width * 0.8; height: parent.height * 0.56;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.38; y: parent.height * 0.7;
+            width: parent.width * 0.24; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.78;
+            width: parent.width * 0.44; height: 2px; background: root.ink;
+        }
+    }
+
+    // --- fit ---
+    if icon-id == "fit" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.1;
+            width: parent.width * 0.8; height: parent.height * 0.8;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.28;
+            width: parent.width * 0.44; height: parent.height * 0.44;
+            background: root.ink; border-radius: 1px;
+        }
+    }
+    if icon-id == "fit-width" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.46;
+            width: parent.width * 0.84; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.34;
+            width: 2px; height: parent.height * 0.32; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.84; y: parent.height * 0.34;
+            width: 2px; height: parent.height * 0.32; background: root.ink;
+        }
+    }
+    if icon-id == "fit-height" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.08;
+            width: 2px; height: parent.height * 0.84; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.34; y: parent.height * 0.08;
+            width: parent.width * 0.32; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.34; y: parent.height * 0.84;
+            width: parent.width * 0.32; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "fit-shrink" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.1;
+            width: parent.width * 0.8; height: parent.height * 0.8;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.46;
+            width: parent.width * 0.44; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "actual" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.2;
+            width: parent.width * 0.28; height: parent.height * 0.6;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.6; y: parent.height * 0.2;
+            width: parent.width * 0.28; height: parent.height * 0.6;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.44; y: parent.height * 0.46;
+            width: parent.width * 0.12; height: 2px; background: root.ink;
+        }
+    }
+
+    // --- rotate / flip / reset ---
+    if icon-id == "rotate-cw" || icon-id == "ll-rotate" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.22;
+            width: parent.width * 0.56; height: parent.height * 0.56;
+            border-radius: parent.width * 0.16;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.62; y: parent.height * 0.12;
+            width: parent.width * 0.2; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.74; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.2; background: root.ink;
+        }
+    }
+    if icon-id == "rotate-ccw" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.22;
+            width: parent.width * 0.56; height: parent.height * 0.56;
+            border-radius: parent.width * 0.16;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.12;
+            width: parent.width * 0.2; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.2; background: root.ink;
+        }
+    }
+    if icon-id == "rotate-180" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.2; y: parent.height * 0.2;
+            width: parent.width * 0.6; height: parent.height * 0.6;
+            border-radius: parent.width;
+            border-width: 2px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.08;
+            width: 2px; height: parent.height * 0.22; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.7;
+            width: 2px; height: parent.height * 0.22; background: root.ink;
+        }
+    }
+    if icon-id == "reset" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.2; y: parent.height * 0.2;
+            width: parent.width * 0.6; height: 2px;
+            background: root.ink; transform-rotation: 45deg;
+        }
+        Rectangle {
+            x: parent.width * 0.2; y: parent.height * 0.2;
+            width: parent.width * 0.6; height: 2px;
+            background: root.ink; transform-rotation: -45deg;
+        }
+    }
+    if icon-id == "flip-h" || icon-id == "ll-flip" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.46;
+            width: parent.width * 0.84; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.34;
+            width: 2px; height: parent.height * 0.32; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.84; y: parent.height * 0.34;
+            width: 2px; height: parent.height * 0.32; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.2;
+            width: 2px; height: parent.height * 0.6; background: root.ink;
+        }
+    }
+    if icon-id == "flip-v" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.08;
+            width: 2px; height: parent.height * 0.84; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.34; y: parent.height * 0.08;
+            width: parent.width * 0.32; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.34; y: parent.height * 0.84;
+            width: parent.width * 0.32; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.2; y: parent.height * 0.46;
+            width: parent.width * 0.6; height: 2px; background: root.ink;
+        }
+    }
+
+    // --- edit ---
+    if icon-id == "crop" || icon-id == "edit-crop" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.12;
+            width: 2px; height: parent.height * 0.76; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.28;
+            width: parent.width * 0.76; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.72;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.72; y: parent.height * 0.28;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+    }
+    if icon-id == "straighten" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.46;
+            width: parent.width * 0.76; height: 2px;
+            background: root.ink; transform-rotation: -18deg;
+        }
+    }
+    if icon-id == "auto-straighten" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.5;
+            width: parent.width * 0.76; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.7; y: parent.height * 0.16;
+            width: 2px; height: parent.height * 0.2; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.62; y: parent.height * 0.24;
+            width: parent.width * 0.2; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "perspective" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.18;
+            width: parent.width * 0.56; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.78;
+            width: parent.width * 0.8; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.18;
+            width: 2px; height: parent.height * 0.62; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.76; y: parent.height * 0.18;
+            width: 2px; height: parent.height * 0.62; background: root.ink;
+        }
+    }
+    if icon-id == "adjust" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.22; y: parent.height * 0.16;
+            width: 2px; height: parent.height * 0.68; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.14; y: parent.height * 0.36;
+            width: parent.width * 0.2; height: parent.height * 0.16;
+            border-radius: parent.width; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.7; y: parent.height * 0.16;
+            width: 2px; height: parent.height * 0.68; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.62; y: parent.height * 0.52;
+            width: parent.width * 0.2; height: parent.height * 0.16;
+            border-radius: parent.width; background: root.ink;
+        }
+    }
+    if icon-id == "filter" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.16; y: parent.height * 0.18;
+            width: parent.width * 0.68; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.38;
+            width: parent.width * 0.44; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.4; y: parent.height * 0.38;
+            width: 2px; height: parent.height * 0.4; background: root.ink;
+        }
+    }
+    if icon-id == "annotate" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.16;
+            width: parent.width * 0.18; height: parent.height * 0.52;
+            background: root.ink; transform-rotation: 40deg;
+        }
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.74;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "print" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.16; y: parent.height * 0.36;
+            width: parent.width * 0.68; height: parent.height * 0.36;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.12;
+            width: parent.width * 0.44; height: parent.height * 0.28;
+            border-width: 1.5px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.58;
+            width: parent.width * 0.44; height: parent.height * 0.26;
+            border-width: 1.5px; border-color: root.ink; background: Theme.surface-raised;
+        }
+    }
+    if icon-id == "export" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.38;
+            width: parent.width * 0.64; height: parent.height * 0.5;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.46; y: parent.height * 0.1;
+            width: 2px; height: parent.height * 0.42; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.34; y: parent.height * 0.1;
+            width: parent.width * 0.16; height: 2px;
+            background: root.ink; transform-rotation: -40deg;
+        }
+        Rectangle {
+            x: parent.width * 0.5; y: parent.height * 0.1;
+            width: parent.width * 0.16; height: 2px;
+            background: root.ink; transform-rotation: 40deg;
+        }
+    }
+    if icon-id == "exif" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.18; y: parent.height * 0.12;
+            width: parent.width * 0.64; height: parent.height * 0.76;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.32;
+            width: parent.width * 0.4; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.48;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.64;
+            width: parent.width * 0.36; height: 2px; background: root.ink;
+        }
+    }
+    if icon-id == "ll-folder" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.28;
+            width: parent.width * 0.28; height: parent.height * 0.12;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.08; y: parent.height * 0.38;
+            width: parent.width * 0.52; height: parent.height * 0.4;
+            background: root.ink; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.68; y: parent.height * 0.16;
+            width: parent.width * 0.22; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.82; y: parent.height * 0.16;
+            width: 2px; height: parent.height * 0.2; background: root.ink;
+        }
+    }
+
+    // --- view ---
+    if icon-id == "bg" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.12;
+            width: parent.width * 0.34; height: parent.height * 0.34; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.54; y: parent.height * 0.54;
+            width: parent.width * 0.34; height: parent.height * 0.34; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.54; y: parent.height * 0.12;
+            width: parent.width * 0.34; height: parent.height * 0.34;
+            border-width: 1.5px; border-color: root.ink; background: transparent;
+        }
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.54;
+            width: parent.width * 0.34; height: parent.height * 0.34;
+            border-width: 1.5px; border-color: root.ink; background: transparent;
+        }
+    }
+    if icon-id == "fullscreen" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.1;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.1;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.62; y: parent.height * 0.1;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.84; y: parent.height * 0.1;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.84;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.62;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.62; y: parent.height * 0.84;
+            width: parent.width * 0.28; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.84; y: parent.height * 0.62;
+            width: 2px; height: parent.height * 0.28; background: root.ink;
+        }
+    }
+    if icon-id == "kiosk" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.12; y: parent.height * 0.12;
+            width: parent.width * 0.76; height: parent.height * 0.52;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.3; y: parent.height * 0.72;
+            width: parent.width * 0.4; height: 2px; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.42; y: parent.height * 0.28;
+            width: parent.width * 0.16; height: parent.height * 0.22; background: root.ink;
+        }
+    }
+    if icon-id == "monitor" : Rectangle {
+        width: parent.width; height: parent.height;
+        Rectangle {
+            x: parent.width * 0.1; y: parent.height * 0.14;
+            width: parent.width * 0.8; height: parent.height * 0.52;
+            border-width: 1.5px; border-color: root.ink; background: transparent; border-radius: 1px;
+        }
+        Rectangle {
+            x: parent.width * 0.42; y: parent.height * 0.66;
+            width: 2px; height: parent.height * 0.14; background: root.ink;
+        }
+        Rectangle {
+            x: parent.width * 0.28; y: parent.height * 0.8;
+            width: parent.width * 0.44; height: 2px; background: root.ink;
+        }
+    }
+}

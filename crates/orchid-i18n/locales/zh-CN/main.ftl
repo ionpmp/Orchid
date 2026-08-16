@@ -488,6 +488,7 @@ viewer-image-first = 第一张
 viewer-image-last = 最后一张
 viewer-image-random = 随机
 viewer-image-loop = 循环文件夹
+viewer-image-more = 更多
 viewer-image-folder = 打开文件夹
 viewer-image-recent = 最近查看
 viewer-image-goto = 跳到序号

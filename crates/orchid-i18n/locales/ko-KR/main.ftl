@@ -488,6 +488,7 @@ viewer-image-first = 첫 이미지
 viewer-image-last = 마지막 이미지
 viewer-image-random = 무작위
 viewer-image-loop = 폴더 반복
+viewer-image-more = 더보기
 viewer-image-folder = 폴더로
 viewer-image-recent = 최근 본 이미지
 viewer-image-goto = 번호로 이동

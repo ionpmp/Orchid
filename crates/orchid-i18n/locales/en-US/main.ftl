@@ -754,6 +754,7 @@ viewer-image-first = First image
 viewer-image-last = Last image
 viewer-image-random = Random image
 viewer-image-loop = Loop folder
+viewer-image-more = More tools
 viewer-image-folder = Go to folder
 viewer-image-recent = Recently viewed
 viewer-image-goto = Go to image

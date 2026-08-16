@@ -478,6 +478,7 @@ viewer-image-first = Первое
 viewer-image-last = Последнее
 viewer-image-random = Случайное
 viewer-image-loop = По кругу
+viewer-image-more = Ещё
 viewer-image-folder = В папку
 viewer-image-recent = Недавние
 viewer-image-goto = Перейти к номеру

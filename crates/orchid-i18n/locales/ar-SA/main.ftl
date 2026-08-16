@@ -489,6 +489,7 @@ viewer-image-first = الصورة الأولى
 viewer-image-last = الصورة الأخيرة
 viewer-image-random = صورة عشوائية
 viewer-image-loop = تكرار المجلد
+viewer-image-more = المزيد
 viewer-image-folder = إلى المجلد
 viewer-image-recent = شوهدت مؤخرًا
 viewer-image-goto = الانتقال إلى رقم

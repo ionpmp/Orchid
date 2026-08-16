@@ -1,6 +1,7 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
 import { ViewerImageModel } from "../../workspace/defs.slint";
+import { ViewerBarIcon } from "viewer-icons.slint";
 
 export component ViewerImageView inherits Rectangle {
     in property <ViewerImageModel> model;
@@ -99,6 +100,8 @@ export component ViewerImageView inherits Rectangle {
     property <int> activity-gen: 0;
     property <int> hide-seen: 0;
     property <bool> chrome-on: !model.chrome-hidden && (root.overlay-peek || !model.overlay-autohide);
+    property <bool> show-more: false;
+    property <string> bar-tip: "";
 
     function bump-overlay() {
         root.overlay-peek = true;
@@ -497,15 +500,24 @@ export component ViewerImageView inherits Rectangle {
         spacing: 0;
 
         if root.chrome-on : Rectangle {
-            height: 36px;
+            height: 52px;
             background: Theme.surface-base;
             border-radius: Theme.radius-md;
+            clip: true;
 
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                alignment: start;
+            VerticalLayout {
+                spacing: 0;
+
+                bar-flick := Flickable {
+                    height: 36px;
+                    viewport-height: 36px;
+                    viewport-width: max(self.width, bar-row.preferred-width);
+
+                    bar-row := HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 4px;
+                        alignment: start;
 
                 Rectangle {
                     width: 28px;
@@ -518,26 +530,17 @@ export component ViewerImageView inherits Rectangle {
                             root.zoom-out();
                             img-keys.focus();
                         }
-                    }
-                    if zoom-out-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: zoom-out-hint.preferred-width + 12px;
-                        height: zoom-out-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        zoom-out-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.viewer-image-zoom-out;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? Strings.viewer-image-zoom-out : "";
                         }
                     }
-                    Text { text: "−"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "zoom-out";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
+                    }
                 }
 
                 Rectangle {
@@ -567,21 +570,16 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     sel-ta := TouchArea {
                         clicked => { root.select-zoom = !root.select-zoom; img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.zoom-selection-label : "";
+                        }
                     }
-                    if sel-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: sel-hint.preferred-width + 12px;
-                        height: sel-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        sel-hint := Text { x: 6px; y: 3px; text: model.zoom-selection-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "▭";
-                        color: root.select-zoom ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "zoom-sel";
+                        icon-size: 16px;
+                        ink: root.select-zoom ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -594,21 +592,16 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     lens-ta := TouchArea {
                         clicked => { root.command("lens"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.lens-label : "";
+                        }
                     }
-                    if lens-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: lens-hint.preferred-width + 12px;
-                        height: lens-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        lens-hint := Text { x: 6px; y: 3px; text: model.lens-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "⌕";
-                        color: model.lens ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "lens";
+                        icon-size: 16px;
+                        ink: model.lens ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -623,26 +616,41 @@ export component ViewerImageView inherits Rectangle {
                             root.zoom-in();
                             img-keys.focus();
                         }
-                    }
-                    if zoom-in-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: zoom-in-hint.preferred-width + 12px;
-                        height: zoom-in-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        zoom-in-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.viewer-image-zoom-in;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? Strings.viewer-image-zoom-in : "";
                         }
                     }
-                    Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-lg; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "zoom-in";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
+                    }
+                }
+
+                Rectangle { width: 8px; }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: root.show-more ? Theme.surface-raised
+                        : more-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    more-ta := TouchArea {
+                        clicked => { root.show-more = !root.show-more; img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.more-label : "";
+                        }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "more";
+                        icon-size: 16px;
+                        ink: root.show-more ? Theme.accent-brand : Theme.text-primary;
+                    }
                 }
 
                 Rectangle { width: 8px; }
@@ -655,17 +663,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     prev-ta := TouchArea {
                         clicked => { root.command("prev"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.prev-label : "";
+                        }
                     }
-                    if prev-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: prev-hint.preferred-width + 12px;
-                        height: prev-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        prev-hint := Text { x: 6px; y: 3px; text: model.prev-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "prev";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "⟨"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -701,17 +709,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     next-ta := TouchArea {
                         clicked => { root.command("next"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.next-label : "";
+                        }
                     }
-                    if next-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: next-hint.preferred-width + 12px;
-                        height: next-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        next-hint := Text { x: 6px; y: 3px; text: model.next-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "next";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "⟩"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -722,17 +730,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     first-ta := TouchArea {
                         clicked => { root.command("first"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.first-label : "";
+                        }
                     }
-                    if first-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: first-hint.preferred-width + 12px;
-                        height: first-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        first-hint := Text { x: 6px; y: 3px; text: model.first-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "first";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "⟨⟨"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -743,17 +751,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     last-ta := TouchArea {
                         clicked => { root.command("last"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.last-label : "";
+                        }
                     }
-                    if last-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: last-hint.preferred-width + 12px;
-                        height: last-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        last-hint := Text { x: 6px; y: 3px; text: model.last-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "last";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "⟩⟩"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -764,21 +772,24 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     rnd-ta := TouchArea {
                         clicked => { root.command("random"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.random-label : "";
+                        }
                     }
-                    if rnd-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: rnd-hint.preferred-width + 12px;
-                        height: rnd-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        rnd-hint := Text { x: 6px; y: 3px; text: model.random-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "random";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "*"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
+                if root.show-more : HorizontalLayout {
+                    spacing: 4px;
+
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.loop-folder ? Theme.surface-raised
                         : loop-ta.has-hover ? Theme.surface-raised : transparent;
@@ -786,53 +797,42 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     loop-ta := TouchArea {
                         clicked => { root.command("loop"); img-keys.focus(); }
-                    }
-                    if loop-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: loop-hint.preferred-width + 12px;
-                        height: loop-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        loop-hint := Text { x: 6px; y: 3px; text: model.loop-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.loop-label;
-                            color: model.loop-folder ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.loop-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "loop";
+                        icon-size: 16px;
+                        ink: model.loop-folder ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: folder-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     folder-ta := TouchArea {
                         clicked => { root.command("reveal-folder"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.folder-label : "";
+                        }
                     }
-                    if folder-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: folder-hint.preferred-width + 12px;
-                        height: folder-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        folder-hint := Text { x: 6px; y: 3px; text: model.folder-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text { text: model.folder-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "folder";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: root.show-recent ? Theme.surface-raised
                         : recent-ta.has-hover ? Theme.surface-raised : transparent;
@@ -840,29 +840,21 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     recent-ta := TouchArea {
                         clicked => { root.show-recent = !root.show-recent; img-keys.focus(); }
-                    }
-                    if recent-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: recent-hint.preferred-width + 12px;
-                        height: recent-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        recent-hint := Text { x: 6px; y: 3px; text: model.recent-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.recent-label;
-                            color: root.show-recent ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.recent-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "recent";
+                        icon-size: 16px;
+                        ink: root.show-recent ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.thumb-strip != 0 ? Theme.surface-raised
                         : thumbs-ta.has-hover ? Theme.surface-raised : transparent;
@@ -870,29 +862,21 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     thumbs-ta := TouchArea {
                         clicked => { root.command("thumbs"); img-keys.focus(); }
-                    }
-                    if thumbs-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: thumbs-hint.preferred-width + 12px;
-                        height: thumbs-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        thumbs-hint := Text { x: 6px; y: 3px; text: model.thumbs-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.thumbs-label;
-                            color: model.thumb-strip != 0 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.thumbs-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "thumbs";
+                        icon-size: 16px;
+                        ink: model.thumb-strip != 0 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.thumb-grid ? Theme.surface-raised
                         : tgrid-ta.has-hover ? Theme.surface-raised : transparent;
@@ -900,29 +884,21 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     tgrid-ta := TouchArea {
                         clicked => { root.command("thumb-grid"); img-keys.focus(); }
-                    }
-                    if tgrid-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: tgrid-hint.preferred-width + 12px;
-                        height: tgrid-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        tgrid-hint := Text { x: 6px; y: 3px; text: model.thumb-grid-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.thumb-grid-label;
-                            color: model.thumb-grid ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.thumb-grid-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "grid";
+                        icon-size: 16px;
+                        ink: model.thumb-grid ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.browse-mode == 1 ? Theme.surface-raised
                         : time-ta.has-hover ? Theme.surface-raised : transparent;
@@ -930,29 +906,21 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     time-ta := TouchArea {
                         clicked => { root.command("browse-timeline"); img-keys.focus(); }
-                    }
-                    if time-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: time-hint.preferred-width + 12px;
-                        height: time-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        time-hint := Text { x: 6px; y: 3px; text: model.timeline-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.timeline-label;
-                            color: model.browse-mode == 1 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.timeline-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "timeline";
+                        icon-size: 16px;
+                        ink: model.browse-mode == 1 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.browse-mode == 2 ? Theme.surface-raised
                         : mapv-ta.has-hover ? Theme.surface-raised : transparent;
@@ -960,29 +928,21 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     mapv-ta := TouchArea {
                         clicked => { root.command("browse-map"); img-keys.focus(); }
-                    }
-                    if mapv-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: mapv-hint.preferred-width + 12px;
-                        height: mapv-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        mapv-hint := Text { x: 6px; y: 3px; text: model.map-view-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.map-view-label;
-                            color: model.browse-mode == 2 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.map-view-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "map";
+                        icon-size: 16px;
+                        ink: model.browse-mode == 2 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.browse-mode == 3 ? Theme.surface-raised
                         : calv-ta.has-hover ? Theme.surface-raised : transparent;
@@ -990,29 +950,21 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     calv-ta := TouchArea {
                         clicked => { root.command("browse-calendar"); img-keys.focus(); }
-                    }
-                    if calv-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: calv-hint.preferred-width + 12px;
-                        height: calv-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        calv-hint := Text { x: 6px; y: 3px; text: model.calendar-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.calendar-label;
-                            color: model.browse-mode == 3 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.calendar-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "calendar";
+                        icon-size: 16px;
+                        ink: model.browse-mode == 3 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.overlay-autohide ? Theme.surface-raised
                         : hide-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1020,53 +972,42 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     hide-ta := TouchArea {
                         clicked => { root.command("overlay-autohide"); img-keys.focus(); }
-                    }
-                    if hide-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: hide-hint.preferred-width + 12px;
-                        height: hide-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        hide-hint := Text { x: 6px; y: 3px; text: model.overlay-autohide-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 8px; padding-right: 8px;
-                        Text {
-                            text: model.overlay-autohide-label;
-                            color: model.overlay-autohide ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.overlay-autohide-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "autohide";
+                        icon-size: 16px;
+                        ink: model.overlay-autohide ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: tsize-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     tsize-ta := TouchArea {
                         clicked => { root.command("thumb-size"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.thumb-size-label : "";
+                        }
                     }
-                    if tsize-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: tsize-hint.preferred-width + 12px;
-                        height: tsize-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        tsize-hint := Text { x: 6px; y: 3px; text: model.thumb-size-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.thumb-size-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "thumb-size";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.thumb-show-meta ? Theme.surface-raised
                         : tmeta-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1074,52 +1015,41 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     tmeta-ta := TouchArea {
                         clicked => { root.command("thumb-meta"); img-keys.focus(); }
-                    }
-                    if tmeta-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: tmeta-hint.preferred-width + 12px;
-                        height: tmeta-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        tmeta-hint := Text { x: 6px; y: 3px; text: model.thumb-meta-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text {
-                            text: model.thumb-meta-label;
-                            color: model.thumb-show-meta ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center; vertical-alignment: center;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.thumb-meta-label : "";
                         }
+                    }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "thumb-meta";
+                        icon-size: 16px;
+                        ink: model.thumb-show-meta ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: tsheet-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     tsheet-ta := TouchArea {
                         clicked => { root.command("contact-sheet"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.contact-sheet-label : "";
+                        }
                     }
-                    if tsheet-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: tsheet-hint.preferred-width + 12px;
-                        height: tsheet-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        tsheet-hint := Text { x: 6px; y: 3px; text: model.contact-sheet-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.contact-sheet-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "contact";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.meta-panel ? Theme.surface-raised
                         : meta-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1127,14 +1057,20 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     meta-ta := TouchArea {
                         clicked => { root.command("meta-panel"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.meta-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.meta-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "meta";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.meta-overlay ? Theme.surface-raised
                         : movl-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1142,31 +1078,44 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     movl-ta := TouchArea {
                         clicked => { root.command("meta-overlay"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.meta-overlay-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.meta-overlay-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "overlay";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: hist-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     hist-ta := TouchArea {
                         clicked => { root.command("hist-mode"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.histogram-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.histogram-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "histogram";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
+                }
                 }
 
                 Rectangle { width: 8px; }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.slideshow-playing ? Theme.surface-raised
                         : slide-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1174,23 +1123,20 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     slide-ta := TouchArea {
                         clicked => { root.command("slideshow"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-label : "";
+                        }
                     }
-                    if slide-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: slide-hint.preferred-width + 12px;
-                        height: slide-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        slide-hint := Text { x: 6px; y: 3px; text: model.slideshow-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "play";
+                        icon-size: 16px;
+                        ink: model.slideshow-playing ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
                 if model.slideshow-playing : Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.slideshow-paused ? Theme.surface-raised
                         : spause-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1198,28 +1144,42 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     spause-ta := TouchArea {
                         clicked => { root.command("slideshow-pause"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-pause-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-pause-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "pause";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
+                if model.slideshow-playing : HorizontalLayout {
+                    spacing: 4px;
                 Rectangle {
-                    min-width: 52px;
+                    width: 28px;
                     height: 28px;
                     background: sspd-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     sspd-ta := TouchArea {
                         clicked => { root.command("slideshow-faster"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-speed-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-speed-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "speed";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.slideshow-random ? Theme.surface-raised
                         : srand-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1227,28 +1187,40 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     srand-ta := TouchArea {
                         clicked => { root.command("slideshow-random"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-random-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-random-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "slide-random";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 44px;
+                    width: 28px;
                     height: 28px;
                     background: strans-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     strans-ta := TouchArea {
                         clicked => { root.command("slideshow-transition"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-transition-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-transition-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "transition";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.slideshow-overlay ? Theme.surface-raised
                         : sovl-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1256,14 +1228,20 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     sovl-ta := TouchArea {
                         clicked => { root.command("slideshow-overlay"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-overlay-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-overlay-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "slide-overlay";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: model.slideshow-music != "" ? Theme.surface-raised
                         : smus-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1271,73 +1249,104 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     smus-ta := TouchArea {
                         clicked => { root.command("slideshow-music"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-music-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-music-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "music";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: sexp-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     sexp-ta := TouchArea {
                         clicked => { root.command("slideshow-export-html"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-export-html-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-export-html-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "export-html";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: svid-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     svid-ta := TouchArea {
                         clicked => { root.command("slideshow-export-video"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-export-video-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-export-video-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "export-video";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: sexe-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     sexe-ta := TouchArea {
                         clicked => { root.command("slideshow-export-exe"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-export-exe-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-export-exe-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "export-exe";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: sscr-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     sscr-ta := TouchArea {
                         clicked => { root.command("slideshow-export-scr"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.slideshow-export-scr-label : "";
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.slideshow-export-scr-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "export-scr";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
+                }
                 }
 
                 Rectangle { width: 8px; }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.fit-mode == 1 ? Theme.surface-raised
                         : fit-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1348,39 +1357,21 @@ export component ViewerImageView inherits Rectangle {
                             root.fit();
                             img-keys.focus();
                         }
-                    }
-                    if fit-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fit-hint.preferred-width + 12px;
-                        height: fit-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fit-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fit-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.fit-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fit-label;
-                            color: model.fit-mode == 1 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "fit";
+                        icon-size: 16px;
+                        ink: model.fit-mode == 1 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.fit-mode == 2 ? Theme.surface-raised
                         : fit-w-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1391,39 +1382,21 @@ export component ViewerImageView inherits Rectangle {
                             root.command("fit-width");
                             img-keys.focus();
                         }
-                    }
-                    if fit-w-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fit-w-hint.preferred-width + 12px;
-                        height: fit-w-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fit-w-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fit-width-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.fit-width-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fit-width-label;
-                            color: model.fit-mode == 2 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "fit-width";
+                        icon-size: 16px;
+                        ink: model.fit-mode == 2 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.fit-mode == 3 ? Theme.surface-raised
                         : fit-h-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1434,39 +1407,21 @@ export component ViewerImageView inherits Rectangle {
                             root.command("fit-height");
                             img-keys.focus();
                         }
-                    }
-                    if fit-h-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fit-h-hint.preferred-width + 12px;
-                        height: fit-h-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fit-h-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fit-height-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.fit-height-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fit-height-label;
-                            color: model.fit-mode == 3 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "fit-height";
+                        icon-size: 16px;
+                        ink: model.fit-mode == 3 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.fit-mode == 4 ? Theme.surface-raised
                         : fit-s-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1477,39 +1432,21 @@ export component ViewerImageView inherits Rectangle {
                             root.command("fit-shrink");
                             img-keys.focus();
                         }
-                    }
-                    if fit-s-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fit-s-hint.preferred-width + 12px;
-                        height: fit-s-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fit-s-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fit-shrink-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.fit-shrink-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fit-shrink-label;
-                            color: model.fit-mode == 4 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "fit-shrink";
+                        icon-size: 16px;
+                        ink: model.fit-mode == 4 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.fit-mode == 0 ? Theme.surface-raised
                         : actual-ta.has-hover ? Theme.surface-raised : transparent;
@@ -1520,34 +1457,16 @@ export component ViewerImageView inherits Rectangle {
                             root.actual-size();
                             img-keys.focus();
                         }
-                    }
-                    if actual-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: actual-hint.preferred-width + 12px;
-                        height: actual-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        actual-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.actual-size-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.actual-size-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.actual-size-label;
-                            color: model.fit-mode == 0 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "actual";
+                        icon-size: 16px;
+                        ink: model.fit-mode == 0 ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -1564,26 +1483,17 @@ export component ViewerImageView inherits Rectangle {
                             root.rotate-cw();
                             img-keys.focus();
                         }
-                    }
-                    if rcw-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: rcw-hint.preferred-width + 12px;
-                        height: rcw-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        rcw-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.viewer-image-rotate-cw;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? Strings.viewer-image-rotate-cw : "";
                         }
                     }
-                    Text { text: "↻"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "rotate-cw";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
+                    }
                 }
 
                 Rectangle {
@@ -1597,26 +1507,17 @@ export component ViewerImageView inherits Rectangle {
                             root.rotate-ccw();
                             img-keys.focus();
                         }
-                    }
-                    if rccw-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: rccw-hint.preferred-width + 12px;
-                        height: rccw-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        rccw-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.viewer-image-rotate-ccw;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? Strings.viewer-image-rotate-ccw : "";
                         }
                     }
-                    Text { text: "↺"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "rotate-ccw";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
+                    }
                 }
 
                 Rectangle {
@@ -1627,17 +1528,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     r180-ta := TouchArea {
                         clicked => { root.command("rotate-180"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.rotate-180-label : "";
+                        }
                     }
-                    if r180-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: r180-hint.preferred-width + 12px;
-                        height: r180-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        r180-hint := Text { x: 6px; y: 3px; text: model.rotate-180-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "rotate-180";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "180"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -1659,29 +1560,28 @@ export component ViewerImageView inherits Rectangle {
                 }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: rst-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     rst-ta := TouchArea {
                         clicked => { root.command("reset-transform"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.reset-transform-label : "";
+                        }
                     }
-                    if rst-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: rst-hint.preferred-width + 12px;
-                        height: rst-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        rst-hint := Text { x: 6px; y: 3px; text: model.reset-transform-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.reset-transform-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "reset";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
 
+                if root.show-more : HorizontalLayout {
+                    spacing: 4px;
                 Rectangle {
                     width: 28px;
                     height: 28px;
@@ -1690,17 +1590,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ll-cw-ta := TouchArea {
                         clicked => { root.command("lossless-cw"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.lossless-rotate-label : "";
+                        }
                     }
-                    if ll-cw-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ll-cw-hint.preferred-width + 12px;
-                        height: ll-cw-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ll-cw-hint := Text { x: 6px; y: 3px; text: model.lossless-rotate-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "ll-rotate";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "↻*"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -1711,17 +1611,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ll-fh-ta := TouchArea {
                         clicked => { root.command("lossless-flip-h"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.lossless-flip-label : "";
+                        }
                     }
-                    if ll-fh-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ll-fh-hint.preferred-width + 12px;
-                        height: ll-fh-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ll-fh-hint := Text { x: 6px; y: 3px; text: model.lossless-flip-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "ll-flip";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "⇄*"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -1733,21 +1633,16 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ll-crop-ta := TouchArea {
                         clicked => { root.select-crop = !root.select-crop; img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.lossless-crop-label : "";
+                        }
                     }
-                    if ll-crop-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ll-crop-hint.preferred-width + 12px;
-                        height: ll-crop-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ll-crop-hint := Text { x: 6px; y: 3px; text: model.lossless-crop-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "✂";
-                        color: root.select-crop ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "crop";
+                        icon-size: 16px;
+                        ink: root.select-crop ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -1760,21 +1655,16 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ed-crop-ta := TouchArea {
                         clicked => { root.select-edit-crop = !root.select-edit-crop; root.select-crop = false; img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.edit-crop-label : "";
+                        }
                     }
-                    if ed-crop-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-crop-hint.preferred-width + 12px;
-                        height: ed-crop-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-crop-hint := Text { x: 6px; y: 3px; text: model.edit-crop-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "✂+";
-                        color: root.select-edit-crop ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "edit-crop";
+                        icon-size: 16px;
+                        ink: root.select-edit-crop ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -1793,15 +1683,9 @@ export component ViewerImageView inherits Rectangle {
                             else { root.crop-aspect = 0; }
                             img-keys.focus();
                         }
-                    }
-                    if ed-asp-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-asp-hint.preferred-width + 12px;
-                        height: ed-asp-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-asp-hint := Text { x: 6px; y: 3px; text: model.edit-aspect-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.edit-aspect-label : "";
+                        }
                     }
                     Text {
                         text: root.crop-aspect < 0.5 ? "free"
@@ -1823,15 +1707,9 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ed-keep-ta := TouchArea {
                         clicked => { root.crop-keep = (root.crop-keep + 1) > 2 ? 0 : root.crop-keep + 1; img-keys.focus(); }
-                    }
-                    if ed-keep-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-keep-hint.preferred-width + 12px;
-                        height: ed-keep-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-keep-hint := Text { x: 6px; y: 3px; text: model.edit-keep-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.edit-keep-label : "";
+                        }
                     }
                     Text {
                         text: root.crop-keep == 1 ? "W" : root.crop-keep == 2 ? "H" : "·";
@@ -1878,21 +1756,16 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ed-str-ta := TouchArea {
                         clicked => { root.select-straighten = !root.select-straighten; img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.edit-straighten-label : "";
+                        }
                     }
-                    if ed-str-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-str-hint.preferred-width + 12px;
-                        height: ed-str-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-str-hint := Text { x: 6px; y: 3px; text: model.edit-straighten-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "/";
-                        color: root.select-straighten ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "straighten";
+                        icon-size: 16px;
+                        ink: root.select-straighten ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -1904,17 +1777,17 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ed-auto-ta := TouchArea {
                         clicked => { root.command("edit-auto-straighten"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.edit-auto-straighten-label : "";
+                        }
                     }
-                    if ed-auto-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-auto-hint.preferred-width + 12px;
-                        height: ed-auto-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-auto-hint := Text { x: 6px; y: 3px; text: model.edit-auto-straighten-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "auto-straighten";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    Text { text: "⌐"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
                 }
 
                 Rectangle {
@@ -1926,22 +1799,18 @@ export component ViewerImageView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     ed-persp-ta := TouchArea {
                         clicked => { root.select-perspective = !root.select-perspective; root.persp-n = 0; img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.edit-perspective-label : "";
+                        }
                     }
-                    if ed-persp-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-persp-hint.preferred-width + 12px;
-                        height: ed-persp-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-persp-hint := Text { x: 6px; y: 3px; text: model.edit-perspective-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "perspective";
+                        icon-size: 16px;
+                        ink: root.select-perspective ? Theme.accent-brand : Theme.text-primary;
                     }
-                    Text {
-                        text: "◇";
-                        color: root.select-perspective ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
-                    }
+                }
                 }
 
                 Rectangle {
@@ -1957,21 +1826,16 @@ export component ViewerImageView inherits Rectangle {
                             if (root.show-adjust) { root.show-filter = false; root.show-annotate = false; root.show-print = false; root.show-share = false; }
                             img-keys.focus();
                         }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.adjust-label : "";
+                        }
                     }
-                    if ed-adj-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-adj-hint.preferred-width + 12px;
-                        height: ed-adj-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-adj-hint := Text { x: 6px; y: 3px; text: model.adjust-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "☼";
-                        color: root.show-adjust ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "adjust";
+                        icon-size: 16px;
+                        ink: root.show-adjust ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -1988,21 +1852,16 @@ export component ViewerImageView inherits Rectangle {
                             if (root.show-filter) { root.show-adjust = false; root.show-annotate = false; root.show-print = false; root.show-share = false; }
                             img-keys.focus();
                         }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.filter-label : "";
+                        }
                     }
-                    if ed-flt-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-flt-hint.preferred-width + 12px;
-                        height: ed-flt-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-flt-hint := Text { x: 6px; y: 3px; text: model.filter-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "✻";
-                        color: root.show-filter ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "filter";
+                        icon-size: 16px;
+                        ink: root.show-filter ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -2020,21 +1879,16 @@ export component ViewerImageView inherits Rectangle {
                             else { root.ann-mode = 0; }
                             img-keys.focus();
                         }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.annotate-label : "";
+                        }
                     }
-                    if ed-ann-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-ann-hint.preferred-width + 12px;
-                        height: ed-ann-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-ann-hint := Text { x: 6px; y: 3px; text: model.annotate-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "✎";
-                        color: root.show-annotate ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "annotate";
+                        icon-size: 16px;
+                        ink: root.show-annotate ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -2051,21 +1905,16 @@ export component ViewerImageView inherits Rectangle {
                             if (root.show-print) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; root.show-share = false; }
                             img-keys.focus();
                         }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.print-label : "";
+                        }
                     }
-                    if ed-prt-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-prt-hint.preferred-width + 12px;
-                        height: ed-prt-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-prt-hint := Text { x: 6px; y: 3px; text: model.print-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "⎙";
-                        color: root.show-print ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "print";
+                        icon-size: 16px;
+                        ink: root.show-print ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -2082,21 +1931,16 @@ export component ViewerImageView inherits Rectangle {
                             if (root.show-share) { root.show-adjust = false; root.show-filter = false; root.show-annotate = false; root.show-print = false; }
                             img-keys.focus();
                         }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.export-label : "";
+                        }
                     }
-                    if ed-exp-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-exp-hint.preferred-width + 12px;
-                        height: ed-exp-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-exp-hint := Text { x: 6px; y: 3px; text: model.export-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: "↗";
-                        color: root.show-share ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "export";
+                        icon-size: 16px;
+                        ink: root.show-share ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -2110,69 +1954,58 @@ export component ViewerImageView inherits Rectangle {
                     ed-anim-ta := TouchArea {
                         clicked => { root.command("anim-toggle"); img-keys.focus(); }
                     }
-                    if ed-anim-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ed-anim-hint.preferred-width + 12px;
-                        height: ed-anim-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ed-anim-hint := Text { x: 6px; y: 3px; text: model.anim-playing ? model.anim-pause-label : model.anim-play-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    Text {
-                        text: model.anim-playing ? "❚❚" : "▶";
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center; vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: model.anim-playing ? "pause" : "play";
+                        icon-size: 16px;
+                        ink: Theme.accent-brand;
                     }
                 }
 
+                if root.show-more : HorizontalLayout {
+                    spacing: 4px;
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: ll-exif-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     ll-exif-ta := TouchArea {
                         clicked => { root.command("lossless-exif"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.lossless-exif-label : "";
+                        }
                     }
-                    if ll-exif-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ll-exif-hint.preferred-width + 12px;
-                        height: ll-exif-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ll-exif-hint := Text { x: 6px; y: 3px; text: model.lossless-exif-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
-                    }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.lossless-exif-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "exif";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: ll-folder-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     ll-folder-ta := TouchArea {
                         clicked => { root.command("lossless-folder:cw"); img-keys.focus(); }
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.lossless-folder-label : "";
+                        }
                     }
-                    if ll-folder-ta.has-hover : Rectangle {
-                        x: parent.x; y: parent.height + 2px;
-                        width: ll-folder-hint.preferred-width + 12px;
-                        height: ll-folder-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px; border-color: Theme.border-default; z: 100;
-                        ll-folder-hint := Text { x: 6px; y: 3px; text: model.lossless-folder-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "ll-folder";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
-                    HorizontalLayout {
-                        padding-left: 6px; padding-right: 6px;
-                        Text { text: model.lossless-folder-label; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
-                    }
+                }
                 }
 
                 Rectangle { width: 8px; }
@@ -2189,31 +2022,16 @@ export component ViewerImageView inherits Rectangle {
                             root.flip-h();
                             img-keys.focus();
                         }
-                    }
-                    if flip-h-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: flip-h-hint.preferred-width + 12px;
-                        height: flip-h-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        flip-h-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.viewer-image-flip-h;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? Strings.viewer-image-flip-h : "";
                         }
                     }
-                    Text {
-                        text: "⇄";
-                        color: model.flipped-h ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "flip-h";
+                        icon-size: 16px;
+                        ink: model.flipped-h ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
@@ -2229,38 +2047,25 @@ export component ViewerImageView inherits Rectangle {
                             root.flip-v();
                             img-keys.focus();
                         }
-                    }
-                    if flip-v-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: flip-v-hint.preferred-width + 12px;
-                        height: flip-v-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        flip-v-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.viewer-image-flip-v;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? Strings.viewer-image-flip-v : "";
                         }
                     }
-                    Text {
-                        text: "⇅";
-                        color: model.flipped-v ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "flip-v";
+                        icon-size: 16px;
+                        ink: model.flipped-v ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle { width: 8px; }
 
+                if root.show-more : HorizontalLayout {
+                    spacing: 4px;
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.bg-kind != 0 ? Theme.surface-raised
                         : bg-ta.has-hover ? Theme.surface-raised : transparent;
@@ -2271,39 +2076,22 @@ export component ViewerImageView inherits Rectangle {
                             root.command("bg-next");
                             img-keys.focus();
                         }
-                    }
-                    if bg-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: bg-hint.preferred-width + 12px;
-                        height: bg-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        bg-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.bg-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.bg-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.bg-label;
-                            color: model.bg-kind != 0 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "bg";
+                        icon-size: 16px;
+                        ink: model.bg-kind != 0 ? Theme.accent-brand : Theme.text-primary;
                     }
+                }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.chrome-hidden ? Theme.surface-raised
                         : fs-ta.has-hover ? Theme.surface-raised : transparent;
@@ -2314,39 +2102,23 @@ export component ViewerImageView inherits Rectangle {
                             root.command("fullscreen");
                             img-keys.focus();
                         }
-                    }
-                    if fs-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fs-hint.preferred-width + 12px;
-                        height: fs-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fs-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fullscreen-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.fullscreen-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fullscreen-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "fullscreen";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
                     }
                 }
 
+                if root.show-more : HorizontalLayout {
+                    spacing: 4px;
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: model.kiosk ? Theme.surface-raised
                         : kiosk-ta.has-hover ? Theme.surface-raised : transparent;
@@ -2357,39 +2129,21 @@ export component ViewerImageView inherits Rectangle {
                             root.command("kiosk");
                             img-keys.focus();
                         }
-                    }
-                    if kiosk-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: kiosk-hint.preferred-width + 12px;
-                        height: kiosk-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        kiosk-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.kiosk-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.kiosk-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.kiosk-label;
-                            color: model.kiosk ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "kiosk";
+                        icon-size: 16px;
+                        ink: model.kiosk ? Theme.accent-brand : Theme.text-primary;
                     }
                 }
 
                 Rectangle {
-                    min-width: 40px;
+                    width: 28px;
                     height: 28px;
                     background: mon-ta.has-hover ? Theme.surface-raised : transparent;
                     border-radius: Theme.radius-md;
@@ -2399,34 +2153,31 @@ export component ViewerImageView inherits Rectangle {
                             root.command("next-monitor");
                             img-keys.focus();
                         }
-                    }
-                    if mon-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: mon-hint.preferred-width + 12px;
-                        height: mon-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        mon-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.next-monitor-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                        changed has-hover => {
+                            root.bar-tip = self.has-hover ? model.next-monitor-label : "";
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.next-monitor-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                                        ViewerBarIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon-id: "monitor";
+                        icon-size: 16px;
+                        ink: Theme.text-primary;
+                    }
+                }
+                }
+                    }
+                }
+
+                Rectangle {
+                    height: 16px;
+                    Text {
+                        text: root.bar-tip;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                        x: 10px;
                     }
                 }
             }
