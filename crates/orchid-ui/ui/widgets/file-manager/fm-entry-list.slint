@@ -19,6 +19,7 @@ export component FmEntryList inherits Rectangle {
     in property <bool> drag-active;
     in property <string> drag-drop-target;
     in property <int> selection-count;
+    in-out property <bool> select-mode: false;
 
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
@@ -42,6 +43,7 @@ export component FmEntryList inherits Rectangle {
 
     property <string> pressing-path: "";
     property <string> pending-exclusive: "";
+    property <string> pending-toggle: "";
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
@@ -88,6 +90,7 @@ export component FmEntryList inherits Rectangle {
         if (abs(root.marquee-y1 - root.marquee-y0) >= 4px
             && root.first-list-hit(root.marquee-y0, root.marquee-y1) >= 0
             && root.last-list-hit(root.marquee-y0, root.marquee-y1) >= 0) {
+            root.select-mode = true;
             root.marquee-select(
                 root.first-list-hit(root.marquee-y0, root.marquee-y1),
                 root.last-list-hit(root.marquee-y0, root.marquee-y1),
@@ -106,6 +109,20 @@ export component FmEntryList inherits Rectangle {
 
     changed listing-id => {
         list-flick.viewport-y = 0px;
+    }
+
+    hold-timer := Timer {
+        interval: 500ms;
+        running: root.pressing-path != "" && !root.drag-active && !root.select-mode;
+        triggered => {
+            if (root.pressing-path != "") {
+                root.select-mode = true;
+                root.entry-clicked(root.pressing-path, true);
+                root.pending-exclusive = "";
+                root.pending-toggle = "";
+                root.pressing-path = "";
+            }
+        }
     }
 
     list-flick := Flickable {
@@ -175,8 +192,6 @@ export component FmEntryList inherits Rectangle {
                     padding-left: 8px;
                     padding-right: 8px;
                     spacing: 8px;
-
-                    Rectangle { width: 20px; height: 1px; }
 
                     Rectangle {
                         min-width: 240px;
@@ -269,15 +284,6 @@ export component FmEntryList inherits Rectangle {
                     padding-left: 8px;
                     padding-right: 8px;
                     spacing: 8px;
-
-                    Text {
-                        text: entry.is-selected ? "☑" : "☐";
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        horizontal-alignment: center;
-                        width: 20px;
-                    }
 
                     if entry.color-label != "" : Rectangle {
                         width: 4px;
@@ -402,8 +408,8 @@ export component FmEntryList inherits Rectangle {
                             if (e.modifiers.shift) {
                                 root.entry-shift-clicked(entry.path);
                                 root.pending-exclusive = "";
-                            } else if (e.modifiers.control) {
-                                root.entry-clicked(entry.path, true);
+                            } else if (e.modifiers.control || root.select-mode) {
+                                root.pending-toggle = entry.path;
                                 root.pending-exclusive = "";
                             } else if (entry.is-selected) {
                                 root.pending-exclusive = entry.path;
@@ -419,6 +425,7 @@ export component FmEntryList inherits Rectangle {
                             if (abs(self.mouse-x - press-x) >= drag-threshold
                                 || abs(self.mouse-y - press-y) >= drag-threshold) {
                                 root.pending-exclusive = "";
+                                root.pending-toggle = "";
                                 root.entry-drag-start(pressing-path);
                                 root.pressing-path = "";
                             }
@@ -435,10 +442,13 @@ export component FmEntryList inherits Rectangle {
                             if (drag-active && !entry.is-dir) {
                                 root.drop-on-current-dir();
                             }
-                            if (root.pending-exclusive == entry.path && !root.drag-active) {
+                            if (root.pending-toggle == entry.path && !root.drag-active) {
+                                root.entry-clicked(entry.path, true);
+                            } else if (root.pending-exclusive == entry.path && !root.drag-active) {
                                 root.entry-clicked(entry.path, false);
                             }
                             root.pending-exclusive = "";
+                            root.pending-toggle = "";
                             root.pressing-path = "";
                         }
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
@@ -447,16 +457,6 @@ export component FmEntryList inherits Rectangle {
                     }
                 }
 
-                check-ta := TouchArea {
-                    x: 8px;
-                    width: 20px;
-                    height: 100%;
-                    clicked => {
-                        root.pending-exclusive = "";
-                        root.pressing-path = "";
-                        root.entry-clicked(entry.path, true);
-                    }
-                }
             }
 
             if bottom-pad > 0px : TouchArea {

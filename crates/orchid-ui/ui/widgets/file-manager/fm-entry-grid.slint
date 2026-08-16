@@ -14,9 +14,11 @@ export component FmEntryGrid inherits Rectangle {
     in property <bool> drag-active;
     in property <string> drag-drop-target;
     in property <int> selection-count;
+    in-out property <bool> select-mode: false;
 
     property <string> pressing-path: "";
     property <string> pending-exclusive: "";
+    property <string> pending-toggle: "";
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
@@ -127,6 +129,7 @@ export component FmEntryGrid inherits Rectangle {
         let c1 = root.last-overlap-col(rx0, rx1);
         if (abs(rx1 - rx0) >= 4px || abs(ry1 - ry0) >= 4px) {
             if (r0 >= 0 && r1 >= 0 && c0 >= 0 && c1 >= 0) {
+                root.select-mode = true;
                 root.marquee-select(r0 * columns + c0, r1 * columns + c1, root.marquee-additive, columns);
             } else if (!root.marquee-additive) {
                 root.empty-clicked();
@@ -140,6 +143,20 @@ export component FmEntryGrid inherits Rectangle {
 
     changed listing-id => {
         grid-flick.viewport-y = 0px;
+    }
+
+    hold-timer := Timer {
+        interval: 500ms;
+        running: root.pressing-path != "" && !root.drag-active && !root.select-mode;
+        triggered => {
+            if (root.pressing-path != "") {
+                root.select-mode = true;
+                root.entry-clicked(root.pressing-path, true);
+                root.pending-exclusive = "";
+                root.pending-toggle = "";
+                root.pressing-path = "";
+            }
+        }
     }
 
     grid-flick := Flickable {
@@ -288,14 +305,6 @@ export component FmEntryGrid inherits Rectangle {
                 font-size: Theme.font-size-sm;
             }
 
-            if root.selection-count > 0 || tile-ta.has-hover || entry.is-selected : Text {
-                x: 6px;
-                y: 4px;
-                text: entry.is-selected ? "☑" : "☐";
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-            }
-
             tile-ta := TouchArea {
                 width: 100%;
                 height: 100%;
@@ -310,8 +319,8 @@ export component FmEntryGrid inherits Rectangle {
                         if (e.modifiers.shift) {
                             root.entry-shift-clicked(entry.path);
                             root.pending-exclusive = "";
-                        } else if (e.modifiers.control) {
-                            root.entry-clicked(entry.path, true);
+                        } else if (e.modifiers.control || root.select-mode) {
+                            root.pending-toggle = entry.path;
                             root.pending-exclusive = "";
                         } else if (entry.is-selected) {
                             root.pending-exclusive = entry.path;
@@ -327,6 +336,7 @@ export component FmEntryGrid inherits Rectangle {
                         if (abs(self.mouse-x - press-x) >= drag-threshold
                             || abs(self.mouse-y - press-y) >= drag-threshold) {
                             root.pending-exclusive = "";
+                            root.pending-toggle = "";
                             root.entry-drag-start(pressing-path);
                             root.pressing-path = "";
                         }
@@ -343,10 +353,13 @@ export component FmEntryGrid inherits Rectangle {
                         if (drag-active && !entry.is-dir) {
                             root.drop-on-current-dir();
                         }
-                        if (root.pending-exclusive == entry.path && !root.drag-active) {
+                        if (root.pending-toggle == entry.path && !root.drag-active) {
+                            root.entry-clicked(entry.path, true);
+                        } else if (root.pending-exclusive == entry.path && !root.drag-active) {
                             root.entry-clicked(entry.path, false);
                         }
                         root.pending-exclusive = "";
+                        root.pending-toggle = "";
                         root.pressing-path = "";
                     }
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
@@ -355,18 +368,6 @@ export component FmEntryGrid inherits Rectangle {
                 }
             }
 
-            check-ta := TouchArea {
-                x: 2px;
-                y: 2px;
-                width: 22px;
-                height: 22px;
-                enabled: root.selection-count > 0 || tile-ta.has-hover || entry.is-selected;
-                clicked => {
-                    root.pending-exclusive = "";
-                    root.pressing-path = "";
-                    root.entry-clicked(entry.path, true);
-                }
-            }
         }
     }
 

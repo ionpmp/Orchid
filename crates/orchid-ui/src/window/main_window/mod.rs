@@ -724,6 +724,10 @@ impl MainWindowController {
         g.set_fm_loading(mgr.tr("fm-loading").into());
         g.set_fm_empty_folder(mgr.tr("fm-empty-folder").into());
         g.set_fm_action_new_folder(mgr.tr("fm-action-new-folder").into());
+        g.set_fm_select_mode(mgr.tr("fm-select-mode").into());
+        g.set_fm_select_done(mgr.tr("fm-select-done").into());
+        g.set_fm_select_clear(mgr.tr("fm-select-clear").into());
+        g.set_fm_select_selected(mgr.tr("fm-select-selected").into());
         g.set_fm_action_new_tab(mgr.tr("fm-action-new-tab").into());
         g.set_fm_action_close_tab(mgr.tr("fm-action-close-tab").into());
         g.set_fm_action_copy(mgr.tr("fm-action-copy").into());

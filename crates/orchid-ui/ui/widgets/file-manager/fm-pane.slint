@@ -77,6 +77,7 @@ export component FmPane inherits Rectangle {
     property <bool> history-open: false;
     property <bool> drives-open: false;
     property <bool> address-editing: false;
+    property <bool> select-mode: false;
 
     property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
         && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3);
@@ -117,7 +118,11 @@ export component FmPane inherits Rectangle {
     function dispatch-fm-action(act: string) -> bool {
         if (act == "") { return false; }
         if (act == "fs.select-all") { root.select-all(); return true; }
-        if (act == "fs.deselect-all") { root.deselect-all(); return true; }
+        if (act == "fs.deselect-all") {
+            root.select-mode = false;
+            root.deselect-all();
+            return true;
+        }
         if (act == "fs.invert-selection") { root.selection-command("invert"); return true; }
         if (act == "fs.select-mask-add") { root.selection-command("mask-add"); return true; }
         if (act == "fs.select-mask-sub") { root.selection-command("mask-sub"); return true; }
@@ -309,6 +314,17 @@ export component FmPane inherits Rectangle {
                 sort-cycle => { root.sort-cycle(); }
                 branch-toggle => { root.nav-command("branch"); }
                 quick-filter-changed(q) => { root.quick-filter-changed(q); }
+                select-mode <=> root.select-mode;
+                selection-count: pane.tabs[pane.active-tab].selection-count;
+                select-toggle => {
+                    if (root.select-mode) {
+                        root.select-mode = false;
+                        root.deselect-all();
+                    } else {
+                        root.select-mode = true;
+                    }
+                }
+                select-clear => { root.deselect-all(); }
             }
 
             FmBreadcrumbs {
@@ -405,6 +421,7 @@ export component FmPane inherits Rectangle {
                         sort-modified-label: pane.tabs[pane.active-tab].sort-modified-label;
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
                         selection-count: pane.tabs[pane.active-tab].selection-count;
+                        select-mode <=> root.select-mode;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
                             root.address-editing = false;
@@ -453,6 +470,7 @@ export component FmPane inherits Rectangle {
                         drag-drop-target: root.drag-drop-target;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         selection-count: pane.tabs[pane.active-tab].selection-count;
+                        select-mode <=> root.select-mode;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
                             root.address-editing = false;
