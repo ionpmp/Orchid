@@ -22,8 +22,10 @@ export component FmEntryGrid inherits Rectangle {
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
+    property <length> marquee-threshold: 10px;
     property <bool> press-empty: false;
     property <bool> marquee-active: false;
+    property <bool> marquee-origin-ready: false;
     property <length> marquee-x0: 0px;
     property <length> marquee-y0: 0px;
     property <length> marquee-x1: 0px;
@@ -117,23 +119,23 @@ export component FmEntryGrid inherits Rectangle {
     }
 
     function finish-empty-gesture() {
-        root.press-empty = false;
-        root.marquee-active = false;
         let rx0 = min(root.marquee-x0, root.marquee-x1);
         let rx1 = max(root.marquee-x0, root.marquee-x1);
         let ry0 = min(root.marquee-y0, root.marquee-y1);
         let ry1 = max(root.marquee-y0, root.marquee-y1);
+        let dragged = root.marquee-active
+            && (abs(rx1 - rx0) >= root.marquee-threshold
+                || abs(ry1 - ry0) >= root.marquee-threshold);
         let r0 = root.first-overlap-row(ry0, ry1);
         let r1 = root.last-overlap-row(ry0, ry1);
         let c0 = root.first-overlap-col(rx0, rx1);
         let c1 = root.last-overlap-col(rx0, rx1);
-        if (abs(rx1 - rx0) >= 4px || abs(ry1 - ry0) >= 4px) {
-            if (r0 >= 0 && r1 >= 0 && c0 >= 0 && c1 >= 0) {
-                root.select-mode = true;
-                root.marquee-select(r0 * columns + c0, r1 * columns + c1, root.marquee-additive, columns);
-            } else if (!root.marquee-additive) {
-                root.empty-clicked();
-            }
+        root.press-empty = false;
+        root.marquee-active = false;
+        root.marquee-origin-ready = false;
+        if (dragged && r0 >= 0 && r1 >= 0 && c0 >= 0 && c1 >= 0) {
+            root.select-mode = true;
+            root.marquee-select(r0 * columns + c0, r1 * columns + c1, root.marquee-additive, columns);
         } else if (!root.marquee-additive) {
             root.empty-clicked();
         }
@@ -143,6 +145,10 @@ export component FmEntryGrid inherits Rectangle {
 
     changed listing-id => {
         grid-flick.viewport-y = 0px;
+        root.press-empty = false;
+        root.marquee-active = false;
+        root.marquee-origin-ready = false;
+        root.select-mode = false;
     }
 
     hold-timer := Timer {
@@ -195,6 +201,7 @@ export component FmEntryGrid inherits Rectangle {
                     && !root.drag-active) {
                     root.press-empty = true;
                     root.marquee-active = false;
+                    root.marquee-origin-ready = false;
                     root.marquee-x0 = self.mouse-x;
                     root.marquee-y0 = self.mouse-y + grid-flick.viewport-y;
                     root.marquee-x1 = self.mouse-x;
@@ -387,16 +394,28 @@ export component FmEntryGrid inherits Rectangle {
         height: 100%;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.move) {
-                root.marquee-x1 = self.mouse-x;
-                root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
-                if (abs(root.marquee-x1 - root.marquee-x0) >= 4px
-                    || abs(root.marquee-y1 - root.marquee-y0) >= 4px) {
-                    root.marquee-active = true;
+                let x = self.mouse-x;
+                let y = self.mouse-y + grid-flick.viewport-y;
+                if (!root.marquee-origin-ready) {
+                    root.marquee-x0 = x;
+                    root.marquee-y0 = y;
+                    root.marquee-x1 = x;
+                    root.marquee-y1 = y;
+                    root.marquee-origin-ready = true;
+                } else {
+                    root.marquee-x1 = x;
+                    root.marquee-y1 = y;
+                    if (abs(root.marquee-x1 - root.marquee-x0) >= root.marquee-threshold
+                        || abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
+                        root.marquee-active = true;
+                    }
                 }
             }
             if (e.kind == PointerEventKind.up) {
-                root.marquee-x1 = self.mouse-x;
-                root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
+                if (root.marquee-origin-ready) {
+                    root.marquee-x1 = self.mouse-x;
+                    root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
+                }
                 root.finish-empty-gesture();
             }
         }

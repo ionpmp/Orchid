@@ -238,6 +238,9 @@ release yet.
   virtual window only near the edge, coalesce snapshot patches, skip
   unchanged rows, and hit-test the visible viewport instead of the full
   virtual height (hover no longer waits on a disk-enum / model rebuild).
+- File-manager empty-space click no longer sticks in tap-to-toggle: a
+  click (including trackpad jitter) clears selection, and marquee starts
+  only after a 10px drag measured in one coordinate space.
 - File-manager first paint: list names without waiting on managed/encrypted
   catalogs or per-folder marker probes; extract shell icons and image
   thumbs for the visible window first (list mode skips image thumbs);

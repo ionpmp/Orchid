@@ -47,8 +47,10 @@ export component FmEntryList inherits Rectangle {
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
+    property <length> marquee-threshold: 10px;
     property <bool> press-empty: false;
     property <bool> marquee-active: false;
+    property <bool> marquee-origin-ready: false;
     property <length> marquee-y0: 0px;
     property <length> marquee-y1: 0px;
     property <bool> marquee-additive: false;
@@ -85,9 +87,12 @@ export component FmEntryList inherits Rectangle {
     }
 
     function finish-empty-gesture() {
+        let dragged = root.marquee-active
+            && abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold;
         root.press-empty = false;
         root.marquee-active = false;
-        if (abs(root.marquee-y1 - root.marquee-y0) >= 4px
+        root.marquee-origin-ready = false;
+        if (dragged
             && root.first-list-hit(root.marquee-y0, root.marquee-y1) >= 0
             && root.last-list-hit(root.marquee-y0, root.marquee-y1) >= 0) {
             root.select-mode = true;
@@ -109,6 +114,10 @@ export component FmEntryList inherits Rectangle {
 
     changed listing-id => {
         list-flick.viewport-y = 0px;
+        root.press-empty = false;
+        root.marquee-active = false;
+        root.marquee-origin-ready = false;
+        root.select-mode = false;
     }
 
     hold-timer := Timer {
@@ -161,6 +170,7 @@ export component FmEntryList inherits Rectangle {
                     && !root.drag-active) {
                     root.press-empty = true;
                     root.marquee-active = false;
+                    root.marquee-origin-ready = false;
                     root.marquee-y0 = self.mouse-y + list-flick.viewport-y;
                     root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
                     root.marquee-additive = e.modifiers.control;
@@ -476,13 +486,22 @@ export component FmEntryList inherits Rectangle {
         height: 100%;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.move) {
-                root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
-                if (abs(root.marquee-y1 - root.marquee-y0) >= 4px) {
-                    root.marquee-active = true;
+                let y = self.mouse-y + list-flick.viewport-y;
+                if (!root.marquee-origin-ready) {
+                    root.marquee-y0 = y;
+                    root.marquee-y1 = y;
+                    root.marquee-origin-ready = true;
+                } else {
+                    root.marquee-y1 = y;
+                    if (abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
+                        root.marquee-active = true;
+                    }
                 }
             }
             if (e.kind == PointerEventKind.up) {
-                root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
+                if (root.marquee-origin-ready) {
+                    root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
+                }
                 root.finish-empty-gesture();
             }
         }
