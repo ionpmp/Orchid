@@ -233,6 +233,10 @@ release yet.
 - Idle CPU, UI lag, FM listing/thumbnail cost, and cold-start work cut
   (virtualized lists, Arc listings, live dir watches, mmap thumbs, coalesced
   weather/RSS fetches, System/Processes live refresh).
+- File-manager listing stays interactive while scrolling: rebase the
+  virtual window only near the edge, coalesce snapshot patches, skip
+  unchanged rows, and hit-test the visible viewport instead of the full
+  virtual height (hover no longer waits on a disk-enum / model rebuild).
 - **UI/render performance pass**: terminal glyph-cache `Arc` sharing, dirty-line
   retained raster, `Arc<[Cell]>` grid rows + mutation-only generation bumps,
   BytesMut PTY reads; in-place Slint model patches for clock / media / password

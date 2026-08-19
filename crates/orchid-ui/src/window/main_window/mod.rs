@@ -214,8 +214,10 @@ pub struct MainWindowController {
     fm_complete_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
     /// Per-pane scroll/viewport size for entry-list virtualization.
     fm_viewport: Arc<Mutex<HashMap<(Uuid, u8), crate::window::models::FmViewport>>>,
-    /// Last virtualized window start index; skip rebuild when unchanged.
-    fm_viewport_window: Arc<Mutex<HashMap<(Uuid, u8), usize>>>,
+    /// Last committed virtualized window `(first, end, width-bucket)`; skip rebuild while it covers.
+    fm_viewport_window: Arc<Mutex<HashMap<(Uuid, u8), (usize, usize, i32)>>>,
+    /// Monotonic sequence per (instance, pane) to coalesce scroll-window patches.
+    fm_viewport_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
     /// After navigation, ignore leftover Flickable scroll until it returns to top.
     fm_viewport_pin_top: Arc<Mutex<HashSet<(Uuid, u8)>>>,
     /// Last pointer position in workspace canvas coordinates (content space).
@@ -531,6 +533,7 @@ impl MainWindowController {
             fm_complete_seq: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport_window: Arc::new(Mutex::new(HashMap::new())),
+            fm_viewport_seq: Arc::new(Mutex::new(HashMap::new())),
             fm_viewport_pin_top: Arc::new(Mutex::new(HashSet::new())),
             last_canvas_pointer: Arc::new(Mutex::new(None)),
             canvas_scroll: Arc::new(Mutex::new((0.0, 0.0))),

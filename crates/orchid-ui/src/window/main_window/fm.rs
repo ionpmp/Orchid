@@ -24,9 +24,10 @@ use crate::window::errors::{fm_localized_error, is_passphrase_retryable};
 use crate::window::models::{
     build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_conflict_dialog,
     empty_context_menu, empty_find_state, empty_fm_overlays, empty_managed_policy_state,
-    empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_window, fm_list_window,
-    fm_passphrase_dialog_labels, patch_fm_selection, sync_fm_path_suggestions, FileManagerOverlays,
-    FmViewport,
+    empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_rebase_slack,
+    fm_grid_visible_range, fm_grid_window, fm_list_visible_range, fm_list_window,
+    fm_passphrase_dialog_labels, fm_window_covers, patch_fm_selection, sync_fm_path_suggestions,
+    FileManagerOverlays, FmViewport, FM_LIST_REBASE_SLACK,
 };
 use crate::window::spawn;
 
@@ -1467,13 +1468,23 @@ impl MainWindowController {
             (tab.view_mode, tab.item_count as usize)
         };
 
-        let (first, end, _, _) = match view_mode {
-            orchid_widgets::FmViewMode::Icons | orchid_widgets::FmViewMode::Gallery => {
-                let large = matches!(view_mode, orchid_widgets::FmViewMode::Gallery);
-                fm_grid_window(total, scroll_y, view_h, view_w, large)
-            }
-            orchid_widgets::FmViewMode::Details => fm_list_window(total, scroll_y, view_h, true),
-            orchid_widgets::FmViewMode::List => fm_list_window(total, scroll_y, view_h, false),
+        let large = matches!(view_mode, orchid_widgets::FmViewMode::Gallery);
+        let (desired, visible, slack) = match view_mode {
+            orchid_widgets::FmViewMode::Icons | orchid_widgets::FmViewMode::Gallery => (
+                fm_grid_window(total, scroll_y, view_h, view_w, large),
+                fm_grid_visible_range(total, scroll_y, view_h, view_w, large),
+                fm_grid_rebase_slack(view_w, large),
+            ),
+            orchid_widgets::FmViewMode::Details => (
+                fm_list_window(total, scroll_y, view_h, true),
+                fm_list_visible_range(total, scroll_y, view_h, true),
+                FM_LIST_REBASE_SLACK,
+            ),
+            orchid_widgets::FmViewMode::List => (
+                fm_list_window(total, scroll_y, view_h, false),
+                fm_list_visible_range(total, scroll_y, view_h, false),
+                FM_LIST_REBASE_SLACK,
+            ),
         };
 
         self.fm_viewport.lock().insert(
@@ -1485,24 +1496,39 @@ impl MainWindowController {
             },
         );
 
+        let (first, end) = {
+            let width_key = (view_w / 8.0).round() as i32;
+            let mut windows = self.fm_viewport_window.lock();
+            if let Some(&(c0, c1, w)) = windows.get(&(inst, p)) {
+                if w == width_key && fm_window_covers((c0, c1), visible, slack, total) {
+                    return;
+                }
+            }
+            let (first, end, _, _) = desired;
+            windows.insert((inst, p), (first, end, width_key));
+            (first, end)
+        };
         orchid_widgets::builtin::file_manager::set_viewport_window(inst, p, first, end);
 
-        {
-            let mut windows = self.fm_viewport_window.lock();
-            if windows.get(&(inst, p)).copied() == Some(first) {
-                return;
-            }
-            windows.insert((inst, p), first);
-        }
-
+        let seq = {
+            let mut map = self.fm_viewport_seq.lock();
+            let entry = map.entry((inst, p)).or_insert(0);
+            *entry = entry.wrapping_add(1);
+            *entry
+        };
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
-            if let Some(c) = tw.upgrade() {
-                let _ = c.widget_manager.refresh_snapshot_cache(inst).await;
-                if !c.try_patch_file_manager_instance(inst) {
-                    if let Err(e) = c.patch_workspace_frames(&[inst]) {
-                        warn!(?e, "fm viewport patch");
-                    }
+            tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+            let Some(c) = tw.upgrade() else {
+                return;
+            };
+            if c.fm_viewport_seq.lock().get(&(inst, p)).copied() != Some(seq) {
+                return;
+            }
+            let _ = c.widget_manager.refresh_snapshot_cache(inst).await;
+            if !c.try_patch_file_manager_instance(inst) {
+                if let Err(e) = c.patch_workspace_frames(&[inst]) {
+                    warn!(?e, "fm viewport patch");
                 }
             }
         });

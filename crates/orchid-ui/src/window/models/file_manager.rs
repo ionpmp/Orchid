@@ -2,8 +2,10 @@
 
 use orchid_i18n::LocaleManager;
 use slint::{Image, Model, ModelRc, SharedString, VecModel};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
+use std::time::Instant;
 use uuid::Uuid;
 
 use super::super::errors::fm_localized_error;
@@ -830,7 +832,47 @@ pub(crate) struct FmViewport {
 
 const FM_VIRTUALIZE_THRESHOLD: usize = 80;
 const FM_LIST_ROW_H: f32 = 28.0;
-const FM_LIST_OVERSCAN: usize = 12;
+const FM_LIST_OVERSCAN: usize = 16;
+/// Keep the committed list window until the tight visible range is this close to an edge.
+pub(crate) const FM_LIST_REBASE_SLACK: usize = 6;
+const FM_DRIVES_CACHE_MS: u128 = 4000;
+
+/// Tight visible list range (no overscan).
+#[must_use]
+pub(crate) fn fm_list_visible_range(
+    total: usize,
+    scroll_y: f32,
+    view_h: f32,
+    details: bool,
+) -> (usize, usize) {
+    if total <= FM_VIRTUALIZE_THRESHOLD {
+        return (0, total);
+    }
+    let header_h = if details { FM_LIST_ROW_H } else { 0.0 };
+    let view_h = view_h.max(FM_LIST_ROW_H);
+    let first = ((scroll_y.max(0.0) - header_h) / FM_LIST_ROW_H)
+        .floor()
+        .max(0.0) as usize;
+    let first = first.min(total);
+    let visible = (view_h / FM_LIST_ROW_H).ceil() as usize + 1;
+    (first, (first + visible).min(total))
+}
+
+/// Whether `committed` still covers `visible` with `slack` rows of headroom.
+#[must_use]
+pub(crate) fn fm_window_covers(
+    committed: (usize, usize),
+    visible: (usize, usize),
+    slack: usize,
+    total: usize,
+) -> bool {
+    let (c0, c1) = committed;
+    let (v0, v1) = visible;
+    if v0 < c0 || v1 > c1 {
+        return false;
+    }
+    (v0 - c0 >= slack || c0 == 0) && (c1 - v1 >= slack || c1 >= total)
+}
 
 /// Compute a visible window into `total` list rows.
 #[must_use]
@@ -855,6 +897,43 @@ pub(crate) fn fm_list_window(
     (first, end, pad_top, content_h)
 }
 
+fn fm_grid_metrics(view_w: f32, large: bool) -> (usize, f32, f32) {
+    let tile_size = if large { 220.0 } else { 100.0 };
+    let tile_height = if large { 240.0 } else { 120.0 };
+    let spacing = 8.0;
+    let cols = ((view_w - spacing) / (tile_size + spacing))
+        .floor()
+        .max(1.0) as usize;
+    (cols, tile_height, spacing)
+}
+
+/// Tight visible grid range (no overscan).
+#[must_use]
+pub(crate) fn fm_grid_visible_range(
+    total: usize,
+    scroll_y: f32,
+    view_h: f32,
+    view_w: f32,
+    large: bool,
+) -> (usize, usize) {
+    if total <= FM_VIRTUALIZE_THRESHOLD {
+        return (0, total);
+    }
+    let (cols, tile_height, spacing) = fm_grid_metrics(view_w, large);
+    let row_h = tile_height + spacing;
+    let view_h = view_h.max(row_h);
+    let first_row = (scroll_y.max(0.0) / row_h).floor().max(0.0) as usize;
+    let visible_rows = (view_h / row_h).ceil() as usize + 1;
+    let first = first_row * cols;
+    (first.min(total), (first + visible_rows * cols).min(total))
+}
+
+/// Item slack equal to one grid row so a column-width scroll does not rebase.
+#[must_use]
+pub(crate) fn fm_grid_rebase_slack(view_w: f32, large: bool) -> usize {
+    fm_grid_metrics(view_w, large).0.max(1)
+}
+
 /// Compute a visible window into a grid of `total` tiles.
 #[must_use]
 pub(crate) fn fm_grid_window(
@@ -864,12 +943,7 @@ pub(crate) fn fm_grid_window(
     view_w: f32,
     large: bool,
 ) -> (usize, usize, f32, f32) {
-    let tile_size = if large { 220.0 } else { 100.0 };
-    let tile_height = if large { 240.0 } else { 120.0 };
-    let spacing = 8.0;
-    let cols = ((view_w - spacing) / (tile_size + spacing))
-        .floor()
-        .max(1.0) as usize;
+    let (cols, tile_height, spacing) = fm_grid_metrics(view_w, large);
     let row_h = tile_height + spacing;
     let rows = total.div_ceil(cols);
     let content_h = rows as f32 * row_h + spacing;
@@ -877,8 +951,8 @@ pub(crate) fn fm_grid_window(
         return (0, total, 0.0, 0.0);
     }
     let view_h = view_h.max(row_h);
-    let first_row = ((scroll_y.max(0.0) / row_h).floor() as isize - 2).max(0) as usize;
-    let visible_rows = ((view_h / row_h).ceil() as usize) + 4;
+    let first_row = ((scroll_y.max(0.0) / row_h).floor() as isize - 3).max(0) as usize;
+    let visible_rows = ((view_h / row_h).ceil() as usize) + 6;
     let first = first_row * cols;
     let end = (first + visible_rows * cols).min(total);
     let pad_top = first_row as f32 * row_h;
@@ -1039,6 +1113,92 @@ fn sync_fm_rows<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     }
 }
 
+fn fm_entry_visually_same(a: &FmEntry, b: &FmEntry) -> bool {
+    a.path == b.path
+        && a.name == b.name
+        && a.is_dir == b.is_dir
+        && a.size_text == b.size_text
+        && a.modified_text == b.modified_text
+        && a.type_text == b.type_text
+        && a.has_thumbnail == b.has_thumbnail
+        && a.thumbnail_key == b.thumbnail_key
+        && a.thumbnail_width == b.thumbnail_width
+        && a.thumbnail_height == b.thumbnail_height
+        && a.thumbnail_is_icon == b.thumbnail_is_icon
+        && a.is_selected == b.is_selected
+        && a.is_hidden == b.is_hidden
+        && a.is_encrypted == b.is_encrypted
+        && a.is_managed == b.is_managed
+        && a.is_starred == b.is_starred
+        && a.color_label == b.color_label
+}
+
+fn sync_fm_sidebar(model: &ModelRc<FmSidebarItem>, new_rows: Vec<FmSidebarItem>) {
+    if let Some(v) = model.as_any().downcast_ref::<VecModel<FmSidebarItem>>() {
+        if v.row_count() == new_rows.len()
+            && (0..new_rows.len()).all(|i| {
+                v.row_data(i).is_some_and(|old| {
+                    old.id == new_rows[i].id
+                        && old.label == new_rows[i].label
+                        && old.icon == new_rows[i].icon
+                        && old.indent == new_rows[i].indent
+                        && old.is_section_header == new_rows[i].is_section_header
+                        && old.is_active == new_rows[i].is_active
+                })
+            })
+        {
+            return;
+        }
+    }
+    sync_fm_rows(model, new_rows);
+}
+
+fn sync_fm_entries(model: &ModelRc<FmEntry>, new_rows: Vec<FmEntry>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<FmEntry>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if fm_entry_visually_same(&old, &row) {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
+}
+
+fn fm_tab_chrome_changed(tab: &FmTab, fresh: &FmTab) -> bool {
+    tab.id != fresh.id
+        || tab.path_display != fresh.path_display
+        || tab.can_back != fresh.can_back
+        || tab.can_forward != fresh.can_forward
+        || tab.view_mode != fresh.view_mode
+        || tab.entry_total_count != fresh.entry_total_count
+        || tab.virtual_pad_top != fresh.virtual_pad_top
+        || tab.virtual_content_height != fresh.virtual_content_height
+        || tab.virtual_first_index != fresh.virtual_first_index
+        || tab.selection_count != fresh.selection_count
+        || tab.status_text != fresh.status_text
+        || tab.quick_filter != fresh.quick_filter
+        || tab.is_loading != fresh.is_loading
+        || tab.error != fresh.error
+        || tab.error_action_label != fresh.error_action_label
+        || tab.sort_by != fresh.sort_by
+        || tab.sort_descending != fresh.sort_descending
+        || tab.sort_name_label != fresh.sort_name_label
+        || tab.sort_size_label != fresh.sort_size_label
+        || tab.sort_modified_label != fresh.sort_modified_label
+        || tab.sort_type_label != fresh.sort_type_label
+        || tab.branch_view != fresh.branch_view
+}
+
 pub(crate) fn sync_fm_path_suggestions(model: &FileManagerModel, rows: Vec<FmPathSuggest>) {
     sync_fm_rows(&model.path_suggestions, rows);
 }
@@ -1121,22 +1281,14 @@ pub(crate) fn patch_file_manager_model(
         .map(|t| t.path_display.clone())
         .unwrap_or_default();
     let sidebar = build_sidebar_items(locale, &active_path, &p.managed_folders, &p.network_mounts);
-    if let (Some(old), Some(new)) = (
-        model
-            .sidebar_items
-            .as_any()
-            .downcast_ref::<VecModel<FmSidebarItem>>(),
-        sidebar.as_any().downcast_ref::<VecModel<FmSidebarItem>>(),
-    ) {
+    if let Some(new) = sidebar.as_any().downcast_ref::<VecModel<FmSidebarItem>>() {
         let rows: Vec<FmSidebarItem> = (0..new.row_count())
             .filter_map(|i| new.row_data(i))
             .collect();
-        sync_fm_rows(&model.sidebar_items, rows);
-        let _ = old;
+        sync_fm_sidebar(&model.sidebar_items, rows);
     }
 
-    let history_rows = build_visit_history_items(p, locale);
-    sync_fm_rows(&model.visit_history, history_rows);
+    sync_fm_rows(&model.visit_history, build_visit_history_items(p, locale));
 
     apply_fm_shell_scalars(model, p, overlays, instance_id, locale, request_autofocus)
 }
@@ -1354,14 +1506,28 @@ fn build_visit_history_items(
         .collect()
 }
 
+thread_local! {
+    static FM_DRIVES_CACHE: RefCell<Option<(Instant, Vec<FmPathSuggest>)>> = const { RefCell::new(None) };
+}
+
 fn build_drive_items() -> Vec<FmPathSuggest> {
-    orchid_widgets::builtin::file_manager::list_local_drives()
-        .into_iter()
-        .map(|d| FmPathSuggest {
-            path: d.path.into(),
-            label: d.label.into(),
-        })
-        .collect()
+    FM_DRIVES_CACHE.with(|slot| {
+        let mut cache = slot.borrow_mut();
+        if let Some((at, rows)) = cache.as_ref() {
+            if at.elapsed().as_millis() < FM_DRIVES_CACHE_MS {
+                return rows.clone();
+            }
+        }
+        let rows: Vec<FmPathSuggest> = orchid_widgets::builtin::file_manager::list_local_drives()
+            .into_iter()
+            .map(|d| FmPathSuggest {
+                path: d.path.into(),
+                label: d.label.into(),
+            })
+            .collect();
+        *cache = Some((Instant::now(), rows.clone()));
+        rows
+    })
 }
 
 fn patch_fm_pane(
@@ -1418,9 +1584,14 @@ fn patch_fm_pane(
                 let rows: Vec<FmEntry> = (0..src.row_count())
                     .filter_map(|i| src.row_data(i))
                     .collect();
-                sync_fm_rows(&tab.entries, rows);
+                sync_fm_entries(&tab.entries, rows);
                 let _ = dst;
-                tab.breadcrumbs = fresh.breadcrumbs;
+                if !fm_tab_chrome_changed(&tab, &fresh) {
+                    continue;
+                }
+                if tab.id != fresh.id || tab.path_display != fresh.path_display {
+                    tab.breadcrumbs = fresh.breadcrumbs;
+                }
                 tab.id = fresh.id;
                 tab.path_display = fresh.path_display;
                 tab.can_back = fresh.can_back;
@@ -1701,7 +1872,10 @@ pub(crate) fn build_context_menu(
 
 #[cfg(test)]
 mod virtualization_tests {
-    use super::{fm_grid_window, fm_list_window, FM_VIRTUALIZE_THRESHOLD};
+    use super::{
+        fm_grid_window, fm_list_visible_range, fm_list_window, fm_window_covers,
+        FM_VIRTUALIZE_THRESHOLD,
+    };
 
     #[test]
     fn list_below_threshold_is_not_virtualized() {
@@ -1728,5 +1902,31 @@ mod virtualization_tests {
         assert!(end < total);
         assert_eq!(pad, 0.0);
         assert!(content > 0.0);
+    }
+
+    #[test]
+    fn window_covers_small_listing() {
+        let total = 40;
+        assert!(fm_window_covers((0, total), (0, total), 6, total));
+    }
+
+    #[test]
+    fn window_covers_until_slack_exhausted() {
+        let total = 400;
+        let committed = (20, 80);
+        assert!(fm_window_covers(committed, (26, 50), 6, total));
+        assert!(!fm_window_covers(committed, (25, 50), 6, total));
+        assert!(!fm_window_covers(committed, (26, 75), 6, total));
+    }
+
+    #[test]
+    fn list_visible_range_is_tighter_than_window() {
+        let total = FM_VIRTUALIZE_THRESHOLD + 200;
+        let scroll = 28.0 * 50.0;
+        let (v0, v1) = fm_list_visible_range(total, scroll, 280.0, false);
+        let (w0, w1, _, _) = fm_list_window(total, scroll, 280.0, false);
+        assert!(w0 <= v0);
+        assert!(w1 >= v1);
+        assert!(v1 - v0 < w1 - w0);
     }
 }

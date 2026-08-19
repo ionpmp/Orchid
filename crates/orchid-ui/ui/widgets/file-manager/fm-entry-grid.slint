@@ -184,8 +184,9 @@ export component FmEntryGrid inherits Rectangle {
         }
 
         bg-ta := TouchArea {
-            width: parent.width;
-            height: max(parent.height, parent.viewport-height);
+            y: grid-flick.viewport-y;
+            width: grid-flick.width;
+            height: grid-flick.height;
             pointer-event(e) => {
                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                     root.entry-context("", self.mouse-x, self.mouse-y);
@@ -195,9 +196,9 @@ export component FmEntryGrid inherits Rectangle {
                     root.press-empty = true;
                     root.marquee-active = false;
                     root.marquee-x0 = self.mouse-x;
-                    root.marquee-y0 = self.mouse-y;
+                    root.marquee-y0 = self.mouse-y + grid-flick.viewport-y;
                     root.marquee-x1 = self.mouse-x;
-                    root.marquee-y1 = self.mouse-y;
+                    root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
                     root.marquee-additive = e.modifiers.control;
                 }
                 if (drag-active) {
