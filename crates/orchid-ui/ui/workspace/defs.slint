@@ -165,9 +165,11 @@ export struct JyotishSearchHit {
 }
 
 export struct JyotishProfileCalCell {
-    day: int,
+    value: int,
+    label: string,
     is-selected: bool,
     is-today: bool,
+    is-outside: bool,
 }
 
 export struct JyotishPanchangaRow {
@@ -303,12 +305,15 @@ export struct JyotishModel {
     profile-edit-gender: int,
     profile-edit-date: string,
     profile-edit-time: string,
+    profile-edit-hour: int,
+    profile-edit-minute: int,
     profile-edit-offset: int,
     profile-edit-offset-text: string,
     profile-edit-place-name: string,
     profile-edit-place-coords: string,
-    profile-cal-title: string,
-    profile-cal-first-weekday: int,
+    profile-cal-mode: int,
+    profile-cal-month-title: string,
+    profile-cal-year-title: string,
     profile-cal-cells: [JyotishProfileCalCell],
     profiles-title: string,
     profiles-hint: string,
@@ -324,6 +329,10 @@ export struct JyotishModel {
     profile-date-placeholder: string,
     profile-time-label: string,
     profile-time-placeholder: string,
+    profile-hour-label: string,
+    profile-minute-label: string,
+    profile-hour-items: [string],
+    profile-minute-items: [string],
     profile-offset-label: string,
     profile-offset-placeholder: string,
     profile-place-placeholder: string,

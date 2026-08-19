@@ -100,8 +100,9 @@ export component WorkspaceView inherits Rectangle {
     callback jyotish-search-birth-places(string, string);
     callback jyotish-set-birth-place(string, string, float, float, string);
     callback jyotish-nav-profile-cal(string, int);
+    callback jyotish-set-profile-cal-mode(string, int);
     callback jyotish-set-profile-cal-day(string, int);
-    callback jyotish-nudge-profile-time(string, int);
+    callback jyotish-set-profile-time(string, int, int);
     callback jyotish-nudge-profile-offset(string, int);
     callback jyotish-upsert-profile(string, int, string, int, string, string, int, string, float, float);
     callback clock-open-cities(string);
@@ -492,8 +493,9 @@ export component WorkspaceView inherits Rectangle {
                         root.jyotish-set-birth-place(id, name, lat, lon, tz);
                     }
                     jyotish-nav-profile-cal(id, d) => { root.jyotish-nav-profile-cal(id, d); }
+                    jyotish-set-profile-cal-mode(id, m) => { root.jyotish-set-profile-cal-mode(id, m); }
                     jyotish-set-profile-cal-day(id, d) => { root.jyotish-set-profile-cal-day(id, d); }
-                    jyotish-nudge-profile-time(id, m) => { root.jyotish-nudge-profile-time(id, m); }
+                    jyotish-set-profile-time(id, h, m) => { root.jyotish-set-profile-time(id, h, m); }
                     jyotish-nudge-profile-offset(id, m) => { root.jyotish-nudge-profile-offset(id, m); }
                     jyotish-upsert-profile(id, index, name, gender, date, time, offset, place, lat, lon) => {
                         root.jyotish-upsert-profile(

@@ -283,7 +283,8 @@ release yet.
 - File-manager single-pane mode no longer shows the left navigation sidebar;
   the listing uses the full widget width. Dual-pane still includes the sidebar.
 - Floating viewer unsaved-close confirm; Clock move-city handlers; Jyotish
-  profile date/time steppers and search field sync.
+  birth-profile date calendar (month/year sheets) and hour/minute wheels;
+  search field sync.
 - Fluent message IDs (hyphenated only); locale UTF-8 mojibake from early
   dependency bumps.
 

@@ -19,8 +19,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{
-    DateTime, Datelike, Duration as ChronoDuration, LocalResult, NaiveDate, NaiveTime, Timelike,
-    Utc, Weekday,
+    DateTime, Datelike, Duration as ChronoDuration, LocalResult, NaiveDate, NaiveTime, Utc, Weekday,
 };
 use chrono_tz::Tz;
 use dashmap::DashMap;
@@ -155,6 +154,8 @@ struct JyotishUiState {
     /// Visible month in the draft birth-date calendar.
     profile_cal_year: i32,
     profile_cal_month: u32,
+    /// `0` day grid, `1` twelve months, `2` twelve-year block.
+    profile_cal_mode: u8,
 }
 
 /// Session cache for the pinned Current location row.
@@ -250,45 +251,80 @@ fn apply_profile_timezone_offset(ui: &mut JyotishUiState) {
     ui.profile_edit_offset = offset_mins.clamp(-14 * 60, 14 * 60);
 }
 
-fn profile_cal_view(ui: &JyotishUiState) -> (&'static str, i32, u8, Vec<JyotishProfileCalCell>) {
+const PROFILE_CAL_DAYS: u8 = 0;
+const PROFILE_CAL_MONTHS: u8 = 1;
+const PROFILE_CAL_YEARS: u8 = 2;
+
+fn visible_cal_year_month(ui: &JyotishUiState) -> (i32, u32) {
+    let now = chrono::Local::now().date_naive();
     let year = if ui.profile_cal_year == 0 {
-        chrono::Local::now().year()
+        now.year()
     } else {
         ui.profile_cal_year
     };
     let month = if ui.profile_cal_month == 0 {
-        chrono::Local::now().month()
+        now.month()
     } else {
         ui.profile_cal_month
     };
+    (year, month)
+}
+
+fn profile_cal_year_block_start(year: i32) -> i32 {
+    let y = year.clamp(1800, 2100);
+    y - y.rem_euclid(12)
+}
+
+fn profile_cal_day_grid_start(year: i32, month: u32) -> NaiveDate {
     let first = NaiveDate::from_ymd_opt(year, month, 1)
         .unwrap_or_else(|| chrono::Local::now().date_naive());
-    let first_weekday = first.weekday().num_days_from_monday() as u8;
-    let days_in_month = {
-        let (ny, nm) = if month == 12 {
-            (year + 1, 1)
-        } else {
-            (year, month + 1)
-        };
-        NaiveDate::from_ymd_opt(ny, nm, 1)
-            .unwrap_or(first)
-            .pred_opt()
-            .unwrap_or(first)
-            .day()
-    };
+    let pad = i64::from(first.weekday().num_days_from_monday());
+    first - ChronoDuration::days(pad)
+}
+
+fn profile_cal_view(ui: &JyotishUiState) -> (&'static str, i32, u8, Vec<JyotishProfileCalCell>) {
+    let (year, month) = visible_cal_year_month(ui);
     let selected = NaiveDate::parse_from_str(&ui.profile_edit_date, "%Y-%m-%d").ok();
     let today = chrono::Local::now().date_naive();
-    let cells = (1..=days_in_month)
-        .map(|day| {
-            let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or(first);
-            JyotishProfileCalCell {
-                day: day as u8,
-                is_selected: selected == Some(date),
-                is_today: date == today,
-            }
-        })
-        .collect();
-    (month_key(month), year, first_weekday, cells)
+    let cells = match ui.profile_cal_mode {
+        PROFILE_CAL_MONTHS => (1..=12)
+            .map(|m| JyotishProfileCalCell {
+                value: m as i32,
+                is_selected: selected.is_some_and(|d| d.year() == year && d.month() == m),
+                is_today: today.year() == year && today.month() == m,
+                is_outside: false,
+            })
+            .collect(),
+        PROFILE_CAL_YEARS => {
+            let start = profile_cal_year_block_start(year);
+            (0..12)
+                .map(|i| {
+                    let y = start + i;
+                    JyotishProfileCalCell {
+                        value: y,
+                        is_selected: selected.is_some_and(|d| d.year() == y),
+                        is_today: today.year() == y,
+                        is_outside: !(1800..=2100).contains(&y),
+                    }
+                })
+                .collect()
+        }
+        _ => {
+            let start = profile_cal_day_grid_start(year, month);
+            (0..42)
+                .map(|i| {
+                    let date = start + ChronoDuration::days(i);
+                    JyotishProfileCalCell {
+                        value: date.day() as i32,
+                        is_selected: selected == Some(date),
+                        is_today: date == today,
+                        is_outside: date.month() != month || date.year() != year,
+                    }
+                })
+                .collect()
+        }
+    };
+    (month_key(month), year, ui.profile_cal_mode, cells)
 }
 
 struct JyotishHandle {
@@ -794,7 +830,7 @@ impl JyotishHandle {
         let ui = self.ui.read().clone();
         let current = self.current_loc.read().clone();
         let (cities, search_results, active_city_index) = cities_and_search(&cfg, &ui, &current);
-        let (profile_cal_month_key, profile_cal_year, profile_cal_first_weekday, profile_cal_cells) =
+        let (profile_cal_month_key, profile_cal_year, profile_cal_mode, profile_cal_cells) =
             profile_cal_view(&ui);
 
         JyotishPayload {
@@ -825,7 +861,7 @@ impl JyotishHandle {
             profile_edit_place_coords: profile_place_coords(&ui),
             profile_cal_month_key,
             profile_cal_year,
-            profile_cal_first_weekday,
+            profile_cal_mode,
             profile_cal_cells,
             ayanamsa_key: cfg.ayanamsa.ftl_key(),
             ayanamsa_deg_text: format!("{:.2}°", data.ayanamsa_deg),
@@ -1356,6 +1392,7 @@ impl JyotishHandle {
             ui.profile_edit_place = default_place;
         }
         ui.profile_edit_timezone.clear();
+        ui.profile_cal_mode = PROFILE_CAL_DAYS;
         sync_profile_cal_month(&mut ui);
         drop(ui);
         self.publish();
@@ -1393,53 +1430,93 @@ impl JyotishHandle {
         self.publish();
     }
 
-    fn nav_profile_cal(&self, delta_months: i32) {
-        let mut ui = self.ui.write();
-        if ui.profile_cal_year == 0 || ui.profile_cal_month == 0 {
-            sync_profile_cal_month(&mut ui);
-        }
-        let mut month = i32::try_from(ui.profile_cal_month).unwrap_or(1) + delta_months;
-        let mut year = ui.profile_cal_year;
-        while month < 1 {
-            month += 12;
-            year -= 1;
-        }
-        while month > 12 {
-            month -= 12;
-            year += 1;
-        }
-        // Keep the picker in a reasonable civil range for birth charts.
-        year = year.clamp(1800, 2100);
-        ui.profile_cal_year = year;
-        ui.profile_cal_month = month as u32;
-        drop(ui);
-        self.publish();
-    }
-
-    fn set_profile_cal_day(&self, day: i32) {
-        if !(1..=31).contains(&day) {
+    fn nav_profile_cal(&self, delta: i32) {
+        if delta == 0 {
             return;
         }
         let mut ui = self.ui.write();
         if ui.profile_cal_year == 0 || ui.profile_cal_month == 0 {
             sync_profile_cal_month(&mut ui);
         }
-        let Some(date) =
-            NaiveDate::from_ymd_opt(ui.profile_cal_year, ui.profile_cal_month, day as u32)
-        else {
-            return;
-        };
-        ui.profile_edit_date = date.format("%Y-%m-%d").to_string();
-        apply_profile_timezone_offset(&mut ui);
+        match ui.profile_cal_mode {
+            PROFILE_CAL_YEARS => {
+                ui.profile_cal_year = (ui.profile_cal_year + delta * 12).clamp(1800, 2100);
+            }
+            PROFILE_CAL_MONTHS => {
+                ui.profile_cal_year = (ui.profile_cal_year + delta).clamp(1800, 2100);
+            }
+            _ => {
+                let mut month = i32::try_from(ui.profile_cal_month).unwrap_or(1) + delta;
+                let mut year = ui.profile_cal_year;
+                while month < 1 {
+                    month += 12;
+                    year -= 1;
+                }
+                while month > 12 {
+                    month -= 12;
+                    year += 1;
+                }
+                ui.profile_cal_year = year.clamp(1800, 2100);
+                ui.profile_cal_month = month as u32;
+            }
+        }
         drop(ui);
         self.publish();
     }
 
-    fn nudge_profile_time(&self, minutes: i32) {
+    fn set_profile_cal_mode(&self, mode: u8) {
         let mut ui = self.ui.write();
-        let (h, m) = parse_hh_mm(&ui.profile_edit_time).unwrap_or((12, 0));
-        let total = (h as i32 * 60 + m as i32 + minutes).rem_euclid(24 * 60);
-        ui.profile_edit_time = format!("{:02}:{:02}", total / 60, total % 60);
+        if ui.profile_cal_year == 0 || ui.profile_cal_month == 0 {
+            sync_profile_cal_month(&mut ui);
+        }
+        ui.profile_cal_mode = mode.min(PROFILE_CAL_YEARS);
+        drop(ui);
+        self.publish();
+    }
+
+    fn set_profile_cal_day(&self, value: i32) {
+        let mut ui = self.ui.write();
+        if ui.profile_cal_year == 0 || ui.profile_cal_month == 0 {
+            sync_profile_cal_month(&mut ui);
+        }
+        match ui.profile_cal_mode {
+            PROFILE_CAL_MONTHS => {
+                if !(1..=12).contains(&value) {
+                    return;
+                }
+                ui.profile_cal_month = value as u32;
+                ui.profile_cal_mode = PROFILE_CAL_DAYS;
+            }
+            PROFILE_CAL_YEARS => {
+                if !(1800..=2100).contains(&value) {
+                    return;
+                }
+                ui.profile_cal_year = value;
+                ui.profile_cal_mode = PROFILE_CAL_MONTHS;
+            }
+            _ => {
+                if !(0..42).contains(&value) {
+                    return;
+                }
+                let (year, month) = visible_cal_year_month(&ui);
+                let date = profile_cal_day_grid_start(year, month)
+                    + ChronoDuration::days(i64::from(value));
+                ui.profile_edit_date = date.format("%Y-%m-%d").to_string();
+                ui.profile_cal_year = date.year();
+                ui.profile_cal_month = date.month();
+                apply_profile_timezone_offset(&mut ui);
+            }
+        }
+        drop(ui);
+        self.publish();
+    }
+
+    fn set_profile_time(&self, hour: i32, minute: i32) {
+        if !(0..=23).contains(&hour) || !(0..=59).contains(&minute) {
+            return;
+        }
+        let mut ui = self.ui.write();
+        ui.profile_edit_time = format!("{hour:02}:{minute:02}");
         drop(ui);
         self.publish();
     }
@@ -1585,11 +1662,6 @@ impl JyotishHandle {
             );
         });
     }
-}
-
-fn parse_hh_mm(text: &str) -> Option<(u32, u32)> {
-    let t = NaiveTime::parse_from_str(text.trim(), "%H:%M").ok()?;
-    Some((t.hour(), t.minute()))
 }
 
 fn birth_datetime_utc(cfg: &JyotishConfig) -> Option<DateTime<Utc>> {
@@ -2116,24 +2188,31 @@ pub fn set_draft_birth_place(
     }
 }
 
-/// Shift the draft birth-date calendar by whole months (◀◀ = −12).
-pub fn nav_profile_cal(instance_id: Uuid, delta_months: i32) {
+/// Shift the draft birth-date calendar (days: ±month, months: ±year, years: ±12).
+pub fn nav_profile_cal(instance_id: Uuid, delta: i32) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
-        h.nav_profile_cal(delta_months);
+        h.nav_profile_cal(delta);
     }
 }
 
-/// Pick a day in the visible draft birth-date calendar month.
-pub fn set_profile_cal_day(instance_id: Uuid, day: i32) {
+/// `0` day grid, `1` months, `2` twelve-year block.
+pub fn set_profile_cal_mode(instance_id: Uuid, mode: u8) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
-        h.set_profile_cal_day(day);
+        h.set_profile_cal_mode(mode);
     }
 }
 
-/// Nudge the draft birth time by minutes (empty draft starts at 12:00).
-pub fn nudge_profile_time(instance_id: Uuid, minutes: i32) {
+/// Pick a calendar cell: day-grid index, month `1..=12`, or a civil year.
+pub fn set_profile_cal_day(instance_id: Uuid, value: i32) {
     if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
-        h.nudge_profile_time(minutes);
+        h.set_profile_cal_day(value);
+    }
+}
+
+/// Set the draft birth time (`hour` 0..=23, `minute` 0..=59).
+pub fn set_profile_time(instance_id: Uuid, hour: i32, minute: i32) {
+    if let Some(h) = JYOTISH_LIVE.get(&instance_id) {
+        h.set_profile_time(hour, minute);
     }
 }
 
@@ -2424,7 +2503,7 @@ fn loading_payload(
     current: &CurrentLocState,
 ) -> JyotishPayload {
     let (cities, search_results, active_city_index) = cities_and_search(cfg, ui, current);
-    let (profile_cal_month_key, profile_cal_year, profile_cal_first_weekday, profile_cal_cells) =
+    let (profile_cal_month_key, profile_cal_year, profile_cal_mode, profile_cal_cells) =
         profile_cal_view(ui);
     JyotishPayload {
         date_text: String::new(),
@@ -2462,7 +2541,7 @@ fn loading_payload(
         profile_edit_place_coords: profile_place_coords(ui),
         profile_cal_month_key,
         profile_cal_year,
-        profile_cal_first_weekday,
+        profile_cal_mode,
         profile_cal_cells,
         ayanamsa_key: cfg.ayanamsa.ftl_key(),
         ayanamsa_deg_text: String::new(),
@@ -3001,7 +3080,10 @@ mod search_tests {
         );
         let h = JYOTISH_LIVE.get(&id).expect("live handle");
         h.begin_edit_profile(None);
-        h.set_profile_cal_day(15);
+        {
+            let mut ui = h.ui.write();
+            ui.profile_edit_date = "1990-06-15".into();
+        }
         h.set_draft_birth_place("Delhi".into(), 28.6139, 77.2090, "Asia/Kolkata".into());
         let ui = h.ui.read().clone();
         assert_eq!(ui.profile_edit_place.name, "Delhi");
@@ -3030,10 +3112,22 @@ mod search_tests {
             ui.profile_cal_year = 1990;
             ui.profile_cal_month = 6;
         }
-        h.set_profile_cal_day(15);
+        let idx = (NaiveDate::from_ymd_opt(1990, 6, 15).expect("date")
+            - profile_cal_day_grid_start(1990, 6))
+        .num_days() as i32;
+        h.set_profile_cal_day(idx);
         assert_eq!(h.ui.read().profile_edit_date, "1990-06-15");
         h.nav_profile_cal(1);
         assert_eq!(h.ui.read().profile_cal_month, 7);
         assert_eq!(h.ui.read().profile_cal_year, 1990);
+        h.set_profile_cal_mode(PROFILE_CAL_YEARS);
+        h.set_profile_cal_day(1984);
+        assert_eq!(h.ui.read().profile_cal_year, 1984);
+        assert_eq!(h.ui.read().profile_cal_mode, PROFILE_CAL_MONTHS);
+        h.set_profile_cal_day(3);
+        assert_eq!(h.ui.read().profile_cal_month, 3);
+        assert_eq!(h.ui.read().profile_cal_mode, PROFILE_CAL_DAYS);
+        h.set_profile_time(14, 35);
+        assert_eq!(h.ui.read().profile_edit_time, "14:35");
     }
 }

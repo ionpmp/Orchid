@@ -108,19 +108,23 @@ component ProfileStepper inherits HorizontalLayout {
     }
 }
 
-/// Month grid for picking a birth date.
+/// Birth-date picker: day grid, or month / twelve-year jump sheets.
 component ProfileDateCal inherits VerticalLayout {
     in property <string> label;
     in property <string> selected-text;
     in property <string> empty-text;
-    in property <string> title;
-    in property <int> first-weekday;
+    in property <int> mode;
+    in property <string> month-title;
+    in property <string> year-title;
     in property <[string]> weekday-headers;
     in property <[JyotishProfileCalCell]> cells;
     callback nav(int);
-    callback pick-day(int);
+    callback set-mode(int);
+    callback pick(int);
 
     spacing: 6px;
+    property <int> cols: root.mode == 0 ? 7 : 3;
+    property <length> cell-h: root.mode == 0 ? 26px : 32px;
 
     Text {
         text: root.label;
@@ -138,24 +142,19 @@ component ProfileDateCal inherits VerticalLayout {
     HorizontalLayout {
         spacing: 4px;
         alignment: center;
-        PillBtn { label: "«"; clicked => { root.nav(-12); } }
         PillBtn { label: "◀"; clicked => { root.nav(-1); } }
-        Text {
-            text: root.title;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-sm;
-            font-weight: Theme.weight-semibold;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
-            wrap: no-wrap;
-            overflow: elide;
+        if root.mode == 0 : PillBtn {
+            label: root.month-title;
+            clicked => { root.set-mode(1); }
+        }
+        PillBtn {
+            label: root.year-title;
+            clicked => { root.set-mode(root.mode == 2 ? 0 : 2); }
         }
         PillBtn { label: "▶"; clicked => { root.nav(1); } }
-        PillBtn { label: "»"; clicked => { root.nav(12); } }
     }
 
-    HorizontalLayout {
+    if root.mode == 0 : HorizontalLayout {
         spacing: 2px;
         height: 16px;
         for wd[i] in root.weekday-headers : Text {
@@ -169,32 +168,130 @@ component ProfileDateCal inherits VerticalLayout {
 
     GridLayout {
         spacing: 2px;
-        for pad in root.first-weekday : Rectangle {
-            row: pad / 7;
-            col: mod(pad, 7);
-            height: 26px;
-        }
         for cell[j] in root.cells : Rectangle {
-            row: (j + root.first-weekday) / 7;
-            col: mod(j + root.first-weekday, 7);
-            height: 26px;
+            row: j / root.cols;
+            col: mod(j, root.cols);
+            height: root.cell-h;
             border-radius: Theme.radius-md;
             background: cell.is-selected ? Theme.accent-brand :
-                (cal-day-ta.has-hover ? Theme.surface-raised : transparent);
+                (cal-cell-ta.has-hover ? Theme.surface-raised : transparent);
             border-width: !cell.is-selected && cell.is-today ? 1px : 0;
             border-color: Theme.border-default;
-            cal-day-ta := TouchArea {
-                clicked => { root.pick-day(cell.day); }
+            cal-cell-ta := TouchArea {
+                clicked => { root.pick(root.mode == 0 ? j : cell.value); }
             }
             Text {
                 width: 100%; height: 100%;
-                text: cell.day;
-                color: cell.is-selected ? Theme.surface-base : Theme.text-primary;
+                text: cell.label;
+                color: cell.is-selected ? Theme.surface-base :
+                    (cell.is-outside ? Theme.text-tertiary : Theme.text-primary);
                 font-size: Theme.font-size-sm;
                 font-weight: cell.is-selected || cell.is-today ? Theme.weight-semibold : Theme.weight-regular;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
+        }
+    }
+}
+
+component TimeWheel inherits Rectangle {
+    in property <string> label;
+    in property <[string]> items;
+    in property <int> selected;
+    callback pick(int);
+
+    background: Theme.surface-base;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.border-default;
+    clip: true;
+    horizontal-stretch: 1;
+
+    VerticalLayout {
+        padding-top: 4px;
+        spacing: 2px;
+
+        Text {
+            text: root.label;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+
+        Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: wheel.preferred-height;
+
+            wheel := VerticalLayout {
+                spacing: 1px;
+                for item[i] in root.items : Rectangle {
+                    height: 26px;
+                    background: root.selected == i ? Theme.accent-brand :
+                        (wheel-ta.has-hover ? Theme.surface-raised : transparent);
+                    border-radius: Theme.radius-md;
+                    wheel-ta := TouchArea {
+                        clicked => { root.pick(i); }
+                    }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: item;
+                        color: root.selected == i ? Theme.surface-base : Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-mono;
+                        font-weight: root.selected == i ? Theme.weight-semibold : Theme.weight-regular;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Side-by-side hour (0–23) and minute (0–59) wheels.
+component ProfileTimeSelect inherits VerticalLayout {
+    in property <string> label;
+    in property <string> selected-text;
+    in property <string> empty-text;
+    in property <string> hour-label;
+    in property <string> minute-label;
+    in property <[string]> hour-items;
+    in property <[string]> minute-items;
+    in property <int> hour;
+    in property <int> minute;
+    callback set-time(int, int);
+
+    spacing: 6px;
+
+    Text {
+        text: root.label;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+    }
+
+    Text {
+        text: root.selected-text == "" ? root.empty-text : root.selected-text;
+        color: root.selected-text == "" ? Theme.text-tertiary : Theme.text-primary;
+        font-size: Theme.font-size-sm;
+        font-family: Theme.font-family-mono;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 148px;
+
+        TimeWheel {
+            label: root.hour-label;
+            items: root.hour-items;
+            selected: root.hour;
+            pick(h) => { root.set-time(h, root.minute < 0 ? 0 : root.minute); }
+        }
+        TimeWheel {
+            label: root.minute-label;
+            items: root.minute-items;
+            selected: root.minute;
+            pick(m) => { root.set-time(root.hour < 0 ? 12 : root.hour, m); }
         }
     }
 }
@@ -291,8 +388,9 @@ export component JyotishView inherits Rectangle {
     callback search-birth-places(string);
     callback set-birth-place(string, float, float, string);
     callback nav-profile-cal(int);
+    callback set-profile-cal-mode(int);
     callback set-profile-cal-day(int);
-    callback nudge-profile-time(int);
+    callback set-profile-time(int, int);
     callback nudge-profile-offset(int);
     callback upsert-profile(int, string, int, string, string, int, string, float, float);
 
@@ -1602,9 +1700,13 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
-                if model.profile-editing : VerticalLayout {
-                    spacing: 6px;
+                if model.profile-editing : Flickable {
                     vertical-stretch: 1;
+                    viewport-width: self.width;
+                    viewport-height: profile-edit-form.preferred-height;
+
+                    profile-edit-form := VerticalLayout {
+                    spacing: 6px;
 
                     Text {
                         text: model.profile-edit-index < 0 ? model.profiles-add-label : model.profiles-edit-label;
@@ -1655,21 +1757,27 @@ export component JyotishView inherits Rectangle {
                         label: model.profile-date-label;
                         selected-text: model.profile-edit-date;
                         empty-text: model.profile-date-placeholder;
-                        title: model.profile-cal-title;
-                        first-weekday: model.profile-cal-first-weekday;
+                        mode: model.profile-cal-mode;
+                        month-title: model.profile-cal-month-title;
+                        year-title: model.profile-cal-year-title;
                         weekday-headers: model.weekday-headers;
                         cells: model.profile-cal-cells;
                         nav(d) => { root.nav-profile-cal(d); }
-                        pick-day(d) => { root.set-profile-cal-day(d); }
+                        set-mode(m) => { root.set-profile-cal-mode(m); }
+                        pick(v) => { root.set-profile-cal-day(v); }
                     }
 
-                    ProfileStepper {
+                    ProfileTimeSelect {
                         label: model.profile-time-label;
-                        value-text: model.profile-edit-time;
+                        selected-text: model.profile-edit-time;
                         empty-text: model.profile-time-placeholder;
-                        small-step: 15;
-                        large-step: 60;
-                        nudge(d) => { root.nudge-profile-time(d); }
+                        hour-label: model.profile-hour-label;
+                        minute-label: model.profile-minute-label;
+                        hour-items: model.profile-hour-items;
+                        minute-items: model.profile-minute-items;
+                        hour: model.profile-edit-hour;
+                        minute: model.profile-edit-minute;
+                        set-time(h, m) => { root.set-profile-time(h, m); }
                     }
 
                     ProfileStepper {
@@ -1808,6 +1916,7 @@ export component JyotishView inherits Rectangle {
                             }
                         }
                     }
+                }
                 }
             }
         }

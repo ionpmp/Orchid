@@ -505,6 +505,14 @@ impl MainWindowController {
         self.refresh_jyotish(inst);
     }
 
+    pub(super) fn on_jyotish_set_profile_cal_mode(self: &Arc<Self>, id: &SharedString, mode: i32) {
+        let Some(inst) = Self::parse_jyotish_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::jyotish::set_profile_cal_mode(inst, mode.clamp(0, 2) as u8);
+        self.refresh_jyotish(inst);
+    }
+
     pub(super) fn on_jyotish_set_profile_cal_day(self: &Arc<Self>, id: &SharedString, day: i32) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
@@ -513,11 +521,16 @@ impl MainWindowController {
         self.refresh_jyotish(inst);
     }
 
-    pub(super) fn on_jyotish_nudge_profile_time(self: &Arc<Self>, id: &SharedString, minutes: i32) {
+    pub(super) fn on_jyotish_set_profile_time(
+        self: &Arc<Self>,
+        id: &SharedString,
+        hour: i32,
+        minute: i32,
+    ) {
         let Some(inst) = Self::parse_jyotish_id(id) else {
             return;
         };
-        orchid_widgets::builtin::jyotish::nudge_profile_time(inst, minutes);
+        orchid_widgets::builtin::jyotish::set_profile_time(inst, hour, minute);
         self.refresh_jyotish(inst);
     }
 

@@ -37,13 +37,16 @@ pub struct JyotishSearchHit {
     pub timezone: String,
 }
 
-/// One day cell in the birth-profile date calendar.
+/// One cell in the birth-profile date picker (day, month, or year view).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct JyotishProfileCalCell {
-    pub day: u8,
+    /// Day of month, month number (1..=12), year, or day-grid index payload.
+    pub value: i32,
     pub is_selected: bool,
     pub is_today: bool,
+    /// Adjacent-month day, or a year outside the supported civil range.
+    pub is_outside: bool,
 }
 
 /// One graha (planet) row for the sidereal table.
@@ -257,8 +260,8 @@ pub struct JyotishPayload {
     /// Month key for the draft date calendar (`jyotish-month-N`).
     pub profile_cal_month_key: &'static str,
     pub profile_cal_year: i32,
-    /// Monday-based padding before day 1 (0..=6).
-    pub profile_cal_first_weekday: u8,
+    /// `0` days, `1` months, `2` twelve-year block.
+    pub profile_cal_mode: u8,
     pub profile_cal_cells: Vec<JyotishProfileCalCell>,
     pub ayanamsa_key: &'static str,
     pub ayanamsa_deg_text: String,

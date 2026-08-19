@@ -135,7 +135,8 @@ personal (natal) day layer** — not the birth fields themselves.
 
 Live APIs: `set_profile_picker_open`, `select_profile`, `remove_profile`,
 `begin_edit_profile`, `upsert_profile`, `search_birth_places`,
-`set_draft_birth_place` (plus gender draft helper).
+`set_draft_birth_place`, `nav_profile_cal`, `set_profile_cal_mode`,
+`set_profile_cal_day`, `set_profile_time` (plus gender draft helper).
 
 ## Rectification overview
 

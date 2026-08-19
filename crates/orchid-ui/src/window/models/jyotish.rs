@@ -73,12 +73,15 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         profile_edit_gender: 0,
         profile_edit_date: SharedString::new(),
         profile_edit_time: SharedString::new(),
+        profile_edit_hour: -1,
+        profile_edit_minute: -1,
         profile_edit_offset: 0,
         profile_edit_offset_text: format_utc_offset(0).into(),
         profile_edit_place_name: SharedString::new(),
         profile_edit_place_coords: SharedString::new(),
-        profile_cal_title: SharedString::new(),
-        profile_cal_first_weekday: 0,
+        profile_cal_mode: 0,
+        profile_cal_month_title: SharedString::new(),
+        profile_cal_year_title: SharedString::new(),
         profile_cal_cells: ModelRc::new(VecModel::default()),
         profiles_title: locale.tr("jyotish-profiles-title").into(),
         profiles_hint: locale.tr("jyotish-profiles-hint").into(),
@@ -94,6 +97,10 @@ pub(crate) fn empty_jyotish_model(locale: &LocaleManager) -> JyotishModel {
         profile_date_placeholder: locale.tr("jyotish-profile-date-placeholder").into(),
         profile_time_label: locale.tr("jyotish-profile-time-label").into(),
         profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
+        profile_hour_label: locale.tr("jyotish-profile-hour-label").into(),
+        profile_minute_label: locale.tr("jyotish-profile-minute-label").into(),
+        profile_hour_items: ModelRc::new(VecModel::from(padded_clock_items(24))),
+        profile_minute_items: ModelRc::new(VecModel::from(padded_clock_items(60))),
         profile_offset_label: locale.tr("jyotish-profile-offset-label").into(),
         profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
         profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
@@ -206,13 +213,17 @@ pub(crate) fn build_jyotish_model(
         m.profile_edit_gender = i32::from(p.profile_edit_gender);
         m.profile_edit_date = p.profile_edit_date.clone().into();
         m.profile_edit_time = p.profile_edit_time.clone().into();
+        let (hour, minute) = profile_edit_hm(&p.profile_edit_time);
+        m.profile_edit_hour = hour;
+        m.profile_edit_minute = minute;
         m.profile_edit_offset = p.profile_edit_offset;
         m.profile_edit_offset_text = format_utc_offset(p.profile_edit_offset).into();
         m.profile_edit_place_name = p.profile_edit_place_name.clone().into();
         m.profile_edit_place_coords = p.profile_edit_place_coords.clone().into();
-        m.profile_cal_title = profile_cal_title(p, locale).into();
-        m.profile_cal_first_weekday = i32::from(p.profile_cal_first_weekday);
-        m.profile_cal_cells = ModelRc::new(VecModel::from(profile_cal_cells(p)));
+        m.profile_cal_mode = i32::from(p.profile_cal_mode);
+        m.profile_cal_month_title = locale.tr(p.profile_cal_month_key).into();
+        m.profile_cal_year_title = profile_cal_year_title(p).into();
+        m.profile_cal_cells = ModelRc::new(VecModel::from(profile_cal_cells(p, locale)));
         return m;
     }
 
@@ -387,13 +398,16 @@ pub(crate) fn build_jyotish_model(
         profile_edit_gender: i32::from(p.profile_edit_gender),
         profile_edit_date: p.profile_edit_date.clone().into(),
         profile_edit_time: p.profile_edit_time.clone().into(),
+        profile_edit_hour: profile_edit_hm(&p.profile_edit_time).0,
+        profile_edit_minute: profile_edit_hm(&p.profile_edit_time).1,
         profile_edit_offset: p.profile_edit_offset,
         profile_edit_offset_text: format_utc_offset(p.profile_edit_offset).into(),
         profile_edit_place_name: p.profile_edit_place_name.clone().into(),
         profile_edit_place_coords: p.profile_edit_place_coords.clone().into(),
-        profile_cal_title: profile_cal_title(p, locale).into(),
-        profile_cal_first_weekday: i32::from(p.profile_cal_first_weekday),
-        profile_cal_cells: ModelRc::new(VecModel::from(profile_cal_cells(p))),
+        profile_cal_mode: i32::from(p.profile_cal_mode),
+        profile_cal_month_title: locale.tr(p.profile_cal_month_key).into(),
+        profile_cal_year_title: profile_cal_year_title(p).into(),
+        profile_cal_cells: ModelRc::new(VecModel::from(profile_cal_cells(p, locale))),
         profiles_title: locale.tr("jyotish-profiles-title").into(),
         profiles_hint: locale.tr("jyotish-profiles-hint").into(),
         profiles_close_label: locale.tr("jyotish-profiles-close").into(),
@@ -408,6 +422,10 @@ pub(crate) fn build_jyotish_model(
         profile_date_placeholder: locale.tr("jyotish-profile-date-placeholder").into(),
         profile_time_label: locale.tr("jyotish-profile-time-label").into(),
         profile_time_placeholder: locale.tr("jyotish-profile-time-placeholder").into(),
+        profile_hour_label: locale.tr("jyotish-profile-hour-label").into(),
+        profile_minute_label: locale.tr("jyotish-profile-minute-label").into(),
+        profile_hour_items: ModelRc::new(VecModel::from(padded_clock_items(24))),
+        profile_minute_items: ModelRc::new(VecModel::from(padded_clock_items(60))),
         profile_offset_label: locale.tr("jyotish-profile-offset-label").into(),
         profile_offset_placeholder: locale.tr("jyotish-profile-offset-placeholder").into(),
         profile_place_placeholder: locale.tr("jyotish-profile-place-placeholder").into(),
@@ -550,23 +568,53 @@ fn jyotish_profile_search_hits(p: &orchid_widgets::JyotishPayload) -> Vec<Jyotis
         .collect()
 }
 
-fn profile_cal_title(p: &orchid_widgets::JyotishPayload, locale: &LocaleManager) -> String {
-    format!(
-        "{} {}",
-        locale.tr(p.profile_cal_month_key),
-        p.profile_cal_year
-    )
+fn padded_clock_items(count: i32) -> Vec<SharedString> {
+    (0..count).map(|n| format!("{n:02}").into()).collect()
 }
 
-fn profile_cal_cells(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileCalCell> {
+fn profile_edit_hm(text: &str) -> (i32, i32) {
+    let Some((h, m)) = text.split_once(':') else {
+        return (-1, -1);
+    };
+    match (h.parse::<i32>(), m.parse::<i32>()) {
+        (Ok(hour), Ok(minute)) if (0..=23).contains(&hour) && (0..=59).contains(&minute) => {
+            (hour, minute)
+        }
+        _ => (-1, -1),
+    }
+}
+
+fn profile_cal_year_title(p: &orchid_widgets::JyotishPayload) -> String {
+    if p.profile_cal_mode == 2 {
+        let start = p.profile_cal_year - p.profile_cal_year.rem_euclid(12);
+        format!("{start}–{}", start + 11)
+    } else {
+        p.profile_cal_year.to_string()
+    }
+}
+
+fn profile_cal_cells(
+    p: &orchid_widgets::JyotishPayload,
+    locale: &LocaleManager,
+) -> Vec<JyotishProfileCalCell> {
     p.profile_cal_cells
         .iter()
         .map(|c| JyotishProfileCalCell {
-            day: i32::from(c.day),
+            value: c.value,
+            label: profile_cal_cell_label(p.profile_cal_mode, c.value, locale).into(),
             is_selected: c.is_selected,
             is_today: c.is_today,
+            is_outside: c.is_outside,
         })
         .collect()
+}
+
+fn profile_cal_cell_label(mode: u8, value: i32, locale: &LocaleManager) -> String {
+    if mode == 1 && (1..=12).contains(&value) {
+        locale.tr(&format!("jyotish-month-{value}"))
+    } else {
+        value.to_string()
+    }
 }
 
 fn gender_labels(locale: &LocaleManager) -> Vec<SharedString> {

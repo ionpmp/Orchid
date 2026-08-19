@@ -982,6 +982,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_jyotish_set_profile_cal_mode({
+            let t = t.clone();
+            move |id, mode| {
+                if let Some(c) = t.upgrade() {
+                    c.on_jyotish_set_profile_cal_mode(&id, mode);
+                }
+            }
+        });
         self.window.on_jyotish_set_profile_cal_day({
             let t = t.clone();
             move |id, day| {
@@ -990,11 +998,11 @@ impl MainWindowController {
                 }
             }
         });
-        self.window.on_jyotish_nudge_profile_time({
+        self.window.on_jyotish_set_profile_time({
             let t = t.clone();
-            move |id, minutes| {
+            move |id, hour, minute| {
                 if let Some(c) = t.upgrade() {
-                    c.on_jyotish_nudge_profile_time(&id, minutes);
+                    c.on_jyotish_set_profile_time(&id, hour, minute);
                 }
             }
         });
