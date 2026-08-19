@@ -19,9 +19,7 @@ export component FmToolbar inherits Rectangle {
     callback sort-cycle();
     callback branch-toggle();
     callback quick-filter-changed(string);
-    callback select-toggle();
-    callback select-clear();
-    in-out property <bool> select-mode: false;
+    callback deselect-all();
     in property <int> selection-count: 0;
 
     background: Theme.surface-raised;
@@ -433,67 +431,28 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle { width: 8px; }
+        if root.selection-count > 1 : Rectangle { width: 8px; }
 
-        Rectangle {
+        if root.selection-count > 1 : Rectangle {
             min-width: 28px; height: 28px;
             y: (parent.height - self.height) / 2;
-            background: root.select-mode || sel-ta.has-hover ? Theme.surface-base : transparent;
+            background: desel-ta.has-hover ? Theme.surface-base : transparent;
             border-radius: Theme.radius-md;
-            border-width: root.select-mode ? 1px : 0px;
-            border-color: Theme.accent-brand;
-
-            sel-ta := TouchArea {
-                clicked => { root.select-toggle(); }
+            desel-ta := TouchArea {
+                clicked => { root.deselect-all(); }
             }
             HorizontalLayout {
                 padding-left: 8px;
                 padding-right: 8px;
                 spacing: 6px;
-                Rectangle {
-                    width: 14px;
-                    height: 14px;
-                    y: (parent.height - self.height) / 2;
-                    Rectangle {
-                        x: 0; y: 0; width: 9px; height: 9px;
-                        border-width: 1.5px; border-color: root.select-mode ? Theme.accent-brand : Theme.text-primary;
-                        background: transparent; border-radius: 1px;
-                    }
-                    Rectangle {
-                        x: 5px; y: 5px; width: 9px; height: 9px;
-                        background: root.select-mode ? Theme.accent-brand : Theme.text-primary;
-                        border-radius: 1px;
-                    }
-                }
                 Text {
-                    text: root.select-mode ? Strings.fm-select-done : Strings.fm-select-mode;
-                    color: root.select-mode ? Theme.accent-brand : Theme.text-primary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
-                }
-            }
-        }
-
-        if root.select-mode || root.selection-count > 0 : Rectangle {
-            min-width: 28px; height: 28px;
-            y: (parent.height - self.height) / 2;
-            background: clr-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-            clr-ta := TouchArea {
-                clicked => { root.select-clear(); }
-            }
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                if root.selection-count > 0 : Text {
                     text: "" + root.selection-count + " " + Strings.fm-select-selected;
                     color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
                 }
                 Text {
-                    text: Strings.fm-select-clear;
+                    text: Strings.fm-action-deselect-all;
                     color: Theme.accent-brand;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;

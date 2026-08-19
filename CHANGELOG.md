@@ -42,9 +42,9 @@ release yet.
   loss restores breadcrumb buttons.
 - File/folder context menu shows name, type, size, modified, and MIME at the
   top instead of a separate Properties item.
-- Selection: **Select** mode (toolbar or long-press) — tap toggles an item,
-  tap empty or **Clear** drops the set, **Done** / Escape leaves the mode;
-  Shift+click range and Ctrl+click still work; marquee enters Select mode;
+- Selection: long-press or marquee enters tap-to-toggle mode; the toolbar
+  shows **Deselect** only when multiple items are selected; tap empty or
+  Escape clears the set; Shift+click range and Ctrl+click still work;
   invert (`*`), name mask (`+` / `-`), files-only / folders-only, attribute
   filter; status bar shows selected size.
 - Navigation: Ctrl+PgUp goes up, Alt+F1 / toolbar drive menu switches
@@ -225,8 +225,9 @@ release yet.
 - redb state store + TOML config with hot-reload; history / cache eviction.
 
 ### Changed
-- File-manager selection is a tap-to-toggle **Select** mode instead of
-  per-row checkboxes (toolbar or long-press; **Clear** / empty tap / **Done**).
+- File-manager selection is tap-to-toggle (long-press / marquee) instead of
+  per-row checkboxes; the toolbar shows **Deselect** only when multiple
+  items are selected (empty tap / Escape still clears).
 - Large dependency refresh (Tantivy 0.26, redb 4, keepass 0.13, age/secrecy,
   notify, portable-pty/vte, viewers stack, ICU, FastCDC, windows/sysinfo).
 - Idle CPU, UI lag, FM listing/thumbnail cost, and cold-start work cut

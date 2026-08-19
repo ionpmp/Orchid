@@ -262,6 +262,7 @@ export component FmPane inherits Rectangle {
                     root.address-editing = false;
                     return accept;
                 }
+                root.select-mode = false;
                 root.deselect-all();
                 return accept;
             }
@@ -314,17 +315,11 @@ export component FmPane inherits Rectangle {
                 sort-cycle => { root.sort-cycle(); }
                 branch-toggle => { root.nav-command("branch"); }
                 quick-filter-changed(q) => { root.quick-filter-changed(q); }
-                select-mode <=> root.select-mode;
                 selection-count: pane.tabs[pane.active-tab].selection-count;
-                select-toggle => {
-                    if (root.select-mode) {
-                        root.select-mode = false;
-                        root.deselect-all();
-                    } else {
-                        root.select-mode = true;
-                    }
+                deselect-all => {
+                    root.select-mode = false;
+                    root.deselect-all();
                 }
-                select-clear => { root.deselect-all(); }
             }
 
             FmBreadcrumbs {
@@ -449,7 +444,10 @@ export component FmPane inherits Rectangle {
                         drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
                         marquee-select(a, b, add) => { root.marquee-select(a, b, add, 1); }
-                        empty-clicked => { root.deselect-all(); }
+                        empty-clicked => {
+                            root.select-mode = false;
+                            root.deselect-all();
+                        }
                     }
 
                 if !pane.tabs[pane.active-tab].is-loading
@@ -497,7 +495,10 @@ export component FmPane inherits Rectangle {
                         drag-scroll-changed(mx, my, vy, w) => { root.entry-drag-scroll(mx, my, vy, w); }
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
                         marquee-select(a, b, add, cols) => { root.marquee-select(a, b, add, cols); }
-                        empty-clicked => { root.deselect-all(); }
+                        empty-clicked => {
+                            root.select-mode = false;
+                            root.deselect-all();
+                        }
                     }
 
                 if pane.tabs[pane.active-tab].error != "" : VerticalLayout {
