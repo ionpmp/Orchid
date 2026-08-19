@@ -21,7 +21,9 @@ use swash::zeno::{Format, Vector};
 use swash::FontRef;
 
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
-use crate::document::model::{Alignment, Block, Document, ListKind, Paragraph, Table};
+use crate::document::model::{
+    Alignment, Block, Document, ListKind, Paragraph, Table, TableCell, TableRow, VMerge,
+};
 
 /// Brush colour for styled runs (RGBA).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -504,7 +506,7 @@ impl DocumentLayout {
             .map(|cursor| plain_offset_from_cursor(doc, cursor))
     }
 
-    /// Lay out a table as an equal-width column grid; appends [`LaidBlock`]s and returns geometry.
+    /// Lay out a table on the `tblGrid` / `gridSpan` / `vMerge` geometry.
     fn append_table_grid(
         &mut self,
         t: &Table,
@@ -514,41 +516,36 @@ impl DocumentLayout {
         emitted_text: &mut bool,
         layouts: &mut Vec<LaidBlock>,
     ) -> TableGridGeom {
-        let ncols = table_column_count(t);
-        let col_widths = table_column_widths_px(t, max_w, ncols);
+        let mut measured = self.measure_table(t, max_w, plain_offset, emitted_text);
         let table_y0 = *total_h;
-        let mut row_heights = Vec::with_capacity(t.rows.len());
+        let row_y0s = row_origins(table_y0, &measured.row_heights);
+        let mut cell_rects = Vec::new();
 
-        for row in &t.rows {
-            let row_y0 = *total_h;
-            let mut cell_items: Vec<Vec<CellItemLayout>> = Vec::with_capacity(ncols);
-            let mut max_content_h = 0.0f32;
-
-            for ci in 0..ncols {
-                let cell_w = col_widths[ci];
-                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                let items = if let Some(cell) = row.cells.get(ci) {
-                    self.layout_cell_items(cell, inner_w, plain_offset, emitted_text)
-                } else {
-                    Vec::new()
+        for (ri, mrow) in measured.rows.iter_mut().enumerate() {
+            let placements = mrow.placements.clone();
+            for (ci, col0, colspan) in placements {
+                let Some(cell) = t.rows.get(ri).and_then(|r| r.cells.get(ci)) else {
+                    continue;
                 };
-                let mut content_h: f32 =
-                    items.iter().map(|i| i.height() + TABLE_CELL_PARA_GAP).sum();
-                if content_h > 0.0 {
-                    content_h -= TABLE_CELL_PARA_GAP;
+                if is_vmerge_continue(cell) {
+                    continue;
                 }
-                max_content_h = max_content_h.max(content_h);
-                cell_items.push(items);
-            }
-
-            let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
-            let mut x_cursor = 0.0f32;
-            for (ci, items) in cell_items.into_iter().enumerate() {
-                let cell_w = col_widths[ci];
-                let x0 = x_cursor + TABLE_CELL_PAD;
-                let mut y = row_y0 + TABLE_CELL_PAD;
+                let rowspan = vmerge_rowspan(t, ri, col0).max(1);
+                let (x0, w, y0, h) = cell_rect(
+                    &measured.col_widths,
+                    &row_y0s,
+                    &measured.row_heights,
+                    col0,
+                    colspan,
+                    ri,
+                    rowspan,
+                );
+                cell_rects.push(TableCellRect { x0, y0, w, h });
+                let x_pad = x0 + TABLE_CELL_PAD;
+                let mut y = y0 + TABLE_CELL_PAD;
+                let items = mrow.items.get_mut(ci).map(std::mem::take).unwrap_or_default();
                 for item in items {
-                    let h = item.height();
+                    let item_h = item.height();
                     match item {
                         CellItemLayout::Para {
                             layout,
@@ -561,7 +558,7 @@ impl DocumentLayout {
                             layouts.push(LaidBlock {
                                 layout,
                                 y0: y,
-                                x0,
+                                x0: x_pad,
                                 indent_px,
                                 plain_start,
                                 body_len,
@@ -581,33 +578,32 @@ impl DocumentLayout {
                             layouts.push(LaidBlock {
                                 layout: Layout::default(),
                                 y0: y,
-                                x0,
+                                x0: x_pad,
                                 indent_px: 0.0,
                                 plain_start,
                                 body_len: 0,
                                 prefix_len: 0,
                                 is_image: true,
-                                image_h: h,
+                                image_h: item_h,
                                 image_w,
                                 image_rgba,
                             });
                         }
                     }
-                    y += h + TABLE_CELL_PARA_GAP;
+                    y += item_h + TABLE_CELL_PARA_GAP;
                 }
-                x_cursor += cell_w;
             }
-            *total_h += row_h;
-            row_heights.push(row_h);
         }
 
+        *total_h = table_y0 + measured.row_heights.iter().sum::<f32>();
         TableGridGeom {
             y0: table_y0,
             width: max_w,
             height: *total_h - table_y0,
-            ncols,
-            col_widths,
-            row_heights,
+            ncols: measured.ncols,
+            col_widths: measured.col_widths,
+            row_heights: measured.row_heights,
+            cell_rects,
         }
     }
 
@@ -624,90 +620,185 @@ impl DocumentLayout {
         plain_offset: &mut usize,
         emitted_text: &mut bool,
     ) -> Option<Cursor> {
-        let ncols = table_column_count(t);
-        let col_widths = table_column_widths_px(t, max_w, ncols);
+        let measured = self.measure_table(t, max_w, plain_offset, emitted_text);
+        let table_y0 = *total_h;
+        let row_y0s = row_origins(table_y0, &measured.row_heights);
+        *total_h = table_y0 + measured.row_heights.iter().sum::<f32>();
 
-        for (row_idx, row) in t.rows.iter().enumerate() {
-            let row_y0 = *total_h;
-            let mut cell_items: Vec<Vec<CellItemLayout>> = Vec::with_capacity(ncols);
-            let mut max_content_h = 0.0f32;
-
-            for ci in 0..ncols {
-                let cell_w = col_widths[ci];
-                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                let items = if let Some(cell) = row.cells.get(ci) {
-                    self.layout_cell_items(cell, inner_w, plain_offset, emitted_text)
-                } else {
-                    Vec::new()
+        let mut hit: Option<(usize, usize, usize, usize, f32, f32, f32)> = None;
+        // (row, cell_idx, col0, colspan, x0, y0, w)
+        for (ri, mrow) in measured.rows.iter().enumerate() {
+            for &(ci, col0, colspan) in &mrow.placements {
+                let Some(cell) = t.rows.get(ri).and_then(|r| r.cells.get(ci)) else {
+                    continue;
                 };
-                let mut content_h: f32 =
-                    items.iter().map(|i| i.height() + TABLE_CELL_PARA_GAP).sum();
+                if is_vmerge_continue(cell) {
+                    continue;
+                }
+                let rowspan = vmerge_rowspan(t, ri, col0).max(1);
+                let (x0, w, y0, h) = cell_rect(
+                    &measured.col_widths,
+                    &row_y0s,
+                    &measured.row_heights,
+                    col0,
+                    colspan,
+                    ri,
+                    rowspan,
+                );
+                if local_x >= x0 && local_x < x0 + w && local_y >= y0 && local_y < y0 + h {
+                    hit = Some((ri, ci, col0, colspan, x0, y0, w));
+                    break;
+                }
+            }
+            if hit.is_some() {
+                break;
+            }
+        }
+
+        let (row_idx, cell_idx, _col0, _colspan, x0, y0, cell_w) = match hit {
+            Some(h) => h,
+            None => return None,
+        };
+        let items = measured
+            .rows
+            .get(row_idx)
+            .and_then(|r| r.items.get(cell_idx))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        if items.is_empty() {
+            let offset = measured
+                .rows
+                .iter()
+                .take(row_idx + 1)
+                .flat_map(|r| r.items.iter().flatten())
+                .last()
+                .map(|p| p.plain_start() + p.body_len())
+                .unwrap_or(*plain_offset);
+            return Some(cursor_from_plain_offset(doc, offset));
+        }
+        let x_pad = x0 + TABLE_CELL_PAD;
+        let mut y = y0 + TABLE_CELL_PAD;
+        for (i, item) in items.iter().enumerate() {
+            let y1 = y + item.height() + TABLE_CELL_PARA_GAP;
+            let last = i + 1 == items.len();
+            if local_y < y1 || last {
+                return match item {
+                    CellItemLayout::Image {
+                        image_idx,
+                        after_paragraph,
+                        ..
+                    } => Some(Cursor::on_cell_image(
+                        block_idx,
+                        row_idx,
+                        cell_idx,
+                        *after_paragraph,
+                        *image_idx,
+                    )),
+                    CellItemLayout::Para {
+                        layout,
+                        plain_start,
+                        body_len,
+                        prefix_len,
+                        indent_px,
+                        ..
+                    } => {
+                        let ly = (local_y - y).max(0.0);
+                        let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
+                        let lx = (local_x - x_pad - indent_px)
+                            .clamp(0.0, (inner_w - indent_px).max(12.0));
+                        let body_idx =
+                            cluster_to_body_index(layout, lx, ly, *prefix_len, *body_len);
+                        Some(cursor_from_plain_offset(doc, plain_start + body_idx))
+                    }
+                };
+            }
+            y = y1;
+        }
+        None
+    }
+
+    fn measure_table(
+        &mut self,
+        t: &Table,
+        max_w: f32,
+        plain_offset: &mut usize,
+        emitted_text: &mut bool,
+    ) -> MeasuredTable {
+        let ncols = table_grid_column_count(t);
+        let col_widths = table_column_widths_px(t, max_w, ncols);
+        let mut rows = Vec::with_capacity(t.rows.len());
+        let mut content_hs: Vec<Vec<f32>> = Vec::with_capacity(t.rows.len());
+
+        for row in &t.rows {
+            let placements = assign_row_columns(row, ncols);
+            let mut items = Vec::with_capacity(row.cells.len());
+            let mut heights = Vec::with_capacity(row.cells.len());
+            for (ci, cell) in row.cells.iter().enumerate() {
+                let (col0, span) = placements
+                    .iter()
+                    .find(|p| p.0 == ci)
+                    .map(|p| (p.1, p.2))
+                    .unwrap_or((0, 1));
+                let cell_w = col_widths.iter().skip(col0).take(span).sum::<f32>();
+                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
+                let cell_items = self.layout_cell_items(cell, inner_w, plain_offset, emitted_text);
+                let mut content_h: f32 = cell_items
+                    .iter()
+                    .map(|i| i.height() + TABLE_CELL_PARA_GAP)
+                    .sum();
                 if content_h > 0.0 {
                     content_h -= TABLE_CELL_PARA_GAP;
                 }
-                max_content_h = max_content_h.max(content_h);
-                cell_items.push(items);
-            }
-
-            let row_h = (max_content_h + TABLE_CELL_PAD * 2.0).max(20.0);
-            let row_y1 = row_y0 + row_h;
-            if local_y >= row_y0 && local_y < row_y1 {
-                let col = column_index_at_x(&col_widths, local_x);
-                let x0 = col_widths.iter().take(col).sum::<f32>() + TABLE_CELL_PAD;
-                let cell_w = col_widths[col];
-                let items = &cell_items[col];
-                if items.is_empty() {
-                    let offset = cell_items
-                        .iter()
-                        .take(col)
-                        .flatten()
-                        .last()
-                        .map(|p| p.plain_start() + p.body_len())
-                        .unwrap_or(*plain_offset);
-                    return Some(cursor_from_plain_offset(doc, offset));
+                if is_vmerge_continue(cell) {
+                    content_h = 0.0;
                 }
-                let mut y = row_y0 + TABLE_CELL_PAD;
-                for (i, item) in items.iter().enumerate() {
-                    let y1 = y + item.height() + TABLE_CELL_PARA_GAP;
-                    let last = i + 1 == items.len();
-                    if local_y < y1 || last {
-                        return match item {
-                            CellItemLayout::Image {
-                                image_idx,
-                                after_paragraph,
-                                ..
-                            } => Some(Cursor::on_cell_image(
-                                block_idx,
-                                row_idx,
-                                col,
-                                *after_paragraph,
-                                *image_idx,
-                            )),
-                            CellItemLayout::Para {
-                                layout,
-                                plain_start,
-                                body_len,
-                                prefix_len,
-                                indent_px,
-                                ..
-                            } => {
-                                let ly = (local_y - y).max(0.0);
-                                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                                let lx = (local_x - x0 - indent_px)
-                                    .clamp(0.0, (inner_w - indent_px).max(12.0));
-                                let body_idx =
-                                    cluster_to_body_index(layout, lx, ly, *prefix_len, *body_len);
-                                Some(cursor_from_plain_offset(doc, plain_start + body_idx))
-                            }
-                        };
-                    }
-                    y = y1;
-                }
+                heights.push(content_h);
+                items.push(cell_items);
             }
-            *total_h = row_y1;
+            content_hs.push(heights);
+            rows.push(MeasuredRow { placements, items });
         }
 
-        None
+        let mut row_heights: Vec<f32> = content_hs
+            .iter()
+            .map(|hs| (hs.iter().copied().fold(0.0f32, f32::max) + TABLE_CELL_PAD * 2.0).max(20.0))
+            .collect();
+        if row_heights.is_empty() {
+            row_heights.push(20.0);
+        }
+
+        for (ri, row) in t.rows.iter().enumerate() {
+            let Some(mrow) = rows.get(ri) else {
+                continue;
+            };
+            for &(ci, col0, _) in &mrow.placements {
+                let Some(cell) = row.cells.get(ci) else {
+                    continue;
+                };
+                if is_vmerge_continue(cell) {
+                    continue;
+                }
+                let rowspan = vmerge_rowspan(t, ri, col0).max(1);
+                let needed = content_hs
+                    .get(ri)
+                    .and_then(|h| h.get(ci))
+                    .copied()
+                    .unwrap_or(0.0)
+                    + TABLE_CELL_PAD * 2.0;
+                let end = (ri + rowspan).min(row_heights.len());
+                let have: f32 = row_heights[ri..end].iter().sum();
+                if needed > have && end > ri {
+                    row_heights[end - 1] += needed - have;
+                }
+            }
+        }
+
+        MeasuredTable {
+            ncols,
+            col_widths,
+            row_heights,
+            rows,
+        }
     }
 
     fn layout_cell_items(
@@ -792,13 +883,102 @@ impl DocumentLayout {
     }
 }
 
-fn table_column_count(t: &Table) -> usize {
-    t.rows
+fn cell_colspan(cell: &TableCell) -> usize {
+    cell.grid_span.unwrap_or(1).max(1) as usize
+}
+
+fn is_vmerge_continue(cell: &TableCell) -> bool {
+    matches!(cell.v_merge, Some(VMerge::Continue))
+}
+
+fn table_grid_column_count(t: &Table) -> usize {
+    let from_grid = t.column_widths_twips.len();
+    let from_rows = t
+        .rows
         .iter()
-        .map(|r| r.cells.len())
+        .map(|r| r.cells.iter().map(cell_colspan).sum::<usize>())
         .max()
-        .unwrap_or(1)
-        .max(1)
+        .unwrap_or(1);
+    from_grid.max(from_rows).max(1)
+}
+
+fn assign_row_columns(row: &TableRow, ncols: usize) -> Vec<(usize, usize, usize)> {
+    let mut col = 0usize;
+    let mut out = Vec::new();
+    for (i, cell) in row.cells.iter().enumerate() {
+        if col >= ncols {
+            break;
+        }
+        let span = cell_colspan(cell).min(ncols - col);
+        out.push((i, col, span));
+        col += span;
+    }
+    out
+}
+
+fn cell_at_grid_col(row: &TableRow, col: usize) -> Option<&TableCell> {
+    let mut c = 0usize;
+    for cell in &row.cells {
+        let span = cell_colspan(cell);
+        if col >= c && col < c + span {
+            return Some(cell);
+        }
+        c += span;
+    }
+    None
+}
+
+fn vmerge_rowspan(t: &Table, row_idx: usize, col0: usize) -> usize {
+    let Some(row) = t.rows.get(row_idx) else {
+        return 1;
+    };
+    let Some(cell) = cell_at_grid_col(row, col0) else {
+        return 1;
+    };
+    if is_vmerge_continue(cell) {
+        return 0;
+    }
+    if !matches!(cell.v_merge, Some(VMerge::Restart)) {
+        return 1;
+    }
+    let mut n = 1;
+    for r in (row_idx + 1)..t.rows.len() {
+        match cell_at_grid_col(&t.rows[r], col0) {
+            Some(c) if is_vmerge_continue(c) => n += 1,
+            _ => break,
+        }
+    }
+    n
+}
+
+fn row_origins(table_y0: f32, row_heights: &[f32]) -> Vec<f32> {
+    let mut y = table_y0;
+    let mut out = Vec::with_capacity(row_heights.len());
+    for &h in row_heights {
+        out.push(y);
+        y += h;
+    }
+    out
+}
+
+fn cell_rect(
+    col_widths: &[f32],
+    row_y0s: &[f32],
+    row_heights: &[f32],
+    col0: usize,
+    colspan: usize,
+    row0: usize,
+    rowspan: usize,
+) -> (f32, f32, f32, f32) {
+    let x0 = col_widths.iter().take(col0).sum::<f32>();
+    let w = col_widths.iter().skip(col0).take(colspan.max(1)).sum::<f32>();
+    let y0 = row_y0s.get(row0).copied().unwrap_or(0.0);
+    let h = row_heights
+        .iter()
+        .skip(row0)
+        .take(rowspan.max(1))
+        .sum::<f32>();
+    (x0, w, y0, h)
 }
 
 /// Pixel widths for each column. Falls back to equal split when `column_widths_twips`
@@ -825,25 +1005,8 @@ fn table_column_widths_px(t: &Table, max_w: f32, ncols: usize) -> Vec<f32> {
         .collect()
 }
 
-fn column_index_at_x(col_widths: &[f32], local_x: f32) -> usize {
-    if col_widths.is_empty() {
-        return 0;
-    }
-    if local_x < 0.0 {
-        return 0;
-    }
-    let mut x = 0.0f32;
-    for (i, &w) in col_widths.iter().enumerate() {
-        x += w;
-        if local_x < x || i + 1 == col_widths.len() {
-            return i;
-        }
-    }
-    col_widths.len().saturating_sub(1)
-}
-
 fn paint_table_grid(pixels: &mut [u8], buf_w: u32, buf_h: u32, pad: f32, grid: &TableGridGeom) {
-    let x = (pad + 0.0).round() as u32;
+    let x = pad.round() as u32;
     let y = (pad + grid.y0).round() as u32;
     let w = grid.width.ceil().max(1.0) as u32;
     let h = grid.height.ceil().max(1.0) as u32;
@@ -872,19 +1035,50 @@ fn paint_table_grid(pixels: &mut [u8], buf_w: u32, buf_h: u32, pad: f32, grid: &
         TABLE_GRID_COLOR,
     );
 
-    let mut x_cursor = 0.0f32;
-    for c in 0..grid.ncols.saturating_sub(1) {
-        x_cursor += grid.col_widths.get(c).copied().unwrap_or(0.0);
-        let vx = (pad + x_cursor).round() as u32;
-        fill_rect(pixels, buf_w, buf_h, vx, y, 1, h, TABLE_GRID_COLOR);
+    if grid.cell_rects.is_empty() {
+        let mut x_cursor = 0.0f32;
+        for c in 0..grid.ncols.saturating_sub(1) {
+            x_cursor += grid.col_widths.get(c).copied().unwrap_or(0.0);
+            let vx = (pad + x_cursor).round() as u32;
+            fill_rect(pixels, buf_w, buf_h, vx, y, 1, h, TABLE_GRID_COLOR);
+        }
+        let mut yy = y;
+        for (i, rh) in grid.row_heights.iter().enumerate() {
+            if i > 0 {
+                fill_rect(pixels, buf_w, buf_h, x, yy, w, 1, TABLE_GRID_COLOR);
+            }
+            yy = yy.saturating_add(rh.ceil().max(1.0) as u32);
+        }
+        return;
     }
 
-    let mut yy = y;
-    for (i, rh) in grid.row_heights.iter().enumerate() {
-        if i > 0 {
-            fill_rect(pixels, buf_w, buf_h, x, yy, w, 1, TABLE_GRID_COLOR);
-        }
-        yy = yy.saturating_add(rh.ceil().max(1.0) as u32);
+    for rect in &grid.cell_rects {
+        let cx = (pad + rect.x0).round() as u32;
+        let cy = (pad + rect.y0).round() as u32;
+        let cw = rect.w.ceil().max(1.0) as u32;
+        let ch = rect.h.ceil().max(1.0) as u32;
+        fill_rect(pixels, buf_w, buf_h, cx, cy, cw, 1, TABLE_GRID_COLOR);
+        fill_rect(
+            pixels,
+            buf_w,
+            buf_h,
+            cx,
+            cy.saturating_add(ch.saturating_sub(1)),
+            cw,
+            1,
+            TABLE_GRID_COLOR,
+        );
+        fill_rect(pixels, buf_w, buf_h, cx, cy, 1, ch, TABLE_GRID_COLOR);
+        fill_rect(
+            pixels,
+            buf_w,
+            buf_h,
+            cx.saturating_add(cw.saturating_sub(1)),
+            cy,
+            1,
+            ch,
+            TABLE_GRID_COLOR,
+        );
     }
 }
 
@@ -973,6 +1167,28 @@ struct TableGridGeom {
     ncols: usize,
     col_widths: Vec<f32>,
     row_heights: Vec<f32>,
+    /// Visible (non-`vMerge` continue) cell boxes, content-relative.
+    cell_rects: Vec<TableCellRect>,
+}
+
+struct TableCellRect {
+    x0: f32,
+    y0: f32,
+    w: f32,
+    h: f32,
+}
+
+struct MeasuredTable {
+    ncols: usize,
+    col_widths: Vec<f32>,
+    row_heights: Vec<f32>,
+    rows: Vec<MeasuredRow>,
+}
+
+struct MeasuredRow {
+    /// `(cell_idx, grid_col0, colspan)`
+    placements: Vec<(usize, usize, usize)>,
+    items: Vec<Vec<CellItemLayout>>,
 }
 
 const TABLE_CELL_PAD: f32 = 4.0;
@@ -1576,7 +1792,7 @@ fn fill_rect(
 mod tests {
     use super::*;
     use crate::document::model::{
-        CellImage, ImageFormat, InlineImage, Run, RunStyle, Table, TableCell, TableRow,
+        CellImage, ImageFormat, InlineImage, Run, RunStyle, Table, TableCell, TableRow, VMerge,
     };
 
     fn sample_paragraph() -> Paragraph {
@@ -1853,6 +2069,122 @@ mod tests {
             offset >= aa && offset <= aa + "AA".len(),
             "offset={offset} expected in AA at {aa}..{}",
             aa + "AA".len()
+        );
+    }
+
+    fn is_grid_px(bytes: &[u8], w: u32, x: u32, y: u32) -> bool {
+        let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+        bytes[i] == TABLE_GRID_COLOR[0]
+            && bytes[i + 1] == TABLE_GRID_COLOR[1]
+            && bytes[i + 2] == TABLE_GRID_COLOR[2]
+    }
+
+    #[test]
+    fn grid_span_covers_two_columns() {
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![{
+                            let mut c = cell("WIDE");
+                            c.grid_span = Some(2);
+                            c
+                        }],
+                    },
+                    TableRow {
+                        cells: vec![cell("L"), cell("R")],
+                    },
+                ],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 40);
+        let vx = (PREVIEW_PADDING + content_w / 2.0).round() as u32;
+        let vy = (PREVIEW_PADDING + TABLE_CELL_PAD + 4.0).round() as u32;
+        assert!(
+            !is_grid_px(&bytes, w, vx, vy),
+            "spanned first row should not have a mid-column border"
+        );
+        let plain = doc.plain_text();
+        let wide = plain.find("WIDE").expect("WIDE");
+        let offset = dl
+            .hit_test_plain_offset(
+                &doc,
+                content_w,
+                PREVIEW_PADDING + content_w * 0.75,
+                PREVIEW_PADDING + TABLE_CELL_PAD + 4.0,
+            )
+            .unwrap();
+        assert!(
+            offset >= wide && offset <= wide + "WIDE".len(),
+            "right half of spanned cell should still hit WIDE, offset={offset}"
+        );
+    }
+
+    #[test]
+    fn vmerge_skips_internal_horizontal_border() {
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Table(Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![
+                            {
+                                let mut c = cell("TOP");
+                                c.v_merge = Some(VMerge::Restart);
+                                c
+                            },
+                            cell("R1"),
+                        ],
+                    },
+                    TableRow {
+                        cells: vec![
+                            TableCell {
+                                paragraphs: vec![Paragraph::default()],
+                                v_merge: Some(VMerge::Continue),
+                                ..Default::default()
+                            },
+                            cell("R2"),
+                        ],
+                    },
+                ],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 50);
+        // Interior of the merged left cell, around the old row split.
+        let x = (PREVIEW_PADDING + content_w * 0.25).round() as u32;
+        let mut grid_rows = 0usize;
+        for y in 0..h {
+            if is_grid_px(&bytes, w, x, y) {
+                grid_rows += 1;
+            }
+        }
+        // Outer top + bottom only — not a third rule through the merge.
+        assert!(
+            grid_rows <= 4,
+            "merged column should not paint a mid-row rule (grid rows={grid_rows})"
+        );
+        let plain = doc.plain_text();
+        let top = plain.find("TOP").expect("TOP");
+        let lower = dl
+            .hit_test_plain_offset(
+                &doc,
+                content_w,
+                PREVIEW_PADDING + content_w * 0.2,
+                PREVIEW_PADDING + 36.0,
+            )
+            .unwrap();
+        assert!(
+            lower >= top && lower <= top + "TOP".len(),
+            "click in continue slot should hit the restart cell, offset={lower}"
         );
     }
 

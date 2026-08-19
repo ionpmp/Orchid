@@ -132,8 +132,8 @@ pub enum VMerge {
 ///
 /// Paragraphs hold editable text; [`Self::images`] are anchored after a paragraph
 /// index and are selectable/deletable via the preview cell-image cursor.
-/// [`Self::grid_span`] / [`Self::v_merge`] are preserved for OOXML round-trip;
-/// the Tier-1 preview still lays out one grid slot per cell.
+/// [`Self::grid_span`] / [`Self::v_merge`] are preserved for OOXML round-trip
+/// and drive preview cell boxes (continue slots are covered by the restart).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TableCell {
     /// Paragraphs inside the cell.
@@ -168,8 +168,8 @@ pub struct TableRow {
 
 /// A table of cells.
 ///
-/// Cell `gridSpan` / `vMerge` attrs are round-tripped on [`TableCell`]; the
-/// Tier-1 preview does not yet render spanning geometry.
+/// Cell `gridSpan` / `vMerge` attrs are round-tripped on [`TableCell`] and
+/// rendered as spanning boxes in the preview.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Table {
     /// Rows top-to-bottom.
