@@ -23,7 +23,7 @@ use crate::operations::progress::ProgressSink;
 use crate::path::FsPath;
 
 pub use archive::{register_archive_provider, ArchiveProvider};
-pub use local::LocalProvider;
+pub use local::{list_local_with_preview, LocalProvider};
 pub use rclone::{
     is_rclone_scheme, normalize_mount_uri, rclone_backend, rclone_sync, register_rclone_providers,
     RcloneProvider, RCLONE_SCHEMES,

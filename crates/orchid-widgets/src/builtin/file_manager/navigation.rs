@@ -77,6 +77,59 @@ impl Navigator {
         }
     }
 
+    /// Like [`Self::navigate`], but local folders larger than `preview_at`
+    /// deliver a prefix through `on_preview` before the full listing returns.
+    pub async fn navigate_with_preview(
+        &self,
+        path: &orchid_fs::FsPath,
+        show_hidden: bool,
+        preview_at: usize,
+        on_preview: impl FnOnce(Vec<orchid_fs::FsEntry>) + Send,
+    ) -> NavigationResult {
+        if !path.is_local() {
+            return self.navigate(path, show_hidden).await;
+        }
+        if self.registry.for_path(path).is_none() {
+            return NavigationResult {
+                entries: Vec::new(),
+                breadcrumbs: self.breadcrumbs_for(path),
+                parent: path.parent(),
+                total_entries: 0,
+                error: Some(format!("no provider for scheme `{}`", path.scheme())),
+            };
+        }
+        let listed = orchid_fs::list_local_with_preview(path, preview_at, |mut partial| {
+            if !show_hidden {
+                partial.retain(|e| !e.metadata.hidden);
+            }
+            on_preview(partial);
+        })
+        .await;
+        let mut entries = match listed {
+            Ok(entries) => entries,
+            Err(e) => {
+                return NavigationResult {
+                    entries: Vec::new(),
+                    breadcrumbs: self.breadcrumbs_for(path),
+                    parent: path.parent(),
+                    total_entries: 0,
+                    error: Some(e.to_string()),
+                };
+            }
+        };
+        if !show_hidden {
+            entries.retain(|e| !e.metadata.hidden);
+        }
+        let total = entries.len();
+        NavigationResult {
+            entries,
+            breadcrumbs: self.breadcrumbs_for(path),
+            parent: path.parent(),
+            total_entries: total,
+            error: None,
+        }
+    }
+
     /// Compute breadcrumb segments for `path` by walking its parents.
     #[must_use]
     pub fn breadcrumbs_for(&self, path: &orchid_fs::FsPath) -> Vec<BreadcrumbSegment> {

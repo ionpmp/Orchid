@@ -56,28 +56,11 @@ impl FsProvider for LocalProvider {
 
     async fn list(&self, path: &FsPath) -> Result<Vec<FsEntry>> {
         let os_path = path.to_local()?;
-        let mut rd = tokio::fs::read_dir(&os_path)
+        // One blocking FindFirstFile/readdir pass. Per-entry tokio::fs
+        // metadata is a second syscall on Windows and delays first paint.
+        tokio::task::spawn_blocking(move || list_dir_blocking(&os_path))
             .await
-            .map_err(map_io(&os_path))?;
-        let mut out = Vec::new();
-        while let Some(entry) = rd.next_entry().await? {
-            let entry_path = entry.path();
-            let Ok(fs_path) = FsPath::from_local(&entry_path) else {
-                continue;
-            };
-            let name = entry.file_name().to_string_lossy().into_owned();
-            // Prefer DirEntry metadata to avoid a second filesystem round-trip.
-            let metadata = match entry.metadata().await {
-                Ok(std_meta) => std_metadata_to_fs(&entry_path, std_meta).await?,
-                Err(_) => os_metadata_to_fs(&entry_path).await?,
-            };
-            out.push(FsEntry {
-                path: fs_path,
-                name,
-                metadata,
-            });
-        }
-        Ok(out)
+            .map_err(|e| FsError::Io(std::io::Error::other(format!("list join: {e}"))))?
     }
 
     async fn metadata(&self, path: &FsPath) -> Result<FsMetadata> {
@@ -298,12 +281,77 @@ fn notify_kind_to_fs_change(kind: &notify::EventKind) -> Option<FsChangeKind> {
     }
 }
 
-async fn os_metadata_to_fs(path: &Path) -> Result<FsMetadata> {
-    let std_meta = tokio::fs::metadata(path).await.map_err(map_io(path))?;
-    std_metadata_to_fs(path, std_meta).await
+fn list_dir_blocking(os_path: &Path) -> Result<Vec<FsEntry>> {
+    list_dir_blocking_preview(os_path, 0, None)
 }
 
-async fn std_metadata_to_fs(path: &Path, std_meta: std::fs::Metadata) -> Result<FsMetadata> {
+fn list_dir_blocking_preview(
+    os_path: &Path,
+    preview_at: usize,
+    preview_tx: Option<tokio::sync::oneshot::Sender<Vec<FsEntry>>>,
+) -> Result<Vec<FsEntry>> {
+    let rd = std::fs::read_dir(os_path).map_err(map_io(os_path))?;
+    let mut out = Vec::new();
+    let mut preview_tx = preview_tx;
+    for entry in rd {
+        let entry = entry.map_err(map_io(os_path))?;
+        let entry_path = entry.path();
+        let Ok(fs_path) = FsPath::from_local(&entry_path) else {
+            continue;
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        // DirEntry::metadata uses WIN32_FIND_DATA / d_type — no extra stat.
+        let metadata = match entry.metadata() {
+            Ok(std_meta) => std_metadata_to_fs(&entry_path, std_meta),
+            Err(_) => {
+                let std_meta = std::fs::metadata(&entry_path).map_err(map_io(&entry_path))?;
+                std_metadata_to_fs(&entry_path, std_meta)
+            }
+        };
+        out.push(FsEntry {
+            path: fs_path,
+            name,
+            metadata,
+        });
+        // First paint: emit the window-sized prefix only when more entries follow.
+        if preview_at > 0 && out.len() == preview_at + 1 {
+            if let Some(tx) = preview_tx.take() {
+                let _ = tx.send(out[..preview_at].to_vec());
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// List a local directory, delivering the first `preview_at` names before the
+/// full pass finishes when the folder is larger than that window.
+///
+/// `on_preview` runs at most once. Small folders never call it.
+pub async fn list_local_with_preview(
+    path: &FsPath,
+    preview_at: usize,
+    on_preview: impl FnOnce(Vec<FsEntry>) + Send,
+) -> Result<Vec<FsEntry>> {
+    let os_path = path.to_local()?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let join = tokio::task::spawn_blocking(move || {
+        list_dir_blocking_preview(&os_path, preview_at, Some(tx))
+    });
+    let preview = async {
+        if let Ok(chunk) = rx.await {
+            on_preview(chunk);
+        }
+    };
+    let (listed, _) = tokio::join!(join, preview);
+    listed.map_err(|e| FsError::Io(std::io::Error::other(format!("list join: {e}"))))?
+}
+
+async fn os_metadata_to_fs(path: &Path) -> Result<FsMetadata> {
+    let std_meta = tokio::fs::metadata(path).await.map_err(map_io(path))?;
+    Ok(std_metadata_to_fs(path, std_meta))
+}
+
+fn std_metadata_to_fs(path: &Path, std_meta: std::fs::Metadata) -> FsMetadata {
     let kind = if std_meta.is_dir() {
         FsEntryKind::Directory
     } else if std_meta.is_symlink() {
@@ -337,20 +385,9 @@ async fn std_metadata_to_fs(path: &Path, std_meta: std::fs::Metadata) -> Result<
         (ro, hidden, false)
     };
 
-    let mime = {
-        let fs_path = FsPath::from_local(path).ok();
-        if let Some(p) = fs_path {
-            if matches!(kind, FsEntryKind::File) {
-                crate::mime::guess_mime(&p, None).await
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
+    let mime = mime_from_extension(path, kind);
 
-    Ok(FsMetadata {
+    FsMetadata {
         kind,
         size: if matches!(kind, FsEntryKind::File) {
             std_meta.len()
@@ -365,7 +402,20 @@ async fn std_metadata_to_fs(path: &Path, std_meta: std::fs::Metadata) -> Result<
         system,
         mime,
         extended: ExtendedAttributes::default(),
-    })
+    }
+}
+
+fn mime_from_extension(path: &Path, kind: FsEntryKind) -> Option<String> {
+    if !matches!(kind, FsEntryKind::File) {
+        return None;
+    }
+    let fs_path = FsPath::from_local(path).ok()?;
+    let ext = fs_path.extension()?;
+    let mime = mime_guess::from_ext(ext)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_string();
+    (mime != "application/octet-stream").then_some(mime)
 }
 
 fn system_time_to_utc(t: Option<SystemTime>) -> Option<DateTime<Utc>> {
@@ -386,8 +436,62 @@ fn map_io(path: &Path) -> impl FnOnce(std::io::Error) -> FsError + '_ {
 
 #[cfg(test)]
 mod read_prefix_tests {
-    use crate::provider::{read_prefix, LocalProvider};
+    use crate::provider::{read_prefix, FsProvider, LocalProvider};
     use crate::FsPath;
+
+    #[tokio::test]
+    async fn list_returns_files_and_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), b"hi").unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let fs_path = FsPath::from_local(dir.path()).unwrap();
+        let provider = LocalProvider::new();
+        let mut names: Vec<String> = provider
+            .list(&fs_path)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["a.txt", "sub"]);
+    }
+
+    #[tokio::test]
+    async fn preview_fires_only_when_folder_exceeds_window() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..90 {
+            std::fs::write(dir.path().join(format!("f{i:03}.txt")), b"x").unwrap();
+        }
+        let fs_path = FsPath::from_local(dir.path()).unwrap();
+        let preview_len = std::sync::Arc::new(std::sync::Mutex::new(None::<usize>));
+        let preview_len_cb = std::sync::Arc::clone(&preview_len);
+        let full = crate::list_local_with_preview(&fs_path, 80, move |chunk| {
+            *preview_len_cb.lock().unwrap() = Some(chunk.len());
+        })
+        .await
+        .unwrap();
+        assert_eq!(full.len(), 90);
+        assert_eq!(*preview_len.lock().unwrap(), Some(80));
+    }
+
+    #[tokio::test]
+    async fn preview_skips_small_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..10 {
+            std::fs::write(dir.path().join(format!("f{i}.txt")), b"x").unwrap();
+        }
+        let fs_path = FsPath::from_local(dir.path()).unwrap();
+        let previewed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let previewed_cb = std::sync::Arc::clone(&previewed);
+        let full = crate::list_local_with_preview(&fs_path, 80, move |_| {
+            previewed_cb.store(true, std::sync::atomic::Ordering::SeqCst);
+        })
+        .await
+        .unwrap();
+        assert_eq!(full.len(), 10);
+        assert!(!previewed.load(std::sync::atomic::Ordering::SeqCst));
+    }
 
     #[tokio::test]
     async fn read_prefix_caps_and_fills() {

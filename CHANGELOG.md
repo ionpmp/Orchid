@@ -237,6 +237,14 @@ release yet.
   virtual window only near the edge, coalesce snapshot patches, skip
   unchanged rows, and hit-test the visible viewport instead of the full
   virtual height (hover no longer waits on a disk-enum / model rebuild).
+- File-manager first paint: list names without waiting on managed/encrypted
+  catalogs or per-folder marker probes; extract shell icons and image
+  thumbs for the visible window first (list mode skips image thumbs);
+  hidden tabs skip formatted rows until shown; local folders list in one
+  blocking FindFirstFile/readdir pass instead of a per-file async stat;
+  folders larger than the virtual window publish the first 80 names before
+  the rest of the directory finishes; the listing stays visible while
+  loading (status-bar hint instead of a full-pane overlay).
 - **UI/render performance pass**: terminal glyph-cache `Arc` sharing, dirty-line
   retained raster, `Arc<[Cell]>` grid rows + mutation-only generation bumps,
   BytesMut PTY reads; in-place Slint model patches for clock / media / password

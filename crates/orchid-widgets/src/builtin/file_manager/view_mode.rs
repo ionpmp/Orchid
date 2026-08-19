@@ -29,7 +29,8 @@ pub fn config_for_mode(mode: ViewMode, density_scale: f32) -> ViewModeConfig {
             mode,
             item_height: 36.0 * scale,
             item_width: f32::INFINITY,
-            show_thumbnails: true,
+            // 20px rows: shell / vector icons only. Image decode delays first paint.
+            show_thumbnails: false,
             columns: None,
         },
         ViewMode::Details => ViewModeConfig {
@@ -46,5 +47,18 @@ pub fn config_for_mode(mode: ViewMode, density_scale: f32) -> ViewModeConfig {
             show_thumbnails: true,
             columns: Some(3),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{config_for_mode, ViewMode};
+
+    #[test]
+    fn list_and_details_skip_image_thumbs() {
+        assert!(!config_for_mode(ViewMode::List, 1.0).show_thumbnails);
+        assert!(!config_for_mode(ViewMode::Details, 1.0).show_thumbnails);
+        assert!(config_for_mode(ViewMode::Icons, 1.0).show_thumbnails);
+        assert!(config_for_mode(ViewMode::Gallery, 1.0).show_thumbnails);
     }
 }

@@ -501,6 +501,9 @@ fn fm_build_tab_status_text(locale: &LocaleManager, t: &orchid_widgets::TabPaylo
     if t.branch_view {
         text = format!("{text} · {}", locale.tr("fm-status-branch"));
     }
+    if t.is_loading {
+        text = format!("{text} · {}", locale.tr("fm-loading"));
+    }
     text
 }
 

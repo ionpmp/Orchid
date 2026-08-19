@@ -352,7 +352,8 @@ export component FmPane inherits Rectangle {
                     }
                 }
 
-                if pane.tabs[pane.active-tab].is-loading : TouchArea {
+                if pane.tabs[pane.active-tab].is-loading
+                    && pane.tabs[pane.active-tab].entry-total-count == 0 : TouchArea {
                     width: 100%;
                     height: 100%;
                     pointer-event(e) => {
@@ -393,8 +394,7 @@ export component FmPane inherits Rectangle {
                     }
                 }
 
-                if !pane.tabs[pane.active-tab].is-loading
-                    && pane.tabs[pane.active-tab].error == ""
+                if pane.tabs[pane.active-tab].error == ""
                     && pane.tabs[pane.active-tab].entry-total-count > 0
                     && (pane.tabs[pane.active-tab].view-mode == 1 || pane.tabs[pane.active-tab].view-mode == 2) :
                     FmEntryList {
@@ -450,8 +450,7 @@ export component FmPane inherits Rectangle {
                         }
                     }
 
-                if !pane.tabs[pane.active-tab].is-loading
-                    && pane.tabs[pane.active-tab].error == ""
+                if pane.tabs[pane.active-tab].error == ""
                     && pane.tabs[pane.active-tab].entry-total-count > 0
                     && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3) :
                     FmEntryGrid {

@@ -304,6 +304,8 @@ struct FileManagerInner {
     transfer_notice: RwLock<Option<(String, std::time::Instant)>>,
     /// Tab ids currently loading a directory listing (navigation in flight).
     loading_tabs: RwLock<HashSet<Uuid>>,
+    /// Bumped when a tab starts listing so a stale preview cannot overwrite a newer nav.
+    listing_epoch: RwLock<HashMap<Uuid, u64>>,
     /// Visible filtered-entry window per pane: (first, end).
     viewport_by_pane: RwLock<HashMap<u8, (usize, usize)>>,
     /// Last passphrase failure (brief status-bar toast while dialog is open).
@@ -441,6 +443,7 @@ impl FileManagerWidget {
                 xfer: transfer::TransferCtl::default(),
                 transfer_notice: RwLock::new(None),
                 loading_tabs: RwLock::new(HashSet::new()),
+                listing_epoch: RwLock::new(HashMap::new()),
                 viewport_by_pane: RwLock::new(HashMap::new()),
                 passphrase_error: RwLock::new(None),
                 ingest_error: RwLock::new(None),
@@ -469,9 +472,13 @@ impl FileManagerWidget {
             (left, right)
         };
 
-        self.inner.refresh_tab(&left, show_hidden).await;
         if let Some(rt) = right {
-            self.inner.refresh_tab(&rt, show_hidden).await;
+            tokio::join!(
+                self.inner.refresh_tab(&left, show_hidden),
+                self.inner.refresh_tab(&rt, show_hidden)
+            );
+        } else {
+            self.inner.refresh_tab(&left, show_hidden).await;
         }
         self.inner.publish_refresh();
     }
@@ -725,6 +732,17 @@ impl FileManagerInner {
 
     fn reset_pane_viewport(&self, pane: u8) {
         self.viewport_by_pane.write().remove(&pane);
+    }
+
+    fn bump_listing_epoch(&self, tab_id: Uuid) -> u64 {
+        let mut map = self.listing_epoch.write();
+        let slot = map.entry(tab_id).or_insert(0);
+        *slot = slot.saturating_add(1);
+        *slot
+    }
+
+    fn listing_epoch(&self, tab_id: Uuid) -> u64 {
+        self.listing_epoch.read().get(&tab_id).copied().unwrap_or(0)
     }
 
     fn record_visit(&self, path: &orchid_fs::FsPath) {
@@ -1201,8 +1219,23 @@ impl FileManagerInner {
         if tabs.is_empty() {
             return;
         }
-        self.refresh_managed_roots().await;
-        self.refresh_encrypted_paths().await;
+        // Catalog IO must not block the directory list; first paint uses the
+        // last-known roots (empty only on a cold widget) and badges catch up.
+        {
+            let this = Arc::clone(self);
+            tokio::spawn(async move {
+                let prev_managed = this.managed_roots.read().clone();
+                let prev_encrypted = this.encrypted_paths.read().clone();
+                this.refresh_managed_roots().await;
+                this.refresh_encrypted_paths().await;
+                if *this.managed_roots.read() != prev_managed
+                    || *this.encrypted_paths.read() != prev_encrypted
+                {
+                    this.reapply_catalog_flags();
+                    this.publish_refresh();
+                }
+            });
+        }
         let show_hidden = self.config.read().show_hidden;
 
         let loading_ids: Vec<Uuid> = tabs.iter().map(|t| t.id).collect();
@@ -1223,9 +1256,11 @@ impl FileManagerInner {
             self.publish_refresh();
         }
 
-        for tab in tabs {
-            self.refresh_tab(tab, show_hidden).await;
-        }
+        let listings = tabs.iter().cloned().map(|tab| {
+            let this = Arc::clone(self);
+            async move { this.refresh_tab(&tab, show_hidden).await }
+        });
+        futures::future::join_all(listings).await;
 
         if opts.indicate_loading {
             let mut loading = self.loading_tabs.write();
@@ -1282,12 +1317,16 @@ impl FileManagerInner {
 
     async fn refresh_tab(self: &Arc<Self>, tab: &TabState, show_hidden: bool) {
         let path = tab.path.clone();
+        let epoch = self.bump_listing_epoch(tab.id);
         let t0 = std::time::Instant::now();
         debug!(path = %path.as_str(), "fm refresh_tab start");
 
         let entries = if is_virtual(&path) {
             self.tab_errors.write().insert(tab.id, None);
             let mut entries = self.list_virtual(&path).await;
+            if self.listing_epoch(tab.id) != epoch {
+                return;
+            }
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
             let entries = Arc::new(entries);
             self.entries_by_tab
@@ -1296,6 +1335,9 @@ impl FileManagerInner {
             entries
         } else if tab.branch_view {
             let result = self.navigator.list_branch(&path, show_hidden).await;
+            if self.listing_epoch(tab.id) != epoch {
+                return;
+            }
             self.tab_errors.write().insert(tab.id, result.error.clone());
             let mut entries = result.entries;
             self.apply_entry_metadata(&mut entries);
@@ -1306,7 +1348,34 @@ impl FileManagerInner {
                 .insert(tab.id, Arc::clone(&entries));
             entries
         } else {
-            let result = self.navigator.navigate(&path, show_hidden).await;
+            let this = Arc::clone(self);
+            let tab_id = tab.id;
+            let sort_by = tab.sort_by;
+            let sort_desc = tab.sort_descending;
+            let tab_preview = tab.clone();
+            let result = self
+                .navigator
+                .navigate_with_preview(
+                    &path,
+                    show_hidden,
+                    FM_VIRTUALIZE_THRESHOLD,
+                    move |mut partial| {
+                        if this.listing_epoch(tab_id) != epoch {
+                            return;
+                        }
+                        this.apply_entry_metadata(&mut partial);
+                        sort_entries(&mut partial, sort_by, sort_desc);
+                        this.entries_by_tab
+                            .write()
+                            .insert(tab_id, Arc::new(partial));
+                        this.publish_refresh();
+                        this.spawn_view_decorations(tab_preview);
+                    },
+                )
+                .await;
+            if self.listing_epoch(tab.id) != epoch {
+                return;
+            }
             self.tab_errors.write().insert(tab.id, result.error.clone());
             let mut entries = result.entries;
             self.apply_entry_metadata(&mut entries);
@@ -1331,11 +1400,7 @@ impl FileManagerInner {
         let tab = tab.clone();
         tokio::spawn(async move {
             this.rewatch_tab(&tab).await;
-            this.ensure_shell_icons(&tab, entries.as_slice()).await;
-            let mode_cfg = config_for_mode(tab.view_mode, 1.0);
-            if mode_cfg.show_thumbnails {
-                this.ensure_thumbnails(&tab, entries.as_slice()).await;
-            }
+            this.decorate_view(&tab).await;
         });
     }
 
@@ -1648,40 +1713,66 @@ impl FileManagerInner {
     fn spawn_view_decorations(self: &Arc<Self>, tab: TabState) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
-            let Some(entries) = this.entries_by_tab.read().get(&tab.id).cloned() else {
-                return;
-            };
-            this.ensure_shell_icons(&tab, entries.as_slice()).await;
-            if config_for_mode(tab.view_mode, 1.0).show_thumbnails {
-                this.ensure_thumbnails(&tab, entries.as_slice()).await;
-            }
+            this.decorate_view(&tab).await;
         });
     }
 
-    async fn ensure_shell_icons(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
-        let size = shell_icon_size_for_mode(tab.view_mode);
-
-        let mut pending = Vec::new();
-        {
-            let cache = self.shell_icon_rgba.read();
-            for e in entries.iter().take(256) {
-                let path_key = e.path.as_str().to_string();
-                let cache_key = shell_icon_cache_key(&path_key, size);
-                if cache.contains_key(&cache_key) {
-                    continue;
-                }
-                let path = e.path.clone();
-                let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
-                pending.push((path_key, path, is_dir));
-            }
-        }
-        if pending.is_empty() {
+    async fn decorate_view(&self, tab: &TabState) {
+        let Some(entries) = self.entries_by_tab.read().get(&tab.id).cloned() else {
             return;
+        };
+        let probe = self.probe_encrypted_directories(tab, entries.as_slice());
+        let icons = self.ensure_shell_icons(tab, entries.as_slice());
+        tokio::join!(probe, icons);
+        if config_for_mode(tab.view_mode, 1.0).show_thumbnails {
+            self.ensure_thumbnails(tab, entries.as_slice()).await;
         }
+    }
 
-        // Shell extraction serializes on a process-wide lock, but scheduling
-        // many spawn_blocking tasks still overlaps with cache hits / scheduling.
-        // Publish once after the full icon pass so the UI is not rebuilt per batch.
+    fn visible_entry_range(&self, tab: &TabState, len: usize) -> (usize, usize) {
+        let pane = {
+            let state = self.state.lock();
+            if state.left_pane.active_tab().id == tab.id {
+                Some(0u8)
+            } else if state
+                .right_pane
+                .as_ref()
+                .is_some_and(|r| r.active_tab().id == tab.id)
+            {
+                Some(1)
+            } else {
+                None
+            }
+        };
+        let stored = pane.and_then(|p| self.viewport_by_pane.read().get(&p).copied());
+        clamp_entry_window(stored, len, 96)
+    }
+
+    fn collect_missing_shell_icons(
+        &self,
+        entries: &[orchid_fs::FsEntry],
+        range: std::ops::Range<usize>,
+        size: orchid_fs::ShellIconSize,
+    ) -> Vec<(String, orchid_fs::FsPath, bool)> {
+        let cache = self.shell_icon_rgba.read();
+        let mut pending = Vec::new();
+        for e in entries.get(range).into_iter().flatten() {
+            let path_key = e.path.as_str().to_string();
+            let cache_key = shell_icon_cache_key(&path_key, size);
+            if cache.contains_key(&cache_key) {
+                continue;
+            }
+            let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
+            pending.push((path_key, e.path.clone(), is_dir));
+        }
+        pending
+    }
+
+    async fn extract_shell_icon_batch(
+        &self,
+        pending: &[(String, orchid_fs::FsPath, bool)],
+        size: orchid_fs::ShellIconSize,
+    ) -> bool {
         const BATCH: usize = 24;
         let mut any_hit = false;
         for chunk in pending.chunks(BATCH) {
@@ -1722,9 +1813,53 @@ impl FileManagerInner {
                 }
             }
         }
-        if any_hit {
+        any_hit
+    }
+
+    async fn ensure_shell_icons(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+        let size = shell_icon_size_for_mode(tab.view_mode);
+        let (first, end) = self.visible_entry_range(tab, entries.len());
+        let visible = self.collect_missing_shell_icons(entries, first..end, size);
+        if !visible.is_empty() && self.extract_shell_icon_batch(&visible, size).await {
             self.publish_refresh();
         }
+        let prefetch_end = (end + 48).min(entries.len());
+        let extra = self.collect_missing_shell_icons(entries, end..prefetch_end, size);
+        if !extra.is_empty() && self.extract_shell_icon_batch(&extra, size).await {
+            self.publish_refresh();
+        }
+    }
+
+    async fn probe_encrypted_directories(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+        let (first, end) = self.visible_entry_range(tab, entries.len());
+        let mut hits = Vec::new();
+        for e in entries.get(first..end).into_iter().flatten() {
+            if !matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
+                continue;
+            }
+            if e.metadata.extended.is_encrypted {
+                continue;
+            }
+            if orchid_fs::encrypted::marker::looks_encrypted_directory(&e.path) {
+                hits.push(e.path.as_str().to_string());
+            }
+        }
+        if hits.is_empty() {
+            return;
+        }
+        {
+            let mut map = self.entries_by_tab.write();
+            let Some(list) = map.get_mut(&tab.id) else {
+                return;
+            };
+            let list = Arc::make_mut(list);
+            for e in list.iter_mut() {
+                if hits.iter().any(|p| p == e.path.as_str()) {
+                    e.metadata.extended.is_encrypted = true;
+                }
+            }
+        }
+        self.publish_refresh();
     }
 
     async fn ensure_thumbnails(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
@@ -1734,10 +1869,11 @@ impl FileManagerInner {
         }
         let thumb_size = viewer_thumb_size(self.config.read().thumbnail_size);
 
+        let (first, end) = self.visible_entry_range(tab, entries.len());
         let mut pending = Vec::new();
         {
             let cache = self.thumbnail_rgba.read();
-            for e in entries.iter().take(64) {
+            for e in entries.get(first..end).into_iter().flatten() {
                 if !is_image_entry(e) {
                     continue;
                 }
@@ -1760,7 +1896,10 @@ impl FileManagerInner {
 
         const CONCURRENCY: usize = 4;
         let mut any_thumb = false;
-        for chunk in pending.chunks(CONCURRENCY) {
+        let mut published = false;
+        let chunks = pending.chunks(CONCURRENCY).collect::<Vec<_>>();
+        let chunk_count = chunks.len();
+        for (i, chunk) in chunks.into_iter().enumerate() {
             let futs = chunk.iter().map(|(path_key, path, key)| {
                 let path_key = path_key.clone();
                 let path = path.clone();
@@ -1811,6 +1950,10 @@ impl FileManagerInner {
                     );
                     any_thumb = true;
                 }
+            }
+            if any_thumb && !published && i + 1 < chunk_count {
+                self.publish_refresh();
+                published = true;
             }
         }
         if any_thumb {
@@ -2043,6 +2186,14 @@ impl FileManagerInner {
         entries
     }
 
+    fn reapply_catalog_flags(&self) {
+        let mut map = self.entries_by_tab.write();
+        for list in map.values_mut() {
+            let list = Arc::make_mut(list);
+            self.apply_entry_metadata(list);
+        }
+    }
+
     fn apply_entry_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
         if entries.is_empty() {
             return;
@@ -2068,11 +2219,9 @@ impl FileManagerInner {
                 e.metadata.extended.is_encrypted = true;
                 continue;
             }
-            // Cheap extension check for files; only directories pay the marker FS probe.
-            if orchid_fs::encrypted::marker::looks_encrypted(&e.path)
-                || (matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory)
-                    && orchid_fs::encrypted::marker::looks_encrypted_directory(&e.path))
-            {
+            // Extension check only — directory marker files are probed off the
+            // listing path in [`Self::probe_encrypted_directories`].
+            if orchid_fs::encrypted::marker::looks_encrypted(&e.path) {
                 e.metadata.extended.is_encrypted = true;
             }
         }
@@ -2403,14 +2552,14 @@ fn build_tab_payload(
     };
 
     let item_count = entries_filtered.len() as u32;
-    // Format only the visible window (+ overscan already applied by UI).
+    // Format only the visible window of the active tab. Hidden tabs wait until shown.
     const DEFAULT_WINDOW: usize = 96;
-    let stored = if is_active_tab {
-        inner.viewport_by_pane.read().get(&pane_idx).copied()
+    let (first, end) = if is_active_tab {
+        let stored = inner.viewport_by_pane.read().get(&pane_idx).copied();
+        clamp_entry_window(stored, entries_filtered.len(), DEFAULT_WINDOW)
     } else {
-        None
+        (0, 0)
     };
-    let (first, end) = clamp_entry_window(stored, entries_filtered.len(), DEFAULT_WINDOW);
     let entries_offset = first as u32;
     let locale = inner.deps.orchid_config.read().locale.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
@@ -3349,6 +3498,9 @@ pub async fn switch_to_tab(instance_id: Uuid, pane: u8, tab_id: &str) -> WidgetR
     }
     inner.reset_pane_viewport(pane);
     inner.publish_refresh();
+    if let Ok(tab) = active_tab_ref(&inner.state.lock(), pane) {
+        inner.spawn_view_decorations(tab.clone());
+    }
     Ok(())
 }
 
@@ -3630,7 +3782,12 @@ pub async fn toggle_dual_pane(instance_id: Uuid) -> WidgetResult<()> {
 pub fn set_viewport_window(instance_id: Uuid, pane: u8, first: usize, end: usize) {
     if let Some(inner) = FM_LIVE.get(&instance_id) {
         let end = end.max(first);
-        inner.viewport_by_pane.write().insert(pane, (first, end));
+        let prev = inner.viewport_by_pane.write().insert(pane, (first, end));
+        if prev.is_some_and(|p| p != (first, end)) {
+            if let Ok(tab) = active_tab_ref(&inner.state.lock(), pane) {
+                inner.spawn_view_decorations(tab.clone());
+            }
+        }
     }
 }
 
