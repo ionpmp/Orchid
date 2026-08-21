@@ -568,10 +568,15 @@ pub(crate) fn patch_fm_selection(
     selection_bytes: u64,
     locale: &LocaleManager,
 ) -> bool {
-    let pane_idx = pane.min(1) as usize;
     let Some(panes) = model.panes.as_any().downcast_ref::<VecModel<FmPane>>() else {
         return false;
     };
+    if panes.row_count() == 0 {
+        return false;
+    }
+    // Without a right pane the backend resolves pane 1 to the left tab; mirror
+    // that here instead of failing into a full frame rebuild.
+    let pane_idx = (pane as usize).min(panes.row_count() - 1);
     let Some(pane_model) = panes.row_data(pane_idx) else {
         return false;
     };

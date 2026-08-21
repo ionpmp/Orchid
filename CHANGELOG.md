@@ -279,6 +279,13 @@ release yet.
   checkbox is a dedicated hit target; click-drag of an already-selected set
   keeps the multi-selection; selected rows use a translucent fill so names
   stay readable; Ctrl+click in single-click-open mode no longer opens.
+- File-manager selection mode no longer sticks: it turns itself off once the
+  selection empties, a press whose release is swallowed by a listing update can
+  no longer arm it after 500 ms, and clicks commit against the entry that was
+  pressed rather than whatever the recycled row shows at release time.
+- File-manager clicks: Ctrl+click no longer counts as half of a double click,
+  a third rapid click no longer opens the file twice, and selection patches in
+  single-pane mode stop falling back to a full frame rebuild.
 - File-manager background right-click works on empty space and empty folders,
   and shows only relevant actions (new folder / file, paste, select all).
 - File-manager context-menu icons render as geometric glyphs (the previous

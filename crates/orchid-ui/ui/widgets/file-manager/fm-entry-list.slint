@@ -56,6 +56,12 @@ export component FmEntryList inherits Rectangle {
     property <bool> marquee-additive: false;
     property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
 
+    function cancel-press() {
+        root.pressing-path = "";
+        root.pending-exclusive = "";
+        root.pending-toggle = "";
+    }
+
     function list-body-y(y: length) -> length {
         return details ? y - header-height : y;
     }
@@ -112,8 +118,21 @@ export component FmEntryList inherits Rectangle {
         ? max(0px, virtual-content-height - virtual-pad-top - header-height - entries.length * row-height)
         : 0px;
 
+    // Rows are recycled by the repeater, so a press can outlive the row it
+    // started on. Drop the gesture whenever the virtual window moves.
+    property <int> row-count: entries.length;
+
+    changed row-count => {
+        root.cancel-press();
+    }
+
+    changed virtual-pad-top => {
+        root.cancel-press();
+    }
+
     changed listing-id => {
         list-flick.viewport-y = 0px;
+        root.cancel-press();
         root.press-empty = false;
         root.marquee-active = false;
         root.marquee-origin-ready = false;
@@ -127,9 +146,7 @@ export component FmEntryList inherits Rectangle {
             if (root.pressing-path != "") {
                 root.select-mode = true;
                 root.entry-clicked(root.pressing-path, true);
-                root.pending-exclusive = "";
-                root.pending-toggle = "";
-                root.pressing-path = "";
+                root.cancel-press();
             }
         }
     }
@@ -406,22 +423,20 @@ export component FmEntryList inherits Rectangle {
                     height: 100%;
                     enabled: !(rename.active && entry.path == rename.path);
                     double-clicked => {
-                        root.pressing-path = "";
+                        root.cancel-press();
                         root.entry-double-clicked(entry.path, entry.is-dir);
                     }
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                            root.cancel-press();
                             if (e.modifiers.shift) {
                                 root.entry-shift-clicked(entry.path);
-                                root.pending-exclusive = "";
                             } else if (e.modifiers.control || root.select-mode) {
                                 root.pending-toggle = entry.path;
-                                root.pending-exclusive = "";
                             } else if (entry.is-selected) {
                                 root.pending-exclusive = entry.path;
                             } else {
                                 root.entry-clicked(entry.path, false);
-                                root.pending-exclusive = "";
                             }
                             root.pressing-path = entry.path;
                             root.press-x = self.mouse-x;
@@ -430,10 +445,9 @@ export component FmEntryList inherits Rectangle {
                         if (pressing-path != "" && e.kind == PointerEventKind.move) {
                             if (abs(self.mouse-x - press-x) >= drag-threshold
                                 || abs(self.mouse-y - press-y) >= drag-threshold) {
-                                root.pending-exclusive = "";
-                                root.pending-toggle = "";
-                                root.entry-drag-start(pressing-path);
-                                root.pressing-path = "";
+                                let dragged-path = root.pressing-path;
+                                root.cancel-press();
+                                root.entry-drag-start(dragged-path);
                             }
                         }
                         if (drag-active && entry.is-dir) {
@@ -448,14 +462,16 @@ export component FmEntryList inherits Rectangle {
                             if (drag-active && !entry.is-dir) {
                                 root.drop-on-current-dir();
                             }
-                            if (root.pending-toggle == entry.path && !root.drag-active) {
-                                root.entry-clicked(entry.path, true);
-                            } else if (root.pending-exclusive == entry.path && !root.drag-active) {
-                                root.entry-clicked(entry.path, false);
+                            // Commit against the path captured on press, not the
+                            // row's current entry: the row may have been recycled.
+                            if (!root.drag-active && root.pressing-path != "") {
+                                if (root.pending-toggle != "") {
+                                    root.entry-clicked(root.pending-toggle, true);
+                                } else if (root.pending-exclusive != "") {
+                                    root.entry-clicked(root.pending-exclusive, false);
+                                }
                             }
-                            root.pending-exclusive = "";
-                            root.pending-toggle = "";
-                            root.pressing-path = "";
+                            root.cancel-press();
                         }
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                             root.entry-context(entry.path, self.mouse-x, self.mouse-y);

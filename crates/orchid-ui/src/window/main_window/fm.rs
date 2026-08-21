@@ -217,6 +217,13 @@ impl MainWindowController {
     /// Update selection highlighting without rebuilding the entry model / snapshot.
     pub(super) fn fm_refresh_selection_ui(self: &Arc<Self>, inst: Uuid, pane: u8) {
         if self.try_patch_fm_selection(inst, pane) {
+            // Selecting only mutates widget state, so the cached snapshot still
+            // carries the old highlight. Any later frame patch (layout, drag,
+            // z-order) would rebuild from it and undo the selection on screen.
+            let wm = self.widget_manager.clone();
+            spawn::spawn_local_compat(async move {
+                let _ = wm.refresh_snapshot_cache(inst).await;
+            });
             return;
         }
         let tw = Arc::downgrade(self);
@@ -1601,10 +1608,17 @@ impl MainWindowController {
                         && prev_path == &ps
                         && now.duration_since(*t).as_millis() <= DOUBLE_CLICK_MS
                 });
-            *last = Some((inst, p, ps.clone(), now));
+            // Consume the pair so a third click does not open a second time.
+            *last = if is_double {
+                None
+            } else {
+                Some((inst, p, ps.clone(), now))
+            };
             is_double
         } else {
-            *self.fm_last_click.lock() = Some((inst, p, ps.clone(), Instant::now()));
+            // A Ctrl+click is never half of a double click; letting it seed the
+            // pair makes the next plain click open the file instead of selecting.
+            *self.fm_last_click.lock() = None;
             false
         };
 

@@ -79,6 +79,18 @@ export component FmPane inherits Rectangle {
     property <bool> address-editing: false;
     property <bool> select-mode: false;
 
+    // Select mode has no chrome of its own, so leaving it stuck with nothing
+    // selected turns every later click into a toggle. Drop it when empty.
+    property <int> active-selection-count: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
+        ? pane.tabs[pane.active-tab].selection-count
+        : 0;
+
+    changed active-selection-count => {
+        if (root.active-selection-count == 0) {
+            root.select-mode = false;
+        }
+    }
+
     property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
         && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3);
     property <length> grid-tile: grid-view && pane.tabs[pane.active-tab].view-mode == 3 ? 220px : 100px;
