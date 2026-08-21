@@ -30,6 +30,9 @@ pub struct WidgetSnapshot {
 /// Type-erased payload. Every built-in widget variant has its own branch so
 /// UI dispatch stays exhaustive without runtime downcasting.
 #[derive(Debug, Clone)]
+// Payloads are built once per snapshot and matched by the UI on every frame;
+// boxing the large variants would trade a cheap move for a heap round-trip.
+#[allow(clippy::large_enum_variant)]
 pub enum WidgetPayload {
     /// Placeholder used while the widget is still loading.
     Empty,

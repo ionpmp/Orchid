@@ -695,8 +695,8 @@ fn watercolor(src: &LoadedImage) -> LoadedImage {
     let mut out = soft.rgba.as_ref().clone();
     for (o, e) in out.chunks_exact_mut(4).zip(edges.rgba.chunks_exact(4)) {
         let ink = f32::from(e[0]) / 255.0;
-        for c in 0..3 {
-            o[c] = (f32::from(o[c]) * (1.0 - ink * 0.55))
+        for v in o.iter_mut().take(3) {
+            *v = (f32::from(*v) * (1.0 - ink * 0.55))
                 .round()
                 .clamp(0.0, 255.0) as u8;
         }
@@ -708,8 +708,8 @@ fn cartoon(src: &LoadedImage) -> LoadedImage {
     let flat = median(src, 2);
     let mut out = flat.rgba.as_ref().clone();
     for px in out.chunks_exact_mut(4) {
-        for c in 0..3 {
-            px[c] = (u16::from(px[c]) / 36 * 36).min(255) as u8;
+        for v in px.iter_mut().take(3) {
+            *v = (u16::from(*v) / 36 * 36).min(255) as u8;
         }
     }
     let quant = wrap(src, out);

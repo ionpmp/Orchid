@@ -374,7 +374,7 @@ fn find_embedded_raster(data: &[u8]) -> Option<&[u8]> {
 
 fn largest_png(data: &[u8]) -> Option<&[u8]> {
     const SIG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
-    const IEND: &[u8] = &[b'I', b'E', b'N', b'D'];
+    const IEND: &[u8] = b"IEND";
     let mut best: Option<&[u8]> = None;
     let mut i = 0;
     while let Some(rel) = data[i..].windows(8).position(|w| w == SIG) {

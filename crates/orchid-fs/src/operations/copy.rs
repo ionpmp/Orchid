@@ -484,8 +484,10 @@ mod tests {
         let dst = td.path().join("b.txt");
         std::fs::write(&src, b"new").unwrap();
         std::fs::write(&dst, b"old").unwrap();
-        let mut opts = CopyOptions::default();
-        opts.skip_existing = true;
+        let opts = CopyOptions {
+            skip_existing: true,
+            ..CopyOptions::default()
+        };
         copy(
             &registry(),
             &FsPath::from_local(&src).unwrap(),
@@ -506,8 +508,10 @@ mod tests {
         let dst = td.path().join("out");
         std::fs::create_dir_all(src.join("sub")).unwrap();
         std::fs::write(src.join("sub/a.txt"), b"x").unwrap();
-        let mut opts = CopyOptions::default();
-        opts.structure_only = true;
+        let opts = CopyOptions {
+            structure_only: true,
+            ..CopyOptions::default()
+        };
         copy(
             &registry(),
             &FsPath::from_local(&src).unwrap(),
@@ -529,8 +533,10 @@ mod tests {
         let dst = td.path().join("dst.bin");
         std::fs::write(&src, b"hello world").unwrap();
         std::fs::write(&dst, b"hello").unwrap();
-        let mut opts = CopyOptions::default();
-        opts.resume = true;
+        let opts = CopyOptions {
+            resume: true,
+            ..CopyOptions::default()
+        };
         copy(
             &registry(),
             &FsPath::from_local(&src).unwrap(),

@@ -423,6 +423,7 @@ fn grid_for(count: u32, spec: &PrintSpec) -> (u32, u32) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn blit_fit(
     buf: &mut [u8],
     bw: u32,

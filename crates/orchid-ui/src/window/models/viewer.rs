@@ -404,6 +404,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn text_chrome_labels(
     locale: &LocaleManager,
 ) -> (
@@ -828,7 +829,7 @@ fn composite_checkerboard(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Arc<V
             if a >= 255 {
                 continue;
             }
-            let light = ((x / TILE) + (y / TILE)) % 2 == 0;
+            let light = ((x / TILE) + (y / TILE)).is_multiple_of(2);
             let c = if light { 204u32 } else { 102u32 };
             if a == 0 {
                 px[0] = c as u8;

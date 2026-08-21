@@ -1386,10 +1386,8 @@ impl DocumentViewer {
             if !sel.is_collapsed() {
                 let (a, b) = sel.normalized();
                 Some(Selection { anchor: a, head: b })
-            } else if let Some(span) = expand_selection_to_hyperlink_span(doc, sel.head) {
-                Some(span)
             } else {
-                None
+                expand_selection_to_hyperlink_span(doc, sel.head)
             }
         };
 

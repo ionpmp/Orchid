@@ -12,7 +12,7 @@ use orchid_widgets::{CreateWidgetRequest, WidgetManager};
 use crate::slint_generated::{DockWidgetType, WidgetCatalog};
 use crate::window::spawn;
 
-use super::{fallback_widget_title, AddWidgetPlacement, MainWindowController};
+use super::{AddWidgetPlacement, MainWindowController};
 
 impl MainWindowController {
     pub(super) fn on_catalog_dismiss(self: &Arc<Self>) {

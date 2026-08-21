@@ -258,20 +258,11 @@ struct SavedImageView {
     transform: ViewTransform,
 }
 
+#[derive(Default)]
 struct ImageViewMemory {
     by_path: HashMap<String, SavedImageView>,
     order: VecDeque<String>,
     last: Option<SavedImageView>,
-}
-
-impl Default for ImageViewMemory {
-    fn default() -> Self {
-        Self {
-            by_path: HashMap::new(),
-            order: VecDeque::new(),
-            last: None,
-        }
-    }
 }
 
 impl ImageViewMemory {
@@ -810,7 +801,7 @@ impl ViewerWidgetInner {
         };
         if !has_anim {
             let ext = path.extension().unwrap_or_default();
-            if is_animation_extension(&ext) {
+            if is_animation_extension(ext) {
                 let os = path.to_local().ok();
                 let seq = if let Some(os) = os {
                     tokio::task::spawn_blocking(move || load_animation_file(&os))
@@ -913,9 +904,10 @@ impl ViewerWidgetInner {
         }
         let music = {
             let existing = self.slideshow.read().music_path.clone();
+            let current = self.path.read().clone();
             if existing.is_some() {
                 existing
-            } else if let Some(path) = self.path.read().clone() {
+            } else if let Some(path) = current {
                 image_slideshow::first_folder_audio(&self.deps.registry, &path)
                     .await
                     .map(|p| p.as_str().to_string())
@@ -1466,10 +1458,7 @@ impl ViewerWidgetInner {
         let Some((kind, rest)) = raw.split_once(':') else {
             return Ok(());
         };
-        let (coords, tail) = rest
-            .split_once(" | ")
-            .map(|(a, b)| (a, b))
-            .unwrap_or((rest, ""));
+        let (coords, tail) = rest.split_once(" | ").unwrap_or((rest, ""));
         let img_pts = {
             let guard = self.viewer.lock().await;
             let Some(v) = guard.as_ref() else {
@@ -2490,19 +2479,23 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             inner.refresh_snapshot().await;
         }
         "cal-prev" => {
-            let mut th = inner.image_thumbs.write();
-            let (y, m) = image_browse::shift_month(th.cal_year, u32::from(th.cal_month.max(1)), -1);
-            th.cal_year = y;
-            th.cal_month = m as u8;
-            drop(th);
+            {
+                let mut th = inner.image_thumbs.write();
+                let (y, m) =
+                    image_browse::shift_month(th.cal_year, u32::from(th.cal_month.max(1)), -1);
+                th.cal_year = y;
+                th.cal_month = m as u8;
+            }
             inner.refresh_snapshot().await;
         }
         "cal-next" => {
-            let mut th = inner.image_thumbs.write();
-            let (y, m) = image_browse::shift_month(th.cal_year, u32::from(th.cal_month.max(1)), 1);
-            th.cal_year = y;
-            th.cal_month = m as u8;
-            drop(th);
+            {
+                let mut th = inner.image_thumbs.write();
+                let (y, m) =
+                    image_browse::shift_month(th.cal_year, u32::from(th.cal_month.max(1)), 1);
+                th.cal_year = y;
+                th.cal_month = m as u8;
+            }
             inner.refresh_snapshot().await;
         }
         "overlay-autohide" => {

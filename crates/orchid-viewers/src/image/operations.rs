@@ -329,10 +329,7 @@ mod tests {
         assert_eq!(out.width, 4);
         assert_eq!(out.height, 3);
         assert_eq!(out.rgba[0..4], [1, 2, 3, 255]);
-        assert_eq!(
-            out.rgba[(1 + 1 * 4) * 4..(1 + 1 * 4) * 4 + 4],
-            [255, 0, 0, 255]
-        );
+        assert_eq!(out.rgba[(1 + 4) * 4..(1 + 4) * 4 + 4], [255, 0, 0, 255]);
     }
 
     #[test]

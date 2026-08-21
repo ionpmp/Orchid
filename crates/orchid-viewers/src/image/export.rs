@@ -567,7 +567,7 @@ fn encode_base64(bytes: &[u8]) -> String {
             }
         }
         i += 3;
-        if out.len() % 76 == 0 {
+        if out.len().is_multiple_of(76) {
             out.push_str("\r\n");
         }
     }

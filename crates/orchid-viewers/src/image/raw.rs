@@ -1,6 +1,5 @@
 //! Camera RAW: embedded JPEG preview, full demosaic, and basic develop.
 
-use std::io::Cursor;
 use std::path::Path;
 
 use rawler::decoders::RawDecodeParams;
@@ -307,11 +306,9 @@ pub(crate) fn demosaic_bilinear(
     let avg = |vals: &[Option<f32>]| {
         let mut s = 0.0;
         let mut n = 0.0;
-        for v in vals {
-            if let Some(v) = v {
-                s += *v;
-                n += 1.0;
-            }
+        for v in vals.iter().flatten() {
+            s += *v;
+            n += 1.0;
         }
         if n > 0.0 {
             s / n
@@ -365,7 +362,7 @@ pub(crate) fn demosaic_bilinear(
                     ]);
                     // G row vs G column: if horizontal neighbors are R, use them as R.
                     let horiz = color_at(y, x.saturating_sub(1).min(w - 1));
-                    if horiz % 3 == 0 {
+                    if horiz.is_multiple_of(3) {
                         (r, v, b)
                     } else {
                         (b, v, r)
@@ -486,6 +483,8 @@ pub(crate) fn apply_adjust_raw_file(path: &Path, op: &AdjustOp) -> Result<Loaded
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]

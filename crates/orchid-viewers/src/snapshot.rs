@@ -4,6 +4,9 @@ use std::sync::Arc;
 
 /// Top-level viewer snapshot.
 #[derive(Debug, Clone)]
+// Variants are boxed at the payload level already; boxing here would add an
+// allocation to every snapshot publish on the render path.
+#[allow(clippy::large_enum_variant)]
 pub enum ViewerSnapshot {
     /// Viewer is in the process of loading.
     Loading {

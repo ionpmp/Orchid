@@ -268,6 +268,7 @@ pub fn format_sidecar_report(path: &Path) -> String {
 
 /// Build the in-viewer metadata panel text.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn format_inspect_panel(
     width: u32,
     height: u32,
@@ -870,7 +871,7 @@ fn rgb_to_cmyk(r: u8, g: u8, b: u8) -> (f32, f32, f32, f32) {
     let g = f32::from(g) / 255.0;
     let b = f32::from(b) / 255.0;
     let k = 1.0 - r.max(g).max(b);
-    if (1.0 - k) < f32::EPSILON {
+    if (1.0 - k).abs() < f32::EPSILON {
         return (0.0, 0.0, 0.0, 100.0);
     }
     let c = (1.0 - r - k) / (1.0 - k);

@@ -612,10 +612,9 @@ fn parse_thumb(raw: &str) -> Option<(u32, EncodeFormat)> {
         }
         if let Ok(n) = part.parse::<u32>() {
             edge = n;
-        } else if let Some(f) = EncodeFormat::parse(part) {
-            fmt = f;
         } else {
-            return None;
+            let f = EncodeFormat::parse(part)?;
+            fmt = f;
         }
     }
     Some((edge, fmt))

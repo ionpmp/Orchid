@@ -1,6 +1,5 @@
 //! Floating windows, taskbar, and document/viewer opening logic for [`MainWindowController`].
 
-use slint::{ComponentHandle, ModelRc, SharedString};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;

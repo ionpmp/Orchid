@@ -172,7 +172,7 @@ impl FileManagerInner {
                     break;
                 }
             };
-            if &src == &job.dest_dir {
+            if src == job.dest_dir {
                 idx += 1;
                 continue;
             }
@@ -294,6 +294,7 @@ impl FileManagerInner {
         result
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn copy_or_move(
         &self,
         src: &orchid_fs::FsPath,

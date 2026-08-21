@@ -3467,7 +3467,7 @@ pub async fn complete_path(instance_id: Uuid, typed: &str) -> Vec<PathCompleteIt
             label: e.name,
         })
         .collect();
-    items.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    items.sort_by_key(|a| a.label.to_lowercase());
     items.truncate(12);
     items
 }

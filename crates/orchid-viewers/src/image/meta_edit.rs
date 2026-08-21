@@ -200,20 +200,20 @@ pub fn import_metadata_csv(csv: &str) -> Result<Vec<(String, EditableMeta)>> {
         if cols.is_empty() {
             continue;
         }
-        let mut e = EditableMeta::default();
-        e.title = nonempty(cols.get(1));
-        e.headline = nonempty(cols.get(2));
-        e.description = nonempty(cols.get(3));
-        e.creator = nonempty(cols.get(4));
-        e.copyright = nonempty(cols.get(5));
-        e.keywords = nonempty(cols.get(6));
-        e.credit = nonempty(cols.get(7));
         let lat = cols.get(8).and_then(|s| s.parse().ok());
         let lon = cols.get(9).and_then(|s| s.parse().ok());
-        if let (Some(lat), Some(lon)) = (lat, lon) {
-            e.gps = Some(Some(GpsFix { lat, lon }));
-        }
-        e.date = nonempty(cols.get(10)).map(Some);
+        let e = EditableMeta {
+            title: nonempty(cols.get(1)),
+            headline: nonempty(cols.get(2)),
+            description: nonempty(cols.get(3)),
+            creator: nonempty(cols.get(4)),
+            copyright: nonempty(cols.get(5)),
+            keywords: nonempty(cols.get(6)),
+            credit: nonempty(cols.get(7)),
+            gps: lat.zip(lon).map(|(lat, lon)| Some(GpsFix { lat, lon })),
+            date: nonempty(cols.get(10)).map(Some),
+            ..EditableMeta::default()
+        };
         rows.push((cols[0].clone(), e));
     }
     Ok(rows)
@@ -1032,7 +1032,7 @@ mod tests {
             },
         )
         .unwrap();
-        let csv = export_metadata_csv(&[path.clone()]).unwrap();
+        let csv = export_metadata_csv(std::slice::from_ref(&path)).unwrap();
         assert!(csv.contains("CSV"));
         let rows = import_metadata_csv(&csv).unwrap();
         assert_eq!(rows[0].1.title.as_deref(), Some("CSV"));

@@ -5,20 +5,19 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, warn};
+use tracing::debug;
 use uuid::Uuid;
 
 use orchid_i18n::LocaleManager;
-use orchid_storage::{WidgetSize, WindowState};
 use orchid_widgets::layout::{PixelBounds, ViewportSize};
 use orchid_widgets::{PlacedWidget, SharedInstance, WidgetPayload};
 
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
-    AppState, CalculatorModel, CalendarModel, ClockModel, FileManagerModel, GroupTabModel,
-    JyotishModel, MediaModel, MoonModel, NotesModel, PasswordModel, ProcessesModel,
-    RecentFilesModel, RssModel, SearchModel, SettingsFieldRow, SystemModel, TerminalCellModel,
-    ViewerModel, WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
+    AppState, CalculatorModel, CalendarModel, ClockModel, FileManagerModel, JyotishModel,
+    MediaModel, MoonModel, NotesModel, PasswordModel, ProcessesModel, RecentFilesModel, RssModel,
+    SearchModel, SystemModel, TerminalCellModel, ViewerModel, WeatherModel, WidgetFrameModel,
+    WorkspaceModel, WorkspaceSummary,
 };
 use crate::window::models::{
     blank_terminal, build_calculator_model, build_calendar_model, build_clock_model,

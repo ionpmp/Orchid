@@ -90,7 +90,7 @@ impl VisitLog {
             .filter(|e| !frequent_paths.contains(e.path.as_str()))
             .cloned()
             .collect();
-        recent.sort_by(|a, b| b.last_seq.cmp(&a.last_seq));
+        recent.sort_by_key(|e| std::cmp::Reverse(e.last_seq));
         recent.truncate(Self::RECENT_COUNT);
 
         let mut out = Vec::new();
@@ -129,7 +129,7 @@ impl VisitLog {
         if self.entries.len() <= Self::MAX_ENTRIES {
             return;
         }
-        self.entries.sort_by(|a, b| b.last_seq.cmp(&a.last_seq));
+        self.entries.sort_by_key(|e| std::cmp::Reverse(e.last_seq));
         self.entries.truncate(Self::MAX_ENTRIES);
     }
 }

@@ -17,7 +17,6 @@ use std::time::Instant;
 use parking_lot::Mutex;
 use slint::winit_030::WinitWindowAccessor;
 use slint::ComponentHandle;
-use slint::Image;
 use slint::Model;
 use slint::ModelRc;
 use slint::SharedString;
@@ -31,47 +30,28 @@ use orchid_core::{
     InputMapper, ParsedCommand, ScreenBounds, SubscriptionHandle,
 };
 use orchid_i18n::{LocaleId, LocaleManager};
-use orchid_storage::{OrchidConfig, StateStore, WidgetSize};
+use orchid_storage::{OrchidConfig, StateStore};
 use orchid_terminal::events::TerminalOutput;
 use orchid_terminal::FontMetrics;
 use orchid_terminal::SessionManager;
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
-use orchid_widgets::SharedInstance;
-use orchid_widgets::WidgetPayload;
 use orchid_widgets::{
-    visible_instance_ids, CreateWidgetRequest, GroupManager, LayoutEngine, PlacedWidget,
-    RecentFilesStore, WidgetManager, WorkspaceManager,
+    visible_instance_ids, GroupManager, LayoutEngine, RecentFilesStore, WidgetManager,
+    WorkspaceManager,
 };
 use parking_lot::RwLock;
 
 use super::models::{
-    blank_terminal, build_calculator_model, build_calendar_model, build_clock_model,
-    build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
-    build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
-    build_rss_model, build_search_model, build_system_model, build_terminal_divider_models,
-    build_terminal_tab_models, build_viewer_model, build_weather_model,
-    default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
-    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_confirm_dialog,
-    empty_context_menu, empty_file_manager_model, empty_jyotish_model, empty_managed_policy_state,
-    empty_media_model, empty_moon_model, empty_notes_model, empty_passphrase_state,
-    empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
-    empty_rename_state, empty_rss_model, empty_search_model, empty_system_model, empty_tag_state,
-    empty_terminal_cells, empty_viewer_model, empty_weather_model, locale_display_name,
-    patch_calculator_model, patch_clock_model, patch_media_model, patch_password_model,
-    patch_processes_model, patch_recent_files_model, patch_search_model, patch_system_model,
-    theme_display_name, widget_has_settings, FileManagerOverlays, PasswordAddDialogOverlay,
+    locale_display_name, theme_display_name, FileManagerOverlays, PasswordAddDialogOverlay,
 };
 use super::spawn;
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
-    AppState, CalculatorModel, CalendarModel, ClockModel, DockWidgetType, FileManagerModel,
-    GroupTabModel, JyotishModel, MainWindow, MediaModel, MoonModel, NotesModel, NotificationItem,
-    PasswordModel, ProcessesConfirmDialog, ProcessesModel, RecentFilesModel, RssModel,
-    SearchCandidateEntry, SearchModel, SettingsFieldRow, SettingsSectionEntry, Strings,
-    SystemModel, TerminalCellModel, Theme, ViewerModel, WeatherModel, WidgetCatalog,
+    AppState, DockWidgetType, MainWindow, NotificationItem, ProcessesConfirmDialog,
+    SearchCandidateEntry, SettingsFieldRow, SettingsSectionEntry, Strings, Theme,
     WidgetCloseConfirmDialog, WidgetFrameModel, WidgetSettingsDialog, WindowTaskbarItem,
-    WorkspaceModel, WorkspaceSummary,
+    WorkspaceSummary,
 };
 use crate::terminal_font_metrics;
 use crate::terminal_raster;
@@ -101,7 +81,6 @@ mod wire;
 mod workspace;
 
 pub use workspace::build_empty_workspace_model;
-pub(super) use workspace::fallback_widget_title;
 pub(super) use workspace::next_untitled_docx_path;
 
 use canvas::ResizeInteraction;
@@ -111,6 +90,8 @@ const WORKSPACE_CHROME_H: f32 = 0.0;
 
 type ProcessesContextMap = HashMap<Uuid, (bool, f32, f32)>;
 type FmLastClick = Option<(Uuid, u8, String, Instant)>;
+/// Committed virtualized window `(first, end, width-bucket)` per (instance, pane).
+type FmViewportWindows = Arc<Mutex<HashMap<(Uuid, u8), (usize, usize, i32)>>>;
 
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
@@ -215,7 +196,7 @@ pub struct MainWindowController {
     /// Per-pane scroll/viewport size for entry-list virtualization.
     fm_viewport: Arc<Mutex<HashMap<(Uuid, u8), crate::window::models::FmViewport>>>,
     /// Last committed virtualized window `(first, end, width-bucket)`; skip rebuild while it covers.
-    fm_viewport_window: Arc<Mutex<HashMap<(Uuid, u8), (usize, usize, i32)>>>,
+    fm_viewport_window: FmViewportWindows,
     /// Monotonic sequence per (instance, pane) to coalesce scroll-window patches.
     fm_viewport_seq: Arc<Mutex<HashMap<(Uuid, u8), u64>>>,
     /// After navigation, ignore leftover Flickable scroll until it returns to top.

@@ -373,9 +373,11 @@ mod tests {
 
     #[test]
     fn reset_orientation_keeps_zoom() {
-        let mut t = ViewTransform::default();
-        t.zoom = 2.0;
-        t.pan_x = 8.0;
+        let mut t = ViewTransform {
+            zoom: 2.0,
+            pan_x: 8.0,
+            ..ViewTransform::default()
+        };
         t.rotate_180();
         t.flipped_horizontal = true;
         t.reset_orientation();
@@ -403,16 +405,20 @@ mod tests {
 
     #[test]
     fn zoom_to_rect_enlarges_and_centers() {
-        let mut t = ViewTransform::default();
-        t.zoom = 1.0;
+        let mut t = ViewTransform {
+            zoom: 1.0,
+            ..ViewTransform::default()
+        };
         t.zoom_to_rect(40.0, 40.0, 80.0, 80.0, 200.0, 200.0);
         assert!((t.zoom - 5.0).abs() < 1e-3);
     }
 
     #[test]
     fn pan_to_fraction_centers_requested_point() {
-        let mut t = ViewTransform::default();
-        t.zoom = 2.0;
+        let mut t = ViewTransform {
+            zoom: 2.0,
+            ..ViewTransform::default()
+        };
         t.pan_to_image_fraction(0.25, 0.5, 100, 80, 0.0);
         assert!((t.pan_x - 50.0).abs() < 1e-3);
         assert!(t.pan_y.abs() < 1e-3);

@@ -571,17 +571,18 @@ fn solve8(a: &mut [[f64; 8]; 8], b: &mut [f64; 8]) -> Option<[f64; 8]> {
         a.swap(col, piv);
         b.swap(col, piv);
         let div = a[col][col];
-        for c in col..8 {
-            a[col][c] /= div;
+        for v in a[col].iter_mut().skip(col) {
+            *v /= div;
         }
         b[col] /= div;
+        let pivot = a[col];
         for r in 0..8 {
             if r == col {
                 continue;
             }
             let f = a[r][col];
-            for c in col..8 {
-                a[r][c] -= f * a[col][c];
+            for (v, p) in a[r].iter_mut().zip(pivot.iter()).skip(col) {
+                *v -= f * p;
             }
             b[r] -= f * b[col];
         }

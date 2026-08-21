@@ -443,6 +443,7 @@ mod xcf {
         Ok((rgba, hw, hh))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn decode_tile(
         data: &[u8],
         offset: usize,

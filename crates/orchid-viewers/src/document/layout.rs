@@ -543,7 +543,11 @@ impl DocumentLayout {
                 cell_rects.push(TableCellRect { x0, y0, w, h });
                 let x_pad = x0 + TABLE_CELL_PAD;
                 let mut y = y0 + TABLE_CELL_PAD;
-                let items = mrow.items.get_mut(ci).map(std::mem::take).unwrap_or_default();
+                let items = mrow
+                    .items
+                    .get_mut(ci)
+                    .map(std::mem::take)
+                    .unwrap_or_default();
                 for item in items {
                     let item_h = item.height();
                     match item {
@@ -655,10 +659,7 @@ impl DocumentLayout {
             }
         }
 
-        let (row_idx, cell_idx, _col0, _colspan, x0, y0, cell_w) = match hit {
-            Some(h) => h,
-            None => return None,
-        };
+        let (row_idx, cell_idx, _col0, _colspan, x0, y0, cell_w) = hit?;
         let items = measured
             .rows
             .get(row_idx)
@@ -971,7 +972,11 @@ fn cell_rect(
     rowspan: usize,
 ) -> (f32, f32, f32, f32) {
     let x0 = col_widths.iter().take(col0).sum::<f32>();
-    let w = col_widths.iter().skip(col0).take(colspan.max(1)).sum::<f32>();
+    let w = col_widths
+        .iter()
+        .skip(col0)
+        .take(colspan.max(1))
+        .sum::<f32>();
     let y0 = row_y0s.get(row0).copied().unwrap_or(0.0);
     let h = row_heights
         .iter()

@@ -13,22 +13,12 @@ pub(super) enum ImageTouchAction {
     Pan(f32, f32),
 }
 
+#[derive(Default)]
 struct State {
     last_viewer: Option<Uuid>,
     points: HashMap<u32, (f32, f32)>,
     prev_dist: Option<f32>,
     prev_mid: Option<(f32, f32)>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            last_viewer: None,
-            points: HashMap::new(),
-            prev_dist: None,
-            prev_mid: None,
-        }
-    }
 }
 
 static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| Mutex::new(State::default()));

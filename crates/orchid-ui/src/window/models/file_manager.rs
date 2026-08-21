@@ -1533,6 +1533,7 @@ fn build_drive_items() -> Vec<FmPathSuggest> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn patch_fm_pane(
     pane: &mut FmPane,
     pp: &orchid_widgets::PanePayload,
