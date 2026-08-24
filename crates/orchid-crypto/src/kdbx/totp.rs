@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use secrecy::{ExposeSecret, SecretString};
-use totp_rs::{Algorithm, TOTP};
+use totp_rs::{Algorithm, Builder};
 use url::Url;
 
 use crate::error::{CryptoError, Result};
@@ -187,22 +187,20 @@ pub fn generate_code(cfg: &TotpConfig, now: DateTime<Utc>) -> Result<TotpCode> {
         TotpAlgorithm::Sha256 => Algorithm::SHA256,
         TotpAlgorithm::Sha512 => Algorithm::SHA512,
     };
-    let secret_bytes = totp_rs::Secret::Encoded(cfg.secret.expose_secret().to_string())
-        .to_bytes()
+    let secret = totp_rs::Secret::try_from_base32(cfg.secret.expose_secret())
         .map_err(|e| CryptoError::TotpGeneration(format!("{e:?}")))?;
-    let totp = TOTP::new(
-        alg,
-        cfg.digits as usize,
-        1,
-        cfg.period_seconds as u64,
-        secret_bytes,
-        cfg.issuer.clone(),
-        cfg.account.clone().unwrap_or_default(),
-    )
-    .map_err(|e| CryptoError::TotpGeneration(e.to_string()))?;
+    let totp = Builder::new()
+        .with_algorithm(alg)
+        .with_digits(cfg.digits)
+        .with_skew(1)
+        .with_step_duration(u64::from(cfg.period_seconds))
+        .with_secret(secret)
+        .with_issuer(cfg.issuer.as_deref())
+        .with_account_name(cfg.account.as_deref().unwrap_or_default())
+        .build_noncompliant();
     let ts = now.timestamp() as u64;
-    let code = totp.generate(ts);
-    let remaining = (cfg.period_seconds as u64 - ts % cfg.period_seconds as u64) as u32;
+    let code = totp.generate(ts).to_string();
+    let remaining = (u64::from(cfg.period_seconds) - ts % u64::from(cfg.period_seconds)) as u32;
     Ok(TotpCode {
         code,
         remaining_seconds: remaining,

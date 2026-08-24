@@ -33,7 +33,7 @@ Every gesture performed with a finger has a textual representation as a command.
 
 | Layer | Technology |
 |---|---|
-| Language | Rust (MSRV 1.97) |
+| Language | Rust (MSRV 1.98) |
 | GUI | Slint |
 | Rendering | Skia (Ganesh backend via Slint) |
 | Storage | redb (state) + KDBX4 (passwords) + files (chunks) |
@@ -64,7 +64,7 @@ Every gesture performed with a finger has a textual representation as a command.
 ## Building from Source
 
 ```bash
-# Requires Rust 1.97+ and Visual Studio Build Tools (C++ workload)
+# Requires Rust 1.98+ and Visual Studio Build Tools (C++ workload)
 git clone https://github.com/ionpmp/Orchid.git
 cd Orchid
 cargo build --release

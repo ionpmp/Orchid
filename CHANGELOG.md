@@ -226,6 +226,12 @@ release yet.
 - redb state store + TOML config with hot-reload; history / cache eviction.
 
 ### Changed
+- MSRV / pinned toolchain **1.97 → 1.98.0**; Cargo.lock refreshed to latest
+  compatible crate versions, plus intentional bumps: `icu` 2.3, `swash` 0.2.10,
+  `crc32fast` 1.5, `fontdb` 0.24, `resvg`/`usvg` 0.48, `parley` 0.11,
+  `bzip2` 0.6, `base64` 0.23, digest stack (`sha2`/`sha1`/`md-5`/`digest` 0.11),
+  and `totp-rs` 6 (Builder API). Left **`bincode` on 2** — crates.io `bincode`
+  3.0 is an unmaintained stub.
 - File-manager selection is tap-to-toggle (long-press / marquee) instead of
   per-row checkboxes; the toolbar shows **Deselect** only when multiple
   items are selected (empty tap / Escape still clears).

@@ -20,7 +20,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.97.0"
+          toolchain: "1.98.0"
           components: rustfmt, clippy
 
       - name: Cache cargo
@@ -49,4 +49,4 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check licenses sources
-          rust-version: "1.97.0"
+          rust-version: "1.98.0"
