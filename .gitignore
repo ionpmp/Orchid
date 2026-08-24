@@ -100,6 +100,8 @@ $RECYCLE.BIN/
 .continue/
 agent-tools/
 agent-transcripts/
+canvases/
+*.canvas.tsx
 
 # ---------------------------------------------------------------------------
 # Node / web tooling (defensive — no JS project yet, but prevents surprises)
