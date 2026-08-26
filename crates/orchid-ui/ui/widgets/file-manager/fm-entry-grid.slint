@@ -23,7 +23,12 @@ export component FmEntryGrid inherits Rectangle {
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
     property <length> marquee-threshold: 10px;
+    // Captured on press: the tile selects itself on pointer-down, so by the
+    // time a move arrives `is-selected` no longer says what was under the
+    // finger when the gesture began.
+    property <bool> press-on-selected: false;
     property <bool> press-empty: false;
+    property <bool> marquee-from-entry: false;
     property <bool> marquee-active: false;
     property <bool> marquee-origin-ready: false;
     property <length> marquee-x0: 0px;
@@ -61,6 +66,18 @@ export component FmEntryGrid inherits Rectangle {
         root.pressing-path = "";
         root.pending-exclusive = "";
         root.pending-toggle = "";
+    }
+
+    // Touchpads abort pointer sequences far more often than mice, and an
+    // aborted press never reaches the `up` handlers. Without this the hold
+    // timer keeps running and arms select mode on its own, and `press-empty`
+    // stays latched, which also freezes the flickable.
+    function abort-gesture() {
+        root.cancel-press();
+        root.press-empty = false;
+        root.marquee-from-entry = false;
+        root.marquee-active = false;
+        root.marquee-origin-ready = false;
     }
 
     function row-top(r: int) -> length {
@@ -136,13 +153,17 @@ export component FmEntryGrid inherits Rectangle {
         let r1 = root.last-overlap-row(ry0, ry1);
         let c0 = root.first-overlap-col(rx0, rx1);
         let c1 = root.last-overlap-col(rx0, rx1);
+        let from-entry = root.marquee-from-entry;
         root.press-empty = false;
         root.marquee-active = false;
         root.marquee-origin-ready = false;
+        root.marquee-from-entry = false;
         if (dragged && r0 >= 0 && r1 >= 0 && c0 >= 0 && c1 >= 0) {
             root.select-mode = true;
             root.marquee-select(r0 * columns + c0, r1 * columns + c1, root.marquee-additive, columns);
-        } else if (!root.marquee-additive) {
+        } else if (!root.marquee-additive && !from-entry) {
+            // A band that began on a tile and fell short of the threshold must
+            // leave that tile's selection alone; only empty space clears it.
             root.empty-clicked();
         }
     }
@@ -232,6 +253,9 @@ export component FmEntryGrid inherits Rectangle {
                     if (e.kind == PointerEventKind.up) {
                         root.drop-on-current-dir();
                     }
+                }
+                if (e.kind == PointerEventKind.cancel) {
+                    root.abort-gesture();
                 }
             }
         }
@@ -353,13 +377,47 @@ export component FmEntryGrid inherits Rectangle {
                         root.pressing-path = entry.path;
                         root.press-x = self.mouse-x;
                         root.press-y = self.mouse-y;
+                        root.press-on-selected = entry.is-selected;
                     }
                     if (pressing-path != "" && e.kind == PointerEventKind.move) {
                         if (abs(self.mouse-x - press-x) >= drag-threshold
                             || abs(self.mouse-y - press-y) >= drag-threshold) {
-                            let dragged-path = root.pressing-path;
-                            root.cancel-press();
-                            root.entry-drag-start(dragged-path);
+                            if (root.press-on-selected) {
+                                let dragged-path = root.pressing-path;
+                                root.cancel-press();
+                                root.entry-drag-start(dragged-path);
+                            } else {
+                                // Dragging off a tile that is not part of the
+                                // selection rubber-bands instead of transferring.
+                                // A touchpad otherwise has no way to start a
+                                // selection without first finding empty space.
+                                root.marquee-x0 = self.absolute-position.x
+                                    - root.absolute-position.x + root.press-x;
+                                root.marquee-y0 = self.absolute-position.y
+                                    - root.absolute-position.y
+                                    + root.press-y + grid-flick.viewport-y;
+                                root.marquee-x1 = root.marquee-x0;
+                                root.marquee-y1 = root.marquee-y0;
+                                root.marquee-origin-ready = true;
+                                root.marquee-additive = e.modifiers.control;
+                                root.marquee-from-entry = true;
+                                root.cancel-press();
+                                root.press-empty = true;
+                            }
+                        }
+                    }
+                    // The overlay that normally tracks a rubber band may never
+                    // take the grab from this tile, so keep driving it here too.
+                    // Both paths share the origin seeded above.
+                    if (root.press-empty && e.kind == PointerEventKind.move) {
+                        root.marquee-x1 = self.absolute-position.x
+                            - root.absolute-position.x + self.mouse-x;
+                        root.marquee-y1 = self.absolute-position.y
+                            - root.absolute-position.y
+                            + self.mouse-y + grid-flick.viewport-y;
+                        if (abs(root.marquee-x1 - root.marquee-x0) >= root.marquee-threshold
+                            || abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
+                            root.marquee-active = true;
                         }
                     }
                     if (drag-active && entry.is-dir) {
@@ -383,7 +441,16 @@ export component FmEntryGrid inherits Rectangle {
                                 root.entry-clicked(root.pending-exclusive, false);
                             }
                         }
+                        // A rubber band started on this tile ends here when the
+                        // overlay never took the grab; otherwise it already ran
+                        // and left `press-empty` clear, so this is a no-op.
+                        if (root.press-empty) {
+                            root.finish-empty-gesture();
+                        }
                         root.cancel-press();
+                    }
+                    if (e.kind == PointerEventKind.cancel) {
+                        root.abort-gesture();
                     }
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                         root.entry-context(entry.path, self.mouse-x, self.mouse-y);
@@ -432,6 +499,9 @@ export component FmEntryGrid inherits Rectangle {
                     root.marquee-y1 = self.mouse-y + grid-flick.viewport-y;
                 }
                 root.finish-empty-gesture();
+            }
+            if (e.kind == PointerEventKind.cancel) {
+                root.abort-gesture();
             }
         }
     }

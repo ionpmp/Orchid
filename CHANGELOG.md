@@ -289,6 +289,15 @@ release yet.
   selection empties, a press whose release is swallowed by a listing update can
   no longer arm it after 500 ms, and clicks commit against the entry that was
   pressed rather than whatever the recycled row shows at release time.
+- File-manager rubber band can start on an entry, not just on empty space:
+  dragging off an unselected row or tile bands, dragging off a selected one
+  still transfers the selection. Touchpads had no reachable way to begin a
+  selection, since the only entry points were a 500 ms hold and empty space.
+- File-manager gestures now handle `PointerEventKind.cancel`. Touchpads abort
+  pointer sequences far more often than mice, and an aborted press never
+  reached the `up` handlers: the hold timer kept running and armed select mode
+  by itself a moment after a light tap, and the latched `press-empty` flag
+  froze list scrolling.
 - File-manager clicks: Ctrl+click no longer counts as half of a double click,
   a third rapid click no longer opens the file twice, and selection patches in
   single-pane mode stop falling back to a full frame rebuild.

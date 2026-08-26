@@ -48,7 +48,12 @@ export component FmEntryList inherits Rectangle {
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
     property <length> marquee-threshold: 10px;
+    // Captured on press: the row selects itself on pointer-down, so by the
+    // time a move arrives `is-selected` no longer says what was under the
+    // finger when the gesture began.
+    property <bool> press-on-selected: false;
     property <bool> press-empty: false;
+    property <bool> marquee-from-entry: false;
     property <bool> marquee-active: false;
     property <bool> marquee-origin-ready: false;
     property <length> marquee-y0: 0px;
@@ -60,6 +65,18 @@ export component FmEntryList inherits Rectangle {
         root.pressing-path = "";
         root.pending-exclusive = "";
         root.pending-toggle = "";
+    }
+
+    // Touchpads abort pointer sequences far more often than mice, and an
+    // aborted press never reaches the `up` handlers. Without this the hold
+    // timer keeps running and arms select mode on its own, and `press-empty`
+    // stays latched, which also freezes the flickable.
+    function abort-gesture() {
+        root.cancel-press();
+        root.press-empty = false;
+        root.marquee-from-entry = false;
+        root.marquee-active = false;
+        root.marquee-origin-ready = false;
     }
 
     function list-body-y(y: length) -> length {
@@ -95,9 +112,11 @@ export component FmEntryList inherits Rectangle {
     function finish-empty-gesture() {
         let dragged = root.marquee-active
             && abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold;
+        let from-entry = root.marquee-from-entry;
         root.press-empty = false;
         root.marquee-active = false;
         root.marquee-origin-ready = false;
+        root.marquee-from-entry = false;
         if (dragged
             && root.first-list-hit(root.marquee-y0, root.marquee-y1) >= 0
             && root.last-list-hit(root.marquee-y0, root.marquee-y1) >= 0) {
@@ -106,7 +125,9 @@ export component FmEntryList inherits Rectangle {
                 root.first-list-hit(root.marquee-y0, root.marquee-y1),
                 root.last-list-hit(root.marquee-y0, root.marquee-y1),
                 root.marquee-additive);
-        } else if (!root.marquee-additive) {
+        } else if (!root.marquee-additive && !from-entry) {
+            // A band that began on a row and fell short of the threshold must
+            // leave that row's selection alone; only empty space clears it.
             root.empty-clicked();
         }
     }
@@ -199,6 +220,9 @@ export component FmEntryList inherits Rectangle {
                     if (e.kind == PointerEventKind.up) {
                         root.drop-on-current-dir();
                     }
+                }
+                if (e.kind == PointerEventKind.cancel) {
+                    root.abort-gesture();
                 }
             }
         }
@@ -441,13 +465,41 @@ export component FmEntryList inherits Rectangle {
                             root.pressing-path = entry.path;
                             root.press-x = self.mouse-x;
                             root.press-y = self.mouse-y;
+                            root.press-on-selected = entry.is-selected;
                         }
                         if (pressing-path != "" && e.kind == PointerEventKind.move) {
                             if (abs(self.mouse-x - press-x) >= drag-threshold
                                 || abs(self.mouse-y - press-y) >= drag-threshold) {
-                                let dragged-path = root.pressing-path;
-                                root.cancel-press();
-                                root.entry-drag-start(dragged-path);
+                                if (root.press-on-selected) {
+                                    let dragged-path = root.pressing-path;
+                                    root.cancel-press();
+                                    root.entry-drag-start(dragged-path);
+                                } else {
+                                    // Dragging off an entry that is not part of the
+                                    // selection rubber-bands instead of transferring.
+                                    // A touchpad otherwise has no way to start a
+                                    // selection without first finding empty space.
+                                    root.marquee-y0 = self.absolute-position.y
+                                        - root.absolute-position.y
+                                        + root.press-y + list-flick.viewport-y;
+                                    root.marquee-y1 = root.marquee-y0;
+                                    root.marquee-origin-ready = true;
+                                    root.marquee-additive = e.modifiers.control;
+                                    root.marquee-from-entry = true;
+                                    root.cancel-press();
+                                    root.press-empty = true;
+                                }
+                            }
+                        }
+                        // The overlay that normally tracks a rubber band may never
+                        // take the grab from this row, so keep driving it here too.
+                        // Both paths share the origin seeded above.
+                        if (root.press-empty && e.kind == PointerEventKind.move) {
+                            root.marquee-y1 = self.absolute-position.y
+                                - root.absolute-position.y
+                                + self.mouse-y + list-flick.viewport-y;
+                            if (abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
+                                root.marquee-active = true;
                             }
                         }
                         if (drag-active && entry.is-dir) {
@@ -471,7 +523,16 @@ export component FmEntryList inherits Rectangle {
                                     root.entry-clicked(root.pending-exclusive, false);
                                 }
                             }
+                            // A rubber band started on this row ends here when the
+                            // overlay never took the grab; otherwise it already ran
+                            // and left `press-empty` clear, so this is a no-op.
+                            if (root.press-empty) {
+                                root.finish-empty-gesture();
+                            }
                             root.cancel-press();
+                        }
+                        if (e.kind == PointerEventKind.cancel) {
+                            root.abort-gesture();
                         }
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                             root.entry-context(entry.path, self.mouse-x, self.mouse-y);
@@ -519,6 +580,9 @@ export component FmEntryList inherits Rectangle {
                     root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
                 }
                 root.finish-empty-gesture();
+            }
+            if (e.kind == PointerEventKind.cancel) {
+                root.abort-gesture();
             }
         }
     }
