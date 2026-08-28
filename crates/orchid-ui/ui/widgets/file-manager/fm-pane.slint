@@ -77,19 +77,6 @@ export component FmPane inherits Rectangle {
     property <bool> history-open: false;
     property <bool> drives-open: false;
     property <bool> address-editing: false;
-    property <bool> select-mode: false;
-
-    // Select mode has no chrome of its own, so leaving it stuck with nothing
-    // selected turns every later click into a toggle. Drop it when empty.
-    property <int> active-selection-count: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
-        ? pane.tabs[pane.active-tab].selection-count
-        : 0;
-
-    changed active-selection-count => {
-        if (root.active-selection-count == 0) {
-            root.select-mode = false;
-        }
-    }
 
     property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
         && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3);
@@ -131,7 +118,6 @@ export component FmPane inherits Rectangle {
         if (act == "") { return false; }
         if (act == "fs.select-all") { root.select-all(); return true; }
         if (act == "fs.deselect-all") {
-            root.select-mode = false;
             root.deselect-all();
             return true;
         }
@@ -274,7 +260,6 @@ export component FmPane inherits Rectangle {
                     root.address-editing = false;
                     return accept;
                 }
-                root.select-mode = false;
                 root.deselect-all();
                 return accept;
             }
@@ -329,7 +314,6 @@ export component FmPane inherits Rectangle {
                 quick-filter-changed(q) => { root.quick-filter-changed(q); }
                 selection-count: pane.tabs[pane.active-tab].selection-count;
                 deselect-all => {
-                    root.select-mode = false;
                     root.deselect-all();
                 }
             }
@@ -428,7 +412,6 @@ export component FmPane inherits Rectangle {
                         sort-modified-label: pane.tabs[pane.active-tab].sort-modified-label;
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
                         selection-count: pane.tabs[pane.active-tab].selection-count;
-                        select-mode <=> root.select-mode;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
                             root.address-editing = false;
@@ -457,7 +440,6 @@ export component FmPane inherits Rectangle {
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
                         marquee-select(a, b, add) => { root.marquee-select(a, b, add, 1); }
                         empty-clicked => {
-                            root.select-mode = false;
                             root.deselect-all();
                         }
                     }
@@ -479,7 +461,6 @@ export component FmPane inherits Rectangle {
                         drag-drop-target: root.drag-drop-target;
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         selection-count: pane.tabs[pane.active-tab].selection-count;
-                        select-mode <=> root.select-mode;
                         entry-clicked(p, ctrl) => {
                             root.history-open = false;
                             root.address-editing = false;
@@ -507,7 +488,6 @@ export component FmPane inherits Rectangle {
                         viewport-changed(y, h, w) => { root.viewport-changed(y, h, w); }
                         marquee-select(a, b, add, cols) => { root.marquee-select(a, b, add, cols); }
                         empty-clicked => {
-                            root.select-mode = false;
                             root.deselect-all();
                         }
                     }

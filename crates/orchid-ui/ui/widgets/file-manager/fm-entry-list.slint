@@ -19,7 +19,6 @@ export component FmEntryList inherits Rectangle {
     in property <bool> drag-active;
     in property <string> drag-drop-target;
     in property <int> selection-count;
-    in-out property <bool> select-mode: false;
 
     callback entry-clicked(string, bool);
     callback entry-shift-clicked(string);
@@ -55,7 +54,8 @@ export component FmEntryList inherits Rectangle {
     property <bool> press-empty: false;
     property <bool> marquee-from-entry: false;
     property <bool> marquee-active: false;
-    property <bool> marquee-origin-ready: false;
+    property <int> live-first: -1;
+    property <int> live-last: -1;
     property <length> marquee-y0: 0px;
     property <length> marquee-y1: 0px;
     property <bool> marquee-additive: false;
@@ -76,7 +76,8 @@ export component FmEntryList inherits Rectangle {
         root.press-empty = false;
         root.marquee-from-entry = false;
         root.marquee-active = false;
-        root.marquee-origin-ready = false;
+        root.live-first = -1;
+        root.live-last = -1;
     }
 
     function list-body-y(y: length) -> length {
@@ -109,18 +110,33 @@ export component FmEntryList inherits Rectangle {
         return end;
     }
 
+    // Explorer highlights rows as the band crosses them. Re-selecting on every
+    // move would round-trip to the backend per frame, so only report when the
+    // covered range actually changes.
+    function track-marquee() {
+        if (root.marquee-active) {
+            let f = root.first-list-hit(root.marquee-y0, root.marquee-y1);
+            let l = root.last-list-hit(root.marquee-y0, root.marquee-y1);
+            if (f >= 0 && l >= 0 && (f != root.live-first || l != root.live-last)) {
+                root.live-first = f;
+                root.live-last = l;
+                root.marquee-select(f, l, root.marquee-additive);
+            }
+        }
+    }
+
     function finish-empty-gesture() {
         let dragged = root.marquee-active
             && abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold;
         let from-entry = root.marquee-from-entry;
         root.press-empty = false;
         root.marquee-active = false;
-        root.marquee-origin-ready = false;
         root.marquee-from-entry = false;
+        root.live-first = -1;
+        root.live-last = -1;
         if (dragged
             && root.first-list-hit(root.marquee-y0, root.marquee-y1) >= 0
             && root.last-list-hit(root.marquee-y0, root.marquee-y1) >= 0) {
-            root.select-mode = true;
             root.marquee-select(
                 root.first-list-hit(root.marquee-y0, root.marquee-y1),
                 root.last-list-hit(root.marquee-y0, root.marquee-y1),
@@ -156,20 +172,6 @@ export component FmEntryList inherits Rectangle {
         root.cancel-press();
         root.press-empty = false;
         root.marquee-active = false;
-        root.marquee-origin-ready = false;
-        root.select-mode = false;
-    }
-
-    hold-timer := Timer {
-        interval: 500ms;
-        running: root.pressing-path != "" && !root.drag-active && !root.select-mode;
-        triggered => {
-            if (root.pressing-path != "") {
-                root.select-mode = true;
-                root.entry-clicked(root.pressing-path, true);
-                root.cancel-press();
-            }
-        }
     }
 
     list-flick := Flickable {
@@ -208,10 +210,23 @@ export component FmEntryList inherits Rectangle {
                     && !root.drag-active) {
                     root.press-empty = true;
                     root.marquee-active = false;
-                    root.marquee-origin-ready = false;
+                    root.marquee-from-entry = false;
+                    root.live-first = -1;
+                    root.live-last = -1;
                     root.marquee-y0 = self.mouse-y + list-flick.viewport-y;
-                    root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
+                    root.marquee-y1 = root.marquee-y0;
                     root.marquee-additive = e.modifiers.control;
+                }
+                // This area holds the pointer grab for the whole press, so the
+                // band has to be tracked right here. An overlay spawned on
+                // press never receives the drag, only the bare cursor after
+                // release, which selected entries on plain hover.
+                if (root.press-empty && e.kind == PointerEventKind.move) {
+                    root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
+                    if (abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
+                        root.marquee-active = true;
+                    }
+                    root.track-marquee();
                 }
                 if (drag-active) {
                     if (e.kind == PointerEventKind.move) {
@@ -220,6 +235,10 @@ export component FmEntryList inherits Rectangle {
                     if (e.kind == PointerEventKind.up) {
                         root.drop-on-current-dir();
                     }
+                }
+                if (root.press-empty && e.kind == PointerEventKind.up) {
+                    root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
+                    root.finish-empty-gesture();
                 }
                 if (e.kind == PointerEventKind.cancel) {
                     root.abort-gesture();
@@ -455,7 +474,7 @@ export component FmEntryList inherits Rectangle {
                             root.cancel-press();
                             if (e.modifiers.shift) {
                                 root.entry-shift-clicked(entry.path);
-                            } else if (e.modifiers.control || root.select-mode) {
+                            } else if (e.modifiers.control) {
                                 root.pending-toggle = entry.path;
                             } else if (entry.is-selected) {
                                 root.pending-exclusive = entry.path;
@@ -483,17 +502,17 @@ export component FmEntryList inherits Rectangle {
                                         - root.absolute-position.y
                                         + root.press-y + list-flick.viewport-y;
                                     root.marquee-y1 = root.marquee-y0;
-                                    root.marquee-origin-ready = true;
                                     root.marquee-additive = e.modifiers.control;
                                     root.marquee-from-entry = true;
+                                    root.live-first = -1;
+                                    root.live-last = -1;
                                     root.cancel-press();
                                     root.press-empty = true;
                                 }
                             }
                         }
-                        // The overlay that normally tracks a rubber band may never
-                        // take the grab from this row, so keep driving it here too.
-                        // Both paths share the origin seeded above.
+                        // A band started on this row is tracked here, since this
+                        // row keeps the pointer grab until release.
                         if (root.press-empty && e.kind == PointerEventKind.move) {
                             root.marquee-y1 = self.absolute-position.y
                                 - root.absolute-position.y
@@ -501,6 +520,7 @@ export component FmEntryList inherits Rectangle {
                             if (abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
                                 root.marquee-active = true;
                             }
+                            root.track-marquee();
                         }
                         if (drag-active && entry.is-dir) {
                             if (e.kind == PointerEventKind.move) {
@@ -523,9 +543,6 @@ export component FmEntryList inherits Rectangle {
                                     root.entry-clicked(root.pending-exclusive, false);
                                 }
                             }
-                            // A rubber band started on this row ends here when the
-                            // overlay never took the grab; otherwise it already ran
-                            // and left `press-empty` clear, so this is a no-op.
                             if (root.press-empty) {
                                 root.finish-empty-gesture();
                             }
@@ -558,32 +575,4 @@ export component FmEntryList inherits Rectangle {
         }
     }
 
-    if root.press-empty : TouchArea {
-        width: 100%;
-        height: 100%;
-        pointer-event(e) => {
-            if (e.kind == PointerEventKind.move) {
-                let y = self.mouse-y + list-flick.viewport-y;
-                if (!root.marquee-origin-ready) {
-                    root.marquee-y0 = y;
-                    root.marquee-y1 = y;
-                    root.marquee-origin-ready = true;
-                } else {
-                    root.marquee-y1 = y;
-                    if (abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold) {
-                        root.marquee-active = true;
-                    }
-                }
-            }
-            if (e.kind == PointerEventKind.up) {
-                if (root.marquee-origin-ready) {
-                    root.marquee-y1 = self.mouse-y + list-flick.viewport-y;
-                }
-                root.finish-empty-gesture();
-            }
-            if (e.kind == PointerEventKind.cancel) {
-                root.abort-gesture();
-            }
-        }
-    }
 }

@@ -232,9 +232,10 @@ release yet.
   `bzip2` 0.6, `base64` 0.23, digest stack (`sha2`/`sha1`/`md-5`/`digest` 0.11),
   and `totp-rs` 6 (Builder API). Left **`bincode` on 2** — crates.io `bincode`
   3.0 is an unmaintained stub.
-- File-manager selection is tap-to-toggle (long-press / marquee) instead of
-  per-row checkboxes; the toolbar shows **Deselect** only when multiple
-  items are selected (empty tap / Escape still clears).
+- File-manager selection follows Explorer instead of per-row checkboxes: click
+  selects, Ctrl+click toggles, Shift+click extends, and a drag rubber-bands and
+  highlights entries live as it crosses them. The toolbar shows **Deselect**
+  only when multiple items are selected (empty click / Escape still clears).
 - Large dependency refresh (Tantivy 0.26, redb 4, keepass 0.13, age/secrecy,
   notify, portable-pty/vte, viewers stack, ICU, FastCDC, windows/sysinfo).
 - Idle CPU, UI lag, FM listing/thumbnail cost, and cold-start work cut
@@ -289,6 +290,14 @@ release yet.
   selection empties, a press whose release is swallowed by a listing update can
   no longer arm it after 500 ms, and clicks commit against the entry that was
   pressed rather than whatever the recycled row shows at release time.
+- File-manager rubber band tracks the drag again. The band was driven by an
+  overlay spawned on press, which never received the drag because the pressed
+  area keeps the pointer grab; it only saw the bare cursor after release, so
+  dragging selected nothing and merely hovering afterwards selected entries.
+  Both views now track the band in the area that holds the grab.
+- File-manager dropped the invisible select mode that a rubber band or a 500 ms
+  hold used to latch, which silently turned every later plain click into a
+  toggle. Toggling is Ctrl+click only, as in Explorer.
 - File-manager rubber band can start on an entry, not just on empty space:
   dragging off an unselected row or tile bands, dragging off a selected one
   still transfers the selection. Touchpads had no reachable way to begin a
