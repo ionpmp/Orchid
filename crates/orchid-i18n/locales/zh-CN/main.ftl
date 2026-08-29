@@ -695,7 +695,7 @@ viewer-media-hint = 在系统播放器中打开
 viewer-html-open = 在浏览器中打开
 viewer-html-hint = HTML 预览使用系统浏览器
 viewer-html-source = 源码
-viewer-document-info = 文档 · { $blocks } 个块 · { $warnings } 个不支持的功能
+viewer-document-info = 文档 · { $words } 词 · { $chars } 字符 · { $blocks } 个块 · { $warnings } 个不支持的功能
 
 viewer-document-save = 保存
 viewer-document-print = 打印

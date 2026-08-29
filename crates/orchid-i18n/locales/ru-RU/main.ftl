@@ -685,7 +685,7 @@ viewer-media-hint = Открывается в системном проигры�
 viewer-html-open = Открыть в браузере
 viewer-html-hint = HTML открывается в системном браузере
 viewer-html-source = Исходник
-viewer-document-info = Документ · { $blocks } блоков · { $warnings } неподдерж. элементов
+viewer-document-info = Документ · { $words } слов · { $chars } символов · { $blocks } блоков · { $warnings } неподдерж. элементов
 
 viewer-document-save = Сохранить
 viewer-document-print = Печать

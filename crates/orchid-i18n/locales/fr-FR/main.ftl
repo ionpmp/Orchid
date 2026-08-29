@@ -695,7 +695,7 @@ viewer-media-hint = S’ouvre dans le lecteur système
 viewer-html-open = Ouvrir dans le navigateur
 viewer-html-hint = L’aperçu HTML utilise le navigateur système
 viewer-html-source = Source
-viewer-document-info = Document · { $blocks } blocs · { $warnings } éléments non pris en charge
+viewer-document-info = Document · { $words } mots · { $chars } caractères · { $blocks } blocs · { $warnings } éléments non pris en charge
 
 viewer-document-save = Enregistrer
 viewer-document-print = Imprimer

@@ -770,6 +770,8 @@ fn build_document_snapshot(
 ) -> ViewerDocumentModel {
     let args = orchid_i18n::FluentArgs::new()
         .with("blocks", s.block_count.to_string())
+        .with("words", s.word_count.to_string())
+        .with("chars", s.char_count.to_string())
         .with(
             "warnings",
             if s.warnings.is_empty() {

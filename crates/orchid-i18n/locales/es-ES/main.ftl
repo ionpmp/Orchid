@@ -695,7 +695,7 @@ viewer-media-hint = Se abre en el reproductor del sistema
 viewer-html-open = Abrir en el navegador
 viewer-html-hint = La vista HTML usa el navegador del sistema
 viewer-html-source = Código
-viewer-document-info = Documento · { $blocks } bloques · { $warnings } elementos no admitidos
+viewer-document-info = Documento · { $words } palabras · { $chars } caracteres · { $blocks } bloques · { $warnings } elementos no admitidos
 
 viewer-document-save = Guardar
 viewer-document-print = Imprimir

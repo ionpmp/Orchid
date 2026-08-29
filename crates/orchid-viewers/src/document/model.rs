@@ -404,6 +404,20 @@ impl Document {
     }
 }
 
+/// Word and character counts for the document status strip.
+///
+/// Words are whitespace-separated; characters exclude `\n` / `\r` (paragraph
+/// joiners in [`Document::plain_text`]) but include spaces and punctuation.
+#[must_use]
+pub fn text_stats(plain: &str) -> (u32, u32) {
+    let words = plain.split_whitespace().count() as u32;
+    let chars = plain
+        .chars()
+        .filter(|c| *c != '\n' && *c != '\r')
+        .count() as u32;
+    (words, chars)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,5 +465,14 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(p.plain_text(), "Hello world");
+    }
+
+    #[test]
+    fn text_stats_counts_words_and_chars() {
+        let (w, c) = text_stats("Hello world\nnext");
+        assert_eq!(w, 3);
+        assert_eq!(c, 15); // "Hello world" (11) + "next" (4)
+        assert_eq!(text_stats(""), (0, 0));
+        assert_eq!(text_stats("  a  b  "), (2, 8));
     }
 }
