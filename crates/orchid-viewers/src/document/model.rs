@@ -133,6 +133,9 @@ pub struct Paragraph {
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.
     pub space_after_twips: u32,
+    /// Line spacing in 240ths of a line (`w:spacing/@w:line` with `lineRule=auto`).
+    /// `0` = engine default; `240` = single, `360` = 1.5, `480` = double.
+    pub line_spacing_240ths: u32,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }

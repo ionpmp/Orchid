@@ -1966,6 +1966,35 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Step line spacing (`w:line` auto) on selected paragraphs through presets.
+    ///
+    /// Presets: single (240), 1.15 (276), 1.5 (360), double (480). `delta` is
+    /// typically `-1` / `+1`.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_line_spacing_selection(&self, delta: i32) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let mut next = doc.blocks.clone();
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                p.line_spacing_240ths = bump_line_spacing_240ths(p.line_spacing_240ths, delta);
+            }
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Set list kind on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
@@ -2214,6 +2243,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     page_break_before: prev.page_break_before,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
+                    line_spacing_240ths: prev.line_spacing_240ths,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -2289,9 +2319,23 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
 
 const DEFAULT_FONT_SIZE_PT: f32 = 14.0;
 const SPACING_TWIPS_MAX: i32 = 2880;
+/// Auto line-spacing presets in 240ths of a line (single, 1.15, 1.5, double).
+const LINE_SPACING_PRESETS: &[u32] = &[240, 276, 360, 480];
 
 fn clamp_spacing_twips(v: i32) -> u32 {
     v.clamp(0, SPACING_TWIPS_MAX) as u32
+}
+
+fn bump_line_spacing_240ths(current: u32, delta: i32) -> u32 {
+    let effective = if current == 0 { 276 } else { current };
+    let idx = LINE_SPACING_PRESETS
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, &p)| (p as i32 - effective as i32).unsigned_abs())
+        .map(|(i, _)| i)
+        .unwrap_or(1);
+    let next = (idx as i32 + delta).clamp(0, LINE_SPACING_PRESETS.len() as i32 - 1) as usize;
+    LINE_SPACING_PRESETS[next]
 }
 
 const FONT_SIZE_STEPS: &[f32] = &[
@@ -2580,6 +2624,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         page_break_before: p.page_break_before,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
+        line_spacing_240ths: p.line_spacing_240ths,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2591,6 +2636,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         page_break_before: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
+        line_spacing_240ths: p.line_spacing_240ths,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2628,6 +2674,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         page_break_before: p.page_break_before,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
+        line_spacing_240ths: p.line_spacing_240ths,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2639,6 +2686,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         page_break_before: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
+        line_spacing_240ths: p.line_spacing_240ths,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2729,6 +2777,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         page_break_before: start_p.page_break_before,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
+        line_spacing_240ths: start_p.line_spacing_240ths,
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -2811,6 +2860,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         page_break_before: start_p.page_break_before,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
+        line_spacing_240ths: start_p.line_spacing_240ths,
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());

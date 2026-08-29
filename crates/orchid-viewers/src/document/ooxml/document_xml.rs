@@ -216,6 +216,7 @@ fn parse_paragraph(
         page_break_before: false,
         space_before_twips: 0,
         space_after_twips: 0,
+        line_spacing_240ths: 0,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -873,13 +874,17 @@ fn write_paragraph(
             .write_event(Event::Empty(BytesStart::new("w:pageBreakBefore")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
-    if p.space_before_twips > 0 || p.space_after_twips > 0 {
+    if p.space_before_twips > 0 || p.space_after_twips > 0 || p.line_spacing_240ths > 0 {
         let mut spacing = BytesStart::new("w:spacing");
         if p.space_before_twips > 0 {
             spacing.push_attribute(("w:before", p.space_before_twips.to_string().as_str()));
         }
         if p.space_after_twips > 0 {
             spacing.push_attribute(("w:after", p.space_after_twips.to_string().as_str()));
+        }
+        if p.line_spacing_240ths > 0 {
+            spacing.push_attribute(("w:line", p.line_spacing_240ths.to_string().as_str()));
+            spacing.push_attribute(("w:lineRule", "auto"));
         }
         writer
             .write_event(Event::Empty(spacing))
@@ -984,6 +989,12 @@ fn apply_paragraph_spacing(e: &BytesStart<'_>, p: &mut Paragraph) {
     }
     if let Some(v) = attr_val(e, "after").and_then(|s| s.parse().ok()) {
         p.space_after_twips = v;
+    }
+    let rule = attr_val(e, "lineRule").unwrap_or_default();
+    if rule.is_empty() || rule == "auto" {
+        if let Some(v) = attr_val(e, "line").and_then(|s| s.parse().ok()) {
+            p.line_spacing_240ths = v;
+        }
     }
 }
 
@@ -1869,6 +1880,43 @@ mod tests {
         assert!(
             text.contains("w:before=\"240\"") && text.contains("w:after=\"120\""),
             "missing spacing attrs: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_line_spacing_auto() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr>
+              <w:r><w:t>Tall</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => assert_eq!(p.line_spacing_240ths, 360),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:line=\"360\"") && text.contains("w:lineRule=\"auto\""),
+            "serialized XML missing line spacing: {text}"
         );
     }
 

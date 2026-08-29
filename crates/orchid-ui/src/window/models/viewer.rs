@@ -612,6 +612,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         list_numbered_label: locale.tr("viewer-document-list-numbered").into(),
         space_after_less_label: locale.tr("viewer-document-space-after-less").into(),
         space_after_more_label: locale.tr("viewer-document-space-after-more").into(),
+        line_spacing_less_label: locale.tr("viewer-document-line-spacing-less").into(),
+        line_spacing_more_label: locale.tr("viewer-document-line-spacing-more").into(),
         image_insert_label: locale.tr("viewer-document-image-insert").into(),
         table_insert_label: locale.tr("viewer-document-table-insert").into(),
         table_row_insert_label: locale.tr("viewer-document-table-row-insert").into(),

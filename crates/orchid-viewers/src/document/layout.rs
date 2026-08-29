@@ -140,7 +140,12 @@ impl DocumentLayout {
             self.layout_cx
                 .ranged_builder(&mut self.font_cx, &text, 1.0, true);
         builder.push_default(StyleProperty::FontSize(14.0));
-        builder.push_default(LineHeight::FontSizeRelative(1.35));
+        let line_rel = if p.line_spacing_240ths == 0 {
+            1.35
+        } else {
+            (p.line_spacing_240ths as f32 / 240.0).clamp(0.5, 4.0)
+        };
+        builder.push_default(LineHeight::FontSizeRelative(line_rel));
         builder.push_default(StyleProperty::Brush(ColorBrush::default()));
         builder.push_default(StyleProperty::FontFamily(FontFamily::named("Segoe UI")));
 
@@ -2444,5 +2449,30 @@ mod tests {
             )
             .unwrap();
         assert_eq!(offset, 0);
+    }
+
+    #[test]
+    fn line_spacing_auto_increases_layout_height() {
+        let mut dl = DocumentLayout::new();
+        let text = "Line one wraps here when narrow.\nLine two also wraps.";
+        let single = Paragraph {
+            runs: vec![Run {
+                text: text.into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            line_spacing_240ths: 240,
+            ..Default::default()
+        };
+        let double = Paragraph {
+            line_spacing_240ths: 480,
+            ..single.clone()
+        };
+        let h1 = dl.layout_paragraph(&single, 120.0).height();
+        let h2 = dl.layout_paragraph(&double, 120.0).height();
+        assert!(
+            h2 > h1 * 1.3,
+            "double spacing should be clearly taller: single={h1} double={h2}"
+        );
     }
 }
