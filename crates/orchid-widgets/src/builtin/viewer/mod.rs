@@ -3279,6 +3279,8 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "table-row-delete" => doc.preview_delete_table_row(),
                 "table-col-insert" => doc.preview_insert_table_column(),
                 "table-col-delete" => doc.preview_delete_table_column(),
+                "table-merge" => doc.preview_merge_table_cells(),
+                "table-unmerge" => doc.preview_unmerge_table_cells(),
                 "toggle-source" => {
                     doc.set_source_mode(!doc.source_mode());
                     Ok(())

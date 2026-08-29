@@ -5,6 +5,7 @@ pub mod layout;
 pub mod model;
 pub mod ooxml;
 pub mod sample;
+pub mod table_edit;
 pub mod undo;
 
 use std::any::Any;
@@ -963,6 +964,69 @@ impl DocumentViewer {
         let cursor = Cursor {
             block_idx: table_idx,
             cell: Some(CellPath::new(row, new_col, 0)),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
+    /// Merge the caret cell with its right neighbor, or with the cell below.
+    pub fn preview_merge_table_cells(&self) -> Result<()> {
+        let (table_idx, row, col) = self.table_cell_context()?;
+        let mut next = {
+            let guard = self.document.read();
+            let doc = guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            match doc.blocks.get(table_idx) {
+                Some(Block::Table(t)) => t.clone(),
+                _ => return Err(ViewerError::EditOutOfBounds),
+            }
+        };
+        table_edit::merge_at(&mut next, row, col)?;
+        self.apply(EditCommand::ReplaceBlock {
+            block_idx: table_idx,
+            previous: Block::Table(next),
+        })?;
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath::new(row, col, 0)),
+            run_idx: 0,
+            byte_offset: 0,
+        };
+        *self.selection.lock() = Selection {
+            anchor: cursor,
+            head: cursor,
+        };
+        Ok(())
+    }
+
+    /// Unmerge the caret cell (horizontal and/or vertical span).
+    pub fn preview_unmerge_table_cells(&self) -> Result<()> {
+        let (table_idx, row, col) = self.table_cell_context()?;
+        let mut next = {
+            let guard = self.document.read();
+            let doc = guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+            match doc.blocks.get(table_idx) {
+                Some(Block::Table(t)) => t.clone(),
+                _ => return Err(ViewerError::EditOutOfBounds),
+            }
+        };
+        table_edit::unmerge_at(&mut next, row, col)?;
+        let safe_col = next
+            .rows
+            .get(row)
+            .map(|r| col.min(r.cells.len().saturating_sub(1)))
+            .unwrap_or(0);
+        self.apply(EditCommand::ReplaceBlock {
+            block_idx: table_idx,
+            previous: Block::Table(next),
+        })?;
+        let cursor = Cursor {
+            block_idx: table_idx,
+            cell: Some(CellPath::new(row, safe_col, 0)),
             run_idx: 0,
             byte_offset: 0,
         };

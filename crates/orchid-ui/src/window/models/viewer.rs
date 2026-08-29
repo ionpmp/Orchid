@@ -615,6 +615,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         table_row_delete_label: locale.tr("viewer-document-table-row-delete").into(),
         table_col_insert_label: locale.tr("viewer-document-table-col-insert").into(),
         table_col_delete_label: locale.tr("viewer-document-table-col-delete").into(),
+        table_merge_label: locale.tr("viewer-document-table-merge").into(),
+        table_unmerge_label: locale.tr("viewer-document-table-unmerge").into(),
         source_label: locale.tr("viewer-document-source").into(),
         preview_label: locale.tr("viewer-document-preview").into(),
         find_label: locale.tr("viewer-document-find").into(),
