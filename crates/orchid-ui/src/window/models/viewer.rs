@@ -583,6 +583,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         preview_width_px: 0,
         preview_height_px: 0,
         save_label: locale.tr("viewer-document-save").into(),
+        print_label: locale.tr("viewer-document-print").into(),
         undo_label: locale.tr("viewer-document-undo").into(),
         redo_label: locale.tr("viewer-document-redo").into(),
         bold_label: locale.tr("viewer-document-bold").into(),

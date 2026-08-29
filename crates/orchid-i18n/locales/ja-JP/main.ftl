@@ -698,6 +698,7 @@ viewer-html-source = ソース
 viewer-document-info = 文書 · { $blocks } ブロック · 未対応 { $warnings }
 
 viewer-document-save = 保存
+viewer-document-print = 印刷
 viewer-document-undo = 元に戻す
 viewer-document-redo = やり直し
 viewer-document-bold = B

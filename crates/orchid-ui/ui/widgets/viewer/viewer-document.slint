@@ -86,6 +86,22 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(52px, print-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, print-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    print-ta := TouchArea { clicked => { root.action("print"); } }
+                    print-btn-label := Text {
+                        text: model.print-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: 28px;
                     height: 28px;
                     background: tool-bg(false, undo-ta.has-hover);

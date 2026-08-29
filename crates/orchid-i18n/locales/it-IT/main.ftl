@@ -698,6 +698,7 @@ viewer-html-source = Sorgente
 viewer-document-info = Documento · { $blocks } blocchi · { $warnings } funzioni non supportate
 
 viewer-document-save = Salva
+viewer-document-print = Stampa
 viewer-document-undo = Annulla
 viewer-document-redo = Ripeti
 viewer-document-bold = B

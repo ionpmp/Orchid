@@ -688,6 +688,7 @@ viewer-html-source = Исходник
 viewer-document-info = Документ · { $blocks } блоков · { $warnings } неподдерж. элементов
 
 viewer-document-save = Сохранить
+viewer-document-print = Печать
 viewer-document-undo = Отменить
 viewer-document-redo = Повторить
 viewer-document-bold = B

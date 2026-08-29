@@ -3213,6 +3213,25 @@ fn print_path(path: &std::path::Path) -> WidgetResult<()> {
     Ok(())
 }
 
+async fn document_print_locked(inner: &ViewerWidgetInner) -> WidgetResult<()> {
+    let text = {
+        let snap = inner.snapshot.read();
+        match snap.as_ref() {
+            Some(ViewerSnapshot::Document(d)) => d.plain_text.to_string(),
+            _ => String::new(),
+        }
+    };
+    if text.is_empty() {
+        return Err(WidgetError::InvalidStateForOperation(
+            "nothing to print".into(),
+        ));
+    }
+    let tmp = std::env::temp_dir().join(format!("orchid-doc-print-{}.txt", inner.instance_id));
+    std::fs::write(&tmp, text.as_bytes())
+        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    print_path(&tmp)
+}
+
 /// Open the current viewer file in the system default app (player / browser).
 pub fn open_current_externally(instance_id: Uuid) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
@@ -3233,6 +3252,10 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
 
     let inner = live_inner(instance_id)?;
     match action.as_str() {
+        "print" => {
+            document_print_locked(&inner).await?;
+            return Ok(());
+        }
         "save" => {
             let mut guard = inner.viewer.lock().await;
             let v = guard
@@ -3471,6 +3494,9 @@ pub async fn document_preview_key(
     let inner = live_inner(instance_id)?;
     if ctrl && matches!(key.as_str(), "s" | "S") {
         return document_action(instance_id, "save".into()).await;
+    }
+    if ctrl && matches!(key.as_str(), "p" | "P") {
+        return document_action(instance_id, "print".into()).await;
     }
     {
         let guard = inner.viewer.lock().await;

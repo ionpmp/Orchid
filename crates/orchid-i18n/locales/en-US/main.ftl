@@ -972,6 +972,7 @@ viewer-html-hint = HTML preview uses the system browser
 viewer-html-source = Source
 viewer-document-info = Document · { $blocks } blocks · { $warnings } unsupported features
 viewer-document-save = Save
+viewer-document-print = Print
 viewer-document-undo = Undo
 viewer-document-redo = Redo
 viewer-document-bold = B

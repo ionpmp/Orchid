@@ -699,6 +699,7 @@ viewer-html-source = المصدر
 viewer-document-info = مستند · { $blocks } كتل · { $warnings } ميزات غير مدعومة
 
 viewer-document-save = حفظ
+viewer-document-print = طباعة
 viewer-document-undo = تراجع
 viewer-document-redo = إعادة
 viewer-document-bold = B

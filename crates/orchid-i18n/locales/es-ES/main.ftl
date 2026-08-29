@@ -698,6 +698,7 @@ viewer-html-source = Código
 viewer-document-info = Documento · { $blocks } bloques · { $warnings } elementos no admitidos
 
 viewer-document-save = Guardar
+viewer-document-print = Imprimir
 viewer-document-undo = Deshacer
 viewer-document-redo = Rehacer
 viewer-document-bold = B

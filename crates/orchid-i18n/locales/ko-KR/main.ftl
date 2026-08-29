@@ -698,6 +698,7 @@ viewer-html-source = 소스
 viewer-document-info = 문서 · { $blocks }개 블록 · 미지원 { $warnings }
 
 viewer-document-save = 저장
+viewer-document-print = 인쇄
 viewer-document-undo = 실행 취소
 viewer-document-redo = 다시 실행
 viewer-document-bold = B

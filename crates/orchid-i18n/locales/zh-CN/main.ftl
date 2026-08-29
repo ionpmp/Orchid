@@ -698,6 +698,7 @@ viewer-html-source = 源码
 viewer-document-info = 文档 · { $blocks } 个块 · { $warnings } 个不支持的功能
 
 viewer-document-save = 保存
+viewer-document-print = 打印
 viewer-document-undo = 撤销
 viewer-document-redo = 重做
 viewer-document-bold = B

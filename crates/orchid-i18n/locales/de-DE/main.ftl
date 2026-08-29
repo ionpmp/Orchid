@@ -698,6 +698,7 @@ viewer-html-source = Quelltext
 viewer-document-info = Dokument · { $blocks } Blöcke · { $warnings } nicht unterstützte Features
 
 viewer-document-save = Speichern
+viewer-document-print = Drucken
 viewer-document-undo = Rückgängig
 viewer-document-redo = Wiederholen
 viewer-document-bold = B
