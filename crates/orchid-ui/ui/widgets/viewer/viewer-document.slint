@@ -1158,81 +1158,107 @@ export component ViewerDocumentView inherits Rectangle {
                 }
             }
 
-            if !model.source-mode : preview-keys := FocusScope {
+            if !model.source-mode : preview-host := Rectangle {
                 width: parent.width;
                 height: parent.height;
 
-                key-pressed(event) => {
-                    if (event.modifiers.control
-                        && !event.modifiers.alt
-                        && (event.text == "f" || event.text == "F"))
-                    {
-                        root.find-open = true;
-                        find-input.focus();
-                        return accept;
+                // Invisible TextInput receives IME composition (same pattern as TerminalView).
+                // TouchArea stays on the canvas for selection; we only steal keyboard focus.
+                preview-keys := TextInput {
+                    x: 0;
+                    y: 0;
+                    width: 1px;
+                    height: 1px;
+                    text: "";
+                    single-line: true;
+                    font-size: 0.1px;
+                    color: transparent;
+                    text-cursor-width: 0px;
+                    input-type: text;
+
+                    key-pressed(event) => {
+                        if (event.modifiers.control
+                            && !event.modifiers.alt
+                            && (event.text == "f" || event.text == "F"))
+                        {
+                            root.find-open = true;
+                            find-input.focus();
+                            return accept;
+                        }
+                        if (event.modifiers.control
+                            && !event.modifiers.shift
+                            && !event.modifiers.alt
+                            && (event.text == "k" || event.text == "K"))
+                        {
+                            root.link-open = true;
+                            root.link-query = model.link-url;
+                            link-input.focus();
+                            return accept;
+                        }
+                        if (event.text == Key.F3) {
+                            root.find-open = true;
+                            root.find-request(root.find-query, !event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.Home) {
+                            root.preview-key("Home", event.modifiers.control, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.End) {
+                            root.preview-key("End", event.modifiers.control, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.LeftArrow) {
+                            root.preview-key("Left", event.modifiers.control, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.RightArrow) {
+                            root.preview-key("Right", event.modifiers.control, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.UpArrow) {
+                            root.preview-key("Up", event.modifiers.control, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.DownArrow) {
+                            root.preview-key("Down", event.modifiers.control, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.Backspace) {
+                            root.preview-key("Backspace", event.modifiers.control, false);
+                            return accept;
+                        }
+                        if (event.text == Key.Delete) {
+                            root.preview-key("Delete", event.modifiers.control, false);
+                            return accept;
+                        }
+                        if (event.text == Key.Tab) {
+                            root.preview-key("Tab", false, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.modifiers.control) {
+                            root.preview-key(event.text, true, event.modifiers.shift);
+                            return accept;
+                        }
+                        if (event.text == Key.Return) {
+                            // Shift+Enter → soft break; Enter → paragraph; Ctrl+Enter → page break (Rust).
+                            root.preview-key("Return", false, event.modifiers.shift);
+                            return accept;
+                        }
+                        // Printable / IME: let TextInput compose, then `edited` commits.
+                        if (event.text != "") {
+                            return reject;
+                        }
+                        return reject;
                     }
-                    if (event.modifiers.control
-                        && !event.modifiers.shift
-                        && !event.modifiers.alt
-                        && (event.text == "k" || event.text == "K"))
-                    {
-                        root.link-open = true;
-                        root.link-query = model.link-url;
-                        link-input.focus();
-                        return accept;
+
+                    edited => {
+                        if (self.text == "") {
+                            return;
+                        }
+                        root.preview-key(self.text, false, false);
+                        self.text = "";
                     }
-                    if (event.text == Key.F3) {
-                        root.find-open = true;
-                        root.find-request(root.find-query, !event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.Home) {
-                        root.preview-key("Home", event.modifiers.control, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.End) {
-                        root.preview-key("End", event.modifiers.control, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.LeftArrow) {
-                        root.preview-key("Left", event.modifiers.control, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.RightArrow) {
-                        root.preview-key("Right", event.modifiers.control, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.UpArrow) {
-                        root.preview-key("Up", event.modifiers.control, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.DownArrow) {
-                        root.preview-key("Down", event.modifiers.control, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.Backspace) {
-                        root.preview-key("Backspace", event.modifiers.control, false);
-                        return accept;
-                    }
-                    if (event.text == Key.Delete) {
-                        root.preview-key("Delete", event.modifiers.control, false);
-                        return accept;
-                    }
-                    if (event.text == Key.Tab) {
-                        root.preview-key("Tab", false, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.modifiers.control) {
-                        root.preview-key(event.text, true, event.modifiers.shift);
-                        return accept;
-                    }
-                    if (event.text == Key.Return) {
-                        // Shift+Enter → soft line break; Enter → new paragraph.
-                        root.preview-key("Return", false, event.modifiers.shift);
-                        return accept;
-                    }
-                    root.preview-key(event.text, false, event.modifiers.shift);
-                    return accept;
                 }
 
                 Flickable {
@@ -1292,6 +1318,26 @@ export component ViewerDocumentView inherits Rectangle {
                                 }
                             }
                         }
+                    }
+                }
+
+                // IME preedit (composition) strip — TextInput owns the string; canvas stays selection-first.
+                if preview-keys.preedit-text != "" : Rectangle {
+                    x: 8px;
+                    y: parent.height - self.height - 8px;
+                    width: min(parent.width - 16px, preedit-label.preferred-width + 16px);
+                    height: preedit-label.preferred-height + 10px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+                    z: 50;
+                    preedit-label := Text {
+                        x: 8px;
+                        y: 5px;
+                        text: preview-keys.preedit-text;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-md;
                     }
                 }
             }
