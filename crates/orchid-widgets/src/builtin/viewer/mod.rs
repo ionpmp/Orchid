@@ -3417,9 +3417,7 @@ pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> Wi
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
-                // Leave room for page padding inside the preview image.
-                let content = (width_px - 56.0).max(160.0);
-                doc.set_preview_width(content);
+                doc.set_preview_viewport_width(width_px.max(200.0));
             }
         }
     }

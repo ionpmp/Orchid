@@ -455,7 +455,7 @@ fn preview_select_all_home_end_and_font_color() {
 
 #[test]
 fn preview_pointer_selects_second_paragraph_for_bold() {
-    use orchid_viewers::document::layout::PREVIEW_PADDING;
+    use orchid_viewers::document::layout::PreviewInsets;
     use orchid_viewers::document::model::Document as Doc;
 
     let viewer = DocumentViewer::new();
@@ -482,7 +482,7 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
     });
     viewer.set_source_mode(false);
     // Click into the second paragraph in preview coordinates.
-    viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 40.0, false);
+    viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 40.0, false);
     viewer.toggle_style_all('b').unwrap();
 
     let guard = viewer.document();
@@ -550,7 +550,7 @@ fn set_and_remove_hyperlink_on_selection() {
 
 #[test]
 fn preview_ctrl_click_opens_hyperlink_without_selection() {
-    use orchid_viewers::document::layout::PREVIEW_PADDING;
+    use orchid_viewers::document::layout::PreviewInsets;
     use orchid_viewers::document::model::{Document as Doc, Hyperlink};
 
     let viewer = DocumentViewer::new();
@@ -571,16 +571,16 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
     });
     viewer.set_source_mode(false);
     let before = viewer.selected_plain_text();
-    let outcome = viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, true);
+    let outcome = viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, true);
     assert_eq!(outcome.open_url.as_deref(), Some("https://example.com/doc"));
     assert_eq!(viewer.selected_plain_text(), before);
 
-    let blocked = viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, false);
+    let blocked = viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, false);
     assert!(blocked.open_url.is_none());
 
     // Hover sets link_hover; leave clears it.
     let _ = viewer.preview_pointer(5, -1.0, -1.0, false);
-    let hover = viewer.preview_pointer(5, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, false);
+    let hover = viewer.preview_pointer(5, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, false);
     assert!(hover.refresh);
     let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
         panic!("snapshot");
@@ -609,7 +609,7 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
         })],
         ..Default::default()
     });
-    let unsafe_out = viewer.preview_pointer(0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 8.0, true);
+    let unsafe_out = viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, true);
     assert!(unsafe_out.open_url.is_none());
 }
 

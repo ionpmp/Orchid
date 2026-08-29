@@ -27,7 +27,7 @@ pub use cursor::{
     paragraph_indices_in_selection, paragraph_mut, paragraph_mut_in_blocks, paragraph_ref,
     plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
-pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
+pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
     Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
     OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
@@ -351,6 +351,27 @@ impl DocumentViewer {
             prev.width = width.max(120.0);
             prev.valid = false;
         }
+    }
+
+    /// Set preview content width from the Slint viewport width (CSS pixels).
+    ///
+    /// Subtracts left/right [`PageSetup`] margins so the rendered page fits the
+    /// viewport the way Word margins would.
+    pub fn set_preview_viewport_width(&self, viewport_px: f32) {
+        let (left, right) = {
+            let guard = self.document.read();
+            match guard.as_ref() {
+                Some(doc) => {
+                    let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+                    (insets.left, insets.right)
+                }
+                None => {
+                    let insets = PreviewInsets::default_letter();
+                    (insets.left, insets.right)
+                }
+            }
+        };
+        self.set_preview_width((viewport_px - left - right).max(160.0));
     }
 
     /// Update the active selection from plain-text UTF-8 byte offsets.

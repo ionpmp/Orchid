@@ -22,7 +22,7 @@ use swash::FontRef;
 
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{
-    Alignment, Block, Document, ListKind, Paragraph, Table, TableCell, TableRow, VMerge,
+    Alignment, Block, Document, ListKind, PageSetup, Paragraph, Table, TableCell, TableRow, VMerge,
 };
 
 /// Brush colour for styled runs (RGBA).
@@ -60,12 +60,42 @@ const HIGHLIGHT_YELLOW: [u8; 4] = [255, 255, 0, 255];
 
 /// Default content width for the document preview (CSS pixels).
 pub const DEFAULT_PREVIEW_WIDTH: f32 = 720.0;
-/// Padding around the page content.
-pub const PREVIEW_PADDING: f32 = 28.0;
 /// Extra left inset per list indent level (`w:ilvl`).
 pub const LIST_INDENT_PX: f32 = 24.0;
 /// Cap rendered page height so huge docs stay interactive.
 pub const MAX_PREVIEW_HEIGHT: u32 = 4096;
+
+/// CSS-pixel page margins for the preview canvas (from `w:pgMar`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreviewInsets {
+    /// Left margin.
+    pub left: f32,
+    /// Right margin.
+    pub right: f32,
+    /// Top margin.
+    pub top: f32,
+    /// Bottom margin.
+    pub bottom: f32,
+}
+
+impl PreviewInsets {
+    /// Convert [`PageSetup`] twip margins to CSS pixels (96 dpi).
+    #[must_use]
+    pub fn from_page_setup(ps: &PageSetup) -> Self {
+        Self {
+            left: twips_to_css_px(ps.margin_left_twips),
+            right: twips_to_css_px(ps.margin_right_twips),
+            top: twips_to_css_px(ps.margin_top_twips),
+            bottom: twips_to_css_px(ps.margin_bottom_twips),
+        }
+    }
+
+    /// Insets for the default US-Letter 1″ margins.
+    #[must_use]
+    pub fn default_letter() -> Self {
+        Self::from_page_setup(&PageSetup::default())
+    }
+}
 
 /// Owns parley + swash contexts for laying out and rasterising paragraphs.
 pub struct DocumentLayout {
@@ -195,7 +225,7 @@ impl DocumentLayout {
         content_width: f32,
         selection: Option<(usize, usize)>,
     ) -> (Arc<Vec<u8>>, u32, u32) {
-        let pad = PREVIEW_PADDING;
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
         let max_w = content_width.max(80.0);
         // Content-relative Y (padding applied at paint time) — must match hit-test.
         let mut layouts: Vec<LaidBlock> = Vec::new();
@@ -279,8 +309,8 @@ impl DocumentLayout {
             }
         }
 
-        let width = (max_w + pad * 2.0).ceil() as u32;
-        let height = (total_h + pad * 2.0)
+        let width = (max_w + insets.left + insets.right).ceil() as u32;
+        let height = (total_h + insets.top + insets.bottom)
             .ceil()
             .clamp(64.0, MAX_PREVIEW_HEIGHT as f32) as u32;
         let mut pixels = vec![255u8; (width as usize) * (height as usize) * 4];
@@ -298,10 +328,10 @@ impl DocumentLayout {
 
         for item in &layouts {
             if let Some(ry) = item.page_break_rule_y {
-                let y = (pad + ry).round() as i32;
+                let y = (insets.top + ry).round() as i32;
                 if y >= 0 && (y as u32) < height {
-                    let x0 = pad.round() as i32;
-                    let x1 = (pad + max_w).round() as i32;
+                    let x0 = insets.left.round() as i32;
+                    let x1 = (insets.left + max_w).round() as i32;
                     paint_dashed_h_line(
                         &mut pixels,
                         width,
@@ -316,7 +346,7 @@ impl DocumentLayout {
         }
 
         for grid in &grids {
-            paint_table_grid(&mut pixels, width, height, pad, grid);
+            paint_table_grid(&mut pixels, width, height, insets.left, insets.top, grid);
         }
 
         let (sel_lo, sel_hi) = match selection {
@@ -333,8 +363,8 @@ impl DocumentLayout {
             if item.is_image || item.layout.is_empty() {
                 continue;
             }
-            let origin_x = pad + item.x0 + item.indent_px;
-            let origin_y = pad + item.y0;
+            let origin_x = insets.left + item.x0 + item.indent_px;
+            let origin_y = insets.top + item.y0;
             if sel_hi > sel_lo {
                 let para_end = item.plain_start + item.body_len;
                 let i0 = sel_lo.max(item.plain_start);
@@ -373,8 +403,8 @@ impl DocumentLayout {
 
         for item in &layouts {
             if item.is_image {
-                let y = (pad + item.y0) as u32;
-                let x = (pad + item.x0) as u32;
+                let y = (insets.top + item.y0) as u32;
+                let x = (insets.left + item.x0) as u32;
                 let box_h = item.image_h.max(24.0) as u32;
                 let box_w = if item.image_w > 0 {
                     item.image_w
@@ -430,8 +460,8 @@ impl DocumentLayout {
                 &mut pixels,
                 width,
                 height,
-                pad + item.x0 + item.indent_px,
-                pad + item.y0,
+                insets.left + item.x0 + item.indent_px,
+                insets.top + item.y0,
             );
         }
 
@@ -449,10 +479,10 @@ impl DocumentLayout {
         x: f32,
         y: f32,
     ) -> Option<Cursor> {
-        let pad = PREVIEW_PADDING;
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
         let max_w = content_width.max(80.0);
-        let local_x = x - pad;
-        let local_y = y - pad;
+        let local_x = x - insets.left;
+        let local_y = y - insets.top;
         let para_gap = 10.0;
 
         let mut total_h = 0.0;
@@ -1046,9 +1076,16 @@ fn table_column_widths_px(t: &Table, max_w: f32, ncols: usize) -> Vec<f32> {
         .collect()
 }
 
-fn paint_table_grid(pixels: &mut [u8], buf_w: u32, buf_h: u32, pad: f32, grid: &TableGridGeom) {
-    let x = pad.round() as u32;
-    let y = (pad + grid.y0).round() as u32;
+fn paint_table_grid(
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    pad_x: f32,
+    pad_y: f32,
+    grid: &TableGridGeom,
+) {
+    let x = pad_x.round() as u32;
+    let y = (pad_y + grid.y0).round() as u32;
     let w = grid.width.ceil().max(1.0) as u32;
     let h = grid.height.ceil().max(1.0) as u32;
 
@@ -1080,7 +1117,7 @@ fn paint_table_grid(pixels: &mut [u8], buf_w: u32, buf_h: u32, pad: f32, grid: &
         let mut x_cursor = 0.0f32;
         for c in 0..grid.ncols.saturating_sub(1) {
             x_cursor += grid.col_widths.get(c).copied().unwrap_or(0.0);
-            let vx = (pad + x_cursor).round() as u32;
+            let vx = (pad_x + x_cursor).round() as u32;
             fill_rect(pixels, buf_w, buf_h, vx, y, 1, h, TABLE_GRID_COLOR);
         }
         let mut yy = y;
@@ -1094,8 +1131,8 @@ fn paint_table_grid(pixels: &mut [u8], buf_w: u32, buf_h: u32, pad: f32, grid: &
     }
 
     for rect in &grid.cell_rects {
-        let cx = (pad + rect.x0).round() as u32;
-        let cy = (pad + rect.y0).round() as u32;
+        let cx = (pad_x + rect.x0).round() as u32;
+        let cy = (pad_y + rect.y0).round() as u32;
         let cw = rect.w.ceil().max(1.0) as u32;
         let ch = rect.h.ceil().max(1.0) as u32;
         fill_rect(pixels, buf_w, buf_h, cx, cy, cw, 1, TABLE_GRID_COLOR);
@@ -1961,7 +1998,7 @@ mod tests {
         };
         // Click near the top of the second paragraph (padding + first para height + gap).
         let offset = dl
-            .hit_test_plain_offset(&doc, 400.0, PREVIEW_PADDING + 8.0, PREVIEW_PADDING + 40.0)
+            .hit_test_plain_offset(&doc, 400.0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 40.0)
             .unwrap();
         // "First\n" = 6 bytes; caret should land in the second paragraph.
         assert!(offset >= 6, "offset={offset}");
@@ -1976,7 +2013,7 @@ mod tests {
             ..Default::default()
         };
         let offset = dl
-            .hit_test_plain_offset(&doc, 400.0, PREVIEW_PADDING + 2.0, PREVIEW_PADDING + 2.0)
+            .hit_test_plain_offset(&doc, 400.0, PreviewInsets::default_letter().left + 2.0, PreviewInsets::default_letter().left + 2.0)
             .unwrap();
         assert_eq!(offset, 0);
     }
@@ -2040,8 +2077,8 @@ mod tests {
         let (bytes, w, h) = dl.render_document(&doc, content_w);
         assert!(w > 100 && h > 40);
         // Mid-column hairline at pad + content_w/2.
-        let vx = (PREVIEW_PADDING + content_w / 2.0).round() as u32;
-        let vy = (PREVIEW_PADDING + 8.0).round() as u32;
+        let vx = (PreviewInsets::default_letter().left + content_w / 2.0).round() as u32;
+        let vy = (PreviewInsets::default_letter().left + 8.0).round() as u32;
         let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
         assert!(
             bytes[i] == TABLE_GRID_COLOR[0]
@@ -2066,8 +2103,8 @@ mod tests {
         let (bytes, w, h) = dl.render_document(&doc, content_w);
         assert!(w > 100 && h > 40);
         // 1:3 split → border at 25% of content width, not 50%.
-        let vx = (PREVIEW_PADDING + content_w * 0.25).round() as u32;
-        let vy = (PREVIEW_PADDING + 8.0).round() as u32;
+        let vx = (PreviewInsets::default_letter().left + content_w * 0.25).round() as u32;
+        let vy = (PreviewInsets::default_letter().left + 8.0).round() as u32;
         let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
         assert!(
             bytes[i] == TABLE_GRID_COLOR[0]
@@ -2080,7 +2117,7 @@ mod tests {
             bytes[i + 3]
         );
         // Equal-split midpoint should not be a vertical border.
-        let mid = (PREVIEW_PADDING + content_w / 2.0).round() as u32;
+        let mid = (PreviewInsets::default_letter().left + content_w / 2.0).round() as u32;
         let mi = ((vy as usize) * (w as usize) + (mid as usize)) * 4;
         assert!(
             !(bytes[mi] == TABLE_GRID_COLOR[0]
@@ -2101,10 +2138,10 @@ mod tests {
         let aa = plain.find("AA").expect("AA");
         let bb = plain.find("BB").expect("BB");
         let content_w = 400.0;
-        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
+        let y = PreviewInsets::default_letter().left + TABLE_CELL_PAD + 4.0;
         // 20% into table → narrow left column.
         let left = dl
-            .hit_test_plain_offset(&doc, content_w, PREVIEW_PADDING + content_w * 0.2, y)
+            .hit_test_plain_offset(&doc, content_w, PreviewInsets::default_letter().left + content_w * 0.2, y)
             .unwrap();
         assert!(
             left >= aa && left <= aa + "AA".len(),
@@ -2112,7 +2149,7 @@ mod tests {
         );
         // 70% into table → wide right column.
         let right = dl
-            .hit_test_plain_offset(&doc, content_w, PREVIEW_PADDING + content_w * 0.7, y)
+            .hit_test_plain_offset(&doc, content_w, PreviewInsets::default_letter().left + content_w * 0.7, y)
             .unwrap();
         assert!(
             right >= bb && right <= bb + "BB".len(),
@@ -2128,8 +2165,8 @@ mod tests {
         let bb = plain.find("BB").expect("BB");
         let content_w = 400.0;
         // Click near the left edge of the right column, top row.
-        let x = PREVIEW_PADDING + content_w * 0.75;
-        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
+        let x = PreviewInsets::default_letter().left + content_w * 0.75;
+        let y = PreviewInsets::default_letter().left + TABLE_CELL_PAD + 4.0;
         let offset = dl.hit_test_plain_offset(&doc, content_w, x, y).unwrap();
         assert!(
             offset >= bb && offset <= bb + "BB".len(),
@@ -2145,8 +2182,8 @@ mod tests {
         let plain = doc.plain_text();
         let aa = plain.find("AA").expect("AA");
         let content_w = 400.0;
-        let x = PREVIEW_PADDING + content_w * 0.25;
-        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 4.0;
+        let x = PreviewInsets::default_letter().left + content_w * 0.25;
+        let y = PreviewInsets::default_letter().left + TABLE_CELL_PAD + 4.0;
         let offset = dl.hit_test_plain_offset(&doc, content_w, x, y).unwrap();
         assert!(
             offset >= aa && offset <= aa + "AA".len(),
@@ -2186,8 +2223,8 @@ mod tests {
         let content_w = 400.0;
         let (bytes, w, h) = dl.render_document(&doc, content_w);
         assert!(w > 100 && h > 40);
-        let vx = (PREVIEW_PADDING + content_w / 2.0).round() as u32;
-        let vy = (PREVIEW_PADDING + TABLE_CELL_PAD + 4.0).round() as u32;
+        let vx = (PreviewInsets::default_letter().left + content_w / 2.0).round() as u32;
+        let vy = (PreviewInsets::default_letter().left + TABLE_CELL_PAD + 4.0).round() as u32;
         assert!(
             !is_grid_px(&bytes, w, vx, vy),
             "spanned first row should not have a mid-column border"
@@ -2198,8 +2235,8 @@ mod tests {
             .hit_test_plain_offset(
                 &doc,
                 content_w,
-                PREVIEW_PADDING + content_w * 0.75,
-                PREVIEW_PADDING + TABLE_CELL_PAD + 4.0,
+                PreviewInsets::default_letter().left + content_w * 0.75,
+                PreviewInsets::default_letter().left + TABLE_CELL_PAD + 4.0,
             )
             .unwrap();
         assert!(
@@ -2243,7 +2280,7 @@ mod tests {
         let (bytes, w, h) = dl.render_document(&doc, content_w);
         assert!(w > 100 && h > 50);
         // Interior of the merged left cell, around the old row split.
-        let x = (PREVIEW_PADDING + content_w * 0.25).round() as u32;
+        let x = (PreviewInsets::default_letter().left + content_w * 0.25).round() as u32;
         let mut grid_rows = 0usize;
         for y in 0..h {
             if is_grid_px(&bytes, w, x, y) {
@@ -2261,8 +2298,8 @@ mod tests {
             .hit_test_plain_offset(
                 &doc,
                 content_w,
-                PREVIEW_PADDING + content_w * 0.2,
-                PREVIEW_PADDING + 36.0,
+                PreviewInsets::default_letter().left + content_w * 0.2,
+                PreviewInsets::default_letter().left + 36.0,
             )
             .unwrap();
         assert!(
@@ -2364,13 +2401,48 @@ mod tests {
         };
         let content_w = 400.0;
         // Click below the paragraph where the cell image is laid out.
-        let x = PREVIEW_PADDING + content_w * 0.25;
-        let y = PREVIEW_PADDING + TABLE_CELL_PAD + 28.0;
+        let x = PreviewInsets::default_letter().left + content_w * 0.25;
+        let y = PreviewInsets::default_letter().left + TABLE_CELL_PAD + 28.0;
         let cursor = dl.hit_test_cursor(&doc, content_w, x, y).expect("hit");
         assert_eq!(
             cursor.cell.and_then(|c| c.image_idx),
             Some(0),
             "expected cell image cursor"
         );
+    }
+
+    #[test]
+    fn preview_honors_asymmetric_page_margins() {
+        let mut dl = DocumentLayout::new();
+        let mut page_setup = PageSetup::default();
+        page_setup.margin_left_twips = 720; // 0.5″
+        page_setup.margin_right_twips = 2160; // 1.5″
+        page_setup.margin_top_twips = 480; // 1/3″
+        page_setup.margin_bottom_twips = 960; // 2/3″
+        let doc = Document {
+            blocks: vec![Block::Paragraph(sample_paragraph())],
+            page_setup,
+            ..Default::default()
+        };
+        let content_w = 400.0;
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        assert!((insets.left - 48.0).abs() < 0.1);
+        assert!((insets.right - 144.0).abs() < 0.1);
+        assert!((insets.top - 32.0).abs() < 0.1);
+        assert!((insets.bottom - 64.0).abs() < 0.1);
+
+        let (_, w, h) = dl.render_document(&doc, content_w);
+        assert_eq!(w, (content_w + insets.left + insets.right).ceil() as u32);
+        assert!(h as f32 >= insets.top + insets.bottom + 16.0);
+
+        let offset = dl
+            .hit_test_plain_offset(
+                &doc,
+                content_w,
+                insets.left + 2.0,
+                insets.top + 2.0,
+            )
+            .unwrap();
+        assert_eq!(offset, 0);
     }
 }

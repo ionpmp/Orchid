@@ -85,7 +85,7 @@ fn preview_select_word_at_offset() {
 
 #[test]
 fn preview_triple_click_selects_paragraph() {
-    use orchid_viewers::document::layout::PREVIEW_PADDING;
+    use orchid_viewers::document::layout::PreviewInsets;
 
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(Doc {
@@ -110,8 +110,8 @@ fn preview_triple_click_selects_paragraph() {
         ..Default::default()
     });
     viewer.set_source_mode(false);
-    let x = PREVIEW_PADDING + 8.0;
-    let y = PREVIEW_PADDING + 8.0;
+    let x = PreviewInsets::default_letter().left + 8.0;
+    let y = PreviewInsets::default_letter().left + 8.0;
 
     // Explicit phase 4 (triple-click).
     viewer.preview_pointer(4, x, y, false);

@@ -200,7 +200,7 @@ release yet.
   insert/delete row/col, merge/unmerge cells, `tblGrid` widths, `gridSpan`/`vMerge` preview),
   inline images (body + cells),
   Find/Replace (`Ctrl+F` / F3, `n/m` status), insert/edit/remove hyperlinks
-  (Link toolbar / Ctrl+K; internal #bookmark), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), paragraph spacing (Sp±), IME composition (preview), catalog **Document** launcher,
+  (Link toolbar / Ctrl+K; internal #bookmark), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), paragraph spacing (Sp±), IME composition (preview), page margins from `pgMar` in preview, catalog **Document** launcher,
   canvas dock; Word/LibreOffice fixtures and round-trip tests.
 - Spec draft for native **`.orchid`** container — see
   [`docs/ORCHID_FORMAT.md`](docs/ORCHID_FORMAT.md) (not implemented yet).
