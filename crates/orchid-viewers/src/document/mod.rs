@@ -39,7 +39,10 @@ pub use undo::{EditCommand, RunStylePatch, UndoStack};
 pub const DEFAULT_SIZE_LIMIT: u64 = 128 * 1024 * 1024;
 
 struct PreviewState {
+    /// Content column width (CSS px), excluding page margins.
     width: f32,
+    /// Last Slint viewport width used to derive [`Self::width`] (`0` = unknown).
+    viewport_px: f32,
     bytes: Arc<Vec<u8>>,
     width_px: u32,
     height_px: u32,
@@ -53,6 +56,7 @@ impl Default for PreviewState {
     fn default() -> Self {
         Self {
             width: DEFAULT_PREVIEW_WIDTH,
+            viewport_px: 0.0,
             bytes: Arc::new(Vec::new()),
             width_px: 0,
             height_px: 0,
@@ -358,6 +362,7 @@ impl DocumentViewer {
     /// Subtracts left/right [`PageSetup`] margins so the rendered page fits the
     /// viewport the way Word margins would.
     pub fn set_preview_viewport_width(&self, viewport_px: f32) {
+        let viewport_px = viewport_px.max(200.0);
         let (left, right) = {
             let guard = self.document.read();
             match guard.as_ref() {
@@ -371,7 +376,24 @@ impl DocumentViewer {
                 }
             }
         };
-        self.set_preview_width((viewport_px - left - right).max(160.0));
+        let content = (viewport_px - left - right).max(160.0);
+        let mut prev = self.preview.lock();
+        prev.viewport_px = viewport_px;
+        if (prev.width - content).abs() > 0.5 {
+            prev.width = content;
+            prev.valid = false;
+        }
+    }
+
+    /// Re-derive content width after page margins change (keeps image ≈ viewport).
+    fn sync_preview_width_after_margin_change(&self, doc: &Document) {
+        let mut prev = self.preview.lock();
+        if prev.viewport_px > 0.0 {
+            let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+            let content = (prev.viewport_px - insets.left - insets.right).max(160.0);
+            prev.width = content;
+        }
+        prev.valid = false;
     }
 
     /// Update the active selection from plain-text UTF-8 byte offsets.
@@ -1774,7 +1796,7 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().undo(doc)?;
-        self.invalidate_preview();
+        self.sync_preview_width_after_margin_change(doc);
         Ok(())
     }
 
@@ -1783,7 +1805,7 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         self.undo.lock().redo(doc)?;
-        self.invalidate_preview();
+        self.sync_preview_width_after_margin_change(doc);
         Ok(())
     }
 
@@ -1992,6 +2014,32 @@ impl DocumentViewer {
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
         self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Bump all page margins by `delta_twips` (clamped to 0.25″–3″).
+    ///
+    /// Typical steps: `±180` (1/8″) or `±360` (1/4″). Preview insets update
+    /// immediately; undo restores the previous [`PageSetup`].
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_page_margins(&self, delta_twips: i32) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut next = doc.page_setup.clone();
+        next.margin_top_twips = clamp_margin_twips(next.margin_top_twips as i32 + delta_twips);
+        next.margin_bottom_twips = clamp_margin_twips(next.margin_bottom_twips as i32 + delta_twips);
+        next.margin_left_twips = clamp_margin_twips(next.margin_left_twips as i32 + delta_twips);
+        next.margin_right_twips = clamp_margin_twips(next.margin_right_twips as i32 + delta_twips);
+        if next == doc.page_setup {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetPageSetup { setup: next })?;
+        self.sync_preview_width_after_margin_change(doc);
         Ok(())
     }
 
@@ -2321,9 +2369,16 @@ const DEFAULT_FONT_SIZE_PT: f32 = 14.0;
 const SPACING_TWIPS_MAX: i32 = 2880;
 /// Auto line-spacing presets in 240ths of a line (single, 1.15, 1.5, double).
 const LINE_SPACING_PRESETS: &[u32] = &[240, 276, 360, 480];
+/// Page margin clamp: 0.25″ … 3″.
+const MARGIN_TWIPS_MIN: i32 = 360;
+const MARGIN_TWIPS_MAX: i32 = 4320;
 
 fn clamp_spacing_twips(v: i32) -> u32 {
     v.clamp(0, SPACING_TWIPS_MAX) as u32
+}
+
+fn clamp_margin_twips(v: i32) -> u32 {
+    v.clamp(MARGIN_TWIPS_MIN, MARGIN_TWIPS_MAX) as u32
 }
 
 fn bump_line_spacing_240ths(current: u32, delta: i32) -> u32 {

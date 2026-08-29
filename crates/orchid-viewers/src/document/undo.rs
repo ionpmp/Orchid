@@ -2,8 +2,8 @@
 
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
-    Alignment, Block, CellImage, Document, Hyperlink, InlineImage, ListKind, Paragraph, Run,
-    RunStyle, Table, TableCell, TableRow,
+    Alignment, Block, CellImage, Document, Hyperlink, InlineImage, ListKind, PageSetup, Paragraph,
+    Run, RunStyle, Table, TableCell, TableRow,
 };
 use crate::error::{Result, ViewerError};
 
@@ -127,6 +127,11 @@ pub enum EditCommand {
     ReplaceBlocks {
         /// New body blocks.
         blocks: Vec<Block>,
+    },
+    /// Replace page size / margins (`w:sectPr` / `w:pgMar`).
+    SetPageSetup {
+        /// New page geometry.
+        setup: PageSetup,
     },
     /// Remove a block (inverse of insert).
     RemoveBlock {
@@ -683,6 +688,10 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
             let previous = std::mem::replace(&mut doc.blocks, blocks.clone());
             Ok(EditCommand::ReplaceBlocks { blocks: previous })
         }
+        EditCommand::SetPageSetup { setup } => {
+            let previous = std::mem::replace(&mut doc.page_setup, setup.clone());
+            Ok(EditCommand::SetPageSetup { setup: previous })
+        }
         EditCommand::RemoveBlock { block_idx } => {
             if *block_idx >= doc.blocks.len() {
                 return Err(ViewerError::EditOutOfBounds);
@@ -1041,6 +1050,24 @@ mod tests {
             Block::Paragraph(p) => assert!(!p.runs[0].style.highlight),
             _ => panic!("expected paragraph"),
         }
+    }
+
+    #[test]
+    fn set_page_setup_then_undo() {
+        let mut doc = doc_with_hello();
+        let original = doc.page_setup.clone();
+        let mut next = original.clone();
+        next.margin_left_twips = 720;
+        next.margin_right_twips = 720;
+        let mut stack = UndoStack::new();
+        stack
+            .push(&mut doc, EditCommand::SetPageSetup { setup: next.clone() })
+            .unwrap();
+        assert_eq!(doc.page_setup.margin_left_twips, 720);
+        stack.undo(&mut doc).unwrap();
+        assert_eq!(doc.page_setup, original);
+        stack.redo(&mut doc).unwrap();
+        assert_eq!(doc.page_setup, next);
     }
 
     #[test]
