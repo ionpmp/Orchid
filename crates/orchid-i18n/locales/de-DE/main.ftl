@@ -741,6 +741,7 @@ viewer-document-table-merge = M+
 viewer-document-table-unmerge = M−
 viewer-document-find = Find
 viewer-document-find-placeholder = Find in document…
+viewer-document-find-case = Aa
 viewer-document-find-no-match = No match
 viewer-document-replace = Replace
 viewer-document-replace-placeholder = Replace with…

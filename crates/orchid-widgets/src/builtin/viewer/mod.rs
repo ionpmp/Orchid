@@ -3356,14 +3356,19 @@ pub async fn document_push_edit(instance_id: Uuid, text: String) -> WidgetResult
     Ok(())
 }
 
-/// Document: find next/previous match in plain text (case-insensitive).
-pub async fn document_find(instance_id: Uuid, query: String, forward: bool) -> WidgetResult<()> {
+/// Document: find next/previous match in plain text.
+pub async fn document_find(
+    instance_id: Uuid,
+    query: String,
+    forward: bool,
+    match_case: bool,
+) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
         let guard = inner.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
-                let _ = doc.preview_find(&query, forward);
+                let _ = doc.preview_find(&query, forward, match_case);
             }
         }
     }
@@ -3377,6 +3382,7 @@ pub async fn document_replace(
     query: String,
     replacement: String,
     all: bool,
+    match_case: bool,
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     {
@@ -3384,11 +3390,11 @@ pub async fn document_replace(
         if let Some(v) = guard.as_ref() {
             if let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() {
                 if all {
-                    doc.preview_replace_all(&query, &replacement)
+                    doc.preview_replace_all(&query, &replacement, match_case)
                         .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
                 } else {
                     let _ = doc
-                        .preview_replace_current(&query, &replacement)
+                        .preview_replace_current(&query, &replacement, match_case)
                         .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
                 }
             }

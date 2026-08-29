@@ -13,9 +13,9 @@ export component ViewerDocumentView inherits Rectangle {
     /// Preview key: token or literal text, plus ctrl/shift.
     callback preview-key(string, bool, bool);
     /// Find next (`true`) / previous (`false`) match for the local query.
-    callback find-request(string, bool);
+    callback find-request(string, bool, bool);
     /// Replace current (`all=false`) or all matches (`all=true`).
-    callback replace-request(string, string, bool);
+    callback replace-request(string, string, bool, bool);
     /// Apply hyperlink URL (`""` removes the link under the selection/caret).
     callback link-request(string);
 
@@ -27,6 +27,7 @@ export component ViewerDocumentView inherits Rectangle {
     property <length> last-viewport-w: 0px;
     property <bool> find-open: false;
     property <string> find-query: "";
+    property <bool> find-match-case: false;
     property <string> replace-query: "";
     property <bool> link-open: false;
     property <string> link-query: "";
@@ -938,7 +939,7 @@ export component ViewerDocumentView inherits Rectangle {
                             vertical-alignment: center;
                             key-pressed(event) => {
                                 if (event.text == Key.Return) {
-                                    root.find-request(root.find-query, !event.modifiers.shift);
+                                    root.find-request(root.find-query, !event.modifiers.shift, root.find-match-case);
                                     return accept;
                                 }
                                 if (event.text == Key.Escape) {
@@ -951,12 +952,35 @@ export component ViewerDocumentView inherits Rectangle {
                     }
 
                     Rectangle {
+                        width: max(28px, case-label.preferred-width + 8px);
+                        height: 26px;
+                        background: root.find-match-case ? Theme.surface-base
+                            : case-ta.has-hover ? Theme.surface-base : transparent;
+                        border-radius: Theme.radius-md;
+                        case-ta := TouchArea {
+                            clicked => {
+                                root.find-match-case = !root.find-match-case;
+                                if (root.find-query != "") {
+                                    root.find-request(root.find-query, true, root.find-match-case);
+                                }
+                            }
+                        }
+                        case-label := Text {
+                            text: model.find-case-label;
+                            color: root.find-match-case ? Theme.accent-brand : Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
                         width: 28px;
                         height: 26px;
                         background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
                         border-radius: Theme.radius-md;
                         find-prev-ta := TouchArea {
-                            clicked => { root.find-request(root.find-query, false); }
+                            clicked => { root.find-request(root.find-query, false, root.find-match-case); }
                         }
                         Text {
                             text: "↑";
@@ -973,7 +997,7 @@ export component ViewerDocumentView inherits Rectangle {
                         background: find-next-ta.has-hover ? Theme.surface-base : transparent;
                         border-radius: Theme.radius-md;
                         find-next-ta := TouchArea {
-                            clicked => { root.find-request(root.find-query, true); }
+                            clicked => { root.find-request(root.find-query, true, root.find-match-case); }
                         }
                         Text {
                             text: "↓";
@@ -1057,7 +1081,7 @@ export component ViewerDocumentView inherits Rectangle {
                             vertical-alignment: center;
                             key-pressed(event) => {
                                 if (event.text == Key.Return) {
-                                    root.replace-request(root.find-query, root.replace-query, false);
+                                    root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
                                     return accept;
                                 }
                                 if (event.text == Key.Escape) {
@@ -1076,7 +1100,7 @@ export component ViewerDocumentView inherits Rectangle {
                         border-radius: Theme.radius-md;
                         replace-one-ta := TouchArea {
                             clicked => {
-                                root.replace-request(root.find-query, root.replace-query, false);
+                                root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
                             }
                         }
                         replace-one-label := Text {
@@ -1095,7 +1119,7 @@ export component ViewerDocumentView inherits Rectangle {
                         border-radius: Theme.radius-md;
                         replace-all-ta := TouchArea {
                             clicked => {
-                                root.replace-request(root.find-query, root.replace-query, true);
+                                root.replace-request(root.find-query, root.replace-query, true, root.find-match-case);
                             }
                         }
                         replace-all-label := Text {
@@ -1261,7 +1285,7 @@ export component ViewerDocumentView inherits Rectangle {
                         }
                         if (event.text == Key.F3) {
                             root.find-open = true;
-                            root.find-request(root.find-query, !event.modifiers.shift);
+                            root.find-request(root.find-query, !event.modifiers.shift, root.find-match-case);
                             return accept;
                         }
                         if (event.text == Key.Home) {
@@ -1464,7 +1488,7 @@ export component ViewerDocumentView inherits Rectangle {
                             }
                             if (event.text == Key.F3) {
                                 root.find-open = true;
-                                root.find-request(root.find-query, !event.modifiers.shift);
+                                root.find-request(root.find-query, !event.modifiers.shift, root.find-match-case);
                                 return accept;
                             }
                             if (event.modifiers.control

@@ -55,8 +55,8 @@ export component ViewerView inherits Rectangle {
     callback document-viewport-changed(length);
     callback document-preview-pointer(int, float, float, bool);
     callback document-preview-key(string, bool, bool);
-    callback document-find-request(string, bool);
-    callback document-replace-request(string, string, bool);
+    callback document-find-request(string, bool, bool);
+    callback document-replace-request(string, string, bool, bool);
     callback document-link-request(string);
 
     background: transparent;
@@ -163,8 +163,8 @@ export component ViewerView inherits Rectangle {
         viewport-changed(w) => { root.document-viewport-changed(w); }
         preview-pointer(p, x, y, ctrl) => { root.document-preview-pointer(p, x, y, ctrl); }
         preview-key(k, c, s) => { root.document-preview-key(k, c, s); }
-        find-request(q, fwd) => { root.document-find-request(q, fwd); }
-        replace-request(q, r, all) => { root.document-replace-request(q, r, all); }
+        find-request(q, fwd, mc) => { root.document-find-request(q, fwd, mc); }
+        replace-request(q, r, all, mc) => { root.document-replace-request(q, r, all, mc); }
         link-request(url) => { root.document-link-request(url); }
     }
 

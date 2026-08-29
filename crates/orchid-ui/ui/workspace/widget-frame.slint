@@ -265,8 +265,8 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-document-viewport-changed(string, length);
     callback viewer-document-preview-pointer(string, int, float, float, bool);
     callback viewer-document-preview-key(string, string, bool, bool);
-    callback viewer-document-find-request(string, string, bool);
-    callback viewer-document-replace-request(string, string, string, bool);
+    callback viewer-document-find-request(string, string, bool, bool);
+    callback viewer-document-replace-request(string, string, string, bool, bool);
     callback viewer-document-link-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
@@ -1065,8 +1065,8 @@ export component WidgetFrame inherits Rectangle {
                         document-viewport-changed(w) => { root.viewer-document-viewport-changed(root.model.instance-id, w); }
                         document-preview-pointer(p, x, y, ctrl) => { root.viewer-document-preview-pointer(root.model.instance-id, p, x, y, ctrl); }
                         document-preview-key(k, c, s) => { root.viewer-document-preview-key(root.model.instance-id, k, c, s); }
-                        document-find-request(q, fwd) => { root.viewer-document-find-request(root.model.instance-id, q, fwd); }
-                        document-replace-request(q, r, all) => { root.viewer-document-replace-request(root.model.instance-id, q, r, all); }
+                        document-find-request(q, fwd, mc) => { root.viewer-document-find-request(root.model.instance-id, q, fwd, mc); }
+                        document-replace-request(q, r, all, mc) => { root.viewer-document-replace-request(root.model.instance-id, q, r, all, mc); }
                         document-link-request(url) => { root.viewer-document-link-request(root.model.instance-id, url); }
                     }
                 }

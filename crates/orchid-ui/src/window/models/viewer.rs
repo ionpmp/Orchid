@@ -628,6 +628,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         preview_label: locale.tr("viewer-document-preview").into(),
         find_label: locale.tr("viewer-document-find").into(),
         find_placeholder: locale.tr("viewer-document-find-placeholder").into(),
+        find_case_label: locale.tr("viewer-document-find-case").into(),
         replace_label: locale.tr("viewer-document-replace").into(),
         replace_placeholder: locale.tr("viewer-document-replace-placeholder").into(),
         replace_one_label: locale.tr("viewer-document-replace-one").into(),

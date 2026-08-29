@@ -159,13 +159,13 @@ impl DocumentViewer {
         }
     }
 
-    /// Find the next / previous case-insensitive match in plain text.
+    /// Find the next / previous match in plain text.
     ///
-    /// Selects the match (preview highlight / source offsets) and returns `true`
-    /// when found. Empty queries are ignored. On a miss, clears the match
-    /// status (`0/0`) and still bumps [`Self::find_gen`] so the UI can show
-    /// "no match".
-    pub fn preview_find(&self, query: &str, forward: bool) -> bool {
+    /// When `match_case` is false, comparison is case-insensitive. Selects the
+    /// match (preview highlight / source offsets) and returns `true` when found.
+    /// Empty queries are ignored. On a miss, clears the match status (`0/0`) and
+    /// still bumps [`Self::find_gen`] so the UI can show "no match".
+    pub fn preview_find(&self, query: &str, forward: bool, match_case: bool) -> bool {
         let q = query.trim();
         if q.is_empty() {
             return false;
@@ -175,17 +175,20 @@ impl DocumentViewer {
             return false;
         };
         let plain = doc.plain_text();
-        let plain_lower = plain.to_lowercase();
-        let q_lower = q.to_lowercase();
-        let q_bytes = q_lower.len();
-        if q_bytes == 0 || plain_lower.is_empty() {
+        let (haystack, needle) = if match_case {
+            (plain.clone(), q.to_string())
+        } else {
+            (plain.to_lowercase(), q.to_lowercase())
+        };
+        let q_bytes = needle.len();
+        if q_bytes == 0 || haystack.is_empty() {
             *self.find_match_index.lock() = 0;
             *self.find_match_count.lock() = 0;
             *self.find_gen.lock() += 1;
             return false;
         }
 
-        let starts = non_overlapping_match_starts(&plain_lower, &q_lower);
+        let starts = non_overlapping_match_starts(&haystack, &needle);
         let match_count = starts.len() as i32;
         if starts.is_empty() {
             *self.find_match_index.lock() = 0;
@@ -200,14 +203,14 @@ impl DocumentViewer {
         let sel_hi = plain_offset_from_cursor(doc, norm_b);
 
         let found = if forward {
-            let start = sel_hi.min(plain_lower.len());
+            let start = sel_hi.min(haystack.len());
             starts
                 .iter()
                 .copied()
                 .find(|&s| s >= start)
                 .or_else(|| starts.first().copied())
         } else {
-            let end = sel_lo.min(plain_lower.len());
+            let end = sel_lo.min(haystack.len());
             starts
                 .iter()
                 .rev()
@@ -246,50 +249,68 @@ impl DocumentViewer {
 
     /// Replace the current find match with `replacement`, then advance to the next.
     ///
-    /// When the selection is not already a case-insensitive match for `query`,
-    /// finds the next match first. Empty queries are ignored.
+    /// When the selection is not already a match for `query` (respecting
+    /// `match_case`), finds the next match first. Empty queries are ignored.
     ///
     /// # Errors
     ///
     /// Propagates edit errors from insert/delete.
-    pub fn preview_replace_current(&self, query: &str, replacement: &str) -> Result<bool> {
+    pub fn preview_replace_current(
+        &self,
+        query: &str,
+        replacement: &str,
+        match_case: bool,
+    ) -> Result<bool> {
         let q = query.trim();
         if q.is_empty() {
             return Ok(false);
         }
         let selected = self.selected_plain_text();
-        if selected.to_lowercase() != q.to_lowercase() && !self.preview_find(q, true) {
+        let selected_ok = if match_case {
+            selected == q
+        } else {
+            selected.to_lowercase() == q.to_lowercase()
+        };
+        if !selected_ok && !self.preview_find(q, true, match_case) {
             return Ok(false);
         }
         self.preview_insert_text(replacement)?;
-        let _ = self.preview_find(q, true);
+        let _ = self.preview_find(q, true, match_case);
         Ok(true)
     }
 
-    /// Replace every non-overlapping case-insensitive match of `query`.
+    /// Replace every non-overlapping match of `query`.
     ///
     /// Uses a single undo step. Returns the number of replacements performed.
     ///
     /// # Errors
     ///
     /// Propagates edit errors.
-    pub fn preview_replace_all(&self, query: &str, replacement: &str) -> Result<usize> {
+    pub fn preview_replace_all(
+        &self,
+        query: &str,
+        replacement: &str,
+        match_case: bool,
+    ) -> Result<usize> {
         use crate::document::undo::{apply_command, EditCommand};
 
         let q = query.trim();
         if q.is_empty() {
             return Ok(0);
         }
-        let q_lower = q.to_lowercase();
-        let q_bytes = q_lower.len();
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let plain = doc.plain_text();
+        let (haystack, needle) = if match_case {
+            (plain, q.to_string())
+        } else {
+            (plain.to_lowercase(), q.to_lowercase())
+        };
+        let q_bytes = needle.len();
         if q_bytes == 0 {
             return Ok(0);
         }
-
-        let mut doc_guard = self.document.write();
-        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let plain_lower = doc.plain_text().to_lowercase();
-        let starts = non_overlapping_match_starts(&plain_lower, &q_lower);
+        let starts = non_overlapping_match_starts(&haystack, &needle);
         if starts.is_empty() {
             drop(doc_guard);
             *self.find_match_index.lock() = 0;
@@ -328,7 +349,7 @@ impl DocumentViewer {
             guard.as_ref().map(|d| d.plain_text().len()).unwrap_or(0)
         };
         self.set_selection_plain_offsets(caret_off, caret_off);
-        let _ = self.preview_find(q, true);
+        let _ = self.preview_find(q, true, match_case);
         self.invalidate_preview();
         Ok(count)
     }

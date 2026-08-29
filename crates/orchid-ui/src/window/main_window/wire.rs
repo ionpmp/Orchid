@@ -2429,7 +2429,7 @@ impl MainWindowController {
         });
         self.window.on_viewer_document_find_request({
             let t = t.clone();
-            move |id, query, forward| {
+            move |id, query, forward, match_case| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
@@ -2437,7 +2437,9 @@ impl MainWindowController {
                         viewer_spawn!(
                             tw,
                             inst,
-                            orchid_widgets::builtin::viewer::document_find(inst, query, forward)
+                            orchid_widgets::builtin::viewer::document_find(
+                                inst, query, forward, match_case
+                            )
                         );
                     }
                 }
@@ -2445,7 +2447,7 @@ impl MainWindowController {
         });
         self.window.on_viewer_document_replace_request({
             let t = t.clone();
-            move |id, query, replacement, all| {
+            move |id, query, replacement, all, match_case| {
                 if let Some(c) = t.upgrade() {
                     if let Ok(inst) = Uuid::parse_str(id.as_str()) {
                         let tw = Arc::downgrade(&c);
@@ -2458,7 +2460,8 @@ impl MainWindowController {
                                 inst,
                                 query,
                                 replacement,
-                                all
+                                all,
+                                match_case
                             )
                         );
                     }

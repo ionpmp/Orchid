@@ -226,8 +226,8 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-document-viewport-changed(string, length);
     callback viewer-document-preview-pointer(string, int, float, float, bool);
     callback viewer-document-preview-key(string, string, bool, bool);
-    callback viewer-document-find-request(string, string, bool);
-    callback viewer-document-replace-request(string, string, string, bool);
+    callback viewer-document-find-request(string, string, bool, bool);
+    callback viewer-document-replace-request(string, string, string, bool, bool);
     callback viewer-document-link-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
@@ -624,8 +624,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
                     viewer-document-preview-pointer(id, p, x, y, ctrl) => { root.viewer-document-preview-pointer(id, p, x, y, ctrl); }
                     viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
-                    viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
-                    viewer-document-replace-request(id, q, r, all) => { root.viewer-document-replace-request(id, q, r, all); }
+                    viewer-document-find-request(id, q, fwd, mc) => { root.viewer-document-find-request(id, q, fwd, mc); }
+                    viewer-document-replace-request(id, q, r, all, mc) => { root.viewer-document-replace-request(id, q, r, all, mc); }
                     viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
@@ -768,8 +768,8 @@ export component WorkspaceView inherits Rectangle {
             viewer-document-viewport-changed(id, w) => { root.viewer-document-viewport-changed(id, w); }
             viewer-document-preview-pointer(id, p, x, y, ctrl) => { root.viewer-document-preview-pointer(id, p, x, y, ctrl); }
             viewer-document-preview-key(id, k, c, s) => { root.viewer-document-preview-key(id, k, c, s); }
-            viewer-document-find-request(id, q, fwd) => { root.viewer-document-find-request(id, q, fwd); }
-            viewer-document-replace-request(id, q, r, all) => { root.viewer-document-replace-request(id, q, r, all); }
+            viewer-document-find-request(id, q, fwd, mc) => { root.viewer-document-find-request(id, q, fwd, mc); }
+            viewer-document-replace-request(id, q, r, all, mc) => { root.viewer-document-replace-request(id, q, r, all, mc); }
             viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
         }
 

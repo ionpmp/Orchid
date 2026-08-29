@@ -52,7 +52,7 @@ fn find_forward_wraps_case_insensitive() {
     viewer.set_source_mode(false);
     viewer.set_selection_plain_offsets(0, 0);
 
-    assert!(viewer.preview_find("hello", true));
+    assert!(viewer.preview_find("hello", true, false));
     let plain = {
         let guard = viewer.document();
         guard.as_ref().unwrap().plain_text()
@@ -61,7 +61,7 @@ fn find_forward_wraps_case_insensitive() {
     assert_eq!(viewer.selection_plain_offsets(), (first, first + 5));
     assert_eq!(viewer.find_match_status(), (1, 3));
 
-    assert!(viewer.preview_find("hello", true));
+    assert!(viewer.preview_find("hello", true, false));
     let second = plain.to_lowercase()[first + 5..]
         .find("hello")
         .map(|rel| first + 5 + rel)
@@ -69,7 +69,7 @@ fn find_forward_wraps_case_insensitive() {
     assert_eq!(viewer.selection_plain_offsets(), (second, second + 5));
     assert_eq!(viewer.find_match_status(), (2, 3));
 
-    assert!(viewer.preview_find("hello", true));
+    assert!(viewer.preview_find("hello", true, false));
     let third = plain.to_lowercase()[second + 5..]
         .find("hello")
         .map(|rel| second + 5 + rel)
@@ -78,7 +78,7 @@ fn find_forward_wraps_case_insensitive() {
     assert_eq!(viewer.find_match_status(), (3, 3));
 
     // Wrap to first.
-    assert!(viewer.preview_find("hello", true));
+    assert!(viewer.preview_find("hello", true, false));
     assert_eq!(viewer.selection_plain_offsets(), (first, first + 5));
     assert_eq!(viewer.find_match_status(), (1, 3));
 }
@@ -94,12 +94,12 @@ fn find_backward_and_empty_query() {
     let end = plain.len();
     viewer.set_selection_plain_offsets(end, end);
 
-    assert!(viewer.preview_find("HELLO", false));
+    assert!(viewer.preview_find("HELLO", false, false));
     let last = plain.to_lowercase().rfind("hello").unwrap();
     assert_eq!(viewer.selection_plain_offsets(), (last, last + 5));
 
-    assert!(!viewer.preview_find("   ", true));
-    assert!(!viewer.preview_find("zzz-missing", true));
+    assert!(!viewer.preview_find("   ", true, false));
+    assert!(!viewer.preview_find("zzz-missing", true, false));
     assert_eq!(viewer.find_match_status(), (0, 0));
 }
 
@@ -110,7 +110,7 @@ fn replace_current_and_all() {
     viewer.set_source_mode(false);
     viewer.set_selection_plain_offsets(0, 0);
 
-    assert!(viewer.preview_replace_current("hello", "Hi").unwrap());
+    assert!(viewer.preview_replace_current("hello", "Hi", false).unwrap());
     let plain = {
         let guard = viewer.document();
         guard.as_ref().unwrap().plain_text()
@@ -118,7 +118,7 @@ fn replace_current_and_all() {
     assert!(plain.contains("Hi"));
     assert_eq!(plain.to_lowercase().matches("hello").count(), 2);
 
-    assert_eq!(viewer.preview_replace_all("hello", "X").unwrap(), 2);
+    assert_eq!(viewer.preview_replace_all("hello", "X", false).unwrap(), 2);
     let plain = {
         let guard = viewer.document();
         guard.as_ref().unwrap().plain_text()
@@ -132,4 +132,24 @@ fn replace_current_and_all() {
         guard.as_ref().unwrap().plain_text()
     };
     assert_eq!(plain.to_lowercase().matches("hello").count(), 2);
+}
+
+#[test]
+fn find_match_case_sensitive() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 0);
+
+    assert!(viewer.preview_find("HELLO", true, true));
+    let plain = {
+        let guard = viewer.document();
+        guard.as_ref().unwrap().plain_text()
+    };
+    let only = plain.find("HELLO").unwrap();
+    assert_eq!(viewer.selection_plain_offsets(), (only, only + 5));
+    assert_eq!(viewer.find_match_status(), (1, 1));
+
+    // Lowercase needle must not match mixed-case / uppercase runs.
+    assert!(!viewer.preview_find("hello", true, true));
+    assert_eq!(viewer.find_match_status(), (0, 0));
 }
