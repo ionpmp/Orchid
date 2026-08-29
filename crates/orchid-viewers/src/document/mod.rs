@@ -1906,6 +1906,45 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Bump space-before / space-after (twips) on selected paragraphs.
+    ///
+    /// Steps of ±120 twips (6 pt). Values clamp to `0..=2880` (0–2").
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_paragraph_spacing_selection(
+        &self,
+        before_delta: i32,
+        after_delta: i32,
+    ) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let mut next = doc.blocks.clone();
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                if before_delta != 0 {
+                    p.space_before_twips =
+                        clamp_spacing_twips(p.space_before_twips as i32 + before_delta);
+                }
+                if after_delta != 0 {
+                    p.space_after_twips =
+                        clamp_spacing_twips(p.space_after_twips as i32 + after_delta);
+                }
+            }
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Set list kind on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
@@ -2152,6 +2191,8 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     list_level: prev.list_level,
                     num_id: prev.num_id,
                     page_break_before: prev.page_break_before,
+                    space_before_twips: prev.space_before_twips,
+                    space_after_twips: prev.space_after_twips,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -2226,6 +2267,12 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
 }
 
 const DEFAULT_FONT_SIZE_PT: f32 = 14.0;
+const SPACING_TWIPS_MAX: i32 = 2880;
+
+fn clamp_spacing_twips(v: i32) -> u32 {
+    v.clamp(0, SPACING_TWIPS_MAX) as u32
+}
+
 const FONT_SIZE_STEPS: &[f32] = &[
     9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0,
 ];
@@ -2510,6 +2557,8 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         list_level: p.list_level,
         num_id: p.num_id,
         page_break_before: p.page_break_before,
+        space_before_twips: p.space_before_twips,
+        space_after_twips: 0,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2519,6 +2568,8 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         list_level: 0,
         num_id: None,
         page_break_before: false,
+        space_before_twips: 0,
+        space_after_twips: p.space_after_twips,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2554,6 +2605,8 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         list_level: p.list_level,
         num_id: p.num_id,
         page_break_before: p.page_break_before,
+        space_before_twips: p.space_before_twips,
+        space_after_twips: 0,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2563,6 +2616,8 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         list_level: 0,
         num_id: None,
         page_break_before: false,
+        space_before_twips: 0,
+        space_after_twips: p.space_after_twips,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2651,6 +2706,8 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         list_level: start_p.list_level,
         num_id: start_p.num_id,
         page_break_before: start_p.page_break_before,
+        space_before_twips: start_p.space_before_twips,
+        space_after_twips: start_p.space_after_twips,
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -2731,6 +2788,8 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         list_level: start_p.list_level,
         num_id: start_p.num_id,
         page_break_before: start_p.page_break_before,
+        space_before_twips: start_p.space_before_twips,
+        space_after_twips: start_p.space_after_twips,
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());

@@ -218,6 +218,7 @@ impl DocumentLayout {
                         rule_y = Some(total_h + 10.0);
                         total_h += PAGE_BREAK_GAP;
                     }
+                    total_h += twips_to_css_px(p.space_before_twips);
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
@@ -238,7 +239,8 @@ impl DocumentLayout {
                         page_break_rule_y: rule_y,
                     });
                     plain_offset += body_len;
-                    total_h += h + para_gap;
+                    let after = twips_to_css_px(p.space_after_twips).max(para_gap);
+                    total_h += h + after;
                 }
                 Block::Table(t) => {
                     let grid = self.append_table_grid(
@@ -471,13 +473,15 @@ impl DocumentLayout {
                     if p.page_break_before {
                         total_h += 28.0;
                     }
+                    total_h += twips_to_css_px(p.space_before_twips);
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
                     let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
-                    let y1 = total_h + h + para_gap;
+                    let after = twips_to_css_px(p.space_after_twips).max(para_gap);
+                    let y1 = total_h + h + after;
                     if local_y >= y0 && local_y < y1 {
                         let ly = (local_y - y0).max(0.0);
                         let lx = (local_x - indent).clamp(0.0, (max_w - indent).max(40.0));
@@ -485,7 +489,7 @@ impl DocumentLayout {
                         return Some(cursor_from_plain_offset(doc, plain_offset + body_idx));
                     }
                     plain_offset += body_len;
-                    total_h += h + para_gap;
+                    total_h += h + after;
                 }
                 Block::Table(t) => {
                     if let Some(cursor) = self.hit_test_table_cursor(
@@ -1802,6 +1806,11 @@ fn blend_pixel(pixels: &mut [u8], buf_w: u32, x: u32, y: u32, r: u8, g: u8, b: u
     pixels[idx + 1] = (f32::from(g) * src_a + f32::from(pixels[idx + 1]) * dst_a) as u8;
     pixels[idx + 2] = (f32::from(b) * src_a + f32::from(pixels[idx + 2]) * dst_a) as u8;
     pixels[idx + 3] = 255;
+}
+
+fn twips_to_css_px(twips: u32) -> f32 {
+    // 1440 twips = 1 inch = 96 CSS px.
+    (twips as f32) * 96.0 / 1440.0
 }
 
 fn paint_dashed_h_line(

@@ -129,6 +129,10 @@ pub struct Paragraph {
     pub num_id: Option<u32>,
     /// Force a page break before this paragraph (`w:pageBreakBefore` / Ctrl+Enter).
     pub page_break_before: bool,
+    /// Space before paragraph in twips (`w:spacing/@w:before`). `0` = none.
+    pub space_before_twips: u32,
+    /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.
+    pub space_after_twips: u32,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }

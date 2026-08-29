@@ -598,6 +598,38 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, sp-less.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sp-less := TouchArea { clicked => { root.action("space-after-less"); } }
+                    Text {
+                        text: model.space-after-less-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, sp-more.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    sp-more := TouchArea { clicked => { root.action("space-after-more"); } }
+                    Text {
+                        text: model.space-after-more-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;

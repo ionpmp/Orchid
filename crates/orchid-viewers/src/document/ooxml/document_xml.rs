@@ -214,6 +214,8 @@ fn parse_paragraph(
         list_level: 0,
         num_id: None,
         page_break_before: false,
+        space_before_twips: 0,
+        space_after_twips: 0,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -252,6 +254,9 @@ fn parse_paragraph(
                     }
                     "pageBreakBefore" if in_p_pr => {
                         p.page_break_before = true;
+                    }
+                    "spacing" if in_p_pr => {
+                        apply_paragraph_spacing(&e, &mut p);
                     }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
@@ -316,6 +321,9 @@ fn parse_paragraph(
                         }
                         "pageBreakBefore" => {
                             p.page_break_before = true;
+                        }
+                        "spacing" => {
+                            apply_paragraph_spacing(&e, &mut p);
                         }
                         _ => {}
                     }
@@ -865,6 +873,18 @@ fn write_paragraph(
             .write_event(Event::Empty(BytesStart::new("w:pageBreakBefore")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if p.space_before_twips > 0 || p.space_after_twips > 0 {
+        let mut spacing = BytesStart::new("w:spacing");
+        if p.space_before_twips > 0 {
+            spacing.push_attribute(("w:before", p.space_before_twips.to_string().as_str()));
+        }
+        if p.space_after_twips > 0 {
+            spacing.push_attribute(("w:after", p.space_after_twips.to_string().as_str()));
+        }
+        writer
+            .write_event(Event::Empty(spacing))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if p.list != ListKind::None {
         writer
             .write_event(Event::Start(BytesStart::new("w:numPr")))
@@ -956,6 +976,15 @@ fn write_paragraph(
         .write_event(Event::End(BytesEnd::new("w:p")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(())
+}
+
+fn apply_paragraph_spacing(e: &BytesStart<'_>, p: &mut Paragraph) {
+    if let Some(v) = attr_val(e, "before").and_then(|s| s.parse().ok()) {
+        p.space_before_twips = v;
+    }
+    if let Some(v) = attr_val(e, "after").and_then(|s| s.parse().ok()) {
+        p.space_after_twips = v;
+    }
 }
 
 fn resolve_hyperlink(e: &BytesStart<'_>, rels: &Relationships) -> Option<Hyperlink> {
@@ -1801,6 +1830,46 @@ mod tests {
             }
             _ => panic!("expected table"),
         }
+    }
+
+    #[test]
+    fn parse_and_write_paragraph_spacing() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>
+              <w:r><w:t>Spaced</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.space_before_twips, 240);
+                assert_eq!(p.space_after_twips, 120);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:before=\"240\"") && text.contains("w:after=\"120\""),
+            "missing spacing attrs: {text}"
+        );
     }
 
     #[test]

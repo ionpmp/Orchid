@@ -3296,6 +3296,10 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "list-numbered" => doc.toggle_list_all(ListKind::Numbered),
                 "list-indent" => doc.bump_list_level_selection(1),
                 "list-outdent" => doc.bump_list_level_selection(-1),
+                "space-after-more" => doc.bump_paragraph_spacing_selection(0, 120),
+                "space-after-less" => doc.bump_paragraph_spacing_selection(0, -120),
+                "space-before-more" => doc.bump_paragraph_spacing_selection(120, 0),
+                "space-before-less" => doc.bump_paragraph_spacing_selection(-120, 0),
                 "table-insert" => doc.preview_insert_table(2, 2),
                 // "image-insert" is handled in the UI layer (clipboard bytes).
                 "table-row-insert" => doc.preview_insert_table_row(),
