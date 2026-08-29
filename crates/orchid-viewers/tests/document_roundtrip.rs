@@ -562,6 +562,7 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
                 hyperlink: Some(Hyperlink {
                     url: "https://example.com/doc".into(),
                     r_id: Some("rId9".into()),
+                    bookmark: None,
                 }),
             }],
             ..Default::default()
@@ -601,6 +602,7 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
                 hyperlink: Some(Hyperlink {
                     url: "javascript:alert(1)".into(),
                     r_id: None,
+                    bookmark: None,
                 }),
             }],
             ..Default::default()

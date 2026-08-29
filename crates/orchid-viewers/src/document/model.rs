@@ -38,13 +38,43 @@ pub struct RunStyle {
     pub font_size_pt: Option<f32>,
 }
 
-/// External hyperlink resolved from `w:hyperlink` + document relationships.
+/// Hyperlink resolved from `w:hyperlink` (external relationship and/or `w:anchor`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hyperlink {
     /// Target URL (`Relationship/@Target`, typically `TargetMode="External"`).
+    /// Empty when this is an internal bookmark link only.
     pub url: String,
     /// Package relationship id (`rIdN`) when known; allocated on save if missing.
     pub r_id: Option<String>,
+    /// Internal bookmark name (`w:anchor`). When set, Ctrl+click jumps in-document.
+    pub bookmark: Option<String>,
+}
+
+impl Hyperlink {
+    /// Whether this link targets an in-document bookmark.
+    #[must_use]
+    pub fn is_internal(&self) -> bool {
+        self.bookmark.as_ref().is_some_and(|b| !b.is_empty())
+    }
+
+    /// UI / compare key: external URL, or `#bookmark` for internal links.
+    #[must_use]
+    pub fn display_target(&self) -> String {
+        if let Some(name) = self.bookmark.as_ref().filter(|b| !b.is_empty()) {
+            format!("#{name}")
+        } else {
+            self.url.clone()
+        }
+    }
+}
+
+/// Named destination from `w:bookmarkStart` (plain-text offset into [`Document::plain_text`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bookmark {
+    /// Bookmark name (`w:name`).
+    pub name: String,
+    /// Byte offset into [`Document::plain_text`] at the bookmark start.
+    pub plain_offset: usize,
 }
 
 /// A contiguous run of text with uniform style.
@@ -297,6 +327,8 @@ pub struct Document {
     pub blocks: Vec<Block>,
     /// Page geometry.
     pub page_setup: PageSetup,
+    /// Named destinations (`w:bookmarkStart`); first occurrence of a name wins on jump.
+    pub bookmarks: Vec<Bookmark>,
     /// Unsupported body-level elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
     /// Original package parts we did not rewrite (styles, numbering, …).
@@ -311,6 +343,15 @@ pub struct Document {
 }
 
 impl Document {
+    /// Plain-text offset of the first bookmark named `name`, if any.
+    #[must_use]
+    pub fn bookmark_offset(&self, name: &str) -> Option<usize> {
+        self.bookmarks
+            .iter()
+            .find(|b| b.name == name)
+            .map(|b| b.plain_offset)
+    }
+
     /// Open a `.docx` from disk and build a [`Document`].
     ///
     /// # Errors

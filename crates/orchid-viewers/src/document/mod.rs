@@ -23,13 +23,13 @@ use crate::viewer_trait::Viewer;
 pub use cursor::{
     adjacent_cell_cursor, adjacent_in_cell, cursor_from_plain_offset,
     expand_selection_to_hyperlink_span, hyperlink_at_cursor, is_image_cursor, is_safe_external_url,
-    normalize_external_link_url, paragraph_cursors_in_selection, paragraph_indices_in_selection,
-    paragraph_mut, paragraph_mut_in_blocks, paragraph_ref, plain_offset_from_cursor,
-    selection_from_plain_offsets, CellPath, Cursor, Selection,
+    normalize_external_link_url, normalize_internal_bookmark, paragraph_cursors_in_selection,
+    paragraph_indices_in_selection, paragraph_mut, paragraph_mut_in_blocks, paragraph_ref,
+    plain_offset_from_cursor, selection_from_plain_offsets, CellPath, Cursor, Selection,
 };
 pub use layout::{DocumentLayout, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
+    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
     OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
@@ -384,10 +384,15 @@ impl DocumentViewer {
         let Some(cursor) = self.layout.lock().hit_test_cursor(doc, width, x, y) else {
             return self.clear_link_hover();
         };
-        let link_url = hyperlink_at_cursor(doc, cursor)
-            .map(|hl| hl.url.as_str())
-            .filter(|u| is_safe_external_url(u))
-            .map(str::to_owned);
+        let link_url = hyperlink_at_cursor(doc, cursor).and_then(|hl| {
+            if hl.is_internal() {
+                Some(hl.display_target())
+            } else if is_safe_external_url(&hl.url) {
+                Some(hl.url.clone())
+            } else {
+                None
+            }
+        });
         let hover_changed = self.set_link_hover(link_url.is_some());
 
         if phase == 5 {
@@ -397,13 +402,29 @@ impl DocumentViewer {
             };
         }
 
-        // Ctrl+click opens the link without altering selection.
+        // Ctrl+click: open external URL, or jump to an internal bookmark.
         if phase == 0 && ctrl {
-            if let Some(url) = link_url {
-                return PreviewPointerOutcome {
-                    open_url: Some(url),
-                    refresh: hover_changed,
-                };
+            if let Some(hl) = hyperlink_at_cursor(doc, cursor) {
+                if hl.is_internal() {
+                    if let Some(name) = hl.bookmark.as_deref() {
+                        if let Some(offset) = doc.bookmark_offset(name) {
+                            let at = cursor_from_plain_offset(doc, offset);
+                            *self.selection.lock() = Selection {
+                                anchor: at,
+                                head: at,
+                            };
+                            return PreviewPointerOutcome {
+                                open_url: None,
+                                refresh: true,
+                            };
+                        }
+                    }
+                } else if is_safe_external_url(&hl.url) {
+                    return PreviewPointerOutcome {
+                        open_url: Some(hl.url.clone()),
+                        refresh: hover_changed,
+                    };
+                }
             }
         }
 
@@ -1424,24 +1445,46 @@ impl DocumentViewer {
         self.apply_style_patch_selection(RunStylePatch::clear_character())
     }
 
-    /// Apply (or replace) an external hyperlink on the selection.
+    /// Apply (or replace) a hyperlink on the selection.
+    ///
+    /// External targets: `http`/`https`/`mailto` or bare hosts (normalized to `https://`).
+    /// Internal targets: `#bookmarkName` (creates the bookmark at document start if missing).
     ///
     /// Collapsed caret on an existing link updates that link span. Collapsed caret
-    /// elsewhere inserts `url` as display text and links it. Non-empty selection
-    /// links the selected text. URL is normalized (`https://` for bare hosts).
+    /// elsewhere inserts the display text and links it. Non-empty selection
+    /// links the selected text.
     ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`] or invalid/unsafe URL
     /// ([`ViewerError::EditOutOfBounds`]).
     pub fn set_hyperlink_selection(&self, url: &str) -> Result<()> {
-        let Some(url) = normalize_external_link_url(url) else {
+        let hl = if let Some(name) = normalize_internal_bookmark(url) {
+            Hyperlink {
+                url: String::new(),
+                r_id: None,
+                bookmark: Some(name),
+            }
+        } else if let Some(url) = normalize_external_link_url(url) {
+            Hyperlink {
+                url,
+                r_id: None,
+                bookmark: None,
+            }
+        } else {
             return Err(ViewerError::EditOutOfBounds);
         };
-        let hl = Hyperlink {
-            url: url.clone(),
-            r_id: None,
-        };
+
+        if let Some(name) = hl.bookmark.clone() {
+            let mut doc_guard = self.document.write();
+            let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+            if doc.bookmark_offset(&name).is_none() {
+                doc.bookmarks.push(crate::document::model::Bookmark {
+                    name,
+                    plain_offset: 0,
+                });
+            }
+        }
 
         let range = {
             let doc_guard = self.document.read();
@@ -1455,6 +1498,7 @@ impl DocumentViewer {
             }
         };
 
+        let insert_label = hl.display_target();
         let range = if let Some(range) = range {
             range
         } else {
@@ -1463,10 +1507,11 @@ impl DocumentViewer {
                 let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
                 plain_offset_from_cursor(doc, self.selection.lock().head)
             };
-            self.preview_insert_text(&url)?;
+            self.preview_insert_text(&insert_label)?;
             let doc_guard = self.document.read();
             let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
-            let range = selection_from_plain_offsets(doc, start_off, start_off + url.len());
+            let range =
+                selection_from_plain_offsets(doc, start_off, start_off + insert_label.len());
             *self.selection.lock() = range;
             range
         };
@@ -2764,7 +2809,7 @@ impl Viewer for DocumentViewer {
         let caret = sel.normalized().0;
         let style = style_at_cursor(doc, caret);
         let link_url = hyperlink_at_cursor(doc, sel.head)
-            .map(|hl| hl.url.clone())
+            .map(|hl| hl.display_target())
             .unwrap_or_default();
         let para = paragraph_ref(doc, caret).or_else(|| first_paragraph(doc));
         let (

@@ -8,7 +8,7 @@ use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::document::model::{
-    Alignment, Block, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
+    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
     OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
@@ -61,12 +61,15 @@ pub fn parse_document_xml(
     numbering: &NumberingDefs,
     rels: &Relationships,
     media: &HashMap<String, Vec<u8>>,
-) -> Result<(Vec<Block>, PageSetup, Vec<OpaqueXmlNode>)> {
+) -> Result<(Vec<Block>, PageSetup, Vec<OpaqueXmlNode>, Vec<Bookmark>)> {
     let mut reader = Reader::from_reader(bytes);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut blocks = Vec::new();
     let mut unsupported = Vec::new();
+    let mut bookmarks: Vec<Bookmark> = Vec::new();
+    let mut pending_body_bookmarks: Vec<String> = Vec::new();
+    let mut plain_len = 0usize;
     let mut page_setup = PageSetup::default();
     let mut in_body = false;
 
@@ -79,7 +82,7 @@ pub fn parse_document_xml(
                 } else if in_body {
                     match local.as_str() {
                         "p" => {
-                            let (p, images) = parse_paragraph(
+                            let (p, images, local_bms) = parse_paragraph(
                                 &mut reader,
                                 &mut buf,
                                 styles,
@@ -88,7 +91,29 @@ pub fn parse_document_xml(
                                 media,
                             )?;
                             let has_text = p.runs.iter().any(|r| !r.text.is_empty());
+                            let para_start = if plain_len > 0 {
+                                plain_len + 1
+                            } else {
+                                0
+                            };
+                            for name in pending_body_bookmarks.drain(..) {
+                                if !bookmarks.iter().any(|b| b.name == name) {
+                                    bookmarks.push(Bookmark {
+                                        name,
+                                        plain_offset: para_start,
+                                    });
+                                }
+                            }
+                            for (name, rel) in local_bms {
+                                if !bookmarks.iter().any(|b| b.name == name) {
+                                    bookmarks.push(Bookmark {
+                                        name,
+                                        plain_offset: para_start + rel,
+                                    });
+                                }
+                            }
                             if has_text || images.is_empty() {
+                                plain_len = para_start + p.plain_text().len();
                                 blocks.push(Block::Paragraph(p));
                             }
                             for img in images {
@@ -98,7 +123,26 @@ pub fn parse_document_xml(
                         "tbl" => {
                             let t =
                                 parse_table(&mut reader, &mut buf, styles, numbering, rels, media)?;
+                            // Advance plain_len to match Document::plain_text after this table.
+                            let before = Document {
+                                blocks: blocks.clone(),
+                                ..Default::default()
+                            }
+                            .plain_text()
+                            .len();
                             blocks.push(Block::Table(t));
+                            plain_len = Document {
+                                blocks: blocks.clone(),
+                                ..Default::default()
+                            }
+                            .plain_text()
+                            .len();
+                            let _ = before;
+                        }
+                        "bookmarkStart" => {
+                            if let Some(name) = attr_val(&e, "name").filter(|n| !n.is_empty()) {
+                                pending_body_bookmarks.push(name);
+                            }
                         }
                         "sectPr" => {
                             page_setup = parse_sect_pr(&mut reader, &mut buf)?;
@@ -118,7 +162,11 @@ pub fn parse_document_xml(
             }
             Ok(Event::Empty(e)) => {
                 let local = local_name(e.name().as_ref());
-                if in_body && local == "sectPr" {
+                if in_body && local == "bookmarkStart" {
+                    if let Some(name) = attr_val(&e, "name").filter(|n| !n.is_empty()) {
+                        pending_body_bookmarks.push(name);
+                    }
+                } else if in_body && local == "sectPr" {
                     // Empty sectPr — keep defaults.
                 } else if in_body && local != "body" {
                     // Self-closing unknown — skip.
@@ -138,7 +186,17 @@ pub fn parse_document_xml(
         buf.clear();
     }
 
-    Ok((blocks, page_setup, unsupported))
+    // Trailing body bookmarks land at end-of-document.
+    for name in pending_body_bookmarks.drain(..) {
+        if !bookmarks.iter().any(|b| b.name == name) {
+            bookmarks.push(Bookmark {
+                name,
+                plain_offset: plain_len,
+            });
+        }
+    }
+
+    Ok((blocks, page_setup, unsupported, bookmarks))
 }
 
 fn parse_paragraph(
@@ -148,7 +206,7 @@ fn parse_paragraph(
     numbering: &NumberingDefs,
     rels: &Relationships,
     media: &HashMap<String, Vec<u8>>,
-) -> Result<(Paragraph, Vec<InlineImage>)> {
+) -> Result<(Paragraph, Vec<InlineImage>, Vec<(String, usize)>)> {
     let mut p = Paragraph {
         runs: Vec::new(),
         alignment: Alignment::Left,
@@ -158,6 +216,8 @@ fn parse_paragraph(
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
+    let mut local_bookmarks: Vec<(String, usize)> = Vec::new();
+    let mut para_plain_len = 0usize;
     let mut in_p_pr = false;
     let mut in_r = false;
     let mut in_t = false;
@@ -191,6 +251,11 @@ fn parse_paragraph(
                     }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
+                    }
+                    "bookmarkStart" => {
+                        if let Some(name) = attr_val(&e, "name").filter(|n| !n.is_empty()) {
+                            local_bookmarks.push((name, para_plain_len));
+                        }
                     }
                     "r" => {
                         in_r = true;
@@ -251,6 +316,11 @@ fn parse_paragraph(
                         run.text.push('\n');
                     }
                 }
+                if local == "bookmarkStart" {
+                    if let Some(name) = attr_val(&e, "name").filter(|n| !n.is_empty()) {
+                        local_bookmarks.push((name, para_plain_len));
+                    }
+                }
                 if in_r && matches!(local.as_str(), "b" | "i" | "u" | "color" | "rFonts" | "sz") {
                     if let Some(ref mut run) = current_run {
                         apply_r_pr_attr(&local, &e, &mut run.style);
@@ -260,8 +330,8 @@ fn parse_paragraph(
             Ok(Event::Text(t)) => {
                 if in_t {
                     if let Some(ref mut run) = current_run {
-                        let text = t.decode().unwrap_or_default();
-                        run.text.push_str(&text);
+                        let text = t.as_ref();
+                        run.text.push_str(text);
                     }
                 }
             }
@@ -274,11 +344,12 @@ fn parse_paragraph(
                         in_r = false;
                         in_t = false;
                         if let Some(run) = current_run.take() {
+                            para_plain_len += run.text.len();
                             p.runs.push(run);
                         }
                     }
                     "hyperlink" => active_link = None,
-                    "p" => return Ok((p, images)),
+                    "p" => return Ok((p, images, local_bookmarks)),
                     _ => {}
                 }
             }
@@ -488,7 +559,7 @@ fn parse_table(
                         }
                     }
                     "p" => {
-                        let (p, images) =
+                        let (p, images, _bms) =
                             parse_paragraph(reader, buf, styles, numbering, rels, media)?;
                         if let Some(ref mut cell) = current_cell {
                             cell.paragraphs.push(p);
@@ -685,10 +756,33 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
 
     let mut drawing_id = 1u32;
+    let mut plain_len = 0usize;
+    let mut bookmark_id = 0u32;
     for block in &doc.blocks {
         match block {
-            Block::Paragraph(p) => write_paragraph(&mut writer, p)?,
-            Block::Table(t) => write_table(&mut writer, t, &mut drawing_id)?,
+            Block::Paragraph(p) => {
+                let para_start = if plain_len > 0 { plain_len + 1 } else { 0 };
+                write_paragraph(
+                    &mut writer,
+                    p,
+                    &doc.bookmarks,
+                    para_start,
+                    &mut bookmark_id,
+                )?;
+                plain_len = para_start + p.plain_text().len();
+            }
+            Block::Table(t) => {
+                write_table(&mut writer, t, &mut drawing_id)?;
+                // Match Document::plain_text: each cell paragraph is separated by `\n`.
+                for row in &t.rows {
+                    for cell in &row.cells {
+                        for p in &cell.paragraphs {
+                            let start = if plain_len > 0 { plain_len + 1 } else { 0 };
+                            plain_len = start + p.plain_text().len();
+                        }
+                    }
+                }
+            }
             Block::Image(img) => {
                 write_image_paragraph(&mut writer, img, &mut drawing_id)?;
             }
@@ -715,18 +809,46 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
     Ok(writer.into_inner().into_inner())
 }
 
-fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Result<()> {
+fn write_collapsed_bookmark(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    id: u32,
+    name: &str,
+) -> Result<()> {
+    let id_s = id.to_string();
+    let mut start = BytesStart::new("w:bookmarkStart");
+    start.push_attribute(("w:id", id_s.as_str()));
+    start.push_attribute(("w:name", name));
+    writer
+        .write_event(Event::Empty(start))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    let mut end = BytesStart::new("w:bookmarkEnd");
+    end.push_attribute(("w:id", id_s.as_str()));
+    writer
+        .write_event(Event::Empty(end))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
+fn write_paragraph(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    p: &Paragraph,
+    bookmarks: &[Bookmark],
+    para_start: usize,
+    bookmark_id: &mut u32,
+) -> Result<()> {
     writer
         .write_event(Event::Start(BytesStart::new("w:p")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     writer
         .write_event(Event::Start(BytesStart::new("w:pPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-    let mut jc = BytesStart::new("w:jc");
-    jc.push_attribute(("w:val", alignment_val(p.alignment)));
-    writer
-        .write_event(Event::Empty(jc))
-        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if p.alignment != Alignment::Left {
+        let mut jc = BytesStart::new("w:jc");
+        jc.push_attribute(("w:val", alignment_val(p.alignment)));
+        writer
+            .write_event(Event::Empty(jc))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if p.list != ListKind::None {
         writer
             .write_event(Event::Start(BytesStart::new("w:numPr")))
@@ -754,23 +876,52 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
         .write_event(Event::End(BytesEnd::new("w:pPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
 
+    // Bookmarks at paragraph start (including empty paragraphs).
+    for b in bookmarks {
+        if b.plain_offset == para_start {
+            write_collapsed_bookmark(writer, *bookmark_id, &b.name)?;
+            *bookmark_id += 1;
+        }
+    }
+
+    let mut run_rel = 0usize;
     let mut i = 0;
     while i < p.runs.len() {
+        if run_rel > 0 {
+            for b in bookmarks {
+                if b.plain_offset == para_start + run_rel {
+                    write_collapsed_bookmark(writer, *bookmark_id, &b.name)?;
+                    *bookmark_id += 1;
+                }
+            }
+        }
         if let Some(ref hl) = p.runs[i].hyperlink {
-            let url = hl.url.as_str();
-            let rid = hl.r_id.as_deref().unwrap_or("rId0");
+            let target = hl.display_target();
             let mut j = i + 1;
-            while j < p.runs.len() && p.runs[j].hyperlink.as_ref().is_some_and(|h| h.url == url) {
+            while j < p.runs.len()
+                && p.runs[j]
+                    .hyperlink
+                    .as_ref()
+                    .is_some_and(|h| h.display_target() == target)
+            {
                 j += 1;
             }
             let mut start = BytesStart::new("w:hyperlink");
-            start.push_attribute(("r:id", rid));
+            if hl.is_internal() {
+                if let Some(name) = hl.bookmark.as_deref() {
+                    start.push_attribute(("w:anchor", name));
+                }
+            } else {
+                let rid = hl.r_id.as_deref().unwrap_or("rId0");
+                start.push_attribute(("r:id", rid));
+            }
             start.push_attribute(("w:history", "1"));
             writer
                 .write_event(Event::Start(start))
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             for run in &p.runs[i..j] {
                 write_run(writer, run)?;
+                run_rel += run.text.len();
             }
             writer
                 .write_event(Event::End(BytesEnd::new("w:hyperlink")))
@@ -778,6 +929,7 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
             i = j;
         } else {
             write_run(writer, &p.runs[i])?;
+            run_rel += p.runs[i].text.len();
             i += 1;
         }
     }
@@ -791,15 +943,29 @@ fn write_paragraph(writer: &mut Writer<Cursor<Vec<u8>>>, p: &Paragraph) -> Resul
 }
 
 fn resolve_hyperlink(e: &BytesStart<'_>, rels: &Relationships) -> Option<Hyperlink> {
+    if let Some(name) = attr_val(e, "anchor").filter(|n| !n.is_empty()) {
+        return Some(Hyperlink {
+            url: String::new(),
+            r_id: None,
+            bookmark: Some(name),
+        });
+    }
     let rid = attr_val(e, "id")?;
     let url = rels.get(&rid)?.clone();
-    // Skip internal bookmark-only links (no Target / empty).
-    if url.is_empty() || url.starts_with('#') {
+    if let Some(name) = url.strip_prefix('#').filter(|n| !n.is_empty()) {
+        return Some(Hyperlink {
+            url: String::new(),
+            r_id: Some(rid),
+            bookmark: Some(name.to_string()),
+        });
+    }
+    if url.is_empty() {
         return None;
     }
     Some(Hyperlink {
         url,
         r_id: Some(rid),
+        bookmark: None,
     })
 }
 
@@ -1022,13 +1188,15 @@ fn write_table(
                     .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             }
             if cell.paragraphs.is_empty() {
-                write_paragraph(writer, &Paragraph::default())?;
+                let mut bm_id = 0u32;
+                write_paragraph(writer, &Paragraph::default(), &[], 0, &mut bm_id)?;
                 for ci in cell.images.iter().filter(|c| c.after_paragraph == 0) {
                     write_image_paragraph(writer, &ci.image, drawing_id)?;
                 }
             } else {
                 for (i, p) in cell.paragraphs.iter().enumerate() {
-                    write_paragraph(writer, p)?;
+                    let mut bm_id = 0u32;
+                    write_paragraph(writer, p, &[], 0, &mut bm_id)?;
                     for ci in cell.images.iter().filter(|c| c.after_paragraph == i) {
                         write_image_paragraph(writer, &ci.image, drawing_id)?;
                     }
@@ -1138,15 +1306,14 @@ fn parse_rgb(val: &str) -> Option<[u8; 3]> {
     }
 }
 
-fn local_name(name: &[u8]) -> String {
-    let s = String::from_utf8_lossy(name);
-    s.rsplit(':').next().unwrap_or(&s).to_string()
+fn local_name(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or(name).to_string()
 }
 
 fn attr_val(e: &BytesStart<'_>, key: &str) -> Option<String> {
     for a in e.attributes().flatten() {
         if local_name(a.key.as_ref()) == key {
-            return Some(String::from_utf8_lossy(&a.value).into_owned());
+            return Some(a.value.into_owned());
         }
     }
     None
@@ -1160,12 +1327,12 @@ fn capture_element(
     let name = local_name(start.name().as_ref());
     let mut out = Vec::new();
     out.extend_from_slice(b"<");
-    out.extend_from_slice(start.name().as_ref());
+    out.extend_from_slice(start.name().as_ref().as_bytes());
     for a in start.attributes().flatten() {
         out.push(b' ');
-        out.extend_from_slice(a.key.as_ref());
+        out.extend_from_slice(a.key.as_ref().as_bytes());
         out.extend_from_slice(b"=\"");
-        out.extend_from_slice(&a.value);
+        out.extend_from_slice(a.value.as_bytes());
         out.push(b'"');
     }
     out.extend_from_slice(b">");
@@ -1174,7 +1341,7 @@ fn capture_element(
         match reader.read_event_into(buf) {
             Ok(Event::Start(e)) => {
                 out.push(b'<');
-                out.extend_from_slice(e.name().as_ref());
+                out.extend_from_slice(e.name().as_ref().as_bytes());
                 out.push(b'>');
                 if local_name(e.name().as_ref()) == name {
                     depth += 1;
@@ -1182,7 +1349,7 @@ fn capture_element(
             }
             Ok(Event::End(e)) => {
                 out.extend_from_slice(b"</");
-                out.extend_from_slice(e.name().as_ref());
+                out.extend_from_slice(e.name().as_ref().as_bytes());
                 out.push(b'>');
                 if local_name(e.name().as_ref()) == name {
                     depth -= 1;
@@ -1191,10 +1358,10 @@ fn capture_element(
                     }
                 }
             }
-            Ok(Event::Text(t)) => out.extend_from_slice(&t),
+            Ok(Event::Text(t)) => out.extend_from_slice(t.as_ref().as_bytes()),
             Ok(Event::Empty(e)) => {
                 out.push(b'<');
-                out.extend_from_slice(e.name().as_ref());
+                out.extend_from_slice(e.name().as_ref().as_bytes());
                 out.extend_from_slice(b"/>");
             }
             Ok(Event::Eof) => {
@@ -1231,7 +1398,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (blocks, setup, _) = parse_document_xml(
+        let (blocks, setup, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1267,7 +1434,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1306,7 +1473,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1330,7 +1497,7 @@ mod tests {
             text.contains("w:strike"),
             "serialized XML missing strike: {text}"
         );
-        let (blocks2, _, _) = parse_document_xml(
+        let (blocks2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1361,7 +1528,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1390,7 +1557,7 @@ mod tests {
             text.contains("superscript") && text.contains("subscript"),
             "serialized XML missing vertAlign: {text}"
         );
-        let (blocks2, _, _) = parse_document_xml(
+        let (blocks2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1425,7 +1592,7 @@ mod tests {
         </w:document>"#;
         let mut rels = Relationships::new();
         rels.insert("rId5".into(), "https://example.com/".into());
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1455,7 +1622,7 @@ mod tests {
             text.contains("w:hyperlink") && text.contains("r:id=\"rId5\""),
             "missing hyperlink wrapper: {text}"
         );
-        let (blocks2, _, _) = parse_document_xml(
+        let (blocks2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1467,6 +1634,74 @@ mod tests {
             Block::Paragraph(p) => {
                 let hl = p.runs[0].hyperlink.as_ref().expect("hyperlink");
                 assert_eq!(hl.url, "https://example.com/");
+            }
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn parse_and_write_internal_hyperlink_and_bookmark() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:bookmarkStart w:id="0" w:name="intro"/>
+              <w:bookmarkEnd w:id="0"/>
+              <w:r><w:t>Intro</w:t></w:r>
+            </w:p>
+            <w:p>
+              <w:hyperlink w:anchor="intro" w:history="1">
+                <w:r><w:t>Go</w:t></w:r>
+              </w:hyperlink>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, bookmarks) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].name, "intro");
+        assert_eq!(bookmarks[0].plain_offset, 0);
+        match &blocks[1] {
+            Block::Paragraph(p) => {
+                let hl = p.runs[0].hyperlink.as_ref().expect("hyperlink");
+                assert!(hl.is_internal());
+                assert_eq!(hl.bookmark.as_deref(), Some("intro"));
+                assert!(hl.url.is_empty());
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            bookmarks,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:anchor=\"intro\"") && text.contains("w:bookmarkStart"),
+            "missing internal link/bookmark: {text}"
+        );
+        let (blocks2, _, _, bookmarks2) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(bookmarks2.iter().any(|b| b.name == "intro"));
+        match &blocks2[1] {
+            Block::Paragraph(p) => {
+                let hl = p.runs[0].hyperlink.as_ref().expect("hyperlink");
+                assert_eq!(hl.bookmark.as_deref(), Some("intro"));
             }
             _ => panic!("expected paragraph"),
         }
@@ -1496,7 +1731,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1534,7 +1769,7 @@ mod tests {
             text.contains("<w:vMerge/>") || text.contains("<w:vMerge />"),
             "missing bare vMerge continue: {text}"
         );
-        let (blocks2, _, _) = parse_document_xml(
+        let (blocks2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1566,7 +1801,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1590,7 +1825,7 @@ mod tests {
             text.contains("w:br") && !text.contains(">Line one\nLine two<"),
             "soft break should serialize as w:br, not a newline in w:t: {text}"
         );
-        let (blocks2, _, _) = parse_document_xml(
+        let (blocks2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1614,7 +1849,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1629,7 +1864,7 @@ mod tests {
             ..Default::default()
         };
         let out = write_document_xml(&doc).unwrap();
-        let (blocks2, _, _) = parse_document_xml(
+        let (blocks2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1663,7 +1898,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _) = parse_document_xml(
+        let (blocks, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1700,7 +1935,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _) = parse_document_xml(
+        let (blocks, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1733,7 +1968,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _) = parse_document_xml(
+        let (blocks, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1777,7 +2012,7 @@ mod tests {
             ..Default::default()
         };
         let out = write_document_xml(&doc).unwrap();
-        let (blocks, _, _) = parse_document_xml(
+        let (blocks, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1830,7 +2065,7 @@ mod tests {
         rels.insert("rId7".into(), "media/dot.png".into());
         let mut media = HashMap::new();
         media.insert("word/media/dot.png".into(), png.clone());
-        let (blocks, _, _) = parse_document_xml(
+        let (blocks, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -1903,7 +2138,7 @@ mod tests {
         rels.insert("rId9".into(), "media/cell.png".into());
         let mut media = HashMap::new();
         media.insert("word/media/cell.png".into(), png.clone());
-        let (blocks, _, _) = parse_document_xml(
+        let (blocks, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),

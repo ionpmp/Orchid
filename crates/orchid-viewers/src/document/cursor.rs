@@ -509,10 +509,21 @@ pub fn normalize_external_link_url(raw: &str) -> Option<String> {
     Some(format!("https://{trimmed}"))
 }
 
-/// Expand a caret on a hyperlink to the contiguous run span sharing that URL.
+/// Normalize a `#bookmark` (or bare bookmark name with leading `#`) for internal links.
+#[must_use]
+pub fn normalize_internal_bookmark(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let name = trimmed.strip_prefix('#')?;
+    if name.is_empty() || name.chars().any(char::is_whitespace) {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+/// Expand a caret on a hyperlink to the contiguous run span sharing that target.
 #[must_use]
 pub fn expand_selection_to_hyperlink_span(doc: &Document, cursor: Cursor) -> Option<Selection> {
-    let url = hyperlink_at_cursor(doc, cursor)?.url.clone();
+    let target = hyperlink_at_cursor(doc, cursor)?.display_target();
     let p = paragraph_ref(doc, cursor)?;
     if p.runs.is_empty() {
         return None;
@@ -522,7 +533,7 @@ pub fn expand_selection_to_hyperlink_span(doc: &Document, cursor: Cursor) -> Opt
         && p.runs[start - 1]
             .hyperlink
             .as_ref()
-            .is_some_and(|hl| hl.url == url)
+            .is_some_and(|hl| hl.display_target() == target)
     {
         start -= 1;
     }
@@ -531,7 +542,7 @@ pub fn expand_selection_to_hyperlink_span(doc: &Document, cursor: Cursor) -> Opt
         && p.runs[end + 1]
             .hyperlink
             .as_ref()
-            .is_some_and(|hl| hl.url == url)
+            .is_some_and(|hl| hl.display_target() == target)
     {
         end += 1;
     }
@@ -1078,6 +1089,7 @@ mod tests {
                         hyperlink: Some(Hyperlink {
                             url: "https://example.com".into(),
                             r_id: Some("rId5".into()),
+                            bookmark: None,
                         }),
                     },
                 ],

@@ -94,7 +94,7 @@ pub fn open_document(path: &Path) -> Result<Document> {
         }
     }
 
-    let (blocks, page_setup, unsupported) =
+    let (blocks, page_setup, unsupported, bookmarks) =
         parse_document_xml(document_xml, &styles, &numbering, &rels, &media)?;
 
     let mut retained = Vec::new();
@@ -108,6 +108,7 @@ pub fn open_document(path: &Path) -> Result<Document> {
     Ok(Document {
         blocks,
         page_setup,
+        bookmarks,
         unsupported,
         retained_parts: retained,
         content_types: package.get("[Content_Types].xml").map(|b| b.to_vec()),
@@ -324,7 +325,10 @@ fn prepare_document_hyperlinks(doc: &mut Document) {
     let mut urls: Vec<String> = Vec::new();
     for_each_run_mut(doc, |run| {
         if let Some(ref hl) = run.hyperlink {
-            if !hl.url.is_empty() && !urls.iter().any(|u| u == &hl.url) {
+            if hl.is_internal() || hl.url.is_empty() {
+                return;
+            }
+            if !urls.iter().any(|u| u == &hl.url) {
                 urls.push(hl.url.clone());
             }
         }
@@ -354,6 +358,9 @@ fn prepare_document_hyperlinks(doc: &mut Document) {
 
     for_each_run_mut(doc, |run| {
         if let Some(ref mut hl) = run.hyperlink {
+            if hl.is_internal() {
+                return;
+            }
             if let Some(rid) = url_to_rid.get(&hl.url) {
                 hl.r_id = Some(rid.clone());
             }
@@ -699,6 +706,7 @@ mod tests {
                     hyperlink: Some(Hyperlink {
                         url: "https://example.com/".into(),
                         r_id: None,
+                    bookmark: None,
                     }),
                 }],
                 ..Default::default()
