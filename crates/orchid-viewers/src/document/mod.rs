@@ -621,16 +621,50 @@ impl DocumentViewer {
     ///
     /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
     pub fn preview_insert_paragraph_break(&self) -> Result<()> {
+        self.insert_break_at_caret(false)
+    }
+
+    /// Insert a page break at the preview caret (Ctrl+Enter).
+    ///
+    /// Splits the paragraph like Enter, then marks the new paragraph with
+    /// [`Paragraph::page_break_before`] for OOXML `w:pageBreakBefore`.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_insert_page_break(&self) -> Result<()> {
+        self.insert_break_at_caret(true)
+    }
+
+    fn insert_break_at_caret(&self, page_break: bool) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
         let at = self.delete_selection_if_needed(doc, sel)?;
-        let (next, caret) = if at.cell.is_some() {
+        let (mut next, caret) = if at.cell.is_some() {
             split_cell_paragraph(doc, at)?
         } else {
             let blocks = split_paragraph_blocks(doc, at)?;
             (blocks, Cursor::at(at.block_idx + 1, 0, 0))
         };
+        if page_break {
+            match next.get_mut(caret.block_idx) {
+                Some(Block::Paragraph(p)) => p.page_break_before = true,
+                Some(Block::Table(t)) => {
+                    if let Some(path) = caret.cell {
+                        if let Some(p) = t
+                            .rows
+                            .get_mut(path.row)
+                            .and_then(|r| r.cells.get_mut(path.col))
+                            .and_then(|c| c.paragraphs.get_mut(path.para_idx))
+                        {
+                            p.page_break_before = true;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
         self.undo
             .lock()
             .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
@@ -2117,6 +2151,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     list: prev.list,
                     list_level: prev.list_level,
                     num_id: prev.num_id,
+                    page_break_before: prev.page_break_before,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -2474,6 +2509,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         list: p.list,
         list_level: p.list_level,
         num_id: p.num_id,
+        page_break_before: p.page_break_before,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2482,6 +2518,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         list: ListKind::None,
         list_level: 0,
         num_id: None,
+        page_break_before: false,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2516,6 +2553,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         list: p.list,
         list_level: p.list_level,
         num_id: p.num_id,
+        page_break_before: p.page_break_before,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2524,6 +2562,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         list: ListKind::None,
         list_level: 0,
         num_id: None,
+        page_break_before: false,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2611,6 +2650,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         list: start_p.list,
         list_level: start_p.list_level,
         num_id: start_p.num_id,
+        page_break_before: start_p.page_break_before,
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -2690,6 +2730,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         list: start_p.list,
         list_level: start_p.list_level,
         num_id: start_p.num_id,
+        page_break_before: start_p.page_break_before,
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());

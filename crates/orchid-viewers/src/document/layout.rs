@@ -212,6 +212,12 @@ impl DocumentLayout {
                         plain_offset += 1;
                     }
                     emitted_text = true;
+                    let mut rule_y = None;
+                    if p.page_break_before {
+                        const PAGE_BREAK_GAP: f32 = 28.0;
+                        rule_y = Some(total_h + 10.0);
+                        total_h += PAGE_BREAK_GAP;
+                    }
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
@@ -229,6 +235,7 @@ impl DocumentLayout {
                         image_h: 0.0,
                         image_w: 0,
                         image_rgba: None,
+                        page_break_rule_y: rule_y,
                     });
                     plain_offset += body_len;
                     total_h += h + para_gap;
@@ -260,6 +267,7 @@ impl DocumentLayout {
                         image_h: h,
                         image_w: w,
                         image_rgba: rgba,
+                        page_break_rule_y: None,
                     });
                     total_h += h + para_gap;
                 }
@@ -285,6 +293,25 @@ impl DocumentLayout {
             height,
             [250, 250, 252, 255],
         );
+
+        for item in &layouts {
+            if let Some(ry) = item.page_break_rule_y {
+                let y = (pad + ry).round() as i32;
+                if y >= 0 && (y as u32) < height {
+                    let x0 = pad.round() as i32;
+                    let x1 = (pad + max_w).round() as i32;
+                    paint_dashed_h_line(
+                        &mut pixels,
+                        width,
+                        height,
+                        x0,
+                        x1,
+                        y,
+                        [180, 180, 190, 255],
+                    );
+                }
+            }
+        }
 
         for grid in &grids {
             paint_table_grid(&mut pixels, width, height, pad, grid);
@@ -441,6 +468,9 @@ impl DocumentLayout {
                         plain_offset += 1;
                     }
                     emitted_text = true;
+                    if p.page_break_before {
+                        total_h += 28.0;
+                    }
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
@@ -571,6 +601,7 @@ impl DocumentLayout {
                                 image_h: 0.0,
                                 image_w: 0,
                                 image_rgba: None,
+                                page_break_rule_y: None,
                             });
                         }
                         CellItemLayout::Image {
@@ -591,6 +622,7 @@ impl DocumentLayout {
                                 image_h: item_h,
                                 image_w,
                                 image_rgba,
+                                page_break_rule_y: None,
                             });
                         }
                     }
@@ -1120,6 +1152,8 @@ struct LaidBlock {
     image_h: f32,
     image_w: u32,
     image_rgba: Option<Vec<u8>>,
+    /// Content-relative Y of a page-break hairline, if this block starts a new page.
+    page_break_rule_y: Option<f32>,
 }
 
 enum CellItemLayout {
@@ -1768,6 +1802,41 @@ fn blend_pixel(pixels: &mut [u8], buf_w: u32, x: u32, y: u32, r: u8, g: u8, b: u
     pixels[idx + 1] = (f32::from(g) * src_a + f32::from(pixels[idx + 1]) * dst_a) as u8;
     pixels[idx + 2] = (f32::from(b) * src_a + f32::from(pixels[idx + 2]) * dst_a) as u8;
     pixels[idx + 3] = 255;
+}
+
+fn paint_dashed_h_line(
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    x0: i32,
+    x1: i32,
+    y: i32,
+    rgba: [u8; 4],
+) {
+    if y < 0 || (y as u32) >= buf_h {
+        return;
+    }
+    let lo = x0.max(0) as u32;
+    let hi = x1.max(0) as u32;
+    let hi = hi.min(buf_w);
+    let mut on = true;
+    let mut run = 0u32;
+    for px in lo..hi {
+        if on {
+            let i = ((y as usize) * (buf_w as usize) + (px as usize)) * 4;
+            if i + 3 < pixels.len() {
+                pixels[i] = rgba[0];
+                pixels[i + 1] = rgba[1];
+                pixels[i + 2] = rgba[2];
+                pixels[i + 3] = rgba[3];
+            }
+        }
+        run += 1;
+        if run >= 4 {
+            run = 0;
+            on = !on;
+        }
+    }
 }
 
 fn fill_rect(

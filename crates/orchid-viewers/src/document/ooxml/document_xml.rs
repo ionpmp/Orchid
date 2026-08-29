@@ -213,6 +213,7 @@ fn parse_paragraph(
         list: ListKind::None,
         list_level: 0,
         num_id: None,
+        page_break_before: false,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -249,6 +250,9 @@ fn parse_paragraph(
                             }
                         }
                     }
+                    "pageBreakBefore" if in_p_pr => {
+                        p.page_break_before = true;
+                    }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
                     }
@@ -279,7 +283,9 @@ fn parse_paragraph(
                         }
                     }
                     "br" if in_r => {
-                        if let Some(ref mut run) = current_run {
+                        if attr_val(&e, "type").as_deref() == Some("page") {
+                            p.page_break_before = true;
+                        } else if let Some(ref mut run) = current_run {
                             run.text.push('\n');
                         }
                     }
@@ -308,11 +314,16 @@ fn parse_paragraph(
                                 }
                             }
                         }
+                        "pageBreakBefore" => {
+                            p.page_break_before = true;
+                        }
                         _ => {}
                     }
                 }
                 if in_r && local == "br" {
-                    if let Some(ref mut run) = current_run {
+                    if attr_val(&e, "type").as_deref() == Some("page") {
+                        p.page_break_before = true;
+                    } else if let Some(ref mut run) = current_run {
                         run.text.push('\n');
                     }
                 }
@@ -847,6 +858,11 @@ fn write_paragraph(
         jc.push_attribute(("w:val", alignment_val(p.alignment)));
         writer
             .write_event(Event::Empty(jc))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if p.page_break_before {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:pageBreakBefore")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     if p.list != ListKind::None {
@@ -1785,6 +1801,47 @@ mod tests {
             }
             _ => panic!("expected table"),
         }
+    }
+
+    #[test]
+    fn parse_and_write_page_break_before() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>One</w:t></w:r></w:p>
+            <w:p>
+              <w:pPr><w:pageBreakBefore/></w:pPr>
+              <w:r><w:t>Two</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[1] {
+            Block::Paragraph(p) => {
+                assert!(p.page_break_before);
+                assert_eq!(p.plain_text(), "Two");
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:pageBreakBefore"),
+            "missing pageBreakBefore: {text}"
+        );
     }
 
     #[test]

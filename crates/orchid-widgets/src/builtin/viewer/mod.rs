@@ -3544,6 +3544,7 @@ pub async fn document_preview_key(
                 "z" | "Z" if shift => doc.redo(),
                 "z" | "Z" => doc.undo(),
                 "y" | "Y" => doc.redo(),
+                "Return" => doc.preview_insert_page_break(),
                 _ => Ok(()),
             }
         } else {

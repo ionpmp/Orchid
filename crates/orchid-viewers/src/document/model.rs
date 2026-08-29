@@ -127,6 +127,8 @@ pub struct Paragraph {
     pub list_level: u8,
     /// OOXML numbering id (`numId`), if any.
     pub num_id: Option<u32>,
+    /// Force a page break before this paragraph (`w:pageBreakBefore` / Ctrl+Enter).
+    pub page_break_before: bool,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }
