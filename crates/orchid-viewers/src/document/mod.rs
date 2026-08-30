@@ -2425,6 +2425,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     line_spacing_rule: prev.line_spacing_rule,
                     indent_left_twips: prev.indent_left_twips,
                     indent_first_line_twips: prev.indent_first_line_twips,
+                    indent_right_twips: prev.indent_right_twips,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -2829,6 +2830,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         line_spacing_rule: p.line_spacing_rule,
         indent_left_twips: p.indent_left_twips,
         indent_first_line_twips: p.indent_first_line_twips,
+        indent_right_twips: p.indent_right_twips,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2844,6 +2846,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         line_spacing_rule: p.line_spacing_rule,
         indent_left_twips: p.indent_left_twips,
         indent_first_line_twips: p.indent_first_line_twips,
+        indent_right_twips: p.indent_right_twips,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2885,6 +2888,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         line_spacing_rule: p.line_spacing_rule,
         indent_left_twips: p.indent_left_twips,
         indent_first_line_twips: p.indent_first_line_twips,
+        indent_right_twips: p.indent_right_twips,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2900,6 +2904,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         line_spacing_rule: p.line_spacing_rule,
         indent_left_twips: p.indent_left_twips,
         indent_first_line_twips: p.indent_first_line_twips,
+        indent_right_twips: p.indent_right_twips,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2994,6 +2999,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         line_spacing_rule: start_p.line_spacing_rule,
         indent_left_twips: start_p.indent_left_twips,
         indent_first_line_twips: start_p.indent_first_line_twips,
+        indent_right_twips: start_p.indent_right_twips,
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -3080,6 +3086,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         line_spacing_rule: start_p.line_spacing_rule,
         indent_left_twips: start_p.indent_left_twips,
         indent_first_line_twips: start_p.indent_first_line_twips,
+        indent_right_twips: start_p.indent_right_twips,
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());

@@ -254,7 +254,7 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
-                    let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
+                    let layout = self.layout_paragraph(p, paragraph_wrap_width(max_w, p));
                     let h = layout.height().max(16.0);
                     layouts.push(LaidBlock {
                         layout,
@@ -509,14 +509,15 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
-                    let layout = self.layout_paragraph(p, (max_w - indent).max(40.0));
+                    let wrap_w = paragraph_wrap_width(max_w, p);
+                    let layout = self.layout_paragraph(p, wrap_w);
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
                     let after = twips_to_css_px(p.space_after_twips).max(para_gap);
                     let y1 = total_h + h + after;
                     if local_y >= y0 && local_y < y1 {
                         let ly = (local_y - y0).max(0.0);
-                        let lx = (local_x - indent).clamp(0.0, (max_w - indent).max(40.0));
+                        let lx = (local_x - indent).clamp(0.0, wrap_w);
                         let body_idx = cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
                         return Some(cursor_from_plain_offset(doc, plain_offset + body_idx));
                     }
@@ -902,7 +903,8 @@ impl DocumentLayout {
             let body_len = p.plain_text().len();
             let prefix_len = list_prefix(p).len();
             let indent = list_indent_px(p);
-            let layout = self.layout_paragraph(p, (inner_w - indent).max(12.0));
+            let wrap_w = (inner_w - indent - paragraph_right_indent_px(p)).max(12.0);
+            let layout = self.layout_paragraph(p, wrap_w);
             let h = layout.height().max(14.0);
             let plain_start = *plain_offset;
             items.push(CellItemLayout::Para {
@@ -1541,6 +1543,15 @@ fn list_indent_px(p: &Paragraph) -> f32 {
         f32::from(p.list_level) * LIST_INDENT_PX
     };
     list + paragraph_left_indent_px(p)
+}
+
+fn paragraph_right_indent_px(p: &Paragraph) -> f32 {
+    twips_to_css_px(p.indent_right_twips)
+}
+
+/// Available wrap width after left (incl. list) and right paragraph indents.
+fn paragraph_wrap_width(max_w: f32, p: &Paragraph) -> f32 {
+    (max_w - list_indent_px(p) - paragraph_right_indent_px(p)).max(40.0)
 }
 
 /// Left edge of the paragraph box after applying `w:ind` left/hanging.

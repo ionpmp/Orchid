@@ -142,6 +142,8 @@ pub struct Paragraph {
     pub indent_left_twips: u32,
     /// First-line indent in twips: positive = `w:firstLine`, negative = −`w:hanging`.
     pub indent_first_line_twips: i32,
+    /// Right indent in twips (`w:ind/@w:right` or `w:end`).
+    pub indent_right_twips: u32,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }

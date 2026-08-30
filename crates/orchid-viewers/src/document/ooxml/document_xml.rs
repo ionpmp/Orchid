@@ -221,6 +221,7 @@ fn parse_paragraph(
         line_spacing_rule: LineSpacingRule::Auto,
         indent_left_twips: 0,
         indent_first_line_twips: 0,
+        indent_right_twips: 0,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -915,10 +916,13 @@ fn write_paragraph(
             .write_event(Event::Empty(spacing))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
-    if p.indent_left_twips > 0 || p.indent_first_line_twips != 0 {
+    if p.indent_left_twips > 0 || p.indent_first_line_twips != 0 || p.indent_right_twips > 0 {
         let mut ind = BytesStart::new("w:ind");
         if p.indent_left_twips > 0 {
             ind.push_attribute(("w:left", p.indent_left_twips.to_string().as_str()));
+        }
+        if p.indent_right_twips > 0 {
+            ind.push_attribute(("w:right", p.indent_right_twips.to_string().as_str()));
         }
         if p.indent_first_line_twips > 0 {
             ind.push_attribute((
@@ -1052,6 +1056,12 @@ fn apply_paragraph_indent(e: &BytesStart<'_>, p: &mut Paragraph) {
         .and_then(|s| s.parse().ok())
     {
         p.indent_left_twips = v;
+    }
+    if let Some(v) = attr_val(e, "right")
+        .or_else(|| attr_val(e, "end"))
+        .and_then(|s| s.parse().ok())
+    {
+        p.indent_right_twips = v;
     }
     if let Some(v) = attr_val(e, "firstLine").and_then(|s| s.parse::<i32>().ok()) {
         p.indent_first_line_twips = v;
@@ -2051,6 +2061,10 @@ mod tests {
               <w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr>
               <w:r><w:t>Hang</w:t></w:r>
             </w:p>
+            <w:p>
+              <w:pPr><w:ind w:right="480"/></w:pPr>
+              <w:r><w:t>Right</w:t></w:r>
+            </w:p>
           </w:body>
         </w:document>"#;
         let (blocks, page_setup, unsupported, _) = parse_document_xml(
@@ -2075,6 +2089,12 @@ mod tests {
             }
             _ => panic!("expected paragraph"),
         }
+        match &blocks[2] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.indent_right_twips, 480);
+            }
+            _ => panic!("expected paragraph"),
+        }
         let doc = Document {
             blocks,
             page_setup,
@@ -2086,7 +2106,8 @@ mod tests {
         assert!(
             text.contains("w:left=\"720\"")
                 && text.contains("w:firstLine=\"360\"")
-                && text.contains("w:hanging=\"720\""),
+                && text.contains("w:hanging=\"720\"")
+                && text.contains("w:right=\"480\""),
             "serialized XML missing indent: {text}"
         );
     }
