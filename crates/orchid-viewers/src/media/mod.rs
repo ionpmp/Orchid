@@ -187,6 +187,36 @@ impl MediaViewer {
         self.engine.ab_clear();
     }
 
+    /// Open a native file dialog and load an external subtitle.
+    pub fn pick_and_add_sub(&self) {
+        let mut dialog = rfd::FileDialog::new()
+            .add_filter("Subtitles", &["srt", "ass", "ssa", "vtt", "sub"])
+            .add_filter("All", &["*"]);
+        if let Some(os) = self.os_path.read().clone() {
+            if let Some(parent) = os.parent() {
+                dialog = dialog.set_directory(parent);
+            }
+        }
+        if let Some(path) = dialog.pick_file() {
+            self.engine.add_sub(&path);
+        }
+    }
+
+    /// Nudge subtitle scale (typical ±0.05).
+    pub fn sub_scale_delta(&self, delta: f64) {
+        self.engine.sub_scale_delta(delta);
+    }
+
+    /// Nudge vertical subtitle position (mpv `sub-pos`, typical ±2).
+    pub fn sub_pos_delta(&self, delta: f64) {
+        self.engine.sub_pos_delta(delta);
+    }
+
+    /// Reset subtitle scale/position defaults.
+    pub fn sub_style_reset(&self) {
+        self.engine.sub_style_reset();
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
@@ -203,6 +233,12 @@ impl MediaViewer {
             "speed-reset" => self.set_speed(1.0),
             "cycle-sub" => self.cycle_sub(),
             "toggle-sub" => self.toggle_sub(),
+            "sub-add" => self.pick_and_add_sub(),
+            "sub-scale-up" => self.sub_scale_delta(0.05),
+            "sub-scale-down" => self.sub_scale_delta(-0.05),
+            "sub-pos-up" => self.sub_pos_delta(-2.0),
+            "sub-pos-down" => self.sub_pos_delta(2.0),
+            "sub-style-reset" => self.sub_style_reset(),
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),

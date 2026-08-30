@@ -113,6 +113,10 @@ enum EngineCmd {
     AbMarkA,
     AbMarkB,
     AbClear,
+    AddSub(PathBuf),
+    SubScaleDelta(f64),
+    SubPosDelta(f64),
+    SubStyleReset,
     Stop,
     Quit,
 }
@@ -237,6 +241,22 @@ impl MpvEngine {
 
     pub fn ab_clear(&self) {
         let _ = self.tx.send(EngineCmd::AbClear);
+    }
+
+    pub fn add_sub(&self, path: &Path) {
+        let _ = self.tx.send(EngineCmd::AddSub(path.to_path_buf()));
+    }
+
+    pub fn sub_scale_delta(&self, delta: f64) {
+        let _ = self.tx.send(EngineCmd::SubScaleDelta(delta));
+    }
+
+    pub fn sub_pos_delta(&self, delta: f64) {
+        let _ = self.tx.send(EngineCmd::SubPosDelta(delta));
+    }
+
+    pub fn sub_style_reset(&self) {
+        let _ = self.tx.send(EngineCmd::SubStyleReset);
     }
 
     pub fn stop(&self) {
@@ -523,6 +543,27 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
             let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
             *shared.ab_label.write() = String::new();
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::AddSub(path) => {
+            let s = path.to_string_lossy();
+            let rc = command_args(api, handle, &["sub-add", s.as_ref()]);
+            if rc < 0 {
+                *shared.error.write() = Some(error_message(api, rc));
+            }
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::SubScaleDelta(d) => {
+            let _ = command_args(api, handle, &["add", "sub-scale", &format!("{d}")]);
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::SubPosDelta(d) => {
+            let _ = command_args(api, handle, &["add", "sub-pos", &format!("{d}")]);
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::SubStyleReset => {
+            let _ = set_double(api, handle, "sub-scale", 1.0);
+            let _ = set_double(api, handle, "sub-pos", 100.0);
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::Stop => {

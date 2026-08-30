@@ -68,7 +68,7 @@ md-5 = "0.11"
 digest = "0.11"
 crc32fast = "1.5"
 base64 = "0.23"
-fastcdc = "4"
+fastcdc = "5"
 rand = "0.10"
 rand_core = "0.10"
 getrandom = "0.4"
@@ -97,7 +97,7 @@ tempfile = "3"
 parking_lot = "0.12"
 
 # Binary encoding / identifiers / time
-bincode = { version = "2", features = ["serde"] }
+bincode_reloaded = { version = "3", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 chrono-tz = "0.10"
@@ -168,6 +168,7 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "j
 feed-rs = "2.4"
 futures = "0.3"
 opener = "0.8"
+rfd = "0.15"
 
 # System info
 sysinfo = { version = "0.39", default-features = false, features = ["disk", "system", "network", "user"] }
@@ -178,7 +179,7 @@ ropey = "1"
 memmap2 = "0.9"
 
 # Document / OOXML (DOCX) viewer-editor
-quick-xml = "0.41"
+quick-xml = "0.42"
 parley = "0.11"
 swash = "0.2.10"
 

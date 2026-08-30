@@ -48,7 +48,31 @@ export component ViewerMediaView inherits Rectangle {
                 return accept;
             }
             if event.text == "s" || event.text == "S" {
-                root.command(event.modifiers.shift ? "toggle-sub" : "cycle-sub");
+                if event.modifiers.control {
+                    root.command("sub-add");
+                } else {
+                    root.command(event.modifiers.shift ? "toggle-sub" : "cycle-sub");
+                }
+                return accept;
+            }
+            if event.text == "{" {
+                root.command("sub-scale-down");
+                return accept;
+            }
+            if event.text == "}" {
+                root.command("sub-scale-up");
+                return accept;
+            }
+            if event.modifiers.alt && event.text == Key.UpArrow {
+                root.command("sub-pos-up");
+                return accept;
+            }
+            if event.modifiers.alt && event.text == Key.DownArrow {
+                root.command("sub-pos-down");
+                return accept;
+            }
+            if event.modifiers.control && event.text == "0" {
+                root.command("sub-style-reset");
                 return accept;
             }
             if (event.text == "a" || event.text == "A") && event.modifiers.shift {
