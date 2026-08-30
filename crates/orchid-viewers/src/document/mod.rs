@@ -2047,6 +2047,42 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Bump right indent (`w:ind/@w:right`) on selected paragraphs.
+    ///
+    /// Typical steps: `±720` (0.5″). Values clamp to `0..=2880` (0–2″).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_indent_right_selection(&self, delta_twips: i32) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                let bumped = clamp_spacing_twips(p.indent_right_twips as i32 + delta_twips);
+                if bumped != p.indent_right_twips {
+                    p.indent_right_twips = bumped;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Bump first-line / hanging indent (`w:firstLine` / `w:hanging`).
     ///
     /// Positive values are first-line indent; negative are hanging.
