@@ -1370,6 +1370,13 @@ export struct ViewerDocumentModel {
     find-match-count: int,
     /// Preview image Y (px) to scroll to for Find (`-1` = no scroll).
     find-scroll-y-px: int,
+    /// Preview display zoom percent (`100` = 100%).
+    preview-zoom-percent: int,
+    zoom-in-label: string,
+    zoom-out-label: string,
+    tip-zoom-in: string,
+    tip-zoom-out: string,
+    tip-zoom-reset: string,
     /// Preview pointer is over an external hyperlink.
     link-hover: bool,
 }

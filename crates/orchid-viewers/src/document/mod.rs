@@ -94,6 +94,8 @@ pub struct DocumentViewer {
     find_match_count: Mutex<i32>,
     /// Preview image Y (CSS px) to scroll to for the current find match (`-1` = none).
     find_scroll_y_px: Mutex<i32>,
+    /// Preview display zoom factor (`1.0` = 100%; layout width unchanged).
+    preview_zoom: Mutex<f32>,
     /// Preview pointer is over an external hyperlink.
     link_hover: Mutex<bool>,
 }
@@ -159,6 +161,7 @@ impl DocumentViewer {
             find_match_index: Mutex::new(0),
             find_match_count: Mutex::new(0),
             find_scroll_y_px: Mutex::new(-1),
+            preview_zoom: Mutex::new(1.0),
             link_hover: Mutex::new(false),
         }
     }
@@ -429,6 +432,28 @@ impl DocumentViewer {
             prev.width = content;
         }
         prev.valid = false;
+    }
+
+    /// Current preview display zoom (`1.0` = 100%).
+    #[must_use]
+    pub fn preview_zoom(&self) -> f32 {
+        *self.preview_zoom.lock()
+    }
+
+    /// Bump preview display zoom by `steps` tenths (`+1` → +10%). Clamped to 50%–300%.
+    pub fn bump_preview_zoom(&self, steps: i32) -> Result<()> {
+        let _ = self.document.read().as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut z = self.preview_zoom.lock();
+        let next = ((*z * 10.0).round() as i32 + steps).clamp(5, 30) as f32 / 10.0;
+        *z = next;
+        Ok(())
+    }
+
+    /// Reset preview display zoom to 100%.
+    pub fn reset_preview_zoom(&self) -> Result<()> {
+        let _ = self.document.read().as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+        *self.preview_zoom.lock() = 1.0;
+        Ok(())
     }
 
     /// Update the active selection from plain-text UTF-8 byte offsets.
@@ -3365,6 +3390,7 @@ impl Viewer for DocumentViewer {
             find_match_index: *self.find_match_index.lock(),
             find_match_count: *self.find_match_count.lock(),
             find_scroll_y_px: *self.find_scroll_y_px.lock(),
+            preview_zoom_percent: ((*self.preview_zoom.lock() * 100.0).round() as i32).clamp(50, 300),
             link_hover: *self.link_hover.lock(),
             link_url,
             page_is_a4,

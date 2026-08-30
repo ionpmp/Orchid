@@ -789,6 +789,12 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         find_match_index: 0,
         find_match_count: 0,
         find_scroll_y_px: -1,
+        preview_zoom_percent: 100,
+        zoom_in_label: locale.tr("viewer-document-zoom-in").into(),
+        zoom_out_label: locale.tr("viewer-document-zoom-out").into(),
+        tip_zoom_in: locale.tr("viewer-document-tip-zoom-in").into(),
+        tip_zoom_out: locale.tr("viewer-document-tip-zoom-out").into(),
+        tip_zoom_reset: locale.tr("viewer-document-tip-zoom-reset").into(),
         link_hover: false,
     }
 }
@@ -964,6 +970,7 @@ fn build_document_snapshot(
     model.find_match_index = s.find_match_index;
     model.find_match_count = s.find_match_count;
     model.find_scroll_y_px = s.find_scroll_y_px;
+    model.preview_zoom_percent = s.preview_zoom_percent;
     model.link_hover = s.link_hover;
     model.link_url = s.link_url.clone().into();
     model.page_size_label = if s.page_is_a4 {

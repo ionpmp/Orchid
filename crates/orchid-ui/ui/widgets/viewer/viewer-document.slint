@@ -1237,6 +1237,76 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, zoom-out-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zoom-out-ta := TouchArea { clicked => { root.action("zoom-out"); } }
+                    Text {
+                        text: model.zoom-out-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-zoom-out;
+                        show: zoom-out-ta.has-hover;
+                        below: true;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, zoom-pct.preferred-width + 8px);
+                    height: 28px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zoom-pct-ta := TouchArea { clicked => { root.action("zoom-reset"); } }
+                    zoom-pct := Text {
+                        text: "\{model.preview-zoom-percent}%";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-zoom-reset;
+                        show: zoom-pct-ta.has-hover;
+                        below: true;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, zoom-in-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    zoom-in-ta := TouchArea { clicked => { root.action("zoom-in"); } }
+                    Text {
+                        text: model.zoom-in-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-zoom-in;
+                        show: zoom-in-ta.has-hover;
+                        below: true;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
                     width: max(44px, find-btn-label.preferred-width + 12px);
                     height: 28px;
                     background: tool-bg(root.find-open, find-ta.has-hover);
@@ -1778,26 +1848,27 @@ export component ViewerDocumentView inherits Rectangle {
                 Flickable {
                     width: parent.width;
                     height: parent.height;
-                    viewport-width: max(self.width, model.preview-width-px * 1px);
-                    viewport-height: max(self.height, model.preview-height-px * 1px);
+                    viewport-width: max(self.width, model.preview-width-px * 1px * max(0.5, model.preview-zoom-percent / 100));
+                    viewport-height: max(self.height, model.preview-height-px * 1px * max(0.5, model.preview-zoom-percent / 100));
 
                     // Mirror find-gen so Preview can scroll to the match.
                     property <int> sync-find-gen: model.find-gen;
                     changed sync-find-gen => {
                         if (model.find-match-count > 0 && model.find-scroll-y-px >= 0) {
-                            // Show match roughly one-third down the viewport.
+                            // Show match roughly one-third down the viewport (zoom-scaled).
                             self.viewport-y = max(
                                 min(0px, self.height - self.viewport-height),
-                                min(0px, -(model.find-scroll-y-px * 1px - self.height / 3))
+                                min(0px, -(model.find-scroll-y-px * 1px * max(0.5, model.preview-zoom-percent / 100) - self.height / 3))
                             );
                         }
                     }
 
                     Rectangle {
                         x: max(0px, (parent.width - self.width) / 2);
-                        width: model.preview-width-px * 1px;
-                        height: model.preview-height-px * 1px;
+                        width: model.preview-width-px * 1px * max(0.5, model.preview-zoom-percent / 100);
+                        height: model.preview-height-px * 1px * max(0.5, model.preview-zoom-percent / 100);
                         background: #fafafc;
+                        property <float> zoom: max(0.5, model.preview-zoom-percent / 100);
 
                         Image {
                             width: parent.width;
@@ -1816,32 +1887,43 @@ export component ViewerDocumentView inherits Rectangle {
                             }
                             changed mouse-x => {
                                 if (self.has-hover && !self.pressed) {
-                                    root.preview-pointer(5, self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                    root.preview-pointer(5, self.mouse-x / 1px / parent.zoom, self.mouse-y / 1px / parent.zoom, false);
                                 }
                             }
                             changed mouse-y => {
                                 if (self.has-hover && !self.pressed) {
-                                    root.preview-pointer(5, self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                    root.preview-pointer(5, self.mouse-x / 1px / parent.zoom, self.mouse-y / 1px / parent.zoom, false);
                                 }
                             }
                             double-clicked => {
                                 preview-keys.focus();
-                                root.preview-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                root.preview-pointer(3, self.mouse-x / 1px / parent.zoom, self.mouse-y / 1px / parent.zoom, false);
                             }
                             pointer-event(e) => {
                                 if (e.button == PointerEventButton.left) {
                                     if (e.kind == PointerEventKind.down) {
                                         preview-keys.focus();
-                                        root.preview-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, e.modifiers.control);
+                                        root.preview-pointer(0, self.mouse-x / 1px / parent.zoom, self.mouse-y / 1px / parent.zoom, e.modifiers.control);
                                     } else if (e.kind == PointerEventKind.up) {
-                                        root.preview-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px, e.modifiers.control);
+                                        root.preview-pointer(2, self.mouse-x / 1px / parent.zoom, self.mouse-y / 1px / parent.zoom, e.modifiers.control);
                                     }
                                 }
                             }
                             moved => {
                                 if (self.pressed) {
-                                    root.preview-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                    root.preview-pointer(1, self.mouse-x / 1px / parent.zoom, self.mouse-y / 1px / parent.zoom, false);
                                 }
+                            }
+                            scroll-event(event) => {
+                                if (event.modifiers.control) {
+                                    if (event.delta-y < 0) {
+                                        root.action("zoom-in");
+                                    } else if (event.delta-y > 0) {
+                                        root.action("zoom-out");
+                                    }
+                                    return accept;
+                                }
+                                return reject;
                             }
                         }
                     }

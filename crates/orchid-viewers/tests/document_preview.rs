@@ -52,6 +52,44 @@ async fn preview_render_after_open() {
     assert!(snap.bold);
 }
 
+#[tokio::test]
+async fn preview_zoom_bumps_and_clamps() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("zoom.docx");
+    write_minimal_docx(
+        &path,
+        br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>Zoom me</w:t></w:r></w:p>
+          </w:body>
+        </w:document>"#,
+    );
+
+    let mut viewer = DocumentViewer::new();
+    let registry = std::sync::Arc::new(orchid_fs::FsProviderRegistry::new());
+    registry
+        .register(std::sync::Arc::new(orchid_fs::LocalProvider::new()))
+        .unwrap();
+    let fs_path = orchid_fs::FsPath::from_local(&path).unwrap();
+    viewer.open(fs_path, registry).await.unwrap();
+
+    assert!((viewer.preview_zoom() - 1.0).abs() < f32::EPSILON);
+    viewer.bump_preview_zoom(5).unwrap();
+    assert!((viewer.preview_zoom() - 1.5).abs() < 0.01);
+    viewer.bump_preview_zoom(100).unwrap();
+    assert!((viewer.preview_zoom() - 3.0).abs() < 0.01);
+    viewer.bump_preview_zoom(-100).unwrap();
+    assert!((viewer.preview_zoom() - 0.5).abs() < 0.01);
+    viewer.reset_preview_zoom().unwrap();
+    assert!((viewer.preview_zoom() - 1.0).abs() < f32::EPSILON);
+
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("expected document snapshot");
+    };
+    assert_eq!(snap.preview_zoom_percent, 100);
+}
+
 #[test]
 fn layout_respects_alignment_and_lists() {
     let mut dl = DocumentLayout::new();

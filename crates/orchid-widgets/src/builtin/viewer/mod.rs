@@ -3526,6 +3526,9 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "first-line-more" => doc.bump_indent_first_line_selection(360),
                 "first-line-less" => doc.bump_indent_first_line_selection(-360),
                 "page-size-cycle" => doc.cycle_page_size(),
+                "zoom-in" => doc.bump_preview_zoom(1),
+                "zoom-out" => doc.bump_preview_zoom(-1),
+                "zoom-reset" => doc.reset_preview_zoom(),
                 "table-insert" => doc.preview_insert_table(2, 2),
                 // "image-insert" is handled in the UI layer (clipboard bytes).
                 "table-row-insert" => doc.preview_insert_table_row(),
@@ -3778,6 +3781,7 @@ pub async fn document_preview_key(
                 "z" | "Z" if shift => doc.redo(),
                 "z" | "Z" => doc.undo(),
                 "y" | "Y" => doc.redo(),
+                "0" => doc.reset_preview_zoom(),
                 "Return" => doc.preview_insert_page_break(),
                 _ => Ok(()),
             }
