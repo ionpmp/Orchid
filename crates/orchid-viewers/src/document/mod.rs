@@ -92,6 +92,8 @@ pub struct DocumentViewer {
     find_match_index: Mutex<i32>,
     /// Total non-overlapping matches for the last query (`0` when none).
     find_match_count: Mutex<i32>,
+    /// Preview image Y (CSS px) to scroll to for the current find match (`-1` = none).
+    find_scroll_y_px: Mutex<i32>,
     /// Preview pointer is over an external hyperlink.
     link_hover: Mutex<bool>,
 }
@@ -156,6 +158,7 @@ impl DocumentViewer {
             find_cursor: Mutex::new(0),
             find_match_index: Mutex::new(0),
             find_match_count: Mutex::new(0),
+            find_scroll_y_px: Mutex::new(-1),
             link_hover: Mutex::new(false),
         }
     }
@@ -185,6 +188,7 @@ impl DocumentViewer {
         if q_bytes == 0 || haystack.is_empty() {
             *self.find_match_index.lock() = 0;
             *self.find_match_count.lock() = 0;
+            *self.find_scroll_y_px.lock() = -1;
             *self.find_gen.lock() += 1;
             return false;
         }
@@ -194,6 +198,7 @@ impl DocumentViewer {
         if starts.is_empty() {
             *self.find_match_index.lock() = 0;
             *self.find_match_count.lock() = 0;
+            *self.find_scroll_y_px.lock() = -1;
             *self.find_gen.lock() += 1;
             return false;
         }
@@ -223,6 +228,7 @@ impl DocumentViewer {
         let Some(byte_start) = found else {
             *self.find_match_index.lock() = 0;
             *self.find_match_count.lock() = 0;
+            *self.find_scroll_y_px.lock() = -1;
             *self.find_gen.lock() += 1;
             return false;
         };
@@ -232,11 +238,18 @@ impl DocumentViewer {
             .position(|&s| s == byte_start)
             .map(|i| (i + 1) as i32)
             .unwrap_or(0);
+        let width = self.preview.lock().width;
+        let scroll_y = self
+            .layout
+            .lock()
+            .y_for_plain_offset(doc, width, byte_start)
+            .round() as i32;
         *self.selection.lock() = selection_from_plain_offsets(doc, byte_start, byte_end);
         *self.find_anchor.lock() = byte_start as i32;
         *self.find_cursor.lock() = byte_end as i32;
         *self.find_match_index.lock() = match_index;
         *self.find_match_count.lock() = match_count;
+        *self.find_scroll_y_px.lock() = scroll_y;
         *self.find_gen.lock() += 1;
         self.invalidate_preview();
         true
@@ -3351,6 +3364,7 @@ impl Viewer for DocumentViewer {
             find_cursor: *self.find_cursor.lock(),
             find_match_index: *self.find_match_index.lock(),
             find_match_count: *self.find_match_count.lock(),
+            find_scroll_y_px: *self.find_scroll_y_px.lock(),
             link_hover: *self.link_hover.lock(),
             link_url,
             page_is_a4,

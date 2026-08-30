@@ -1323,6 +1323,8 @@ export struct ViewerDocumentModel {
     find-cursor: int,
     find-match-index: int,
     find-match-count: int,
+    /// Preview image Y (px) to scroll to for Find (`-1` = no scroll).
+    find-scroll-y-px: int,
     /// Preview pointer is over an external hyperlink.
     link-hover: bool,
 }

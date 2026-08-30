@@ -394,6 +394,44 @@ fn bump_indent_first_line_selection_steps_and_clamps() {
 }
 
 #[test]
+fn find_sets_scroll_y_for_later_match() {
+    let viewer = DocumentViewer::new();
+    let mut blocks = Vec::new();
+    for i in 0..40 {
+        blocks.push(Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: format!("Line {i} filler text for scrolling."),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }));
+    }
+    blocks.push(Block::Paragraph(Paragraph {
+        runs: vec![Run {
+            text: "UNIQUE_FIND_TARGET here".into(),
+            style: RunStyle::default(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }));
+    *viewer.document_mut() = Some(Doc {
+        blocks,
+        ..Default::default()
+    });
+    viewer.set_preview_width(400.0);
+    assert!(viewer.preview_find("UNIQUE_FIND_TARGET", true, true));
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("expected document snapshot");
+    };
+    assert!(
+        snap.find_scroll_y_px > 100,
+        "late match should scroll down: y={}",
+        snap.find_scroll_y_px
+    );
+}
+
+#[test]
 fn bump_paragraph_spacing_before_and_after() {
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(sample_doc());

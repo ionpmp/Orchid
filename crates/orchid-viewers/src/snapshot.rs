@@ -88,6 +88,8 @@ pub struct DocumentSnapshot {
     pub find_match_index: i32,
     /// Total non-overlapping matches for the last find query.
     pub find_match_count: i32,
+    /// Preview image Y (CSS px) for scrolling to the current find match (`-1` = none).
+    pub find_scroll_y_px: i32,
     /// Preview pointer is over an external hyperlink (pointer cursor affordance).
     pub link_hover: bool,
     /// External hyperlink URL at the selection caret (empty when none).

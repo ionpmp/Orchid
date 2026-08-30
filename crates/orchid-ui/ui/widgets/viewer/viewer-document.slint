@@ -1499,6 +1499,18 @@ export component ViewerDocumentView inherits Rectangle {
                     viewport-width: max(self.width, model.preview-width-px * 1px);
                     viewport-height: max(self.height, model.preview-height-px * 1px);
 
+                    // Mirror find-gen so Preview can scroll to the match.
+                    property <int> sync-find-gen: model.find-gen;
+                    changed sync-find-gen => {
+                        if (model.find-match-count > 0 && model.find-scroll-y-px >= 0) {
+                            // Show match roughly one-third down the viewport.
+                            self.viewport-y = max(
+                                min(0px, self.height - self.viewport-height),
+                                min(0px, -(model.find-scroll-y-px * 1px - self.height / 3))
+                            );
+                        }
+                    }
+
                     Rectangle {
                         x: max(0px, (parent.width - self.width) / 2);
                         width: model.preview-width-px * 1px;

@@ -573,6 +573,110 @@ impl DocumentLayout {
             .map(|cursor| plain_offset_from_cursor(doc, cursor))
     }
 
+    /// Image-space Y (CSS px, including page top inset) for a plain-text byte offset.
+    ///
+    /// Used to scroll the Preview `Flickable` to a Find match. Returns the top of the
+    /// containing paragraph / cell item (line-precise Y is not required for MVP).
+    #[must_use]
+    pub fn y_for_plain_offset(
+        &mut self,
+        doc: &Document,
+        content_width: f32,
+        target: usize,
+    ) -> f32 {
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let max_w = content_width.max(80.0);
+        let para_gap = 10.0;
+        let mut total_h = 0.0;
+        let mut plain_offset = 0usize;
+        let mut emitted_text = false;
+
+        for block in &doc.blocks {
+            match block {
+                Block::Paragraph(p) => {
+                    if emitted_text {
+                        plain_offset += 1;
+                    }
+                    emitted_text = true;
+                    if p.page_break_before {
+                        total_h += 28.0;
+                    }
+                    total_h += twips_to_css_px(p.space_before_twips);
+                    let body_len = p.plain_text().len();
+                    let y0 = total_h;
+                    let wrap_w = paragraph_wrap_width(max_w, p);
+                    let layout = self.layout_paragraph(p, wrap_w);
+                    let h = layout.height().max(16.0);
+                    if target >= plain_offset && target <= plain_offset + body_len {
+                        return insets.top + y0;
+                    }
+                    plain_offset += body_len;
+                    total_h += h + twips_to_css_px(p.space_after_twips).max(para_gap);
+                }
+                Block::Table(t) => {
+                    let range_start = plain_offset;
+                    let measured = self.measure_table(t, max_w, &mut plain_offset, &mut emitted_text);
+                    let table_y0 = total_h;
+                    let row_y0s = row_origins(table_y0, &measured.row_heights);
+                    if target >= range_start && target <= plain_offset {
+                        for (ri, mrow) in measured.rows.iter().enumerate() {
+                            for &(ci, col0, colspan) in &mrow.placements {
+                                let Some(cell) = t.rows.get(ri).and_then(|r| r.cells.get(ci))
+                                else {
+                                    continue;
+                                };
+                                if is_vmerge_continue(cell) {
+                                    continue;
+                                }
+                                let rowspan = vmerge_rowspan(t, ri, col0).max(1);
+                                let (_x0, _w, y0, _h) = cell_rect(
+                                    &measured.col_widths,
+                                    &row_y0s,
+                                    &measured.row_heights,
+                                    col0,
+                                    colspan,
+                                    ri,
+                                    rowspan,
+                                );
+                                let mut y = y0 + TABLE_CELL_PAD;
+                                if let Some(items) = mrow.items.get(ci) {
+                                    for item in items {
+                                        let item_h = item.height();
+                                        let in_item = match item {
+                                            CellItemLayout::Para {
+                                                plain_start,
+                                                body_len,
+                                                ..
+                                            } => {
+                                                target >= *plain_start
+                                                    && target <= plain_start + body_len
+                                            }
+                                            CellItemLayout::Image { plain_start, .. } => {
+                                                target == *plain_start
+                                            }
+                                        };
+                                        if in_item {
+                                            return insets.top + y;
+                                        }
+                                        y += item_h + TABLE_CELL_PARA_GAP;
+                                    }
+                                }
+                            }
+                        }
+                        return insets.top + table_y0;
+                    }
+                    total_h += measured.row_heights.iter().sum::<f32>() + para_gap;
+                }
+                Block::Image(img) => {
+                    let (_, h_px) = preview_image_display_size(img, max_w);
+                    let h = (h_px as f32).max(24.0);
+                    total_h += h + para_gap;
+                }
+            }
+        }
+        insets.top + total_h
+    }
+
     /// Lay out a table on the `tblGrid` / `gridSpan` / `vMerge` geometry.
     fn append_table_grid(
         &mut self,

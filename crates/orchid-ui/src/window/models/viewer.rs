@@ -743,6 +743,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         find_cursor: 0,
         find_match_index: 0,
         find_match_count: 0,
+        find_scroll_y_px: -1,
         link_hover: false,
     }
 }
@@ -917,6 +918,7 @@ fn build_document_snapshot(
     model.find_cursor = s.find_cursor;
     model.find_match_index = s.find_match_index;
     model.find_match_count = s.find_match_count;
+    model.find_scroll_y_px = s.find_scroll_y_px;
     model.link_hover = s.link_hover;
     model.link_url = s.link_url.clone().into();
     model.page_size_label = if s.page_is_a4 {
