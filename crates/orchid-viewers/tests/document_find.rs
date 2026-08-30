@@ -204,3 +204,77 @@ fn cycle_page_size_letter_and_a4() {
         assert_eq!(ps.width_twips, 11906);
     }
 }
+
+#[test]
+fn bump_indent_left_selection_steps_and_clamps() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 0);
+
+    viewer.bump_indent_left_selection(720).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_left_twips, 720);
+        assert_eq!(p.indent_first_line_twips, 0);
+    }
+
+    viewer.bump_indent_left_selection(720).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_left_twips, 1440);
+    }
+
+    // Clamp at 2880 (2″).
+    for _ in 0..10 {
+        viewer.bump_indent_left_selection(720).unwrap();
+    }
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_left_twips, 2880);
+    }
+
+    viewer.bump_indent_left_selection(-720).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_left_twips, 2160);
+    }
+
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_left_twips, 2880);
+    }
+
+    // Floor at 0.
+    for _ in 0..20 {
+        viewer.bump_indent_left_selection(-720).unwrap();
+    }
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_left_twips, 0);
+    }
+}

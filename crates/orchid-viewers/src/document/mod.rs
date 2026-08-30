@@ -2010,6 +2010,43 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Bump left indent (`w:ind/@w:left`) on selected paragraphs.
+    ///
+    /// Typical steps: `±720` (0.5″). Values clamp to `0..=2880` (0–2″).
+    /// First-line / hanging indent is left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_indent_left_selection(&self, delta_twips: i32) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                let bumped = clamp_spacing_twips(p.indent_left_twips as i32 + delta_twips);
+                if bumped != p.indent_left_twips {
+                    p.indent_left_twips = bumped;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step line spacing (`w:line` auto) on selected paragraphs through presets.
     ///
     /// Presets: single (240), 1.15 (276), 1.5 (360), double (480). `delta` is
