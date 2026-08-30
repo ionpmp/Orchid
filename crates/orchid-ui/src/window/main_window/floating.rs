@@ -282,6 +282,26 @@ impl MainWindowController {
         });
     }
 
+    /// Catalog launcher: pick a local media file, then open the in-app player on the canvas.
+    pub(super) fn spawn_open_media_player(self: &Arc<Self>, placement: AddWidgetPlacement) {
+        let Some(path) = orchid_viewers::pick_media_file() else {
+            return;
+        };
+        let fs_path = match orchid_fs::FsPath::from_local(&path) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(?e, path = %path.display(), "media player: FsPath");
+                return;
+            }
+        };
+        let ctrl = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            if let Err(e) = Self::open_document_editor_on_canvas(ctrl, fs_path, placement).await {
+                warn!(?e, "media player: open on canvas");
+            }
+        });
+    }
+
     /// Open a document in a new viewer widget placed on the workspace grid (not floating).
     pub(super) async fn open_document_editor_on_canvas(
         ctrl: Weak<MainWindowController>,

@@ -92,7 +92,9 @@ release yet.
   resume position, manual subtitle open (Ctrl+S) with scale `{`/`}` and
   Alt+↑/↓ position, playlist shuffle (Y) / random jump (R), Windows SMTC
   publish with cover thumbnail (media keys / lock screen), simple EQ
-  presets (E: Flat/Bass/Treble/Vocal), and keyboard shortcuts. Bundle
+  presets (E: Flat/Bass/Treble/Vocal), and keyboard shortcuts. Catalog
+  **Media Player** launcher opens a file picker then places a viewer on
+  the canvas (distinct from **Now Playing** SMTC). Bundle
   `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see
   `docs/BUILDING.md`); without it, chrome remains and files can still open
   in the system player.

@@ -329,9 +329,15 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
-                            type-id: "media"; glyph: "M"; label: Strings.dock-widget-media;
+                            type-id: "media"; glyph: "N"; label: Strings.dock-widget-media;
                             description: Strings.widget-media-desc;
                             card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
+                            description: Strings.widget-media-viewer-desc;
+                            card-visible: WidgetCatalog.show-media-viewer;
                             pick(id) => { root.pick(id); }
                         }
                     }
@@ -408,9 +414,15 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
-                            type-id: "media"; glyph: "M"; label: Strings.dock-widget-media;
+                            type-id: "media"; glyph: "N"; label: Strings.dock-widget-media;
                             description: Strings.widget-media-desc;
                             card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
+                            description: Strings.widget-media-viewer-desc;
+                            card-visible: WidgetCatalog.show-media-viewer;
                             pick(id) => { root.pick(id); }
                         }
                     }
@@ -629,9 +641,15 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
-                            type-id: "media"; glyph: "M"; label: Strings.dock-widget-media;
+                            type-id: "media"; glyph: "N"; label: Strings.dock-widget-media;
                             description: Strings.widget-media-desc;
                             card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
+                            description: Strings.widget-media-viewer-desc;
+                            card-visible: WidgetCatalog.show-media-viewer;
                             pick(id) => { root.pick(id); }
                         }
                     }

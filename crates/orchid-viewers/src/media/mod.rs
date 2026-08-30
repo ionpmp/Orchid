@@ -22,6 +22,21 @@ pub use cover::{discover_cover_sidecars, load_cover_art, load_media_tags};
 pub use ffi::mpv_available;
 pub use sidecars::discover_sidecar_subs;
 
+/// Native file dialog for picking a local audio/video file.
+#[must_use]
+pub fn pick_media_file() -> Option<std::path::PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter(
+            "Media",
+            &[
+                "mp4", "mkv", "webm", "avi", "mov", "wmv", "m4v", "mpeg", "mpg", "mp3", "wav",
+                "flac", "ogg", "aac", "m4a", "wma", "opus", "aiff",
+            ],
+        )
+        .add_filter("All", &["*"])
+        .pick_file()
+}
+
 use engine::MpvEngine;
 
 /// Extensions treated as audio or video.

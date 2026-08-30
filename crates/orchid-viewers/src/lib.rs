@@ -89,7 +89,7 @@ pub use image::{
     IMAGE_FILE_EXTENSIONS,
 };
 pub use media::{
-    discover_sidecar_subs, is_media_file_extension, mpv_available, MediaViewer,
+    discover_sidecar_subs, is_media_file_extension, mpv_available, pick_media_file, MediaViewer,
     MEDIA_FILE_EXTENSIONS,
 };
 pub use pdf::PdfViewer;

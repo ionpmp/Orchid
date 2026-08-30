@@ -50,8 +50,10 @@ widget-recent-files-desc = Archivos abiertos recientemente en Orchid
 widget-search-name = BÃºsqueda universal
 widget-search-desc = Buscar archivos, ejecutar comandos, abrir ajustes
 
-widget-media-name = Reproductor multimedia
-widget-media-desc = ReproducciÃ³n actual con controles de transporte
+widget-media-name = En reproducción
+widget-media-desc = Controla la sesión multimedia del sistema (Spotify, navegador…)
+widget-media-viewer-name = Reproductor
+widget-media-viewer-desc = Reproduce audio y vídeo local en Orchid
 
 widget-password-name = ContraseÃ±as
 widget-password-desc = Acceder a su base de datos de contraseÃ±as
@@ -1592,6 +1594,7 @@ dock-widget-rss = Noticias
 dock-widget-recent-files = Recientes
 dock-widget-search = BÃºsqueda
 dock-widget-media = Medios
+dock-widget-media-viewer = Reproductor
 dock-widget-password = ContraseÃ±as
 dock-widget-viewer = Visor
 dock-widget-document-editor = Document

@@ -50,8 +50,10 @@ widget-recent-files-desc = Orchid 中最近打开的文件
 widget-search-name = 通用搜索
 widget-search-desc = 搜索文件、运行命令、打开设置
 
-widget-media-name = 媒体播放器
-widget-media-desc = 正在播放及传输控制
+widget-media-name = 正在播放
+widget-media-desc = 控制系统媒体会话（Spotify、浏览器等）
+widget-media-viewer-name = 媒体播放器
+widget-media-viewer-desc = 在 Orchid 中播放本地音频和视频
 
 widget-password-name = 密码
 widget-password-desc = 访问您的密码数据库
@@ -1592,6 +1594,7 @@ dock-widget-rss = 新闻
 dock-widget-recent-files = 最近
 dock-widget-search = 搜索
 dock-widget-media = 媒体
+dock-widget-media-viewer = 媒体播放器
 dock-widget-password = 密码
 dock-widget-viewer = 查看器
 dock-widget-document-editor = Document

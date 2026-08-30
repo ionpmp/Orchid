@@ -177,8 +177,10 @@ widget-recent-files-desc = Recently opened files across Orchid
 widget-search-name = Universal Search
 widget-search-desc = Search files, run commands, open settings
 
-widget-media-name = Media Player
-widget-media-desc = Now playing with transport controls
+widget-media-name = Now Playing
+widget-media-desc = Control the system media session (Spotify, browser, …)
+widget-media-viewer-name = Media Player
+widget-media-viewer-desc = Play local audio and video in Orchid (libmpv)
 
 widget-password-name = Passwords
 widget-password-desc = Access your password database
@@ -1886,7 +1888,8 @@ dock-widget-calendar = Calendar
 dock-widget-rss = News
 dock-widget-recent-files = Recent
 dock-widget-search = Search
-dock-widget-media = Media
+dock-widget-media = Now Playing
+dock-widget-media-viewer = Media Player
 dock-widget-password = Passwords
 dock-widget-viewer = Viewer
 dock-widget-document-editor = Document

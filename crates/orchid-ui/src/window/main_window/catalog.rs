@@ -49,6 +49,10 @@ impl MainWindowController {
             self.spawn_open_document_editor(placement);
             return;
         }
+        if type_id == "media-viewer" {
+            self.spawn_open_media_player(placement);
+            return;
+        }
         if !is_known_widget_type(type_id) {
             warn!(type_id, "unknown widget type");
             return;
@@ -216,6 +220,7 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
             | "recent-files"
             | "universal-search"
             | "media-player"
+            | "media-viewer"
             | "password-manager"
             | "viewer"
             | "document-editor"
@@ -238,6 +243,7 @@ fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collection
     g.set_show_recent_files(visible_ids.contains("recent-files"));
     g.set_show_search(visible_ids.contains("search"));
     g.set_show_media(visible_ids.contains("media"));
+    g.set_show_media_viewer(visible_ids.contains("media-viewer"));
     g.set_show_password(visible_ids.contains("password"));
     g.set_show_viewer(visible_ids.contains("viewer"));
     g.set_show_document_editor(visible_ids.contains("document-editor"));
@@ -274,6 +280,7 @@ pub(super) fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> 
         "recent-files" => "widget-recent-files-desc",
         "search" | "universal-search" => "widget-search-desc",
         "media" => "widget-media-desc",
+        "media-viewer" => "widget-media-viewer-desc",
         "password" => "widget-password-desc",
         "viewer" => "widget-viewer-desc",
         "document-editor" => "widget-document-editor-desc",
@@ -367,6 +374,12 @@ pub(super) fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             type_id: "media".into(),
             label: locale.tr("dock-widget-media").into(),
             description: dock_widget_description(locale, "media"),
+            icon: "media".into(),
+        },
+        DockWidgetType {
+            type_id: "media-viewer".into(),
+            label: locale.tr("dock-widget-media-viewer").into(),
+            description: dock_widget_description(locale, "media-viewer"),
             icon: "media".into(),
         },
         DockWidgetType {

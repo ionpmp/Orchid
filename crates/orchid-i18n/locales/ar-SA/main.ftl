@@ -50,8 +50,10 @@ widget-recent-files-desc = الملفات المفتوحة مؤخرًا في Orc
 widget-search-name = البحث الشامل
 widget-search-desc = البحث في الملفات وتشغيل الأوامر وفتح الإعدادات
 
-widget-media-name = مشغّل الوسائط
-widget-media-desc = التشغيل الحالي مع عناصر التحكم
+widget-media-name = التشغيل الآن
+widget-media-desc = التحكم في جلسة الوسائط في النظام
+widget-media-viewer-name = مشغل الوسائط
+widget-media-viewer-desc = تشغيل الصوت والفيديو محليًا في Orchid
 
 widget-password-name = كلمات المرور
 widget-password-desc = الوصول إلى قاعدة بيانات كلمات المرور
@@ -1593,6 +1595,7 @@ dock-widget-rss = الأخبار
 dock-widget-recent-files = الأخيرة
 dock-widget-search = البحث
 dock-widget-media = الوسائط
+dock-widget-media-viewer = مشغل الوسائط
 dock-widget-password = كلمات المرور
 dock-widget-viewer = العارض
 dock-widget-document-editor = Document

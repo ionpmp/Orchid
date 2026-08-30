@@ -50,8 +50,10 @@ widget-recent-files-desc = Orchid에서 최근에 연 파일
 widget-search-name = 통합 검색
 widget-search-desc = 파일 검색, 명령 실행, 설정 열기
 
-widget-media-name = 미디어 플레이어
-widget-media-desc = 재생 중인 미디어 및 전송 제어
+widget-media-name = 지금 재생 중
+widget-media-desc = 시스템 미디어 세션 제어 (Spotify, 브라우저 등)
+widget-media-viewer-name = 미디어 플레이어
+widget-media-viewer-desc = Orchid에서 로컬 오디오·비디오 재생
 
 widget-password-name = 비밀번호
 widget-password-desc = 비밀번호 데이터베이스에 액세스
@@ -1592,6 +1594,7 @@ dock-widget-rss = 뉴스
 dock-widget-recent-files = 최근
 dock-widget-search = 검색
 dock-widget-media = 미디어
+dock-widget-media-viewer = 미디어 플레이어
 dock-widget-password = 비밀번호
 dock-widget-viewer = 뷰어
 dock-widget-document-editor = Document
