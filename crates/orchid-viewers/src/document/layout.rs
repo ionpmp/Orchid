@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use parley::layout::{
     Alignment as ParleyAlignment, AlignmentOptions, Cluster, ClusterSide, GlyphRun,
-    PositionedLayoutItem,
+    IndentOptions, PositionedLayoutItem,
 };
 use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, Layout, LayoutContext, LineHeight, RangedBuilder};
@@ -201,6 +201,7 @@ impl DocumentLayout {
         }
 
         let mut layout = builder.build(&text);
+        apply_paragraph_text_indent(&mut layout, p);
         layout.break_all_lines(Some(max_width.max(1.0)));
         layout.align(parley_alignment(p.alignment), AlignmentOptions::default());
         layout
@@ -1534,11 +1535,39 @@ fn list_prefix(p: &Paragraph) -> String {
 }
 
 fn list_indent_px(p: &Paragraph) -> f32 {
-    if p.list == ListKind::None {
+    let list = if p.list == ListKind::None {
         0.0
     } else {
         f32::from(p.list_level) * LIST_INDENT_PX
+    };
+    list + paragraph_left_indent_px(p)
+}
+
+/// Left edge of the paragraph box after applying `w:ind` left/hanging.
+fn paragraph_left_indent_px(p: &Paragraph) -> f32 {
+    let left = p.indent_left_twips;
+    let fl = p.indent_first_line_twips;
+    let base = if fl < 0 {
+        left.saturating_sub(fl.unsigned_abs())
+    } else {
+        left
+    };
+    twips_to_css_px(base)
+}
+
+fn apply_paragraph_text_indent(layout: &mut Layout<ColorBrush>, p: &Paragraph) {
+    let fl = p.indent_first_line_twips;
+    if fl == 0 {
+        return;
     }
+    let amount = twips_to_css_px(fl.unsigned_abs());
+    layout.set_text_indent(
+        amount,
+        IndentOptions {
+            hanging: fl < 0,
+            ..IndentOptions::default()
+        },
+    );
 }
 
 fn parley_alignment(a: Alignment) -> ParleyAlignment {
@@ -2519,6 +2548,34 @@ mod tests {
         assert!(
             h_exact > h_auto + 10.0,
             "exact 720 twips should be taller than single auto: auto={h_auto} exact={h_exact}"
+        );
+    }
+
+    #[test]
+    fn paragraph_left_indent_narrows_layout_width() {
+        let mut dl = DocumentLayout::new();
+        let long = "Word ".repeat(40);
+        let flush = Paragraph {
+            runs: vec![Run {
+                text: long.clone(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let indented = Paragraph {
+            indent_left_twips: 2880, // 2″ → ~192 CSS px less width
+            ..flush.clone()
+        };
+        let h_flush = dl.layout_paragraph(&flush, 400.0).height();
+        // Same content_width budget as document layout: max_w - indent.
+        let indent = list_indent_px(&indented);
+        let h_ind = dl
+            .layout_paragraph(&indented, (400.0 - indent).max(40.0))
+            .height();
+        assert!(
+            h_ind > h_flush,
+            "2″ left indent should wrap to more lines: flush={h_flush} indented={h_ind}"
         );
     }
 }

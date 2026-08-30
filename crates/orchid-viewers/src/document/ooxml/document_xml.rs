@@ -219,6 +219,8 @@ fn parse_paragraph(
         space_after_twips: 0,
         line_spacing: 0,
         line_spacing_rule: LineSpacingRule::Auto,
+        indent_left_twips: 0,
+        indent_first_line_twips: 0,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -260,6 +262,9 @@ fn parse_paragraph(
                     }
                     "spacing" if in_p_pr => {
                         apply_paragraph_spacing(&e, &mut p);
+                    }
+                    "ind" if in_p_pr => {
+                        apply_paragraph_indent(&e, &mut p);
                     }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
@@ -327,6 +332,9 @@ fn parse_paragraph(
                         }
                         "spacing" => {
                             apply_paragraph_spacing(&e, &mut p);
+                        }
+                        "ind" => {
+                            apply_paragraph_indent(&e, &mut p);
                         }
                         _ => {}
                     }
@@ -907,6 +915,26 @@ fn write_paragraph(
             .write_event(Event::Empty(spacing))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if p.indent_left_twips > 0 || p.indent_first_line_twips != 0 {
+        let mut ind = BytesStart::new("w:ind");
+        if p.indent_left_twips > 0 {
+            ind.push_attribute(("w:left", p.indent_left_twips.to_string().as_str()));
+        }
+        if p.indent_first_line_twips > 0 {
+            ind.push_attribute((
+                "w:firstLine",
+                p.indent_first_line_twips.to_string().as_str(),
+            ));
+        } else if p.indent_first_line_twips < 0 {
+            ind.push_attribute((
+                "w:hanging",
+                (-p.indent_first_line_twips).to_string().as_str(),
+            ));
+        }
+        writer
+            .write_event(Event::Empty(ind))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if p.list != ListKind::None {
         writer
             .write_event(Event::Start(BytesStart::new("w:numPr")))
@@ -1015,6 +1043,20 @@ fn apply_paragraph_spacing(e: &BytesStart<'_>, p: &mut Paragraph) {
     };
     if let Some(v) = attr_val(e, "line").and_then(|s| s.parse().ok()) {
         p.line_spacing = v;
+    }
+}
+
+fn apply_paragraph_indent(e: &BytesStart<'_>, p: &mut Paragraph) {
+    if let Some(v) = attr_val(e, "left")
+        .or_else(|| attr_val(e, "start"))
+        .and_then(|s| s.parse().ok())
+    {
+        p.indent_left_twips = v;
+    }
+    if let Some(v) = attr_val(e, "firstLine").and_then(|s| s.parse::<i32>().ok()) {
+        p.indent_first_line_twips = v;
+    } else if let Some(v) = attr_val(e, "hanging").and_then(|s| s.parse::<i32>().ok()) {
+        p.indent_first_line_twips = -v.abs();
     }
 }
 
@@ -1993,6 +2035,59 @@ mod tests {
                 && text.contains("w:lineRule=\"exact\"")
                 && text.contains("w:lineRule=\"atLeast\""),
             "serialized XML missing exact/atLeast: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_paragraph_indent() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:ind w:left="720" w:firstLine="360"/></w:pPr>
+              <w:r><w:t>First</w:t></w:r>
+            </w:p>
+            <w:p>
+              <w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr>
+              <w:r><w:t>Hang</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.indent_left_twips, 720);
+                assert_eq!(p.indent_first_line_twips, 360);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        match &blocks[1] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.indent_left_twips, 720);
+                assert_eq!(p.indent_first_line_twips, -720);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:left=\"720\"")
+                && text.contains("w:firstLine=\"360\"")
+                && text.contains("w:hanging=\"720\""),
+            "serialized XML missing indent: {text}"
         );
     }
 

@@ -138,6 +138,10 @@ pub struct Paragraph {
     pub line_spacing: u32,
     /// How [`Self::line_spacing`] is interpreted (`w:lineRule`).
     pub line_spacing_rule: LineSpacingRule,
+    /// Left indent in twips (`w:ind/@w:left` or `w:start`). Combined with list indent in preview.
+    pub indent_left_twips: u32,
+    /// First-line indent in twips: positive = `w:firstLine`, negative = −`w:hanging`.
+    pub indent_first_line_twips: i32,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }
