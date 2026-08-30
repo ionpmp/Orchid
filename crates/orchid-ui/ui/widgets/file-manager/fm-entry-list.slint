@@ -133,7 +133,7 @@ export component FmEntryList inherits Rectangle {
         let live_f = root.live-first;
         let live_l = root.live-last;
         let dragged = root.marquee-active
-            && (live_f >= 0 && live_l >= 0
+            && ((live_f >= 0 && live_l >= 0)
                 || abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold);
         let from-entry = root.marquee-from-entry;
         let additive = root.marquee-additive;

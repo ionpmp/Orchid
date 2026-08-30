@@ -220,6 +220,11 @@ impl MediaViewer {
         self.engine.sub_style_reset();
     }
 
+    /// Cycle simple EQ presets (Flat / Bass / Treble / Vocal).
+    pub fn cycle_eq(&self) {
+        self.engine.cycle_eq();
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
@@ -242,6 +247,7 @@ impl MediaViewer {
             "sub-pos-up" => self.sub_pos_delta(-2.0),
             "sub-pos-down" => self.sub_pos_delta(2.0),
             "sub-style-reset" => self.sub_style_reset(),
+            "cycle-eq" => self.cycle_eq(),
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),
@@ -365,6 +371,7 @@ impl Viewer for MediaViewer {
             audio_label: shared.audio_label.read().clone(),
             chapter_label: shared.chapter_label.read().clone(),
             ab_label: shared.ab_label.read().clone(),
+            eq_label: shared.eq_label.read().clone(),
             error,
         })
     }

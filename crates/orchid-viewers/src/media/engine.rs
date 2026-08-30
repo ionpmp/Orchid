@@ -53,6 +53,8 @@ pub struct SharedPlayback {
     /// Seek once duration is known after load.
     pub pending_resume_secs: RwLock<Option<f64>>,
     pub ab_label: RwLock<String>,
+    pub eq_label: RwLock<String>,
+    pub eq_index: AtomicU32,
     pub sub_label: RwLock<String>,
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
@@ -81,6 +83,8 @@ impl SharedPlayback {
             resume_path: RwLock::new(None),
             pending_resume_secs: RwLock::new(None),
             ab_label: RwLock::new(String::new()),
+            eq_label: RwLock::new(String::new()),
+            eq_index: AtomicU32::new(0),
             sub_label: RwLock::new(String::new()),
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
@@ -117,6 +121,7 @@ enum EngineCmd {
     SubScaleDelta(f64),
     SubPosDelta(f64),
     SubStyleReset,
+    CycleEq,
     Stop,
     Quit,
 }
@@ -257,6 +262,10 @@ impl MpvEngine {
 
     pub fn sub_style_reset(&self) {
         let _ = self.tx.send(EngineCmd::SubStyleReset);
+    }
+
+    pub fn cycle_eq(&self) {
+        let _ = self.tx.send(EngineCmd::CycleEq);
     }
 
     pub fn stop(&self) {
@@ -445,6 +454,9 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             *shared.resume_path.write() = Some(path.clone());
             *shared.pending_resume_secs.write() = resume_secs;
             *shared.ab_label.write() = String::new();
+            shared.eq_index.store(0, Ordering::Relaxed);
+            *shared.eq_label.write() = String::new();
+            let _ = command_args(api, handle, &["af", "clr"]);
             let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
             let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
             for sub in sidecars {
@@ -566,6 +578,10 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let _ = set_double(api, handle, "sub-pos", 100.0);
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::CycleEq => {
+            apply_next_eq(api, handle, shared);
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::Stop => {
             persist_resume(shared);
             let _ = command_args(api, handle, &["stop"]);
@@ -576,6 +592,8 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             *shared.resume_path.write() = None;
             *shared.pending_resume_secs.write() = None;
             *shared.ab_label.write() = String::new();
+            shared.eq_index.store(0, Ordering::Relaxed);
+            *shared.eq_label.write() = String::new();
             shared.has_video.store(false, Ordering::Relaxed);
             shared.playing.store(false, Ordering::Relaxed);
             shared.dirty.store(true, Ordering::Release);
@@ -700,6 +718,29 @@ unsafe fn refresh_ab_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayb
         (Some(a), None) => format!("A {a:.0}s"),
         (None, Some(b)) => format!("B {b:.0}s"),
         (None, None) => String::new(),
+    };
+}
+
+/// Simple lavfi EQ presets (Flat → Bass → Treble → Vocal).
+const EQ_PRESETS: &[(&str, Option<&str>)] = &[
+    ("", None),
+    ("Bass", Some("lavfi=[bass=g=6]")),
+    ("Treble", Some("lavfi=[treble=g=5]")),
+    ("Vocal", Some("lavfi=[equalizer=f=300:t=h:width=200:g=-3,equalizer=f=3000:t=h:width=1000:g=4]")),
+];
+
+unsafe fn apply_next_eq(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next = (shared.eq_index.load(Ordering::Relaxed) + 1) % EQ_PRESETS.len() as u32;
+    shared.eq_index.store(next, Ordering::Relaxed);
+    let (label, filter) = EQ_PRESETS[next as usize];
+    let _ = command_args(api, handle, &["af", "clr"]);
+    if let Some(af) = filter {
+        let _ = command_args(api, handle, &["af", "add", af]);
+    }
+    *shared.eq_label.write() = if label.is_empty() {
+        String::new()
+    } else {
+        format!("EQ {label}")
     };
 }
 

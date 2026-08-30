@@ -95,6 +95,10 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("ab-clear");
                 return accept;
             }
+            if event.text == "e" || event.text == "E" {
+                root.command("cycle-eq");
+                return accept;
+            }
             if event.text == "y" || event.text == "Y" {
                 root.command("shuffle");
                 return accept;
@@ -394,6 +398,12 @@ export component ViewerMediaView inherits Rectangle {
                     }
                     if model.ab-label != "" : Text {
                         text: model.ab-label;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    if model.eq-label != "" : Text {
+                        text: model.eq-label;
                         color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;

@@ -207,7 +207,7 @@ export component FmEntryGrid inherits Rectangle {
         let ry0 = min(root.marquee-y0, root.marquee-y1);
         let ry1 = max(root.marquee-y0, root.marquee-y1);
         let dragged = root.marquee-active
-            && (live_f >= 0 && live_l >= 0
+            && ((live_f >= 0 && live_l >= 0)
                 || abs(rx1 - rx0) >= root.marquee-threshold
                 || abs(ry1 - ry0) >= root.marquee-threshold);
         let from-entry = root.marquee-from-entry;
