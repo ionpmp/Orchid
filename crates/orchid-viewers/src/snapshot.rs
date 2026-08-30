@@ -420,6 +420,7 @@ pub struct MediaSnapshot {
     pub chapter_label: String,
     pub ab_label: String,
     pub eq_label: String,
+    pub hwdec_label: String,
     pub error: String,
 }
 

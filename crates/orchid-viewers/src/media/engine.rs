@@ -11,7 +11,7 @@ use parking_lot::RwLock;
 
 use super::ffi::{
     self, command_args, c_str, error_message, get_double, get_flag, get_int64, get_string,
-    set_double, set_flag, MpvApi, MpvHandle, MpvRenderContext, MpvRenderParam,
+    set_double, set_flag, set_string, MpvApi, MpvHandle, MpvRenderContext, MpvRenderParam,
     MPV_EVENT_NONE, MPV_EVENT_SHUTDOWN, MPV_RENDER_PARAM_ADVANCED_CONTROL,
     MPV_RENDER_PARAM_API_TYPE, MPV_RENDER_PARAM_INVALID, MPV_RENDER_PARAM_SW_FORMAT,
     MPV_RENDER_PARAM_SW_POINTER, MPV_RENDER_PARAM_SW_SIZE, MPV_RENDER_PARAM_SW_STRIDE,
@@ -55,6 +55,9 @@ pub struct SharedPlayback {
     pub ab_label: RwLock<String>,
     pub eq_label: RwLock<String>,
     pub eq_index: AtomicU32,
+    /// 0 = `auto-copy` (HW decode → system RAM for SW blit), 1 = `no`.
+    pub hwdec_mode: AtomicU32,
+    pub hwdec_label: RwLock<String>,
     pub sub_label: RwLock<String>,
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
@@ -85,6 +88,8 @@ impl SharedPlayback {
             ab_label: RwLock::new(String::new()),
             eq_label: RwLock::new(String::new()),
             eq_index: AtomicU32::new(0),
+            hwdec_mode: AtomicU32::new(0),
+            hwdec_label: RwLock::new(String::new()),
             sub_label: RwLock::new(String::new()),
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
@@ -122,6 +127,7 @@ enum EngineCmd {
     SubPosDelta(f64),
     SubStyleReset,
     CycleEq,
+    CycleHwdec,
     Stop,
     Quit,
 }
@@ -268,6 +274,10 @@ impl MpvEngine {
         let _ = self.tx.send(EngineCmd::CycleEq);
     }
 
+    pub fn cycle_hwdec(&self) {
+        let _ = self.tx.send(EngineCmd::CycleHwdec);
+    }
+
     pub fn stop(&self) {
         let _ = self.tx.send(EngineCmd::Stop);
     }
@@ -302,7 +312,8 @@ fn run_worker(
         set_opt(api, handle, "osc", "no")?;
         set_opt(api, handle, "keep-open", "yes")?;
         set_opt(api, handle, "idle", "yes")?;
-        set_opt(api, handle, "hwdec", "no")?;
+        // HW decode with copy-back so the SW (rgb0) render path can blit to Slint.
+        set_opt(api, handle, "hwdec", "auto-copy")?;
         set_opt(api, handle, "video-sync", "audio")?;
         // Prefer embedded album art as a video track when present.
         let _ = set_opt(api, handle, "audio-display", "embedded-first");
@@ -582,6 +593,10 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             apply_next_eq(api, handle, shared);
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::CycleHwdec => {
+            apply_next_hwdec(api, handle, shared);
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::Stop => {
             persist_resume(shared);
             let _ = command_args(api, handle, &["stop"]);
@@ -594,6 +609,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             *shared.ab_label.write() = String::new();
             shared.eq_index.store(0, Ordering::Relaxed);
             *shared.eq_label.write() = String::new();
+            *shared.hwdec_label.write() = String::new();
             shared.has_video.store(false, Ordering::Relaxed);
             shared.playing.store(false, Ordering::Relaxed);
             shared.dirty.store(true, Ordering::Release);
@@ -697,6 +713,7 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
         String::new()
     };
     refresh_ab_label(api, handle, shared);
+    refresh_hwdec_label(api, handle, shared);
     shared.dirty.store(true, Ordering::Release);
 }
 
@@ -741,6 +758,29 @@ unsafe fn apply_next_eq(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback
         String::new()
     } else {
         format!("EQ {label}")
+    };
+}
+
+/// Preferred decode modes for the SW blit path (`auto-copy` keeps frames in system RAM).
+const HWDEC_MODES: &[&str] = &["auto-copy", "no"];
+
+unsafe fn apply_next_hwdec(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next = (shared.hwdec_mode.load(Ordering::Relaxed) + 1) % HWDEC_MODES.len() as u32;
+    shared.hwdec_mode.store(next, Ordering::Relaxed);
+    let mode = HWDEC_MODES[next as usize];
+    let _ = set_string(api, handle, "hwdec", mode);
+    refresh_hwdec_label(api, handle, shared);
+}
+
+unsafe fn refresh_hwdec_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let mode = HWDEC_MODES[shared.hwdec_mode.load(Ordering::Relaxed) as usize];
+    let current = get_string(api, handle, "hwdec-current").unwrap_or_default();
+    *shared.hwdec_label.write() = if mode == "no" {
+        "Dec SW".into()
+    } else if current.is_empty() || current == "no" {
+        "Dec auto-copy".into()
+    } else {
+        format!("Dec {current}")
     };
 }
 

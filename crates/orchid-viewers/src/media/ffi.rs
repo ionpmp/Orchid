@@ -331,6 +331,18 @@ pub(crate) unsafe fn set_flag(api: &MpvApi, handle: MpvHandle, name: &str, value
     )
 }
 
+pub(crate) unsafe fn set_string(api: &MpvApi, handle: MpvHandle, name: &str, value: &str) -> c_int {
+    let key = c_str(name);
+    let val = c_str(value);
+    let mut ptr: *const c_char = val.as_ptr();
+    (api.set_property)(
+        handle,
+        key.as_ptr(),
+        MPV_FORMAT_STRING,
+        (&raw mut ptr).cast(),
+    )
+}
+
 pub(crate) unsafe fn command_args(api: &MpvApi, handle: MpvHandle, args: &[&str]) -> c_int {
     let c_args: Vec<CString> = args.iter().map(|s| c_str(s)).collect();
     let mut ptrs: Vec<*const c_char> = c_args.iter().map(|c| c.as_ptr()).collect();

@@ -240,6 +240,11 @@ impl MediaViewer {
         self.engine.cycle_eq();
     }
 
+    /// Cycle hardware decode: `auto-copy` ↔ software (`no`).
+    pub fn cycle_hwdec(&self) {
+        self.engine.cycle_hwdec();
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
@@ -263,6 +268,7 @@ impl MediaViewer {
             "sub-pos-down" => self.sub_pos_delta(2.0),
             "sub-style-reset" => self.sub_style_reset(),
             "cycle-eq" => self.cycle_eq(),
+            "cycle-hwdec" => self.cycle_hwdec(),
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),
@@ -387,6 +393,7 @@ impl Viewer for MediaViewer {
             chapter_label: shared.chapter_label.read().clone(),
             ab_label: shared.ab_label.read().clone(),
             eq_label: shared.eq_label.read().clone(),
+            hwdec_label: shared.hwdec_label.read().clone(),
             error,
         })
     }
