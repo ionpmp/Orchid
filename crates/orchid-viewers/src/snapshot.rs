@@ -417,6 +417,7 @@ pub struct MediaSnapshot {
     pub sub_visible: bool,
     pub audio_label: String,
     pub chapter_label: String,
+    pub ab_label: String,
     pub error: String,
 }
 

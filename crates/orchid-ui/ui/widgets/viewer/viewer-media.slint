@@ -51,12 +51,24 @@ export component ViewerMediaView inherits Rectangle {
                 root.command(event.modifiers.shift ? "toggle-sub" : "cycle-sub");
                 return accept;
             }
+            if (event.text == "a" || event.text == "A") && event.modifiers.shift {
+                root.command("ab-a");
+                return accept;
+            }
             if event.text == "a" || event.text == "A" {
                 root.command("cycle-audio");
                 return accept;
             }
+            if (event.text == "b" || event.text == "B") && event.modifiers.shift {
+                root.command("ab-b");
+                return accept;
+            }
             if event.text == "c" || event.text == "C" {
                 root.command(event.modifiers.shift ? "chapter-prev" : "chapter-next");
+                return accept;
+            }
+            if (event.text == "l" || event.text == "L") && event.modifiers.shift {
+                root.command("ab-clear");
                 return accept;
             }
             if event.text == "n" || event.text == "N" || event.text == Key.PageDown {
@@ -345,6 +357,12 @@ export component ViewerMediaView inherits Rectangle {
                     if model.chapter-label != "" : Text {
                         text: model.chapter-label;
                         color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    if model.ab-label != "" : Text {
+                        text: model.ab-label;
+                        color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }

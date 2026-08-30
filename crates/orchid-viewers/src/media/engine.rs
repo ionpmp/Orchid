@@ -17,6 +17,7 @@ use super::ffi::{
     MPV_RENDER_PARAM_SW_POINTER, MPV_RENDER_PARAM_SW_SIZE, MPV_RENDER_PARAM_SW_STRIDE,
     MPV_RENDER_UPDATE_FRAME,
 };
+use super::resume;
 use super::sidecars::discover_sidecar_subs;
 
 /// Max software render width (height scales to preserve aspect).
@@ -47,6 +48,11 @@ pub struct SharedPlayback {
     pub cover: RwLock<Option<FrameBuf>>,
     pub title: RwLock<String>,
     pub artist: RwLock<String>,
+    /// OS path of the current file (for resume bookmarks).
+    pub resume_path: RwLock<Option<PathBuf>>,
+    /// Seek once duration is known after load.
+    pub pending_resume_secs: RwLock<Option<f64>>,
+    pub ab_label: RwLock<String>,
     pub sub_label: RwLock<String>,
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
@@ -72,6 +78,9 @@ impl SharedPlayback {
             cover: RwLock::new(None),
             title: RwLock::new(String::new()),
             artist: RwLock::new(String::new()),
+            resume_path: RwLock::new(None),
+            pending_resume_secs: RwLock::new(None),
+            ab_label: RwLock::new(String::new()),
             sub_label: RwLock::new(String::new()),
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
@@ -86,6 +95,7 @@ enum EngineCmd {
     Load {
         path: PathBuf,
         sidecars: Vec<PathBuf>,
+        resume_secs: Option<f64>,
     },
     PlayPause,
     SeekRel(f64),
@@ -100,6 +110,9 @@ enum EngineCmd {
     CycleAudio,
     ChapterNext,
     ChapterPrev,
+    AbMarkA,
+    AbMarkB,
+    AbClear,
     Stop,
     Quit,
 }
@@ -146,9 +159,11 @@ impl MpvEngine {
 
     pub fn load(&self, path: &Path) {
         let sidecars = discover_sidecar_subs(path);
+        let resume_secs = resume::take_resume(path);
         let _ = self.tx.send(EngineCmd::Load {
             path: path.to_path_buf(),
             sidecars,
+            resume_secs,
         });
     }
 
@@ -210,6 +225,18 @@ impl MpvEngine {
 
     pub fn chapter_prev(&self) {
         let _ = self.tx.send(EngineCmd::ChapterPrev);
+    }
+
+    pub fn ab_mark_a(&self) {
+        let _ = self.tx.send(EngineCmd::AbMarkA);
+    }
+
+    pub fn ab_mark_b(&self) {
+        let _ = self.tx.send(EngineCmd::AbMarkB);
+    }
+
+    pub fn ab_clear(&self) {
+        let _ = self.tx.send(EngineCmd::AbClear);
     }
 
     pub fn stop(&self) {
@@ -381,7 +408,12 @@ unsafe fn create_render_context(
 
 unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, cmd: EngineCmd) {
     match cmd {
-        EngineCmd::Load { path, sidecars } => {
+        EngineCmd::Load {
+            path,
+            sidecars,
+            resume_secs,
+        } => {
+            persist_resume(shared);
             let path_s = path.to_string_lossy();
             let rc = command_args(api, handle, &["loadfile", path_s.as_ref(), "replace"]);
             if rc < 0 {
@@ -390,6 +422,11 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 return;
             }
             *shared.error.write() = None;
+            *shared.resume_path.write() = Some(path.clone());
+            *shared.pending_resume_secs.write() = resume_secs;
+            *shared.ab_label.write() = String::new();
+            let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
+            let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
             for sub in sidecars {
                 let s = sub.to_string_lossy();
                 let _ = command_args(api, handle, &["sub-add", s.as_ref()]);
@@ -468,12 +505,36 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let _ = command_args(api, handle, &["add", "chapter", "-1"]);
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::AbMarkA => {
+            if let Some(pos) = get_double(api, handle, "time-pos") {
+                let _ = set_double(api, handle, "ab-loop-a", pos);
+                refresh_ab_label(api, handle, shared);
+                shared.dirty.store(true, Ordering::Release);
+            }
+        }
+        EngineCmd::AbMarkB => {
+            if let Some(pos) = get_double(api, handle, "time-pos") {
+                let _ = set_double(api, handle, "ab-loop-b", pos);
+                refresh_ab_label(api, handle, shared);
+                shared.dirty.store(true, Ordering::Release);
+            }
+        }
+        EngineCmd::AbClear => {
+            let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
+            let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
+            *shared.ab_label.write() = String::new();
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::Stop => {
+            persist_resume(shared);
             let _ = command_args(api, handle, &["stop"]);
             *shared.frame.write() = None;
             *shared.cover.write() = None;
             *shared.title.write() = String::new();
             *shared.artist.write() = String::new();
+            *shared.resume_path.write() = None;
+            *shared.pending_resume_secs.write() = None;
+            *shared.ab_label.write() = String::new();
             shared.has_video.store(false, Ordering::Relaxed);
             shared.playing.store(false, Ordering::Relaxed);
             shared.dirty.store(true, Ordering::Release);
@@ -504,6 +565,13 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
         shared
             .duration_ms
             .store((dur.max(0.0) * 1000.0) as u64, Ordering::Relaxed);
+        if dur > 0.0 {
+            if let Some(secs) = shared.pending_resume_secs.write().take() {
+                if secs > 0.0 && secs + 1.0 < dur {
+                    let _ = command_args(api, handle, &["seek", &format!("{secs}"), "absolute"]);
+                }
+            }
+        }
     }
     if let Some(paused) = get_flag(api, handle, "pause") {
         shared.playing.store(!paused, Ordering::Relaxed);
@@ -569,7 +637,29 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
     } else {
         String::new()
     };
+    refresh_ab_label(api, handle, shared);
     shared.dirty.store(true, Ordering::Release);
+}
+
+fn persist_resume(shared: &SharedPlayback) {
+    let path = shared.resume_path.read().clone();
+    let Some(path) = path else {
+        return;
+    };
+    let pos = shared.position_ms.load(Ordering::Relaxed) as f64 / 1000.0;
+    let dur = shared.duration_ms.load(Ordering::Relaxed) as f64 / 1000.0;
+    resume::store_resume(&path, pos, dur);
+}
+
+unsafe fn refresh_ab_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let a = get_double(api, handle, "ab-loop-a");
+    let b = get_double(api, handle, "ab-loop-b");
+    *shared.ab_label.write() = match (a, b) {
+        (Some(a), Some(b)) => format!("A-B {a:.0}s–{b:.0}s"),
+        (Some(a), None) => format!("A {a:.0}s"),
+        (None, Some(b)) => format!("B {b:.0}s"),
+        (None, None) => String::new(),
+    };
 }
 
 unsafe fn render_frame(

@@ -3,6 +3,7 @@
 mod cover;
 mod engine;
 mod ffi;
+mod resume;
 mod sidecars;
 
 use std::any::Any;
@@ -171,6 +172,21 @@ impl MediaViewer {
         self.engine.chapter_prev();
     }
 
+    /// Mark A-B loop start.
+    pub fn ab_mark_a(&self) {
+        self.engine.ab_mark_a();
+    }
+
+    /// Mark A-B loop end.
+    pub fn ab_mark_b(&self) {
+        self.engine.ab_mark_b();
+    }
+
+    /// Clear A-B loop.
+    pub fn ab_clear(&self) {
+        self.engine.ab_clear();
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
@@ -190,6 +206,9 @@ impl MediaViewer {
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),
+            "ab-a" => self.ab_mark_a(),
+            "ab-b" => self.ab_mark_b(),
+            "ab-clear" => self.ab_clear(),
             cmd if let Some(raw) = cmd.strip_prefix("seek-frac:") => {
                 if let Ok(f) = raw.parse::<f64>() {
                     self.seek_fraction(f);
@@ -305,6 +324,7 @@ impl Viewer for MediaViewer {
             sub_visible: shared.sub_visible.load(Ordering::Relaxed),
             audio_label: shared.audio_label.read().clone(),
             chapter_label: shared.chapter_label.read().clone(),
+            ab_label: shared.ab_label.read().clone(),
             error,
         })
     }
