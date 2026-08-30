@@ -1040,6 +1040,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-image-insert;
+                        show: img-ins.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -1055,6 +1060,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-table-insert;
+                        show: t-ins.has-hover;
+                        below: true;
                     }
                 }
 
@@ -1072,6 +1082,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-table-row-insert;
+                        show: tr-ins.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -1087,6 +1102,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-table-row-delete;
+                        show: tr-del.has-hover;
+                        below: true;
                     }
                 }
 
@@ -1104,6 +1124,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-table-col-insert;
+                        show: tc-ins.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -1119,6 +1144,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-table-col-delete;
+                        show: tc-del.has-hover;
+                        below: true;
                     }
                 }
 
@@ -1136,6 +1166,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-table-merge;
+                        show: t-merge.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -1151,6 +1186,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-table-unmerge;
+                        show: t-unmerge.has-hover;
+                        below: true;
                     }
                 }
 
