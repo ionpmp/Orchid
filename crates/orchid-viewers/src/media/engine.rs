@@ -43,6 +43,10 @@ pub struct SharedPlayback {
     pub has_video: AtomicBool,
     pub frame_gen: AtomicU64,
     pub frame: RwLock<Option<FrameBuf>>,
+    /// Still image for audio-only (APIC / folder cover); not updated every frame.
+    pub cover: RwLock<Option<FrameBuf>>,
+    pub title: RwLock<String>,
+    pub artist: RwLock<String>,
     pub sub_label: RwLock<String>,
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
@@ -65,6 +69,9 @@ impl SharedPlayback {
             has_video: AtomicBool::new(false),
             frame_gen: AtomicU64::new(0),
             frame: RwLock::new(None),
+            cover: RwLock::new(None),
+            title: RwLock::new(String::new()),
+            artist: RwLock::new(String::new()),
             sub_label: RwLock::new(String::new()),
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
@@ -143,6 +150,14 @@ impl MpvEngine {
             path: path.to_path_buf(),
             sidecars,
         });
+    }
+
+    /// Still cover / tags for audio chrome (call with [`Self::load`]).
+    pub fn set_cover_and_tags(&self, cover: Option<FrameBuf>, title: String, artist: String) {
+        *self.shared.cover.write() = cover;
+        *self.shared.title.write() = title;
+        *self.shared.artist.write() = artist;
+        self.shared.dirty.store(true, Ordering::Release);
     }
 
     pub fn play_pause(&self) {
@@ -233,6 +248,8 @@ fn run_worker(
         set_opt(api, handle, "idle", "yes")?;
         set_opt(api, handle, "hwdec", "no")?;
         set_opt(api, handle, "video-sync", "audio")?;
+        // Prefer embedded album art as a video track when present.
+        let _ = set_opt(api, handle, "audio-display", "embedded-first");
         let rc = (api.initialize)(handle);
         if rc < 0 {
             let msg = error_message(api, rc);
@@ -454,6 +471,9 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
         EngineCmd::Stop => {
             let _ = command_args(api, handle, &["stop"]);
             *shared.frame.write() = None;
+            *shared.cover.write() = None;
+            *shared.title.write() = String::new();
+            *shared.artist.write() = String::new();
             shared.has_video.store(false, Ordering::Relaxed);
             shared.playing.store(false, Ordering::Relaxed);
             shared.dirty.store(true, Ordering::Release);

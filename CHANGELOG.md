@@ -87,10 +87,11 @@ release yet.
 #### Viewers
 - **Media viewer (libmpv):** in-app audio/video playback with play/pause,
   seek scrubber, volume/mute, speed, folder playlist, audio-track cycle,
-  chapters, embedded and sidecar `.srt`/`.ass` subtitles, and keyboard
-  shortcuts. Bundle `mpv-1.dll` / `libmpv-2.dll` under
-  `third-party/mpv/win-x64/` (see `docs/BUILDING.md`); without it, chrome
-  remains and files can still open in the system player.
+  chapters, embedded and sidecar `.srt`/`.ass` subtitles, album cover art
+  (ID3 APIC / folder `cover.jpg`), and keyboard shortcuts. Bundle
+  `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see
+  `docs/BUILDING.md`); without it, chrome remains and files can still open
+  in the system player.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
 - Image display: fit-to-window / width / height, 1:1, shrink-if-larger

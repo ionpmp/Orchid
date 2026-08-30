@@ -95,23 +95,36 @@ export component ViewerMediaView inherits Rectangle {
                 alignment: center;
                 padding: 24px;
                 spacing: 10px;
-                Text {
-                    text: model.kind-label;
-                    color: Theme.accent-brand;
-                    font-size: Theme.font-size-lg;
-                    font-weight: Theme.weight-semibold;
-                    horizontal-alignment: center;
+                if model.has-cover : Image {
+                    width: min(220px, parent.width - 48px);
+                    height: min(220px, parent.width - 48px);
+                    source: model.cover;
+                    image-fit: contain;
                 }
                 Text {
-                    text: model.path-display;
+                    text: model.title-label != "" ? model.title-label : model.path-display;
                     color: Theme.text-primary;
                     font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-semibold;
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
+                if model.artist-label != "" : Text {
+                    text: model.artist-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: model.kind-label;
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
                 if model.available : Text {
                     text: model.playing ? model.pause-label : model.play-label;
-                    color: Theme.text-secondary;
+                    color: Theme.text-tertiary;
                     font-size: Theme.font-size-sm;
                     horizontal-alignment: center;
                 }

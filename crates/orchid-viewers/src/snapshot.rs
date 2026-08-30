@@ -403,6 +403,13 @@ pub struct MediaSnapshot {
     pub frame_rgba: Arc<Vec<u8>>,
     pub frame_width: u32,
     pub frame_height: u32,
+    /// Still album art when there is no video track (APIC / folder cover).
+    pub has_cover: bool,
+    pub cover_rgba: Arc<Vec<u8>>,
+    pub cover_width: u32,
+    pub cover_height: u32,
+    pub title: String,
+    pub artist: String,
     /// 0-based index into the folder playlist.
     pub playlist_index: u32,
     pub playlist_count: u32,

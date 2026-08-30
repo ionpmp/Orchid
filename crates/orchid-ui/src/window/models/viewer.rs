@@ -564,6 +564,10 @@ fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
         next_label: locale.tr("viewer-media-next").into(),
         seek_back_label: locale.tr("viewer-media-seek-back").into(),
         seek_fwd_label: locale.tr("viewer-media-seek-fwd").into(),
+        cover: Image::default(),
+        has_cover: false,
+        title_label: SharedString::new(),
+        artist_label: SharedString::new(),
     }
 }
 
@@ -648,6 +652,10 @@ fn build_media_snapshot(
         next_label: locale.tr("viewer-media-next").into(),
         seek_back_label: locale.tr("viewer-media-seek-back").into(),
         seek_fwd_label: locale.tr("viewer-media-seek-fwd").into(),
+        cover: slint_image_from_rgba(&s.cover_rgba, s.cover_width, s.cover_height),
+        has_cover: s.has_cover,
+        title_label: s.title.clone().into(),
+        artist_label: s.artist.clone().into(),
     }
 }
 

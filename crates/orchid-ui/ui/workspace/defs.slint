@@ -1408,6 +1408,11 @@ export struct ViewerMediaModel {
     next-label: string,
     seek-back-label: string,
     seek-fwd-label: string,
+    /// Still album art when `has-video` is false.
+    cover: image,
+    has-cover: bool,
+    title-label: string,
+    artist-label: string,
 }
 
 export struct ViewerHtmlModel {

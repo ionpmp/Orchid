@@ -1,5 +1,6 @@
 //! Audio / video viewer backed by libmpv (RGBA blit) with system-player fallback.
 
+mod cover;
 mod engine;
 mod ffi;
 mod sidecars;
@@ -16,6 +17,7 @@ use crate::error::Result;
 use crate::snapshot::{MediaSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
+pub use cover::{discover_cover_sidecars, load_cover_art, load_media_tags};
 pub use ffi::mpv_available;
 pub use sidecars::discover_sidecar_subs;
 
@@ -229,6 +231,10 @@ impl Viewer for MediaViewer {
         *self.os_path.write() = os.clone();
         *self.path.write() = Some(path);
         if let Some(os) = os {
+            let tags = cover::load_media_tags(&os);
+            let art = cover::load_cover_art(&os);
+            self.engine
+                .set_cover_and_tags(art, tags.title, tags.artist);
             if self.engine_available() {
                 self.engine.load(&os);
             }
@@ -258,6 +264,11 @@ impl Viewer for MediaViewer {
             Some(f) => (f.rgba, f.width, f.height),
             None => (Arc::new(Vec::new()), 0, 0),
         };
+        let cover = shared.cover.read().clone();
+        let (has_cover, cover_rgba, cover_width, cover_height) = match cover {
+            Some(f) => (true, f.rgba, f.width, f.height),
+            None => (false, Arc::new(Vec::new()), 0, 0),
+        };
         let position_ms = shared.position_ms.load(Ordering::Relaxed);
         let duration_ms = shared.duration_ms.load(Ordering::Relaxed);
         let progress = if duration_ms > 0 {
@@ -282,6 +293,12 @@ impl Viewer for MediaViewer {
             frame_rgba,
             frame_width,
             frame_height,
+            has_cover,
+            cover_rgba,
+            cover_width,
+            cover_height,
+            title: shared.title.read().clone(),
+            artist: shared.artist.read().clone(),
             playlist_index: *self.playlist_index.read(),
             playlist_count: *self.playlist_count.read(),
             sub_label: shared.sub_label.read().clone(),
