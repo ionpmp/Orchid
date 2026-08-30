@@ -1,6 +1,37 @@
 import { Theme } from "../../theme_global.slint";
 import { ViewerDocumentModel } from "../../workspace/defs.slint";
 
+/// Hover tip overlay (same pattern as NotesToolBtn).
+component DocHoverTip inherits Rectangle {
+    in property <string> tip;
+    in property <bool> show;
+    /// When true, tip appears below the parent; otherwise above.
+    in property <bool> below: false;
+
+    width: 0px;
+    height: 0px;
+
+    if show && tip != "" : Rectangle {
+        x: (parent.width - tip-box.preferred-width - 12px) / 2;
+        y: root.below ? parent.height + 4px : -tip-box.preferred-height - 8px;
+        width: tip-box.preferred-width + 12px;
+        height: tip-box.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 50;
+        tip-box := Text {
+            x: 6px;
+            y: 3px;
+            text: root.tip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            font-family: Theme.font-family-sans;
+        }
+    }
+}
+
 export component ViewerDocumentView inherits Rectangle {
     in property <ViewerDocumentModel> model;
 
@@ -335,6 +366,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-link;
+                        show: link-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -1001,6 +1037,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-find;
+                        show: find-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -1032,7 +1073,7 @@ export component ViewerDocumentView inherits Rectangle {
 
         Rectangle {
             height: root.find-open ? 68px : 0px;
-            clip: true;
+            clip: false;
             background: Theme.surface-raised;
 
             VerticalLayout {
@@ -1133,6 +1174,10 @@ export component ViewerDocumentView inherits Rectangle {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
+                        DocHoverTip {
+                            tip: model.tip-find-prev;
+                            show: find-prev-ta.has-hover;
+                        }
                     }
 
                     Rectangle {
@@ -1149,6 +1194,10 @@ export component ViewerDocumentView inherits Rectangle {
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
+                        }
+                        DocHoverTip {
+                            tip: model.tip-find-next;
+                            show: find-next-ta.has-hover;
                         }
                     }
 
@@ -1178,6 +1227,10 @@ export component ViewerDocumentView inherits Rectangle {
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
+                        }
+                        DocHoverTip {
+                            tip: model.tip-find-close;
+                            show: find-close-ta.has-hover;
                         }
                     }
                 }
