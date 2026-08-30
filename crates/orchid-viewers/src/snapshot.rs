@@ -92,6 +92,8 @@ pub struct DocumentSnapshot {
     pub link_hover: bool,
     /// External hyperlink URL at the selection caret (empty when none).
     pub link_url: String,
+    /// True when page size matches ISO A4 (else treated as US Letter for the Pg control).
+    pub page_is_a4: bool,
 }
 
 /// Image snapshot.

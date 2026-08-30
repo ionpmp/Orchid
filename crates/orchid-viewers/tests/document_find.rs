@@ -4,6 +4,7 @@ use orchid_viewers::document::model::{
     Block, Document as Doc, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use orchid_viewers::document::DocumentViewer;
+use orchid_viewers::{Viewer, ViewerSnapshot};
 
 fn sample_doc() -> Doc {
     fn cell(text: &str) -> TableCell {
@@ -164,6 +165,12 @@ fn cycle_page_size_letter_and_a4() {
         assert_eq!(ps.width_twips, 12240);
         assert_eq!(ps.height_twips, 15840);
     }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document snapshot");
+        };
+        assert!(!snap.page_is_a4);
+    }
     viewer.cycle_page_size().unwrap();
     {
         let guard = viewer.document();
@@ -171,12 +178,24 @@ fn cycle_page_size_letter_and_a4() {
         assert_eq!(ps.width_twips, 11906);
         assert_eq!(ps.height_twips, 16838);
     }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document snapshot");
+        };
+        assert!(snap.page_is_a4);
+    }
     viewer.cycle_page_size().unwrap();
     {
         let guard = viewer.document();
         let ps = &guard.as_ref().unwrap().page_setup;
         assert_eq!(ps.width_twips, 12240);
         assert_eq!(ps.height_twips, 15840);
+    }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document snapshot");
+        };
+        assert!(!snap.page_is_a4);
     }
     viewer.undo().unwrap();
     {

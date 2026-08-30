@@ -3181,6 +3181,7 @@ impl Viewer for DocumentViewer {
             }
             (Arc::clone(&prev.bytes), prev.width_px, prev.height_px)
         };
+        let page_is_a4 = is_a4_page(&doc.page_setup);
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -3216,6 +3217,7 @@ impl Viewer for DocumentViewer {
             find_match_count: *self.find_match_count.lock(),
             link_hover: *self.link_hover.lock(),
             link_url,
+            page_is_a4,
         })
     }
 
