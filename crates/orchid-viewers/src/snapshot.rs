@@ -413,6 +413,7 @@ pub struct MediaSnapshot {
     /// 0-based index into the folder playlist.
     pub playlist_index: u32,
     pub playlist_count: u32,
+    pub playlist_shuffle: bool,
     pub sub_label: String,
     pub sub_visible: bool,
     pub audio_label: String,

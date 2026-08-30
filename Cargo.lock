@@ -6184,6 +6184,7 @@ dependencies = [
  "feed-rs",
  "futures",
  "iana-time-zone",
+ "image",
  "opener",
  "orchid-core",
  "orchid-crypto",

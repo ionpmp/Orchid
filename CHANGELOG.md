@@ -90,8 +90,9 @@ release yet.
   chapters, embedded and sidecar `.srt`/`.ass` subtitles, album cover art
   (ID3 APIC / folder `cover.jpg`), A-B loop (Shift+A/B, Shift+L clear),
   resume position, manual subtitle open (Ctrl+S) with scale `{`/`}` and
-  Alt+↑/↓ position, Windows SMTC publish (media keys / lock screen), and
-  keyboard shortcuts. Bundle `mpv-1.dll` / `libmpv-2.dll` under
+  Alt+↑/↓ position, playlist shuffle (Y) / random jump (R), Windows SMTC
+  publish with cover thumbnail (media keys / lock screen), and keyboard
+  shortcuts. Bundle `mpv-1.dll` / `libmpv-2.dll` under
   `third-party/mpv/win-x64/` (see `docs/BUILDING.md`); without it, chrome
   remains and files can still open in the system player.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
@@ -300,6 +301,11 @@ release yet.
   selection empties, a press whose release is swallowed by a listing update can
   no longer arm it after 500 ms, and clicks commit against the entry that was
   pressed rather than whatever the recycled row shows at release time.
+- File-manager marquee commit keeps the live index range instead of
+  re-hit-testing on mouse-up, which often shrank the selection the moment the
+  button came up (restored only after a focus-driven full repaint). The model
+  is patched before the live highlight is cleared, and selection cache syncs
+  no longer mark the frame dirty (that raced the rubber band on the next tick).
 - File-manager rubber-band rows highlight immediately from the live index
   range in Slint, and marquee selection updates the model on the UI stack
   instead of an async spawn — the previous round-trip left some entries

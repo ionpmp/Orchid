@@ -16,6 +16,8 @@ pub struct MediaFolderNav {
     pub index: usize,
     /// Wrap around at the ends.
     pub loop_playlist: bool,
+    /// Next/prev pick a random readable sibling instead of sequential order.
+    pub shuffle: bool,
     /// Recently opened media in this viewer (newest first).
     pub history: VecDeque<FsPath>,
     /// Paths that failed to open; skipped on later steps.
@@ -29,6 +31,7 @@ impl Default for MediaFolderNav {
             siblings: Vec::new(),
             index: 0,
             loop_playlist: true,
+            shuffle: false,
             history: VecDeque::new(),
             unreadable: HashSet::new(),
         }
@@ -48,6 +51,8 @@ pub enum MediaNavStep {
     Last,
     /// 1-based index.
     Goto(usize),
+    /// Random readable sibling (≠ current when possible).
+    Random,
 }
 
 impl MediaFolderNav {
@@ -101,8 +106,21 @@ impl MediaFolderNav {
                     None
                 }
             }
-            MediaNavStep::Next => self.step_from(self.index, 1),
-            MediaNavStep::Prev => self.step_from(self.index, -1),
+            MediaNavStep::Next => {
+                if self.shuffle {
+                    self.pick_random()
+                } else {
+                    self.step_from(self.index, 1)
+                }
+            }
+            MediaNavStep::Prev => {
+                if self.shuffle {
+                    self.pick_random()
+                } else {
+                    self.step_from(self.index, -1)
+                }
+            }
+            MediaNavStep::Random => self.pick_random(),
         }
     }
 
@@ -140,6 +158,37 @@ impl MediaFolderNav {
             }
         }
         None
+    }
+
+    fn pick_random(&self) -> Option<usize> {
+        let readable: Vec<usize> = (0..self.siblings.len())
+            .filter(|i| self.is_readable(*i))
+            .collect();
+        if readable.is_empty() {
+            return None;
+        }
+        if readable.len() == 1 {
+            return Some(readable[0]);
+        }
+        let others: Vec<usize> = readable
+            .iter()
+            .copied()
+            .filter(|i| *i != self.index)
+            .collect();
+        let pool = if others.is_empty() {
+            &readable
+        } else {
+            &others
+        };
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(1);
+        let mut x = seed ^ (self.index as u64).wrapping_mul(0x9E37_79B9);
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        Some(pool[(x as usize) % pool.len()])
     }
 }
 
@@ -224,5 +273,17 @@ mod tests {
         let mut n = nav(&["a.mp4", "b.mp3", "c.mkv"], 0, true);
         n.mark_unreadable(&p("b.mp3"));
         assert_eq!(n.pick(MediaNavStep::Next), Some(2));
+    }
+
+    #[test]
+    fn shuffle_next_leaves_current() {
+        let mut n = nav(&["a.mp4", "b.mp3", "c.mkv"], 0, true);
+        n.shuffle = true;
+        for _ in 0..8 {
+            let cur = n.index;
+            let next = n.pick(MediaNavStep::Next).unwrap();
+            assert_ne!(next, cur);
+            n.index = next;
+        }
     }
 }

@@ -11,13 +11,16 @@ use std::sync::{Mutex, OnceLock};
 use orchid_viewers::MediaSnapshot;
 use tracing::debug;
 use uuid::Uuid;
-use windows::core::{Ref, Result as WinResult};
+use windows::core::{Ref, Result as WinResult, HSTRING};
 use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Media::Playback::MediaPlayer;
 use windows::Media::{
     MediaPlaybackStatus, MediaPlaybackType, SystemMediaTransportControls,
     SystemMediaTransportControlsButton, SystemMediaTransportControlsButtonPressedEventArgs,
     SystemMediaTransportControlsTimelineProperties,
+};
+use windows::Storage::Streams::{
+    DataWriter, InMemoryRandomAccessStream, RandomAccessStreamReference,
 };
 
 static STATE: OnceLock<Mutex<Option<PublisherState>>> = OnceLock::new();
@@ -29,6 +32,7 @@ struct PublisherState {
     last_title: String,
     last_artist: String,
     last_playing: Option<bool>,
+    last_cover_sig: u64,
 }
 
 fn state() -> &'static Mutex<Option<PublisherState>> {
@@ -80,6 +84,7 @@ fn init_publisher() -> WinResult<PublisherState> {
         last_title: String::new(),
         last_artist: String::new(),
         last_playing: None,
+        last_cover_sig: 0,
     })
 }
 
@@ -127,6 +132,7 @@ pub fn clear_active(instance_id: Uuid) {
         state.last_title.clear();
         state.last_artist.clear();
         state.last_playing = None;
+        state.last_cover_sig = 0;
     }
 }
 
@@ -153,12 +159,27 @@ pub fn publish(instance_id: Uuid, snap: &MediaSnapshot) {
         snap.title.clone()
     };
     let artist = snap.artist.clone();
-    if title != state.last_title || artist != state.last_artist {
+    let cover_sig = cover_signature(snap);
+    let meta_changed = title != state.last_title || artist != state.last_artist;
+    let cover_changed = cover_sig != state.last_cover_sig;
+    if meta_changed || cover_changed {
         if let Ok(updater) = state.smtc.DisplayUpdater() {
             let _ = updater.SetType(MediaPlaybackType::Music);
             if let Ok(props) = updater.MusicProperties() {
-                let _ = props.SetTitle(&windows::core::HSTRING::from(title.as_str()));
-                let _ = props.SetArtist(&windows::core::HSTRING::from(artist.as_str()));
+                let _ = props.SetTitle(&HSTRING::from(title.as_str()));
+                let _ = props.SetArtist(&HSTRING::from(artist.as_str()));
+            }
+            if cover_changed {
+                if snap.has_cover {
+                    if let Some(stream_ref) = jpeg_stream_ref_from_rgba(
+                        &snap.cover_rgba,
+                        snap.cover_width,
+                        snap.cover_height,
+                    ) {
+                        let _ = updater.SetThumbnail(&stream_ref);
+                    }
+                }
+                state.last_cover_sig = cover_sig;
             }
             let _ = updater.Update();
         }
@@ -191,4 +212,46 @@ fn ms_to_timespan(ms: u64) -> TimeSpan {
     TimeSpan {
         Duration: (ms as i64).saturating_mul(10_000),
     }
+}
+
+fn cover_signature(snap: &MediaSnapshot) -> u64 {
+    if !snap.has_cover || snap.cover_rgba.is_empty() {
+        return 0;
+    }
+    let mut h = (snap.cover_width as u64)
+        .wrapping_mul(0x9E37_79B9)
+        .wrapping_add(snap.cover_height as u64);
+    h ^= snap.cover_rgba.len() as u64;
+    for (i, b) in snap.cover_rgba.iter().take(64).enumerate() {
+        h = h.wrapping_mul(31).wrapping_add(*b as u64).wrapping_add(i as u64);
+    }
+    h
+}
+
+fn jpeg_stream_ref_from_rgba(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+) -> Option<RandomAccessStreamReference> {
+    if width == 0 || height == 0 || rgba.len() < (width as usize) * (height as usize) * 4 {
+        return None;
+    }
+    let img = image::RgbaImage::from_raw(width, height, rgba.to_vec())?;
+    let mut jpeg = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut jpeg);
+    let rgb = image::DynamicImage::ImageRgba8(img).to_rgb8();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 85)
+        .encode(rgb.as_raw(), width, height, image::ExtendedColorType::Rgb8)
+        .ok()?;
+    if jpeg.is_empty() {
+        return None;
+    }
+    let stream = InMemoryRandomAccessStream::new().ok()?;
+    let writer = DataWriter::CreateDataWriter(&stream).ok()?;
+    writer.WriteBytes(&jpeg).ok()?;
+    writer.StoreAsync().ok()?.join().ok()?;
+    writer.FlushAsync().ok()?.join().ok()?;
+    drop(writer);
+    stream.Seek(0).ok()?;
+    RandomAccessStreamReference::CreateFromStream(&stream).ok()
 }

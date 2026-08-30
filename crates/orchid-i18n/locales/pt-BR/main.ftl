@@ -705,6 +705,7 @@ viewer-media-volume = Vol. { $n }%
 viewer-media-muted = Mudo
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
+viewer-media-shuffle = Aleatório
 viewer-media-subs-off = Legendas off
 viewer-html-open = Abrir no navegador
 viewer-html-hint = A prévia HTML usa o navegador do sistema

@@ -53,6 +53,7 @@ pub struct MediaViewer {
     /// Playlist index overlay (0-based); set by the widget.
     playlist_index: RwLock<u32>,
     playlist_count: RwLock<u32>,
+    playlist_shuffle: RwLock<bool>,
 }
 
 impl Default for MediaViewer {
@@ -72,13 +73,15 @@ impl MediaViewer {
             engine: MpvEngine::spawn(),
             playlist_index: RwLock::new(0),
             playlist_count: RwLock::new(0),
+            playlist_shuffle: RwLock::new(false),
         }
     }
 
     /// Update playlist chrome (1-based display uses index+1).
-    pub fn set_playlist_info(&self, index: u32, count: u32) {
+    pub fn set_playlist_info(&self, index: u32, count: u32, shuffle: bool) {
         *self.playlist_index.write() = index;
         *self.playlist_count.write() = count;
+        *self.playlist_shuffle.write() = shuffle;
     }
 
     /// True when libmpv loaded successfully.
@@ -356,6 +359,7 @@ impl Viewer for MediaViewer {
             artist: shared.artist.read().clone(),
             playlist_index: *self.playlist_index.read(),
             playlist_count: *self.playlist_count.read(),
+            playlist_shuffle: *self.playlist_shuffle.read(),
             sub_label: shared.sub_label.read().clone(),
             sub_visible: shared.sub_visible.load(Ordering::Relaxed),
             audio_label: shared.audio_label.read().clone(),

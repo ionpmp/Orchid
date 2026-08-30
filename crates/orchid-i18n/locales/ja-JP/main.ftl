@@ -705,6 +705,7 @@ viewer-media-volume = 音量 { $n }%
 viewer-media-muted = ミュート
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
+viewer-media-shuffle = シャッフル
 viewer-media-subs-off = 字幕オフ
 viewer-html-open = ブラウザーで開く
 viewer-html-hint = HTML プレビューはシステムのブラウザーを使います

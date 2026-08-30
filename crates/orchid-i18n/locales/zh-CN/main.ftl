@@ -705,6 +705,7 @@ viewer-media-volume = 音量 { $n }%
 viewer-media-muted = 静音
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
+viewer-media-shuffle = 随机
 viewer-media-subs-off = 字幕关闭
 viewer-html-open = 在浏览器中打开
 viewer-html-hint = HTML 预览使用系统浏览器

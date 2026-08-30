@@ -611,12 +611,17 @@ fn build_media_snapshot(
         &orchid_i18n::FluentArgs::new().with("n", format!("{:.1}", s.speed)),
     );
     let playlist_label = if s.playlist_count > 0 {
-        locale.tr_args(
+        let base = locale.tr_args(
             "viewer-media-playlist",
             &orchid_i18n::FluentArgs::new()
                 .with("i", (s.playlist_index + 1).to_string())
                 .with("n", s.playlist_count.to_string()),
-        )
+        );
+        if s.playlist_shuffle {
+            format!("{base} · {}", locale.tr("viewer-media-shuffle"))
+        } else {
+            base
+        }
     } else {
         String::new()
     };

@@ -501,14 +501,14 @@ impl ViewerWidgetInner {
     }
 
     async fn apply_media_playlist_overlay(&self) {
-        let (idx, count) = {
+        let (idx, count, shuffle) = {
             let nav = self.media_nav.read();
-            (nav.index as u32, nav.siblings.len() as u32)
+            (nav.index as u32, nav.siblings.len() as u32, nav.shuffle)
         };
         let guard = self.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                media.set_playlist_info(idx, count);
+                media.set_playlist_info(idx, count, shuffle);
             }
         }
     }
@@ -570,15 +570,15 @@ impl ViewerWidgetInner {
                     None => return,
                     Some(true) => {
                         // Re-apply playlist chrome then publish.
-                        let (idx, count) = {
+                        let (idx, count, shuffle) = {
                             let nav = inner.media_nav.read();
-                            (nav.index as u32, nav.siblings.len() as u32)
+                            (nav.index as u32, nav.siblings.len() as u32, nav.shuffle)
                         };
                         {
                             let guard = inner.viewer.lock().await;
                             if let Some(v) = guard.as_ref() {
                                 if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                                    media.set_playlist_info(idx, count);
+                                    media.set_playlist_info(idx, count, shuffle);
                                 }
                                 let snap = apply_image_overlay(
                                     v.snapshot(),
@@ -3426,6 +3426,18 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             let next = !inner.media_nav.read().loop_playlist;
             inner.media_nav.write().loop_playlist = next;
             inner.refresh_snapshot().await;
+            return Ok(());
+        }
+        "shuffle" => {
+            let next = !inner.media_nav.read().shuffle;
+            inner.media_nav.write().shuffle = next;
+            inner.refresh_snapshot().await;
+            return Ok(());
+        }
+        "random" => {
+            inner
+                .navigate_media(media_nav::MediaNavStep::Random)
+                .await?;
             return Ok(());
         }
         cmd if let Some(raw) = cmd.strip_prefix("goto:") => {

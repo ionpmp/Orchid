@@ -95,6 +95,14 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("ab-clear");
                 return accept;
             }
+            if event.text == "y" || event.text == "Y" {
+                root.command("shuffle");
+                return accept;
+            }
+            if event.text == "r" || event.text == "R" {
+                root.command("random");
+                return accept;
+            }
             if event.text == "n" || event.text == "N" || event.text == Key.PageDown {
                 root.command("next");
                 return accept;
