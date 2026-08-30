@@ -91,6 +91,12 @@ pub enum ViewerError {
     )]
     PdfUnavailable,
 
+    /// libmpv shared library could not be loaded.
+    #[error(
+        "Media playback unavailable: place mpv-1.dll (or libmpv-2.dll) next to the executable or see docs/BUILDING.md"
+    )]
+    MediaUnavailable,
+
     /// Text decode failed.
     #[error("failed to parse text: {0}")]
     TextDecode(String),

@@ -121,6 +121,7 @@ arboard = "3"
 
 # Viewers / archives / file IO
 pdfium-render = "0.9"
+libloading = "0.8"
 image = "0.25"
 jxl-oxide = { version = "0.12", default-features = false, features = ["moxcms"] }
 psd = "0.3"

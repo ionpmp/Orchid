@@ -2323,6 +2323,43 @@ impl MainWindowController {
             }
         });
 
+        self.window.on_viewer_media_command({
+            let t = t.clone();
+            move |id, cmd| {
+                if let Some(c) = t.upgrade() {
+                    c.apply_viewer_window_command(cmd.as_str());
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        c.bring_floating_to_front(inst);
+                        let cmd = cmd.to_string();
+                        spawn::spawn_local_compat(async move {
+                            if let Err(e) =
+                                orchid_widgets::builtin::viewer::media_command(inst, &cmd).await
+                            {
+                                warn!(?e, "viewer media command");
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
+        self.window.on_viewer_media_seek_frac({
+            let t = t.clone();
+            move |id, frac| {
+                if let Some(_c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        spawn::spawn_local_compat(async move {
+                            if let Err(e) =
+                                orchid_widgets::builtin::viewer::media_seek_frac(inst, frac).await
+                            {
+                                warn!(?e, "viewer media seek");
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
         self.window.on_viewer_document_action({
             let t = t.clone();
             move |id, action| {

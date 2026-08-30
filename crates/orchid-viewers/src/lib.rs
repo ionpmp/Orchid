@@ -1,5 +1,5 @@
 //! Content viewers for Orchid: images, PDF, text with syntax
-//! highlighting, archives, and thumbnails.
+//! highlighting, archives, media (libmpv), and thumbnails.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
@@ -88,7 +88,10 @@ pub use image::{
     ImageFitMode, ImageFormat, ImageViewer, LoadedImage, ViewTransform, DEFAULT_SIZE_LIMIT,
     IMAGE_FILE_EXTENSIONS,
 };
-pub use media::{is_media_file_extension, MediaViewer, MEDIA_FILE_EXTENSIONS};
+pub use media::{
+    discover_sidecar_subs, is_media_file_extension, mpv_available, MediaViewer,
+    MEDIA_FILE_EXTENSIONS,
+};
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, CalDayItem, DocumentSnapshot,

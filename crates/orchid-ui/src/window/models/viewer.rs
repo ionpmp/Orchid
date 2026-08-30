@@ -543,6 +543,97 @@ fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
         kind_label: SharedString::new(),
         play_label: locale.tr("viewer-media-play").into(),
         hint_label: locale.tr("viewer-media-hint").into(),
+        unavailable_label: SharedString::new(),
+        open_external_label: locale.tr("viewer-media-open-external").into(),
+        frame: Image::default(),
+        has_video: false,
+        available: false,
+        playing: false,
+        progress: 0.0,
+        position_label: SharedString::from("0:00"),
+        duration_label: SharedString::from("0:00"),
+        volume_label: SharedString::new(),
+        speed_label: SharedString::new(),
+        playlist_label: SharedString::new(),
+        sub_label: SharedString::new(),
+        error_text: SharedString::new(),
+    }
+}
+
+fn format_media_time(ms: u64) -> String {
+    let total_secs = ms / 1000;
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+fn build_media_snapshot(
+    s: &orchid_viewers::MediaSnapshot,
+    locale: &LocaleManager,
+) -> ViewerMediaModel {
+    let kind = if s.kind_label == "audio" {
+        locale.tr("viewer-media-kind-audio")
+    } else {
+        locale.tr("viewer-media-kind-video")
+    };
+    let unavailable = if s.available {
+        String::new()
+    } else {
+        locale.tr("viewer-media-unavailable")
+    };
+    let volume_label = if s.muted {
+        locale.tr("viewer-media-muted")
+    } else {
+        locale.tr_args(
+            "viewer-media-volume",
+            &orchid_i18n::FluentArgs::new().with("n", s.volume.to_string()),
+        )
+    };
+    let speed_label = locale.tr_args(
+        "viewer-media-speed",
+        &orchid_i18n::FluentArgs::new().with("n", format!("{:.1}", s.speed)),
+    );
+    let playlist_label = if s.playlist_count > 0 {
+        locale.tr_args(
+            "viewer-media-playlist",
+            &orchid_i18n::FluentArgs::new()
+                .with("i", (s.playlist_index + 1).to_string())
+                .with("n", s.playlist_count.to_string()),
+        )
+    } else {
+        String::new()
+    };
+    let sub = if s.sub_label.is_empty() {
+        String::new()
+    } else if s.sub_visible {
+        s.sub_label.clone()
+    } else {
+        locale.tr("viewer-media-subs-off")
+    };
+    ViewerMediaModel {
+        path_display: s.path_display.clone().into(),
+        kind_label: kind.into(),
+        play_label: locale.tr("viewer-media-play").into(),
+        hint_label: locale.tr("viewer-media-hint").into(),
+        unavailable_label: unavailable.into(),
+        open_external_label: locale.tr("viewer-media-open-external").into(),
+        frame: slint_image_from_rgba(&s.frame_rgba, s.frame_width, s.frame_height),
+        has_video: s.has_video,
+        available: s.available,
+        playing: s.playing,
+        progress: s.progress,
+        position_label: format_media_time(s.position_ms).into(),
+        duration_label: format_media_time(s.duration_ms).into(),
+        volume_label: volume_label.into(),
+        speed_label: speed_label.into(),
+        playlist_label: playlist_label.into(),
+        sub_label: sub.into(),
+        error_text: s.error.clone().into(),
     }
 }
 
@@ -746,12 +837,7 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
         }
         Vs::Media(s) => {
             model.kind = 8;
-            model.media = ViewerMediaModel {
-                path_display: s.path_display.clone().into(),
-                kind_label: s.kind_label.clone().into(),
-                play_label: locale.tr("viewer-media-play").into(),
-                hint_label: locale.tr("viewer-media-hint").into(),
-            };
+            model.media = build_media_snapshot(s, locale);
         }
         Vs::Html(s) => {
             model.kind = 9;

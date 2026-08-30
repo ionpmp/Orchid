@@ -30,7 +30,7 @@ pub enum ViewerSnapshot {
     Archive(ArchiveSnapshot),
     /// Rich-text document (DOCX).
     Document(DocumentSnapshot),
-    /// Audio / video — system player via Open.
+    /// Audio / video — libmpv when available, else system player via Open.
     Media(MediaSnapshot),
     /// HTML source + open in the system browser.
     Html(HtmlSnapshot),
@@ -377,7 +377,7 @@ pub enum ArchiveStatus {
     },
 }
 
-/// Audio / video snapshot (metadata + Play).
+/// Audio / video snapshot (libmpv transport + optional RGBA frame).
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct MediaSnapshot {
@@ -385,6 +385,26 @@ pub struct MediaSnapshot {
     /// `"audio"` or `"video"`.
     pub kind_label: String,
     pub info_text: String,
+    /// libmpv loaded and usable.
+    pub available: bool,
+    pub playing: bool,
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    /// 0..1 progress fraction.
+    pub progress: f32,
+    pub volume: u32,
+    pub muted: bool,
+    pub speed: f32,
+    pub has_video: bool,
+    pub frame_rgba: Arc<Vec<u8>>,
+    pub frame_width: u32,
+    pub frame_height: u32,
+    /// 0-based index into the folder playlist.
+    pub playlist_index: u32,
+    pub playlist_count: u32,
+    pub sub_label: String,
+    pub sub_visible: bool,
+    pub error: String,
 }
 
 /// HTML snapshot (source preview + Open in browser).

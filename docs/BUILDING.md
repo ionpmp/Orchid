@@ -27,6 +27,21 @@ third-party/pdfium/win-x64/pdfium.dll
 
 The `orchid-app` build script copies this DLL next to `orchid.exe` under `target/<profile>/`. Without it, the PDF viewer shows an explanatory error and PDF text extraction in search is skipped.
 
+**libmpv (in-app audio / video playback)**
+
+Orchid loads libmpv at runtime for the Media viewer. Download a prebuilt Windows
+x64 **libmpv** package from
+[mpv-player-windows / libmpv](https://sourceforge.net/projects/mpv-player-windows/files/libmpv/)
+and place the primary DLL (and any companion DLLs from the package) at:
+
+```
+third-party/mpv/win-x64/mpv-1.dll
+```
+
+or `libmpv-2.dll` (depending on the package). The `orchid-app` build script
+copies every `*.dll` from that folder next to `orchid.exe`. Without libmpv, the
+Media viewer shows chrome and can still open the file in the system player.
+
 ## Cloning
 
 ```bash

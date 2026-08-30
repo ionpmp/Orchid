@@ -85,6 +85,11 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **Media viewer (libmpv):** in-app audio/video playback with play/pause,
+  seek scrubber, volume/mute, speed, folder playlist, embedded and sidecar
+  `.srt`/`.ass` subtitles, and keyboard shortcuts. Bundle `mpv-1.dll` /
+  `libmpv-2.dll` under `third-party/mpv/win-x64/` (see `docs/BUILDING.md`);
+  without it, chrome remains and files can still open in the system player.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
 - Image display: fit-to-window / width / height, 1:1, shrink-if-larger
@@ -193,7 +198,8 @@ release yet.
   context menu **File associations…** opens the OS default-apps settings.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find
   (F7) with regex + multiline replace, print, undo/redo.
-- Media files open a Play handoff to the system player; HTML shows source
+- Media viewer plays in-app via libmpv when bundled; otherwise opens a Play
+  handoff to the system player. HTML shows source
   plus Open in browser.
 - **Tier-1 DOCX document editor**: OOXML read/write, Preview/Source,
   parley+swash canvas, selection and keyboard editing, tables (cell nav,

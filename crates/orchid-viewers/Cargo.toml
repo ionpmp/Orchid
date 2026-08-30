@@ -1,6 +1,6 @@
 [package]
 name = "orchid-viewers"
-description = "Content viewers for Orchid: images, PDF, text (with syntax highlighting), archives, and thumbnails."
+description = "Content viewers for Orchid: images, PDF, text (with syntax highlighting), archives, media (libmpv), and thumbnails."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -55,6 +55,7 @@ tokio = { workspace = true }
 dashmap.workspace = true
 
 pdfium-render.workspace = true
+libloading.workspace = true
 quick-xml.workspace = true
 parley.workspace = true
 swash.workspace = true

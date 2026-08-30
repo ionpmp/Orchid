@@ -5,6 +5,7 @@ mod image_inspect;
 mod image_nav;
 mod image_slideshow;
 mod image_thumbs;
+mod media_nav;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -23,8 +24,8 @@ use orchid_viewers::{
     set_wallpaper, share_intent_url, unique_export_dest, write_mail_eml, write_screenshot,
     AdjustOp, AnnotateOp, ArchiveViewer, CropKeep, DocumentViewer, EditOp, ExportFormat,
     ExportSpec, FilterOp, HistMode, ImageFitMode, ImageThumbItem, ImageViewer, LosslessOp,
-    PdfViewer, SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService, ThumbnailSize,
-    ViewTransform, Viewer,
+    MediaViewer, PdfViewer, SlideTransition, SyntaxHighlighter, TextViewer, ThumbnailService,
+    ThumbnailSize, ViewTransform, Viewer,
 };
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
@@ -235,6 +236,8 @@ struct ViewerWidgetInner {
     floating: RwLock<Option<crate::layout::PixelBounds>>,
     /// Image folder playlist (next/prev, loop, recent).
     image_nav: RwLock<image_nav::ImageFolderNav>,
+    /// Media folder playlist (next/prev, loop).
+    media_nav: RwLock<media_nav::MediaFolderNav>,
     /// Last zoom / fit per path (and the most recent view for new files).
     image_views: RwLock<ImageViewMemory>,
     /// Thumbnail strip / grid prefs and generated cells.
@@ -246,6 +249,7 @@ struct ViewerWidgetInner {
     slideshow: RwLock<image_slideshow::SlideshowState>,
     slide_tick: AtomicU64,
     anim_tick: AtomicU64,
+    media_tick: AtomicU64,
     music_child: parking_lot::Mutex<Option<std::process::Child>>,
     inspect: RwLock<image_inspect::InspectState>,
     inspect_gen: AtomicU64,
@@ -356,6 +360,7 @@ impl ViewerWidgetInner {
     /// first snapshot.
     async fn open_path(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
         self.anim_tick.fetch_add(1, Ordering::Relaxed);
+        self.media_tick.fetch_add(1, Ordering::Relaxed);
         self.remember_current_image_view().await;
         let registry = self.deps.registry.clone();
         let highlighter = self.deps.highlighter.clone();
@@ -421,6 +426,10 @@ impl ViewerWidgetInner {
             }
             self.schedule_thumbs_and_preload();
         }
+        if is_media_path(&path) {
+            self.after_media_opened(&path).await;
+            self.schedule_media_ticks();
+        }
         self.overlay_image_nav();
         self.publish_refresh();
         Ok(())
@@ -461,6 +470,124 @@ impl ViewerWidgetInner {
             self.slideshow.write().overlay_text = image_slideshow::overlay_for_path(path);
         }
         self.schedule_inspect(path);
+    }
+
+    async fn after_media_opened(&self, path: &orchid_fs::FsPath) {
+        let parent = path.parent();
+        let need_list = {
+            let nav = self.media_nav.read();
+            nav.folder.as_ref() != parent.as_ref() || !nav.siblings.iter().any(|p| p == path)
+        };
+        if need_list {
+            if let Some(folder) = parent {
+                if let Some(list) =
+                    media_nav::list_media_siblings(&self.deps.registry, &folder).await
+                {
+                    self.media_nav.write().set_folder(folder, list, path);
+                }
+            }
+        } else {
+            self.media_nav.write().set_current(path);
+        }
+        self.media_nav.write().push_history(path);
+        self.apply_media_playlist_overlay().await;
+    }
+
+    async fn apply_media_playlist_overlay(&self) {
+        let (idx, count) = {
+            let nav = self.media_nav.read();
+            (nav.index as u32, nav.siblings.len() as u32)
+        };
+        let guard = self.viewer.lock().await;
+        if let Some(v) = guard.as_ref() {
+            if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
+                media.set_playlist_info(idx, count);
+            }
+        }
+    }
+
+    async fn navigate_media(&self, step: media_nav::MediaNavStep) -> WidgetResult<()> {
+        {
+            let path = self.path.read().clone();
+            if let Some(path) = path.as_ref() {
+                if is_media_path(path) {
+                    let need = self.media_nav.read().siblings.is_empty();
+                    if need {
+                        self.after_media_opened(path).await;
+                    }
+                }
+            }
+        }
+        let idx = self.media_nav.read().pick(step);
+        let Some(idx) = idx else {
+            return Ok(());
+        };
+        let Some(next) = self.media_nav.read().siblings.get(idx).cloned() else {
+            return Ok(());
+        };
+        self.media_nav.write().index = idx;
+        self.open_path(next).await
+    }
+
+    fn schedule_media_ticks(&self) {
+        let gen = self.media_tick.fetch_add(1, Ordering::Relaxed) + 1;
+        let inner = {
+            let Some(entry) = VIEWER_LIVE.get(&self.instance_id) else {
+                return;
+            };
+            Arc::clone(entry.value())
+        };
+        tokio::spawn(async move {
+            loop {
+                if inner.media_tick.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(33)).await;
+                if inner.media_tick.load(Ordering::Relaxed) != gen {
+                    return;
+                }
+                let dirty = {
+                    let guard = inner.viewer.lock().await;
+                    if let Some(v) = guard.as_ref() {
+                        if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
+                            let d = media.take_dirty() || media.is_playing();
+                            Some(d)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+                match dirty {
+                    None => return,
+                    Some(true) => {
+                        // Re-apply playlist chrome then publish.
+                        let (idx, count) = {
+                            let nav = inner.media_nav.read();
+                            (nav.index as u32, nav.siblings.len() as u32)
+                        };
+                        {
+                            let guard = inner.viewer.lock().await;
+                            if let Some(v) = guard.as_ref() {
+                                if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
+                                    media.set_playlist_info(idx, count);
+                                }
+                                *inner.snapshot.write() = Some(apply_image_overlay(
+                                    v.snapshot(),
+                                    &inner.image_nav.read(),
+                                    Some(&inner.image_thumbs.read()),
+                                    Some(&inner.slideshow.read()),
+                                    Some(&inner.inspect.read()),
+                                ));
+                            }
+                        }
+                        inner.publish_refresh();
+                    }
+                    Some(false) => {}
+                }
+            }
+        });
     }
 
     fn schedule_inspect(&self, path: &orchid_fs::FsPath) {
@@ -1660,6 +1787,7 @@ impl ViewerWidget {
                 pending_edit: AtomicBool::new(false),
                 floating: RwLock::new(None),
                 image_nav: RwLock::new(image_nav::ImageFolderNav::default()),
+                media_nav: RwLock::new(media_nav::MediaFolderNav::default()),
                 image_views: RwLock::new(ImageViewMemory::default()),
                 image_thumbs: RwLock::new(image_thumbs::ImageThumbState::default()),
                 image_preload: RwLock::new(image_thumbs::ImagePreloadCache::default()),
@@ -1667,6 +1795,7 @@ impl ViewerWidget {
                 slideshow: RwLock::new(image_slideshow::SlideshowState::default()),
                 slide_tick: AtomicU64::new(0),
                 anim_tick: AtomicU64::new(0),
+                media_tick: AtomicU64::new(0),
                 music_child: parking_lot::Mutex::new(None),
                 inspect: RwLock::new(image_inspect::InspectState::default()),
                 inspect_gen: AtomicU64::new(0),
@@ -1778,6 +1907,11 @@ pub async fn open_path_for_edit(instance_id: Uuid, path: orchid_fs::FsPath) -> W
 fn is_image_path(path: &orchid_fs::FsPath) -> bool {
     path.extension()
         .is_some_and(orchid_viewers::is_image_file_extension)
+}
+
+fn is_media_path(path: &orchid_fs::FsPath) -> bool {
+    path.extension()
+        .is_some_and(orchid_viewers::is_media_file_extension)
 }
 
 fn apply_image_overlay(
@@ -3244,6 +3378,87 @@ pub fn open_current_externally(instance_id: Uuid) -> WidgetResult<()> {
         .to_local()
         .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     opener::open(&os).map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))
+}
+
+/// Media viewer transport / playlist command.
+pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    match command {
+        "next" => {
+            inner
+                .navigate_media(media_nav::MediaNavStep::Next)
+                .await?;
+            return Ok(());
+        }
+        "prev" => {
+            inner
+                .navigate_media(media_nav::MediaNavStep::Prev)
+                .await?;
+            return Ok(());
+        }
+        "first" => {
+            inner
+                .navigate_media(media_nav::MediaNavStep::First)
+                .await?;
+            return Ok(());
+        }
+        "last" => {
+            inner
+                .navigate_media(media_nav::MediaNavStep::Last)
+                .await?;
+            return Ok(());
+        }
+        "loop" => {
+            let next = !inner.media_nav.read().loop_playlist;
+            inner.media_nav.write().loop_playlist = next;
+            inner.refresh_snapshot().await;
+            return Ok(());
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("goto:") => {
+            if let Ok(n) = raw.parse::<usize>() {
+                inner
+                    .navigate_media(media_nav::MediaNavStep::Goto(n))
+                    .await?;
+            }
+            return Ok(());
+        }
+        "fullscreen" | "kiosk" | "exit-immersive" | "next-monitor" => {
+            // Handled at the UI window layer; still accept no-op here.
+            return Ok(());
+        }
+        _ => {}
+    }
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        let Some(media) = v.as_any().downcast_ref::<MediaViewer>() else {
+            return Ok(());
+        };
+        media.apply_command(command);
+    }
+    inner.schedule_media_ticks();
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Seek media to a 0..1 progress fraction.
+pub async fn media_seek_frac(instance_id: Uuid, frac: f32) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Ok(());
+        };
+        let Some(media) = v.as_any().downcast_ref::<MediaViewer>() else {
+            return Ok(());
+        };
+        media.seek_fraction(f64::from(frac));
+    }
+    inner.schedule_media_ticks();
+    inner.refresh_snapshot().await;
+    Ok(())
 }
 
 /// Document: apply a toolbar / shortcut action (`save`, `undo`, `redo`, `bold`, …).

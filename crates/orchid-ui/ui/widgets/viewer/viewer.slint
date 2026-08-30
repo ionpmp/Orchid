@@ -59,6 +59,9 @@ export component ViewerView inherits Rectangle {
     callback document-replace-request(string, string, bool, bool);
     callback document-link-request(string);
 
+    callback media-command(string);
+    callback media-seek-frac(float);
+
     background: transparent;
 
     if model.kind == 0 : VerticalLayout {
@@ -172,7 +175,9 @@ export component ViewerView inherits Rectangle {
         width: parent.width;
         height: parent.height;
         model: root.model.media;
-        play => { root.open-external(); }
+        command(c) => { root.media-command(c); }
+        seek-frac(f) => { root.media-seek-frac(f); }
+        open-external => { root.open-external(); }
     }
 
     if model.kind == 9 : ViewerHtmlView {

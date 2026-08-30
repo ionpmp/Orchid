@@ -1324,6 +1324,21 @@ export struct ViewerMediaModel {
     kind-label: string,
     play-label: string,
     hint-label: string,
+    unavailable-label: string,
+    open-external-label: string,
+    /// Video frame (empty image when audio-only / unavailable).
+    frame: image,
+    has-video: bool,
+    available: bool,
+    playing: bool,
+    progress: float,
+    position-label: string,
+    duration-label: string,
+    volume-label: string,
+    speed-label: string,
+    playlist-label: string,
+    sub-label: string,
+    error-text: string,
 }
 
 export struct ViewerHtmlModel {

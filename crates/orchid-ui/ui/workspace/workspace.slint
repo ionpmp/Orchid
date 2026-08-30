@@ -220,6 +220,9 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-text-replace-request(string, string, string, bool, bool, bool);
     callback viewer-open-external(string);
 
+    callback viewer-media-command(string, string);
+    callback viewer-media-seek-frac(string, float);
+
     callback viewer-document-action(string, string);
     callback viewer-document-text-edited(string, string);
     callback viewer-document-selection-changed(string, int, int);
@@ -618,6 +621,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-text-find-request(id, q, fwd, rx, ml) => { root.viewer-text-find-request(id, q, fwd, rx, ml); }
                     viewer-text-replace-request(id, q, r, all, rx, ml) => { root.viewer-text-replace-request(id, q, r, all, rx, ml); }
                     viewer-open-external(id) => { root.viewer-open-external(id); }
+                    viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
+                    viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
                     viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
                     viewer-document-text-edited(id, t) => { root.viewer-document-text-edited(id, t); }
                     viewer-document-selection-changed(id, a, h) => { root.viewer-document-selection-changed(id, a, h); }
@@ -762,6 +767,8 @@ export component WorkspaceView inherits Rectangle {
             viewer-text-find-request(id, q, fwd, rx, ml) => { root.viewer-text-find-request(id, q, fwd, rx, ml); }
             viewer-text-replace-request(id, q, r, all, rx, ml) => { root.viewer-text-replace-request(id, q, r, all, rx, ml); }
             viewer-open-external(id) => { root.viewer-open-external(id); }
+            viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
+            viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
             viewer-document-text-edited(id, t) => { root.viewer-document-text-edited(id, t); }
             viewer-document-selection-changed(id, a, h) => { root.viewer-document-selection-changed(id, a, h); }
