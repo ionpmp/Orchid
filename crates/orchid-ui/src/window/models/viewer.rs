@@ -717,6 +717,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_font_family_prev: locale.tr("viewer-document-tip-font-family-prev").into(),
         tip_font_family_next: locale.tr("viewer-document-tip-font-family-next").into(),
         tip_toggle_source: locale.tr("viewer-document-tip-toggle-source").into(),
+        tip_save: locale.tr("viewer-document-tip-save").into(),
+        tip_print: locale.tr("viewer-document-tip-print").into(),
         link_url: SharedString::new(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),

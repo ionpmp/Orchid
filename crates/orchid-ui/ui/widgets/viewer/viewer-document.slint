@@ -115,6 +115,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-save;
+                        show: save-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -130,6 +135,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-print;
+                        show: print-ta.has-hover;
+                        below: true;
                     }
                 }
 
