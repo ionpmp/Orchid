@@ -22,7 +22,8 @@ use swash::FontRef;
 
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{
-    Alignment, Block, Document, ListKind, PageSetup, Paragraph, Table, TableCell, TableRow, VMerge,
+    Alignment, Block, Document, LineSpacingRule, ListKind, PageSetup, Paragraph, Table, TableCell,
+    TableRow, VMerge,
 };
 
 /// Brush colour for styled runs (RGBA).
@@ -140,12 +141,7 @@ impl DocumentLayout {
             self.layout_cx
                 .ranged_builder(&mut self.font_cx, &text, 1.0, true);
         builder.push_default(StyleProperty::FontSize(14.0));
-        let line_rel = if p.line_spacing_240ths == 0 {
-            1.35
-        } else {
-            (p.line_spacing_240ths as f32 / 240.0).clamp(0.5, 4.0)
-        };
-        builder.push_default(LineHeight::FontSizeRelative(line_rel));
+        builder.push_default(paragraph_line_height(p));
         builder.push_default(StyleProperty::Brush(ColorBrush::default()));
         builder.push_default(StyleProperty::FontFamily(FontFamily::named("Segoe UI")));
 
@@ -1855,6 +1851,28 @@ fn twips_to_css_px(twips: u32) -> f32 {
     (twips as f32) * 96.0 / 1440.0
 }
 
+fn paragraph_line_height(p: &Paragraph) -> LineHeight {
+    match p.line_spacing_rule {
+        LineSpacingRule::Auto => {
+            let rel = if p.line_spacing == 0 {
+                1.35
+            } else {
+                (p.line_spacing as f32 / 240.0).clamp(0.5, 4.0)
+            };
+            LineHeight::FontSizeRelative(rel)
+        }
+        LineSpacingRule::Exact => {
+            LineHeight::Absolute(twips_to_css_px(p.line_spacing).max(1.0))
+        }
+        // Word "at least": floor line box to the given height. Approximate with
+        // Absolute max(value, typical default line box).
+        LineSpacingRule::AtLeast => {
+            let min_h = twips_to_css_px(p.line_spacing).max(1.0);
+            LineHeight::Absolute(min_h.max(14.0 * 1.2))
+        }
+    }
+}
+
 fn paint_dashed_h_line(
     pixels: &mut [u8],
     buf_w: u32,
@@ -1917,7 +1935,8 @@ fn fill_rect(
 mod tests {
     use super::*;
     use crate::document::model::{
-        CellImage, ImageFormat, InlineImage, Run, RunStyle, Table, TableCell, TableRow, VMerge,
+        CellImage, ImageFormat, InlineImage, LineSpacingRule, Run, RunStyle, Table, TableCell,
+        TableRow, VMerge,
     };
 
     fn sample_paragraph() -> Paragraph {
@@ -2461,11 +2480,11 @@ mod tests {
                 style: RunStyle::default(),
                 ..Default::default()
             }],
-            line_spacing_240ths: 240,
+            line_spacing: 240,
             ..Default::default()
         };
         let double = Paragraph {
-            line_spacing_240ths: 480,
+            line_spacing: 480,
             ..single.clone()
         };
         let h1 = dl.layout_paragraph(&single, 120.0).height();
@@ -2473,6 +2492,33 @@ mod tests {
         assert!(
             h2 > h1 * 1.3,
             "double spacing should be clearly taller: single={h1} double={h2}"
+        );
+    }
+
+    #[test]
+    fn line_spacing_exact_sets_absolute_height() {
+        let mut dl = DocumentLayout::new();
+        let text = "One line only.";
+        let auto = Paragraph {
+            runs: vec![Run {
+                text: text.into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            line_spacing: 240,
+            line_spacing_rule: LineSpacingRule::Auto,
+            ..Default::default()
+        };
+        let exact = Paragraph {
+            line_spacing: 720, // 0.5″ ≈ 48 CSS px
+            line_spacing_rule: LineSpacingRule::Exact,
+            ..auto.clone()
+        };
+        let h_auto = dl.layout_paragraph(&auto, 400.0).height();
+        let h_exact = dl.layout_paragraph(&exact, 400.0).height();
+        assert!(
+            h_exact > h_auto + 10.0,
+            "exact 720 twips should be taller than single auto: auto={h_auto} exact={h_exact}"
         );
     }
 }

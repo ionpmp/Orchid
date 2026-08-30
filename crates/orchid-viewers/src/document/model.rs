@@ -133,11 +133,25 @@ pub struct Paragraph {
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.
     pub space_after_twips: u32,
-    /// Line spacing in 240ths of a line (`w:spacing/@w:line` with `lineRule=auto`).
-    /// `0` = engine default; `240` = single, `360` = 1.5, `480` = double.
-    pub line_spacing_240ths: u32,
+    /// Raw `w:spacing/@w:line` value: 240ths of a line when
+    /// [`LineSpacingRule::Auto`], otherwise twips. `0` + Auto = engine default.
+    pub line_spacing: u32,
+    /// How [`Self::line_spacing`] is interpreted (`w:lineRule`).
+    pub line_spacing_rule: LineSpacingRule,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
+}
+
+/// How `w:spacing/@w:line` is measured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LineSpacingRule {
+    /// Multiples of a line (240 = single). Default when omitted.
+    #[default]
+    Auto,
+    /// Exact line height in twips.
+    Exact,
+    /// Minimum line height in twips.
+    AtLeast,
 }
 
 impl Paragraph {

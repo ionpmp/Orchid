@@ -29,8 +29,9 @@ pub use cursor::{
 };
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage, ListKind,
-    OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
+    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage,
+    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell,
+    TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
@@ -2028,7 +2029,13 @@ impl DocumentViewer {
         let mut next = doc.blocks.clone();
         for cursor in cursors {
             if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
-                p.line_spacing_240ths = bump_line_spacing_240ths(p.line_spacing_240ths, delta);
+                let current = if p.line_spacing_rule == LineSpacingRule::Auto {
+                    p.line_spacing
+                } else {
+                    0
+                };
+                p.line_spacing_rule = LineSpacingRule::Auto;
+                p.line_spacing = bump_line_spacing(current, delta);
             }
         }
         self.undo
@@ -2338,7 +2345,8 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     page_break_before: prev.page_break_before,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
-                    line_spacing_240ths: prev.line_spacing_240ths,
+                    line_spacing: prev.line_spacing,
+                    line_spacing_rule: prev.line_spacing_rule,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -2438,7 +2446,7 @@ fn is_a4_page(ps: &PageSetup) -> bool {
     ps.width_twips == PAGE_A4_WIDTH_TWIPS && ps.height_twips == PAGE_A4_HEIGHT_TWIPS
 }
 
-fn bump_line_spacing_240ths(current: u32, delta: i32) -> u32 {
+fn bump_line_spacing(current: u32, delta: i32) -> u32 {
     let effective = if current == 0 { 276 } else { current };
     let idx = LINE_SPACING_PRESETS
         .iter()
@@ -2736,7 +2744,8 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         page_break_before: p.page_break_before,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
-        line_spacing_240ths: p.line_spacing_240ths,
+        line_spacing: p.line_spacing,
+        line_spacing_rule: p.line_spacing_rule,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2748,7 +2757,8 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         page_break_before: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
-        line_spacing_240ths: p.line_spacing_240ths,
+        line_spacing: p.line_spacing,
+        line_spacing_rule: p.line_spacing_rule,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2786,7 +2796,8 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         page_break_before: p.page_break_before,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
-        line_spacing_240ths: p.line_spacing_240ths,
+        line_spacing: p.line_spacing,
+        line_spacing_rule: p.line_spacing_rule,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -2798,7 +2809,8 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         page_break_before: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
-        line_spacing_240ths: p.line_spacing_240ths,
+        line_spacing: p.line_spacing,
+        line_spacing_rule: p.line_spacing_rule,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -2889,7 +2901,8 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         page_break_before: start_p.page_break_before,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
-        line_spacing_240ths: start_p.line_spacing_240ths,
+        line_spacing: start_p.line_spacing,
+        line_spacing_rule: start_p.line_spacing_rule,
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -2972,7 +2985,8 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         page_break_before: start_p.page_break_before,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
-        line_spacing_240ths: start_p.line_spacing_240ths,
+        line_spacing: start_p.line_spacing,
+        line_spacing_rule: start_p.line_spacing_rule,
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());
