@@ -1157,6 +1157,10 @@ export component ViewerDocumentView inherits Rectangle {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
+                        DocHoverTip {
+                            tip: model.tip-find-case;
+                            show: case-ta.has-hover;
+                        }
                     }
 
                     Rectangle {
