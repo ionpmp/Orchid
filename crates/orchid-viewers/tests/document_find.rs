@@ -392,3 +392,43 @@ fn bump_indent_first_line_selection_steps_and_clamps() {
         assert!(p.indent_first_line_twips < 1440);
     }
 }
+
+#[test]
+fn bump_paragraph_spacing_before_and_after() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 0);
+
+    viewer.bump_paragraph_spacing_selection(120, 0).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.space_before_twips, 120);
+        assert_eq!(p.space_after_twips, 0);
+    }
+
+    viewer.bump_paragraph_spacing_selection(0, 120).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.space_before_twips, 120);
+        assert_eq!(p.space_after_twips, 120);
+    }
+
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.space_after_twips, 0);
+        assert_eq!(p.space_before_twips, 120);
+    }
+}

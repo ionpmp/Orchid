@@ -703,6 +703,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         list_numbered_label: locale.tr("viewer-document-list-numbered").into(),
         space_after_less_label: locale.tr("viewer-document-space-after-less").into(),
         space_after_more_label: locale.tr("viewer-document-space-after-more").into(),
+        space_before_less_label: locale.tr("viewer-document-space-before-less").into(),
+        space_before_more_label: locale.tr("viewer-document-space-before-more").into(),
         line_spacing_less_label: locale.tr("viewer-document-line-spacing-less").into(),
         line_spacing_more_label: locale.tr("viewer-document-line-spacing-more").into(),
         margin_less_label: locale.tr("viewer-document-margin-less").into(),
