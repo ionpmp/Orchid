@@ -218,11 +218,12 @@ impl MainWindowController {
     pub(super) fn fm_refresh_selection_ui(self: &Arc<Self>, inst: Uuid, pane: u8) {
         if self.try_patch_fm_selection(inst, pane) {
             // Selecting only mutates widget state, so the cached snapshot still
-            // carries the old highlight. Any later frame patch (layout, drag,
-            // z-order) would rebuild from it and undo the selection on screen.
+            // carries the old highlight. Sync the cache quietly — a dirty frame
+            // would re-patch from the snapshot on the next tick and race the
+            // live rubber band.
             let wm = self.widget_manager.clone();
             spawn::spawn_local_compat(async move {
-                let _ = wm.refresh_snapshot_cache(inst).await;
+                let _ = wm.sync_snapshot_cache(inst).await;
             });
             return;
         }

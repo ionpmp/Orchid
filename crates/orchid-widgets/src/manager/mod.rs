@@ -200,6 +200,26 @@ impl WidgetManager {
         Ok(())
     }
 
+    /// Write the current widget snapshot into the cache without marking the
+    /// frame dirty.
+    ///
+    /// File-manager selection patches the Slint model directly, then needs the
+    /// cache to catch up so a later layout rebuild does not resurrect an old
+    /// highlight. Forcing dirty here would schedule a snapshot patch on the
+    /// next tick and race the live rubber band.
+    pub async fn sync_snapshot_cache(&self, instance_id: Uuid) -> Result<()> {
+        let inst = self.get_instance(instance_id)?;
+        let snapshot = {
+            let guard = inst.widget.lock().await;
+            guard.snapshot()
+        };
+        let Some(snap) = snapshot else {
+            return Ok(());
+        };
+        self.inner.snapshot_cache.put(inst.id, snap);
+        Ok(())
+    }
+
     /// Fill [`WidgetSnapshotCache`] for every known instance (e.g. after restore).
     pub async fn prime_snapshot_caches(&self) -> Result<()> {
         let ids: Vec<Uuid> = self.inner.instances.iter().map(|e| *e.key()).collect();

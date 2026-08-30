@@ -197,30 +197,43 @@ export component FmEntryGrid inherits Rectangle {
     }
 
     function finish-empty-gesture() {
+        // Commit the range the user already saw. Re-hit-testing on release
+        // often shrinks the band (mouse-up sample ≠ last move), which drops
+        // tiles until a later full repaint restores the widget's selection.
+        let live_f = root.live-first;
+        let live_l = root.live-last;
         let rx0 = min(root.marquee-x0, root.marquee-x1);
         let rx1 = max(root.marquee-x0, root.marquee-x1);
         let ry0 = min(root.marquee-y0, root.marquee-y1);
         let ry1 = max(root.marquee-y0, root.marquee-y1);
         let dragged = root.marquee-active
-            && (abs(rx1 - rx0) >= root.marquee-threshold
+            && (live_f >= 0 && live_l >= 0
+                || abs(rx1 - rx0) >= root.marquee-threshold
                 || abs(ry1 - ry0) >= root.marquee-threshold);
+        let from-entry = root.marquee-from-entry;
+        let additive = root.marquee-additive;
         let r0 = root.first-overlap-row(ry0, ry1);
         let r1 = root.last-overlap-row(ry0, ry1);
         let c0 = root.first-overlap-col(rx0, rx1);
         let c1 = root.last-overlap-col(rx0, rx1);
-        let from-entry = root.marquee-from-entry;
+        let hit_f = r0 >= 0 && c0 >= 0 ? r0 * columns + c0 : -1;
+        let hit_l = r1 >= 0 && c1 >= 0 ? r1 * columns + c1 : -1;
+        let f = live_f >= 0 ? live_f : hit_f;
+        let l = live_l >= 0 ? live_l : hit_l;
+        if (dragged && f >= 0 && l >= 0) {
+            // Patch is_selected while the live highlight is still painted, so
+            // clearing marquee-active does not flash a stale model.
+            root.marquee-select(f, l, additive, columns);
+        } else if (!additive && !from-entry) {
+            // A band that began on a tile and fell short of the threshold must
+            // leave that tile's selection alone; only empty space clears it.
+            root.empty-clicked();
+        }
         root.press-empty = false;
         root.marquee-active = false;
         root.marquee-from-entry = false;
         root.live-first = -1;
         root.live-last = -1;
-        if (dragged && r0 >= 0 && r1 >= 0 && c0 >= 0 && c1 >= 0) {
-            root.marquee-select(r0 * columns + c0, r1 * columns + c1, root.marquee-additive, columns);
-        } else if (!root.marquee-additive && !from-entry) {
-            // A band that began on a tile and fell short of the threshold must
-            // leave that tile's selection alone; only empty space clears it.
-            root.empty-clicked();
-        }
     }
 
     background: transparent;

@@ -127,26 +127,32 @@ export component FmEntryList inherits Rectangle {
     }
 
     function finish-empty-gesture() {
+        // Commit the range the user already saw. Re-hit-testing on release
+        // often shrinks the band (mouse-up sample ≠ last move), which drops
+        // entries until a later full repaint restores the widget's selection.
+        let live_f = root.live-first;
+        let live_l = root.live-last;
         let dragged = root.marquee-active
-            && abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold;
+            && (live_f >= 0 && live_l >= 0
+                || abs(root.marquee-y1 - root.marquee-y0) >= root.marquee-threshold);
         let from-entry = root.marquee-from-entry;
+        let additive = root.marquee-additive;
+        let f = live_f >= 0 ? live_f : root.first-list-hit(root.marquee-y0, root.marquee-y1);
+        let l = live_l >= 0 ? live_l : root.last-list-hit(root.marquee-y0, root.marquee-y1);
+        if (dragged && f >= 0 && l >= 0) {
+            // Patch is_selected while the live highlight is still painted, so
+            // clearing marquee-active does not flash a stale model.
+            root.marquee-select(f, l, additive);
+        } else if (!additive && !from-entry) {
+            // A band that began on a row and fell short of the threshold must
+            // leave that row's selection alone; only empty space clears it.
+            root.empty-clicked();
+        }
         root.press-empty = false;
         root.marquee-active = false;
         root.marquee-from-entry = false;
         root.live-first = -1;
         root.live-last = -1;
-        if (dragged
-            && root.first-list-hit(root.marquee-y0, root.marquee-y1) >= 0
-            && root.last-list-hit(root.marquee-y0, root.marquee-y1) >= 0) {
-            root.marquee-select(
-                root.first-list-hit(root.marquee-y0, root.marquee-y1),
-                root.last-list-hit(root.marquee-y0, root.marquee-y1),
-                root.marquee-additive);
-        } else if (!root.marquee-additive && !from-entry) {
-            // A band that began on a row and fell short of the threshold must
-            // leave that row's selection alone; only empty space clears it.
-            root.empty-clicked();
-        }
     }
 
     property <length> row-height: 28px;
