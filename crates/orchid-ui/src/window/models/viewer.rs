@@ -737,6 +737,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_find_next: locale.tr("viewer-document-tip-find-next").into(),
         tip_find_prev: locale.tr("viewer-document-tip-find-prev").into(),
         tip_find_close: locale.tr("viewer-document-tip-find-close").into(),
+        tip_find_case: locale.tr("viewer-document-tip-find-case").into(),
         find_no_match_label: locale.tr("viewer-document-find-no-match").into(),
         find_gen: 0,
         find_anchor: 0,

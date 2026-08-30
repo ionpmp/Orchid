@@ -771,6 +771,7 @@ viewer-document-tip-find = Find (Ctrl+F)
 viewer-document-tip-find-next = Find next
 viewer-document-tip-find-prev = Find previous
 viewer-document-tip-find-close = Close find
+viewer-document-tip-find-case = Match case (Aa)
 viewer-document-source = Source
 viewer-document-preview = Aperçu
 viewer-text-line-ending-lf = LF
