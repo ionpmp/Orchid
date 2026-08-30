@@ -2047,6 +2047,45 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Bump first-line / hanging indent (`w:firstLine` / `w:hanging`).
+    ///
+    /// Positive values are first-line indent; negative are hanging.
+    /// Typical steps: `±360` (0.25″). Clamped to `-1440..=1440` (±1″).
+    /// Left indent is left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_indent_first_line_selection(&self, delta_twips: i32) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                let bumped =
+                    (p.indent_first_line_twips + delta_twips).clamp(INDENT_FIRST_LINE_MIN, INDENT_FIRST_LINE_MAX);
+                if bumped != p.indent_first_line_twips {
+                    p.indent_first_line_twips = bumped;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step line spacing (`w:line` auto) on selected paragraphs through presets.
     ///
     /// Presets: single (240), 1.15 (276), 1.5 (360), double (480). `delta` is
@@ -2461,6 +2500,9 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
 
 const DEFAULT_FONT_SIZE_PT: f32 = 14.0;
 const SPACING_TWIPS_MAX: i32 = 2880;
+/// First-line / hanging clamp (±1″).
+const INDENT_FIRST_LINE_MIN: i32 = -1440;
+const INDENT_FIRST_LINE_MAX: i32 = 1440;
 /// Auto line-spacing presets in 240ths of a line (single, 1.15, 1.5, double).
 const LINE_SPACING_PRESETS: &[u32] = &[240, 276, 360, 480];
 /// Page margin clamp: 0.25″ … 3″.

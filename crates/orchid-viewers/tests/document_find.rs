@@ -278,3 +278,65 @@ fn bump_indent_left_selection_steps_and_clamps() {
         assert_eq!(p.indent_left_twips, 0);
     }
 }
+
+#[test]
+fn bump_indent_first_line_selection_steps_and_clamps() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 0);
+
+    viewer.bump_indent_first_line_selection(360).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_first_line_twips, 360);
+        assert_eq!(p.indent_left_twips, 0);
+    }
+
+    viewer.bump_indent_first_line_selection(-720).unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_first_line_twips, -360);
+    }
+
+    for _ in 0..20 {
+        viewer.bump_indent_first_line_selection(-360).unwrap();
+    }
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_first_line_twips, -1440);
+    }
+
+    for _ in 0..40 {
+        viewer.bump_indent_first_line_selection(360).unwrap();
+    }
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert_eq!(p.indent_first_line_twips, 1440);
+    }
+
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let p = match &guard.as_ref().unwrap().blocks[0] {
+            Block::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        assert!(p.indent_first_line_twips < 1440);
+    }
+}

@@ -709,6 +709,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         margin_more_label: locale.tr("viewer-document-margin-more").into(),
         indent_less_label: locale.tr("viewer-document-indent-less").into(),
         indent_more_label: locale.tr("viewer-document-indent-more").into(),
+        first_line_less_label: locale.tr("viewer-document-first-line-less").into(),
+        first_line_more_label: locale.tr("viewer-document-first-line-more").into(),
         page_size_label: locale.tr("viewer-document-page-letter").into(),
         image_insert_label: locale.tr("viewer-document-image-insert").into(),
         table_insert_label: locale.tr("viewer-document-table-insert").into(),

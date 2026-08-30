@@ -727,6 +727,38 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, fl-less.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fl-less := TouchArea { clicked => { root.action("first-line-less"); } }
+                    Text {
+                        text: model.first-line-less-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, fl-more.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fl-more := TouchArea { clicked => { root.action("first-line-more"); } }
+                    Text {
+                        text: model.first-line-more-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: max(28px, pg-label.preferred-width + 8px);
                     height: 28px;
                     background: tool-bg(false, pg-ta.has-hover);

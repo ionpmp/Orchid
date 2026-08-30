@@ -3521,6 +3521,8 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "margin-less" => doc.bump_page_margins(-180),
                 "indent-more" => doc.bump_indent_left_selection(720),
                 "indent-less" => doc.bump_indent_left_selection(-720),
+                "first-line-more" => doc.bump_indent_first_line_selection(360),
+                "first-line-less" => doc.bump_indent_first_line_selection(-360),
                 "page-size-cycle" => doc.cycle_page_size(),
                 "table-insert" => doc.preview_insert_table(2, 2),
                 // "image-insert" is handled in the UI layer (clipboard bytes).
