@@ -154,6 +154,21 @@ impl MediaViewer {
         self.engine.toggle_sub();
     }
 
+    /// Cycle audio tracks.
+    pub fn cycle_audio(&self) {
+        self.engine.cycle_audio();
+    }
+
+    /// Jump to next chapter.
+    pub fn chapter_next(&self) {
+        self.engine.chapter_next();
+    }
+
+    /// Jump to previous chapter.
+    pub fn chapter_prev(&self) {
+        self.engine.chapter_prev();
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
@@ -170,6 +185,9 @@ impl MediaViewer {
             "speed-reset" => self.set_speed(1.0),
             "cycle-sub" => self.cycle_sub(),
             "toggle-sub" => self.toggle_sub(),
+            "cycle-audio" => self.cycle_audio(),
+            "chapter-next" => self.chapter_next(),
+            "chapter-prev" => self.chapter_prev(),
             cmd if let Some(raw) = cmd.strip_prefix("seek-frac:") => {
                 if let Ok(f) = raw.parse::<f64>() {
                     self.seek_fraction(f);
@@ -268,6 +286,8 @@ impl Viewer for MediaViewer {
             playlist_count: *self.playlist_count.read(),
             sub_label: shared.sub_label.read().clone(),
             sub_visible: shared.sub_visible.load(Ordering::Relaxed),
+            audio_label: shared.audio_label.read().clone(),
+            chapter_label: shared.chapter_label.read().clone(),
             error,
         })
     }

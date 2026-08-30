@@ -556,7 +556,14 @@ fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
         speed_label: SharedString::new(),
         playlist_label: SharedString::new(),
         sub_label: SharedString::new(),
+        audio_label: SharedString::new(),
+        chapter_label: SharedString::new(),
         error_text: SharedString::new(),
+        pause_label: locale.tr("viewer-media-pause").into(),
+        prev_label: locale.tr("viewer-media-prev").into(),
+        next_label: locale.tr("viewer-media-next").into(),
+        seek_back_label: locale.tr("viewer-media-seek-back").into(),
+        seek_fwd_label: locale.tr("viewer-media-seek-fwd").into(),
     }
 }
 
@@ -633,7 +640,14 @@ fn build_media_snapshot(
         speed_label: speed_label.into(),
         playlist_label: playlist_label.into(),
         sub_label: sub.into(),
+        audio_label: s.audio_label.clone().into(),
+        chapter_label: s.chapter_label.clone().into(),
         error_text: s.error.clone().into(),
+        pause_label: locale.tr("viewer-media-pause").into(),
+        prev_label: locale.tr("viewer-media-prev").into(),
+        next_label: locale.tr("viewer-media-next").into(),
+        seek_back_label: locale.tr("viewer-media-seek-back").into(),
+        seek_fwd_label: locale.tr("viewer-media-seek-fwd").into(),
     }
 }
 

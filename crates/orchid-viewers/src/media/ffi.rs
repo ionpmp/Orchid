@@ -23,10 +23,11 @@ pub(crate) const MPV_EVENT_SHUTDOWN: c_int = 1;
 pub(crate) const MPV_RENDER_PARAM_INVALID: c_int = 0;
 pub(crate) const MPV_RENDER_PARAM_API_TYPE: c_int = 1;
 pub(crate) const MPV_RENDER_PARAM_ADVANCED_CONTROL: c_int = 10;
-pub(crate) const MPV_RENDER_PARAM_SW_SIZE: c_int = 15;
-pub(crate) const MPV_RENDER_PARAM_SW_FORMAT: c_int = 16;
-pub(crate) const MPV_RENDER_PARAM_SW_STRIDE: c_int = 17;
-pub(crate) const MPV_RENDER_PARAM_SW_POINTER: c_int = 18;
+// Values match include/mpv/render.h (SW_* sit after DRM_* params).
+pub(crate) const MPV_RENDER_PARAM_SW_SIZE: c_int = 17;
+pub(crate) const MPV_RENDER_PARAM_SW_FORMAT: c_int = 18;
+pub(crate) const MPV_RENDER_PARAM_SW_STRIDE: c_int = 19;
+pub(crate) const MPV_RENDER_PARAM_SW_POINTER: c_int = 20;
 
 pub(crate) const MPV_RENDER_UPDATE_FRAME: u64 = 1 << 1;
 

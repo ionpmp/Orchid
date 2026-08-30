@@ -408,6 +408,8 @@ pub struct MediaSnapshot {
     pub playlist_count: u32,
     pub sub_label: String,
     pub sub_visible: bool,
+    pub audio_label: String,
+    pub chapter_label: String,
     pub error: String,
 }
 

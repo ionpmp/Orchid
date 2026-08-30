@@ -45,6 +45,8 @@ pub struct SharedPlayback {
     pub frame: RwLock<Option<FrameBuf>>,
     pub sub_label: RwLock<String>,
     pub sub_visible: AtomicBool,
+    pub audio_label: RwLock<String>,
+    pub chapter_label: RwLock<String>,
     pub error: RwLock<Option<String>>,
     /// Set when a new frame or transport property changed.
     pub dirty: AtomicBool,
@@ -65,6 +67,8 @@ impl SharedPlayback {
             frame: RwLock::new(None),
             sub_label: RwLock::new(String::new()),
             sub_visible: AtomicBool::new(true),
+            audio_label: RwLock::new(String::new()),
+            chapter_label: RwLock::new(String::new()),
             error: RwLock::new(None),
             dirty: AtomicBool::new(false),
         }
@@ -86,6 +90,9 @@ enum EngineCmd {
     MuteToggle,
     CycleSub,
     ToggleSub,
+    CycleAudio,
+    ChapterNext,
+    ChapterPrev,
     Stop,
     Quit,
 }
@@ -176,6 +183,18 @@ impl MpvEngine {
 
     pub fn toggle_sub(&self) {
         let _ = self.tx.send(EngineCmd::ToggleSub);
+    }
+
+    pub fn cycle_audio(&self) {
+        let _ = self.tx.send(EngineCmd::CycleAudio);
+    }
+
+    pub fn chapter_next(&self) {
+        let _ = self.tx.send(EngineCmd::ChapterNext);
+    }
+
+    pub fn chapter_prev(&self) {
+        let _ = self.tx.send(EngineCmd::ChapterPrev);
     }
 
     pub fn stop(&self) {
@@ -420,6 +439,18 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             shared.sub_visible.store(!vis, Ordering::Relaxed);
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::CycleAudio => {
+            let _ = command_args(api, handle, &["cycle", "audio"]);
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::ChapterNext => {
+            let _ = command_args(api, handle, &["add", "chapter", "1"]);
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::ChapterPrev => {
+            let _ = command_args(api, handle, &["add", "chapter", "-1"]);
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::Stop => {
             let _ = command_args(api, handle, &["stop"]);
             *shared.frame.write() = None;
@@ -489,6 +520,35 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
         format!("sub {sid}")
     };
     *shared.sub_label.write() = label;
+
+    let aid = get_int64(api, handle, "aid").unwrap_or(-1);
+    let audio = if aid <= 0 {
+        String::new()
+    } else if let Some(title) = get_string(api, handle, "current-tracks/audio/title") {
+        if title.is_empty() {
+            get_string(api, handle, "current-tracks/audio/lang")
+                .unwrap_or_else(|| format!("audio {aid}"))
+        } else {
+            title
+        }
+    } else if let Some(lang) = get_string(api, handle, "current-tracks/audio/lang") {
+        lang
+    } else {
+        format!("audio {aid}")
+    };
+    *shared.audio_label.write() = audio;
+
+    let chapter = get_int64(api, handle, "chapter").unwrap_or(-1);
+    let chapters = get_int64(api, handle, "chapters").unwrap_or(0);
+    *shared.chapter_label.write() = if chapters > 0 && chapter >= 0 {
+        let key = format!("chapter-list/{chapter}/title");
+        match get_string(api, handle, &key) {
+            Some(t) if !t.is_empty() => format!("{} ({}/{})", t, chapter + 1, chapters),
+            _ => format!("{}/{}", chapter + 1, chapters),
+        }
+    } else {
+        String::new()
+    };
     shared.dirty.store(true, Ordering::Release);
 }
 
@@ -511,8 +571,9 @@ unsafe fn render_frame(
     let mut buf = vec![0u8; stride * h as usize];
 
     let mut size = [w as i32, h as i32];
-    let format = c_str("rgba");
-    let mut stride_i = stride as i32;
+    // Documented SW formats: rgb0 = R,G,B,pad. Convert to RGBA for Slint.
+    let format = c_str("rgb0");
+    let mut stride_sz: usize = stride;
     let mut params = [
         MpvRenderParam {
             type_: MPV_RENDER_PARAM_SW_SIZE,
@@ -524,7 +585,7 @@ unsafe fn render_frame(
         },
         MpvRenderParam {
             type_: MPV_RENDER_PARAM_SW_STRIDE,
-            data: (&raw mut stride_i).cast(),
+            data: (&raw mut stride_sz).cast(),
         },
         MpvRenderParam {
             type_: MPV_RENDER_PARAM_SW_POINTER,
@@ -537,7 +598,14 @@ unsafe fn render_frame(
     ];
     let rc = (api.render_context_render)(render, params.as_mut_ptr());
     if rc < 0 {
+        *shared.error.write() = Some(error_message(api, rc));
+        shared.dirty.store(true, Ordering::Release);
         return;
+    }
+
+    // rgb0 → RGBA (set alpha opaque).
+    for px in buf.chunks_exact_mut(4) {
+        px[3] = 255;
     }
 
     *shared.frame.write() = Some(FrameBuf {
