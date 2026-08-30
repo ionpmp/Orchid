@@ -1,4 +1,4 @@
-﻿# Orchid Spanish (es-ES) message catalog.
+# Orchid Spanish (es-ES) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -723,6 +723,20 @@ viewer-document-link-placeholder = https://… or #bookmark
 viewer-document-link-apply = Apply
 viewer-document-link-remove = Remove
 viewer-document-tip-link = Insert link (Ctrl+K)
+viewer-document-tip-bold = Bold (Ctrl+B)
+viewer-document-tip-italic = Italic (Ctrl+I)
+viewer-document-tip-underline = Underline (Ctrl+U)
+viewer-document-tip-strikethrough = Strikethrough
+viewer-document-tip-highlight = Highlight
+viewer-document-tip-superscript = Superscript
+viewer-document-tip-subscript = Subscript
+viewer-document-tip-clear-formatting = Clear formatting (Ctrl+Space)
+viewer-document-tip-align-left = Align left
+viewer-document-tip-align-center = Align center
+viewer-document-tip-align-right = Align right
+viewer-document-tip-align-justify = Justify
+viewer-document-tip-list-bullet = Bullet list
+viewer-document-tip-list-numbered = Numbered list
 viewer-document-font-smaller = A−
 viewer-document-font-larger = A+
 viewer-document-font-prev = «

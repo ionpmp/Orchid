@@ -231,6 +231,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-bold;
+                        show: bold-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -246,6 +251,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-italic;
+                        show: italic-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -263,6 +273,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-underline;
+                        show: underline-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -278,6 +293,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-strikethrough;
+                        show: strike-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -295,6 +315,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-highlight;
+                        show: hl-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -310,6 +335,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-superscript;
+                        show: super-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -327,6 +357,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-subscript;
+                        show: sub-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -342,6 +377,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-clear-formatting;
+                        show: clear-fmt-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -545,6 +585,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-align-left;
+                        show: al-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -560,6 +605,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-align-center;
+                        show: ac-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -577,6 +627,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-align-right;
+                        show: ar-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -592,6 +647,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-align-justify;
+                        show: aj-ta.has-hover;
+                        below: true;
                     }
                 }
 
@@ -616,6 +676,11 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+                    DocHoverTip {
+                        tip: model.tip-list-bullet;
+                        show: bullet-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
@@ -631,6 +696,11 @@ export component ViewerDocumentView inherits Rectangle {
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-list-numbered;
+                        show: num-ta.has-hover;
+                        below: true;
                     }
                 }
 
