@@ -42,6 +42,12 @@ or `libmpv-2.dll` (depending on the package). The `orchid-app` build script
 copies every `*.dll` from that folder next to `orchid.exe`. Without libmpv, the
 Media viewer shows chrome and can still open the file in the system player.
 
+Helper (requires 7-Zip):
+
+```bash
+python scripts/fetch_mpv.py
+```
+
 ## Cloning
 
 ```bash

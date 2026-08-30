@@ -56,6 +56,11 @@ third-party/pdfium/**/*.tgz
 third-party/pdfium/**/bin/
 third-party/pdfium/**/lib/
 third-party/pdfium/**/include/
+third-party/mpv/**/*.dll
+third-party/mpv/**/*.7z
+third-party/mpv/**/*.lib
+third-party/mpv/**/*.a
+third-party/mpv/**/include/
 
 *.tmp
 *.bak

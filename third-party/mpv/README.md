@@ -20,7 +20,14 @@ third-party/mpv/win-x64/libmpv-2.dll
 Copy any companion DLLs from the package into the same folder. The `orchid-app`
 build script stages every `*.dll` next to `orchid.exe` under `target/<profile>/`.
 
-Without libmpv, the Media viewer falls back to metadata chrome plus “Open in
-the system player”.
+Helper script (requires [7-Zip](https://www.7-zip.org/)):
+
+```bash
+python scripts/fetch_mpv.py
+```
+
+This downloads the latest shinchiro `mpv-dev-x86_64-*.7z` into this folder.
+DLLs are gitignored (same policy as pdfium); only `README.md`, `.gitkeep`, and
+`VERSION` are tracked.
 
 See [docs/BUILDING.md](../../docs/BUILDING.md) for full setup instructions.
