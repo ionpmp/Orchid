@@ -257,9 +257,10 @@ mod windows_impl {
             return None;
         }
         let wide = path_wide(path);
+        // windows 0.62: Param<IBindCtx> is implemented for Option<&IBindCtx>, not Option<_>.
+        let bind_ctx: Option<&windows::Win32::System::Com::IBindCtx> = None;
         let factory: IShellItemImageFactory =
-            SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None::<&windows::Win32::System::Com::IBindCtx>)
-                .ok()?;
+            SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), bind_ctx).ok()?;
         let px = size.pixels() as i32;
         let hbmp = factory
             .GetImage(
