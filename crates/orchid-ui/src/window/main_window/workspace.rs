@@ -432,6 +432,13 @@ impl MainWindowController {
                 row.group_tabs = group_tabs;
                 v.set_row_data(r, row);
             }
+            // Selecting mutates widget state without publishing a snapshot, so
+            // the cache read above can carry a selection older than the pointer
+            // and repaint stale highlights over a live marquee. The widget is
+            // the only authority here, so re-assert it.
+            for pane in 0..p.panes.len() as u8 {
+                self.try_patch_fm_selection(id, pane);
+            }
             return true;
         }
         false

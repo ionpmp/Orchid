@@ -234,7 +234,7 @@ impl MainWindowController {
         });
     }
 
-    fn try_patch_fm_selection(&self, inst: Uuid, pane: u8) -> bool {
+    pub(super) fn try_patch_fm_selection(&self, inst: Uuid, pane: u8) -> bool {
         use std::collections::HashSet;
         let selected: HashSet<String> =
             orchid_widgets::builtin::file_manager::selected_entries(inst, pane)
@@ -3297,20 +3297,15 @@ impl MainWindowController {
         let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
             return;
         };
-        let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            if let Err(e) = orchid_widgets::builtin::file_manager::select_index_range(
-                inst, p, from, to, additive, columns,
-            )
-            .await
-            {
-                warn!(?e, "fm marquee");
-                return;
-            }
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_selection_ui(inst, p);
-            }
-        });
+        // Keep this on the UI stack: an async spawn reordered patches and left
+        // the rubber-band highlight lagging the pointer until a full repaint.
+        if let Err(e) = orchid_widgets::builtin::file_manager::select_index_range_sync(
+            inst, p, from, to, additive, columns,
+        ) {
+            warn!(?e, "fm marquee");
+            return;
+        }
+        self.fm_refresh_selection_ui(inst, p);
     }
     pub(super) fn on_fm_rename_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;

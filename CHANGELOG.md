@@ -296,6 +296,14 @@ release yet.
   selection empties, a press whose release is swallowed by a listing update can
   no longer arm it after 500 ms, and clicks commit against the entry that was
   pressed rather than whatever the recycled row shows at release time.
+- File-manager rubber-band rows highlight immediately from the live index
+  range in Slint, and marquee selection updates the model on the UI stack
+  instead of an async spawn — the previous round-trip left some entries
+  unhighlighted until a focus-driven full repaint.
+- File-manager shell icons use `IShellItemImageFactory` (Explorer's path)
+  instead of the jumbo image list, which often stores a 32×32 glyph on a
+  256×256 canvas and looked melted when stretched. Rows pull 48px sources;
+  tiles fill their box from a true 256px bitmap.
 - File-manager rubber band tracks the drag again. The band was driven by an
   overlay spawned on press, which never received the drag because the pressed
   area keeps the pointer grab; it only saw the bare cursor after release, so

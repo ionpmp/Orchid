@@ -1,8 +1,9 @@
 //! OS shell file/folder icons for the file manager.
 //!
-//! On Windows this extracts association icons via `SHGetFileInfoW` (16/32px)
-//! and `SHGetImageList` jumbo / extra-large lists (256/48px), then renders
-//! them to RGBA. Other platforms return `None` and keep the geometric UI fallback.
+//! On Windows this prefers `IShellItemImageFactory` (the same path Explorer
+//! uses for sharp 48/256px glyphs), falling back to `SHGetImageList` /
+//! `SHGetFileInfoW`. Other platforms return `None` and keep the geometric UI
+//! fallback.
 
 use std::sync::Arc;
 
@@ -132,17 +133,20 @@ mod windows_impl {
 
     use dashmap::DashMap;
     use windows::core::PCWSTR;
+    use windows::Win32::Foundation::SIZE;
     use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, ReleaseDC,
-        SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+        CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetDIBits, GetObjectW,
+        ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+        HBITMAP,
     };
     use windows::Win32::Storage::FileSystem::{
         FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_FLAGS_AND_ATTRIBUTES,
     };
     use windows::Win32::UI::Controls::{IImageList, ILD_TRANSPARENT};
     use windows::Win32::UI::Shell::{
-        SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
-        SHGFI_SYSICONINDEX, SHGFI_USEFILEATTRIBUTES, SHIL_EXTRALARGE, SHIL_JUMBO,
+        IShellItemImageFactory, SHCreateItemFromParsingName, SHGetFileInfoW, SHGetImageList,
+        SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON, SHGFI_SYSICONINDEX,
+        SHGFI_USEFILEATTRIBUTES, SHIL_EXTRALARGE, SHIL_JUMBO, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY,
     };
     use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, DrawIconEx, DI_NORMAL, HICON};
 
@@ -176,8 +180,15 @@ mod windows_impl {
     }
 
     fn cache_key(path: &FsPath, is_dir: bool, size: ShellIconSize) -> CacheKey {
+        // High-res factory icons can carry per-folder overlays; never share one
+        // path's bitmap across every directory for those sizes.
         if is_dir {
-            return ("dir".into(), size);
+            return match size {
+                ShellIconSize::ExtraLarge | ShellIconSize::Jumbo => {
+                    (format!("dir:{}", path.as_str()), size)
+                }
+                ShellIconSize::Small | ShellIconSize::Large => ("dir".into(), size),
+            };
         }
         let ext = path.extension().unwrap_or("").to_ascii_lowercase();
         let key = match ext.as_str() {
@@ -221,7 +232,11 @@ mod windows_impl {
     unsafe fn extract_icon(path: &Path, is_dir: bool, size: ShellIconSize) -> Option<ShellIcon> {
         match size {
             ShellIconSize::ExtraLarge | ShellIconSize::Jumbo => {
-                extract_via_image_list(path, is_dir, size)
+                // Image-list jumbo entries are often a 32×32 glyph on a 256×256
+                // canvas (looks melted when stretched). IShellItemImageFactory
+                // returns the same high-res bitmaps Explorer uses.
+                extract_via_item_factory(path, size)
+                    .or_else(|| extract_via_image_list(path, is_dir, size))
                     .or_else(|| extract_via_file_info(path, is_dir, ShellIconSize::Large))
             }
             ShellIconSize::Small | ShellIconSize::Large => {
@@ -235,6 +250,83 @@ mod windows_impl {
             .encode_wide()
             .chain(std::iter::once(0))
             .collect()
+    }
+
+    unsafe fn extract_via_item_factory(path: &Path, size: ShellIconSize) -> Option<ShellIcon> {
+        if !path.exists() {
+            return None;
+        }
+        let wide = path_wide(path);
+        let factory: IShellItemImageFactory =
+            SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None::<&windows::Win32::System::Com::IBindCtx>)
+                .ok()?;
+        let px = size.pixels() as i32;
+        let hbmp = factory
+            .GetImage(
+                SIZE { cx: px, cy: px },
+                SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
+            )
+            .ok()?;
+        let icon = hbitmap_to_rgba(hbmp);
+        let _ = DeleteObject(hbmp.into());
+        // Factory icons are already tightly composed; cropping would only
+        // discard intentional padding and shrink a sharp bitmap.
+        icon
+    }
+
+    unsafe fn hbitmap_to_rgba(hbmp: HBITMAP) -> Option<ShellIcon> {
+        let mut bmp = BITMAP::default();
+        let got = GetObjectW(
+            hbmp.into(),
+            mem::size_of::<BITMAP>() as i32,
+            Some(&mut bmp as *mut _ as *mut c_void),
+        );
+        if got == 0 || bmp.bmWidth <= 0 || bmp.bmHeight <= 0 {
+            return None;
+        }
+        let width = bmp.bmWidth as u32;
+        let height = bmp.bmHeight.unsigned_abs();
+        let screen_dc = GetDC(None);
+        if screen_dc.is_invalid() {
+            return None;
+        }
+        let mem_dc = CreateCompatibleDC(Some(screen_dc));
+        if mem_dc.is_invalid() {
+            let _ = ReleaseDC(None, screen_dc);
+            return None;
+        }
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: bmp.bmWidth,
+                biHeight: -(height as i32),
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0 as _,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        let rows = GetDIBits(
+            mem_dc,
+            hbmp,
+            0,
+            height,
+            Some(pixels.as_mut_ptr().cast()),
+            &bmi as *const _ as *mut BITMAPINFO,
+            DIB_RGB_COLORS,
+        );
+        let _ = DeleteDC(mem_dc);
+        let _ = ReleaseDC(None, screen_dc);
+        if rows == 0 {
+            return None;
+        }
+        Some(ShellIcon {
+            rgba: Arc::new(bgra_to_rgba(&pixels)),
+            width,
+            height,
+        })
     }
 
     unsafe fn extract_via_image_list(

@@ -7,6 +7,7 @@ export component FmEntryList inherits Rectangle {
     in property <int> entry-total-count;
     in property <length> virtual-pad-top;
     in property <length> virtual-content-height;
+    in property <int> virtual-first-index;
     in property <string> listing-id;
     in property <bool> details;
     in property <int> sort-by;
@@ -151,9 +152,29 @@ export component FmEntryList inherits Rectangle {
     property <length> row-height: 28px;
     property <length> header-height: details ? 28px : 0px;
     property <bool> virtualized: virtual-content-height > 0px;
+    property <int> first-index: virtualized ? max(0, virtual-first-index) : 0;
     property <length> bottom-pad: virtualized
         ? max(0px, virtual-content-height - virtual-pad-top - header-height - entries.length * row-height)
         : 0px;
+
+    // Absolute index of a virtual row — used so the rubber band can paint
+    // before the async selection patch catches up.
+    function row-in-marquee(i: int) -> bool {
+        if (!root.marquee-active || root.live-first < 0 || root.live-last < 0) {
+            return false;
+        }
+        let abs = root.first-index + i;
+        return abs >= root.live-first && abs <= root.live-last;
+    }
+
+    function row-highlighted(i: int, selected: bool) -> bool {
+        if (root.marquee-active) {
+            return root.marquee-additive
+                ? (selected || root.row-in-marquee(i))
+                : root.row-in-marquee(i);
+        }
+        return selected;
+    }
 
     // Rows are recycled by the repeater, so a press can outlive the row it
     // started on. Drop the gesture whenever the virtual window moves.
@@ -340,10 +361,10 @@ export component FmEntryList inherits Rectangle {
 
             for entry[i] in entries : Rectangle {
                 height: row-height;
-                background: entry.is-selected
+                background: root.row-highlighted(i, entry.is-selected)
                     ? #4d82ff44
                     : (row-ta.has-hover ? Theme.surface-raised : transparent);
-                border-width: entry.is-selected || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 1px : 0px;
+                border-width: root.row-highlighted(i, entry.is-selected) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 1px : 0px;
                 border-color: Theme.accent-brand;
 
                 HorizontalLayout {

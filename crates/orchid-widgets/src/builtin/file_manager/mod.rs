@@ -352,14 +352,25 @@ struct RefreshOpts {
     indicate_loading: bool,
 }
 
-const SHELL_ICON_CACHE_CAP: usize = 1024;
+/// Byte budget for the shell icon cache.
+///
+/// A flat entry count cannot span the size buckets: a 32px icon is 4 KB while
+/// a jumbo one is 256 KB, so 1024 entries is either a rounding error or a
+/// quarter of a gigabyte depending on the view mode.
+const SHELL_ICON_CACHE_BYTES: usize = 48 * 1024 * 1024;
 const THUMBNAIL_CACHE_CAP: usize = 256;
 
+/// Pick the icon bucket one step above the drawn size, never below it.
+///
+/// Downscaling stays sharp, upscaling does not, and the drawn size is in
+/// logical pixels that the display scale multiplies again: rows draw 20pt,
+/// which is already 30px at 150%, and icon tiles draw roughly 60pt.
 fn shell_icon_size_for_mode(mode: ViewMode) -> orchid_fs::ShellIconSize {
     match mode {
-        ViewMode::Gallery => orchid_fs::ShellIconSize::Jumbo,
-        ViewMode::Icons => orchid_fs::ShellIconSize::ExtraLarge,
-        ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::Small,
+        ViewMode::Gallery | ViewMode::Icons => orchid_fs::ShellIconSize::Jumbo,
+        // Rows draw ~20 logical px; at 200% DPI that is 40 physical, so 48px
+        // sources stay sharp where 32px would upscale.
+        ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::ExtraLarge,
     }
 }
 
@@ -385,6 +396,29 @@ fn insert_capped_thumbnail(
         order.push_back(key.clone());
     }
     map.insert(key, value);
+}
+
+/// Insert into an LRU cache bounded by decoded bytes rather than entry count.
+fn insert_capped_icon(
+    map: &mut HashMap<String, orchid_viewers::Thumbnail>,
+    order: &mut VecDeque<String>,
+    key: String,
+    value: orchid_viewers::Thumbnail,
+    byte_budget: usize,
+) {
+    if !map.contains_key(&key) {
+        order.push_back(key.clone());
+    }
+    map.insert(key, value);
+    let mut used: usize = map.values().map(|t| t.rgba.len()).sum();
+    while used > byte_budget {
+        let Some(old) = order.pop_front() else {
+            break;
+        };
+        if let Some(dropped) = map.remove(&old) {
+            used = used.saturating_sub(dropped.rgba.len());
+        }
+    }
 }
 
 impl FileManagerWidget {
@@ -1798,7 +1832,7 @@ impl FileManagerInner {
                     let Some(icon) = icon else {
                         continue;
                     };
-                    insert_capped_thumbnail(
+                    insert_capped_icon(
                         &mut cache,
                         &mut order,
                         shell_icon_cache_key(&path_key, size),
@@ -1807,7 +1841,7 @@ impl FileManagerInner {
                             width: icon.width,
                             height: icon.height,
                         },
-                        SHELL_ICON_CACHE_CAP,
+                        SHELL_ICON_CACHE_BYTES,
                     );
                     any_hit = true;
                 }
@@ -5048,6 +5082,20 @@ pub async fn apply_select_filter(
 /// `columns <= 1` selects a linear range (list / details). Otherwise the bounding
 /// rectangle of the two tile indices in an icon grid is selected.
 pub async fn select_index_range(
+    instance_id: Uuid,
+    pane: u8,
+    from: i32,
+    to: i32,
+    additive: bool,
+    columns: i32,
+) -> WidgetResult<()> {
+    select_index_range_sync(instance_id, pane, from, to, additive, columns)
+}
+
+/// Same as [`select_index_range`], but callable from the UI thread without an
+/// async hop — marquee tracking needs the selection model updated before the
+/// next pointer move is painted.
+pub fn select_index_range_sync(
     instance_id: Uuid,
     pane: u8,
     from: i32,

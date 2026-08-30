@@ -167,6 +167,35 @@ export component FmEntryGrid inherits Rectangle {
         }
     }
 
+    // Absolute tile index painted by the live rubber band (column bounding box,
+    // matching `select_index_rect`). Independent of the async selection patch.
+    function tile-in-marquee(i: int) -> bool {
+        if (!root.marquee-active || root.live-first < 0 || root.live-last < 0 || columns <= 0) {
+            return false;
+        }
+        let abs = root.first-index + i;
+        let r = floor(abs / columns);
+        let c = mod(abs, columns);
+        let r0 = floor(root.live-first / columns);
+        let c0 = mod(root.live-first, columns);
+        let r1 = floor(root.live-last / columns);
+        let c1 = mod(root.live-last, columns);
+        let top = min(r0, r1);
+        let bot = max(r0, r1);
+        let left = min(c0, c1);
+        let right = max(c0, c1);
+        return r >= top && r <= bot && c >= left && c <= right;
+    }
+
+    function tile-highlighted(i: int, selected: bool) -> bool {
+        if (root.marquee-active) {
+            return root.marquee-additive
+                ? (selected || root.tile-in-marquee(i))
+                : root.tile-in-marquee(i);
+        }
+        return selected;
+    }
+
     function finish-empty-gesture() {
         let rx0 = min(root.marquee-x0, root.marquee-x1);
         let rx1 = max(root.marquee-x0, root.marquee-x1);
@@ -297,11 +326,11 @@ export component FmEntryGrid inherits Rectangle {
             y: tile-spacing + (floor((first-index + i) / columns) * (tile-height + tile-spacing));
             width: tile-size;
             height: tile-height;
-            background: entry.is-selected
+            background: root.tile-highlighted(i, entry.is-selected)
                 ? #4d82ff44
                 : (tile-ta.has-hover ? Theme.surface-raised : transparent);
             border-radius: Theme.radius-md;
-            border-width: entry.is-selected || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 2px : 0px;
+            border-width: root.tile-highlighted(i, entry.is-selected) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 2px : 0px;
             border-color: Theme.accent-brand;
 
             VerticalLayout {
@@ -316,12 +345,8 @@ export component FmEntryGrid inherits Rectangle {
                     if entry.has-thumbnail : Image {
                         source: entry.thumbnail;
                         image-fit: contain;
-                        width: entry.thumbnail-is-icon
-                            ? min(parent.width - 8px, max(1px, entry.thumbnail-width * 2px))
-                            : parent.width - 8px;
-                        height: entry.thumbnail-is-icon
-                            ? min(parent.height - 8px, max(1px, entry.thumbnail-height * 2px))
-                            : parent.height - 8px;
+                        width: parent.width - 8px;
+                        height: parent.height - 8px;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                     }
