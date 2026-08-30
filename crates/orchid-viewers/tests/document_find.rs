@@ -153,3 +153,35 @@ fn find_match_case_sensitive() {
     assert!(!viewer.preview_find("hello", true, true));
     assert_eq!(viewer.find_match_status(), (0, 0));
 }
+
+#[test]
+fn cycle_page_size_letter_and_a4() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 12240);
+        assert_eq!(ps.height_twips, 15840);
+    }
+    viewer.cycle_page_size().unwrap();
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 11906);
+        assert_eq!(ps.height_twips, 16838);
+    }
+    viewer.cycle_page_size().unwrap();
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 12240);
+        assert_eq!(ps.height_twips, 15840);
+    }
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 11906);
+    }
+}

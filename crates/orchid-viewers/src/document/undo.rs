@@ -1071,6 +1071,23 @@ mod tests {
     }
 
     #[test]
+    fn cycle_page_size_letter_a4_round_trip() {
+        let mut doc = doc_with_hello();
+        assert_eq!(doc.page_setup.width_twips, 12240);
+        assert_eq!(doc.page_setup.height_twips, 15840);
+        let mut stack = UndoStack::new();
+        let mut a4 = doc.page_setup.clone();
+        a4.width_twips = 11906;
+        a4.height_twips = 16838;
+        stack
+            .push(&mut doc, EditCommand::SetPageSetup { setup: a4.clone() })
+            .unwrap();
+        assert_eq!(doc.page_setup, a4);
+        stack.undo(&mut doc).unwrap();
+        assert_eq!(doc.page_setup.width_twips, 12240);
+    }
+
+    #[test]
     fn set_strikethrough_then_undo() {
         let mut doc = doc_with_hello();
         let mut stack = UndoStack::new();

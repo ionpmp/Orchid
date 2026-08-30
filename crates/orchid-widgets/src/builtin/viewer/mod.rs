@@ -3304,6 +3304,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "line-spacing-less" => doc.bump_line_spacing_selection(-1),
                 "margin-more" => doc.bump_page_margins(180),
                 "margin-less" => doc.bump_page_margins(-180),
+                "page-size-cycle" => doc.cycle_page_size(),
                 "table-insert" => doc.preview_insert_table(2, 2),
                 // "image-insert" is handled in the UI layer (clipboard bytes).
                 "table-row-insert" => doc.preview_insert_table_row(),

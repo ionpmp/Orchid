@@ -721,6 +721,7 @@ viewer-document-line-spacing-less = Ln−
 viewer-document-line-spacing-more = Ln+
 viewer-document-margin-less = Mar−
 viewer-document-margin-more = Mar+
+viewer-document-page-size = Pg
 viewer-document-image-insert = Img
 viewer-document-table-insert = T+
 viewer-document-table-row-insert = R+

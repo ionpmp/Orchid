@@ -2064,6 +2064,32 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Toggle page size between US Letter and ISO A4 (margins unchanged).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn cycle_page_size(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut next = doc.page_setup.clone();
+        if is_a4_page(&next) {
+            next.width_twips = PAGE_LETTER_WIDTH_TWIPS;
+            next.height_twips = PAGE_LETTER_HEIGHT_TWIPS;
+        } else {
+            next.width_twips = PAGE_A4_WIDTH_TWIPS;
+            next.height_twips = PAGE_A4_HEIGHT_TWIPS;
+        }
+        if next == doc.page_setup {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetPageSetup { setup: next })?;
+        self.sync_preview_width_after_margin_change(doc);
+        Ok(())
+    }
+
     /// Set list kind on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
@@ -2393,6 +2419,12 @@ const LINE_SPACING_PRESETS: &[u32] = &[240, 276, 360, 480];
 /// Page margin clamp: 0.25″ … 3″.
 const MARGIN_TWIPS_MIN: i32 = 360;
 const MARGIN_TWIPS_MAX: i32 = 4320;
+/// US Letter page size (twips).
+const PAGE_LETTER_WIDTH_TWIPS: u32 = 12240;
+const PAGE_LETTER_HEIGHT_TWIPS: u32 = 15840;
+/// ISO A4 page size (twips).
+const PAGE_A4_WIDTH_TWIPS: u32 = 11906;
+const PAGE_A4_HEIGHT_TWIPS: u32 = 16838;
 
 fn clamp_spacing_twips(v: i32) -> u32 {
     v.clamp(0, SPACING_TWIPS_MAX) as u32
@@ -2400,6 +2432,10 @@ fn clamp_spacing_twips(v: i32) -> u32 {
 
 fn clamp_margin_twips(v: i32) -> u32 {
     v.clamp(MARGIN_TWIPS_MIN, MARGIN_TWIPS_MAX) as u32
+}
+
+fn is_a4_page(ps: &PageSetup) -> bool {
+    ps.width_twips == PAGE_A4_WIDTH_TWIPS && ps.height_twips == PAGE_A4_HEIGHT_TWIPS
 }
 
 fn bump_line_spacing_240ths(current: u32, delta: i32) -> u32 {

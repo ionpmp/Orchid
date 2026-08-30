@@ -695,6 +695,22 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(28px, pg-label.preferred-width + 8px);
+                    height: 28px;
+                    background: tool-bg(false, pg-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    pg-ta := TouchArea { clicked => { root.action("page-size-cycle"); } }
+                    pg-label := Text {
+                        text: model.page-size-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;
