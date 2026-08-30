@@ -6,6 +6,8 @@ mod image_nav;
 mod image_slideshow;
 mod image_thumbs;
 mod media_nav;
+#[cfg(windows)]
+mod smtc_publisher;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -429,6 +431,11 @@ impl ViewerWidgetInner {
         if is_media_path(&path) {
             self.after_media_opened(&path).await;
             self.schedule_media_ticks();
+            #[cfg(windows)]
+            smtc_publisher::set_active(self.instance_id);
+        } else {
+            #[cfg(windows)]
+            smtc_publisher::clear_active(self.instance_id);
         }
         self.overlay_image_nav();
         self.publish_refresh();
@@ -573,13 +580,18 @@ impl ViewerWidgetInner {
                                 if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
                                     media.set_playlist_info(idx, count);
                                 }
-                                *inner.snapshot.write() = Some(apply_image_overlay(
+                                let snap = apply_image_overlay(
                                     v.snapshot(),
                                     &inner.image_nav.read(),
                                     Some(&inner.image_thumbs.read()),
                                     Some(&inner.slideshow.read()),
                                     Some(&inner.inspect.read()),
-                                ));
+                                );
+                                #[cfg(windows)]
+                                if let ViewerSnapshot::Media(ref m) = snap {
+                                    smtc_publisher::publish(inner.instance_id, m);
+                                }
+                                *inner.snapshot.write() = Some(snap);
                             }
                         }
                         inner.publish_refresh();
@@ -681,6 +693,8 @@ impl ViewerWidgetInner {
 
     async fn close_viewer(&self) {
         self.stop_slideshow();
+        #[cfg(windows)]
+        smtc_publisher::clear_active(self.instance_id);
         let taken = self.viewer.lock().await.take();
         if let Some(mut v) = taken {
             let _ = v.close().await;

@@ -90,9 +90,10 @@ release yet.
   chapters, embedded and sidecar `.srt`/`.ass` subtitles, album cover art
   (ID3 APIC / folder `cover.jpg`), A-B loop (Shift+A/B, Shift+L clear),
   resume position, manual subtitle open (Ctrl+S) with scale `{`/`}` and
-  Alt+↑/↓ position, and keyboard shortcuts. Bundle `mpv-1.dll` /
-  `libmpv-2.dll` under `third-party/mpv/win-x64/` (see `docs/BUILDING.md`);
-  without it, chrome remains and files can still open in the system player.
+  Alt+↑/↓ position, Windows SMTC publish (media keys / lock screen), and
+  keyboard shortcuts. Bundle `mpv-1.dll` / `libmpv-2.dll` under
+  `third-party/mpv/win-x64/` (see `docs/BUILDING.md`); without it, chrome
+  remains and files can still open in the system player.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
 - Image display: fit-to-window / width / height, 1:1, shrink-if-larger
