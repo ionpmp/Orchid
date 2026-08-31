@@ -1,6 +1,6 @@
 //! Retention, quota, and exclude rules for managed folders.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{FsError, Result};

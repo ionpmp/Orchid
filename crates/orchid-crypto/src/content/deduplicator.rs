@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
@@ -35,7 +35,7 @@ pub struct ChunkRef {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct FileManifest {
     /// Manifest identifier.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// Original on-disk path at ingest time, if the caller passed one.
     pub original_path: Option<String>,
@@ -47,7 +47,7 @@ pub struct FileManifest {
     /// Ordered list of chunk references.
     pub chunks: Vec<ChunkRef>,
     /// When the manifest was created.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: chrono::DateTime<Utc>,
     /// Chunker configuration used to ingest the file. Reconstruction does
     /// not depend on it, but it's recorded for diagnostics.

@@ -1,6 +1,6 @@
 //! Visit frequency + recency for the file-manager path history menu.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// One recorded folder visit.

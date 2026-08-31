@@ -1,6 +1,6 @@
 //! Jyotish widget persistent configuration.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 

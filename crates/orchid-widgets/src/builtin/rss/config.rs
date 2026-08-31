@@ -1,6 +1,6 @@
 //! RSS widget persistent configuration.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// One feed source entry.

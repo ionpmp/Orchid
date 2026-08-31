@@ -1,6 +1,6 @@
 //! File-manager persistent configuration.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use super::visit_log::PathVisit;

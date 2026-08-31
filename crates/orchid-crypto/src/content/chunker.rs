@@ -13,7 +13,7 @@ use crate::secret::zeroizing::ZeroizingBytes;
 /// Tunables for [`Chunker`]. `avg_size` is a target; actual chunks vary
 /// between `min_size` and `max_size` depending on content.
 #[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode,
+    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, bincode_reloaded::Encode, bincode_reloaded::Decode,
 )]
 pub struct ChunkerConfig {
     /// Lower bound on a single chunk's length in bytes.

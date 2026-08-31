@@ -1,6 +1,6 @@
 //! Sidecar metadata for age-encrypted payloads.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,14 +20,14 @@ pub struct EncryptedFileMeta {
     /// Schema version (`METADATA_VERSION`).
     pub version: u32,
     /// Unique metadata id.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// Original filename.
     pub original_name: String,
     /// Original plaintext size in bytes.
     pub original_size: u64,
     /// When encryption completed.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub encrypted_at: DateTime<Utc>,
     /// Kind of identity that encrypted the payload.
     pub identity_kind: IdentityKind,
@@ -81,7 +81,7 @@ impl EncryptedFileMeta {
     ///
     /// Propagates [`CryptoError::Encoding`] on encode failure.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::encode_to_vec(self, bincode::config::standard())
+        bincode_reloaded::encode_to_vec(self, bincode_reloaded::config::standard())
             .map_err(|e| CryptoError::Encoding(e.to_string()))
     }
 
@@ -91,7 +91,7 @@ impl EncryptedFileMeta {
     ///
     /// Propagates [`CryptoError::Encoding`] on decode failure.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let (v, _) = bincode::decode_from_slice(bytes, bincode::config::standard())
+        let (v, _) = bincode_reloaded::decode_from_slice(bytes, bincode_reloaded::config::standard())
             .map_err(|e| CryptoError::Encoding(e.to_string()))?;
         Ok(v)
     }

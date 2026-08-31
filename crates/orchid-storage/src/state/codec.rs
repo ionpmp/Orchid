@@ -1,7 +1,7 @@
 //! redb `Value` adapter that encodes Rust values through `bincode`.
 //!
 //! [`Value<T>`] is a zero-sized type that implements [`redb::Value`] for any
-//! `T: bincode::Encode + bincode::Decode<()>`, letting us declare tables like:
+//! `T: bincode_reloaded::Encode + bincode_reloaded::Decode<()>`, letting us declare tables like:
 //!
 //! ```ignore
 //! use redb::TableDefinition;
@@ -18,7 +18,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use bincode::config;
+use bincode_reloaded::config;
 
 use crate::error::Result;
 
@@ -29,7 +29,7 @@ pub struct Value<T>(PhantomData<T>);
 
 impl<T> redb::Value for Value<T>
 where
-    T: bincode::Encode + bincode::Decode<()> + Debug + 'static,
+    T: bincode_reloaded::Encode + bincode_reloaded::Decode<()> + Debug + 'static,
 {
     type SelfType<'a>
         = T
@@ -54,7 +54,7 @@ where
         // message is the accepted pattern.
         #[allow(clippy::expect_used)]
         {
-            let (value, _) = bincode::decode_from_slice(data, config::standard())
+            let (value, _) = bincode_reloaded::decode_from_slice(data, config::standard())
                 .expect("orchid-storage: bincode decode failed (database corrupted?)");
             value
         }
@@ -69,7 +69,7 @@ where
         // fail unless the encoder runs out of memory, which is unrecoverable.
         #[allow(clippy::expect_used)]
         {
-            bincode::encode_to_vec(value, config::standard())
+            bincode_reloaded::encode_to_vec(value, config::standard())
                 .expect("orchid-storage: bincode encode should not fail")
         }
     }
@@ -92,9 +92,9 @@ where
 /// Propagates [`crate::StorageError::Bincode`] if encoding fails.
 pub fn bincode_encode<T>(value: &T) -> Result<Vec<u8>>
 where
-    T: bincode::Encode,
+    T: bincode_reloaded::Encode,
 {
-    Ok(bincode::encode_to_vec(value, config::standard())?)
+    Ok(bincode_reloaded::encode_to_vec(value, config::standard())?)
 }
 
 /// Decode a value from a byte slice using the workspace-standard bincode
@@ -105,9 +105,9 @@ where
 /// Propagates [`crate::StorageError::BincodeDecode`] if decoding fails.
 pub fn bincode_decode<T>(bytes: &[u8]) -> Result<T>
 where
-    T: bincode::Decode<()>,
+    T: bincode_reloaded::Decode<()>,
 {
-    let (value, _) = bincode::decode_from_slice(bytes, config::standard())?;
+    let (value, _) = bincode_reloaded::decode_from_slice(bytes, config::standard())?;
     Ok(value)
 }
 

@@ -4,7 +4,7 @@
 //! — never the underlying secret material. The user re-supplies the
 //! passphrase / key at every reveal.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use orchid_crypto::{IdentityKind, RevealDuration};
 use redb::TableDefinition;
 use serde::{Deserialize, Serialize};

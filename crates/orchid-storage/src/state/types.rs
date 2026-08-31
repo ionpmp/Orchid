@@ -4,9 +4,9 @@
 //! dumps) and `bincode` traits (for on-disk storage via [`super::codec`]).
 //! Fields whose types do not natively implement the bincode traits — `Uuid`,
 //! `DateTime<Utc>` — are routed through serde using
-//! `#[bincode(with_serde)]`.
+//! `#[bincode_reloaded(with_serde)]`.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -17,10 +17,10 @@ pub struct SchemaMeta {
     /// On-disk schema version. Incremented whenever a migration is added.
     pub version: u32,
     /// When this database was first created.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: DateTime<Utc>,
     /// When the database was most recently opened by Orchid.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub last_opened_at: DateTime<Utc>,
     /// Version string of `orchid-app` that most recently opened this DB.
     pub orchid_version: String,
@@ -30,10 +30,10 @@ pub struct SchemaMeta {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct HistoryEntry {
     /// Unique identifier for the entry.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// When the action was recorded.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub timestamp: DateTime<Utc>,
     /// Logical action identifier, e.g. `"fs.move"` or `"widget.create"`.
     pub action_id: String,
@@ -42,7 +42,7 @@ pub struct HistoryEntry {
     /// Optional target (file path, widget id, etc.).
     pub target: Option<String>,
     /// If set, the action can be reversed up to this deadline.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub reversible_until: Option<DateTime<Utc>>,
     /// If set, the textual command that would reverse this action.
     pub reverse_command: Option<String>,
@@ -146,12 +146,12 @@ impl WindowPlacement {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct WidgetInstance {
     /// Unique identifier for this widget instance.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// Identifier of the widget type, e.g. `"weather"`, `"moon"`, `"terminal"`.
     pub widget_type: String,
     /// Which workspace this widget belongs to.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub workspace_id: Uuid,
     /// Position on the widget grid.
     pub position: GridPosition,
@@ -164,10 +164,10 @@ pub struct WidgetInstance {
     /// Bincode-encoded per-widget configuration payload.
     pub config: Vec<u8>,
     /// When this instance was first created.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: DateTime<Utc>,
     /// When this instance was last updated.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub updated_at: DateTime<Utc>,
 }
 
@@ -210,7 +210,7 @@ pub enum LifecycleState {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Workspace {
     /// Unique identifier.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// User-facing name.
     pub name: String,
@@ -219,10 +219,10 @@ pub struct Workspace {
     /// Optional wallpaper path.
     pub wallpaper: Option<String>,
     /// When this workspace was created.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: DateTime<Utc>,
     /// When this workspace was last updated.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub updated_at: DateTime<Utc>,
 }
 
@@ -238,7 +238,7 @@ pub struct FileTag {
     /// Whether the user has starred this file.
     pub starred: bool,
     /// When the tag record was last updated.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub updated_at: DateTime<Utc>,
 }
 
@@ -259,14 +259,14 @@ pub enum ColorLabel {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct SessionState {
     /// Currently focused workspace.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub active_workspace_id: Option<Uuid>,
     /// Open file manager tabs.
     pub open_file_manager_tabs: Vec<FileManagerTab>,
     /// Open terminal sessions.
     pub open_terminal_sessions: Vec<TerminalSession>,
     /// When this snapshot was taken.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub last_saved_at: DateTime<Utc>,
 }
 
@@ -274,7 +274,7 @@ pub struct SessionState {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct FileManagerTab {
     /// Unique identifier for the tab.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// Path currently displayed in this tab.
     pub path: String,
@@ -298,7 +298,7 @@ pub enum ViewMode {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct TerminalSession {
     /// Unique identifier for the session.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// Which backend this session uses.
     pub backend: TerminalBackend,
@@ -329,10 +329,10 @@ pub struct CacheEntry {
     /// Kind of cached artefact.
     pub kind: CacheKind,
     /// When this entry was created.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: DateTime<Utc>,
     /// When this entry was most recently accessed.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub last_access_at: DateTime<Utc>,
     /// Size of `data` in bytes; duplicated here to avoid decoding for stats.
     pub size_bytes: u64,
@@ -387,7 +387,7 @@ mod tests {
 
     fn roundtrip<T>(value: &T) -> T
     where
-        T: bincode::Encode + bincode::Decode<()>,
+        T: bincode_reloaded::Encode + bincode_reloaded::Decode<()>,
     {
         let bytes = bincode_encode(value).unwrap();
         bincode_decode::<T>(&bytes).unwrap()

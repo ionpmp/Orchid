@@ -14,7 +14,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction};
 use serde::{Deserialize, Serialize};
@@ -68,18 +68,18 @@ static AVAILABLE: &[Migration] = &[
 /// Schema v1 widget row (no `placement` field).
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct WidgetInstanceV1 {
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     id: Uuid,
     widget_type: String,
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     workspace_id: Uuid,
     position: GridPosition,
     size: WidgetSize,
     lifecycle: LifecycleState,
     config: Vec<u8>,
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     created_at: DateTime<Utc>,
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     updated_at: DateTime<Utc>,
 }
 
@@ -143,9 +143,9 @@ fn migrate_v1_to_v2_window_placement(txn: &WriteTransaction) -> Result<()> {
         let _ = key;
         // Exact v1 consume → upgrade. Otherwise accept already-v2 rows
         // (idempotent re-run after a partial migration).
-        let v2 = match bincode::decode_from_slice::<WidgetInstanceV1, _>(
+        let v2 = match bincode_reloaded::decode_from_slice::<WidgetInstanceV1, _>(
             &bytes,
-            bincode::config::standard(),
+            bincode_reloaded::config::standard(),
         ) {
             Ok((v1, read)) if read == bytes.len() => WidgetInstance {
                 id: v1.id,
@@ -160,7 +160,7 @@ fn migrate_v1_to_v2_window_placement(txn: &WriteTransaction) -> Result<()> {
                 updated_at: v1.updated_at,
             },
             _ => {
-                bincode::decode_from_slice::<WidgetInstance, _>(&bytes, bincode::config::standard())
+                bincode_reloaded::decode_from_slice::<WidgetInstance, _>(&bytes, bincode_reloaded::config::standard())
                     .map(|(row, _)| row)
                     .map_err(|e| StorageError::MigrationFailed {
                         from: 1,

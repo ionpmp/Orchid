@@ -19,7 +19,7 @@ notify.workspace = true
 notify-debouncer-full.workspace = true
 directories.workspace = true
 parking_lot.workspace = true
-bincode.workspace = true
+bincode_reloaded.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 

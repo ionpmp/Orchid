@@ -1,6 +1,6 @@
 //! Configuration types for managed folders.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use orchid_crypto::ChunkerConfig;
 use serde::{Deserialize, Serialize};
 

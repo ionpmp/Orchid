@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
@@ -80,10 +80,10 @@ pub struct ChunkRefInfo {
     /// Number of outstanding references from manifests / callers.
     pub refcount: u64,
     /// When the chunk was first inserted.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: DateTime<Utc>,
     /// When the chunk was most recently read or re-inserted.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub last_accessed_at: DateTime<Utc>,
 }
 

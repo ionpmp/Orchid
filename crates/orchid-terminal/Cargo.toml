@@ -19,7 +19,7 @@ tokio = { workspace = true }
 
 # Plumbing
 serde.workspace = true
-bincode.workspace = true
+bincode_reloaded.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true

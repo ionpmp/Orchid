@@ -4,7 +4,7 @@ pub mod operations;
 
 use std::sync::Arc;
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use orchid_storage::{GridPosition, WidgetSize};
@@ -24,13 +24,13 @@ pub(crate) const GROUPS_TABLE: TableDefinition<'_, &[u8; 16], orchid_storage::Va
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct WidgetGroup {
     /// Group id.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub id: Uuid,
     /// Workspace this group belongs to.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub workspace_id: Uuid,
     /// Widget instance ids, left-to-right tab order.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub members: SmallVec<[Uuid; 4]>,
     /// Index of the currently active tab.
     pub active_member: u16,
@@ -39,7 +39,7 @@ pub struct WidgetGroup {
     /// Size that applies to the group as a whole.
     pub size: WidgetSize,
     /// When the group was created.
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     pub created_at: DateTime<Utc>,
 }
 

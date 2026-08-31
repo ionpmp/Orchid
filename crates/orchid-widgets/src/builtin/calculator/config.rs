@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use super::engine::{AngleMode, CalcMode, HistoryEntry};

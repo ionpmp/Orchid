@@ -248,8 +248,9 @@ release yet.
   compatible crate versions, plus intentional bumps: `icu` 2.3, `swash` 0.2.10,
   `crc32fast` 1.5, `fontdb` 0.24, `resvg`/`usvg` 0.48, `parley` 0.11,
   `bzip2` 0.6, `base64` 0.23, digest stack (`sha2`/`sha1`/`md-5`/`digest` 0.11),
-  and `totp-rs` 6 (Builder API). Left **`bincode` on 2** — crates.io `bincode`
-  3.0 is an unmaintained stub.
+  and `totp-rs` 6 (Builder API). Binary codec **`bincode` → `bincode_reloaded`
+  3** (crates.io `bincode` 3.0 is an unmaintained stub that only emits
+  `compile_error!`).
 - File-manager selection follows Explorer instead of per-row checkboxes: click
   selects, Ctrl+click toggles, Shift+click extends, and a drag rubber-bands and
   highlights entries live as it crosses them. The toolbar shows **Deselect**

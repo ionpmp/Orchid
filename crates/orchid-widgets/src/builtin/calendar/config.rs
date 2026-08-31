@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::{Datelike, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -155,7 +155,7 @@ impl CalendarConfig {
 #[must_use]
 pub fn decode_config(bytes: &[u8]) -> CalendarConfig {
     if let Ok((mut cfg, _)) =
-        bincode::serde::decode_from_slice::<CalendarConfig, _>(bytes, bincode::config::standard())
+        bincode_reloaded::serde::decode_from_slice::<CalendarConfig, _>(bytes, bincode_reloaded::config::standard())
     {
         cfg.normalize();
         return cfg;
@@ -170,7 +170,7 @@ pub fn decode_config(bytes: &[u8]) -> CalendarConfig {
     }
 
     if let Ok((legacy, _)) =
-        bincode::serde::decode_from_slice::<Legacy, _>(bytes, bincode::config::standard())
+        bincode_reloaded::serde::decode_from_slice::<Legacy, _>(bytes, bincode_reloaded::config::standard())
     {
         let mut cfg = CalendarConfig {
             events: legacy.events,

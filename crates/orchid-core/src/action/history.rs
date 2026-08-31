@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -31,7 +31,7 @@ use orchid_storage::{HistoryEntry, StateStore};
 struct HistoryMetadata {
     success: bool,
     error_message: Option<String>,
-    #[bincode(with_serde)]
+    #[bincode_reloaded(with_serde)]
     correlation_id: Option<Uuid>,
     source_label: String,
 }
@@ -116,7 +116,7 @@ impl ActionMiddleware for HistoryRecorder {
             correlation_id: ctx.correlation_id,
             source_label: ctx.source.label(),
         };
-        let metadata_bytes = match bincode::encode_to_vec(&metadata, bincode::config::standard()) {
+        let metadata_bytes = match bincode_reloaded::encode_to_vec(&metadata, bincode_reloaded::config::standard()) {
             Ok(b) => b,
             Err(e) => {
                 warn!(error = %e, "failed to encode history metadata; skipping entry");
@@ -222,7 +222,7 @@ mod tests {
         assert_eq!(recent[0].command_text, "orc test echo");
 
         let meta: HistoryMetadata =
-            bincode::decode_from_slice(&recent[0].metadata, bincode::config::standard())
+            bincode_reloaded::decode_from_slice(&recent[0].metadata, bincode_reloaded::config::standard())
                 .unwrap()
                 .0;
         assert!(meta.success);
@@ -241,7 +241,7 @@ mod tests {
         let recent = r.iter_history_recent(10).unwrap();
         assert_eq!(recent.len(), 1);
         let meta: HistoryMetadata =
-            bincode::decode_from_slice(&recent[0].metadata, bincode::config::standard())
+            bincode_reloaded::decode_from_slice(&recent[0].metadata, bincode_reloaded::config::standard())
                 .unwrap()
                 .0;
         assert!(!meta.success);

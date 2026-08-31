@@ -1276,7 +1276,7 @@ mod tests {
             view_month: 7,
             selected_date: "2026-07-21".into(),
         };
-        let bytes = bincode::serde::encode_to_vec(&legacy, bincode::config::standard()).unwrap();
+        let bytes = bincode_reloaded::serde::encode_to_vec(&legacy, bincode_reloaded::config::standard()).unwrap();
         let cfg = decode_config(&bytes);
         assert_eq!(cfg.events.len(), 1);
         assert_eq!(cfg.events[0].title, "Legacy");

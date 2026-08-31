@@ -12,7 +12,7 @@ use crate::error::{Result, WidgetError};
 ///
 /// Returns [`WidgetError::CreationFailed`] on encode failure.
 pub fn save_state<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    bincode::serde::encode_to_vec(value, bincode::config::standard())
+    bincode_reloaded::serde::encode_to_vec(value, bincode_reloaded::config::standard())
         .map_err(|e| WidgetError::CreationFailed(format!("bincode encode: {e}")))
 }
 
@@ -22,7 +22,7 @@ pub fn save_state<T: Serialize>(value: &T) -> Result<Vec<u8>> {
 ///
 /// Returns [`WidgetError::CreationFailed`] on decode failure.
 pub fn restore_state<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    let (value, _) = bincode::serde::decode_from_slice(bytes, bincode::config::standard())
+    let (value, _) = bincode_reloaded::serde::decode_from_slice(bytes, bincode_reloaded::config::standard())
         .map_err(|e| WidgetError::CreationFailed(format!("bincode decode: {e}")))?;
     Ok(value)
 }

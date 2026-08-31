@@ -1,6 +1,6 @@
 //! Config for the system-indicators widget.
 
-use bincode::{Decode, Encode};
+use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// Persistent system-widget config.

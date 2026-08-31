@@ -63,12 +63,12 @@ pub enum StorageError {
     /// A bincode encoding error. In practice this only happens if a value
     /// exceeds an encoder limit since all of our types are infallibly encodable.
     #[error("bincode encode error: {0}")]
-    Bincode(#[from] ::bincode::error::EncodeError),
+    Bincode(#[from] ::bincode_reloaded::error::EncodeError),
 
     /// A bincode decoding error, typically signalling corruption of the
     /// underlying redb database.
     #[error("bincode decode error: {0}")]
-    BincodeDecode(#[from] ::bincode::error::DecodeError),
+    BincodeDecode(#[from] ::bincode_reloaded::error::DecodeError),
 
     /// A schema migration failed while opening the state database.
     #[error("migration from v{from} to v{to} failed: {reason}")]
