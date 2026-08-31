@@ -133,6 +133,10 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("cycle-hwdec");
                 return accept;
             }
+            if event.text == "t" || event.text == "T" {
+                root.command("cycle-sleep");
+                return accept;
+            }
             if event.text == "y" || event.text == "Y" {
                 root.command("shuffle");
                 return accept;
@@ -232,7 +236,7 @@ export component ViewerMediaView inherits Rectangle {
                 }
             }
 
-            // Click surface toggles play when available
+            // Click / wheel / double-click on the media surface
             TouchArea {
                 clicked => {
                     if model.available {
@@ -240,6 +244,18 @@ export component ViewerMediaView inherits Rectangle {
                     } else {
                         root.open-external();
                     }
+                }
+                double-clicked => {
+                    root.command("fullscreen");
+                }
+                scroll-event(event) => {
+                    if event.delta-y > 0 {
+                        root.command("seek-fwd-5");
+                    }
+                    if event.delta-y < 0 {
+                        root.command("seek-back-5");
+                    }
+                    return accept;
                 }
             }
 
@@ -479,6 +495,12 @@ export component ViewerMediaView inherits Rectangle {
                     if model.hwdec-label != "" : Text {
                         text: model.hwdec-label;
                         color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    if model.sleep-label != "" : Text {
+                        text: model.sleep-label;
+                        color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }

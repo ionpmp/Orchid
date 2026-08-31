@@ -255,6 +255,11 @@ impl MediaViewer {
         self.engine.cycle_hwdec();
     }
 
+    /// Cycle sleep timer: off → 15 → 30 → 60 → 90 → off.
+    pub fn cycle_sleep(&self) {
+        self.engine.cycle_sleep();
+    }
+
     /// Seek to start and pause.
     pub fn stop(&self) {
         self.engine.stop();
@@ -303,6 +308,7 @@ impl MediaViewer {
             "sub-style-reset" => self.sub_style_reset(),
             "cycle-eq" => self.cycle_eq(),
             "cycle-hwdec" => self.cycle_hwdec(),
+            "cycle-sleep" => self.cycle_sleep(),
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),
@@ -429,6 +435,7 @@ impl Viewer for MediaViewer {
             ab_label: shared.ab_label.read().clone(),
             eq_label: shared.eq_label.read().clone(),
             hwdec_label: shared.hwdec_label.read().clone(),
+            sleep_label: shared.sleep_label.read().clone(),
             osd_text: shared.osd_text.read().clone(),
             error,
         })

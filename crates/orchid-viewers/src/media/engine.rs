@@ -61,6 +61,10 @@ pub struct SharedPlayback {
     /// 0 = `auto-copy` (HW decode → system RAM for SW blit), 1 = `no`.
     pub hwdec_mode: AtomicU32,
     pub hwdec_label: RwLock<String>,
+    /// Sleep timer deadline; when reached, pause and clear.
+    pub sleep_until: RwLock<Option<Instant>>,
+    pub sleep_index: AtomicU32,
+    pub sleep_label: RwLock<String>,
     pub osd_text: RwLock<String>,
     /// Instant::now() + duration; cleared when expired in poll.
     pub osd_until: RwLock<Option<Instant>>,
@@ -98,6 +102,9 @@ impl SharedPlayback {
             eq_index: AtomicU32::new(0),
             hwdec_mode: AtomicU32::new(0),
             hwdec_label: RwLock::new(String::new()),
+            sleep_until: RwLock::new(None),
+            sleep_index: AtomicU32::new(0),
+            sleep_label: RwLock::new(String::new()),
             osd_text: RwLock::new(String::new()),
             osd_until: RwLock::new(None),
             sub_label: RwLock::new(String::new()),
@@ -139,6 +146,7 @@ enum EngineCmd {
     SubStyleReset,
     CycleEq,
     CycleHwdec,
+    CycleSleep,
     Stop,
     FrameFwd,
     FrameBack,
@@ -290,6 +298,10 @@ impl MpvEngine {
 
     pub fn cycle_hwdec(&self) {
         let _ = self.tx.send(EngineCmd::CycleHwdec);
+    }
+
+    pub fn cycle_sleep(&self) {
+        let _ = self.tx.send(EngineCmd::CycleSleep);
     }
 
     pub fn stop(&self) {
@@ -690,6 +702,19 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             );
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::CycleSleep => {
+            apply_next_sleep(shared);
+            let label = shared.sleep_label.read().clone();
+            flash_osd(
+                shared,
+                if label.is_empty() {
+                    "Sleep off".into()
+                } else {
+                    label.clone()
+                },
+            );
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::Stop => {
             // Keep the file loaded: seek to start and pause (PotPlayer-style stop).
             persist_resume(shared);
@@ -829,6 +854,7 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
     };
     refresh_ab_label(api, handle, shared);
     refresh_hwdec_label(api, handle, shared);
+    tick_sleep(api, handle, shared);
     expire_osd(shared);
     shared.dirty.store(true, Ordering::Release);
 }
@@ -971,6 +997,48 @@ unsafe fn refresh_hwdec_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPl
     } else {
         format!("Dec {current}")
     };
+}
+
+/// Sleep timer presets in minutes (`0` = off).
+const SLEEP_PRESETS_MIN: &[u32] = &[0, 15, 30, 60, 90];
+
+fn apply_next_sleep(shared: &SharedPlayback) {
+    let next = (shared.sleep_index.load(Ordering::Relaxed) + 1) % SLEEP_PRESETS_MIN.len() as u32;
+    shared.sleep_index.store(next, Ordering::Relaxed);
+    let mins = SLEEP_PRESETS_MIN[next as usize];
+    if mins == 0 {
+        *shared.sleep_until.write() = None;
+        *shared.sleep_label.write() = String::new();
+    } else {
+        *shared.sleep_until.write() =
+            Some(Instant::now() + Duration::from_secs(u64::from(mins) * 60));
+        *shared.sleep_label.write() = format!("Sleep {mins}m");
+    }
+}
+
+unsafe fn tick_sleep(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let until = *shared.sleep_until.read();
+    let Some(until) = until else {
+        return;
+    };
+    if Instant::now() < until {
+        let left = until.saturating_duration_since(Instant::now());
+        let total = left.as_secs();
+        let mins = total / 60;
+        let secs = total % 60;
+        *shared.sleep_label.write() = if mins > 0 {
+            format!("Sleep {mins}m{secs:02}s")
+        } else {
+            format!("Sleep {secs}s")
+        };
+        return;
+    }
+    shared.sleep_index.store(0, Ordering::Relaxed);
+    *shared.sleep_until.write() = None;
+    *shared.sleep_label.write() = String::new();
+    let _ = set_flag(api, handle, "pause", true);
+    shared.playing.store(false, Ordering::Relaxed);
+    flash_osd(shared, "Sleep — paused".into());
 }
 
 unsafe fn render_frame(
