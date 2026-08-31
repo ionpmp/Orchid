@@ -124,8 +124,7 @@ fn plain_text_from_document_xml(xml: &str) -> String {
                 }
             }
             Ok(Event::Text(t)) if in_t => {
-                let text = t.decode().unwrap_or_default();
-                out.push_str(&text);
+                out.push_str(t.as_ref());
                 at_para_start = false;
             }
             Ok(Event::End(e)) => {
@@ -147,9 +146,8 @@ fn plain_text_from_document_xml(xml: &str) -> String {
     out
 }
 
-fn local_name(name: &[u8]) -> String {
-    let s = String::from_utf8_lossy(name);
-    s.rsplit(':').next().unwrap_or(&s).to_string()
+fn local_name(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or(name).to_string()
 }
 
 #[cfg(test)]

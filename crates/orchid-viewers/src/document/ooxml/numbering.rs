@@ -216,16 +216,14 @@ pub fn parse_numbering_xml(bytes: &[u8]) -> Result<NumberingDefs> {
     Ok(defs)
 }
 
-fn local_name(name: &[u8]) -> String {
-    let s = String::from_utf8_lossy(name);
-    s.rsplit(':').next().unwrap_or(&s).to_string()
+fn local_name(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or(name).to_string()
 }
 
 fn attr_val(e: &quick_xml::events::BytesStart<'_>, key: &str) -> Option<String> {
     for a in e.attributes().flatten() {
-        let local = local_name(a.key.as_ref());
-        if local == key {
-            return Some(String::from_utf8_lossy(&a.value).into_owned());
+        if local_name(a.key.as_ref()) == key {
+            return Some(a.value.into_owned());
         }
     }
     None

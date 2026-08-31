@@ -156,7 +156,7 @@ fn parse_core_xml(xml: &str) -> OfficeCoreProps {
                 current = local_name(e.name().as_ref()).to_ascii_lowercase();
             }
             Ok(quick_xml::events::Event::Text(t)) => {
-                let text = t.decode().unwrap_or_default().into_owned();
+                let text = t.as_ref().to_string();
                 match current.as_str() {
                     "title" => props.title = text,
                     "subject" => props.subject = text,
@@ -177,9 +177,8 @@ fn parse_core_xml(xml: &str) -> OfficeCoreProps {
     props
 }
 
-fn local_name(name: &[u8]) -> &str {
-    let s = std::str::from_utf8(name).unwrap_or("");
-    s.rsplit(':').next().unwrap_or(s)
+fn local_name(name: &str) -> &str {
+    name.rsplit(':').next().unwrap_or(name)
 }
 
 fn write_core_xml(props: &OfficeCoreProps) -> String {
