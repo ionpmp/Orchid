@@ -70,6 +70,7 @@ pub struct MediaViewer {
     playlist_index: RwLock<u32>,
     playlist_count: RwLock<u32>,
     playlist_shuffle: RwLock<bool>,
+    playlist_loop: RwLock<bool>,
 }
 
 impl Default for MediaViewer {
@@ -90,14 +91,16 @@ impl MediaViewer {
             playlist_index: RwLock::new(0),
             playlist_count: RwLock::new(0),
             playlist_shuffle: RwLock::new(false),
+            playlist_loop: RwLock::new(true),
         }
     }
 
     /// Update playlist chrome (1-based display uses index+1).
-    pub fn set_playlist_info(&self, index: u32, count: u32, shuffle: bool) {
+    pub fn set_playlist_info(&self, index: u32, count: u32, shuffle: bool, loop_playlist: bool) {
         *self.playlist_index.write() = index;
         *self.playlist_count.write() = count;
         *self.playlist_shuffle.write() = shuffle;
+        *self.playlist_loop.write() = loop_playlist;
     }
 
     /// True when libmpv loaded successfully.
@@ -116,6 +119,12 @@ impl MediaViewer {
     #[must_use]
     pub fn take_dirty(&self) -> bool {
         self.engine.take_dirty()
+    }
+
+    /// End-of-file reached for the current track.
+    #[must_use]
+    pub fn take_eof(&self) -> bool {
+        self.engine.take_eof()
     }
 
     /// Toggle play / pause.
@@ -388,6 +397,7 @@ impl Viewer for MediaViewer {
             playlist_index: *self.playlist_index.read(),
             playlist_count: *self.playlist_count.read(),
             playlist_shuffle: *self.playlist_shuffle.read(),
+            playlist_loop: *self.playlist_loop.read(),
             sub_label: shared.sub_label.read().clone(),
             sub_visible: shared.sub_visible.load(Ordering::Relaxed),
             audio_label: shared.audio_label.read().clone(),

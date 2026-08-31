@@ -708,6 +708,7 @@ viewer-media-muted = 음소거
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = 셔플
+viewer-media-loop = 반복
 viewer-media-subs-off = 자막 끔
 viewer-html-open = 브라우저에서 열기
 viewer-html-hint = HTML 미리보기는 시스템 브라우저를 사용합니다

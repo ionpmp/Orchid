@@ -31,7 +31,7 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("vol-down");
                 return accept;
             }
-            if event.text == "f" || event.text == "F" {
+            if event.text == "f" || event.text == "F" || event.text == Key.F11 {
                 root.command("fullscreen");
                 return accept;
             }
@@ -71,6 +71,10 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("sub-pos-down");
                 return accept;
             }
+            if event.text == "0" && !event.modifiers.control && !event.modifiers.shift {
+                root.command("speed-reset");
+                return accept;
+            }
             if event.modifiers.control && event.text == "0" {
                 root.command("sub-style-reset");
                 return accept;
@@ -93,6 +97,10 @@ export component ViewerMediaView inherits Rectangle {
             }
             if (event.text == "l" || event.text == "L") && event.modifiers.shift {
                 root.command("ab-clear");
+                return accept;
+            }
+            if event.text == "l" || event.text == "L" {
+                root.command("loop");
                 return accept;
             }
             if event.text == "e" || event.text == "E" {

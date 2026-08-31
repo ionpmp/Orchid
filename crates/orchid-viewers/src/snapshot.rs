@@ -414,6 +414,7 @@ pub struct MediaSnapshot {
     pub playlist_index: u32,
     pub playlist_count: u32,
     pub playlist_shuffle: bool,
+    pub playlist_loop: bool,
     pub sub_label: String,
     pub sub_visible: bool,
     pub audio_label: String,

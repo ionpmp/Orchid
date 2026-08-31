@@ -709,6 +709,7 @@ viewer-media-muted = صامت
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = عشوائي
+viewer-media-loop = تكرار
 viewer-media-subs-off = الترجمة متوقفة
 viewer-html-open = فتح في المتصفح
 viewer-html-hint = معاينة HTML تستخدم متصفح النظام

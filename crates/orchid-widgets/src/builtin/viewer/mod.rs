@@ -501,14 +501,19 @@ impl ViewerWidgetInner {
     }
 
     async fn apply_media_playlist_overlay(&self) {
-        let (idx, count, shuffle) = {
+        let (idx, count, shuffle, loop_playlist) = {
             let nav = self.media_nav.read();
-            (nav.index as u32, nav.siblings.len() as u32, nav.shuffle)
+            (
+                nav.index as u32,
+                nav.siblings.len() as u32,
+                nav.shuffle,
+                nav.loop_playlist,
+            )
         };
         let guard = self.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                media.set_playlist_info(idx, count, shuffle);
+                media.set_playlist_info(idx, count, shuffle, loop_playlist);
             }
         }
     }
@@ -553,12 +558,14 @@ impl ViewerWidgetInner {
                 if inner.media_tick.load(Ordering::Relaxed) != gen {
                     return;
                 }
-                let dirty = {
+                let tick = {
                     let guard = inner.viewer.lock().await;
                     if let Some(v) = guard.as_ref() {
                         if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                            let d = media.take_dirty() || media.is_playing();
-                            Some(d)
+                            Some((
+                                media.take_dirty() || media.is_playing(),
+                                media.take_eof(),
+                            ))
                         } else {
                             None
                         }
@@ -566,19 +573,32 @@ impl ViewerWidgetInner {
                         None
                     }
                 };
+                let Some((dirty, eof)) = tick else {
+                    return;
+                };
+                if eof {
+                    let _ = inner
+                        .navigate_media(media_nav::MediaNavStep::Next)
+                        .await;
+                    continue;
+                }
                 match dirty {
-                    None => return,
-                    Some(true) => {
+                    true => {
                         // Re-apply playlist chrome then publish.
-                        let (idx, count, shuffle) = {
+                        let (idx, count, shuffle, loop_playlist) = {
                             let nav = inner.media_nav.read();
-                            (nav.index as u32, nav.siblings.len() as u32, nav.shuffle)
+                            (
+                                nav.index as u32,
+                                nav.siblings.len() as u32,
+                                nav.shuffle,
+                                nav.loop_playlist,
+                            )
                         };
                         {
                             let guard = inner.viewer.lock().await;
                             if let Some(v) = guard.as_ref() {
                                 if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                                    media.set_playlist_info(idx, count, shuffle);
+                                    media.set_playlist_info(idx, count, shuffle, loop_playlist);
                                 }
                                 let snap = apply_image_overlay(
                                     v.snapshot(),
@@ -596,7 +616,7 @@ impl ViewerWidgetInner {
                         }
                         inner.publish_refresh();
                     }
-                    Some(false) => {}
+                    false => {}
                 }
             }
         });

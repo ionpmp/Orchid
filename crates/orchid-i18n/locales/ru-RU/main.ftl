@@ -698,6 +698,7 @@ viewer-media-muted = Без звука
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = Случайно
+viewer-media-loop = Повтор
 viewer-media-subs-off = Субтитры выкл.
 viewer-html-open = Открыть в браузере
 viewer-html-hint = HTML открывается в системном браузере

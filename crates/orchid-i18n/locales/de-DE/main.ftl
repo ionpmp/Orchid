@@ -708,6 +708,7 @@ viewer-media-muted = Stumm
 viewer-media-speed = { $n }×
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = Zufall
+viewer-media-loop = Wiederholen
 viewer-media-subs-off = Untertitel aus
 viewer-html-open = Im Browser öffnen
 viewer-html-hint = HTML-Vorschau nutzt den Systembrowser

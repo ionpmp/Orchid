@@ -620,11 +620,14 @@ fn build_media_snapshot(
                 .with("i", (s.playlist_index + 1).to_string())
                 .with("n", s.playlist_count.to_string()),
         );
+        let mut label = base;
         if s.playlist_shuffle {
-            format!("{base} · {}", locale.tr("viewer-media-shuffle"))
-        } else {
-            base
+            label = format!("{label} · {}", locale.tr("viewer-media-shuffle"));
         }
+        if s.playlist_loop {
+            label = format!("{label} · {}", locale.tr("viewer-media-loop"));
+        }
+        label
     } else {
         String::new()
     };

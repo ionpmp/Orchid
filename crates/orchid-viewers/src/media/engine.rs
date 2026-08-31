@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use super::ffi::{
     self, command_args, c_str, error_message, get_double, get_flag, get_int64, get_string,
     set_double, set_flag, set_string, MpvApi, MpvHandle, MpvRenderContext, MpvRenderParam,
-    MPV_EVENT_NONE, MPV_EVENT_SHUTDOWN, MPV_RENDER_PARAM_ADVANCED_CONTROL,
+    MPV_EVENT_NONE, MPV_EVENT_SHUTDOWN, MPV_EVENT_END_FILE, MPV_RENDER_PARAM_ADVANCED_CONTROL,
     MPV_RENDER_PARAM_API_TYPE, MPV_RENDER_PARAM_INVALID, MPV_RENDER_PARAM_SW_FORMAT,
     MPV_RENDER_PARAM_SW_POINTER, MPV_RENDER_PARAM_SW_SIZE, MPV_RENDER_PARAM_SW_STRIDE,
     MPV_RENDER_UPDATE_FRAME,
@@ -68,6 +68,8 @@ pub struct SharedPlayback {
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
     pub chapter_label: RwLock<String>,
+    /// Set when mpv reaches end-of-file (cleared on load / take).
+    pub eof_reached: AtomicBool,
     pub error: RwLock<Option<String>>,
     /// Set when a new frame or transport property changed.
     pub dirty: AtomicBool,
@@ -102,6 +104,7 @@ impl SharedPlayback {
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
             chapter_label: RwLock::new(String::new()),
+            eof_reached: AtomicBool::new(false),
             error: RwLock::new(None),
             dirty: AtomicBool::new(false),
         }
@@ -294,6 +297,11 @@ impl MpvEngine {
     pub fn take_dirty(&self) -> bool {
         self.shared.dirty.swap(false, Ordering::AcqRel)
     }
+
+    /// Take end-of-file flag (set once per finished track).
+    pub fn take_eof(&self) -> bool {
+        self.shared.eof_reached.swap(false, Ordering::AcqRel)
+    }
 }
 
 impl Drop for MpvEngine {
@@ -332,12 +340,17 @@ fn run_worker(
             .volume
             .store(prefs.volume.round() as u32, Ordering::Relaxed);
         shared.muted.store(prefs.muted, Ordering::Relaxed);
+        shared.hwdec_mode.store(prefs.hwdec_mode.min(1), Ordering::Relaxed);
         let rc = (api.initialize)(handle);
         if rc < 0 {
             let msg = error_message(api, rc);
             (api.terminate_destroy)(handle);
             return Err(msg);
         }
+        let mode_idx = shared.hwdec_mode.load(Ordering::Relaxed).min(1) as usize;
+        let hwdec = if mode_idx == 0 { "auto-copy" } else { "no" };
+        let _ = set_string(api, handle, "hwdec", hwdec);
+        refresh_hwdec_label(api, handle, &shared);
     }
 
     let render = unsafe { create_render_context(api, handle)? };
@@ -368,7 +381,7 @@ fn run_worker(
         }
 
         unsafe {
-            drain_events(api, handle);
+            drain_events(api, handle, &shared);
             let flags = (api.render_context_update)(render);
             if flags & MPV_RENDER_UPDATE_FRAME != 0 || frame_flag.swap(false, Ordering::AcqRel)
             {
@@ -477,6 +490,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 return;
             }
             *shared.error.write() = None;
+            shared.eof_reached.store(false, Ordering::Relaxed);
             *shared.resume_path.write() = Some(path.clone());
             *shared.pending_resume_secs.write() = resume_secs;
             *shared.ab_label.write() = String::new();
@@ -512,7 +526,11 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let v = v.clamp(0.0, 150.0);
             let _ = set_double(api, handle, "volume", v);
             shared.volume.store(v as u32, Ordering::Relaxed);
-            prefs::store(v, shared.muted.load(Ordering::Relaxed));
+            prefs::store(
+                v,
+                shared.muted.load(Ordering::Relaxed),
+                shared.hwdec_mode.load(Ordering::Relaxed),
+            );
             flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
         }
@@ -521,7 +539,11 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let v = (cur + d).clamp(0.0, 150.0);
             let _ = set_double(api, handle, "volume", v);
             shared.volume.store(v as u32, Ordering::Relaxed);
-            prefs::store(v, shared.muted.load(Ordering::Relaxed));
+            prefs::store(
+                v,
+                shared.muted.load(Ordering::Relaxed),
+                shared.hwdec_mode.load(Ordering::Relaxed),
+            );
             flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
         }
@@ -549,7 +571,11 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let _ = set_flag(api, handle, "mute", !muted);
             shared.muted.store(!muted, Ordering::Relaxed);
             let vol = shared.volume.load(Ordering::Relaxed) as f64;
-            prefs::store(vol, !muted);
+            prefs::store(
+                vol,
+                !muted,
+                shared.hwdec_mode.load(Ordering::Relaxed),
+            );
             flash_osd(
                 shared,
                 if !muted {
@@ -670,7 +696,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
     }
 }
 
-unsafe fn drain_events(api: &MpvApi, handle: MpvHandle) {
+unsafe fn drain_events(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
     loop {
         let ev = (api.wait_event)(handle, 0.0);
         if ev.is_null() || (*ev).event_id == MPV_EVENT_NONE {
@@ -678,6 +704,10 @@ unsafe fn drain_events(api: &MpvApi, handle: MpvHandle) {
         }
         if (*ev).event_id == MPV_EVENT_SHUTDOWN {
             break;
+        }
+        if (*ev).event_id == MPV_EVENT_END_FILE {
+            shared.eof_reached.store(true, Ordering::Release);
+            shared.dirty.store(true, Ordering::Release);
         }
     }
 }
@@ -851,6 +881,11 @@ unsafe fn apply_next_hwdec(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayb
     let mode = HWDEC_MODES[next as usize];
     let _ = set_string(api, handle, "hwdec", mode);
     refresh_hwdec_label(api, handle, shared);
+    prefs::store(
+        shared.volume.load(Ordering::Relaxed) as f64,
+        shared.muted.load(Ordering::Relaxed),
+        next,
+    );
 }
 
 unsafe fn refresh_hwdec_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {

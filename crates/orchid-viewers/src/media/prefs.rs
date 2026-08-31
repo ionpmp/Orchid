@@ -9,6 +9,9 @@ pub struct MediaPrefs {
     /// mpv volume 0..150.
     pub volume: f64,
     pub muted: bool,
+    /// 0 = `auto-copy`, 1 = `no`.
+    #[serde(default)]
+    pub hwdec_mode: u32,
 }
 
 impl Default for MediaPrefs {
@@ -16,6 +19,7 @@ impl Default for MediaPrefs {
         Self {
             volume: 100.0,
             muted: false,
+            hwdec_mode: 0,
         }
     }
 }
@@ -61,13 +65,14 @@ pub fn load() -> MediaPrefs {
     prefs
 }
 
-/// Persist volume / mute.
-pub fn store(volume: f64, muted: bool) {
+/// Persist volume / mute / hwdec mode.
+pub fn store(volume: f64, muted: bool, hwdec_mode: u32) {
     let Ok(_g) = LOCK.lock() else {
         return;
     };
     save_file(&MediaPrefs {
         volume: volume.clamp(0.0, 150.0),
         muted,
+        hwdec_mode: hwdec_mode.min(1),
     });
 }

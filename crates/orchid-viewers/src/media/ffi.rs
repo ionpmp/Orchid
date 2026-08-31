@@ -19,6 +19,7 @@ pub(crate) const MPV_FORMAT_DOUBLE: c_int = 5;
 
 pub(crate) const MPV_EVENT_NONE: c_int = 0;
 pub(crate) const MPV_EVENT_SHUTDOWN: c_int = 1;
+pub(crate) const MPV_EVENT_END_FILE: c_int = 7;
 
 pub(crate) const MPV_RENDER_PARAM_INVALID: c_int = 0;
 pub(crate) const MPV_RENDER_PARAM_API_TYPE: c_int = 1;
