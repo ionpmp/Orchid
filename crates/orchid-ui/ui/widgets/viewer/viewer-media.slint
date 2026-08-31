@@ -15,6 +15,18 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("play-pause");
                 return accept;
             }
+            if event.text == Key.Backspace {
+                root.command("stop");
+                return accept;
+            }
+            if event.text == Key.Home {
+                root.command("first");
+                return accept;
+            }
+            if event.text == Key.End {
+                root.command("last");
+                return accept;
+            }
             if event.text == Key.LeftArrow {
                 root.command(event.modifiers.shift ? "seek-back-10" : "seek-back-5");
                 return accept;
@@ -48,11 +60,21 @@ export component ViewerMediaView inherits Rectangle {
                 return accept;
             }
             if event.text == "s" || event.text == "S" {
-                if event.modifiers.control {
+                if event.modifiers.control && event.modifiers.shift {
+                    root.command("screenshot");
+                } else if event.modifiers.control {
                     root.command("sub-add");
                 } else {
                     root.command(event.modifiers.shift ? "toggle-sub" : "cycle-sub");
                 }
+                return accept;
+            }
+            if event.text == "." {
+                root.command("frame-fwd");
+                return accept;
+            }
+            if event.text == "," {
+                root.command("frame-back");
                 return accept;
             }
             if event.text == "{" {

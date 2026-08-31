@@ -140,6 +140,9 @@ enum EngineCmd {
     CycleEq,
     CycleHwdec,
     Stop,
+    FrameFwd,
+    FrameBack,
+    Screenshot,
     Quit,
 }
 
@@ -291,6 +294,18 @@ impl MpvEngine {
 
     pub fn stop(&self) {
         let _ = self.tx.send(EngineCmd::Stop);
+    }
+
+    pub fn frame_fwd(&self) {
+        let _ = self.tx.send(EngineCmd::FrameFwd);
+    }
+
+    pub fn frame_back(&self) {
+        let _ = self.tx.send(EngineCmd::FrameBack);
+    }
+
+    pub fn screenshot(&self) {
+        let _ = self.tx.send(EngineCmd::Screenshot);
     }
 
     /// Take dirty flag; returns true when UI should republish the snapshot.
@@ -676,20 +691,38 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::Stop => {
+            // Keep the file loaded: seek to start and pause (PotPlayer-style stop).
             persist_resume(shared);
-            let _ = command_args(api, handle, &["stop"]);
-            *shared.frame.write() = None;
-            *shared.cover.write() = None;
-            *shared.title.write() = String::new();
-            *shared.artist.write() = String::new();
-            *shared.resume_path.write() = None;
-            *shared.pending_resume_secs.write() = None;
-            *shared.ab_label.write() = String::new();
-            shared.eq_index.store(0, Ordering::Relaxed);
-            *shared.eq_label.write() = String::new();
-            *shared.hwdec_label.write() = String::new();
-            shared.has_video.store(false, Ordering::Relaxed);
+            let _ = command_args(api, handle, &["seek", "0", "absolute"]);
+            let _ = set_flag(api, handle, "pause", true);
             shared.playing.store(false, Ordering::Relaxed);
+            shared.position_ms.store(0, Ordering::Relaxed);
+            flash_osd(shared, "Stop".into());
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::FrameFwd => {
+            let _ = command_args(api, handle, &["frame-step"]);
+            shared.playing.store(false, Ordering::Relaxed);
+            flash_osd(shared, "Frame →".into());
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::FrameBack => {
+            let _ = command_args(api, handle, &["frame-back-step"]);
+            shared.playing.store(false, Ordering::Relaxed);
+            flash_osd(shared, "Frame ←".into());
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::Screenshot => {
+            match write_screenshot(shared) {
+                Ok(path) => {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "shot.png".into());
+                    flash_osd(shared, format!("Shot {name}"));
+                }
+                Err(msg) => flash_osd(shared, msg),
+            }
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::Quit => {}
@@ -813,6 +846,46 @@ fn persist_resume(shared: &SharedPlayback) {
 fn flash_osd(shared: &SharedPlayback, text: String) {
     *shared.osd_text.write() = text;
     *shared.osd_until.write() = Some(Instant::now() + Duration::from_secs_f64(OSD_SECS));
+}
+
+fn write_screenshot(shared: &SharedPlayback) -> Result<PathBuf, String> {
+    let src = shared
+        .resume_path
+        .read()
+        .clone()
+        .ok_or_else(|| "Shot: no file".to_string())?;
+    let frame = shared
+        .frame
+        .read()
+        .clone()
+        .ok_or_else(|| "Shot: no video frame".to_string())?;
+    if frame.width == 0 || frame.height == 0 || frame.rgba.is_empty() {
+        return Err("Shot: empty frame".into());
+    }
+    let parent = src
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let stem = src
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "orchid".into());
+    let dest = next_shot_path(&parent, &stem);
+    let img = image::RgbaImage::from_raw(frame.width, frame.height, (*frame.rgba).clone())
+        .ok_or_else(|| "Shot: bad frame size".to_string())?;
+    img.save(&dest)
+        .map_err(|e| format!("Shot failed: {e}"))?;
+    Ok(dest)
+}
+
+fn next_shot_path(dir: &Path, stem: &str) -> PathBuf {
+    for i in 1..10_000 {
+        let candidate = dir.join(format!("{stem}-shot-{i:03}.png"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    dir.join(format!("{stem}-shot.png"))
 }
 
 fn expire_osd(shared: &SharedPlayback) {

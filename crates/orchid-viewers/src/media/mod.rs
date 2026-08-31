@@ -255,10 +255,34 @@ impl MediaViewer {
         self.engine.cycle_hwdec();
     }
 
+    /// Seek to start and pause.
+    pub fn stop(&self) {
+        self.engine.stop();
+    }
+
+    /// Advance one video frame (pauses).
+    pub fn frame_fwd(&self) {
+        self.engine.frame_fwd();
+    }
+
+    /// Step one video frame backward (pauses).
+    pub fn frame_back(&self) {
+        self.engine.frame_back();
+    }
+
+    /// Write the current video frame as a sibling PNG.
+    pub fn screenshot(&self) {
+        self.engine.screenshot();
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
             "play-pause" | "play" | "pause" => self.play_pause(),
+            "stop" => self.stop(),
+            "frame-fwd" => self.frame_fwd(),
+            "frame-back" => self.frame_back(),
+            "screenshot" => self.screenshot(),
             "seek-back-5" => self.seek_rel(-5.0),
             "seek-fwd-5" => self.seek_rel(5.0),
             "seek-back-10" => self.seek_rel(-10.0),
