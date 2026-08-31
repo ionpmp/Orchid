@@ -260,6 +260,21 @@ impl MediaViewer {
         self.engine.cycle_sleep();
     }
 
+    /// Cycle video aspect override (auto / 16:9 / 4:3 / 2.35 / 1:1).
+    pub fn cycle_aspect(&self) {
+        self.engine.cycle_aspect();
+    }
+
+    /// Cycle video rotate 0 → 90 → 180 → 270.
+    pub fn cycle_rotate(&self) {
+        self.engine.cycle_rotate();
+    }
+
+    /// Nudge audio delay in seconds (typical ±0.05).
+    pub fn audio_delay_delta(&self, delta_secs: f64) {
+        self.engine.audio_delay_delta(delta_secs);
+    }
+
     /// Seek to start and pause.
     pub fn stop(&self) {
         self.engine.stop();
@@ -309,6 +324,10 @@ impl MediaViewer {
             "cycle-eq" => self.cycle_eq(),
             "cycle-hwdec" => self.cycle_hwdec(),
             "cycle-sleep" => self.cycle_sleep(),
+            "cycle-aspect" => self.cycle_aspect(),
+            "cycle-rotate" => self.cycle_rotate(),
+            "audio-delay-up" => self.audio_delay_delta(0.05),
+            "audio-delay-down" => self.audio_delay_delta(-0.05),
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),
@@ -436,6 +455,23 @@ impl Viewer for MediaViewer {
             eq_label: shared.eq_label.read().clone(),
             hwdec_label: shared.hwdec_label.read().clone(),
             sleep_label: shared.sleep_label.read().clone(),
+            aspect_label: shared.aspect_label.read().clone(),
+            rotate_label: {
+                let deg = shared.rotate_deg.load(Ordering::Relaxed);
+                if deg == 0 {
+                    String::new()
+                } else {
+                    format!("Rot {deg}°")
+                }
+            },
+            audio_delay_label: {
+                let ms = shared.audio_delay_ms.load(Ordering::Relaxed);
+                if ms == 0 {
+                    String::new()
+                } else {
+                    format!("A-delay {:+.0}ms", f64::from(ms))
+                }
+            },
             osd_text: shared.osd_text.read().clone(),
             error,
         })

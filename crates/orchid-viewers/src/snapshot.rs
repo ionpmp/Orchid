@@ -423,6 +423,9 @@ pub struct MediaSnapshot {
     pub eq_label: String,
     pub hwdec_label: String,
     pub sleep_label: String,
+    pub aspect_label: String,
+    pub rotate_label: String,
+    pub audio_delay_label: String,
     /// Transient on-screen status (volume / seek / speed).
     pub osd_text: String,
     pub error: String,

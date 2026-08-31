@@ -52,11 +52,19 @@ export component ViewerMediaView inherits Rectangle {
                 return accept;
             }
             if event.text == "[" {
-                root.command("speed-down");
+                if event.modifiers.control {
+                    root.command("audio-delay-down");
+                } else {
+                    root.command("speed-down");
+                }
                 return accept;
             }
             if event.text == "]" {
-                root.command("speed-up");
+                if event.modifiers.control {
+                    root.command("audio-delay-up");
+                } else {
+                    root.command("speed-up");
+                }
                 return accept;
             }
             if event.text == "s" || event.text == "S" {
@@ -135,6 +143,14 @@ export component ViewerMediaView inherits Rectangle {
             }
             if event.text == "t" || event.text == "T" {
                 root.command("cycle-sleep");
+                return accept;
+            }
+            if event.text == "v" || event.text == "V" {
+                root.command("cycle-aspect");
+                return accept;
+            }
+            if (event.text == "r" || event.text == "R") && event.modifiers.control {
+                root.command("cycle-rotate");
                 return accept;
             }
             if event.text == "y" || event.text == "Y" {
@@ -501,6 +517,24 @@ export component ViewerMediaView inherits Rectangle {
                     if model.sleep-label != "" : Text {
                         text: model.sleep-label;
                         color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    if model.aspect-label != "" : Text {
+                        text: model.aspect-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    if model.rotate-label != "" : Text {
+                        text: model.rotate-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    if model.audio-delay-label != "" : Text {
+                        text: model.audio-delay-label;
+                        color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }

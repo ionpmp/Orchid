@@ -1,7 +1,7 @@
 //! libmpv playback session (worker thread + shared snapshot state).
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
@@ -65,6 +65,10 @@ pub struct SharedPlayback {
     pub sleep_until: RwLock<Option<Instant>>,
     pub sleep_index: AtomicU32,
     pub sleep_label: RwLock<String>,
+    pub aspect_index: AtomicU32,
+    pub aspect_label: RwLock<String>,
+    pub rotate_deg: AtomicU32,
+    pub audio_delay_ms: AtomicI32,
     pub osd_text: RwLock<String>,
     /// Instant::now() + duration; cleared when expired in poll.
     pub osd_until: RwLock<Option<Instant>>,
@@ -105,6 +109,10 @@ impl SharedPlayback {
             sleep_until: RwLock::new(None),
             sleep_index: AtomicU32::new(0),
             sleep_label: RwLock::new(String::new()),
+            aspect_index: AtomicU32::new(0),
+            aspect_label: RwLock::new(String::new()),
+            rotate_deg: AtomicU32::new(0),
+            audio_delay_ms: AtomicI32::new(0),
             osd_text: RwLock::new(String::new()),
             osd_until: RwLock::new(None),
             sub_label: RwLock::new(String::new()),
@@ -147,6 +155,9 @@ enum EngineCmd {
     CycleEq,
     CycleHwdec,
     CycleSleep,
+    CycleAspect,
+    CycleRotate,
+    AudioDelayDelta(f64),
     Stop,
     FrameFwd,
     FrameBack,
@@ -302,6 +313,18 @@ impl MpvEngine {
 
     pub fn cycle_sleep(&self) {
         let _ = self.tx.send(EngineCmd::CycleSleep);
+    }
+
+    pub fn cycle_aspect(&self) {
+        let _ = self.tx.send(EngineCmd::CycleAspect);
+    }
+
+    pub fn cycle_rotate(&self) {
+        let _ = self.tx.send(EngineCmd::CycleRotate);
+    }
+
+    pub fn audio_delay_delta(&self, delta_secs: f64) {
+        let _ = self.tx.send(EngineCmd::AudioDelayDelta(delta_secs));
     }
 
     pub fn stop(&self) {
@@ -715,6 +738,35 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             );
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::CycleAspect => {
+            apply_next_aspect(api, handle, shared);
+            let label = shared.aspect_label.read().clone();
+            flash_osd(
+                shared,
+                if label.is_empty() {
+                    "Aspect auto".into()
+                } else {
+                    label
+                },
+            );
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::CycleRotate => {
+            apply_next_rotate(api, handle, shared);
+            let deg = shared.rotate_deg.load(Ordering::Relaxed);
+            flash_osd(shared, format!("Rotate {deg}°"));
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::AudioDelayDelta(d) => {
+            let cur = shared.audio_delay_ms.load(Ordering::Relaxed) as f64 / 1000.0;
+            let next = (cur + d).clamp(-5.0, 5.0);
+            let _ = set_double(api, handle, "audio-delay", next);
+            shared
+                .audio_delay_ms
+                .store((next * 1000.0).round() as i32, Ordering::Relaxed);
+            flash_osd(shared, format!("A-delay {next:+.2}s"));
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::Stop => {
             // Keep the file loaded: seek to start and pause (PotPlayer-style stop).
             persist_resume(shared);
@@ -1014,6 +1066,33 @@ fn apply_next_sleep(shared: &SharedPlayback) {
             Some(Instant::now() + Duration::from_secs(u64::from(mins) * 60));
         *shared.sleep_label.write() = format!("Sleep {mins}m");
     }
+}
+
+/// Aspect override presets: auto, then common ratios.
+const ASPECT_PRESETS: &[(&str, f64)] = &[
+    ("", -1.0),
+    ("16:9", 16.0 / 9.0),
+    ("4:3", 4.0 / 3.0),
+    ("2.35:1", 2.35),
+    ("1:1", 1.0),
+];
+
+unsafe fn apply_next_aspect(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next = (shared.aspect_index.load(Ordering::Relaxed) + 1) % ASPECT_PRESETS.len() as u32;
+    shared.aspect_index.store(next, Ordering::Relaxed);
+    let (label, ratio) = ASPECT_PRESETS[next as usize];
+    let _ = set_double(api, handle, "video-aspect-override", ratio);
+    *shared.aspect_label.write() = if label.is_empty() {
+        String::new()
+    } else {
+        format!("AR {label}")
+    };
+}
+
+unsafe fn apply_next_rotate(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next = (shared.rotate_deg.load(Ordering::Relaxed) + 90) % 360;
+    shared.rotate_deg.store(next, Ordering::Relaxed);
+    let _ = set_double(api, handle, "video-rotate", f64::from(next));
 }
 
 unsafe fn tick_sleep(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {

@@ -98,7 +98,8 @@ release yet.
   volume/seek/speed/mute, folder auto-advance on EOF (L toggles loop), stop
   that seeks to start and pauses (Backspace), Home/End playlist ends, frame
   step (`,` / `.`), screenshot PNG (Ctrl+Shift+S), sleep timer (T:
-  15/30/60/90/off), wheel seek and double-click fullscreen on the surface,
+  15/30/60/90/off), aspect cycle (V), rotate (Ctrl+R), audio delay
+  (Ctrl+[/]), wheel seek and double-click fullscreen on the surface,
   and keyboard shortcuts. Catalog
   **Media Player** launcher opens a file picker then places a viewer on
   the canvas (distinct from **Now Playing** SMTC). Bundle
