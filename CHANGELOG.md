@@ -93,8 +93,9 @@ release yet.
   Alt+↑/↓ position, playlist shuffle (Y) / random jump (R), Windows SMTC
   publish with cover thumbnail (media keys / lock screen), simple EQ
   presets (E: Flat/Bass/Treble/Vocal), hardware decode via `hwdec=auto-copy`
-  (H cycles auto-copy ↔ software; status chip shows active decoder), and
-  keyboard shortcuts. Catalog
+  (H cycles auto-copy ↔ software; status chip shows active decoder), persisted
+  volume/mute (`media_prefs.json`), SW blit up to 1920px wide, OSD flash for
+  volume/seek/speed/mute, and keyboard shortcuts. Catalog
   **Media Player** launcher opens a file picker then places a viewer on
   the canvas (distinct from **Now Playing** SMTC). Bundle
   `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see

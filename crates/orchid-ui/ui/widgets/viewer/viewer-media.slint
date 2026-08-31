@@ -212,6 +212,22 @@ export component ViewerMediaView inherits Rectangle {
                     }
                 }
             }
+
+            if model.osd-text != "" : Rectangle {
+                x: parent.width / 2 - self.width / 2;
+                y: 16px;
+                width: max(80px, osd-lab.preferred-width + 24px);
+                height: max(28px, osd-lab.preferred-height + 12px);
+                border-radius: Theme.radius-md;
+                background: #000000aa;
+                osd-lab := Text {
+                    text: model.osd-text;
+                    color: #ffffff;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
 
         // Transport chrome
@@ -364,11 +380,29 @@ export component ViewerMediaView inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    Text {
-                        text: model.volume-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                    vol-chip := Rectangle {
+                        width: max(40px, vol-lab.preferred-width + 8px);
+                        height: 24px;
+                        background: transparent;
+                        vol-ta := TouchArea {
+                            clicked => { root.command("mute"); }
+                            scroll-event(event) => {
+                                if event.delta-y > 0 {
+                                    root.command("vol-up");
+                                }
+                                if event.delta-y < 0 {
+                                    root.command("vol-down");
+                                }
+                                return accept;
+                            }
+                        }
+                        vol-lab := Text {
+                            text: model.volume-label;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                     Text {
                         text: model.speed-label;

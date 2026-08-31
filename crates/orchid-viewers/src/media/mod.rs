@@ -3,6 +3,7 @@
 mod cover;
 mod engine;
 mod ffi;
+mod prefs;
 mod resume;
 mod sidecars;
 
@@ -394,6 +395,7 @@ impl Viewer for MediaViewer {
             ab_label: shared.ab_label.read().clone(),
             eq_label: shared.eq_label.read().clone(),
             hwdec_label: shared.hwdec_label.read().clone(),
+            osd_text: shared.osd_text.read().clone(),
             error,
         })
     }

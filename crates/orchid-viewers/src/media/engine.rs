@@ -17,11 +17,14 @@ use super::ffi::{
     MPV_RENDER_PARAM_SW_POINTER, MPV_RENDER_PARAM_SW_SIZE, MPV_RENDER_PARAM_SW_STRIDE,
     MPV_RENDER_UPDATE_FRAME,
 };
+use super::prefs;
 use super::resume;
 use super::sidecars::discover_sidecar_subs;
 
 /// Max software render width (height scales to preserve aspect).
-const MAX_FRAME_W: u32 = 1280;
+const MAX_FRAME_W: u32 = 1920;
+/// OSD flash duration after volume / speed / seek / mute changes.
+const OSD_SECS: f64 = 1.4;
 
 #[derive(Debug, Clone)]
 pub struct FrameBuf {
@@ -58,6 +61,9 @@ pub struct SharedPlayback {
     /// 0 = `auto-copy` (HW decode → system RAM for SW blit), 1 = `no`.
     pub hwdec_mode: AtomicU32,
     pub hwdec_label: RwLock<String>,
+    pub osd_text: RwLock<String>,
+    /// Instant::now() + duration; cleared when expired in poll.
+    pub osd_until: RwLock<Option<Instant>>,
     pub sub_label: RwLock<String>,
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
@@ -90,6 +96,8 @@ impl SharedPlayback {
             eq_index: AtomicU32::new(0),
             hwdec_mode: AtomicU32::new(0),
             hwdec_label: RwLock::new(String::new()),
+            osd_text: RwLock::new(String::new()),
+            osd_until: RwLock::new(None),
             sub_label: RwLock::new(String::new()),
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
@@ -317,6 +325,13 @@ fn run_worker(
         set_opt(api, handle, "video-sync", "audio")?;
         // Prefer embedded album art as a video track when present.
         let _ = set_opt(api, handle, "audio-display", "embedded-first");
+        let prefs = prefs::load();
+        let _ = set_opt(api, handle, "volume", &format!("{}", prefs.volume));
+        let _ = set_opt(api, handle, "mute", if prefs.muted { "yes" } else { "no" });
+        shared
+            .volume
+            .store(prefs.volume.round() as u32, Ordering::Relaxed);
+        shared.muted.store(prefs.muted, Ordering::Relaxed);
         let rc = (api.initialize)(handle);
         if rc < 0 {
             let msg = error_message(api, rc);
@@ -484,16 +499,21 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
         }
         EngineCmd::SeekRel(secs) => {
             let _ = command_args(api, handle, &["seek", &format!("{secs}"), "relative"]);
+            let sign = if secs >= 0.0 { "+" } else { "" };
+            flash_osd(shared, format!("Seek {sign}{secs:.0}s"));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::SeekAbs(secs) => {
             let _ = command_args(api, handle, &["seek", &format!("{secs}"), "absolute"]);
+            flash_osd(shared, format!("Seek {}", format_osd_time(secs)));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::SetVolume(v) => {
             let v = v.clamp(0.0, 150.0);
             let _ = set_double(api, handle, "volume", v);
             shared.volume.store(v as u32, Ordering::Relaxed);
+            prefs::store(v, shared.muted.load(Ordering::Relaxed));
+            flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::VolumeDelta(d) => {
@@ -501,6 +521,8 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let v = (cur + d).clamp(0.0, 150.0);
             let _ = set_double(api, handle, "volume", v);
             shared.volume.store(v as u32, Ordering::Relaxed);
+            prefs::store(v, shared.muted.load(Ordering::Relaxed));
+            flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::SetSpeed(s) => {
@@ -509,6 +531,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             shared
                 .speed_x100
                 .store((s * 100.0).round() as u32, Ordering::Relaxed);
+            flash_osd(shared, format!("Speed {s:.2}×"));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::SpeedDelta(d) => {
@@ -518,12 +541,23 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             shared
                 .speed_x100
                 .store((s * 100.0).round() as u32, Ordering::Relaxed);
+            flash_osd(shared, format!("Speed {s:.2}×"));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::MuteToggle => {
             let muted = get_flag(api, handle, "mute").unwrap_or(false);
             let _ = set_flag(api, handle, "mute", !muted);
             shared.muted.store(!muted, Ordering::Relaxed);
+            let vol = shared.volume.load(Ordering::Relaxed) as f64;
+            prefs::store(vol, !muted);
+            flash_osd(
+                shared,
+                if !muted {
+                    "Muted".into()
+                } else {
+                    format!("Vol {:.0}%", vol)
+                },
+            );
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::CycleSub => {
@@ -591,10 +625,28 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
         }
         EngineCmd::CycleEq => {
             apply_next_eq(api, handle, shared);
+            let label = shared.eq_label.read().clone();
+            flash_osd(
+                shared,
+                if label.is_empty() {
+                    "EQ Flat".into()
+                } else {
+                    label
+                },
+            );
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::CycleHwdec => {
             apply_next_hwdec(api, handle, shared);
+            let label = shared.hwdec_label.read().clone();
+            flash_osd(
+                shared,
+                if label.is_empty() {
+                    "Dec".into()
+                } else {
+                    label
+                },
+            );
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::Stop => {
@@ -714,6 +766,7 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
     };
     refresh_ab_label(api, handle, shared);
     refresh_hwdec_label(api, handle, shared);
+    expire_osd(shared);
     shared.dirty.store(true, Ordering::Release);
 }
 
@@ -725,6 +778,34 @@ fn persist_resume(shared: &SharedPlayback) {
     let pos = shared.position_ms.load(Ordering::Relaxed) as f64 / 1000.0;
     let dur = shared.duration_ms.load(Ordering::Relaxed) as f64 / 1000.0;
     resume::store_resume(&path, pos, dur);
+}
+
+fn flash_osd(shared: &SharedPlayback, text: String) {
+    *shared.osd_text.write() = text;
+    *shared.osd_until.write() = Some(Instant::now() + Duration::from_secs_f64(OSD_SECS));
+}
+
+fn expire_osd(shared: &SharedPlayback) {
+    let clear = shared
+        .osd_until
+        .read()
+        .is_some_and(|until| Instant::now() >= until);
+    if clear {
+        *shared.osd_text.write() = String::new();
+        *shared.osd_until.write() = None;
+    }
+}
+
+fn format_osd_time(secs: f64) -> String {
+    let total = secs.max(0.0) as u64;
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
 }
 
 unsafe fn refresh_ab_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
