@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use orchid_viewers::{is_media_file_extension, load_track_meta, TrackMeta};
 
-use super::config::BrowseTab;
+use super::config::{BrowseTab, LibrarySort};
 
 /// Audio-only extensions (subset of media extensions).
 pub const AUDIO_EXTENSIONS: &[&str] = &[
@@ -112,10 +112,11 @@ impl LibraryIndex {
         search: &str,
         playlist_tracks: Option<&[String]>,
         favorites: &[String],
+        sort: LibrarySort,
     ) -> BrowseResult {
         let q = search.trim().to_lowercase();
         let matches = |t: &LibraryTrack| track_matches(t, &q);
-        match tab {
+        let mut result = match tab {
             BrowseTab::Songs => BrowseResult {
                 groups: Vec::new(),
                 tracks: self
@@ -253,7 +254,11 @@ impl LibraryIndex {
                 groups: Vec::new(),
                 tracks: Vec::new(),
             },
+        };
+        if tab != BrowseTab::NowPlaying && !result.tracks.is_empty() {
+            sort_track_rows(&mut result.tracks, self, sort);
         }
+        result
     }
 }
 
@@ -289,6 +294,45 @@ fn track_row(t: &LibraryTrack) -> TrackRow {
         artist: t.artist.clone(),
         album: t.album.clone(),
         subtitle: format!("{} — {}", t.artist, t.album),
+    }
+}
+
+fn sort_track_rows(tracks: &mut [TrackRow], index: &LibraryIndex, sort: LibrarySort) {
+    tracks.sort_by(|a, b| {
+        let ta = index.find_by_path(&a.path);
+        let tb = index.find_by_path(&b.path);
+        match (ta, tb) {
+            (Some(a), Some(b)) => compare_tracks(a, b, sort),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+        }
+    });
+}
+
+fn compare_tracks(a: &LibraryTrack, b: &LibraryTrack, sort: LibrarySort) -> std::cmp::Ordering {
+    match sort {
+        LibrarySort::ArtistAlbum => a
+            .artist
+            .to_lowercase()
+            .cmp(&b.artist.to_lowercase())
+            .then_with(|| a.album.to_lowercase().cmp(&b.album.to_lowercase()))
+            .then_with(|| a.track.cmp(&b.track))
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+        LibrarySort::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+        LibrarySort::Album => a
+            .album
+            .to_lowercase()
+            .cmp(&b.album.to_lowercase())
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+        LibrarySort::Year => match (a.year, b.year) {
+            (None, None) => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (Some(ya), Some(yb)) => yb
+                .cmp(&ya)
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+        },
     }
 }
 
@@ -370,7 +414,7 @@ mod tests {
         fs::write(dir.path().join("d.txt"), b"").unwrap();
         let idx = LibraryIndex::scan(&[dir.path().to_string_lossy().into_owned()]);
         assert_eq!(idx.tracks.len(), 2);
-        let artists = idx.browse_rows(BrowseTab::Artists, "", "", None, &[]);
+        let artists = idx.browse_rows(BrowseTab::Artists, "", "", None, &[], LibrarySort::default());
         assert!(!artists.groups.is_empty());
     }
 
@@ -397,13 +441,48 @@ mod tests {
             year: None,
             folder: "/music".into(),
         });
-        let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", None, &[]);
+        let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", None, &[], LibrarySort::default());
         assert_eq!(neon.tracks.len(), 1);
         assert_eq!(neon.tracks[0].title, "Neon Lights");
-        let folk = idx.browse_rows(BrowseTab::Artists, "", "folk", None, &[]);
+        let folk = idx.browse_rows(BrowseTab::Artists, "", "folk", None, &[], LibrarySort::default());
         assert_eq!(folk.groups.len(), 1);
         assert_eq!(folk.groups[0].label, "Folk Duo");
-        let miss = idx.browse_rows(BrowseTab::Songs, "", "zzzz", None, &[]);
+        let miss = idx.browse_rows(BrowseTab::Songs, "", "zzzz", None, &[], LibrarySort::default());
         assert!(miss.tracks.is_empty());
+    }
+
+    #[test]
+    fn sort_orders_songs_by_title() {
+        let mut idx = LibraryIndex::default();
+        idx.tracks.push(LibraryTrack {
+            path: PathBuf::from("/music/z.mp3"),
+            title: "Zulu".into(),
+            artist: "Band".into(),
+            album: "One".into(),
+            genre: String::new(),
+            track: None,
+            year: None,
+            folder: "/music".into(),
+        });
+        idx.tracks.push(LibraryTrack {
+            path: PathBuf::from("/music/a.mp3"),
+            title: "Alpha".into(),
+            artist: "Band".into(),
+            album: "One".into(),
+            genre: String::new(),
+            track: None,
+            year: None,
+            folder: "/music".into(),
+        });
+        let sorted = idx.browse_rows(
+            BrowseTab::Songs,
+            "",
+            "",
+            None,
+            &[],
+            LibrarySort::Title,
+        );
+        assert_eq!(sorted.tracks[0].title, "Alpha");
+        assert_eq!(sorted.tracks[1].title, "Zulu");
     }
 }

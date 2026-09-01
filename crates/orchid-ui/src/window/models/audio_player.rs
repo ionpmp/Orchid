@@ -114,8 +114,20 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         move_down_label: locale.tr("audio-player-move-down").into(),
         play_group_label: locale.tr("audio-player-play-group").into(),
         remove_root_label: locale.tr("audio-player-remove-root").into(),
+        sort_label: sort_label_for(0, locale),
+        is_current_favorite: false,
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
+}
+
+fn sort_label_for(sort: u8, locale: &LocaleManager) -> SharedString {
+    let key = match sort {
+        1 => "audio-player-sort-title",
+        2 => "audio-player-sort-album",
+        3 => "audio-player-sort-year",
+        _ => "audio-player-sort-artist",
+    };
+    locale.tr(key).into()
 }
 
 fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerModel {
@@ -254,6 +266,8 @@ pub(crate) fn build_audio_player_model(
             has_cover: p.has_cover,
             cover,
             has_library_roots: p.has_library_roots,
+            sort_label: sort_label_for(p.library_sort, locale),
+            is_current_favorite: p.is_current_favorite,
             ..labels_only(locale)
         },
         locale,

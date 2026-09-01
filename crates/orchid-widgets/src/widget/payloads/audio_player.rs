@@ -50,6 +50,8 @@ pub struct AudioPlayerPayload {
     pub browse_filter: String,
     pub browse_filter_label: String,
     pub search_query: String,
+    pub library_sort: u8,
+    pub is_current_favorite: bool,
     pub renaming_playlist: bool,
     pub active_playlist_id: String,
     pub groups: Vec<AudioPlayerGroupRow>,

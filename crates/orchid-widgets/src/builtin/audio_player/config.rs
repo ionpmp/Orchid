@@ -73,6 +73,44 @@ impl BrowseTab {
     }
 }
 
+/// Track list sort order for library browse views.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Encode, Decode)]
+#[repr(u8)]
+pub enum LibrarySort {
+    #[default]
+    ArtistAlbum = 0,
+    Title = 1,
+    Album = 2,
+    Year = 3,
+}
+
+impl LibrarySort {
+    #[must_use]
+    pub fn cycle(self) -> Self {
+        match self {
+            Self::ArtistAlbum => Self::Title,
+            Self::Title => Self::Album,
+            Self::Album => Self::Year,
+            Self::Year => Self::ArtistAlbum,
+        }
+    }
+
+    #[must_use]
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    #[must_use]
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Title,
+            2 => Self::Album,
+            3 => Self::Year,
+            _ => Self::ArtistAlbum,
+        }
+    }
+}
+
 /// User-defined playlist.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PlaylistEntry {
@@ -115,6 +153,8 @@ pub struct AudioPlayerConfig {
     pub browse_filter: String,
     /// Free-text library search (title / artist / album).
     pub search_query: String,
+    /// Track list ordering in library browse views.
+    pub library_sort: LibrarySort,
     /// Inline rename editor open for the active user playlist.
     pub renaming_playlist: bool,
 }
@@ -135,6 +175,7 @@ impl Default for AudioPlayerConfig {
             active_playlist_id: String::new(),
             browse_filter: String::new(),
             search_query: String::new(),
+            library_sort: LibrarySort::default(),
             renaming_playlist: false,
         }
     }

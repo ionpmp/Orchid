@@ -253,7 +253,8 @@ release yet.
   (add roots) or audio files (enqueue); play / enqueue all tracks matching the
   active library search (including filtered queue); queue tab play-at without
   reshuffling shuffle order, Home/End jump, Delete removes current track, empty
-  queue hint; Enter plays all search matches.
+  queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year);
+  favorite toggle on now-playing (star + F key).
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).

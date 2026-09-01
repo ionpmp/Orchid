@@ -71,6 +71,12 @@ export component AudioPlayerView inherits Rectangle {
                 root.command("speed");
                 return accept;
             }
+            if event.text == "f" || event.text == "F" {
+                if root.model.has-track {
+                    root.command("toggle-favorite-current");
+                    return accept;
+                }
+            }
             if event.text == Key.Return {
                 if root.model.search-query != "" {
                     root.command("play-search");
@@ -251,6 +257,21 @@ export component AudioPlayerView inherits Rectangle {
                     TouchArea { clicked => { root.command("enqueue-search"); } }
                     enq-search-txt := Text {
                         text: root.model.enqueue-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab != 5 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: sort-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("sort"); } }
+                    sort-txt := Text {
+                        text: root.model.sort-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
@@ -742,6 +763,19 @@ export component AudioPlayerView inherits Rectangle {
                                 color: Theme.accent-brand;
                                 font-size: Theme.font-size-sm;
                                 overflow: elide;
+                            }
+                        }
+                        if root.model.has-track : Rectangle {
+                            width: 28px;
+                            height: 28px;
+                            TouchArea { clicked => { root.command("toggle-favorite-current"); } }
+                            Text {
+                                text: root.model.is-current-favorite ? "*" : "+";
+                                color: root.model.is-current-favorite ? Theme.accent-brand : Theme.text-tertiary;
+                                font-size: Theme.font-size-md;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: 100%; height: 100%;
                             }
                         }
                     }

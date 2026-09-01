@@ -33,7 +33,7 @@ use crate::{
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{AudioPlayerConfig, BrowseTab, PlaylistEntry, RepeatMode};
+pub use config::{AudioPlayerConfig, BrowseTab, LibrarySort, PlaylistEntry, RepeatMode};
 use library::{LibraryIndex, TrackRow};
 use lyrics::Lyrics;
 use player::PlayerSession;
@@ -415,6 +415,23 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         "speed" => {
             h.player.cycle_speed();
+            h.publish();
+        }
+        "sort" => {
+            h.config.write().library_sort = h.config.read().library_sort.cycle();
+            h.publish();
+        }
+        "toggle-favorite-current" => {
+            let Some(path) = h.queue.read().current().map(str::to_string) else {
+                return;
+            };
+            let mut cfg = h.config.write();
+            if let Some(i) = cfg.favorites.iter().position(|p| p == &path) {
+                cfg.favorites.remove(i);
+            } else {
+                cfg.favorites.push(path);
+            }
+            drop(cfg);
             h.publish();
         }
         "seek-back-5" => {
@@ -833,6 +850,7 @@ fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
             &cfg.search_query,
             playlist_tracks,
             &cfg.favorites,
+            cfg.library_sort,
         )
         .tracks
         .iter()
@@ -894,6 +912,7 @@ fn group_track_paths(h: &AudioHandle, group_key: &str) -> Vec<String> {
         &cfg.search_query,
         None,
         &cfg.favorites,
+        cfg.library_sort,
     );
     browse.tracks.iter().map(|t| t.path.clone()).collect()
 }
@@ -1035,6 +1054,7 @@ impl AudioPlayerWidget {
                 &cfg.search_query,
                 playlist_tracks,
                 &cfg.favorites,
+                cfg.library_sort,
             )
         };
 
@@ -1143,6 +1163,10 @@ impl AudioPlayerWidget {
             browse_filter: cfg.browse_filter.clone(),
             browse_filter_label: cfg.browse_filter.clone(),
             search_query: cfg.search_query.clone(),
+            library_sort: cfg.library_sort.as_u8(),
+            is_current_favorite: current
+                .as_deref()
+                .is_some_and(|p| cfg.favorites.iter().any(|f| f == p)),
             renaming_playlist: cfg.renaming_playlist,
             active_playlist_id: cfg.active_playlist_id.clone(),
             groups: browse
