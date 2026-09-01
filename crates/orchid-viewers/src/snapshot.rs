@@ -382,6 +382,16 @@ pub enum ArchiveStatus {
 }
 
 /// Audio / video snapshot (libmpv transport + optional RGBA frame).
+/// One row in the media folder playlist side panel.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct MediaPlaylistItem {
+    pub name: String,
+    /// 0-based index into the folder playlist.
+    pub index: u32,
+    pub selected: bool,
+}
+
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct MediaSnapshot {
@@ -415,6 +425,10 @@ pub struct MediaSnapshot {
     pub playlist_count: u32,
     pub playlist_shuffle: bool,
     pub playlist_loop: bool,
+    /// Folder playlist rows for the side panel (may be empty).
+    pub playlist_items: Vec<MediaPlaylistItem>,
+    /// Whether the UI should show the playlist panel.
+    pub playlist_panel_open: bool,
     pub sub_label: String,
     pub sub_visible: bool,
     pub audio_label: String,

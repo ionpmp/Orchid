@@ -447,6 +447,8 @@ impl Viewer for MediaViewer {
             playlist_count: *self.playlist_count.read(),
             playlist_shuffle: *self.playlist_shuffle.read(),
             playlist_loop: *self.playlist_loop.read(),
+            playlist_items: Vec::new(),
+            playlist_panel_open: false,
             sub_label: shared.sub_label.read().clone(),
             sub_visible: shared.sub_visible.load(Ordering::Relaxed),
             audio_label: shared.audio_label.read().clone(),

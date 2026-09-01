@@ -8,8 +8,8 @@ use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel, ViewerEmptyModel,
     ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin, ViewerMediaModel,
-    ViewerModel, ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment,
-    ViewerTextModel,
+    ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine,
+    ViewerSyntaxSegment, ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -555,6 +555,8 @@ fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
         volume_label: SharedString::new(),
         speed_label: SharedString::new(),
         playlist_label: SharedString::new(),
+        playlist_items: ModelRc::new(VecModel::default()),
+        playlist_panel_open: false,
         sub_label: SharedString::new(),
         audio_label: SharedString::new(),
         chapter_label: SharedString::new(),
@@ -642,6 +644,15 @@ fn build_media_snapshot(
     } else {
         locale.tr("viewer-media-subs-off")
     };
+    let playlist_items: Vec<ViewerMediaPlaylistItem> = s
+        .playlist_items
+        .iter()
+        .map(|item| ViewerMediaPlaylistItem {
+            name: item.name.clone().into(),
+            index: item.index as i32,
+            selected: item.selected,
+        })
+        .collect();
     ViewerMediaModel {
         path_display: s.path_display.clone().into(),
         kind_label: kind.into(),
@@ -659,6 +670,8 @@ fn build_media_snapshot(
         volume_label: volume_label.into(),
         speed_label: speed_label.into(),
         playlist_label: playlist_label.into(),
+        playlist_items: ModelRc::new(VecModel::from(playlist_items)),
+        playlist_panel_open: s.playlist_panel_open,
         sub_label: sub.into(),
         audio_label: s.audio_label.clone().into(),
         chapter_label: s.chapter_label.clone().into(),

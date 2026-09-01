@@ -1,3 +1,4 @@
+import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme_global.slint";
 import { ViewerMediaModel } from "../../workspace/defs.slint";
 
@@ -169,6 +170,10 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("prev");
                 return accept;
             }
+            if event.text == "q" || event.text == "Q" {
+                root.command("playlist-toggle");
+                return accept;
+            }
             if event.text == "o" || event.text == "O" {
                 root.open-external();
                 return accept;
@@ -181,10 +186,14 @@ export component ViewerMediaView inherits Rectangle {
         padding: 0;
         spacing: 0;
 
-        // Video / audio surface
-        Rectangle {
+        HorizontalLayout {
+            spacing: 0;
             vertical-stretch: 1;
-            background: transparent;
+
+            // Video / audio surface
+            Rectangle {
+                horizontal-stretch: 1;
+                background: transparent;
 
             if model.has-video : Image {
                 width: parent.width;
@@ -288,6 +297,54 @@ export component ViewerMediaView inherits Rectangle {
                     font-size: Theme.font-size-md;
                     horizontal-alignment: center;
                     vertical-alignment: center;
+                }
+            }
+        }
+
+            if model.playlist-panel-open && model.playlist-items.length > 0 : HorizontalLayout {
+                spacing: 0;
+                Rectangle {
+                    width: 1px;
+                    background: Theme.border-default;
+                }
+                Rectangle {
+                    width: 200px;
+                    background: Theme.surface-base;
+
+                    ListView {
+                        width: parent.width;
+                        height: parent.height;
+                        for item in model.playlist-items : Rectangle {
+                            height: 28px;
+                            background: item.selected ? Theme.surface-raised
+                                : row-ta.has-hover ? Theme.surface-raised : transparent;
+                            row-ta := TouchArea {
+                                clicked => {
+                                    root.command("goto:" + (item.index + 1));
+                                }
+                            }
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 6px;
+                                Text {
+                                    text: (item.index + 1);
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    width: 28px;
+                                }
+                                Text {
+                                    text: item.name;
+                                    color: item.selected ? Theme.accent-brand : Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -477,6 +534,9 @@ export component ViewerMediaView inherits Rectangle {
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("playlist-toggle"); }
+                        }
                     }
                     if model.sub-label != "" : Text {
                         text: model.sub-label;

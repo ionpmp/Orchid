@@ -252,6 +252,8 @@ struct ViewerWidgetInner {
     slide_tick: AtomicU64,
     anim_tick: AtomicU64,
     media_tick: AtomicU64,
+    /// Side playlist panel visibility (Q toggles).
+    playlist_panel_open: AtomicBool,
     music_child: parking_lot::Mutex<Option<std::process::Child>>,
     inspect: RwLock<image_inspect::InspectState>,
     inspect_gen: AtomicU64,
@@ -452,6 +454,8 @@ impl ViewerWidgetInner {
             Some(&self.image_thumbs.read()),
             Some(&self.slideshow.read()),
             Some(&self.inspect.read()),
+            Some(&self.media_nav.read()),
+            self.playlist_panel_open.load(Ordering::Relaxed),
         ));
     }
 
@@ -606,6 +610,8 @@ impl ViewerWidgetInner {
                                     Some(&inner.image_thumbs.read()),
                                     Some(&inner.slideshow.read()),
                                     Some(&inner.inspect.read()),
+                                    Some(&inner.media_nav.read()),
+                                    inner.playlist_panel_open.load(Ordering::Relaxed),
                                 );
                                 #[cfg(windows)]
                                 if let ViewerSnapshot::Media(ref m) = snap {
@@ -733,6 +739,8 @@ impl ViewerWidgetInner {
                 Some(&self.image_thumbs.read()),
                 Some(&self.slideshow.read()),
                 Some(&self.inspect.read()),
+                Some(&self.media_nav.read()),
+                self.playlist_panel_open.load(Ordering::Relaxed),
             ));
         }
         drop(guard);
@@ -1830,6 +1838,7 @@ impl ViewerWidget {
                 slide_tick: AtomicU64::new(0),
                 anim_tick: AtomicU64::new(0),
                 media_tick: AtomicU64::new(0),
+                playlist_panel_open: AtomicBool::new(true),
                 music_child: parking_lot::Mutex::new(None),
                 inspect: RwLock::new(image_inspect::InspectState::default()),
                 inspect_gen: AtomicU64::new(0),
@@ -1954,6 +1963,8 @@ fn apply_image_overlay(
     thumbs: Option<&image_thumbs::ImageThumbState>,
     slide: Option<&image_slideshow::SlideshowState>,
     inspect: Option<&image_inspect::InspectState>,
+    media_nav: Option<&media_nav::MediaFolderNav>,
+    playlist_panel_open: bool,
 ) -> ViewerSnapshot {
     match snap {
         ViewerSnapshot::Image(mut s) => {
@@ -2036,6 +2047,25 @@ fn apply_image_overlay(
                 }
             }
             ViewerSnapshot::Image(s)
+        }
+        ViewerSnapshot::Media(mut m) => {
+            if let Some(nav) = media_nav {
+                m.playlist_items = nav
+                    .siblings
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| orchid_viewers::MediaPlaylistItem {
+                        name: p
+                            .file_name()
+                            .unwrap_or_else(|| p.as_str())
+                            .to_string(),
+                        index: i as u32,
+                        selected: i == nav.index,
+                    })
+                    .collect();
+                m.playlist_panel_open = playlist_panel_open && !m.playlist_items.is_empty();
+            }
+            ViewerSnapshot::Media(m)
         }
         other => other,
     }
@@ -3454,6 +3484,14 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             inner.refresh_snapshot().await;
             return Ok(());
         }
+        "playlist-toggle" => {
+            let next = !inner.playlist_panel_open.load(Ordering::Relaxed);
+            inner
+                .playlist_panel_open
+                .store(next, Ordering::Relaxed);
+            inner.refresh_snapshot().await;
+            return Ok(());
+        }
         "random" => {
             inner
                 .navigate_media(media_nav::MediaNavStep::Random)
@@ -4052,6 +4090,8 @@ impl Widget for ViewerWidget {
                     Some(&self.inner.image_thumbs.read()),
                     Some(&self.inner.slideshow.read()),
                     Some(&self.inner.inspect.read()),
+                    Some(&self.inner.media_nav.read()),
+                    self.inner.playlist_panel_open.load(Ordering::Relaxed),
                 ),
             }),
         })

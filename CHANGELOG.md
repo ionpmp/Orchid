@@ -100,7 +100,8 @@ release yet.
   step (`,` / `.`), screenshot PNG (Ctrl+Shift+S), sleep timer (T:
   15/30/60/90/off), aspect cycle (V), rotate (Ctrl+R), audio delay
   (Ctrl+[/]), wheel seek and double-click fullscreen on the surface,
-  and keyboard shortcuts. Catalog
+  and keyboard shortcuts. Side playlist panel (Q toggle; click row to jump).
+  Catalog
   **Media Player** launcher opens a file picker then places a viewer on
   the canvas (distinct from **Now Playing** SMTC). Bundle
   `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see

@@ -1381,6 +1381,13 @@ export struct ViewerDocumentModel {
     link-hover: bool,
 }
 
+export struct ViewerMediaPlaylistItem {
+    name: string,
+    /// 0-based index; UI sends `goto:(index+1)`.
+    index: int,
+    selected: bool,
+}
+
 export struct ViewerMediaModel {
     path-display: string,
     kind-label: string,
@@ -1399,6 +1406,8 @@ export struct ViewerMediaModel {
     volume-label: string,
     speed-label: string,
     playlist-label: string,
+    playlist-items: [ViewerMediaPlaylistItem],
+    playlist-panel-open: bool,
     sub-label: string,
     audio-label: string,
     chapter-label: string,
