@@ -165,3 +165,15 @@ async fn libmpv_plays_wav_when_bundled() {
 
     viewer.close().await.unwrap();
 }
+
+#[test]
+fn audio_engine_mode_spawns() {
+    use orchid_viewers::{EngineMode, MpvEngine};
+    let engine = MpvEngine::spawn_with_mode(EngineMode::Audio);
+    assert_eq!(engine.mode, EngineMode::Audio);
+    assert_eq!(
+        engine.shared.available.load(std::sync::atomic::Ordering::Relaxed),
+        mpv_available()
+    );
+    // Drop sends Quit; no panic.
+}

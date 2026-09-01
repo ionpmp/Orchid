@@ -23,26 +23,49 @@ const MAX_COVER_EDGE: u32 = 512;
 
 /// Title / artist for audio chrome (best-effort).
 #[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
 pub struct MediaTags {
     pub title: String,
     pub artist: String,
 }
 
+/// Richer tags for the audio library (scan-time, no cover bytes).
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct TrackMeta {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub genre: String,
+    pub track: Option<u32>,
+    pub year: Option<i32>,
+}
+
 /// Load display tags from ID3 when available; otherwise use the file stem as title.
 #[must_use]
 pub fn load_media_tags(path: &Path) -> MediaTags {
+    let meta = load_track_meta(path);
+    MediaTags {
+        title: meta.title,
+        artist: meta.artist,
+    }
+}
+
+/// Load library metadata from ID3 when available; otherwise stem as title.
+#[must_use]
+pub fn load_track_meta(path: &Path) -> TrackMeta {
     let stem = path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or_default()
         .to_string();
     let Ok(tag) = id3::Tag::read_from_path(path) else {
-        return MediaTags {
+        return TrackMeta {
             title: stem,
-            artist: String::new(),
+            ..TrackMeta::default()
         };
     };
-    MediaTags {
+    TrackMeta {
         title: tag
             .title()
             .map(str::trim)
@@ -55,6 +78,20 @@ pub fn load_media_tags(path: &Path) -> MediaTags {
             .filter(|s| !s.is_empty())
             .map(str::to_string)
             .unwrap_or_default(),
+        album: tag
+            .album()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_default(),
+        genre: tag
+            .genre()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_default(),
+        track: tag.track(),
+        year: tag.year(),
     }
 }
 
