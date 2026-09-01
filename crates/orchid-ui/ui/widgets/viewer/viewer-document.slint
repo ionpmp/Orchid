@@ -584,7 +584,12 @@ export component ViewerDocumentView inherits Rectangle {
                     border-width: model.color-rgb == 1118481 || model.color-rgb == 0 ? 2px : 1px;
                     border-color: model.color-rgb == 1118481 || model.color-rgb == 0
                         ? Theme.accent-brand : Theme.border-default;
-                    TouchArea { clicked => { root.action("color-111111"); } }
+                    color-black-ta := TouchArea { clicked => { root.action("color-111111"); } }
+                    DocHoverTip {
+                        tip: model.tip-color-black;
+                        show: color-black-ta.has-hover;
+                        below: true;
+                    }
                 }
                 Rectangle {
                     width: 16px;
@@ -595,7 +600,12 @@ export component ViewerDocumentView inherits Rectangle {
                     border-width: model.color-rgb == 14423142 ? 2px : 1px;
                     border-color: model.color-rgb == 14423142
                         ? Theme.accent-brand : Theme.border-default;
-                    TouchArea { clicked => { root.action("color-dc2626"); } }
+                    color-red-ta := TouchArea { clicked => { root.action("color-dc2626"); } }
+                    DocHoverTip {
+                        tip: model.tip-color-red;
+                        show: color-red-ta.has-hover;
+                        below: true;
+                    }
                 }
                 Rectangle {
                     width: 16px;
@@ -606,7 +616,12 @@ export component ViewerDocumentView inherits Rectangle {
                     border-width: model.color-rgb == 2442219 ? 2px : 1px;
                     border-color: model.color-rgb == 2442219
                         ? Theme.accent-brand : Theme.border-default;
-                    TouchArea { clicked => { root.action("color-2563eb"); } }
+                    color-blue-ta := TouchArea { clicked => { root.action("color-2563eb"); } }
+                    DocHoverTip {
+                        tip: model.tip-color-blue;
+                        show: color-blue-ta.has-hover;
+                        below: true;
+                    }
                 }
                 Rectangle {
                     width: 16px;
@@ -617,7 +632,12 @@ export component ViewerDocumentView inherits Rectangle {
                     border-width: model.color-rgb == 1483594 ? 2px : 1px;
                     border-color: model.color-rgb == 1483594
                         ? Theme.accent-brand : Theme.border-default;
-                    TouchArea { clicked => { root.action("color-16a34a"); } }
+                    color-green-ta := TouchArea { clicked => { root.action("color-16a34a"); } }
+                    DocHoverTip {
+                        tip: model.tip-color-green;
+                        show: color-green-ta.has-hover;
+                        below: true;
+                    }
                 }
 
                 Rectangle {
