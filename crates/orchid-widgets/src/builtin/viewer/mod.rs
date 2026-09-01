@@ -3628,6 +3628,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "underline" => doc.toggle_style_all('u'),
                 "strikethrough" | "strike" => doc.toggle_style_all('s'),
                 "highlight" => doc.toggle_style_all('h'),
+                "shade" => doc.toggle_paragraph_shade_selection(),
                 "superscript" => doc.toggle_style_all('^'),
                 "subscript" => doc.toggle_style_all('_'),
                 "clear-formatting" => doc.clear_formatting_selection(),

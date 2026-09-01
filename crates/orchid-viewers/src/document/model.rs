@@ -144,6 +144,8 @@ pub struct Paragraph {
     pub indent_first_line_twips: i32,
     /// Right indent in twips (`w:ind/@w:right` or `w:end`).
     pub indent_right_twips: u32,
+    /// Paragraph background fill (`w:shd/@w:fill` as RGB). `None` = no shading.
+    pub shade_fill: Option<[u8; 3]>,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }

@@ -335,6 +335,27 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
+                    background: tool-bg(model.shade, shade-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    shade-ta := TouchArea { clicked => { root.action("shade"); } }
+                    Text {
+                        text: model.shade-label;
+                        color: tool-btn(model.shade);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-shade;
+                        show: shade-ta.has-hover;
+                        below: true;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
                     background: tool-bg(model.superscript, super-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;

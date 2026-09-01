@@ -58,6 +58,8 @@ pub struct DocumentSnapshot {
     pub underline: bool,
     pub strikethrough: bool,
     pub highlight: bool,
+    /// Paragraph shading (`w:shd`) active at the caret.
+    pub shade: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).

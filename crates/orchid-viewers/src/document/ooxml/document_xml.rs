@@ -222,6 +222,7 @@ fn parse_paragraph(
         indent_left_twips: 0,
         indent_first_line_twips: 0,
         indent_right_twips: 0,
+        shade_fill: None,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -266,6 +267,9 @@ fn parse_paragraph(
                     }
                     "ind" if in_p_pr => {
                         apply_paragraph_indent(&e, &mut p);
+                    }
+                    "shd" if in_p_pr => {
+                        apply_paragraph_shading(&e, &mut p);
                     }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
@@ -336,6 +340,9 @@ fn parse_paragraph(
                         }
                         "ind" => {
                             apply_paragraph_indent(&e, &mut p);
+                        }
+                        "shd" => {
+                            apply_paragraph_shading(&e, &mut p);
                         }
                         _ => {}
                     }
@@ -939,6 +946,16 @@ fn write_paragraph(
             .write_event(Event::Empty(ind))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if let Some([r, g, b]) = p.shade_fill {
+        let mut shd = BytesStart::new("w:shd");
+        shd.push_attribute(("w:val", "clear"));
+        shd.push_attribute(("w:color", "auto"));
+        let fill = format!("{r:02X}{g:02X}{b:02X}");
+        shd.push_attribute(("w:fill", fill.as_str()));
+        writer
+            .write_event(Event::Empty(shd))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if p.list != ListKind::None {
         writer
             .write_event(Event::Start(BytesStart::new("w:numPr")))
@@ -1068,6 +1085,12 @@ fn apply_paragraph_indent(e: &BytesStart<'_>, p: &mut Paragraph) {
     } else if let Some(v) = attr_val(e, "hanging").and_then(|s| s.parse::<i32>().ok()) {
         p.indent_first_line_twips = -v.abs();
     }
+}
+
+fn apply_paragraph_shading(e: &BytesStart<'_>, p: &mut Paragraph) {
+    p.shade_fill = attr_val(e, "fill")
+        .filter(|v| !v.is_empty() && !v.eq_ignore_ascii_case("auto"))
+        .and_then(|v| parse_rgb(&v));
 }
 
 fn resolve_hyperlink(e: &BytesStart<'_>, rels: &Relationships) -> Option<Hyperlink> {
@@ -2109,6 +2132,59 @@ mod tests {
                 && text.contains("w:hanging=\"720\"")
                 && text.contains("w:right=\"480\""),
             "serialized XML missing indent: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_paragraph_shading() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:shd w:val="clear" w:color="auto" w:fill="FFCC00"/></w:pPr>
+              <w:r><w:t>Shaded</w:t></w:r>
+            </w:p>
+            <w:p>
+              <w:pPr><w:shd w:val="clear" w:fill="auto"/></w:pPr>
+              <w:r><w:t>Clear</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.shade_fill, Some([0xFF, 0xCC, 0x00]));
+            }
+            _ => panic!("expected paragraph"),
+        }
+        match &blocks[1] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.shade_fill, None);
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:shd") && text.contains("FFCC00"),
+            "serialized XML missing shading: {text}"
+        );
+        assert!(
+            !text.contains("w:fill=\"auto\""),
+            "auto fill should not be written: {text}"
         );
     }
 

@@ -269,6 +269,8 @@ impl DocumentLayout {
                         image_w: 0,
                         image_rgba: None,
                         page_break_rule_y: rule_y,
+                        shade_fill: p.shade_fill,
+                        shade_w: max_w,
                     });
                     plain_offset += body_len;
                     let after = twips_to_css_px(p.space_after_twips).max(para_gap);
@@ -302,6 +304,8 @@ impl DocumentLayout {
                         image_w: w,
                         image_rgba: rgba,
                         page_break_rule_y: None,
+                        shade_fill: None,
+                        shade_w: 0.0,
                     });
                     total_h += h + para_gap;
                 }
@@ -349,6 +353,32 @@ impl DocumentLayout {
 
         for grid in &grids {
             paint_table_grid(&mut pixels, width, height, insets.left, insets.top, grid);
+        }
+
+        // Paragraph shading under selection / glyphs.
+        for item in &layouts {
+            if item.is_image {
+                continue;
+            }
+            let Some([r, g, b]) = item.shade_fill else {
+                continue;
+            };
+            let h = if item.layout.is_empty() {
+                16.0
+            } else {
+                item.layout.height().max(16.0)
+            };
+            let w = item.shade_w.max(1.0);
+            fill_rect(
+                &mut pixels,
+                width,
+                height,
+                (insets.left + item.x0).round() as u32,
+                (insets.top + item.y0).round() as u32,
+                w.round() as u32,
+                h.round() as u32,
+                [r, g, b, 255],
+            );
         }
 
         let (sel_lo, sel_hi) = match selection {
@@ -728,6 +758,8 @@ impl DocumentLayout {
                             body_len,
                             prefix_len,
                             indent_px,
+                            shade_fill,
+                            shade_w,
                             ..
                         } => {
                             layouts.push(LaidBlock {
@@ -743,6 +775,8 @@ impl DocumentLayout {
                                 image_w: 0,
                                 image_rgba: None,
                                 page_break_rule_y: None,
+                                shade_fill,
+                                shade_w,
                             });
                         }
                         CellItemLayout::Image {
@@ -764,6 +798,8 @@ impl DocumentLayout {
                                 image_w,
                                 image_rgba,
                                 page_break_rule_y: None,
+                                shade_fill: None,
+                                shade_w: 0.0,
                             });
                         }
                     }
@@ -1018,6 +1054,8 @@ impl DocumentLayout {
                 prefix_len,
                 indent_px: indent,
                 height: h,
+                shade_fill: p.shade_fill,
+                shade_w: inner_w,
             });
             *plain_offset += body_len;
             let after_text = *plain_offset;
@@ -1303,6 +1341,10 @@ struct LaidBlock {
     image_rgba: Option<Vec<u8>>,
     /// Content-relative Y of a page-break hairline, if this block starts a new page.
     page_break_rule_y: Option<f32>,
+    /// Paragraph `w:shd` fill (RGB); painted under selection/glyphs.
+    shade_fill: Option<[u8; 3]>,
+    /// Content-relative width available for paragraph shade (body column or cell).
+    shade_w: f32,
 }
 
 enum CellItemLayout {
@@ -1313,6 +1355,8 @@ enum CellItemLayout {
         prefix_len: usize,
         indent_px: f32,
         height: f32,
+        shade_fill: Option<[u8; 3]>,
+        shade_w: f32,
     },
     Image {
         /// Caret offset when the image is clicked (end of preceding text).
