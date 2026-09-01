@@ -30,6 +30,10 @@ try {
     Write-Warning "orchid.exe is in use. Close Orchid, then re-run this script (or rename orchid.exe.new -> orchid.exe)."
 }
 
+# Runtime companions staged next to orchid.exe by orchid-app/build.rs (pdfium, libmpv).
+Get-ChildItem -Path $SourceDir -Filter "*.dll" -File -ErrorAction SilentlyContinue |
+    ForEach-Object { Copy-Item -Path $_.FullName -Destination (Join-Path $installRoot $_.Name) -Force }
+
 if (Test-Path $iconSource) {
     Copy-Item -Path $iconSource -Destination $installIcon -Force
 }

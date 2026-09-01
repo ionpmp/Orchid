@@ -20,6 +20,9 @@ $releaseExe = Join-Path $root "target\release\orchid.exe"
 
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 Copy-Item -Path $releaseExe -Destination (Join-Path $distDir "orchid.exe") -Force
+$releaseDir = Join-Path $root "target\release"
+Get-ChildItem -Path $releaseDir -Filter "*.dll" -File -ErrorAction SilentlyContinue |
+    ForEach-Object { Copy-Item -Path $_.FullName -Destination (Join-Path $distDir $_.Name) -Force }
 Copy-Item -Path (Join-Path $root "scripts\install-desktop.ps1") -Destination (Join-Path $distDir "install.ps1") -Force
 $iconIco = Join-Path $root "assets\logo\orchid-icon.ico"
 if (Test-Path $iconIco) {
