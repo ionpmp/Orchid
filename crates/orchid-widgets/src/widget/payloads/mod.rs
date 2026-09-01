@@ -24,7 +24,8 @@ pub mod viewer;
 pub mod weather;
 
 pub use audio_player::{
-    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerTrackRow,
+    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
+    AudioPlayerTrackRow,
 };
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};

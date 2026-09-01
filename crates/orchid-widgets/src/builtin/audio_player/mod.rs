@@ -23,7 +23,8 @@ use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerTrackRow,
+    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
+    AudioPlayerTrackRow,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -237,20 +238,92 @@ pub fn rescan(instance_id: Uuid) {
 
 /// Pick a folder via native dialog and add it as a library root.
 pub fn add_library_root(instance_id: Uuid) {
-    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
-        return;
-    };
     let Some(dir) = orchid_viewers::pick_media_folder() else {
         return;
     };
-    let s = dir.to_string_lossy().into_owned();
+    add_library_root_path(instance_id, &dir.to_string_lossy());
+}
+
+/// Add `root` as a library folder (deduped) and rescan.
+pub fn add_library_root_path(instance_id: Uuid, root: &str) {
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return;
+    };
+    let s = root.trim();
+    if s.is_empty() {
+        return;
+    }
     {
         let mut cfg = h.config.write();
-        if !cfg.library_roots.iter().any(|r| r == &s) {
-            cfg.library_roots.push(s);
+        if !cfg.library_roots.iter().any(|r| r == s) {
+            cfg.library_roots.push(s.to_string());
+        } else {
+            return;
         }
     }
     kick_scan(Arc::clone(h.value()));
+}
+
+/// Remove a library root folder (by exact path). Triggers a rescan.
+pub fn remove_library_root(instance_id: Uuid, root: &str) {
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        let before = cfg.library_roots.len();
+        cfg.library_roots.retain(|r| r != root);
+        if cfg.library_roots.len() == before {
+            return;
+        }
+    }
+    kick_scan(Arc::clone(h.value()));
+}
+
+/// Ingest Explorer / OS drop paths: folders become library roots, audio files enqueue.
+///
+/// Returns `true` if at least one path was handled.
+pub fn ingest_os_paths(instance_id: Uuid, paths: &[String]) -> bool {
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return false;
+    };
+    let mut added_root = false;
+    let mut enqueued = false;
+    for raw in paths {
+        let path = std::path::Path::new(raw);
+        if path.is_dir() {
+            let s = path.to_string_lossy();
+            let mut cfg = h.config.write();
+            if !cfg.library_roots.iter().any(|r| r == s.as_ref()) {
+                cfg.library_roots.push(s.into_owned());
+                added_root = true;
+            }
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        if !library::is_audio_extension(&ext.to_ascii_lowercase()) {
+            continue;
+        }
+        if h.queue.write().enqueue_end(raw) {
+            enqueued = true;
+        }
+    }
+    if added_root {
+        kick_scan(Arc::clone(h.value()));
+    }
+    if enqueued {
+        h.sync_queue_to_config();
+        if h.queue.read().current().is_some() && !h.player.is_playing() {
+            // Keep chrome consistent; do not auto-start on drop.
+        }
+        h.publish();
+    }
+    added_root || enqueued
 }
 
 /// Execute a transport / browse command string.
@@ -380,6 +453,22 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             add_library_root(instance_id);
             return;
         }
+        "remove-last-root" => {
+            let removed = {
+                let mut cfg = h.config.write();
+                cfg.library_roots.pop()
+            };
+            if removed.is_some() {
+                drop(h);
+                rescan(instance_id);
+            }
+            return;
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("remove-root:") => {
+            drop(h);
+            remove_library_root(instance_id, raw);
+            return;
+        }
         "clear-filter" => {
             h.config.write().browse_filter.clear();
             h.publish();
@@ -472,6 +561,9 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         cmd if let Some(raw) = cmd.strip_prefix("play-group:") => {
             play_group(&h, raw);
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("enqueue-group:") => {
+            enqueue_group(&h, raw);
         }
         cmd if let Some(raw) = cmd.strip_prefix("play-track:") => {
             play_track(&h, raw);
@@ -637,20 +729,11 @@ fn play_track(h: &AudioHandle, path: &str) {
 }
 
 fn play_group(h: &AudioHandle, group_key: &str) {
-    let cfg = h.config.read().clone();
-    let lib = h.library.read();
-    let browse = lib.browse_rows(
-        cfg.browse_tab,
-        group_key,
-        &cfg.search_query,
-        None,
-        &cfg.favorites,
-    );
-    let paths: Vec<String> = browse.tracks.iter().map(|t| t.path.clone()).collect();
-    drop(lib);
+    let paths = group_track_paths(h, group_key);
     if paths.is_empty() {
         return;
     }
+    let cfg = h.config.read().clone();
     {
         let mut q = h.queue.write();
         q.replace(paths, 0);
@@ -665,6 +748,41 @@ fn play_group(h: &AudioHandle, group_key: &str) {
         c.browse_filter = group_key.to_string();
     }
     h.load_current();
+}
+
+fn enqueue_group(h: &AudioHandle, group_key: &str) {
+    let paths = group_track_paths(h, group_key);
+    if paths.is_empty() {
+        return;
+    }
+    {
+        let mut q = h.queue.write();
+        let mut added = false;
+        for path in paths {
+            if q.enqueue_end(&path) {
+                added = true;
+            }
+        }
+        if !added {
+            return;
+        }
+    }
+    h.prefetch_following();
+    h.sync_queue_to_config();
+    h.publish();
+}
+
+fn group_track_paths(h: &AudioHandle, group_key: &str) -> Vec<String> {
+    let cfg = h.config.read().clone();
+    let lib = h.library.read();
+    let browse = lib.browse_rows(
+        cfg.browse_tab,
+        group_key,
+        &cfg.search_query,
+        None,
+        &cfg.favorites,
+    );
+    browse.tracks.iter().map(|t| t.path.clone()).collect()
 }
 
 fn format_time(ms: u64) -> String {
@@ -855,6 +973,22 @@ impl AudioPlayerWidget {
         } else {
             format!("{} folders", cfg.library_roots.len())
         };
+        let roots: Vec<AudioPlayerRootRow> = cfg
+            .library_roots
+            .iter()
+            .map(|path| {
+                let label = PathBuf::from(path)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| path.clone());
+                AudioPlayerRootRow {
+                    path: path.clone(),
+                    label,
+                }
+            })
+            .collect();
+        let has_library_roots = !roots.is_empty();
 
         let empty_hint = if cfg.library_roots.is_empty() {
             "audio-player-empty-roots".into()
@@ -899,10 +1033,14 @@ impl AudioPlayerWidget {
             groups: browse
                 .groups
                 .into_iter()
-                .map(|g| AudioPlayerGroupRow {
-                    key: g.key,
-                    label: g.label,
-                    count: g.count,
+                .map(|g| {
+                    let is_library_root = cfg.library_roots.iter().any(|r| r == &g.key);
+                    AudioPlayerGroupRow {
+                        key: g.key,
+                        label: g.label,
+                        count: g.count,
+                        is_library_root,
+                    }
                 })
                 .collect(),
             tracks: track_rows_from(
@@ -911,6 +1049,7 @@ impl AudioPlayerWidget {
                 &cfg.favorites,
             ),
             playlists,
+            roots,
             queue: track_rows_from(
                 &browse.tracks,
                 current.as_deref(),
@@ -938,6 +1077,7 @@ impl AudioPlayerWidget {
             lyrics_line: self.handle.lyrics.read().line_at(pos),
             has_lyrics: !self.handle.lyrics.read().is_empty(),
             library_count: lib.tracks.len() as u32,
+            has_library_roots,
             roots_label,
             empty_hint,
             has_cover,

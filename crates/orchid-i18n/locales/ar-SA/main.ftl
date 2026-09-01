@@ -484,6 +484,7 @@ audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
 audio-player-play-group = Play
+audio-player-remove-root = Remove folder
 media-unsupported = عناصر التحكم بالوسائط غير متاحة على هذه المنصة
 media-play = تشغيل
 media-pause = إيقاف مؤقت

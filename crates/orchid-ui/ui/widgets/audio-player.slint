@@ -222,6 +222,21 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
+                if root.model.has-library-roots : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: rem-root-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("remove-last-root"); } }
+                    rem-root-txt := Text {
+                        text: root.model.remove-root-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
                 if root.model.browse-tab == 4 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
@@ -279,6 +294,44 @@ export component AudioPlayerView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                         width: 100%; height: 100%;
+                    }
+                }
+            }
+
+            if root.model.roots.length > 0 : Flickable {
+                height: 28px;
+                vertical-stretch: 0;
+                viewport-height: self.height;
+                HorizontalLayout {
+                    spacing: 4px;
+                    for r in root.model.roots : Rectangle {
+                        border-radius: Theme.radius-md;
+                        background: Theme.surface-base;
+                        height: 24px;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 4px;
+                            spacing: 4px;
+                            Text {
+                                text: r.label;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                width: 20px;
+                                height: 20px;
+                                clicked => { root.command("remove-root:" + r.path); }
+                                Text {
+                                    text: "x";
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -390,6 +443,32 @@ export component AudioPlayerView inherits Rectangle {
                                             color: Theme.accent-brand;
                                             font-size: Theme.font-size-sm;
                                             font-weight: Theme.weight-semibold;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        TouchArea { clicked => { root.command("enqueue-group:" + g.key); } }
+                                        Text {
+                                            text: root.model.enqueue-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 3 && g.is-library-root : Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        TouchArea { clicked => { root.command("remove-root:" + g.key); } }
+                                        Text {
+                                            text: root.model.remove-root-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
                                             width: 100%; height: 100%;

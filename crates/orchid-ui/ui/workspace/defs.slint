@@ -804,6 +804,7 @@ export struct AudioPlayerGroupItem {
     key: string,
     label: string,
     count: int,
+    is-library-root: bool,
 }
 
 export struct AudioPlayerPlaylistItem {
@@ -811,6 +812,11 @@ export struct AudioPlayerPlaylistItem {
     name: string,
     count: int,
     is-active: bool,
+}
+
+export struct AudioPlayerRootItem {
+    path: string,
+    label: string,
 }
 
 export struct AudioPlayerModel {
@@ -823,6 +829,7 @@ export struct AudioPlayerModel {
     groups: [AudioPlayerGroupItem],
     tracks: [AudioPlayerTrackItem],
     playlists: [AudioPlayerPlaylistItem],
+    roots: [AudioPlayerRootItem],
     has-track: bool,
     title: string,
     artist: string,
@@ -872,6 +879,8 @@ export struct AudioPlayerModel {
     move-up-label: string,
     move-down-label: string,
     play-group-label: string,
+    remove-root-label: string,
+    has-library-roots: bool,
     engine-missing-label: string,
 }
 

@@ -439,6 +439,24 @@ impl MainWindowController {
         }
     }
 
+    /// Audio Player instance under the canvas pointer (content area, below header).
+    pub(super) fn audio_player_content_at_pointer(&self) -> Option<Uuid> {
+        let Some((cx, cy)) = *self.last_canvas_pointer.lock() else {
+            return None;
+        };
+        let (inst, bounds) = self.widget_bounds_at_canvas_point(
+            cx,
+            cy,
+            orchid_widgets::builtin::audio_player::TYPE_ID,
+        )?;
+        let content_top = bounds.y + Self::WIDGET_FRAME_HEADER_PX;
+        if cy >= content_top && cy < bounds.y + bounds.height {
+            Some(inst)
+        } else {
+            None
+        }
+    }
+
     pub(super) fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
@@ -656,6 +674,12 @@ impl MainWindowController {
         if let Some(viewer_id) = self.viewer_content_at_pointer() {
             self.open_os_paths_on_viewer(viewer_id, paths);
             return;
+        }
+        // Audio Player: folders → library roots, audio files → enqueue.
+        if let Some(audio_id) = self.audio_player_content_at_pointer() {
+            if orchid_widgets::builtin::audio_player::ingest_os_paths(audio_id, &paths) {
+                return;
+            }
         }
         let Some((inst, pane)) = self.fm_drop_target() else {
             return;

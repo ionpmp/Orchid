@@ -483,6 +483,7 @@ audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
 audio-player-play-group = Play
+audio-player-remove-root = Remove folder
 media-unsupported = Les contrÃ´les mÃ©dia ne sont pas disponibles sur cette plateforme
 media-play = Lecture
 media-pause = Pause

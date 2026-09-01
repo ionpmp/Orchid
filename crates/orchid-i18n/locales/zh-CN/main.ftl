@@ -483,6 +483,7 @@ audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
 audio-player-play-group = Play
+audio-player-remove-root = Remove folder
 media-unsupported = 此平台不支持媒体控制
 media-play = 播放
 media-pause = 暂停

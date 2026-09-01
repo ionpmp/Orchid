@@ -5,7 +5,8 @@ use orchid_widgets::AudioPlayerPayload;
 use slint::{Image, ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
-    AudioPlayerGroupItem, AudioPlayerModel, AudioPlayerPlaylistItem, AudioPlayerTrackItem,
+    AudioPlayerGroupItem, AudioPlayerModel, AudioPlayerPlaylistItem, AudioPlayerRootItem,
+    AudioPlayerTrackItem,
 };
 
 pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerModel {
@@ -20,6 +21,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
             tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
             playlists: ModelRc::new(VecModel::from(Vec::<AudioPlayerPlaylistItem>::new())),
+            roots: ModelRc::new(VecModel::from(Vec::<AudioPlayerRootItem>::new())),
             has_track: false,
             title: SharedString::new(),
             artist: SharedString::new(),
@@ -42,6 +44,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             empty_hint: SharedString::new(),
             has_cover: false,
             cover: Image::default(),
+            has_library_roots: false,
             ..labels_only(locale)
         },
         locale,
@@ -59,6 +62,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
         tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
         playlists: ModelRc::new(VecModel::from(Vec::<AudioPlayerPlaylistItem>::new())),
+        roots: ModelRc::new(VecModel::from(Vec::<AudioPlayerRootItem>::new())),
         has_track: false,
         title: SharedString::new(),
         artist: SharedString::new(),
@@ -81,6 +85,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         empty_hint: SharedString::new(),
         has_cover: false,
         cover: Image::default(),
+        has_library_roots: false,
         tab_songs: locale.tr("audio-player-tab-songs").into(),
         tab_artists: locale.tr("audio-player-tab-artists").into(),
         tab_albums: locale.tr("audio-player-tab-albums").into(),
@@ -108,6 +113,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         move_up_label: locale.tr("audio-player-move-up").into(),
         move_down_label: locale.tr("audio-player-move-down").into(),
         play_group_label: locale.tr("audio-player-play-group").into(),
+        remove_root_label: locale.tr("audio-player-remove-root").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -141,6 +147,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.move_up_label = base.move_up_label;
     m.move_down_label = base.move_down_label;
     m.play_group_label = base.play_group_label;
+    m.remove_root_label = base.remove_root_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }
@@ -182,6 +189,7 @@ pub(crate) fn build_audio_player_model(
                         key: g.key.clone().into(),
                         label: g.label.clone().into(),
                         count: g.count as i32,
+                        is_library_root: g.is_library_root,
                     })
                     .collect::<Vec<_>>(),
             )),
@@ -205,6 +213,15 @@ pub(crate) fn build_audio_player_model(
                         name: pl.name.clone().into(),
                         count: pl.count as i32,
                         is_active: pl.is_active,
+                    })
+                    .collect::<Vec<_>>(),
+            )),
+            roots: ModelRc::new(VecModel::from(
+                p.roots
+                    .iter()
+                    .map(|r| AudioPlayerRootItem {
+                        path: r.path.clone().into(),
+                        label: r.label.clone().into(),
                     })
                     .collect::<Vec<_>>(),
             )),
@@ -236,6 +253,7 @@ pub(crate) fn build_audio_player_model(
             empty_hint,
             has_cover: p.has_cover,
             cover,
+            has_library_roots: p.has_library_roots,
             ..labels_only(locale)
         },
         locale,

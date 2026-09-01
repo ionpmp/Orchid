@@ -37,7 +37,8 @@ pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
-    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerTrackRow,
+    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
+    AudioPlayerTrackRow,
     CalcHistoryRow, CalculatorPayload, CalendarDayCell, CalendarEventRow, CalendarPayload,
     CalendarUpcomingRow, ClockCityView, ClockPayload, ClockSearchHit, EntryPayload,
     FileManagerPayload, FmViewMode, IndicatorStatus, JyotishAntarRow, JyotishCityEntry,

@@ -248,7 +248,10 @@ release yet.
   audio-only libmpv session (separate from SMTC Now Playing and Viewer media
   chrome); widget-owned volume (not Viewer `media_prefs`); mutual pause with
   Viewer. Library list scrolls in the middle so the now-playing bar stays inside
-  the widget when resized.
+  the widget when resized. Play / enqueue an entire artist, album, or folder
+  group; library root chips with per-folder remove; Explorer drop of folders
+  (add roots) or audio files (enqueue); remove library folders (last root or a
+  Folders-tab root row).
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).

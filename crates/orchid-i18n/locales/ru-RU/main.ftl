@@ -473,6 +473,7 @@ audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
 audio-player-play-group = Играть
+audio-player-remove-root = Удалить папку
 media-unsupported = Управление медиа недоступно на этой платформе
 media-play = Воспроизвести
 media-pause = Пауза

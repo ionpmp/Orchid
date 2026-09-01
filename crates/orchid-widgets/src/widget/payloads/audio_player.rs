@@ -10,6 +10,8 @@ pub struct AudioPlayerGroupRow {
     pub key: String,
     pub label: String,
     pub count: u32,
+    /// True when `key` matches a configured library root (Folders tab remove).
+    pub is_library_root: bool,
 }
 
 /// One track row in the list.
@@ -33,6 +35,13 @@ pub struct AudioPlayerPlaylistRow {
     pub is_active: bool,
 }
 
+/// Configured library root folder.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AudioPlayerRootRow {
+    pub path: String,
+    pub label: String,
+}
+
 /// Snapshot for the Slint audio-player surface.
 #[derive(Debug, Clone, Default)]
 pub struct AudioPlayerPayload {
@@ -46,6 +55,7 @@ pub struct AudioPlayerPayload {
     pub groups: Vec<AudioPlayerGroupRow>,
     pub tracks: Vec<AudioPlayerTrackRow>,
     pub playlists: Vec<AudioPlayerPlaylistRow>,
+    pub roots: Vec<AudioPlayerRootRow>,
     pub queue: Vec<AudioPlayerTrackRow>,
     pub queue_index: i32,
     pub has_track: bool,
@@ -69,6 +79,7 @@ pub struct AudioPlayerPayload {
     pub lyrics_line: String,
     pub has_lyrics: bool,
     pub library_count: u32,
+    pub has_library_roots: bool,
     pub roots_label: String,
     pub empty_hint: String,
     pub has_cover: bool,
