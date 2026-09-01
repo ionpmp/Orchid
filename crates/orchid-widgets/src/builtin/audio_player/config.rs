@@ -115,6 +115,8 @@ pub struct AudioPlayerConfig {
     pub browse_filter: String,
     /// Free-text library search (title / artist / album).
     pub search_query: String,
+    /// Inline rename editor open for the active user playlist.
+    pub renaming_playlist: bool,
 }
 
 impl Default for AudioPlayerConfig {
@@ -133,6 +135,7 @@ impl Default for AudioPlayerConfig {
             active_playlist_id: String::new(),
             browse_filter: String::new(),
             search_query: String::new(),
+            renaming_playlist: false,
         }
     }
 }

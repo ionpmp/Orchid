@@ -818,6 +818,8 @@ export struct AudioPlayerModel {
     browse-tab: int,
     browse-filter: string,
     search-query: string,
+    renaming-playlist: bool,
+    active-playlist-id: string,
     groups: [AudioPlayerGroupItem],
     tracks: [AudioPlayerTrackItem],
     playlists: [AudioPlayerPlaylistItem],
@@ -860,6 +862,9 @@ export struct AudioPlayerModel {
     play-next-label: string,
     remove-label: string,
     clear-queue-label: string,
+    delete-playlist-label: string,
+    rename-playlist-label: string,
+    add-to-playlist-label: string,
     engine-missing-label: string,
 }
 

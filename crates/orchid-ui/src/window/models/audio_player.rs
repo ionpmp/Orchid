@@ -15,6 +15,8 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             browse_tab: 0,
             browse_filter: SharedString::new(),
             search_query: SharedString::new(),
+            renaming_playlist: false,
+            active_playlist_id: SharedString::new(),
             groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
             tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
             playlists: ModelRc::new(VecModel::from(Vec::<AudioPlayerPlaylistItem>::new())),
@@ -51,6 +53,8 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         browse_tab: 0,
         browse_filter: SharedString::new(),
         search_query: SharedString::new(),
+        renaming_playlist: false,
+        active_playlist_id: SharedString::new(),
         groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
         tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
         playlists: ModelRc::new(VecModel::from(Vec::<AudioPlayerPlaylistItem>::new())),
@@ -93,6 +97,9 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         play_next_label: locale.tr("audio-player-play-next").into(),
         remove_label: locale.tr("audio-player-remove").into(),
         clear_queue_label: locale.tr("audio-player-clear-queue").into(),
+        delete_playlist_label: locale.tr("audio-player-delete-playlist").into(),
+        rename_playlist_label: locale.tr("audio-player-rename-playlist").into(),
+        add_to_playlist_label: locale.tr("audio-player-add-to-playlist").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -117,6 +124,9 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.play_next_label = base.play_next_label;
     m.remove_label = base.remove_label;
     m.clear_queue_label = base.clear_queue_label;
+    m.delete_playlist_label = base.delete_playlist_label;
+    m.rename_playlist_label = base.rename_playlist_label;
+    m.add_to_playlist_label = base.add_to_playlist_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }
@@ -149,6 +159,8 @@ pub(crate) fn build_audio_player_model(
             browse_tab: i32::from(p.browse_tab),
             browse_filter: p.browse_filter.clone().into(),
             search_query: p.search_query.clone().into(),
+            renaming_playlist: p.renaming_playlist,
+            active_playlist_id: p.active_playlist_id.clone().into(),
             groups: ModelRc::new(VecModel::from(
                 p.groups
                     .iter()

@@ -368,6 +368,44 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             drop(cfg);
             h.publish();
         }
+        "delete-playlist" => {
+            let mut cfg = h.config.write();
+            let id = cfg.active_playlist_id.clone();
+            if id.is_empty() {
+                // Favorites is synthetic — clear favorites instead.
+                cfg.favorites.clear();
+            } else {
+                cfg.playlists.retain(|p| p.id != id);
+                cfg.active_playlist_id.clear();
+            }
+            drop(cfg);
+            h.publish();
+        }
+        "start-rename-playlist" => {
+            let mut cfg = h.config.write();
+            if !cfg.active_playlist_id.is_empty() {
+                cfg.renaming_playlist = true;
+            }
+            drop(cfg);
+            h.publish();
+        }
+        "cancel-rename-playlist" => {
+            h.config.write().renaming_playlist = false;
+            h.publish();
+        }
+        cmd if let Some(name) = cmd.strip_prefix("rename-playlist:") => {
+            let name = name.trim();
+            if !name.is_empty() {
+                let mut cfg = h.config.write();
+                let id = cfg.active_playlist_id.clone();
+                if let Some(pl) = cfg.playlists.iter_mut().find(|p| p.id == id) {
+                    pl.name = name.to_string();
+                }
+                cfg.renaming_playlist = false;
+                drop(cfg);
+                h.publish();
+            }
+        }
         cmd if let Some(raw) = cmd.strip_prefix("seek-frac:") => {
             if let Ok(f) = raw.parse::<f64>() {
                 h.player.seek_fraction(f);
@@ -465,6 +503,22 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         cmd if let Some(raw) = cmd.strip_prefix("select-playlist:") => {
             h.config.write().active_playlist_id = raw.to_string();
             h.config.write().browse_filter.clear();
+            h.config.write().renaming_playlist = false;
+            h.publish();
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("add-to-active-playlist:") => {
+            let mut cfg = h.config.write();
+            let id = cfg.active_playlist_id.clone();
+            if id.is_empty() {
+                if !cfg.favorites.iter().any(|p| p == raw) {
+                    cfg.favorites.push(raw.to_string());
+                }
+            } else if let Some(pl) = cfg.playlists.iter_mut().find(|p| p.id == id) {
+                if !pl.tracks.iter().any(|t| t == raw) {
+                    pl.tracks.push(raw.to_string());
+                }
+            }
+            drop(cfg);
             h.publish();
         }
         cmd if let Some(raw) = cmd.strip_prefix("add-to-playlist:") => {
@@ -751,6 +805,8 @@ impl AudioPlayerWidget {
             browse_filter: cfg.browse_filter.clone(),
             browse_filter_label: cfg.browse_filter.clone(),
             search_query: cfg.search_query.clone(),
+            renaming_playlist: cfg.renaming_playlist,
+            active_playlist_id: cfg.active_playlist_id.clone(),
             groups: browse
                 .groups
                 .into_iter()

@@ -814,6 +814,8 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.browse_tab == b.browse_tab
         && a.browse_filter == b.browse_filter
         && a.search_query == b.search_query
+        && a.renaming_playlist == b.renaming_playlist
+        && a.active_playlist_id == b.active_playlist_id
         && a.groups == b.groups
         && a.tracks == b.tracks
         && a.playlists == b.playlists

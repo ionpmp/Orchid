@@ -41,6 +41,8 @@ pub struct AudioPlayerPayload {
     pub browse_filter: String,
     pub browse_filter_label: String,
     pub search_query: String,
+    pub renaming_playlist: bool,
+    pub active_playlist_id: String,
     pub groups: Vec<AudioPlayerGroupRow>,
     pub tracks: Vec<AudioPlayerTrackRow>,
     pub playlists: Vec<AudioPlayerPlaylistRow>,
