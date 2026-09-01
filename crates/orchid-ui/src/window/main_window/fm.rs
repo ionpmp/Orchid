@@ -421,17 +421,24 @@ impl MainWindowController {
         })
     }
     pub(super) fn pointer_over_viewer_content(&self) -> bool {
-        let Some((cx, cy)) = *self.last_canvas_pointer.lock() else {
-            return false;
-        };
-        let Some((_inst, bounds)) =
-            self.widget_bounds_at_canvas_point(cx, cy, orchid_widgets::builtin::viewer::TYPE_ID)
-        else {
-            return false;
-        };
-        let content_top = bounds.y + Self::WIDGET_FRAME_HEADER_PX;
-        cy >= content_top && cy < bounds.y + bounds.height
+        self.viewer_content_at_pointer().is_some()
     }
+
+    /// Viewer instance under the canvas pointer (content area, below header).
+    pub(super) fn viewer_content_at_pointer(&self) -> Option<Uuid> {
+        let Some((cx, cy)) = *self.last_canvas_pointer.lock() else {
+            return None;
+        };
+        let (inst, bounds) =
+            self.widget_bounds_at_canvas_point(cx, cy, orchid_widgets::builtin::viewer::TYPE_ID)?;
+        let content_top = bounds.y + Self::WIDGET_FRAME_HEADER_PX;
+        if cy >= content_top && cy < bounds.y + bounds.height {
+            Some(inst)
+        } else {
+            None
+        }
+    }
+
     pub(super) fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
@@ -645,6 +652,11 @@ impl MainWindowController {
         });
     }
     pub(super) fn on_os_files_dropped(self: &Arc<Self>, paths: Vec<String>) {
+        // Prefer opening into the viewer under the pointer (media / documents / images).
+        if let Some(viewer_id) = self.viewer_content_at_pointer() {
+            self.open_os_paths_on_viewer(viewer_id, paths);
+            return;
+        }
         let Some((inst, pane)) = self.fm_drop_target() else {
             return;
         };
@@ -681,6 +693,67 @@ impl MainWindowController {
             }
             if let Some(c) = tw.upgrade() {
                 c.fm_refresh_ui(inst).await;
+            }
+        });
+    }
+
+    /// OS / Explorer drop onto a viewer: replace the hovered viewer with the first
+    /// file, open additional files in new viewers (same cap as FM multi-open).
+    pub(super) fn open_os_paths_on_viewer(self: &Arc<Self>, viewer_id: Uuid, paths: Vec<String>) {
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            let mut files = Vec::new();
+            for p in paths {
+                let Ok(fp) = orchid_fs::FsPath::new(&p) else {
+                    continue;
+                };
+                if fp.scheme() == "virtual" {
+                    continue;
+                }
+                let os = std::path::Path::new(&p);
+                if !os.is_file() {
+                    continue;
+                }
+                files.push(fp);
+            }
+            if files.is_empty() {
+                return;
+            }
+            let mut iter = files.into_iter();
+            let Some(first) = iter.next() else {
+                return;
+            };
+            if let Err(e) =
+                orchid_widgets::builtin::viewer::open_path(viewer_id, first.clone()).await
+            {
+                warn!(?e, "viewer os drop: open first");
+            } else if let Some(c) = tw.upgrade() {
+                c.recent_files.touch(&first, Some(&c.bus));
+            }
+            let mut opened = 1usize;
+            let mut skipped = 0usize;
+            for fp in iter {
+                if opened >= Self::VIEWER_MULTI_OPEN_CAP {
+                    skipped += 1;
+                    continue;
+                }
+                match Self::open_in_viewer_for_controller(tw.clone(), fp, false, false).await {
+                    Ok((_, true)) => opened += 1,
+                    Ok((_, false)) => {}
+                    Err(_) => {}
+                }
+            }
+            if let Some(c) = tw.upgrade() {
+                if skipped > 0 {
+                    let title = c.locale.tr("widget-viewer-name");
+                    let args = orchid_i18n::FluentArgs::new()
+                        .with("opened", opened.to_string())
+                        .with("skipped", skipped.to_string())
+                        .with("cap", Self::VIEWER_MULTI_OPEN_CAP.to_string());
+                    let body = c.locale.tr_args("viewer-multi-open-capped", &args);
+                    c.push_notification(&title, &body, 2);
+                }
+                c.schedule_rebuild();
             }
         });
     }
