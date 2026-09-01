@@ -1922,6 +1922,9 @@ pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetR
                 // Keep the current first line; only resize the window.
                 tv.set_visible_range(tv.first_visible_line(), count);
                 should_refresh = true;
+            } else if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
+                media.set_viewport(width, height);
+                // No immediate refresh — next frame blit uses the new target size.
             }
         }
     }

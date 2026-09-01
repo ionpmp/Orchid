@@ -101,7 +101,8 @@ release yet.
   15/30/60/90/off), aspect cycle (V), rotate (Ctrl+R), audio delay
   (Ctrl+[/]), wheel seek and double-click fullscreen on the surface,
   and keyboard shortcuts. Side playlist panel (Q toggle; click row to jump).
-  Drop files from Explorer onto a viewer to open them there. Catalog
+  Drop files from Explorer onto a viewer to open them there. SW blit scales
+  to the widget viewport (capped at 1920×1080). Catalog
   **Media Player** launcher opens a file picker then places a viewer on
   the canvas (distinct from **Now Playing** SMTC). Bundle
   `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see

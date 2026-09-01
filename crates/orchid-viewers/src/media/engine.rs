@@ -23,6 +23,7 @@ use super::sidecars::discover_sidecar_subs;
 
 /// Max software render width (height scales to preserve aspect).
 const MAX_FRAME_W: u32 = 1920;
+const MAX_FRAME_H: u32 = 1080;
 /// OSD flash duration after volume / speed / seek / mute changes.
 const OSD_SECS: f64 = 1.4;
 
@@ -79,6 +80,9 @@ pub struct SharedPlayback {
     /// Set when mpv reaches end-of-file (cleared on load / take).
     pub eof_reached: AtomicBool,
     pub error: RwLock<Option<String>>,
+    /// Soft target blit size from the UI viewport (`0` = uncapped aside from MAX_*).
+    pub target_w: AtomicU32,
+    pub target_h: AtomicU32,
     /// Set when a new frame or transport property changed.
     pub dirty: AtomicBool,
 }
@@ -121,6 +125,8 @@ impl SharedPlayback {
             chapter_label: RwLock::new(String::new()),
             eof_reached: AtomicBool::new(false),
             error: RwLock::new(None),
+            target_w: AtomicU32::new(0),
+            target_h: AtomicU32::new(0),
             dirty: AtomicBool::new(false),
         }
     }
@@ -341,6 +347,13 @@ impl MpvEngine {
 
     pub fn screenshot(&self) {
         let _ = self.tx.send(EngineCmd::Screenshot);
+    }
+
+    /// Hint the SW blit size from the widget viewport (pixels).
+    pub fn set_target_size(&self, width: u32, height: u32) {
+        self.shared.target_w.store(width, Ordering::Relaxed);
+        self.shared.target_h.store(height, Ordering::Relaxed);
+        self.shared.dirty.store(true, Ordering::Release);
     }
 
     /// Take dirty flag; returns true when UI should republish the snapshot.
@@ -1134,7 +1147,19 @@ unsafe fn render_frame(
     }
     shared.has_video.store(true, Ordering::Relaxed);
 
-    let (w, h) = scale_frame(vw, vh, MAX_FRAME_W);
+    let tw = shared.target_w.load(Ordering::Relaxed);
+    let th = shared.target_h.load(Ordering::Relaxed);
+    let max_w = if tw == 0 {
+        MAX_FRAME_W
+    } else {
+        tw.clamp(160, MAX_FRAME_W)
+    };
+    let max_h = if th == 0 {
+        MAX_FRAME_H
+    } else {
+        th.clamp(90, MAX_FRAME_H)
+    };
+    let (w, h) = scale_frame_fit(vw, vh, max_w, max_h);
     let stride = (w as usize) * 4;
     let mut buf = vec![0u8; stride * h as usize];
 
@@ -1185,31 +1210,45 @@ unsafe fn render_frame(
     shared.dirty.store(true, Ordering::Release);
 }
 
-fn scale_frame(w: u32, h: u32, max_w: u32) -> (u32, u32) {
+fn scale_frame_fit(w: u32, h: u32, max_w: u32, max_h: u32) -> (u32, u32) {
     if w == 0 || h == 0 {
         return (0, 0);
     }
-    if w <= max_w {
-        return (w, h);
+    let mut sw = f64::from(w);
+    let mut sh = f64::from(h);
+    if max_w > 0 && sw > f64::from(max_w) {
+        let scale = f64::from(max_w) / sw;
+        sw *= scale;
+        sh *= scale;
     }
-    let scale = f64::from(max_w) / f64::from(w);
-    let nh = ((f64::from(h) * scale).round() as u32).max(1);
-    (max_w, nh)
+    if max_h > 0 && max_h != u32::MAX && sh > f64::from(max_h) {
+        let scale = f64::from(max_h) / sh;
+        sw *= scale;
+        sh *= scale;
+    }
+    ((sw.round() as u32).max(1), (sh.round() as u32).max(1))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::scale_frame;
+    use super::scale_frame_fit;
 
     #[test]
     fn scale_preserves_small() {
-        assert_eq!(scale_frame(640, 360, 1280), (640, 360));
+        assert_eq!(scale_frame_fit(640, 360, 1280, u32::MAX), (640, 360));
     }
 
     #[test]
     fn scale_shrinks_wide() {
-        let (w, h) = scale_frame(1920, 1080, 1280);
+        let (w, h) = scale_frame_fit(1920, 1080, 1280, u32::MAX);
         assert_eq!(w, 1280);
         assert_eq!(h, 720);
+    }
+
+    #[test]
+    fn scale_fit_respects_height() {
+        let (w, h) = scale_frame_fit(1920, 1080, 1920, 540);
+        assert_eq!(h, 540);
+        assert_eq!(w, 960);
     }
 }

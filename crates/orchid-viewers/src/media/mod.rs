@@ -295,6 +295,15 @@ impl MediaViewer {
         self.engine.screenshot();
     }
 
+    /// Match SW blit resolution to the widget viewport.
+    pub fn set_viewport(&self, width: f32, height: f32) {
+        let w = width.max(0.0).round() as u32;
+        let h = height.max(0.0).round() as u32;
+        // Leave room for transport chrome (~72px) when height is the full widget.
+        let video_h = h.saturating_sub(72);
+        self.engine.set_target_size(w, video_h.max(90));
+    }
+
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
