@@ -72,6 +72,8 @@ pub enum WidgetPayload {
     UniversalSearch(crate::widget::payloads::UniversalSearchPayload),
     /// Media player widget.
     MediaPlayer(crate::widget::payloads::MediaPlayerPayload),
+    /// Local audio library player.
+    AudioPlayer(crate::widget::payloads::AudioPlayerPayload),
     /// Password manager widget.
     PasswordManager(crate::widget::payloads::PasswordManagerPayload),
     /// Content viewer widget.

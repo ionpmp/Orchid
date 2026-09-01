@@ -1,13 +1,13 @@
 //! Render-equality helpers for [`super::snapshot_renders_unchanged`].
 
 use crate::widget::payloads::{
-    CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload, FileManagerPayload,
-    JyotishAntarRow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary,
-    JyotishPayload, JyotishYearSummary, MediaPlayerPayload, MoonPayload, NotesPayload,
-    PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload, ProcessRowView,
-    ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView,
-    ServiceRowView, StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload,
-    UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
+    AudioPlayerPayload, CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload,
+    FileManagerPayload, JyotishAntarRow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
+    JyotishMonthSummary, JyotishPayload, JyotishYearSummary, MediaPlayerPayload, MoonPayload,
+    NotesPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
+    ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
+    SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
+    UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPanePayload, TerminalPayload, WidgetPayload};
 
@@ -37,6 +37,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
             search_payload_eq(a, b)
         }
         (WidgetPayload::MediaPlayer(a), WidgetPayload::MediaPlayer(b)) => media_payload_eq(a, b),
+        (WidgetPayload::AudioPlayer(a), WidgetPayload::AudioPlayer(b)) => {
+            audio_player_payload_eq(a, b)
+        }
         (WidgetPayload::PasswordManager(a), WidgetPayload::PasswordManager(b)) => {
             password_payload_eq(a, b)
         }
@@ -804,6 +807,35 @@ fn media_payload_eq(a: &MediaPlayerPayload, b: &MediaPlayerPayload) -> bool {
             (Some(x), Some(y)) => std::sync::Arc::ptr_eq(x, y) || x.as_ref() == y.as_ref(),
             _ => false,
         }
+}
+
+fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bool {
+    a.engine_available == b.engine_available
+        && a.browse_tab == b.browse_tab
+        && a.browse_filter == b.browse_filter
+        && a.groups == b.groups
+        && a.tracks == b.tracks
+        && a.playlists == b.playlists
+        && a.queue == b.queue
+        && a.queue_index == b.queue_index
+        && a.has_track == b.has_track
+        && a.title == b.title
+        && a.artist == b.artist
+        && a.album == b.album
+        && a.is_playing == b.is_playing
+        && a.position_ms / 100 == b.position_ms / 100
+        && a.duration_ms == b.duration_ms
+        && a.volume == b.volume
+        && a.muted == b.muted
+        && a.shuffle == b.shuffle
+        && a.repeat == b.repeat
+        && a.sleep_label == b.sleep_label
+        && a.library_count == b.library_count
+        && a.has_cover == b.has_cover
+        && a.cover_width == b.cover_width
+        && a.cover_height == b.cover_height
+        && (std::sync::Arc::ptr_eq(&a.cover_rgba, &b.cover_rgba)
+            || a.cover_rgba.as_ref() == b.cover_rgba.as_ref())
 }
 
 fn password_entry_eq(a: &PasswordEntryView, b: &PasswordEntryView) -> bool {

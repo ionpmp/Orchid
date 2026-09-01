@@ -5,6 +5,7 @@
 //! [`crate::widget::snapshot::WidgetPayload`] and consumed exhaustively by
 //! the UI renderer.
 
+pub mod audio_player;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
@@ -22,6 +23,9 @@ pub mod system;
 pub mod viewer;
 pub mod weather;
 
+pub use audio_player::{
+    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerTrackRow,
+};
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
