@@ -2048,10 +2048,11 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Toggle paragraph shading (`w:shd`) on selected paragraphs.
+    /// Toggle paragraph or table-cell shading on the selection.
     ///
-    /// If any selected paragraph already has a fill, clears shading on all of
-    /// them; otherwise applies a light-blue Word-like fill (`#D9E2F3`).
+    /// When the caret/selection is inside a table cell, toggles `w:tcPr/w:shd`
+    /// on those cells; otherwise toggles paragraph `w:shd`. If any target
+    /// already has a fill, clears shading; otherwise applies `#D9E2F3`.
     ///
     /// # Errors
     ///
@@ -2065,20 +2066,58 @@ impl DocumentViewer {
         if cursors.is_empty() {
             return Ok(());
         }
-        let clear = cursors
-            .iter()
-            .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.shade_fill.is_some()));
+
+        // Prefer cell shading when any selected cursor is in a table cell.
+        let cell_keys: Vec<(usize, usize, usize)> = {
+            let mut keys = Vec::new();
+            for c in &cursors {
+                if let Some(path) = c.cell {
+                    let key = (c.block_idx, path.row, path.col);
+                    if !keys.contains(&key) {
+                        keys.push(key);
+                    }
+                }
+            }
+            keys
+        };
+
         let mut next = doc.blocks.clone();
         let mut changed = false;
-        for cursor in cursors {
-            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
-                let new_fill = if clear { None } else { Some(FILL) };
-                if p.shade_fill != new_fill {
-                    p.shade_fill = new_fill;
-                    changed = true;
+
+        if !cell_keys.is_empty() {
+            let clear = cell_keys.iter().any(|&(bi, row, col)| {
+                matches!(
+                    next.get(bi),
+                    Some(Block::Table(t))
+                        if t.rows.get(row).and_then(|r| r.cells.get(col)).is_some_and(|c| c.shade_fill.is_some())
+                )
+            });
+            let new_fill = if clear { None } else { Some(FILL) };
+            for (bi, row, col) in cell_keys {
+                if let Some(Block::Table(t)) = next.get_mut(bi) {
+                    if let Some(cell) = t.rows.get_mut(row).and_then(|r| r.cells.get_mut(col)) {
+                        if cell.shade_fill != new_fill {
+                            cell.shade_fill = new_fill;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        } else {
+            let clear = cursors
+                .iter()
+                .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.shade_fill.is_some()));
+            for cursor in cursors {
+                if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                    let new_fill = if clear { None } else { Some(FILL) };
+                    if p.shade_fill != new_fill {
+                        p.shade_fill = new_fill;
+                        changed = true;
+                    }
                 }
             }
         }
+
         if !changed {
             return Ok(());
         }
@@ -3375,7 +3414,18 @@ impl Viewer for DocumentViewer {
                 ListKind::Numbered => 2,
             },
         );
-        let shade = para.is_some_and(|p| p.shade_fill.is_some());
+        let shade = if let Some(path) = caret.cell {
+            matches!(
+                doc.blocks.get(caret.block_idx),
+                Some(Block::Table(t))
+                    if t.rows
+                        .get(path.row)
+                        .and_then(|r| r.cells.get(path.col))
+                        .is_some_and(|c| c.shade_fill.is_some())
+            )
+        } else {
+            para.is_some_and(|p| p.shade_fill.is_some())
+        };
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {

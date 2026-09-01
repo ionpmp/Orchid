@@ -205,6 +205,8 @@ pub struct TableCell {
     pub grid_span: Option<u32>,
     /// Vertical merge (`w:vMerge`). `None` means not merged.
     pub v_merge: Option<VMerge>,
+    /// Cell background fill (`w:tcPr/w:shd/@w:fill` as RGB). `None` = no shading.
+    pub shade_fill: Option<[u8; 3]>,
 }
 
 impl TableCell {
@@ -216,6 +218,7 @@ impl TableCell {
             images: Vec::new(),
             grid_span: None,
             v_merge: None,
+            shade_fill: None,
         }
     }
 }

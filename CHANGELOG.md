@@ -232,7 +232,7 @@ release yet.
   parley+swash canvas, selection and keyboard editing, tables (cell nav,
   insert/delete row/col, merge/unmerge cells, `tblGrid` widths, `gridSpan`/`vMerge` preview),
   inline images (body + cells),
-  Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), paragraph shading (`w:shd` fill + preview; Shd toggle), insert/edit/remove hyperlinks
+  Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), HiDPI 2× preview raster, paragraph/cell shading (`w:shd` / `w:tcPr/w:shd` + preview; Shd toggle), insert/edit/remove hyperlinks
   (Link toolbar / Ctrl+K; internal #bookmark), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), paragraph spacing (Sb±/Sp±), line spacing (auto Ln± + exact/atLeast round-trip), paragraph indent (w:ind left/right; Ind± / Ir± / Fl±), IME composition (preview), page margins from `pgMar` in preview (Mar+/-), Letter/A4 page size (Pg shows Ltr/A4), status word/char counts, find match-case (Aa), catalog **Document** launcher,
   canvas dock; Word/LibreOffice fixtures and round-trip tests.
 - Spec draft for native **`.orchid`** container — see

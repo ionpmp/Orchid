@@ -771,7 +771,13 @@ impl DocumentLayout {
                     ri,
                     rowspan,
                 );
-                cell_rects.push(TableCellRect { x0, y0, w, h });
+                cell_rects.push(TableCellRect {
+                    x0,
+                    y0,
+                    w,
+                    h,
+                    shade_fill: cell.shade_fill,
+                });
                 let x_pad = x0 + pad;
                 let mut y = y0 + pad;
                 let items = mrow
@@ -1316,6 +1322,9 @@ fn paint_table_grid(
         let cy = (pad_y + rect.y0).round() as u32;
         let cw = rect.w.ceil().max(1.0) as u32;
         let ch = rect.h.ceil().max(1.0) as u32;
+        if let Some([r, g, b]) = rect.shade_fill {
+            fill_rect(pixels, buf_w, buf_h, cx, cy, cw, ch, [r, g, b, 255]);
+        }
         fill_rect(pixels, buf_w, buf_h, cx, cy, cw, 1, TABLE_GRID_COLOR);
         fill_rect(
             pixels,
@@ -1443,6 +1452,7 @@ struct TableCellRect {
     y0: f32,
     w: f32,
     h: f32,
+    shade_fill: Option<[u8; 3]>,
 }
 
 struct MeasuredTable {
@@ -2314,6 +2324,32 @@ mod tests {
             })],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn table_cell_shade_fills_preview_pixels() {
+        let mut dl = DocumentLayout::new();
+        let mut doc = table_2x2_doc();
+        if let Block::Table(t) = &mut doc.blocks[0] {
+            t.rows[0].cells[0].shade_fill = Some([0xFF, 0x00, 0x00]);
+        }
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 40);
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::default_letter();
+        // Sample inside the top-left cell (past the hairline border).
+        let vx = ((insets.left + 8.0) * s).round() as u32;
+        let vy = ((insets.top + 8.0) * s).round() as u32;
+        let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
+        assert!(
+            bytes[i] > 200 && bytes[i + 1] < 40 && bytes[i + 2] < 40,
+            "expected red cell shade at ({vx},{vy}) got rgba({},{},{},{})",
+            bytes[i],
+            bytes[i + 1],
+            bytes[i + 2],
+            bytes[i + 3]
+        );
     }
 
     #[test]

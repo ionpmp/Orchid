@@ -117,6 +117,7 @@ fn merge_vertical(table: &mut Table, row: usize, col: usize) -> Result<()> {
             images: Vec::new(),
             grid_span: span,
             v_merge: Some(VMerge::Continue),
+            shade_fill: None,
         },
     );
     let left_para_count = table.rows[row].cells[col].paragraphs.len();

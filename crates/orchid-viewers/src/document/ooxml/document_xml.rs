@@ -620,6 +620,11 @@ fn parse_table(
                             apply_v_merge(&e, cell);
                         }
                     }
+                    "shd" => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_shading(&e, cell);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -646,6 +651,11 @@ fn parse_table(
                     "vMerge" => {
                         if let Some(ref mut cell) = current_cell {
                             apply_v_merge(&e, cell);
+                        }
+                    }
+                    "shd" => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_shading(&e, cell);
                         }
                     }
                     _ => {}
@@ -1093,6 +1103,12 @@ fn apply_paragraph_shading(e: &BytesStart<'_>, p: &mut Paragraph) {
         .and_then(|v| parse_rgb(&v));
 }
 
+fn apply_cell_shading(e: &BytesStart<'_>, cell: &mut TableCell) {
+    cell.shade_fill = attr_val(e, "fill")
+        .filter(|v| !v.is_empty() && !v.eq_ignore_ascii_case("auto"))
+        .and_then(|v| parse_rgb(&v));
+}
+
 fn resolve_hyperlink(e: &BytesStart<'_>, rels: &Relationships) -> Option<Hyperlink> {
     if let Some(name) = attr_val(e, "anchor").filter(|n| !n.is_empty()) {
         return Some(Hyperlink {
@@ -1302,7 +1318,10 @@ fn write_table(
                 .write_event(Event::Start(BytesStart::new("w:tc")))
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             let width = t.column_widths_twips.get(ci).copied();
-            let need_tc_pr = width.is_some() || cell.grid_span.is_some() || cell.v_merge.is_some();
+            let need_tc_pr = width.is_some()
+                || cell.grid_span.is_some()
+                || cell.v_merge.is_some()
+                || cell.shade_fill.is_some();
             if need_tc_pr {
                 writer
                     .write_event(Event::Start(BytesStart::new("w:tcPr")))
@@ -1332,6 +1351,16 @@ fn write_table(
                     }
                     writer
                         .write_event(Event::Empty(vm_el))
+                        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                }
+                if let Some([r, g, b]) = cell.shade_fill {
+                    let mut shd = BytesStart::new("w:shd");
+                    shd.push_attribute(("w:val", "clear"));
+                    shd.push_attribute(("w:color", "auto"));
+                    let fill = format!("{r:02X}{g:02X}{b:02X}");
+                    shd.push_attribute(("w:fill", fill.as_str()));
+                    writer
+                        .write_event(Event::Empty(shd))
                         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
                 }
                 writer
@@ -2132,6 +2161,50 @@ mod tests {
                 && text.contains("w:hanging=\"720\"")
                 && text.contains("w:right=\"480\""),
             "serialized XML missing indent: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_cell_shading() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:tbl>
+              <w:tr>
+                <w:tc>
+                  <w:tcPr><w:shd w:val="clear" w:fill="AABBCC"/></w:tcPr>
+                  <w:p><w:r><w:t>A</w:t></w:r></w:p>
+                </w:tc>
+                <w:tc>
+                  <w:tcPr><w:shd w:val="clear" w:fill="auto"/></w:tcPr>
+                  <w:p><w:r><w:t>B</w:t></w:r></w:p>
+                </w:tc>
+              </w:tr>
+            </w:tbl>
+          </w:body>
+        </w:document>"#;
+        let (blocks, _, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let Block::Table(t) = &blocks[0] else {
+            panic!("expected table");
+        };
+        assert_eq!(t.rows[0].cells[0].shade_fill, Some([0xAA, 0xBB, 0xCC]));
+        assert_eq!(t.rows[0].cells[1].shade_fill, None);
+        let doc = Document {
+            blocks,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:shd") && text.contains("AABBCC"),
+            "missing cell shade: {text}"
         );
     }
 
