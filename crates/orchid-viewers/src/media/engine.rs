@@ -157,6 +157,8 @@ enum EngineCmd {
         sidecars: Vec<PathBuf>,
         resume_secs: Option<f64>,
     },
+    /// Append a file to the mpv playlist (prefetch for gapless).
+    PlaylistAppend(PathBuf),
     PlayPause,
     SeekRel(f64),
     SeekAbs(f64),
@@ -268,6 +270,13 @@ impl MpvEngine {
             sidecars,
             resume_secs,
         });
+    }
+
+    /// Append `path` after the current playlist entry (gapless prefetch).
+    pub fn playlist_append(&self, path: &Path) {
+        let _ = self
+            .tx
+            .send(EngineCmd::PlaylistAppend(path.to_path_buf()));
     }
 
     /// Still cover / tags for audio chrome (call with [`Self::load`]).
@@ -459,6 +468,10 @@ fn run_worker(
             let _ = set_opt(api, handle, "audio-display", "no");
             // Soft volume boost up to 150% (matches SetVolume clamp).
             let _ = set_opt(api, handle, "volume-max", "150");
+            // Prefer seamless transitions when the next file is already queued.
+            let _ = set_opt(api, handle, "gapless-audio", "yes");
+            // Allow playlist auto-advance into a prefetched next track.
+            let _ = set_opt(api, handle, "keep-open", "no");
         } else {
             set_opt(api, handle, "vo", "libmpv")?;
             // HW decode with copy-back so the SW (rgb0) render path can blit to Slint.
@@ -470,7 +483,9 @@ fn run_worker(
         set_opt(api, handle, "input-default-bindings", "no")?;
         set_opt(api, handle, "input-vo-keyboard", "no")?;
         set_opt(api, handle, "osc", "no")?;
-        set_opt(api, handle, "keep-open", "yes")?;
+        if !audio_only {
+            set_opt(api, handle, "keep-open", "yes")?;
+        }
         set_opt(api, handle, "idle", "yes")?;
         set_opt(api, handle, "video-sync", "audio")?;
         let prefs = prefs::load();
@@ -703,6 +718,10 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             }
             let _ = set_flag(api, handle, "pause", false);
             shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::PlaylistAppend(path) => {
+            let path_s = path.to_string_lossy();
+            let _ = command_args(api, handle, &["loadfile", path_s.as_ref(), "append"]);
         }
         EngineCmd::PlayPause => {
             let paused = get_flag(api, handle, "pause").unwrap_or(true);

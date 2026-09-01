@@ -36,6 +36,21 @@ impl PlayerSession {
         }
     }
 
+    /// Update cover/tags/lyrics chrome without reloading the file (gapless advance).
+    pub fn apply_meta(&self, path: &Path) {
+        let tags = load_media_tags(path);
+        let art = load_cover_art(path);
+        self.engine
+            .set_cover_and_tags(art, tags.title, tags.artist);
+    }
+
+    /// Prefetch the next file into mpv's playlist for gapless handover.
+    pub fn prefetch_path(&self, path: &Path) {
+        if self.available() {
+            self.engine.playlist_append(path);
+        }
+    }
+
     pub fn play_pause(&self) {
         self.engine.play_pause();
     }

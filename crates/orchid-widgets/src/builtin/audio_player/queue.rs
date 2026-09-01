@@ -55,6 +55,40 @@ impl PlayQueue {
         self.paths.get(self.index).map(String::as_str)
     }
 
+    /// Path that would play after [`Self::next`] without mutating state.
+    #[must_use]
+    pub fn peek_next(&self) -> Option<&str> {
+        if self.paths.is_empty() {
+            return None;
+        }
+        match self.repeat {
+            RepeatMode::One => return self.current(),
+            RepeatMode::Off | RepeatMode::All => {}
+        }
+        if self.shuffle {
+            let pos = self
+                .order
+                .iter()
+                .position(|&i| i == self.index)
+                .unwrap_or(0);
+            if pos + 1 < self.order.len() {
+                return self.paths.get(self.order[pos + 1]).map(String::as_str);
+            }
+            if matches!(self.repeat, RepeatMode::All) && !self.order.is_empty() {
+                // After rebuild the first of a new order is unpredictable; skip prefetch.
+                return None;
+            }
+            return None;
+        }
+        if self.index + 1 < self.paths.len() {
+            return self.paths.get(self.index + 1).map(String::as_str);
+        }
+        if matches!(self.repeat, RepeatMode::All) {
+            return self.paths.first().map(String::as_str);
+        }
+        None
+    }
+
     /// Advance to next track. Returns the new path, or `None` if playback should stop.
     pub fn next(&mut self) -> Option<&str> {
         if self.paths.is_empty() {
@@ -177,5 +211,19 @@ mod tests {
             RepeatMode::One,
         );
         assert_eq!(q.next(), Some("a"));
+    }
+
+    #[test]
+    fn peek_next_follows_linear_order() {
+        let q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into()],
+            0,
+            false,
+            RepeatMode::Off,
+        );
+        assert_eq!(q.peek_next(), Some("b"));
+        let mut q = q;
+        assert_eq!(q.next(), Some("b"));
+        assert_eq!(q.peek_next(), Some("c"));
     }
 }

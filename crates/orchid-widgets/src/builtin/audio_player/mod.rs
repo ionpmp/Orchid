@@ -52,6 +52,8 @@ struct AudioHandle {
     player: Arc<PlayerSession>,
     sleep: Arc<RwLock<SleepTimer>>,
     lyrics: Arc<RwLock<Lyrics>>,
+    /// Path last appended to mpv for gapless advance (if any).
+    prefetched: Arc<RwLock<Option<String>>>,
     bus: Arc<orchid_core::EventBus>,
     scanning: AtomicBool,
     scan_gen: AtomicU64,
@@ -95,10 +97,48 @@ impl AudioHandle {
         self.player.load_path(p.as_path());
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
         self.player.set_volume(f64::from(self.config.read().volume));
+        self.prefetch_following();
         #[cfg(windows)]
         {
             crate::builtin::viewer::smtc_publisher::set_active_audio(self.instance_id);
             self.push_smtc();
+        }
+    }
+
+    /// Sync chrome after mpv already advanced into a prefetched track.
+    fn adopt_prefetched(&self, path: &str) {
+        let p = PathBuf::from(path);
+        self.player.apply_meta(p.as_path());
+        *self.lyrics.write() = Lyrics::load_for(p.as_path());
+        self.player.set_volume(f64::from(self.config.read().volume));
+        self.prefetch_following();
+        #[cfg(windows)]
+        {
+            crate::builtin::viewer::smtc_publisher::set_active_audio(self.instance_id);
+            self.push_smtc();
+        }
+    }
+
+    fn prefetch_following(&self) {
+        let (current, next) = {
+            let q = self.queue.read();
+            (
+                q.current().map(str::to_string),
+                q.peek_next().map(str::to_string),
+            )
+        };
+        match next {
+            Some(path) if current.as_deref() != Some(path.as_str()) => {
+                self.player.prefetch_path(PathBuf::from(&path).as_path());
+                *self.prefetched.write() = Some(path);
+            }
+            Some(_) => {
+                // Repeat-one: mpv loops the same file; do not append.
+                *self.prefetched.write() = None;
+            }
+            None => {
+                *self.prefetched.write() = None;
+            }
         }
     }
 
@@ -489,6 +529,7 @@ impl AudioPlayerWidget {
             player,
             sleep: Arc::new(RwLock::new(SleepTimer::default())),
             lyrics: Arc::new(RwLock::new(Lyrics::default())),
+            prefetched: Arc::new(RwLock::new(None)),
             bus,
             scanning: AtomicBool::new(false),
             scan_gen: AtomicU64::new(0),
@@ -698,9 +739,15 @@ impl AudioPlayerWidget {
             async move {
                 let mut dirty = handle.player.take_dirty();
                 if handle.player.take_eof() {
+                    let expected = handle.prefetched.write().take();
                     let next = handle.queue.write().next().map(str::to_string);
                     if let Some(path) = next {
-                        handle.load_path(&path);
+                        if expected.as_deref() == Some(path.as_str()) {
+                            // mpv should already be playing the appended file.
+                            handle.adopt_prefetched(&path);
+                        } else {
+                            handle.load_path(&path);
+                        }
                         handle.sync_queue_to_config();
                         dirty = true;
                     }
