@@ -437,6 +437,8 @@ pub struct MediaSnapshot {
     pub chapter_label: String,
     pub ab_label: String,
     pub eq_label: String,
+    pub sub_style_label: String,
+    pub replaygain_label: String,
     pub hwdec_label: String,
     pub sleep_label: String,
     pub aspect_label: String,

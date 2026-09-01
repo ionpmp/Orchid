@@ -254,14 +254,24 @@ impl MediaViewer {
         self.engine.sub_pos_delta(delta);
     }
 
-    /// Reset subtitle scale/position defaults.
+    /// Reset subtitle scale/position/colors to defaults.
     pub fn sub_style_reset(&self) {
         self.engine.sub_style_reset();
+    }
+
+    /// Cycle subtitle color / outline / box presets.
+    pub fn cycle_sub_style(&self) {
+        self.engine.cycle_sub_style();
     }
 
     /// Cycle simple EQ presets (Flat / Bass / Treble / Vocal).
     pub fn cycle_eq(&self) {
         self.engine.cycle_eq();
+    }
+
+    /// Cycle ReplayGain: off → track → album.
+    pub fn cycle_replaygain(&self) {
+        self.engine.cycle_replaygain();
     }
 
     /// Cycle hardware decode: `auto-copy` ↔ software (`no`).
@@ -345,7 +355,9 @@ impl MediaViewer {
             "sub-pos-up" => self.sub_pos_delta(-2.0),
             "sub-pos-down" => self.sub_pos_delta(2.0),
             "sub-style-reset" => self.sub_style_reset(),
+            "cycle-sub-style" => self.cycle_sub_style(),
             "cycle-eq" => self.cycle_eq(),
+            "cycle-replaygain" => self.cycle_replaygain(),
             "cycle-hwdec" => self.cycle_hwdec(),
             "cycle-sleep" => self.cycle_sleep(),
             "cycle-aspect" => self.cycle_aspect(),
@@ -483,6 +495,8 @@ impl Viewer for MediaViewer {
             chapter_label: shared.chapter_label.read().clone(),
             ab_label: shared.ab_label.read().clone(),
             eq_label: shared.eq_label.read().clone(),
+            sub_style_label: shared.sub_style_label.read().clone(),
+            replaygain_label: shared.replaygain_label.read().clone(),
             hwdec_label: shared.hwdec_label.read().clone(),
             sleep_label: shared.sleep_label.read().clone(),
             aspect_label: shared.aspect_label.read().clone(),

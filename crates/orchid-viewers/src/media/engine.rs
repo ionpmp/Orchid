@@ -59,6 +59,12 @@ pub struct SharedPlayback {
     pub ab_label: RwLock<String>,
     pub eq_label: RwLock<String>,
     pub eq_index: AtomicU32,
+    /// Subtitle color/outline preset index.
+    pub sub_style_index: AtomicU32,
+    pub sub_style_label: RwLock<String>,
+    /// ReplayGain mode index (0=off, 1=track, 2=album).
+    pub replaygain_index: AtomicU32,
+    pub replaygain_label: RwLock<String>,
     /// 0 = `auto-copy` (HW decode → system RAM for SW blit), 1 = `no`.
     pub hwdec_mode: AtomicU32,
     pub hwdec_label: RwLock<String>,
@@ -110,6 +116,10 @@ impl SharedPlayback {
             ab_label: RwLock::new(String::new()),
             eq_label: RwLock::new(String::new()),
             eq_index: AtomicU32::new(0),
+            sub_style_index: AtomicU32::new(0),
+            sub_style_label: RwLock::new(String::new()),
+            replaygain_index: AtomicU32::new(0),
+            replaygain_label: RwLock::new(String::new()),
             hwdec_mode: AtomicU32::new(0),
             hwdec_label: RwLock::new(String::new()),
             sleep_until: RwLock::new(None),
@@ -161,7 +171,9 @@ enum EngineCmd {
     SubScaleDelta(f64),
     SubPosDelta(f64),
     SubStyleReset,
+    CycleSubStyle,
     CycleEq,
+    CycleReplayGain,
     CycleHwdec,
     CycleSleep,
     CycleAspect,
@@ -313,8 +325,16 @@ impl MpvEngine {
         let _ = self.tx.send(EngineCmd::SubStyleReset);
     }
 
+    pub fn cycle_sub_style(&self) {
+        let _ = self.tx.send(EngineCmd::CycleSubStyle);
+    }
+
     pub fn cycle_eq(&self) {
         let _ = self.tx.send(EngineCmd::CycleEq);
+    }
+
+    pub fn cycle_replaygain(&self) {
+        let _ = self.tx.send(EngineCmd::CycleReplayGain);
     }
 
     pub fn cycle_hwdec(&self) {
@@ -588,6 +608,11 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let _ = command_args(api, handle, &["af", "clr"]);
             let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
             let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
+            // Re-apply session look / gain after a fresh load.
+            let style = shared.sub_style_index.load(Ordering::Relaxed);
+            apply_sub_style(api, handle, shared, style);
+            let rg = shared.replaygain_index.load(Ordering::Relaxed) as usize % REPLAYGAIN_MODES.len();
+            let _ = set_string(api, handle, "replaygain", REPLAYGAIN_MODES[rg].1);
             for sub in sidecars {
                 let s = sub.to_string_lossy();
                 let _ = command_args(api, handle, &["sub-add", s.as_ref()]);
@@ -737,8 +762,25 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::SubStyleReset => {
-            let _ = set_double(api, handle, "sub-scale", 1.0);
-            let _ = set_double(api, handle, "sub-pos", 100.0);
+            shared.sub_style_index.store(0, Ordering::Relaxed);
+            apply_sub_style(api, handle, shared, 0);
+            flash_osd(shared, "Subs default".into());
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::CycleSubStyle => {
+            let next =
+                (shared.sub_style_index.load(Ordering::Relaxed) + 1) % SUB_STYLE_PRESETS.len() as u32;
+            shared.sub_style_index.store(next, Ordering::Relaxed);
+            apply_sub_style(api, handle, shared, next);
+            let label = shared.sub_style_label.read().clone();
+            flash_osd(
+                shared,
+                if label.is_empty() {
+                    "Subs default".into()
+                } else {
+                    label
+                },
+            );
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::CycleEq => {
@@ -748,6 +790,19 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 shared,
                 if label.is_empty() {
                     "EQ Flat".into()
+                } else {
+                    label
+                },
+            );
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::CycleReplayGain => {
+            apply_next_replaygain(api, handle, shared);
+            let label = shared.replaygain_label.read().clone();
+            flash_osd(
+                shared,
+                if label.is_empty() {
+                    "ReplayGain off".into()
                 } else {
                     label
                 },
@@ -1068,6 +1123,54 @@ unsafe fn refresh_ab_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayb
         (Some(a), None) => format!("A {a:.0}s"),
         (None, Some(b)) => format!("B {b:.0}s"),
         (None, None) => String::new(),
+    };
+}
+
+/// Subtitle look presets (color / outline / box) applied via mpv props.
+const SUB_STYLE_PRESETS: &[(&str, &str, &str, &str, f64, f64)] = &[
+    // label, color, border, back, border-size, shadow
+    ("", "#FFFFFFFF", "#FF000000", "#00000000", 2.0, 0.0),
+    ("Subs outline", "#FFFFFFFF", "#FF000000", "#00000000", 3.0, 0.0),
+    ("Subs yellow", "#FFFFFF00", "#FF000000", "#00000000", 2.5, 0.0),
+    ("Subs box", "#FFFFFFFF", "#FF000000", "#80000000", 0.0, 0.0),
+    ("Subs cyan", "#FF00FFFF", "#FF003333", "#00000000", 2.0, 1.0),
+];
+
+unsafe fn apply_sub_style(
+    api: &MpvApi,
+    handle: MpvHandle,
+    shared: &SharedPlayback,
+    index: u32,
+) {
+    let idx = index as usize % SUB_STYLE_PRESETS.len();
+    let (label, color, border, back, border_size, shadow) = SUB_STYLE_PRESETS[idx];
+    let _ = set_double(api, handle, "sub-scale", 1.0);
+    let _ = set_double(api, handle, "sub-pos", 100.0);
+    let _ = set_string(api, handle, "sub-color", color);
+    let _ = set_string(api, handle, "sub-border-color", border);
+    let _ = set_string(api, handle, "sub-back-color", back);
+    let _ = set_double(api, handle, "sub-border-size", border_size);
+    let _ = set_double(api, handle, "sub-shadow-offset", shadow);
+    *shared.sub_style_label.write() = if label.is_empty() {
+        String::new()
+    } else {
+        (*label).into()
+    };
+}
+
+/// ReplayGain modes via mpv `replaygain` (tags in file; no af conflict with EQ).
+const REPLAYGAIN_MODES: &[(&str, &str)] = &[("", "no"), ("RG track", "track"), ("RG album", "album")];
+
+unsafe fn apply_next_replaygain(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next =
+        (shared.replaygain_index.load(Ordering::Relaxed) + 1) % REPLAYGAIN_MODES.len() as u32;
+    shared.replaygain_index.store(next, Ordering::Relaxed);
+    let (label, mode) = REPLAYGAIN_MODES[next as usize];
+    let _ = set_string(api, handle, "replaygain", mode);
+    *shared.replaygain_label.write() = if label.is_empty() {
+        String::new()
+    } else {
+        (*label).into()
     };
 }
 
