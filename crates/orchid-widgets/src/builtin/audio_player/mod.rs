@@ -1073,7 +1073,7 @@ impl AudioPlayerWidget {
                 0,
                 AudioPlayerPlaylistRow {
                     id: String::new(),
-                    name: "Favorites".into(),
+                    name: "audio-player-favorites".into(),
                     count: cfg.favorites.len() as u32,
                     is_active: cfg.active_playlist_id.is_empty()
                         && cfg.browse_tab == BrowseTab::Playlists,
@@ -1101,11 +1101,7 @@ impl AudioPlayerWidget {
             None => (false, Arc::new(Vec::new()), 0, 0),
         };
 
-        let roots_label = if cfg.library_roots.is_empty() {
-            String::new()
-        } else {
-            format!("{} folders", cfg.library_roots.len())
-        };
+        let roots_label = String::new();
         let roots: Vec<AudioPlayerRootRow> = cfg
             .library_roots
             .iter()
@@ -1122,6 +1118,7 @@ impl AudioPlayerWidget {
             })
             .collect();
         let has_library_roots = !roots.is_empty();
+        let library_roots_count = roots.len() as u32;
 
         let empty_hint = if cfg.library_roots.is_empty() {
             "audio-player-empty-roots".into()
@@ -1216,6 +1213,7 @@ impl AudioPlayerWidget {
             lyrics_line: self.handle.lyrics.read().line_at(pos),
             has_lyrics: !self.handle.lyrics.read().is_empty(),
             library_count: lib.tracks.len() as u32,
+            library_roots_count,
             has_library_roots,
             roots_label,
             empty_hint,

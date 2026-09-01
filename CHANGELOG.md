@@ -254,7 +254,8 @@ release yet.
   active library search (including filtered queue); queue tab play-at without
   reshuffling shuffle order, Home/End jump, Delete removes current track, empty
   queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year);
-  favorite toggle on now-playing (star + F key).
+  favorite toggle on now-playing (star + F key); double-click a library track to
+  enqueue; localized Favorites playlist name and library stats strip.
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).

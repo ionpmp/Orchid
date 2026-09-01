@@ -1,6 +1,6 @@
 //! Slint model for the local audio library player.
 
-use orchid_i18n::LocaleManager;
+use orchid_i18n::{FluentArgs, LocaleManager};
 use orchid_widgets::AudioPlayerPayload;
 use slint::{Image, ModelRc, SharedString, VecModel};
 
@@ -130,6 +130,40 @@ fn sort_label_for(sort: u8, locale: &LocaleManager) -> SharedString {
     locale.tr(key).into()
 }
 
+fn playlist_name(name: &str, locale: &LocaleManager) -> SharedString {
+    if name.starts_with("audio-player-") {
+        locale.tr(name).into()
+    } else {
+        name.into()
+    }
+}
+
+fn library_stats_label(tracks: u32, folders: u32, locale: &LocaleManager) -> SharedString {
+    match (tracks, folders) {
+        (0, 0) => SharedString::new(),
+        (t, 0) => locale
+            .tr_args(
+                "audio-player-library-stats-tracks",
+                &FluentArgs::new().with("tracks", t.to_string()),
+            )
+            .into(),
+        (0, f) => locale
+            .tr_args(
+                "audio-player-library-stats-folders",
+                &FluentArgs::new().with("folders", f.to_string()),
+            )
+            .into(),
+        (t, f) => locale
+            .tr_args(
+                "audio-player-library-stats-tracks-folders",
+                &FluentArgs::new()
+                    .with("tracks", t.to_string())
+                    .with("folders", f.to_string()),
+            )
+            .into(),
+    }
+}
+
 fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerModel {
     let base = labels_only(locale);
     m.tab_songs = base.tab_songs;
@@ -222,7 +256,7 @@ pub(crate) fn build_audio_player_model(
                     .iter()
                     .map(|pl| AudioPlayerPlaylistItem {
                         id: pl.id.clone().into(),
-                        name: pl.name.clone().into(),
+                        name: playlist_name(&pl.name, locale),
                         count: pl.count as i32,
                         is_active: pl.is_active,
                     })
@@ -255,13 +289,7 @@ pub(crate) fn build_audio_player_model(
             speed_label: p.speed_label.clone().into(),
             lyrics_line: p.lyrics_line.clone().into(),
             has_lyrics: p.has_lyrics,
-            roots_label: if p.library_count > 0 && !p.roots_label.is_empty() {
-                format!("{} tracks · {}", p.library_count, p.roots_label).into()
-            } else if p.library_count > 0 {
-                format!("{} tracks", p.library_count).into()
-            } else {
-                p.roots_label.clone().into()
-            },
+            roots_label: library_stats_label(p.library_count, p.library_roots_count, locale),
             empty_hint,
             has_cover: p.has_cover,
             cover,

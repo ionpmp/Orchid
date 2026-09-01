@@ -81,6 +81,7 @@ pub struct AudioPlayerPayload {
     pub lyrics_line: String,
     pub has_lyrics: bool,
     pub library_count: u32,
+    pub library_roots_count: u32,
     pub has_library_roots: bool,
     pub roots_label: String,
     pub empty_hint: String,
