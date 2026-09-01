@@ -392,6 +392,16 @@ pub struct MediaPlaylistItem {
     pub selected: bool,
 }
 
+/// One chapter row for the media chapters popup.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct MediaChapterItem {
+    pub name: String,
+    /// 0-based chapter index.
+    pub index: u32,
+    pub selected: bool,
+}
+
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct MediaSnapshot {
@@ -435,6 +445,7 @@ pub struct MediaSnapshot {
     pub sub_visible: bool,
     pub audio_label: String,
     pub chapter_label: String,
+    pub chapter_items: Vec<MediaChapterItem>,
     pub ab_label: String,
     pub eq_label: String,
     pub sub_style_label: String,

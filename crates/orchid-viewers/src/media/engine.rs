@@ -83,6 +83,10 @@ pub struct SharedPlayback {
     pub sub_visible: AtomicBool,
     pub audio_label: RwLock<String>,
     pub chapter_label: RwLock<String>,
+    /// Current chapter index (`-1` when none).
+    pub chapter_index: AtomicI32,
+    /// Cached chapter titles `(index, title)` for the UI list.
+    pub chapter_items: RwLock<Vec<(u32, String)>>,
     /// Set when mpv reaches end-of-file (cleared on load / take).
     pub eof_reached: AtomicBool,
     pub error: RwLock<Option<String>>,
@@ -135,6 +139,8 @@ impl SharedPlayback {
             sub_visible: AtomicBool::new(true),
             audio_label: RwLock::new(String::new()),
             chapter_label: RwLock::new(String::new()),
+            chapter_index: AtomicI32::new(-1),
+            chapter_items: RwLock::new(Vec::new()),
             eof_reached: AtomicBool::new(false),
             error: RwLock::new(None),
             target_w: AtomicU32::new(0),
@@ -164,6 +170,7 @@ enum EngineCmd {
     CycleAudio,
     ChapterNext,
     ChapterPrev,
+    SetChapter(i64),
     AbMarkA,
     AbMarkB,
     AbClear,
@@ -187,24 +194,49 @@ enum EngineCmd {
     Quit,
 }
 
+/// Playback session mode: video blit for the Viewer, or audio-only for the
+/// library player (no SW render context).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EngineMode {
+    /// Software RGBA blit path (`vo=libmpv` + render context).
+    #[default]
+    Video,
+    /// Audio-focused path (`vo=null`, no render context).
+    Audio,
+}
+
 /// Handle to a background libmpv session.
 #[derive(Debug)]
 pub struct MpvEngine {
+    /// Shared transport / frame state readable from the UI thread.
     pub shared: Arc<SharedPlayback>,
+    /// Session mode used at spawn.
+    pub mode: EngineMode,
     tx: Sender<EngineCmd>,
     _join: Option<JoinHandle<()>>,
 }
 
 impl MpvEngine {
-    /// Start the worker. When libmpv is missing, commands become no-ops and
+    /// Start a video-capable worker (Viewer default).
+    ///
+    /// When libmpv is missing, commands become no-ops and
     /// [`SharedPlayback::available`] is false.
     pub fn spawn() -> Self {
+        Self::spawn_with_mode(EngineMode::Video)
+    }
+
+    /// Start a worker in the given [`EngineMode`].
+    pub fn spawn_with_mode(mode: EngineMode) -> Self {
         let available = ffi::mpv_available();
         let shared = Arc::new(SharedPlayback::new(available));
         let (tx, rx) = mpsc::channel::<EngineCmd>();
         let shared_worker = Arc::clone(&shared);
+        let thread_name = match mode {
+            EngineMode::Video => "orchid-mpv",
+            EngineMode::Audio => "orchid-mpv-audio",
+        };
         let join = thread::Builder::new()
-            .name("orchid-mpv".into())
+            .name(thread_name.into())
             .spawn(move || {
                 if !available {
                     // Drain until Quit so senders do not block forever.
@@ -215,13 +247,14 @@ impl MpvEngine {
                     }
                     return;
                 }
-                if let Err(e) = run_worker(shared_worker, rx) {
+                if let Err(e) = run_worker(shared_worker, rx, mode) {
                     tracing::warn!(error = %e, "mpv worker exited");
                 }
             })
             .ok();
         Self {
             shared,
+            mode,
             tx,
             _join: join,
         }
@@ -295,6 +328,10 @@ impl MpvEngine {
 
     pub fn chapter_prev(&self) {
         let _ = self.tx.send(EngineCmd::ChapterPrev);
+    }
+
+    pub fn set_chapter(&self, index: i64) {
+        let _ = self.tx.send(EngineCmd::SetChapter(index));
     }
 
     pub fn ab_mark_a(&self) {
@@ -404,6 +441,7 @@ impl Drop for MpvEngine {
 fn run_worker(
     shared: Arc<SharedPlayback>,
     rx: mpsc::Receiver<EngineCmd>,
+    mode: EngineMode,
 ) -> Result<(), String> {
     let api = ffi::api().map_err(|_| "libmpv unavailable".to_string())?;
     let handle = unsafe { (api.create)() };
@@ -411,19 +449,28 @@ fn run_worker(
         return Err("mpv_create failed".into());
     }
 
+    let audio_only = matches!(mode, EngineMode::Audio);
+
     unsafe {
-        set_opt(api, handle, "vo", "libmpv")?;
+        if audio_only {
+            set_opt(api, handle, "vo", "null")?;
+            set_opt(api, handle, "hwdec", "no")?;
+            set_opt(api, handle, "video", "no")?;
+            let _ = set_opt(api, handle, "audio-display", "no");
+        } else {
+            set_opt(api, handle, "vo", "libmpv")?;
+            // HW decode with copy-back so the SW (rgb0) render path can blit to Slint.
+            set_opt(api, handle, "hwdec", "auto-copy")?;
+            // Prefer embedded album art as a video track when present.
+            let _ = set_opt(api, handle, "audio-display", "embedded-first");
+        }
         set_opt(api, handle, "terminal", "no")?;
         set_opt(api, handle, "input-default-bindings", "no")?;
         set_opt(api, handle, "input-vo-keyboard", "no")?;
         set_opt(api, handle, "osc", "no")?;
         set_opt(api, handle, "keep-open", "yes")?;
         set_opt(api, handle, "idle", "yes")?;
-        // HW decode with copy-back so the SW (rgb0) render path can blit to Slint.
-        set_opt(api, handle, "hwdec", "auto-copy")?;
         set_opt(api, handle, "video-sync", "audio")?;
-        // Prefer embedded album art as a video track when present.
-        let _ = set_opt(api, handle, "audio-display", "embedded-first");
         let prefs = prefs::load();
         let _ = set_opt(api, handle, "volume", &format!("{}", prefs.volume));
         let _ = set_opt(api, handle, "mute", if prefs.muted { "yes" } else { "no" });
@@ -438,7 +485,14 @@ fn run_worker(
             .volume
             .store(prefs.volume.round() as u32, Ordering::Relaxed);
         shared.muted.store(prefs.muted, Ordering::Relaxed);
-        shared.hwdec_mode.store(prefs.hwdec_mode.min(1), Ordering::Relaxed);
+        shared.hwdec_mode.store(
+            if audio_only {
+                1
+            } else {
+                prefs.hwdec_mode.min(1)
+            },
+            Ordering::Relaxed,
+        );
         shared
             .pitch_preserve
             .store(prefs.pitch_preserve, Ordering::Relaxed);
@@ -456,12 +510,16 @@ fn run_worker(
             (api.terminate_destroy)(handle);
             return Err(msg);
         }
-        let mode_idx = shared.hwdec_mode.load(Ordering::Relaxed).min(1) as usize;
-        let hwdec = if mode_idx == 0 { "auto-copy" } else { "no" };
-        let _ = set_string(api, handle, "hwdec", hwdec);
-        refresh_hwdec_label(api, handle, &shared);
-        let style = shared.sub_style_index.load(Ordering::Relaxed);
-        apply_sub_style(api, handle, &shared, style);
+        if !audio_only {
+            let mode_idx = shared.hwdec_mode.load(Ordering::Relaxed).min(1) as usize;
+            let hwdec = if mode_idx == 0 { "auto-copy" } else { "no" };
+            let _ = set_string(api, handle, "hwdec", hwdec);
+            refresh_hwdec_label(api, handle, &shared);
+            let style = shared.sub_style_index.load(Ordering::Relaxed);
+            apply_sub_style(api, handle, &shared, style);
+        } else {
+            *shared.hwdec_label.write() = String::new();
+        }
         let rg = shared.replaygain_index.load(Ordering::Relaxed) as usize;
         let _ = set_string(api, handle, "replaygain", REPLAYGAIN_MODES[rg].1);
         let rg_label = REPLAYGAIN_MODES[rg].0;
@@ -472,15 +530,21 @@ fn run_worker(
         };
     }
 
-    let render = unsafe { create_render_context(api, handle)? };
+    let render = if audio_only {
+        None
+    } else {
+        Some(unsafe { create_render_context(api, handle)? })
+    };
     let frame_flag = Arc::new(AtomicBool::new(false));
-    let flag_cb = Arc::clone(&frame_flag);
-    unsafe {
-        (api.render_context_set_update_callback)(
-            render,
-            Some(on_render_update),
-            Arc::into_raw(flag_cb) as *mut _,
-        );
+    if let Some(render) = render {
+        let flag_cb = Arc::clone(&frame_flag);
+        unsafe {
+            (api.render_context_set_update_callback)(
+                render,
+                Some(on_render_update),
+                Arc::into_raw(flag_cb) as *mut _,
+            );
+        }
     }
 
     let mut last_prop = Instant::now() - Duration::from_secs(1);
@@ -503,10 +567,13 @@ fn run_worker(
 
         unsafe {
             drain_events(api, handle, &shared);
-            let flags = (api.render_context_update)(render);
-            if flags & MPV_RENDER_UPDATE_FRAME != 0 || frame_flag.swap(false, Ordering::AcqRel)
-            {
-                render_frame(api, handle, render, &shared);
+            if let Some(render) = render {
+                let flags = (api.render_context_update)(render);
+                if flags & MPV_RENDER_UPDATE_FRAME != 0
+                    || frame_flag.swap(false, Ordering::AcqRel)
+                {
+                    render_frame(api, handle, render, &shared);
+                }
             }
         }
 
@@ -538,17 +605,12 @@ fn run_worker(
     }
 
     unsafe {
-        (api.render_context_set_update_callback)(render, None, std::ptr::null_mut());
-        (api.render_context_free)(render);
+        if let Some(render) = render {
+            (api.render_context_set_update_callback)(render, None, std::ptr::null_mut());
+            (api.render_context_free)(render);
+        }
         (api.terminate_destroy)(handle);
-        // Leak the Arc intentionally if callback still holds it — we nulled the
-        // callback above, so reclaim:
-        // (callback pointer was Arc::into_raw; free it)
     }
-    // Reclaim update-callback Arc (set to null already).
-    // We passed Arc::into_raw once; drop it now.
-    // Safety: callback cleared, no concurrent use.
-    // Cannot easily recover the pointer after nulling — accept Arc leak of AtomicBool.
 
     Ok(())
 }
@@ -623,6 +685,8 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             *shared.ab_label.write() = String::new();
             shared.eq_index.store(0, Ordering::Relaxed);
             *shared.eq_label.write() = String::new();
+            *shared.chapter_items.write() = Vec::new();
+            *shared.chapter_label.write() = String::new();
             let _ = command_args(api, handle, &["af", "clr"]);
             let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
             let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
@@ -741,6 +805,12 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
         }
         EngineCmd::ChapterPrev => {
             let _ = command_args(api, handle, &["add", "chapter", "-1"]);
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::SetChapter(idx) => {
+            let idx = idx.max(0);
+            let _ = command_args(api, handle, &["set", "chapter", &format!("{idx}")]);
+            flash_osd(shared, format!("Chapter {}", idx + 1));
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::AbMarkA => {
@@ -1036,6 +1106,10 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
 
     let chapter = get_int64(api, handle, "chapter").unwrap_or(-1);
     let chapters = get_int64(api, handle, "chapters").unwrap_or(0);
+    shared.chapter_index.store(
+        chapter.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        Ordering::Relaxed,
+    );
     *shared.chapter_label.write() = if chapters > 0 && chapter >= 0 {
         let key = format!("chapter-list/{chapter}/title");
         match get_string(api, handle, &key) {
@@ -1045,6 +1119,7 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
     } else {
         String::new()
     };
+    refresh_chapter_items(api, handle, shared, chapters);
     refresh_ab_label(api, handle, shared);
     refresh_hwdec_label(api, handle, shared);
     tick_sleep(api, handle, shared);
@@ -1136,6 +1211,36 @@ fn format_osd_time(secs: f64) -> String {
         format!("{h}:{m:02}:{s:02}")
     } else {
         format!("{m}:{s:02}")
+    }
+}
+
+unsafe fn refresh_chapter_items(
+    api: &MpvApi,
+    handle: MpvHandle,
+    shared: &SharedPlayback,
+    chapters: i64,
+) {
+    let n = chapters.max(0) as usize;
+    let mut items = Vec::with_capacity(n);
+    for i in 0..n {
+        let key = format!("chapter-list/{i}/title");
+        let title = match get_string(api, handle, &key) {
+            Some(t) if !t.is_empty() => t,
+            _ => format!("Chapter {}", i + 1),
+        };
+        items.push((i as u32, title));
+    }
+    let changed = {
+        let cur = shared.chapter_items.read();
+        cur.len() != items.len()
+            || cur
+                .iter()
+                .zip(items.iter())
+                .any(|(a, b)| a.0 != b.0 || a.1 != b.1)
+    };
+    if changed {
+        *shared.chapter_items.write() = items;
+        shared.dirty.store(true, Ordering::Release);
     }
 }
 

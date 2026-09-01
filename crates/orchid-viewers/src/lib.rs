@@ -89,15 +89,16 @@ pub use image::{
     IMAGE_FILE_EXTENSIONS,
 };
 pub use media::{
-    discover_sidecar_subs, is_media_file_extension, media_playlist_panel_default,
-    mpv_available, persist_media_playlist_panel, pick_media_file, MediaViewer,
-    MEDIA_FILE_EXTENSIONS,
+    discover_cover_sidecars, discover_sidecar_subs, is_media_file_extension, load_cover_art,
+    load_media_tags, load_track_meta, media_playlist_panel_default, mpv_available,
+    persist_media_playlist_panel, pick_media_file, pick_media_folder, EngineMode, FrameBuf,
+    MediaTags, MediaViewer, MpvEngine, SharedPlayback, TrackMeta, MEDIA_FILE_EXTENSIONS,
 };
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, CalDayItem, DocumentSnapshot,
-    HtmlSnapshot, ImageSnapshot, ImageThumbItem, MapPinItem, MediaPlaylistItem, MediaSnapshot,
-    PdfSnapshot, SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot,
+    HtmlSnapshot, ImageSnapshot, ImageThumbItem, MapPinItem, MediaChapterItem, MediaPlaylistItem,
+    MediaSnapshot, PdfSnapshot, SelectionRange, SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot,
     ViewerSnapshot,
 };
 pub use text::{

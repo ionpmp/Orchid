@@ -16,10 +16,11 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 
 use crate::error::Result;
-use crate::snapshot::{MediaSnapshot, ViewerSnapshot};
+use crate::snapshot::{MediaChapterItem, MediaSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
-pub use cover::{discover_cover_sidecars, load_cover_art, load_media_tags};
+pub use cover::{discover_cover_sidecars, load_cover_art, load_media_tags, load_track_meta, MediaTags, TrackMeta};
+pub use engine::{EngineMode, FrameBuf, MpvEngine, SharedPlayback};
 pub use ffi::mpv_available;
 pub use sidecars::discover_sidecar_subs;
 
@@ -32,6 +33,20 @@ pub fn media_playlist_panel_default() -> bool {
 /// Persist playlist side-panel open state.
 pub fn persist_media_playlist_panel(open: bool) {
     prefs::store_playlist_panel_open(open);
+}
+
+/// Native file dialog for picking a music library folder.
+#[must_use]
+pub fn pick_media_folder() -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    if let Some(dir) = prefs::load().last_folder {
+        if dir.is_dir() {
+            dialog = dialog.set_directory(dir);
+        }
+    }
+    let path = dialog.pick_folder()?;
+    prefs::store_last_folder(&path);
+    Some(path)
 }
 
 /// Native file dialog for picking a local audio/video file.
@@ -57,8 +72,6 @@ pub fn pick_media_file() -> Option<std::path::PathBuf> {
     }
     Some(path)
 }
-
-use engine::MpvEngine;
 
 /// Extensions treated as audio or video.
 pub const MEDIA_FILE_EXTENSIONS: &[&str] = &[
@@ -107,7 +120,7 @@ impl MediaViewer {
             path: RwLock::new(None),
             os_path: RwLock::new(None),
             kind_label: RwLock::new(String::new()),
-            engine: MpvEngine::spawn(),
+            engine: MpvEngine::spawn_with_mode(EngineMode::Video),
             playlist_index: RwLock::new(0),
             playlist_count: RwLock::new(0),
             playlist_shuffle: RwLock::new(false),
@@ -223,6 +236,11 @@ impl MediaViewer {
     /// Jump to previous chapter.
     pub fn chapter_prev(&self) {
         self.engine.chapter_prev();
+    }
+
+    /// Jump to a 0-based chapter index.
+    pub fn set_chapter(&self, index: i64) {
+        self.engine.set_chapter(index);
     }
 
     /// Mark A-B loop start.
@@ -382,6 +400,11 @@ impl MediaViewer {
             "cycle-audio" => self.cycle_audio(),
             "chapter-next" => self.chapter_next(),
             "chapter-prev" => self.chapter_prev(),
+            cmd if let Some(raw) = cmd.strip_prefix("chapter:") => {
+                if let Ok(i) = raw.parse::<i64>() {
+                    self.set_chapter(i);
+                }
+            }
             "ab-a" => self.ab_mark_a(),
             "ab-b" => self.ab_mark_b(),
             "ab-clear" => self.ab_clear(),
@@ -508,6 +531,19 @@ impl Viewer for MediaViewer {
             sub_visible: shared.sub_visible.load(Ordering::Relaxed),
             audio_label: shared.audio_label.read().clone(),
             chapter_label: shared.chapter_label.read().clone(),
+            chapter_items: {
+                let cur = shared.chapter_index.load(Ordering::Relaxed);
+                shared
+                    .chapter_items
+                    .read()
+                    .iter()
+                    .map(|(i, name)| MediaChapterItem {
+                        name: name.clone(),
+                        index: *i,
+                        selected: cur >= 0 && *i == cur as u32,
+                    })
+                    .collect()
+            },
             ab_label: shared.ab_label.read().clone(),
             eq_label: shared.eq_label.read().clone(),
             sub_style_label: shared.sub_style_label.read().clone(),
