@@ -461,6 +461,8 @@ fn run_worker(
             break;
         }
 
+        let playing = shared.playing.load(Ordering::Relaxed);
+
         unsafe {
             drain_events(api, handle, &shared);
             let flags = (api.render_context_update)(render);
@@ -470,16 +472,22 @@ fn run_worker(
             }
         }
 
-        if last_prop.elapsed() >= Duration::from_millis(100) {
+        let prop_interval = if playing {
+            Duration::from_millis(100)
+        } else {
+            Duration::from_millis(400)
+        };
+        if last_prop.elapsed() >= prop_interval {
             last_prop = Instant::now();
             unsafe {
                 poll_props(api, handle, &shared);
             }
         }
 
-        // Short wait so we also wake for mpv events.
+        // Short wait while playing; idle longer when paused to cut CPU.
+        let wait_s = if playing { 0.02 } else { 0.12 };
         unsafe {
-            let ev = (api.wait_event)(handle, 0.02);
+            let ev = (api.wait_event)(handle, wait_s);
             if !ev.is_null() {
                 let id = (*ev).event_id;
                 if id == MPV_EVENT_SHUTDOWN {
@@ -961,8 +969,14 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
     refresh_ab_label(api, handle, shared);
     refresh_hwdec_label(api, handle, shared);
     tick_sleep(api, handle, shared);
-    expire_osd(shared);
-    shared.dirty.store(true, Ordering::Release);
+    let osd_cleared = expire_osd(shared);
+    let playing = shared.playing.load(Ordering::Relaxed);
+    let osd_active = shared.osd_until.read().is_some();
+    let sleep_active = shared.sleep_until.read().is_some();
+    // Avoid waking the UI every poll while paused with nothing to show.
+    if playing || osd_active || osd_cleared || sleep_active {
+        shared.dirty.store(true, Ordering::Release);
+    }
 }
 
 fn persist_resume(shared: &SharedPlayback) {
@@ -1020,7 +1034,7 @@ fn next_shot_path(dir: &Path, stem: &str) -> PathBuf {
     dir.join(format!("{stem}-shot.png"))
 }
 
-fn expire_osd(shared: &SharedPlayback) {
+fn expire_osd(shared: &SharedPlayback) -> bool {
     let clear = shared
         .osd_until
         .read()
@@ -1028,6 +1042,9 @@ fn expire_osd(shared: &SharedPlayback) {
     if clear {
         *shared.osd_text.write() = String::new();
         *shared.osd_until.write() = None;
+        true
+    } else {
+        false
     }
 }
 

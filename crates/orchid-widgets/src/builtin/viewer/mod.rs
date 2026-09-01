@@ -558,17 +558,14 @@ impl ViewerWidgetInner {
                 if inner.media_tick.load(Ordering::Relaxed) != gen {
                     return;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(33)).await;
-                if inner.media_tick.load(Ordering::Relaxed) != gen {
-                    return;
-                }
                 let tick = {
                     let guard = inner.viewer.lock().await;
                     if let Some(v) = guard.as_ref() {
                         if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
                             Some((
-                                media.take_dirty() || media.is_playing(),
+                                media.take_dirty(),
                                 media.take_eof(),
+                                media.is_playing(),
                             ))
                         } else {
                             None
@@ -577,7 +574,7 @@ impl ViewerWidgetInner {
                         None
                     }
                 };
-                let Some((dirty, eof)) = tick else {
+                let Some((dirty, eof, playing)) = tick else {
                     return;
                 };
                 if eof {
@@ -586,8 +583,7 @@ impl ViewerWidgetInner {
                         .await;
                     continue;
                 }
-                match dirty {
-                    true => {
+                if dirty {
                         // Re-apply playlist chrome then publish.
                         let (idx, count, shuffle, loop_playlist) = {
                             let nav = inner.media_nav.read();
@@ -621,8 +617,12 @@ impl ViewerWidgetInner {
                             }
                         }
                         inner.publish_refresh();
-                    }
-                    false => {}
+                }
+                // ~30 Hz while playing (frames + progress); idle slower when paused.
+                let wait_ms = if playing { 33 } else { 200 };
+                tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                if inner.media_tick.load(Ordering::Relaxed) != gen {
+                    return;
                 }
             }
         });
