@@ -332,28 +332,31 @@ export component WidgetFrame inherits Rectangle {
     callback fm-entry-drag-scroll(string, int, length, length, length, length);
     callback fm-error-action(string, int);
 
-    pure function get-widget-icon(type-id: string) -> string {
+    // ASCII/BMP only — Slint's default font on Windows lacks color emoji.
+    pure function get-widget-icon(type_id: string) -> string {
         return
-            type-id == "terminal" ? "💻" :
-            type-id == "weather" ? "🌤️" :
-            type-id == "moon" ? "🌙" :
-            type-id == "jyotish" ? "✨" :
-            type-id == "clock" ? "🕒" :
-            type-id == "system" ? "📊" :
-            type-id == "rss" ? "📰" :
-            type-id == "recent-files" ? "🕒" :
-            type-id == "search" || type-id == "universal-search" ? "🔍" :
-            type-id == "media" || type-id == "media-player" ? "🎵" :
-            type-id == "audio-player" ? "♪" :
-            type-id == "password" || type-id == "password-manager" ? "🔑" :
-            type-id == "viewer" ? "👁️" :
-            type-id == "document-editor" ? "📝" :
-            type-id == "file-manager" ? "📁" :
-            type-id == "processes" ? "📈" :
-            type-id == "calculator" ? "🧮" :
-            type-id == "notes" ? "🗒️" :
-            type-id == "calendar" ? "📅" :
-            "⚙️";
+            type_id == "terminal" ? ">_" :
+            type_id == "weather" ? "W" :
+            type_id == "moon" ? "O" :
+            type_id == "jyotish" ? "*" :
+            type_id == "clock" ? "C" :
+            type_id == "system" ? "S" :
+            type_id == "rss" ? "N" :
+            type_id == "recent-files" ? "R" :
+            type_id == "search" || type_id == "universal-search" ? "/" :
+            type_id == "media" || type_id == "media-player" ? "M" :
+            type_id == "audio-player" ? "A" :
+            type_id == "video-player" ? "Vp" :
+            type_id == "media-viewer" ? "MV" :
+            type_id == "password" || type_id == "password-manager" ? "*" :
+            type_id == "viewer" ? "Vi" :
+            type_id == "document-editor" ? "D" :
+            type_id == "file-manager" ? "#" :
+            type_id == "processes" ? "P" :
+            type_id == "calculator" ? "=" :
+            type_id == "notes" ? "Nt" :
+            type_id == "calendar" ? "Ca" :
+            "*";
     }
 
     background: Theme.surface-raised;

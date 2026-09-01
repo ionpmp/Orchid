@@ -11,29 +11,31 @@ component CatalogCard inherits Rectangle {
     in property <bool> card-visible: true;
     callback pick(string);
 
+    // ASCII/BMP only — Slint's default font on Windows lacks color emoji.
     pure function get-icon(type_id: string) -> string {
         return
-            type_id == "terminal" ? "💻" :
-            type_id == "weather" ? "🌤️" :
-            type_id == "moon" ? "🌙" :
-            type_id == "jyotish" ? "✨" :
-            type_id == "clock" ? "🕒" :
-            type_id == "system" ? "📊" :
-            type_id == "rss" ? "📰" :
-            type_id == "recent-files" ? "🕒" :
-            type_id == "search" || type_id == "universal-search" ? "🔍" :
-            type_id == "media" || type_id == "media-player" ? "🎵" :
-            type_id == "audio-player" ? "♪" :
-            type_id == "media-viewer" ? "▶" :
-            type_id == "password" || type_id == "password-manager" ? "🔑" :
-            type_id == "viewer" ? "👁️" :
-            type_id == "document-editor" ? "📝" :
-            type_id == "file-manager" ? "📁" :
-            type_id == "processes" ? "📈" :
-            type_id == "calculator" ? "🧮" :
-            type_id == "notes" ? "🗒️" :
-            type_id == "calendar" ? "📅" :
-            "⚙️";
+            type_id == "terminal" ? ">_" :
+            type_id == "weather" ? "W" :
+            type_id == "moon" ? "O" :
+            type_id == "jyotish" ? "*" :
+            type_id == "clock" ? "C" :
+            type_id == "system" ? "S" :
+            type_id == "rss" ? "N" :
+            type_id == "recent-files" ? "R" :
+            type_id == "search" || type_id == "universal-search" ? "/" :
+            type_id == "media" || type_id == "media-player" ? "M" :
+            type_id == "audio-player" ? "A" :
+            type_id == "video-player" ? "Vp" :
+            type_id == "media-viewer" ? "MV" :
+            type_id == "password" || type_id == "password-manager" ? "*" :
+            type_id == "viewer" ? "Vi" :
+            type_id == "document-editor" ? "D" :
+            type_id == "file-manager" ? "#" :
+            type_id == "processes" ? "P" :
+            type_id == "calculator" ? "=" :
+            type_id == "notes" ? "Nt" :
+            type_id == "calendar" ? "Ca" :
+            "*";
     }
 
     horizontal-stretch: 1;
@@ -79,7 +81,9 @@ component CatalogCard inherits Rectangle {
                 width: 100%;
                 height: 100%;
                 text: root.get-icon(root.type-id);
-                font-size: 22px;
+                color: card-ta.has-hover ? #ffffff : Theme.text-primary;
+                font-size: 15px;
+                font-weight: Theme.weight-semibold;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -343,7 +347,13 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
-                            type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
+                            type-id: "video-player"; glyph: "▶"; label: Strings.dock-widget-video-player;
+                            description: Strings.widget-video-player-desc;
+                            card-visible: WidgetCatalog.show-video-player;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media-viewer"; glyph: "🎞"; label: Strings.dock-widget-media-viewer;
                             description: Strings.widget-media-viewer-desc;
                             card-visible: WidgetCatalog.show-media-viewer;
                             pick(id) => { root.pick(id); }
@@ -434,7 +444,13 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
-                            type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
+                            type-id: "video-player"; glyph: "▶"; label: Strings.dock-widget-video-player;
+                            description: Strings.widget-video-player-desc;
+                            card-visible: WidgetCatalog.show-video-player;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media-viewer"; glyph: "🎞"; label: Strings.dock-widget-media-viewer;
                             description: Strings.widget-media-viewer-desc;
                             card-visible: WidgetCatalog.show-media-viewer;
                             pick(id) => { root.pick(id); }
@@ -667,7 +683,13 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
-                            type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
+                            type-id: "video-player"; glyph: "▶"; label: Strings.dock-widget-video-player;
+                            description: Strings.widget-video-player-desc;
+                            card-visible: WidgetCatalog.show-video-player;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "media-viewer"; glyph: "🎞"; label: Strings.dock-widget-media-viewer;
                             description: Strings.widget-media-viewer-desc;
                             card-visible: WidgetCatalog.show-media-viewer;
                             pick(id) => { root.pick(id); }

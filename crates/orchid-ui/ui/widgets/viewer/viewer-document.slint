@@ -92,6 +92,8 @@ export component ViewerDocumentView inherits Rectangle {
         Rectangle {
             height: 36px;
             background: Theme.surface-base;
+            clip: false;
+            z: 20;
 
             HorizontalLayout {
                 padding-left: 6px;
@@ -118,7 +120,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-save;
                         show: save-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -139,7 +141,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-print;
                         show: print-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -155,7 +157,7 @@ export component ViewerDocumentView inherits Rectangle {
                         clicked => { root.action("undo"); }
                     }
                     Text {
-                        text: "↩";
+                        text: "Un";
                         color: Theme.text-primary;
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
@@ -164,7 +166,7 @@ export component ViewerDocumentView inherits Rectangle {
 
                     if undo-ta.has-hover : Rectangle {
                         x: 0;
-                        y: parent.height + 4px;
+                        y: -undo-hint.preferred-height - 8px;
                         width: undo-hint.preferred-width + 12px;
                         height: undo-hint.preferred-height + 6px;
                         background: Theme.surface-raised;
@@ -193,7 +195,7 @@ export component ViewerDocumentView inherits Rectangle {
                         clicked => { root.action("redo"); }
                     }
                     Text {
-                        text: "↪";
+                        text: "Re";
                         color: Theme.text-primary;
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
@@ -202,7 +204,7 @@ export component ViewerDocumentView inherits Rectangle {
 
                     if redo-ta.has-hover : Rectangle {
                         x: 0;
-                        y: parent.height + 4px;
+                        y: -redo-hint.preferred-height - 8px;
                         width: redo-hint.preferred-width + 12px;
                         height: redo-hint.preferred-height + 6px;
                         background: Theme.surface-raised;
@@ -244,7 +246,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-bold;
                         show: bold-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -265,7 +267,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-italic;
                         show: italic-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -286,7 +288,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-underline;
                         show: underline-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -307,7 +309,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-strikethrough;
                         show: strike-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -328,7 +330,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-highlight;
                         show: hl-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -349,7 +351,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-shade;
                         show: shade-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -370,7 +372,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-superscript;
                         show: super-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -391,7 +393,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-subscript;
                         show: sub-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -412,7 +414,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-clear-formatting;
                         show: clear-fmt-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -441,7 +443,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-link;
                         show: link-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -469,7 +471,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-font-smaller;
                         show: fs-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -505,7 +507,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-font-larger;
                         show: fl-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -526,7 +528,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-font-family-prev;
                         show: ff-prev-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -549,7 +551,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-font-family-next;
                         show: ff-label-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -570,7 +572,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-font-family-next;
                         show: ff-next-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -588,7 +590,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-color-black;
                         show: color-black-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
                 Rectangle {
@@ -604,7 +606,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-color-red;
                         show: color-red-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
                 Rectangle {
@@ -620,7 +622,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-color-blue;
                         show: color-blue-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
                 Rectangle {
@@ -636,7 +638,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-color-green;
                         show: color-green-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -664,7 +666,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-align-left;
                         show: al-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -685,7 +687,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-align-center;
                         show: ac-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -706,7 +708,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-align-right;
                         show: ar-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -727,7 +729,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-align-justify;
                         show: aj-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -755,7 +757,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-list-bullet;
                         show: bullet-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -776,7 +778,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-list-numbered;
                         show: num-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -797,7 +799,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-space-before-less;
                         show: sb-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -818,7 +820,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-space-before-more;
                         show: sb-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -839,7 +841,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-space-after-less;
                         show: sp-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -860,7 +862,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-space-after-more;
                         show: sp-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -881,7 +883,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-line-spacing-less;
                         show: ln-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -902,7 +904,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-line-spacing-more;
                         show: ln-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -923,7 +925,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-margin-less;
                         show: mar-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -944,7 +946,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-margin-more;
                         show: mar-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -965,7 +967,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-indent-less;
                         show: ind-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -986,7 +988,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-indent-more;
                         show: ind-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1007,7 +1009,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-indent-right-less;
                         show: ir-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1028,7 +1030,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-indent-right-more;
                         show: ir-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1049,7 +1051,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-first-line-less;
                         show: fl-less.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1070,7 +1072,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-first-line-more;
                         show: fl-more.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1091,7 +1093,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-page-size;
                         show: pg-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1119,7 +1121,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-image-insert;
                         show: img-ins.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1140,7 +1142,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-insert;
                         show: t-ins.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1161,7 +1163,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-row-insert;
                         show: tr-ins.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1182,7 +1184,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-row-delete;
                         show: tr-del.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1203,7 +1205,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-col-insert;
                         show: tc-ins.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1224,7 +1226,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-col-delete;
                         show: tc-del.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1245,7 +1247,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-merge;
                         show: t-merge.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1266,7 +1268,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-table-unmerge;
                         show: t-unmerge.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1294,7 +1296,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-zoom-out;
                         show: zoom-out-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1315,7 +1317,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-zoom-reset;
                         show: zoom-pct-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1336,7 +1338,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-zoom-in;
                         show: zoom-in-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1371,7 +1373,7 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-find;
                         show: find-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
@@ -1392,14 +1394,14 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-toggle-source;
                         show: mode-ta.has-hover;
-                        below: true;
+                        below: false;
                     }
                 }
 
                 Rectangle { horizontal-stretch: 1; }
 
                 if model.dirty || root.locally-dirty : Text {
-                    text: "●";
+                    text: "*";
                     color: #eab308;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
@@ -1508,7 +1510,7 @@ export component ViewerDocumentView inherits Rectangle {
                             clicked => { root.find-request(root.find-query, false, root.find-match-case); }
                         }
                         Text {
-                            text: "↑";
+                            text: "^";
                             color: Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
@@ -1529,7 +1531,7 @@ export component ViewerDocumentView inherits Rectangle {
                             clicked => { root.find-request(root.find-query, true, root.find-match-case); }
                         }
                         Text {
-                            text: "↓";
+                            text: "v";
                             color: Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
@@ -1562,7 +1564,7 @@ export component ViewerDocumentView inherits Rectangle {
                             clicked => { root.find-open = false; }
                         }
                         Text {
-                            text: "×";
+                            text: "x";
                             color: Theme.text-primary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
@@ -2182,7 +2184,7 @@ export component ViewerDocumentView inherits Rectangle {
                     overflow: elide;
                 }
                 if model.dirty || root.locally-dirty : Text {
-                    text: "●";
+                    text: "*";
                     color: #eab308;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
