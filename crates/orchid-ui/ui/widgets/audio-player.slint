@@ -207,6 +207,21 @@ export component AudioPlayerView inherits Rectangle {
                 }
             }
 
+            Rectangle {
+                border-radius: Theme.radius-md;
+                background: Theme.surface-base;
+                width: rescan-txt.preferred-width + 16px;
+                TouchArea { clicked => { root.command("rescan"); } }
+                rescan-txt := Text {
+                    text: root.model.rescan-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%; height: 100%;
+                }
+            }
+
             if root.model.browse-tab == 4 : Rectangle {
                 border-radius: Theme.radius-md;
                 background: Theme.surface-base;
