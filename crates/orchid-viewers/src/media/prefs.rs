@@ -1,4 +1,7 @@
 //! Persist media viewer prefs across sessions.
+//!
+//! Volume / mute here belong to the Media Viewer only. The Audio Player keeps
+//! its own volume in widget state and does not read or write this file.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

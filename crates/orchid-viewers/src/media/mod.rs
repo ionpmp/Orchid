@@ -165,6 +165,16 @@ impl MediaViewer {
         self.engine.play_pause();
     }
 
+    /// Pause if currently playing.
+    pub fn pause(&self) {
+        self.engine.pause();
+    }
+
+    /// Resume if currently paused.
+    pub fn resume(&self) {
+        self.engine.resume();
+    }
+
     /// Seek relative seconds.
     pub fn seek_rel(&self, seconds: f64) {
         self.engine.seek_rel(seconds);
@@ -364,7 +374,9 @@ impl MediaViewer {
     /// Apply a media command string from the UI.
     pub fn apply_command(&self, command: &str) {
         match command {
-            "play-pause" | "play" | "pause" => self.play_pause(),
+            "play-pause" => self.play_pause(),
+            "play" => self.resume(),
+            "pause" => self.pause(),
             "stop" => self.stop(),
             "frame-fwd" => self.frame_fwd(),
             "frame-back" => self.frame_back(),

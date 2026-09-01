@@ -433,6 +433,7 @@ impl ViewerWidgetInner {
             self.schedule_thumbs_and_preload();
         }
         if is_media_path(&path) {
+            crate::builtin::audio_player::pause_all();
             self.after_media_opened(&path).await;
             self.schedule_media_ticks();
             #[cfg(windows)]
@@ -2099,6 +2100,26 @@ fn live_inner(instance_id: Uuid) -> WidgetResult<Arc<ViewerWidgetInner>> {
         .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))
 }
 
+/// Pause every live media viewer that is currently playing.
+pub async fn pause_all_media() {
+    let ids: Vec<Uuid> = VIEWER_LIVE.iter().map(|e| *e.key()).collect();
+    for id in ids {
+        let Some(inner) = VIEWER_LIVE.get(&id).map(|e| Arc::clone(e.value())) else {
+            continue;
+        };
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            continue;
+        };
+        let Some(media) = v.as_any().downcast_ref::<MediaViewer>() else {
+            continue;
+        };
+        if media.is_playing() {
+            media.pause();
+        }
+    }
+}
+
 /// Current open path for a live viewer instance, if any.
 #[must_use]
 pub fn current_path(instance_id: Uuid) -> Option<orchid_fs::FsPath> {
@@ -3542,6 +3563,11 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         let Some(media) = v.as_any().downcast_ref::<MediaViewer>() else {
             return Ok(());
         };
+        if command == "play-pause" && !media.is_playing() {
+            crate::builtin::audio_player::pause_all();
+        } else if command == "play" {
+            crate::builtin::audio_player::pause_all();
+        }
         media.apply_command(command);
     }
     inner.schedule_media_ticks();
