@@ -125,9 +125,7 @@ impl PlayerSession {
     }
 
     pub fn pause(&self) {
-        if self.is_playing() {
-            self.engine.play_pause();
-        }
+        self.engine.pause();
     }
 
     pub fn cycle_eq(&self) {

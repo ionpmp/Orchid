@@ -160,6 +160,8 @@ enum EngineCmd {
     /// Append a file to the mpv playlist (prefetch for gapless).
     PlaylistAppend(PathBuf),
     PlayPause,
+    /// Force pause (`true`) or unpause (`false`) without toggling.
+    SetPaused(bool),
     SeekRel(f64),
     SeekAbs(f64),
     SetVolume(f64),
@@ -289,6 +291,16 @@ impl MpvEngine {
 
     pub fn play_pause(&self) {
         let _ = self.tx.send(EngineCmd::PlayPause);
+    }
+
+    /// Pause playback if currently playing (no-op when already paused).
+    pub fn pause(&self) {
+        let _ = self.tx.send(EngineCmd::SetPaused(true));
+    }
+
+    /// Resume playback if currently paused.
+    pub fn resume(&self) {
+        let _ = self.tx.send(EngineCmd::SetPaused(false));
     }
 
     pub fn seek_rel(&self, seconds: f64) {
@@ -489,8 +501,14 @@ fn run_worker(
         set_opt(api, handle, "idle", "yes")?;
         set_opt(api, handle, "video-sync", "audio")?;
         let prefs = prefs::load();
-        let _ = set_opt(api, handle, "volume", &format!("{}", prefs.volume));
-        let _ = set_opt(api, handle, "mute", if prefs.muted { "yes" } else { "no" });
+        // Audio Player persists volume in widget state — do not share Viewer prefs.
+        let (volume, muted) = if audio_only {
+            (100.0_f64, false)
+        } else {
+            (prefs.volume, prefs.muted)
+        };
+        let _ = set_opt(api, handle, "volume", &format!("{volume}"));
+        let _ = set_opt(api, handle, "mute", if muted { "yes" } else { "no" });
         // Keep musical pitch when speed ≠ 1 (mpv inserts scaletempo2).
         let _ = set_opt(
             api,
@@ -500,8 +518,8 @@ fn run_worker(
         );
         shared
             .volume
-            .store(prefs.volume.round() as u32, Ordering::Relaxed);
-        shared.muted.store(prefs.muted, Ordering::Relaxed);
+            .store(volume.round() as u32, Ordering::Relaxed);
+        shared.muted.store(muted, Ordering::Relaxed);
         shared.hwdec_mode.store(
             if audio_only {
                 1
@@ -573,7 +591,7 @@ fn run_worker(
                 break;
             }
             unsafe {
-                handle_cmd(api, handle, &shared, cmd);
+                handle_cmd(api, handle, &shared, mode, cmd);
             }
         }
         if quit {
@@ -680,7 +698,25 @@ unsafe fn create_render_context(
     }
 }
 
-unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, cmd: EngineCmd) {
+fn persist_transport(mode: EngineMode, shared: &SharedPlayback) {
+    if matches!(mode, EngineMode::Audio) {
+        return;
+    }
+    prefs::store(
+        shared.volume.load(Ordering::Relaxed) as f64,
+        shared.muted.load(Ordering::Relaxed),
+        shared.hwdec_mode.load(Ordering::Relaxed),
+        shared.pitch_preserve.load(Ordering::Relaxed),
+    );
+}
+
+unsafe fn handle_cmd(
+    api: &MpvApi,
+    handle: MpvHandle,
+    shared: &SharedPlayback,
+    mode: EngineMode,
+    cmd: EngineCmd,
+) {
     match cmd {
         EngineCmd::Load {
             path,
@@ -728,6 +764,10 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let _ = set_flag(api, handle, "pause", !paused);
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::SetPaused(paused) => {
+            let _ = set_flag(api, handle, "pause", paused);
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::SeekRel(secs) => {
             let _ = command_args(api, handle, &["seek", &format!("{secs}"), "relative"]);
             let sign = if secs >= 0.0 { "+" } else { "" };
@@ -743,12 +783,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let v = v.clamp(0.0, 150.0);
             let _ = set_double(api, handle, "volume", v);
             shared.volume.store(v as u32, Ordering::Relaxed);
-            prefs::store(
-                v,
-                shared.muted.load(Ordering::Relaxed),
-                shared.hwdec_mode.load(Ordering::Relaxed),
-                shared.pitch_preserve.load(Ordering::Relaxed),
-            );
+            persist_transport(mode, shared);
             flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
         }
@@ -757,12 +792,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let v = (cur + d).clamp(0.0, 150.0);
             let _ = set_double(api, handle, "volume", v);
             shared.volume.store(v as u32, Ordering::Relaxed);
-            prefs::store(
-                v,
-                shared.muted.load(Ordering::Relaxed),
-                shared.hwdec_mode.load(Ordering::Relaxed),
-                shared.pitch_preserve.load(Ordering::Relaxed),
-            );
+            persist_transport(mode, shared);
             flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
         }
@@ -789,19 +819,16 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let muted = get_flag(api, handle, "mute").unwrap_or(false);
             let _ = set_flag(api, handle, "mute", !muted);
             shared.muted.store(!muted, Ordering::Relaxed);
-            let vol = shared.volume.load(Ordering::Relaxed) as f64;
-            prefs::store(
-                vol,
-                !muted,
-                shared.hwdec_mode.load(Ordering::Relaxed),
-                shared.pitch_preserve.load(Ordering::Relaxed),
-            );
+            persist_transport(mode, shared);
             flash_osd(
                 shared,
                 if !muted {
                     "Muted".into()
                 } else {
-                    format!("Vol {:.0}%", vol)
+                    format!(
+                        "Vol {}%",
+                        shared.volume.load(Ordering::Relaxed)
+                    )
                 },
             );
             shared.dirty.store(true, Ordering::Release);
@@ -925,7 +952,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::CycleHwdec => {
-            apply_next_hwdec(api, handle, shared);
+            apply_next_hwdec(api, handle, shared, mode);
             let label = shared.hwdec_label.read().clone();
             flash_osd(
                 shared,
@@ -983,12 +1010,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
             let next = !shared.pitch_preserve.load(Ordering::Relaxed);
             shared.pitch_preserve.store(next, Ordering::Relaxed);
             let _ = set_flag(api, handle, "audio-pitch-correction", next);
-            prefs::store(
-                shared.volume.load(Ordering::Relaxed) as f64,
-                shared.muted.load(Ordering::Relaxed),
-                shared.hwdec_mode.load(Ordering::Relaxed),
-                next,
-            );
+            persist_transport(mode, shared);
             flash_osd(
                 shared,
                 if next {
@@ -1350,18 +1372,18 @@ unsafe fn apply_next_eq(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback
 /// Preferred decode modes for the SW blit path (`auto-copy` keeps frames in system RAM).
 const HWDEC_MODES: &[&str] = &["auto-copy", "no"];
 
-unsafe fn apply_next_hwdec(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+unsafe fn apply_next_hwdec(
+    api: &MpvApi,
+    handle: MpvHandle,
+    shared: &SharedPlayback,
+    mode: EngineMode,
+) {
     let next = (shared.hwdec_mode.load(Ordering::Relaxed) + 1) % HWDEC_MODES.len() as u32;
     shared.hwdec_mode.store(next, Ordering::Relaxed);
-    let mode = HWDEC_MODES[next as usize];
-    let _ = set_string(api, handle, "hwdec", mode);
+    let mode_str = HWDEC_MODES[next as usize];
+    let _ = set_string(api, handle, "hwdec", mode_str);
     refresh_hwdec_label(api, handle, shared);
-    prefs::store(
-        shared.volume.load(Ordering::Relaxed) as f64,
-        shared.muted.load(Ordering::Relaxed),
-        next,
-        shared.pitch_preserve.load(Ordering::Relaxed),
-    );
+    persist_transport(mode, shared);
 }
 
 unsafe fn refresh_hwdec_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
