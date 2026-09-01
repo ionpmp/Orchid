@@ -102,9 +102,10 @@ release yet.
   (Ctrl+[/]), wheel seek and double-click fullscreen on the surface,
   and keyboard shortcuts. Side playlist panel (Q toggle; click row to jump).
   Drop files from Explorer onto a viewer to open them there. SW blit scales
-  to the widget viewport (capped at 1920×1080). Catalog
-  **Media Player** launcher opens a file picker then places a viewer on
-  the canvas (distinct from **Now Playing** SMTC). Bundle
+  to the widget viewport (capped at 1920×1080). Video transport chrome
+  auto-hides after ~2.5s idle (mouse move / keys / hover reveal; audio-only
+  keeps the bar). Catalog **Media Player** launcher opens a file picker then
+  places a viewer on the canvas (distinct from **Now Playing** SMTC). Bundle
   `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see
   `docs/BUILDING.md`); without it, chrome remains and files can still open
   in the system player.

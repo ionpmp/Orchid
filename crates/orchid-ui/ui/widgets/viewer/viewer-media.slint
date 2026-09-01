@@ -10,8 +10,33 @@ export component ViewerMediaView inherits Rectangle {
 
     background: #000000;
 
+    // Transport auto-hides during video; audio-only keeps chrome visible.
+    property <bool> chrome-peek: true;
+    property <bool> chrome-hover: false;
+    property <int> activity-gen: 0;
+    property <int> hide-seen: 0;
+    property <bool> chrome-on: !model.has-video || root.chrome-peek || root.chrome-hover;
+
+    function bump-chrome() {
+        root.chrome-peek = true;
+        root.activity-gen = root.activity-gen + 1;
+    }
+
+    hide-chrome-timer := Timer {
+        interval: 2500ms;
+        running: model.has-video && model.available && root.chrome-peek && !root.chrome-hover;
+        triggered => {
+            if (root.activity-gen == root.hide-seen) {
+                root.chrome-peek = false;
+            } else {
+                root.hide-seen = root.activity-gen;
+            }
+        }
+    }
+
     focus-scope := FocusScope {
         key-pressed(event) => {
+            root.bump-chrome();
             if event.text == " " {
                 root.command("play-pause");
                 return accept;
@@ -263,7 +288,14 @@ export component ViewerMediaView inherits Rectangle {
 
             // Click / wheel / double-click on the media surface
             TouchArea {
+                moved => { root.bump-chrome(); }
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down {
+                        root.bump-chrome();
+                    }
+                }
                 clicked => {
+                    root.bump-chrome();
                     if model.available {
                         root.command("play-pause");
                     } else {
@@ -271,9 +303,11 @@ export component ViewerMediaView inherits Rectangle {
                     }
                 }
                 double-clicked => {
+                    root.bump-chrome();
                     root.command("fullscreen");
                 }
                 scroll-event(event) => {
+                    root.bump-chrome();
                     if event.delta-y > 0 {
                         root.command("seek-fwd-5");
                     }
@@ -349,10 +383,18 @@ export component ViewerMediaView inherits Rectangle {
             }
         }
 
-        // Transport chrome
-        Rectangle {
+        // Transport chrome (collapses when auto-hidden so the video can expand)
+        if root.chrome-on : Rectangle {
             height: 72px;
             background: Theme.surface-base;
+            chrome-ta := TouchArea {
+                changed has-hover => {
+                    root.chrome-hover = self.has-hover;
+                    if self.has-hover {
+                        root.bump-chrome();
+                    }
+                }
+            }
 
             VerticalLayout {
                 padding-left: 12px;
@@ -367,11 +409,13 @@ export component ViewerMediaView inherits Rectangle {
                     background: transparent;
                     scrub := TouchArea {
                         moved => {
+                            root.bump-chrome();
                             if self.pressed && self.width > 0 {
                                 root.seek-frac((self.mouse-x / self.width));
                             }
                         }
                         clicked => {
+                            root.bump-chrome();
                             if self.width > 0 {
                                 root.seek-frac((self.mouse-x / self.width));
                             }
