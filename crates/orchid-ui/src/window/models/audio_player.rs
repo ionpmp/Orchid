@@ -30,6 +30,9 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             shuffle: false,
             repeat: 0,
             sleep_label: SharedString::new(),
+            eq_label: SharedString::new(),
+            lyrics_line: SharedString::new(),
+            has_lyrics: false,
             roots_label: SharedString::new(),
             empty_hint: SharedString::new(),
             has_cover: false,
@@ -61,6 +64,9 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         shuffle: false,
         repeat: 0,
         sleep_label: SharedString::new(),
+        eq_label: SharedString::new(),
+        lyrics_line: SharedString::new(),
+        has_lyrics: false,
         roots_label: SharedString::new(),
         empty_hint: SharedString::new(),
         has_cover: false,
@@ -76,6 +82,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         new_playlist_label: locale.tr("audio-player-new-playlist").into(),
         no_track_label: locale.tr("audio-player-no-track").into(),
         sleep_off_label: locale.tr("audio-player-sleep-off").into(),
+        eq_off_label: locale.tr("audio-player-eq-off").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -93,6 +100,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.new_playlist_label = base.new_playlist_label;
     m.no_track_label = base.no_track_label;
     m.sleep_off_label = base.sleep_off_label;
+    m.eq_off_label = base.eq_off_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }
@@ -170,6 +178,9 @@ pub(crate) fn build_audio_player_model(
             shuffle: p.shuffle,
             repeat: i32::from(p.repeat),
             sleep_label: p.sleep_label.clone().into(),
+            eq_label: p.eq_label.clone().into(),
+            lyrics_line: p.lyrics_line.clone().into(),
+            has_lyrics: p.has_lyrics,
             roots_label: if p.library_count > 0 && !p.roots_label.is_empty() {
                 format!("{} tracks · {}", p.library_count, p.roots_label).into()
             } else if p.library_count > 0 {

@@ -4,6 +4,7 @@
 
 pub mod config;
 pub mod library;
+pub mod lyrics;
 pub mod player;
 pub mod queue;
 pub mod sleep;
@@ -32,6 +33,7 @@ use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::{AudioPlayerConfig, BrowseTab, PlaylistEntry, RepeatMode};
 use library::{LibraryIndex, TrackRow};
+use lyrics::Lyrics;
 use player::PlayerSession;
 use queue::PlayQueue;
 use sleep::SleepTimer;
@@ -48,6 +50,7 @@ struct AudioHandle {
     queue: Arc<RwLock<PlayQueue>>,
     player: Arc<PlayerSession>,
     sleep: Arc<RwLock<SleepTimer>>,
+    lyrics: Arc<RwLock<Lyrics>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -78,11 +81,17 @@ impl AudioHandle {
             q.current().map(str::to_string)
         };
         if let Some(path) = path {
-            self.player.load_path(PathBuf::from(&path).as_path());
-            self.player.set_volume(f64::from(self.config.read().volume));
+            self.load_path(&path);
         }
         self.sync_queue_to_config();
         self.publish();
+    }
+
+    fn load_path(&self, path: &str) {
+        let p = PathBuf::from(path);
+        self.player.load_path(p.as_path());
+        *self.lyrics.write() = Lyrics::load_for(p.as_path());
+        self.player.set_volume(f64::from(self.config.read().volume));
     }
 }
 
@@ -162,7 +171,7 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         "next" => {
             let next = h.queue.write().next().map(str::to_string);
             if let Some(path) = next {
-                h.player.load_path(PathBuf::from(path).as_path());
+                h.load_path(&path);
                 h.sync_queue_to_config();
                 h.publish();
             }
@@ -170,7 +179,7 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         "prev" | "previous" => {
             let prev = h.queue.write().previous().map(str::to_string);
             if let Some(path) = prev {
-                h.player.load_path(PathBuf::from(path).as_path());
+                h.load_path(&path);
                 h.sync_queue_to_config();
                 h.publish();
             }
@@ -197,6 +206,10 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         "sleep" => {
             h.sleep.write().cycle();
+            h.publish();
+        }
+        "eq" => {
+            h.player.cycle_eq();
             h.publish();
         }
         "rescan" => {
@@ -386,6 +399,9 @@ impl AudioPlayerWidget {
         if config.volume > 0.0 {
             player.set_volume(f64::from(config.volume));
         }
+        if config.muted != player.muted() {
+            player.mute_toggle();
+        }
         let handle = Arc::new(AudioHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
@@ -393,6 +409,7 @@ impl AudioPlayerWidget {
             queue: Arc::new(RwLock::new(queue)),
             player,
             sleep: Arc::new(RwLock::new(SleepTimer::default())),
+            lyrics: Arc::new(RwLock::new(Lyrics::default())),
             bus,
         });
         AUDIO_LIVE.insert(instance_id, Arc::clone(&handle));
@@ -567,6 +584,9 @@ impl AudioPlayerWidget {
             shuffle: q.shuffle,
             repeat: q.repeat.as_u8(),
             sleep_label: self.handle.sleep.read().label.clone(),
+            eq_label: self.handle.player.eq_label(),
+            lyrics_line: self.handle.lyrics.read().line_at(pos),
+            has_lyrics: !self.handle.lyrics.read().is_empty(),
             library_count: lib.tracks.len() as u32,
             roots_label,
             empty_hint,
@@ -586,7 +606,7 @@ impl AudioPlayerWidget {
                 if handle.player.take_eof() {
                     let next = handle.queue.write().next().map(str::to_string);
                     if let Some(path) = next {
-                        handle.player.load_path(PathBuf::from(path).as_path());
+                        handle.load_path(&path);
                         handle.sync_queue_to_config();
                         dirty = true;
                     }

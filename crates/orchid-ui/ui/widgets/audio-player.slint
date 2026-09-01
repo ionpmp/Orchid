@@ -233,27 +233,29 @@ export component AudioPlayerView inherits Rectangle {
                     height: 40px;
                     background: t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent);
                     border-radius: Theme.radius-md;
-                    t-ta := TouchArea {
-                        clicked => { root.command("play-track:" + t.path); }
-                    }
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 8px;
                         spacing: 8px;
-                        VerticalLayout {
-                            alignment: center;
+                        Rectangle {
                             horizontal-stretch: 1;
-                            Text {
-                                text: t.title;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-md;
-                                overflow: elide;
+                            t-ta := TouchArea {
+                                clicked => { root.command("play-track:" + t.path); }
                             }
-                            Text {
-                                text: t.subtitle;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                overflow: elide;
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: t.title;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-md;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: t.subtitle;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    overflow: elide;
+                                }
                             }
                         }
                         Rectangle {
@@ -281,7 +283,7 @@ export component AudioPlayerView inherits Rectangle {
         }
 
         Rectangle {
-            height: 96px;
+            height: root.model.has-lyrics ? 120px : 96px;
             background: Theme.surface-raised;
             border-radius: Theme.radius-md;
 
@@ -325,6 +327,12 @@ export component AudioPlayerView inherits Rectangle {
                         Text {
                             text: root.model.artist;
                             color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            overflow: elide;
+                        }
+                        if root.model.has-lyrics : Text {
+                            text: root.model.lyrics-line;
+                            color: Theme.accent-brand;
                             font-size: Theme.font-size-sm;
                             overflow: elide;
                         }
@@ -435,12 +443,71 @@ export component AudioPlayerView inherits Rectangle {
                             width: 100%; height: 100%;
                         }
                     }
+                    vol-chip := Rectangle {
+                        width: 56px;
+                        height: 24px;
+                        VerticalLayout {
+                            spacing: 2px;
+                            alignment: center;
+                            Text {
+                                text: root.model.muted ? "M" : (root.model.volume + "%");
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                            }
+                            Rectangle {
+                                height: 3px;
+                                background: Theme.surface-base;
+                                border-radius: 1px;
+                                Rectangle {
+                                    height: parent.height;
+                                    width: parent.width * min(1.0, root.model.volume / 150);
+                                    background: Theme.accent-brand;
+                                    border-radius: 1px;
+                                }
+                            }
+                        }
+                        TouchArea {
+                            clicked => {
+                                if self.width > 0 {
+                                    root.command("volume:" + (self.mouse-x / self.width * 150));
+                                }
+                            }
+                            moved => {
+                                if self.pressed && self.width > 0 {
+                                    root.command("volume:" + (self.mouse-x / self.width * 150));
+                                }
+                            }
+                            double-clicked => { root.command("mute"); }
+                            scroll-event(event) => {
+                                if event.delta-y > 0 {
+                                    root.command("volume:" + min(150, root.model.volume + 5));
+                                }
+                                if event.delta-y < 0 {
+                                    root.command("volume:" + max(0, root.model.volume - 5));
+                                }
+                                return accept;
+                            }
+                        }
+                    }
                     Rectangle {
                         width: sleep-txt.preferred-width + 10px; height: 24px;
                         TouchArea { clicked => { root.command("sleep"); } }
                         sleep-txt := Text {
                             text: root.model.sleep-label != "" ? root.model.sleep-label : root.model.sleep-off-label;
                             color: root.model.sleep-label != "" ? Theme.accent-brand : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: 100%; height: 100%;
+                        }
+                    }
+                    Rectangle {
+                        width: eq-txt.preferred-width + 10px; height: 24px;
+                        TouchArea { clicked => { root.command("eq"); } }
+                        eq-txt := Text {
+                            text: root.model.eq-label != "" ? root.model.eq-label : root.model.eq-off-label;
+                            color: root.model.eq-label != "" ? Theme.accent-brand : Theme.text-tertiary;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;

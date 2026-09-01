@@ -114,6 +114,15 @@ impl PlayerSession {
             self.engine.play_pause();
         }
     }
+
+    pub fn cycle_eq(&self) {
+        self.engine.cycle_eq();
+    }
+
+    #[must_use]
+    pub fn eq_label(&self) -> String {
+        self.engine.shared.eq_label.read().clone()
+    }
 }
 
 impl Default for PlayerSession {
