@@ -70,7 +70,15 @@ export component ViewerMediaView inherits Rectangle {
                 return accept;
             }
             if event.text == "f" || event.text == "F" || event.text == Key.F11 {
-                root.command("fullscreen");
+                root.command(event.modifiers.shift ? "kiosk" : "fullscreen");
+                return accept;
+            }
+            if event.text == Key.Escape {
+                root.command("exit-immersive");
+                return accept;
+            }
+            if (event.text == "m" || event.text == "M") && event.modifiers.shift {
+                root.command("next-monitor");
                 return accept;
             }
             if event.text == "m" || event.text == "M" {
@@ -98,9 +106,19 @@ export component ViewerMediaView inherits Rectangle {
                     root.command("screenshot");
                 } else if event.modifiers.control {
                     root.command("sub-add");
+                } else if event.modifiers.shift {
+                    root.command("toggle-sub");
                 } else {
-                    root.command(event.modifiers.shift ? "toggle-sub" : "cycle-sub");
+                    root.command("cycle-sub");
                 }
+                return accept;
+            }
+            if event.text == "g" || event.text == "G" {
+                root.command("cycle-sub-style");
+                return accept;
+            }
+            if event.text == "u" || event.text == "U" {
+                root.command("cycle-replaygain");
                 return accept;
             }
             if event.text == "." {
@@ -594,6 +612,18 @@ export component ViewerMediaView inherits Rectangle {
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("cycle-sub-style"); }
+                        }
+                    }
+                    if model.sub-style-label != "" : Text {
+                        text: model.sub-style-label;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("cycle-sub-style"); }
+                        }
                     }
                     if model.audio-label != "" : Text {
                         text: model.audio-label;
@@ -618,6 +648,15 @@ export component ViewerMediaView inherits Rectangle {
                         color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                    }
+                    if model.replaygain-label != "" : Text {
+                        text: model.replaygain-label;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("cycle-replaygain"); }
+                        }
                     }
                     if model.hwdec-label != "" : Text {
                         text: model.hwdec-label;

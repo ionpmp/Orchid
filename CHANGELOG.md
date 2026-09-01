@@ -107,11 +107,13 @@ release yet.
   keeps the bar).   Pitch-preserving speed via mpv `audio-pitch-correction`
   / scaletempo2 (K or click speed chip to toggle; persisted). Paused idle
   skips UI republish / slows mpv polling; catalog picker remembers the last
-  media folder. Catalog **Media Player** launcher opens a file picker then
-  places a viewer on the canvas (distinct from **Now Playing** SMTC). Bundle
-  `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see
-  `docs/BUILDING.md`); without it, chrome remains and files can still open
-  in the system player.
+  media folder. Subtitle style presets (G: outline / yellow / box / cyan;
+  Ctrl+0 resets). ReplayGain off/track/album (U). Shift+F kiosk, Esc exits
+  immersive, Shift+M next monitor. Catalog **Media Player** launcher opens a
+  file picker then places a viewer on the canvas (distinct from **Now Playing**
+  SMTC). Bundle `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/`
+  (see `docs/BUILDING.md`); without it, chrome remains and files can still
+  open in the system player.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
 - Image display: fit-to-window / width / height, 1:1, shrink-if-larger
