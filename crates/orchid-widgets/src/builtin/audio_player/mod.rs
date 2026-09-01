@@ -96,7 +96,51 @@ impl AudioHandle {
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
         self.player.set_volume(f64::from(self.config.read().volume));
         #[cfg(windows)]
-        smtc::set_active(self.instance_id);
+        {
+            crate::builtin::viewer::smtc_publisher::set_active_audio(self.instance_id);
+            self.push_smtc();
+        }
+    }
+
+    #[cfg(windows)]
+    fn push_smtc(&self) {
+        use crate::builtin::viewer::smtc_publisher::{publish_now_playing, NowPlaying};
+        let cover = self.player.cover();
+        let (has_cover, cover_rgba, cover_width, cover_height) = match cover {
+            Some(f) => (true, f.rgba, f.width, f.height),
+            None => (false, std::sync::Arc::new(Vec::new()), 0, 0),
+        };
+        let title = self.player.title();
+        let title = if title.is_empty() {
+            self.queue
+                .read()
+                .current()
+                .map(|p| {
+                    std::path::Path::new(p)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(p)
+                        .to_string()
+                })
+                .unwrap_or_default()
+        } else {
+            title
+        };
+        publish_now_playing(
+            self.instance_id,
+            &NowPlaying {
+                available: self.player.available(),
+                title,
+                artist: self.player.artist(),
+                playing: self.player.is_playing(),
+                position_ms: self.player.position_ms(),
+                duration_ms: self.player.duration_ms(),
+                has_cover,
+                cover_rgba,
+                cover_width,
+                cover_height,
+            },
+        );
     }
 }
 
@@ -410,7 +454,6 @@ impl AudioPlayerWidget {
         bus: Arc<orchid_core::EventBus>,
     ) -> Self {
         config.normalize();
-        let library = LibraryIndex::scan(&config.library_roots);
         let queue = PlayQueue::from_paths(
             config.queue.clone(),
             config.queue_index as usize,
@@ -427,14 +470,17 @@ impl AudioPlayerWidget {
         let handle = Arc::new(AudioHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
-            library: Arc::new(RwLock::new(library)),
+            library: Arc::new(RwLock::new(LibraryIndex::default())),
             queue: Arc::new(RwLock::new(queue)),
             player,
             sleep: Arc::new(RwLock::new(SleepTimer::default())),
             lyrics: Arc::new(RwLock::new(Lyrics::default())),
             bus,
+            scanning: AtomicBool::new(false),
+            scan_gen: AtomicU64::new(0),
         });
         AUDIO_LIVE.insert(instance_id, Arc::clone(&handle));
+        kick_scan(Arc::clone(&handle));
         Self {
             instance_id,
             handle,
@@ -542,6 +588,8 @@ impl AudioPlayerWidget {
 
         let empty_hint = if cfg.library_roots.is_empty() {
             "audio-player-empty-roots".into()
+        } else if self.handle.scanning.load(Ordering::Acquire) {
+            "audio-player-scanning".into()
         } else if lib.tracks.is_empty() {
             "audio-player-empty-library".into()
         } else {
@@ -639,6 +687,8 @@ impl AudioPlayerWidget {
                     dirty = true;
                 }
                 if dirty || handle.player.is_playing() || handle.sleep.read().is_active() {
+                    #[cfg(windows)]
+                    handle.push_smtc();
                     handle.publish();
                 }
             }
@@ -679,6 +729,8 @@ impl Widget for AudioPlayerWidget {
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.refresh.stop();
         self.handle.sync_queue_to_config();
+        #[cfg(windows)]
+        crate::builtin::viewer::smtc_publisher::clear_active(self.instance_id);
         AUDIO_LIVE.remove(&self.instance_id);
         Ok(())
     }
@@ -716,16 +768,16 @@ impl Widget for AudioPlayerWidget {
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
         let mut cfg: AudioPlayerConfig = state_codec::restore_state(bytes).unwrap_or_default();
         cfg.normalize();
-        let library = LibraryIndex::scan(&cfg.library_roots);
         let queue = PlayQueue::from_paths(
             cfg.queue.clone(),
             cfg.queue_index as usize,
             cfg.shuffle,
             cfg.repeat,
         );
-        *self.handle.library.write() = library;
+        *self.handle.library.write() = LibraryIndex::default();
         *self.handle.queue.write() = queue;
         *self.handle.config.write() = cfg;
+        kick_scan(Arc::clone(&self.handle));
         Ok(())
     }
 
