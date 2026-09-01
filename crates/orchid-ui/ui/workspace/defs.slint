@@ -871,6 +871,7 @@ export struct AudioPlayerModel {
     remove-from-playlist-label: string,
     move-up-label: string,
     move-down-label: string,
+    play-group-label: string,
     engine-missing-label: string,
 }
 
@@ -1335,6 +1336,8 @@ export struct ViewerDocumentModel {
     preview-image: image,
     preview-width-px: int,
     preview-height-px: int,
+    /// Device pixels per CSS pixel in `preview-image` (`2` = HiDPI supersample).
+    preview-render-scale: int,
     save-label: string,
     print-label: string,
     undo-label: string,

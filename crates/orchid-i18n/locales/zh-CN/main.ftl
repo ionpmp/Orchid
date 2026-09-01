@@ -482,6 +482,7 @@ audio-player-delete-playlist = 删除
 audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
+audio-player-play-group = Play
 media-unsupported = 此平台不支持媒体控制
 media-play = 播放
 media-pause = 暂停

@@ -470,6 +470,9 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.config.write().browse_filter = raw.to_string();
             h.publish();
         }
+        cmd if let Some(raw) = cmd.strip_prefix("play-group:") => {
+            play_group(&h, raw);
+        }
         cmd if let Some(raw) = cmd.strip_prefix("play-track:") => {
             play_track(&h, raw);
         }
@@ -629,6 +632,37 @@ fn play_track(h: &AudioHandle, path: &str) {
         if q.shuffle {
             q.rebuild_order();
         }
+    }
+    h.load_current();
+}
+
+fn play_group(h: &AudioHandle, group_key: &str) {
+    let cfg = h.config.read().clone();
+    let lib = h.library.read();
+    let browse = lib.browse_rows(
+        cfg.browse_tab,
+        group_key,
+        &cfg.search_query,
+        None,
+        &cfg.favorites,
+    );
+    let paths: Vec<String> = browse.tracks.iter().map(|t| t.path.clone()).collect();
+    drop(lib);
+    if paths.is_empty() {
+        return;
+    }
+    {
+        let mut q = h.queue.write();
+        q.replace(paths, 0);
+        q.shuffle = cfg.shuffle;
+        q.repeat = cfg.repeat;
+        if q.shuffle {
+            q.rebuild_order();
+        }
+    }
+    {
+        let mut c = h.config.write();
+        c.browse_filter = group_key.to_string();
     }
     h.load_current();
 }

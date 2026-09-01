@@ -153,6 +153,7 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.source_mode == b.source_mode
                 && a.preview_width_px == b.preview_width_px
                 && a.preview_height_px == b.preview_height_px
+                && a.preview_render_scale == b.preview_render_scale
                 && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
                     || a.plain_text.as_ref() == b.plain_text.as_ref())
                 && (std::sync::Arc::ptr_eq(&a.preview_rgba, &b.preview_rgba)

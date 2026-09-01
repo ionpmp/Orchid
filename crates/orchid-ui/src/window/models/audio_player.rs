@@ -107,6 +107,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         remove_from_playlist_label: locale.tr("audio-player-remove-from-playlist").into(),
         move_up_label: locale.tr("audio-player-move-up").into(),
         move_down_label: locale.tr("audio-player-move-down").into(),
+        play_group_label: locale.tr("audio-player-play-group").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -139,6 +140,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.remove_from_playlist_label = base.remove_from_playlist_label;
     m.move_up_label = base.move_up_label;
     m.move_down_label = base.move_down_label;
+    m.play_group_label = base.play_group_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }

@@ -482,6 +482,7 @@ audio-player-delete-playlist = 삭제
 audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
+audio-player-play-group = Play
 media-unsupported = 이 플랫폼에서는 미디어 제어를 사용할 수 없습니다
 media-play = 재생
 media-pause = 일시 정지

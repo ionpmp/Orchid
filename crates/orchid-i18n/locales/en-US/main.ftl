@@ -748,6 +748,7 @@ audio-player-delete-playlist = Delete
 audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
+audio-player-play-group = Play
 media-unsupported = Media controls are not available on this platform
 media-play = Play
 media-pause = Pause

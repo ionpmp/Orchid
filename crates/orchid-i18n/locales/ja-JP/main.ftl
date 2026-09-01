@@ -482,6 +482,7 @@ audio-player-delete-playlist = 削除
 audio-player-remove = x
 audio-player-play-next = N>
 audio-player-enqueue = Q+
+audio-player-play-group = Play
 media-unsupported = このプラットフォームではメディアコントロールは利用できません
 media-play = 再生
 media-pause = 一時停止
