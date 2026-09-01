@@ -1,4 +1,4 @@
-//! Persist media viewer prefs (volume, mute, hwdec, pitch, last picker folder).
+//! Persist media viewer prefs across sessions.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -19,9 +19,22 @@ pub struct MediaPrefs {
     /// Last directory used by the catalog media file picker.
     #[serde(default)]
     pub last_folder: Option<PathBuf>,
+    /// Subtitle color/outline preset index.
+    #[serde(default)]
+    pub sub_style_index: u32,
+    /// ReplayGain mode index (0=off, 1=track, 2=album).
+    #[serde(default)]
+    pub replaygain_index: u32,
+    /// Whether the folder playlist side panel starts open.
+    #[serde(default = "default_playlist_panel_open")]
+    pub playlist_panel_open: bool,
 }
 
 fn default_pitch_preserve() -> bool {
+    true
+}
+
+fn default_playlist_panel_open() -> bool {
     true
 }
 
@@ -33,6 +46,9 @@ impl Default for MediaPrefs {
             hwdec_mode: 0,
             pitch_preserve: true,
             last_folder: None,
+            sub_style_index: 0,
+            replaygain_index: 0,
+            playlist_panel_open: true,
         }
     }
 }
@@ -67,7 +83,16 @@ fn save_file(prefs: &MediaPrefs) {
 
 static LOCK: Mutex<()> = Mutex::new(());
 
-/// Load last volume / mute (clamped).
+fn update(f: impl FnOnce(&mut MediaPrefs)) {
+    let Ok(_g) = LOCK.lock() else {
+        return;
+    };
+    let mut prefs = load_file();
+    f(&mut prefs);
+    save_file(&prefs);
+}
+
+/// Load prefs (volume clamped).
 #[must_use]
 pub fn load() -> MediaPrefs {
     let Ok(_g) = LOCK.lock() else {
@@ -78,25 +103,34 @@ pub fn load() -> MediaPrefs {
     prefs
 }
 
-/// Persist volume / mute / hwdec / pitch-preserve (keeps `last_folder`).
+/// Persist volume / mute / hwdec / pitch-preserve.
 pub fn store(volume: f64, muted: bool, hwdec_mode: u32, pitch_preserve: bool) {
-    let Ok(_g) = LOCK.lock() else {
-        return;
-    };
-    let mut prefs = load_file();
-    prefs.volume = volume.clamp(0.0, 150.0);
-    prefs.muted = muted;
-    prefs.hwdec_mode = hwdec_mode.min(1);
-    prefs.pitch_preserve = pitch_preserve;
-    save_file(&prefs);
+    update(|prefs| {
+        prefs.volume = volume.clamp(0.0, 150.0);
+        prefs.muted = muted;
+        prefs.hwdec_mode = hwdec_mode.min(1);
+        prefs.pitch_preserve = pitch_preserve;
+    });
+}
+
+/// Persist subtitle style + ReplayGain indices.
+pub fn store_look(sub_style_index: u32, replaygain_index: u32) {
+    update(|prefs| {
+        prefs.sub_style_index = sub_style_index;
+        prefs.replaygain_index = replaygain_index;
+    });
 }
 
 /// Remember the folder shown in the next media file picker.
 pub fn store_last_folder(folder: &Path) {
-    let Ok(_g) = LOCK.lock() else {
-        return;
-    };
-    let mut prefs = load_file();
-    prefs.last_folder = Some(folder.to_path_buf());
-    save_file(&prefs);
+    update(|prefs| {
+        prefs.last_folder = Some(folder.to_path_buf());
+    });
+}
+
+/// Persist playlist side-panel open state.
+pub fn store_playlist_panel_open(open: bool) {
+    update(|prefs| {
+        prefs.playlist_panel_open = open;
+    });
 }

@@ -23,6 +23,17 @@ pub use cover::{discover_cover_sidecars, load_cover_art, load_media_tags};
 pub use ffi::mpv_available;
 pub use sidecars::discover_sidecar_subs;
 
+/// Default playlist side-panel open state from prefs.
+#[must_use]
+pub fn media_playlist_panel_default() -> bool {
+    prefs::load().playlist_panel_open
+}
+
+/// Persist playlist side-panel open state.
+pub fn persist_media_playlist_panel(open: bool) {
+    prefs::store_playlist_panel_open(open);
+}
+
 /// Native file dialog for picking a local audio/video file.
 #[must_use]
 pub fn pick_media_file() -> Option<std::path::PathBuf> {
@@ -320,12 +331,16 @@ impl MediaViewer {
     }
 
     /// Match SW blit resolution to the widget viewport.
-    pub fn set_viewport(&self, width: f32, height: f32) {
-        let w = width.max(0.0).round() as u32;
+    /// When `playlist_panel_open`, reserves ~200px for the side list.
+    pub fn set_viewport(&self, width: f32, height: f32, playlist_panel_open: bool) {
+        let mut w = width.max(0.0).round() as u32;
         let h = height.max(0.0).round() as u32;
+        if playlist_panel_open {
+            w = w.saturating_sub(201);
+        }
         // Leave room for transport chrome (~72px) when height is the full widget.
         let video_h = h.saturating_sub(72);
-        self.engine.set_target_size(w, video_h.max(90));
+        self.engine.set_target_size(w.max(160), video_h.max(90));
     }
 
     /// Apply a media command string from the UI.
