@@ -13,9 +13,10 @@ export component ViewerMediaView inherits Rectangle {
     // Transport auto-hides during video; audio-only keeps chrome visible.
     property <bool> chrome-peek: true;
     property <bool> chrome-hover: false;
+    property <bool> chapters-open: false;
     property <int> activity-gen: 0;
     property <int> hide-seen: 0;
-    property <bool> chrome-on: !model.has-video || root.chrome-peek || root.chrome-hover;
+    property <bool> chrome-on: !model.has-video || root.chrome-peek || root.chrome-hover || root.chapters-open;
 
     function bump-chrome() {
         root.chrome-peek = true;
@@ -407,7 +408,7 @@ export component ViewerMediaView inherits Rectangle {
 
         // Transport chrome (collapses when auto-hidden so the video can expand)
         if root.chrome-on : Rectangle {
-            height: 72px;
+            height: root.chapters-open && model.chapter-items.length > 0 ? 192px : 72px;
             background: Theme.surface-base;
             chrome-ta := TouchArea {
                 changed has-hover => {
@@ -424,6 +425,42 @@ export component ViewerMediaView inherits Rectangle {
                 padding-top: 6px;
                 padding-bottom: 6px;
                 spacing: 6px;
+
+                if root.chapters-open && model.chapter-items.length > 0 : ListView {
+                    height: 114px;
+                    for item in model.chapter-items : Rectangle {
+                        height: 26px;
+                        background: item.selected ? Theme.surface-raised
+                            : ch-ta.has-hover ? Theme.surface-raised : transparent;
+                        ch-ta := TouchArea {
+                            clicked => {
+                                root.command("chapter:" + item.index);
+                                root.chapters-open = false;
+                                root.bump-chrome();
+                            }
+                        }
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 6px;
+                            Text {
+                                text: (item.index + 1);
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                width: 28px;
+                            }
+                            Text {
+                                text: item.name;
+                                color: item.selected ? Theme.accent-brand : Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
+                }
 
                 // Scrubber
                 Rectangle {
@@ -566,11 +603,43 @@ export component ViewerMediaView inherits Rectangle {
                     }
 
                     vol-chip := Rectangle {
-                        width: max(40px, vol-lab.preferred-width + 8px);
+                        width: 72px;
                         height: 24px;
                         background: transparent;
+                        VerticalLayout {
+                            spacing: 2px;
+                            alignment: center;
+                            vol-lab := Text {
+                                text: model.volume-label;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                            }
+                            Rectangle {
+                                height: 4px;
+                                width: parent.width;
+                                background: Theme.border-default;
+                                border-radius: 2px;
+                                Rectangle {
+                                    height: parent.height;
+                                    width: parent.width * model.volume-frac;
+                                    background: Theme.accent-brand;
+                                    border-radius: 2px;
+                                }
+                            }
+                        }
                         vol-ta := TouchArea {
-                            clicked => { root.command("mute"); }
+                            clicked => {
+                                if self.width > 0 {
+                                    root.command("volume:" + (self.mouse-x / self.width * 150));
+                                }
+                            }
+                            moved => {
+                                if self.pressed && self.width > 0 {
+                                    root.command("volume:" + (self.mouse-x / self.width * 150));
+                                }
+                            }
+                            double-clicked => { root.command("mute"); }
                             scroll-event(event) => {
                                 if event.delta-y > 0 {
                                     root.command("vol-up");
@@ -580,13 +649,6 @@ export component ViewerMediaView inherits Rectangle {
                                 }
                                 return accept;
                             }
-                        }
-                        vol-lab := Text {
-                            text: model.volume-label;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
                         }
                     }
                     Text {
@@ -630,12 +692,21 @@ export component ViewerMediaView inherits Rectangle {
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("cycle-audio"); }
+                        }
                     }
                     if model.chapter-label != "" : Text {
                         text: model.chapter-label;
-                        color: Theme.text-tertiary;
+                        color: root.chapters-open ? Theme.accent-brand : Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        TouchArea {
+                            clicked => {
+                                root.chapters-open = !root.chapters-open;
+                                root.bump-chrome();
+                            }
+                        }
                     }
                     if model.ab-label != "" : Text {
                         text: model.ab-label;
@@ -648,6 +719,9 @@ export component ViewerMediaView inherits Rectangle {
                         color: Theme.accent-brand;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("cycle-eq"); }
+                        }
                     }
                     if model.replaygain-label != "" : Text {
                         text: model.replaygain-label;

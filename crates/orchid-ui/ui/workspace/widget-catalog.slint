@@ -23,6 +23,8 @@ component CatalogCard inherits Rectangle {
             type_id == "recent-files" ? "🕒" :
             type_id == "search" || type_id == "universal-search" ? "🔍" :
             type_id == "media" || type_id == "media-player" ? "🎵" :
+            type_id == "audio-player" ? "♪" :
+            type_id == "media-viewer" ? "▶" :
             type_id == "password" || type_id == "password-manager" ? "🔑" :
             type_id == "viewer" ? "👁️" :
             type_id == "document-editor" ? "📝" :
@@ -335,6 +337,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
+                            type-id: "audio-player"; glyph: "♪"; label: Strings.dock-widget-audio-player;
+                            description: Strings.widget-audio-player-desc;
+                            card-visible: WidgetCatalog.show-audio-player;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
                             type-id: "media-viewer"; glyph: "▶"; label: Strings.dock-widget-media-viewer;
                             description: Strings.widget-media-viewer-desc;
                             card-visible: WidgetCatalog.show-media-viewer;
@@ -417,6 +425,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "media"; glyph: "N"; label: Strings.dock-widget-media;
                             description: Strings.widget-media-desc;
                             card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "audio-player"; glyph: "♪"; label: Strings.dock-widget-audio-player;
+                            description: Strings.widget-audio-player-desc;
+                            card-visible: WidgetCatalog.show-audio-player;
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
@@ -644,6 +658,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "media"; glyph: "N"; label: Strings.dock-widget-media;
                             description: Strings.widget-media-desc;
                             card-visible: WidgetCatalog.show-media;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "audio-player"; glyph: "♪"; label: Strings.dock-widget-audio-player;
+                            description: Strings.widget-audio-player-desc;
+                            card-visible: WidgetCatalog.show-audio-player;
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {

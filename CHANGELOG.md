@@ -115,6 +115,8 @@ release yet.
   (see `docs/BUILDING.md`); without it, chrome remains and files can still
   open in the system player. Subtitle style and ReplayGain choices persist;
   playlist panel open state and SW blit width account for the side list.
+  Chapters popup (click chapter chip), volume scrubber (drag / double-click
+  mute), clickable EQ and audio-track chips.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
 - Image display: fit-to-window / width / height, 1:1, shrink-if-larger
@@ -237,6 +239,9 @@ release yet.
   [`docs/ORCHID_FORMAT.md`](docs/ORCHID_FORMAT.md) (not implemented yet).
 
 #### Built-in widgets
+- **Audio Player**: local music library (Songs / Artists / Albums / Folders),
+  playlists and favorites, shuffle / repeat, sleep timer, shared audio-only
+  libmpv session (separate from SMTC Now Playing and Viewer media chrome).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
 - Weather, Moon (geometric phase disk), System indicators, Media, RSS,
   Recent files, Universal search, Password manager (KDBX4 + Windows Hello).

@@ -792,6 +792,65 @@ export struct MediaModel {
     thumbnail: image,
 }
 
+export struct AudioPlayerTrackItem {
+    path: string,
+    title: string,
+    subtitle: string,
+    is-current: bool,
+    is-favorite: bool,
+}
+
+export struct AudioPlayerGroupItem {
+    key: string,
+    label: string,
+    count: int,
+}
+
+export struct AudioPlayerPlaylistItem {
+    id: string,
+    name: string,
+    count: int,
+    is-active: bool,
+}
+
+export struct AudioPlayerModel {
+    engine-available: bool,
+    browse-tab: int,
+    browse-filter: string,
+    groups: [AudioPlayerGroupItem],
+    tracks: [AudioPlayerTrackItem],
+    playlists: [AudioPlayerPlaylistItem],
+    has-track: bool,
+    title: string,
+    artist: string,
+    album: string,
+    is-playing: bool,
+    progress: float,
+    position-label: string,
+    duration-label: string,
+    volume: int,
+    muted: bool,
+    shuffle: bool,
+    repeat: int,
+    sleep-label: string,
+    roots-label: string,
+    empty-hint: string,
+    has-cover: bool,
+    cover: image,
+    tab-songs: string,
+    tab-artists: string,
+    tab-albums: string,
+    tab-folders: string,
+    tab-playlists: string,
+    tab-now-playing: string,
+    back-label: string,
+    add-folder-label: string,
+    new-playlist-label: string,
+    no-track-label: string,
+    sleep-off-label: string,
+    engine-missing-label: string,
+}
+
 export struct PasswordEntryItem {
     id: string,
     title: string,
@@ -1388,6 +1447,13 @@ export struct ViewerMediaPlaylistItem {
     selected: bool,
 }
 
+export struct ViewerMediaChapterItem {
+    name: string,
+    /// 0-based chapter index; UI sends `chapter:index`.
+    index: int,
+    selected: bool,
+}
+
 export struct ViewerMediaModel {
     path-display: string,
     kind-label: string,
@@ -1404,6 +1470,8 @@ export struct ViewerMediaModel {
     position-label: string,
     duration-label: string,
     volume-label: string,
+    /// 0..1 of the 0..150 mpv volume range (for the volume scrubber).
+    volume-frac: float,
     speed-label: string,
     playlist-label: string,
     playlist-items: [ViewerMediaPlaylistItem],
@@ -1411,6 +1479,7 @@ export struct ViewerMediaModel {
     sub-label: string,
     audio-label: string,
     chapter-label: string,
+    chapter-items: [ViewerMediaChapterItem],
     ab-label: string,
     eq-label: string,
     sub-style-label: string,
@@ -1825,6 +1894,7 @@ export struct WidgetFrameModel {
     recent-files: RecentFilesModel,
     search: SearchModel,
     media: MediaModel,
+    audio-player: AudioPlayerModel,
     password: PasswordModel,
     viewer: ViewerModel,
     file-manager: FileManagerModel,

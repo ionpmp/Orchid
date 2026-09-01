@@ -7,9 +7,9 @@ use std::sync::Arc;
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel, ViewerEmptyModel,
-    ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin, ViewerMediaModel,
-    ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel, ViewerStatusModel, ViewerSyntaxLine,
-    ViewerSyntaxSegment, ViewerTextModel,
+    ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin, ViewerMediaChapterItem,
+    ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel, ViewerStatusModel,
+    ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -553,6 +553,7 @@ fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
         position_label: SharedString::from("0:00"),
         duration_label: SharedString::from("0:00"),
         volume_label: SharedString::new(),
+        volume_frac: 0.0,
         speed_label: SharedString::new(),
         playlist_label: SharedString::new(),
         playlist_items: ModelRc::new(VecModel::default()),
@@ -560,6 +561,7 @@ fn empty_viewer_media_model(locale: &LocaleManager) -> ViewerMediaModel {
         sub_label: SharedString::new(),
         audio_label: SharedString::new(),
         chapter_label: SharedString::new(),
+        chapter_items: ModelRc::new(VecModel::default()),
         ab_label: SharedString::new(),
         eq_label: SharedString::new(),
         sub_style_label: SharedString::new(),
@@ -661,6 +663,15 @@ fn build_media_snapshot(
             selected: item.selected,
         })
         .collect();
+    let chapter_items: Vec<ViewerMediaChapterItem> = s
+        .chapter_items
+        .iter()
+        .map(|item| ViewerMediaChapterItem {
+            name: item.name.clone().into(),
+            index: item.index as i32,
+            selected: item.selected,
+        })
+        .collect();
     ViewerMediaModel {
         path_display: s.path_display.clone().into(),
         kind_label: kind.into(),
@@ -676,6 +687,7 @@ fn build_media_snapshot(
         position_label: format_media_time(s.position_ms).into(),
         duration_label: format_media_time(s.duration_ms).into(),
         volume_label: volume_label.into(),
+        volume_frac: (s.volume as f32 / 150.0).clamp(0.0, 1.0),
         speed_label: speed_label.into(),
         playlist_label: playlist_label.into(),
         playlist_items: ModelRc::new(VecModel::from(playlist_items)),
@@ -683,6 +695,7 @@ fn build_media_snapshot(
         sub_label: sub.into(),
         audio_label: s.audio_label.clone().into(),
         chapter_label: s.chapter_label.clone().into(),
+        chapter_items: ModelRc::new(VecModel::from(chapter_items)),
         ab_label: s.ab_label.clone().into(),
         eq_label: s.eq_label.clone().into(),
         sub_style_label: s.sub_style_label.clone().into(),
