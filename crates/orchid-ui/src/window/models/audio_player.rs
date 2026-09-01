@@ -34,6 +34,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             repeat: 0,
             sleep_label: SharedString::new(),
             eq_label: SharedString::new(),
+            rg_label: SharedString::new(),
             speed_label: SharedString::new(),
             lyrics_line: SharedString::new(),
             has_lyrics: false,
@@ -72,6 +73,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         repeat: 0,
         sleep_label: SharedString::new(),
         eq_label: SharedString::new(),
+        rg_label: SharedString::new(),
         speed_label: SharedString::new(),
         lyrics_line: SharedString::new(),
         has_lyrics: false,
@@ -91,6 +93,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         no_track_label: locale.tr("audio-player-no-track").into(),
         sleep_off_label: locale.tr("audio-player-sleep-off").into(),
         eq_off_label: locale.tr("audio-player-eq-off").into(),
+        rg_off_label: locale.tr("audio-player-rg-off").into(),
         speed_off_label: locale.tr("audio-player-speed-off").into(),
         search_placeholder: locale.tr("audio-player-search-placeholder").into(),
         enqueue_label: locale.tr("audio-player-enqueue").into(),
@@ -100,6 +103,9 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         delete_playlist_label: locale.tr("audio-player-delete-playlist").into(),
         rename_playlist_label: locale.tr("audio-player-rename-playlist").into(),
         add_to_playlist_label: locale.tr("audio-player-add-to-playlist").into(),
+        remove_from_playlist_label: locale.tr("audio-player-remove-from-playlist").into(),
+        move_up_label: locale.tr("audio-player-move-up").into(),
+        move_down_label: locale.tr("audio-player-move-down").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -118,6 +124,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.no_track_label = base.no_track_label;
     m.sleep_off_label = base.sleep_off_label;
     m.eq_off_label = base.eq_off_label;
+    m.rg_off_label = base.rg_off_label;
     m.speed_off_label = base.speed_off_label;
     m.search_placeholder = base.search_placeholder;
     m.enqueue_label = base.enqueue_label;
@@ -127,6 +134,9 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.delete_playlist_label = base.delete_playlist_label;
     m.rename_playlist_label = base.rename_playlist_label;
     m.add_to_playlist_label = base.add_to_playlist_label;
+    m.remove_from_playlist_label = base.remove_from_playlist_label;
+    m.move_up_label = base.move_up_label;
+    m.move_down_label = base.move_down_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }
@@ -208,6 +218,7 @@ pub(crate) fn build_audio_player_model(
             repeat: i32::from(p.repeat),
             sleep_label: p.sleep_label.clone().into(),
             eq_label: p.eq_label.clone().into(),
+            rg_label: p.rg_label.clone().into(),
             speed_label: p.speed_label.clone().into(),
             lyrics_line: p.lyrics_line.clone().into(),
             has_lyrics: p.has_lyrics,

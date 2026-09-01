@@ -232,7 +232,7 @@ release yet.
   parley+swash canvas, selection and keyboard editing, tables (cell nav,
   insert/delete row/col, merge/unmerge cells, `tblGrid` widths, `gridSpan`/`vMerge` preview),
   inline images (body + cells),
-  Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), insert/edit/remove hyperlinks
+  Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), paragraph shading (`w:shd` fill + preview; Shd toggle), insert/edit/remove hyperlinks
   (Link toolbar / Ctrl+K; internal #bookmark), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), paragraph spacing (Sb±/Sp±), line spacing (auto Ln± + exact/atLeast round-trip), paragraph indent (w:ind left/right; Ind± / Ir± / Fl±), IME composition (preview), page margins from `pgMar` in preview (Mar+/-), Letter/A4 page size (Pg shows Ltr/A4), status word/char counts, find match-case (Aa), catalog **Document** launcher,
   canvas dock; Word/LibreOffice fixtures and round-trip tests.
 - Spec draft for native **`.orchid`** container — see
@@ -241,12 +241,13 @@ release yet.
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders),
   playlists (create / rename / delete / add tracks) and favorites, shuffle /
-  repeat, sleep timer, EQ presets, playback speed presets, soft volume boost
-  (to 150%), library search, add-to-queue / play-next / clear queue, gapless
-  prefetch, sidecar `.lrc` lyrics, background library scan, Windows SMTC (lock
-  screen / media keys), shared audio-only libmpv session (separate from SMTC
-  Now Playing and Viewer media chrome); widget-owned volume (not Viewer
-  `media_prefs`); mutual pause with Viewer.
+  repeat, sleep timer, EQ presets, ReplayGain, playback speed presets, soft
+  volume boost (to 150%), library search, add-to-queue / play-next / reorder /
+  clear queue, gapless prefetch, sidecar `.lrc` lyrics, background library scan,
+  focused keyboard transport, Windows SMTC (lock screen / media keys), shared
+  audio-only libmpv session (separate from SMTC Now Playing and Viewer media
+  chrome); widget-owned volume (not Viewer `media_prefs`); mutual pause with
+  Viewer.
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
 - Weather, Moon (geometric phase disk), System indicators, Media, RSS,
   Recent files, Universal search, Password manager (KDBX4 + Windows Hello).

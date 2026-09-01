@@ -336,8 +336,38 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.player.cycle_eq();
             h.publish();
         }
+        "rg" | "replaygain" => {
+            h.player.cycle_replaygain();
+            h.publish();
+        }
         "speed" => {
             h.player.cycle_speed();
+            h.publish();
+        }
+        "seek-back-5" => {
+            h.player.seek_rel(-5.0);
+            h.publish();
+        }
+        "seek-fwd-5" => {
+            h.player.seek_rel(5.0);
+            h.publish();
+        }
+        "seek-back-10" => {
+            h.player.seek_rel(-10.0);
+            h.publish();
+        }
+        "seek-fwd-10" => {
+            h.player.seek_rel(10.0);
+            h.publish();
+        }
+        "vol-up" => {
+            h.player.volume_delta(5.0);
+            h.sync_queue_to_config();
+            h.publish();
+        }
+        "vol-down" => {
+            h.player.volume_delta(-5.0);
+            h.sync_queue_to_config();
             h.publish();
         }
         "rescan" => {
@@ -476,6 +506,31 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
                 h.sync_queue_to_config();
                 h.publish();
             }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("queue-up:") => {
+            if h.queue.write().move_up(raw) {
+                h.prefetch_following();
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("queue-down:") => {
+            if h.queue.write().move_down(raw) {
+                h.prefetch_following();
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("remove-from-active-playlist:") => {
+            let mut cfg = h.config.write();
+            let id = cfg.active_playlist_id.clone();
+            if id.is_empty() {
+                cfg.favorites.retain(|p| p != raw);
+            } else if let Some(pl) = cfg.playlists.iter_mut().find(|p| p.id == id) {
+                pl.tracks.retain(|t| t != raw);
+            }
+            drop(cfg);
+            h.publish();
         }
         cmd if cmd == "clear-queue" => {
             {
@@ -844,6 +899,7 @@ impl AudioPlayerWidget {
             repeat: q.repeat.as_u8(),
             sleep_label: self.handle.sleep.read().label.clone(),
             eq_label: self.handle.player.eq_label(),
+            rg_label: self.handle.player.replaygain_label(),
             speed_label: self.handle.player.speed_label(),
             lyrics_line: self.handle.lyrics.read().line_at(pos),
             has_lyrics: !self.handle.lyrics.read().is_empty(),

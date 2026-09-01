@@ -222,6 +222,42 @@ impl PlayQueue {
         was_current
     }
 
+    /// Swap `path` with the previous entry. Keeps the current-track index on the same path.
+    pub fn move_up(&mut self, path: &str) -> bool {
+        let Some(i) = self.paths.iter().position(|p| p == path) else {
+            return false;
+        };
+        if i == 0 {
+            return false;
+        }
+        self.paths.swap(i - 1, i);
+        if self.index == i {
+            self.index = i - 1;
+        } else if self.index == i - 1 {
+            self.index = i;
+        }
+        self.rebuild_order();
+        true
+    }
+
+    /// Swap `path` with the next entry. Keeps the current-track index on the same path.
+    pub fn move_down(&mut self, path: &str) -> bool {
+        let Some(i) = self.paths.iter().position(|p| p == path) else {
+            return false;
+        };
+        if i + 1 >= self.paths.len() {
+            return false;
+        }
+        self.paths.swap(i, i + 1);
+        if self.index == i {
+            self.index = i + 1;
+        } else if self.index == i + 1 {
+            self.index = i;
+        }
+        self.rebuild_order();
+        true
+    }
+
     pub fn set_shuffle(&mut self, shuffle: bool) {
         self.shuffle = shuffle;
         self.rebuild_order();
@@ -303,5 +339,20 @@ mod tests {
         assert_eq!(q.index, 0);
         assert!(q.remove_path("b"));
         assert_eq!(q.current(), Some("c"));
+    }
+
+    #[test]
+    fn move_up_down_keeps_current_path() {
+        let mut q =
+            PlayQueue::from_paths(vec!["a".into(), "b".into(), "c".into()], 1, false, RepeatMode::Off);
+        assert_eq!(q.current(), Some("b"));
+        assert!(q.move_up("b"));
+        assert_eq!(q.paths, vec!["b", "a", "c"]);
+        assert_eq!(q.current(), Some("b"));
+        assert!(q.move_down("b"));
+        assert_eq!(q.paths, vec!["a", "b", "c"]);
+        assert_eq!(q.current(), Some("b"));
+        assert!(!q.move_up("a"));
+        assert!(!q.move_down("c"));
     }
 }
