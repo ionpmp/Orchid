@@ -102,6 +102,8 @@ pub struct DocumentSnapshot {
     pub link_url: String,
     /// True when page size matches ISO A4 (else treated as US Letter for the Pg control).
     pub page_is_a4: bool,
+    /// True when page width exceeds height (landscape).
+    pub page_landscape: bool,
 }
 
 /// Image snapshot.

@@ -711,6 +711,11 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                         if let Some(h) = attr_val(&e, "h").and_then(|v| v.parse().ok()) {
                             setup.height_twips = h;
                         }
+                        if attr_val(&e, "orient").as_deref() == Some("landscape")
+                            && setup.width_twips < setup.height_twips
+                        {
+                            std::mem::swap(&mut setup.width_twips, &mut setup.height_twips);
+                        }
                     }
                     "pgMar" => {
                         if let Some(v) = attr_val(&e, "top").and_then(|v| v.parse().ok()) {
@@ -1436,9 +1441,13 @@ fn write_sect_pr(writer: &mut Writer<Cursor<Vec<u8>>>, setup: &PageSetup) -> Res
     writer
         .write_event(Event::Start(BytesStart::new("w:sectPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    let landscape = setup.width_twips > setup.height_twips;
     let mut sz = BytesStart::new("w:pgSz");
     sz.push_attribute(("w:w", setup.width_twips.to_string().as_str()));
     sz.push_attribute(("w:h", setup.height_twips.to_string().as_str()));
+    if landscape {
+        sz.push_attribute(("w:orient", "landscape"));
+    }
     writer
         .write_event(Event::Empty(sz))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -2299,6 +2308,45 @@ mod tests {
         assert!(
             text.contains("w:pageBreakBefore"),
             "missing pageBreakBefore: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_page_orientation_landscape() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>Hi</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:pgSz w:w="12240" w:h="15840" w:orient="landscape"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(page_setup.width_twips, 15840);
+        assert_eq!(page_setup.height_twips, 12240);
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:orient=\"landscape\""),
+            "missing orient: {text}"
+        );
+        assert!(
+            text.contains("w:w=\"15840\"") && text.contains("w:h=\"12240\""),
+            "missing landscape pgSz dims: {text}"
         );
     }
 

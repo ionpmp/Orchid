@@ -206,6 +206,46 @@ fn cycle_page_size_letter_and_a4() {
 }
 
 #[test]
+fn toggle_page_orientation_swaps_dimensions() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 12240);
+        assert_eq!(ps.height_twips, 15840);
+    }
+    viewer.toggle_page_orientation().unwrap();
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 15840);
+        assert_eq!(ps.height_twips, 12240);
+    }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document snapshot");
+        };
+        assert!(snap.page_landscape);
+        assert!(!snap.page_is_a4);
+    }
+    viewer.cycle_page_size().unwrap();
+    {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        assert_eq!(ps.width_twips, 16838);
+        assert_eq!(ps.height_twips, 11906);
+    }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document snapshot");
+        };
+        assert!(snap.page_landscape);
+        assert!(snap.page_is_a4);
+    }
+}
+
+#[test]
 fn bump_indent_left_selection_steps_and_clamps() {
     let viewer = DocumentViewer::new();
     *viewer.document_mut() = Some(sample_doc());

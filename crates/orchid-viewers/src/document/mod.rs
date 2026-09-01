@@ -2310,13 +2310,42 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let mut next = doc.page_setup.clone();
+        let landscape = is_landscape_page(&next);
         if is_a4_page(&next) {
-            next.width_twips = PAGE_LETTER_WIDTH_TWIPS;
-            next.height_twips = PAGE_LETTER_HEIGHT_TWIPS;
+            if landscape {
+                next.width_twips = PAGE_LETTER_HEIGHT_TWIPS;
+                next.height_twips = PAGE_LETTER_WIDTH_TWIPS;
+            } else {
+                next.width_twips = PAGE_LETTER_WIDTH_TWIPS;
+                next.height_twips = PAGE_LETTER_HEIGHT_TWIPS;
+            }
+        } else if landscape {
+            next.width_twips = PAGE_A4_HEIGHT_TWIPS;
+            next.height_twips = PAGE_A4_WIDTH_TWIPS;
         } else {
             next.width_twips = PAGE_A4_WIDTH_TWIPS;
             next.height_twips = PAGE_A4_HEIGHT_TWIPS;
         }
+        if next == doc.page_setup {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetPageSetup { setup: next })?;
+        self.sync_preview_width_after_margin_change(doc);
+        Ok(())
+    }
+
+    /// Swap page width and height (portrait ↔ landscape).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_page_orientation(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut next = doc.page_setup.clone();
+        std::mem::swap(&mut next.width_twips, &mut next.height_twips);
         if next == doc.page_setup {
             return Ok(());
         }
@@ -2679,8 +2708,21 @@ fn clamp_margin_twips(v: i32) -> u32 {
     v.clamp(MARGIN_TWIPS_MIN, MARGIN_TWIPS_MAX) as u32
 }
 
+fn is_landscape_page(ps: &PageSetup) -> bool {
+    ps.width_twips > ps.height_twips
+}
+
+fn page_portrait_dims(ps: &PageSetup) -> (u32, u32) {
+    if is_landscape_page(ps) {
+        (ps.height_twips, ps.width_twips)
+    } else {
+        (ps.width_twips, ps.height_twips)
+    }
+}
+
 fn is_a4_page(ps: &PageSetup) -> bool {
-    ps.width_twips == PAGE_A4_WIDTH_TWIPS && ps.height_twips == PAGE_A4_HEIGHT_TWIPS
+    let (w, h) = page_portrait_dims(ps);
+    w == PAGE_A4_WIDTH_TWIPS && h == PAGE_A4_HEIGHT_TWIPS
 }
 
 fn bump_line_spacing(current: u32, delta: i32) -> u32 {
@@ -3455,6 +3497,7 @@ impl Viewer for DocumentViewer {
             (Arc::clone(&prev.bytes), prev.width_px, prev.height_px)
         };
         let page_is_a4 = is_a4_page(&doc.page_setup);
+        let page_landscape = is_landscape_page(&doc.page_setup);
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -3495,6 +3538,7 @@ impl Viewer for DocumentViewer {
             link_hover: *self.link_hover.lock(),
             link_url,
             page_is_a4,
+            page_landscape,
         })
     }
 
