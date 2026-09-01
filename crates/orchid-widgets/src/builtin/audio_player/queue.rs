@@ -166,6 +166,62 @@ impl PlayQueue {
         }
     }
 
+    /// Append `path` to the end of the queue (no duplicates by path).
+    pub fn enqueue_end(&mut self, path: &str) -> bool {
+        if self.paths.iter().any(|p| p == path) {
+            return false;
+        }
+        self.paths.push(path.to_string());
+        self.rebuild_order();
+        true
+    }
+
+    /// Insert `path` immediately after the current track.
+    pub fn enqueue_next(&mut self, path: &str) -> bool {
+        if let Some(i) = self.paths.iter().position(|p| p == path) {
+            if i == self.index {
+                return false;
+            }
+            let item = self.paths.remove(i);
+            if i < self.index {
+                self.index -= 1;
+            }
+            let insert_at = (self.index + 1).min(self.paths.len());
+            self.paths.insert(insert_at, item);
+            self.rebuild_order();
+            return true;
+        }
+        let insert_at = if self.paths.is_empty() {
+            0
+        } else {
+            (self.index + 1).min(self.paths.len())
+        };
+        self.paths.insert(insert_at, path.to_string());
+        self.rebuild_order();
+        true
+    }
+
+    /// Remove a path from the queue. Adjusts index; returns whether current track changed.
+    pub fn remove_path(&mut self, path: &str) -> bool {
+        let Some(i) = self.paths.iter().position(|p| p == path) else {
+            return false;
+        };
+        let was_current = i == self.index;
+        self.paths.remove(i);
+        if self.paths.is_empty() {
+            self.index = 0;
+            self.order.clear();
+            return was_current;
+        }
+        if i < self.index {
+            self.index -= 1;
+        } else if i == self.index {
+            self.index = self.index.min(self.paths.len() - 1);
+        }
+        self.rebuild_order();
+        was_current
+    }
+
     pub fn set_shuffle(&mut self, shuffle: bool) {
         self.shuffle = shuffle;
         self.rebuild_order();
@@ -225,5 +281,27 @@ mod tests {
         let mut q = q;
         assert_eq!(q.next(), Some("b"));
         assert_eq!(q.peek_next(), Some("c"));
+    }
+
+    #[test]
+    fn enqueue_end_and_next() {
+        let mut q = PlayQueue::from_paths(vec!["a".into(), "b".into()], 0, false, RepeatMode::Off);
+        assert!(q.enqueue_end("c"));
+        assert_eq!(q.paths, vec!["a", "b", "c"]);
+        assert!(!q.enqueue_end("c"));
+        assert!(q.enqueue_next("d"));
+        assert_eq!(q.paths, vec!["a", "d", "b", "c"]);
+        assert_eq!(q.peek_next(), Some("d"));
+    }
+
+    #[test]
+    fn remove_path_adjusts_index() {
+        let mut q =
+            PlayQueue::from_paths(vec!["a".into(), "b".into(), "c".into()], 1, false, RepeatMode::Off);
+        assert!(!q.remove_path("a"));
+        assert_eq!(q.paths, vec!["b", "c"]);
+        assert_eq!(q.index, 0);
+        assert!(q.remove_path("b"));
+        assert_eq!(q.current(), Some("c"));
     }
 }

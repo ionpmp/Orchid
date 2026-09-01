@@ -89,6 +89,10 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         eq_off_label: locale.tr("audio-player-eq-off").into(),
         speed_off_label: locale.tr("audio-player-speed-off").into(),
         search_placeholder: locale.tr("audio-player-search-placeholder").into(),
+        enqueue_label: locale.tr("audio-player-enqueue").into(),
+        play_next_label: locale.tr("audio-player-play-next").into(),
+        remove_label: locale.tr("audio-player-remove").into(),
+        clear_queue_label: locale.tr("audio-player-clear-queue").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -109,6 +113,10 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.eq_off_label = base.eq_off_label;
     m.speed_off_label = base.speed_off_label;
     m.search_placeholder = base.search_placeholder;
+    m.enqueue_label = base.enqueue_label;
+    m.play_next_label = base.play_next_label;
+    m.remove_label = base.remove_label;
+    m.clear_queue_label = base.clear_queue_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }

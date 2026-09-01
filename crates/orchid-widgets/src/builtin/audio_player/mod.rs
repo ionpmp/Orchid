@@ -98,6 +98,7 @@ impl AudioHandle {
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
         self.player.set_volume(f64::from(self.config.read().volume));
         self.prefetch_following();
+        pause_rival_viewers();
         #[cfg(windows)]
         {
             crate::builtin::viewer::smtc_publisher::set_active_audio(self.instance_id);
@@ -201,6 +202,23 @@ fn kick_scan(handle: Arc<AudioHandle>) {
     });
 }
 
+/// Pause every live Audio Player instance (e.g. when Viewer media starts).
+pub fn pause_all() {
+    for h in AUDIO_LIVE.iter() {
+        if h.player.is_playing() {
+            h.player.pause();
+            h.publish();
+        }
+    }
+}
+
+/// Ask all media viewers to pause (fire-and-forget).
+fn pause_rival_viewers() {
+    tokio::spawn(async {
+        crate::builtin::viewer::pause_all_media().await;
+    });
+}
+
 /// Snapshot live config for settings (if any).
 #[must_use]
 pub fn current_config(instance_id: Uuid) -> Option<AudioPlayerConfig> {
@@ -242,6 +260,7 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
     };
     match command {
         "play-pause" => {
+            let resuming = !h.player.is_playing();
             if h.queue.read().current().is_none() {
                 // Nothing queued — play all songs.
                 let paths: Vec<String> = h
@@ -266,6 +285,9 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
                 // Engine missing — still toggle UI state by reloading.
                 h.load_current();
             } else {
+                if resuming {
+                    pause_rival_viewers();
+                }
                 h.player.play_pause();
                 h.publish();
             }
@@ -382,6 +404,53 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         cmd if let Some(raw) = cmd.strip_prefix("play-track:") => {
             play_track(&h, raw);
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("enqueue:") => {
+            let added = h.queue.write().enqueue_end(raw);
+            if added {
+                h.prefetch_following();
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("play-next:") => {
+            let added = h.queue.write().enqueue_next(raw);
+            if added {
+                h.prefetch_following();
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("remove-from-queue:") => {
+            let was_current = h.queue.write().remove_path(raw);
+            if was_current {
+                if h.queue.read().current().is_some() {
+                    h.load_current();
+                } else {
+                    h.player.stop();
+                    *h.lyrics.write() = Lyrics::default();
+                    *h.prefetched.write() = None;
+                    h.sync_queue_to_config();
+                    h.publish();
+                }
+            } else {
+                h.prefetch_following();
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if cmd == "clear-queue" => {
+            {
+                let mut q = h.queue.write();
+                q.paths.clear();
+                q.index = 0;
+                q.order.clear();
+            }
+            h.player.stop();
+            *h.lyrics.write() = Lyrics::default();
+            *h.prefetched.write() = None;
+            h.sync_queue_to_config();
+            h.publish();
         }
         cmd if let Some(raw) = cmd.strip_prefix("toggle-favorite:") => {
             let mut cfg = h.config.write();
