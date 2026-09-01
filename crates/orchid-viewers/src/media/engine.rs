@@ -457,6 +457,8 @@ fn run_worker(
             set_opt(api, handle, "hwdec", "no")?;
             set_opt(api, handle, "video", "no")?;
             let _ = set_opt(api, handle, "audio-display", "no");
+            // Soft volume boost up to 150% (matches SetVolume clamp).
+            let _ = set_opt(api, handle, "volume-max", "150");
         } else {
             set_opt(api, handle, "vo", "libmpv")?;
             // HW decode with copy-back so the SW (rgb0) render path can blit to Slint.

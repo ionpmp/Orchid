@@ -451,6 +451,7 @@ audio-player-new-playlist = Новый плейлист
 audio-player-no-track = Нет трека
 audio-player-sleep-off = Сон
 audio-player-eq-off = Эквалайзер
+audio-player-speed-off = 1x
 audio-player-engine-missing = Нет libmpv
 audio-player-empty-roots = Добавьте папку с музыкой, чтобы собрать библиотеку
 audio-player-empty-library = В папках библиотеки нет аудиофайлов

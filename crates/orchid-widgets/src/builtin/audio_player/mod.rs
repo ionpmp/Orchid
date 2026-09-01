@@ -10,6 +10,7 @@ pub mod queue;
 pub mod sleep;
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
@@ -52,6 +53,8 @@ struct AudioHandle {
     sleep: Arc<RwLock<SleepTimer>>,
     lyrics: Arc<RwLock<Lyrics>>,
     bus: Arc<orchid_core::EventBus>,
+    scanning: AtomicBool,
+    scan_gen: AtomicU64,
 }
 
 impl AudioHandle {
@@ -92,7 +95,26 @@ impl AudioHandle {
         self.player.load_path(p.as_path());
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
         self.player.set_volume(f64::from(self.config.read().volume));
+        #[cfg(windows)]
+        smtc::set_active(self.instance_id);
     }
+}
+
+/// Kick a background library scan (supersedes any in-flight scan).
+fn kick_scan(handle: Arc<AudioHandle>) {
+    let gen = handle.scan_gen.fetch_add(1, Ordering::AcqRel) + 1;
+    handle.scanning.store(true, Ordering::Release);
+    handle.publish();
+    let roots = handle.config.read().library_roots.clone();
+    tokio::task::spawn_blocking(move || {
+        let index = LibraryIndex::scan(&roots);
+        if handle.scan_gen.load(Ordering::Acquire) != gen {
+            return;
+        }
+        *handle.library.write() = index;
+        handle.scanning.store(false, Ordering::Release);
+        handle.publish();
+    });
 }
 
 /// Snapshot live config for settings (if any).
@@ -108,9 +130,7 @@ pub fn rescan(instance_id: Uuid) {
     let Some(h) = AUDIO_LIVE.get(&instance_id) else {
         return;
     };
-    let roots = h.config.read().library_roots.clone();
-    *h.library.write() = LibraryIndex::scan(&roots);
-    h.publish();
+    kick_scan(Arc::clone(h.value()));
 }
 
 /// Pick a folder via native dialog and add it as a library root.
@@ -128,9 +148,7 @@ pub fn add_library_root(instance_id: Uuid) {
             cfg.library_roots.push(s);
         }
     }
-    let roots = h.config.read().library_roots.clone();
-    *h.library.write() = LibraryIndex::scan(&roots);
-    h.publish();
+    kick_scan(Arc::clone(h.value()));
 }
 
 /// Execute a transport / browse command string.
@@ -210,6 +228,10 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         "eq" => {
             h.player.cycle_eq();
+            h.publish();
+        }
+        "speed" => {
+            h.player.cycle_speed();
             h.publish();
         }
         "rescan" => {
@@ -585,6 +607,7 @@ impl AudioPlayerWidget {
             repeat: q.repeat.as_u8(),
             sleep_label: self.handle.sleep.read().label.clone(),
             eq_label: self.handle.player.eq_label(),
+            speed_label: self.handle.player.speed_label(),
             lyrics_line: self.handle.lyrics.read().line_at(pos),
             has_lyrics: !self.handle.lyrics.read().is_empty(),
             library_count: lib.tracks.len() as u32,

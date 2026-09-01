@@ -831,6 +831,7 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.repeat == b.repeat
         && a.sleep_label == b.sleep_label
         && a.eq_label == b.eq_label
+        && a.speed_label == b.speed_label
         && a.lyrics_line == b.lyrics_line
         && a.has_lyrics == b.has_lyrics
         && a.library_count == b.library_count

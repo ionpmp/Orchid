@@ -123,6 +123,38 @@ impl PlayerSession {
     pub fn eq_label(&self) -> String {
         self.engine.shared.eq_label.read().clone()
     }
+
+    /// Cycle playback rate through common music-player presets.
+    pub fn cycle_speed(&self) {
+        const PRESETS: &[f64] = &[0.75, 1.0, 1.25, 1.5, 2.0];
+        let cur = self.speed();
+        let next = PRESETS
+            .iter()
+            .copied()
+            .find(|p| *p > cur + 0.01)
+            .unwrap_or(PRESETS[0]);
+        self.engine.set_speed(next);
+    }
+
+    #[must_use]
+    pub fn speed(&self) -> f64 {
+        self.engine.shared.speed_x100.load(Ordering::Relaxed) as f64 / 100.0
+    }
+
+    #[must_use]
+    pub fn speed_label(&self) -> String {
+        let s = self.speed();
+        if (s - 1.0).abs() < 0.01 {
+            String::new()
+        } else {
+            let rounded = (s * 100.0).round() / 100.0;
+            if (rounded * 100.0).round() % 100.0 == 0.0 {
+                format!("{rounded:.0}x")
+            } else {
+                format!("{rounded:.2}x")
+            }
+        }
+    }
 }
 
 impl Default for PlayerSession {

@@ -727,6 +727,7 @@ audio-player-new-playlist = New playlist
 audio-player-no-track = No track
 audio-player-sleep-off = Sleep
 audio-player-eq-off = EQ
+audio-player-speed-off = 1x
 audio-player-engine-missing = libmpv missing
 audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders

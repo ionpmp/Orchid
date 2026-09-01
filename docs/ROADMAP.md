@@ -70,7 +70,7 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
 - [x] Widget: Files (recent) — shared MRU store, dock widget, FM virtual Recent folder
 - [x] Widget: Universal search — debouncer + aggregator wired; UI patch-on-update (no per-keystroke rebuild)
 - [x] Widget: Media player (audio/video)
-- [~] Widget: Audio player — local library (Songs/Artists/Albums/Folders), queue, shuffle/repeat, sleep timer, favorites + playlists, EQ presets, sidecar `.lrc` lyrics; shared audio-only libmpv session
+- [~] Widget: Audio player — local library (Songs/Artists/Albums/Folders), queue, shuffle/repeat, sleep timer, favorites + playlists, EQ presets, playback speed, soft volume boost (to 150%), sidecar `.lrc` lyrics; shared audio-only libmpv session
 - [x] Widget: RSS feed
 - [x] Widget: Password manager — unlock UI (passphrase + Hello), search, copy, TOTP, add entry; lock vault button + command
 - [x] Widget: Terminal — end-to-end with tab strip, split panes, draggable dividers, shortcuts, live raster, persisted layout

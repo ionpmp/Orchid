@@ -514,6 +514,18 @@ export component AudioPlayerView inherits Rectangle {
                             width: 100%; height: 100%;
                         }
                     }
+                    Rectangle {
+                        width: speed-txt.preferred-width + 10px; height: 24px;
+                        TouchArea { clicked => { root.command("speed"); } }
+                        speed-txt := Text {
+                            text: root.model.speed-label != "" ? root.model.speed-label : root.model.speed-off-label;
+                            color: root.model.speed-label != "" ? Theme.accent-brand : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: 100%; height: 100%;
+                        }
+                    }
                     if !root.model.engine-available : Text {
                         text: root.model.engine-missing-label;
                         color: Theme.text-tertiary;
