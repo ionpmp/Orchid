@@ -254,6 +254,8 @@ struct ViewerWidgetInner {
     media_tick: AtomicU64,
     /// Side playlist panel visibility (Q toggles).
     playlist_panel_open: AtomicBool,
+    /// Last media widget viewport (CSS px) for re-applying blit size on panel toggle.
+    media_viewport: RwLock<(f32, f32)>,
     music_child: parking_lot::Mutex<Option<std::process::Child>>,
     inspect: RwLock<image_inspect::InspectState>,
     inspect_gen: AtomicU64,
@@ -1838,7 +1840,10 @@ impl ViewerWidget {
                 slide_tick: AtomicU64::new(0),
                 anim_tick: AtomicU64::new(0),
                 media_tick: AtomicU64::new(0),
-                playlist_panel_open: AtomicBool::new(true),
+                playlist_panel_open: AtomicBool::new(
+                    orchid_viewers::media_playlist_panel_default(),
+                ),
+                media_viewport: RwLock::new((0.0, 0.0)),
                 music_child: parking_lot::Mutex::new(None),
                 inspect: RwLock::new(image_inspect::InspectState::default()),
                 inspect_gen: AtomicU64::new(0),
@@ -1923,7 +1928,9 @@ pub async fn set_viewport(instance_id: Uuid, width: f32, height: f32) -> WidgetR
                 tv.set_visible_range(tv.first_visible_line(), count);
                 should_refresh = true;
             } else if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                media.set_viewport(width, height);
+                *inner.media_viewport.write() = (width, height);
+                let panel = inner.playlist_panel_open.load(Ordering::Relaxed);
+                media.set_viewport(width, height, panel);
                 // No immediate refresh — next frame blit uses the new target size.
             }
         }
@@ -3492,6 +3499,18 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             inner
                 .playlist_panel_open
                 .store(next, Ordering::Relaxed);
+            orchid_viewers::persist_media_playlist_panel(next);
+            {
+                let (w, h) = *inner.media_viewport.read();
+                if w > 0.0 && h > 0.0 {
+                    let guard = inner.viewer.lock().await;
+                    if let Some(v) = guard.as_ref() {
+                        if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
+                            media.set_viewport(w, h, next);
+                        }
+                    }
+                }
+            }
             inner.refresh_snapshot().await;
             return Ok(());
         }

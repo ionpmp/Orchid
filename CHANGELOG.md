@@ -113,7 +113,8 @@ release yet.
   file picker then places a viewer on the canvas (distinct from **Now Playing**
   SMTC). Bundle `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/`
   (see `docs/BUILDING.md`); without it, chrome remains and files can still
-  open in the system player.
+  open in the system player. Subtitle style and ReplayGain choices persist;
+  playlist panel open state and SW blit width account for the side list.
 - Image, PDF (pdfium), syntax-highlighted text (Tree-sitter),
   archives (ZIP / 7z / TAR / TAR.GZ / TAR.XZ).
 - Image display: fit-to-window / width / height, 1:1, shrink-if-larger
