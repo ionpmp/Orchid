@@ -247,7 +247,10 @@ release yet.
   focused keyboard transport, Windows SMTC (lock screen / media keys), shared
   audio-only libmpv session (separate from SMTC Now Playing and Viewer media
   chrome); widget-owned volume (not Viewer `media_prefs`); mutual pause with
-  Viewer.
+  Viewer. Library list scrolls in the middle so the now-playing bar stays inside
+  the widget when resized.
+- Catalog **Video Player** launcher: video-only file picker → in-app libmpv
+  viewer on the canvas (alongside **Media Player** for audio/video).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
 - Weather, Moon (geometric phase disk), System indicators, Media, RSS,
   Recent files, Universal search, Password manager (KDBX4 + Windows Hello).

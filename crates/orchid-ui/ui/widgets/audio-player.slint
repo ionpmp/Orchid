@@ -8,6 +8,7 @@ export component AudioPlayerView inherits Rectangle {
     callback command(string);
 
     background: transparent;
+    clip: true;
 
     focus-scope := FocusScope {
         width: 100%;
@@ -65,262 +66,95 @@ export component AudioPlayerView inherits Rectangle {
             return reject;
         }
 
-        TouchArea {
+        VerticalLayout {
             width: 100%;
             height: 100%;
-            clicked => { focus-scope.focus(); }
-
-    VerticalLayout {
-        padding: 8px;
-        spacing: 6px;
-
-        HorizontalLayout {
-            spacing: 4px;
-            height: 28px;
-
-            tab-btn := Rectangle {
-                border-radius: Theme.radius-md;
-                background: root.model.browse-tab == 0 ? Theme.accent-brand : Theme.surface-base;
-                horizontal-stretch: 1;
-                TouchArea { clicked => { root.command("tab:0"); } }
-                Text {
-                    text: root.model.tab-songs;
-                    color: root.model.browse-tab == 0 ? Theme.surface-base : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: root.model.browse-tab == 1 ? Theme.accent-brand : Theme.surface-base;
-                horizontal-stretch: 1;
-                TouchArea { clicked => { root.command("tab:1"); } }
-                Text {
-                    text: root.model.tab-artists;
-                    color: root.model.browse-tab == 1 ? Theme.surface-base : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: root.model.browse-tab == 2 ? Theme.accent-brand : Theme.surface-base;
-                horizontal-stretch: 1;
-                TouchArea { clicked => { root.command("tab:2"); } }
-                Text {
-                    text: root.model.tab-albums;
-                    color: root.model.browse-tab == 2 ? Theme.surface-base : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: root.model.browse-tab == 3 ? Theme.accent-brand : Theme.surface-base;
-                horizontal-stretch: 1;
-                TouchArea { clicked => { root.command("tab:3"); } }
-                Text {
-                    text: root.model.tab-folders;
-                    color: root.model.browse-tab == 3 ? Theme.surface-base : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: root.model.browse-tab == 4 ? Theme.accent-brand : Theme.surface-base;
-                horizontal-stretch: 1;
-                TouchArea { clicked => { root.command("tab:4"); } }
-                Text {
-                    text: root.model.tab-playlists;
-                    color: root.model.browse-tab == 4 ? Theme.surface-base : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: root.model.browse-tab == 5 ? Theme.accent-brand : Theme.surface-base;
-                horizontal-stretch: 1;
-                TouchArea { clicked => { root.command("tab:5"); } }
-                Text {
-                    text: root.model.tab-now-playing;
-                    color: root.model.browse-tab == 5 ? Theme.surface-base : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-        }
-
-        HorizontalLayout {
+            padding: 8px;
             spacing: 6px;
-            height: 28px;
 
-            if root.model.browse-filter != "" : Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: back-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("clear-filter"); } }
-                back-txt := Text {
-                    text: root.model.back-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-
-            SearchField {
-                horizontal-stretch: 1;
-                field-height: 28px;
-                query: root.model.search-query;
-                placeholder: root.model.search-placeholder;
-                edited(q) => { root.command("search:" + q); }
-                escape-pressed => { root.command("clear-search"); }
-            }
-
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: add-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("add-root"); } }
-                add-txt := Text {
-                    text: root.model.add-folder-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-
-            Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: rescan-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("rescan"); } }
-                rescan-txt := Text {
-                    text: root.model.rescan-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-
-            if root.model.browse-tab == 4 : Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: new-pl-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("new-playlist"); } }
-                new-pl-txt := Text {
-                    text: root.model.new-playlist-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-
-            if root.model.browse-tab == 4 && root.model.active-playlist-id != "" : Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: rename-pl-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("start-rename-playlist"); } }
-                rename-pl-txt := Text {
-                    text: root.model.rename-playlist-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-
-            if root.model.browse-tab == 4 : Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: del-pl-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("delete-playlist"); } }
-                del-pl-txt := Text {
-                    text: root.model.delete-playlist-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-
-            if root.model.browse-tab == 5 && root.model.tracks.length > 0 : Rectangle {
-                border-radius: Theme.radius-md;
-                background: Theme.surface-base;
-                width: clear-q-txt.preferred-width + 16px;
-                TouchArea { clicked => { root.command("clear-queue"); } }
-                clear-q-txt := Text {
-                    text: root.model.clear-queue-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%; height: 100%;
-                }
-            }
-        }
-
-        if root.model.roots-label != "" : Text {
-            text: root.model.roots-label;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            vertical-alignment: center;
-        }
-
-        if root.model.empty-hint != "" : Text {
-            text: root.model.empty-hint;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-md;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            vertical-stretch: 1;
-        }
-
-        if root.model.browse-tab == 4 && root.model.renaming-playlist : SearchField {
-            field-height: 28px;
-            query: "";
-            placeholder: root.model.rename-playlist-label;
-            edited(q) => { root.command("rename-playlist:" + q); }
-            escape-pressed => { root.command("cancel-rename-playlist"); }
-        }
-
-        if root.model.browse-tab == 4 && root.model.empty-hint == "" : Flickable {
-            height: 28px;
-            viewport-width: pl-row.preferred-width;
-            pl-row := HorizontalLayout {
+            HorizontalLayout {
                 spacing: 4px;
-                for pl in root.model.playlists : Rectangle {
+                height: 28px;
+                vertical-stretch: 0;
+
+                Rectangle {
                     border-radius: Theme.radius-md;
-                    background: pl.is-active ? Theme.accent-brand : Theme.surface-base;
-                    width: pl-txt.preferred-width + 14px;
-                    height: 26px;
-                    TouchArea { clicked => { root.command("select-playlist:" + pl.id); } }
-                    pl-txt := Text {
-                        text: pl.name + " (" + pl.count + ")";
-                        color: pl.is-active ? Theme.surface-base : Theme.text-secondary;
+                    background: root.model.browse-tab == 0 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:0"); } }
+                    Text {
+                        text: root.model.tab-songs;
+                        color: root.model.browse-tab == 0 ? Theme.surface-base : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: root.model.browse-tab == 1 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:1"); } }
+                    Text {
+                        text: root.model.tab-artists;
+                        color: root.model.browse-tab == 1 ? Theme.surface-base : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: root.model.browse-tab == 2 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:2"); } }
+                    Text {
+                        text: root.model.tab-albums;
+                        color: root.model.browse-tab == 2 ? Theme.surface-base : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: root.model.browse-tab == 3 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:3"); } }
+                    Text {
+                        text: root.model.tab-folders;
+                        color: root.model.browse-tab == 3 ? Theme.surface-base : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: root.model.browse-tab == 4 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:4"); } }
+                    Text {
+                        text: root.model.tab-playlists;
+                        color: root.model.browse-tab == 4 ? Theme.surface-base : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: root.model.browse-tab == 5 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:5"); } }
+                    Text {
+                        text: root.model.tab-now-playing;
+                        color: root.model.browse-tab == 5 ? Theme.surface-base : Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -328,469 +162,634 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
             }
-        }
 
-        if root.model.groups.length > 0 : Flickable {
-            vertical-stretch: 1;
-            viewport-height: groups-col.preferred-height;
-            groups-col := VerticalLayout {
-                spacing: 2px;
-                for g in root.model.groups : Rectangle {
-                    height: 32px;
-                    background: g-ta.has-hover ? Theme.surface-raised : transparent;
+            HorizontalLayout {
+                spacing: 6px;
+                height: 28px;
+                vertical-stretch: 0;
+
+                if root.model.browse-filter != "" : Rectangle {
                     border-radius: Theme.radius-md;
-                    g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: g.label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                            horizontal-stretch: 1;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: g.count;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
+                    background: Theme.surface-base;
+                    width: back-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("clear-filter"); } }
+                    back-txt := Text {
+                        text: root.model.back-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                SearchField {
+                    horizontal-stretch: 1;
+                    field-height: 28px;
+                    query: root.model.search-query;
+                    placeholder: root.model.search-placeholder;
+                    edited(q) => { root.command("search:" + q); }
+                    escape-pressed => { root.command("clear-search"); }
+                }
+
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: add-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("add-root"); } }
+                    add-txt := Text {
+                        text: root.model.add-folder-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: rescan-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("rescan"); } }
+                    rescan-txt := Text {
+                        text: root.model.rescan-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 4 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: new-pl-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("new-playlist"); } }
+                    new-pl-txt := Text {
+                        text: root.model.new-playlist-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 4 && root.model.active-playlist-id != "" : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: rename-pl-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("start-rename-playlist"); } }
+                    rename-pl-txt := Text {
+                        text: root.model.rename-playlist-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 4 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: del-pl-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("delete-playlist"); } }
+                    del-pl-txt := Text {
+                        text: root.model.delete-playlist-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 5 && root.model.tracks.length > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: clear-q-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("clear-queue"); } }
+                    clear-q-txt := Text {
+                        text: root.model.clear-queue-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
                     }
                 }
             }
-        }
 
-        if root.model.tracks.length > 0 : Flickable {
-            vertical-stretch: 1;
-            viewport-height: tracks-col.preferred-height;
-            tracks-col := VerticalLayout {
-                spacing: 1px;
-                for t in root.model.tracks : Rectangle {
-                    height: 40px;
-                    background: t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent);
-                    border-radius: Theme.radius-md;
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        spacing: 8px;
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            t-ta := TouchArea {
-                                clicked => { root.command("play-track:" + t.path); }
-                            }
-                            VerticalLayout {
-                                alignment: center;
-                                Text {
-                                    text: t.title;
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-md;
-                                    overflow: elide;
-                                }
-                                Text {
-                                    text: t.subtitle;
-                                    color: Theme.text-tertiary;
-                                    font-size: Theme.font-size-sm;
-                                    overflow: elide;
-                                }
-                            }
-                        }
-                        Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("toggle-favorite:" + t.path); }
-                            }
-                            Text {
-                                text: t.is-favorite ? "*" : "+";
-                                color: t.is-favorite ? Theme.accent-brand : Theme.text-tertiary;
-                                font-size: Theme.font-size-md;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab != 5 : Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("enqueue:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.enqueue-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab != 5 : Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("play-next:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.play-next-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab == 4 : Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("add-to-active-playlist:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.add-to-playlist-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab == 4 : Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("remove-from-active-playlist:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.remove-from-playlist-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab == 5 : Rectangle {
-                            width: 22px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("queue-up:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.move-up-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab == 5 : Rectangle {
-                            width: 22px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("queue-down:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.move-down-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                        if root.model.browse-tab == 5 : Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea {
-                                clicked => { root.command("remove-from-queue:" + t.path); }
-                            }
-                            Text {
-                                text: root.model.remove-label;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
-                        }
-                    }
-                }
+            if root.model.roots-label != "" : Text {
+                text: root.model.roots-label;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                vertical-stretch: 0;
             }
-        }
 
-        if root.model.groups.length == 0 && root.model.tracks.length == 0 && root.model.empty-hint == "" : Rectangle {
-            vertical-stretch: 1;
-        }
+            if root.model.browse-tab == 4 && root.model.renaming-playlist : SearchField {
+                field-height: 28px;
+                vertical-stretch: 0;
+                query: "";
+                placeholder: root.model.rename-playlist-label;
+                edited(q) => { root.command("rename-playlist:" + q); }
+                escape-pressed => { root.command("cancel-rename-playlist"); }
+            }
 
-        Rectangle {
-            height: root.model.has-lyrics ? 120px : 96px;
-            background: Theme.surface-raised;
-            border-radius: Theme.radius-md;
-
-            VerticalLayout {
-                padding: 8px;
-                spacing: 4px;
-
-                HorizontalLayout {
-                    spacing: 10px;
-                    Rectangle {
-                        width: 52px;
-                        height: 52px;
-                        background: Theme.surface-base;
+            if root.model.browse-tab == 4 && root.model.empty-hint == "" : Flickable {
+                height: 28px;
+                vertical-stretch: 0;
+                viewport-width: pl-row.preferred-width;
+                pl-row := HorizontalLayout {
+                    spacing: 4px;
+                    for pl in root.model.playlists : Rectangle {
                         border-radius: Theme.radius-md;
-                        clip: true;
-                        if root.model.has-cover : Image {
-                            width: 100%; height: 100%;
-                            source: root.model.cover;
-                            image-fit: cover;
-                        }
-                        if !root.model.has-cover : Text {
-                            text: "♪";
-                            color: Theme.text-tertiary;
-                            font-size: 22px;
+                        background: pl.is-active ? Theme.accent-brand : Theme.surface-base;
+                        width: pl-txt.preferred-width + 14px;
+                        height: 26px;
+                        TouchArea { clicked => { root.command("select-playlist:" + pl.id); } }
+                        pl-txt := Text {
+                            text: pl.name + " (" + pl.count + ")";
+                            color: pl.is-active ? Theme.surface-base : Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                             width: 100%; height: 100%;
                         }
                     }
-                    VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 1;
+                }
+            }
+
+            // Library / queue body — takes remaining height; lists scroll inside.
+            Rectangle {
+                vertical-stretch: 1;
+                horizontal-stretch: 1;
+                clip: true;
+                background: transparent;
+
+                if root.model.empty-hint != "" : Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.model.empty-hint;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                if root.model.empty-hint == "" : Flickable {
+                    width: 100%;
+                    height: 100%;
+                    viewport-width: self.width;
+                    viewport-height: browse-col.preferred-height;
+
+                    browse-col := VerticalLayout {
                         spacing: 2px;
-                        Text {
-                            text: root.model.has-track ? root.model.title : root.model.no-track-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            font-weight: Theme.weight-semibold;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: root.model.artist;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            overflow: elide;
-                        }
-                        if root.model.has-lyrics : Text {
-                            text: root.model.lyrics-line;
-                            color: Theme.accent-brand;
-                            font-size: Theme.font-size-sm;
-                            overflow: elide;
-                        }
-                    }
-                }
+                        width: parent.width;
 
-                HorizontalLayout {
-                    spacing: 6px;
-                    Text {
-                        text: root.model.position-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-                    progress-bar := Rectangle {
-                        height: 4px;
-                        background: Theme.surface-base;
-                        border-radius: 2px;
-                        horizontal-stretch: 1;
-                        Rectangle {
-                            width: parent.width * root.model.progress;
-                            height: 100%;
-                            background: Theme.accent-brand;
-                            border-radius: 2px;
+                        if root.model.groups.length > 0 : VerticalLayout {
+                            spacing: 2px;
+                            for g in root.model.groups : Rectangle {
+                                height: 32px;
+                                background: g-ta.has-hover ? Theme.surface-raised : transparent;
+                                border-radius: Theme.radius-md;
+                                g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    Text {
+                                        text: g.label;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-md;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: g.count;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
                         }
-                        seek-ta := TouchArea {
-                            clicked => {
-                                if progress-bar.width > 0 {
-                                    root.command("seek-frac:" + (seek-ta.pressed-x / progress-bar.width));
+
+                        if root.model.tracks.length > 0 : VerticalLayout {
+                            spacing: 1px;
+                            for t in root.model.tracks : Rectangle {
+                                height: 40px;
+                                background: t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent);
+                                border-radius: Theme.radius-md;
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    spacing: 6px;
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        t-ta := TouchArea {
+                                            clicked => { root.command("play-track:" + t.path); }
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: t.title;
+                                                color: Theme.text-primary;
+                                                font-size: Theme.font-size-md;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: t.subtitle;
+                                                color: Theme.text-tertiary;
+                                                font-size: Theme.font-size-sm;
+                                                overflow: elide;
+                                            }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 28px; height: 28px;
+                                        TouchArea { clicked => { root.command("toggle-favorite:" + t.path); } }
+                                        Text {
+                                            text: t.is-favorite ? "*" : "+";
+                                            color: t.is-favorite ? Theme.accent-brand : Theme.text-tertiary;
+                                            font-size: Theme.font-size-md;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab != 5 : Rectangle {
+                                        width: 28px; height: 28px;
+                                        TouchArea { clicked => { root.command("enqueue:" + t.path); } }
+                                        Text {
+                                            text: root.model.enqueue-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab != 5 : Rectangle {
+                                        width: 28px; height: 28px;
+                                        TouchArea { clicked => { root.command("play-next:" + t.path); } }
+                                        Text {
+                                            text: root.model.play-next-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 4 : Rectangle {
+                                        width: 28px; height: 28px;
+                                        TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
+                                        Text {
+                                            text: root.model.add-to-playlist-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 4 : Rectangle {
+                                        width: 28px; height: 28px;
+                                        TouchArea { clicked => { root.command("remove-from-active-playlist:" + t.path); } }
+                                        Text {
+                                            text: root.model.remove-from-playlist-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 5 : Rectangle {
+                                        width: 22px; height: 28px;
+                                        TouchArea { clicked => { root.command("queue-up:" + t.path); } }
+                                        Text {
+                                            text: root.model.move-up-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 5 : Rectangle {
+                                        width: 22px; height: 28px;
+                                        TouchArea { clicked => { root.command("queue-down:" + t.path); } }
+                                        Text {
+                                            text: root.model.move-down-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 5 : Rectangle {
+                                        width: 28px; height: 28px;
+                                        TouchArea { clicked => { root.command("remove-from-queue:" + t.path); } }
+                                        Text {
+                                            text: root.model.remove-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    Text {
-                        text: root.model.duration-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
                 }
+            }
 
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: center;
+            // Now-playing chrome — sized to content, never pushed outside the widget.
+            Rectangle {
+                vertical-stretch: 0;
+                min-height: 108px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                clip: true;
 
-                    Rectangle {
-                        width: 28px; height: 24px;
-                        TouchArea { clicked => { root.command("shuffle"); } }
-                        Text {
-                            text: "S";
-                            color: root.model.shuffle ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-semibold;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: 32px; height: 24px;
-                        TouchArea { clicked => { root.command("prev"); } }
-                        Text {
-                            text: "|<";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: 36px; height: 28px;
-                        border-radius: Theme.radius-md;
-                        background: Theme.accent-brand;
-                        TouchArea { clicked => { root.command("play-pause"); } }
-                        Text {
-                            text: root.model.is-playing ? "||" : ">";
-                            color: Theme.surface-base;
-                            font-size: Theme.font-size-md;
-                            font-weight: Theme.weight-semibold;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: 32px; height: 24px;
-                        TouchArea { clicked => { root.command("next"); } }
-                        Text {
-                            text: ">|";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: 28px; height: 24px;
-                        TouchArea { clicked => { root.command("repeat"); } }
-                        Text {
-                            text: root.model.repeat == 2 ? "1" : (root.model.repeat == 1 ? "R" : "r");
-                            color: root.model.repeat > 0 ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-semibold;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    vol-chip := Rectangle {
-                        width: 56px;
-                        height: 24px;
-                        VerticalLayout {
-                            spacing: 2px;
-                            alignment: center;
-                            Text {
-                                text: root.model.muted ? "M" : (root.model.volume + "%");
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        height: 52px;
+                        Rectangle {
+                            width: 52px;
+                            height: 52px;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-md;
+                            clip: true;
+                            if root.model.has-cover : Image {
+                                width: 100%; height: 100%;
+                                source: root.model.cover;
+                                image-fit: cover;
+                            }
+                            if !root.model.has-cover : Text {
+                                text: "♪";
                                 color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
+                                font-size: 22px;
                                 horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: 100%; height: 100%;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            spacing: 2px;
+                            Text {
+                                text: root.model.has-track ? root.model.title : root.model.no-track-label;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-md;
+                                font-weight: Theme.weight-semibold;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: root.model.artist;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                            if root.model.has-lyrics : Text {
+                                text: root.model.lyrics-line;
+                                color: Theme.accent-brand;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 16px;
+                        Text {
+                            text: root.model.position-label;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        progress-bar := Rectangle {
+                            height: 4px;
+                            background: Theme.surface-base;
+                            border-radius: 2px;
+                            horizontal-stretch: 1;
+                            Rectangle {
+                                width: parent.width * root.model.progress;
+                                height: 100%;
+                                background: Theme.accent-brand;
+                                border-radius: 2px;
+                            }
+                            seek-ta := TouchArea {
+                                clicked => {
+                                    if progress-bar.width > 0 {
+                                        root.command("seek-frac:" + (seek-ta.pressed-x / progress-bar.width));
+                                    }
+                                }
+                            }
+                        }
+                        Text {
+                            text: root.model.duration-label;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Flickable {
+                        height: 28px;
+                        viewport-height: 28px;
+                        viewport-width: max(self.width, transport-row.preferred-width);
+
+                        transport-row := HorizontalLayout {
+                            spacing: 8px;
+                            alignment: center;
+                            height: 28px;
+
+                            Rectangle {
+                                width: 28px; height: 24px;
+                                TouchArea { clicked => { root.command("shuffle"); } }
+                                Text {
+                                    text: "S";
+                                    color: root.model.shuffle ? Theme.accent-brand : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: Theme.weight-semibold;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
                             }
                             Rectangle {
-                                height: 3px;
-                                background: Theme.surface-base;
-                                border-radius: 1px;
-                                Rectangle {
-                                    height: parent.height;
-                                    width: parent.width * min(1.0, root.model.volume / 150);
-                                    background: Theme.accent-brand;
-                                    border-radius: 1px;
+                                width: 32px; height: 24px;
+                                TouchArea { clicked => { root.command("prev"); } }
+                                Text {
+                                    text: "|<";
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-md;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
                                 }
                             }
-                        }
-                        TouchArea {
-                            clicked => {
-                                if self.width > 0 {
-                                    root.command("volume:" + (self.mouse-x / self.width * 150));
+                            Rectangle {
+                                width: 36px; height: 28px;
+                                border-radius: Theme.radius-md;
+                                background: Theme.accent-brand;
+                                TouchArea { clicked => { root.command("play-pause"); } }
+                                Text {
+                                    text: root.model.is-playing ? "||" : ">";
+                                    color: Theme.surface-base;
+                                    font-size: Theme.font-size-md;
+                                    font-weight: Theme.weight-semibold;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
                                 }
                             }
-                            moved => {
-                                if self.pressed && self.width > 0 {
-                                    root.command("volume:" + (self.mouse-x / self.width * 150));
+                            Rectangle {
+                                width: 32px; height: 24px;
+                                TouchArea { clicked => { root.command("next"); } }
+                                Text {
+                                    text: ">|";
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-md;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
                                 }
                             }
-                            double-clicked => { root.command("mute"); }
-                            scroll-event(event) => {
-                                if event.delta-y > 0 {
-                                    root.command("volume:" + min(150, root.model.volume + 5));
+                            Rectangle {
+                                width: 28px; height: 24px;
+                                TouchArea { clicked => { root.command("repeat"); } }
+                                Text {
+                                    text: root.model.repeat == 2 ? "1" : (root.model.repeat == 1 ? "R" : "r");
+                                    color: root.model.repeat > 0 ? Theme.accent-brand : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: Theme.weight-semibold;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
                                 }
-                                if event.delta-y < 0 {
-                                    root.command("volume:" + max(0, root.model.volume - 5));
+                            }
+                            vol-chip := Rectangle {
+                                width: 56px;
+                                height: 24px;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    alignment: center;
+                                    Text {
+                                        text: root.model.muted ? "M" : (root.model.volume + "%");
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                    }
+                                    Rectangle {
+                                        height: 3px;
+                                        background: Theme.surface-base;
+                                        border-radius: 1px;
+                                        Rectangle {
+                                            height: parent.height;
+                                            width: parent.width * min(1.0, root.model.volume / 150);
+                                            background: Theme.accent-brand;
+                                            border-radius: 1px;
+                                        }
+                                    }
                                 }
-                                return accept;
+                                TouchArea {
+                                    clicked => {
+                                        if self.width > 0 {
+                                            root.command("volume:" + (self.mouse-x / self.width * 150));
+                                        }
+                                    }
+                                    moved => {
+                                        if self.pressed && self.width > 0 {
+                                            root.command("volume:" + (self.mouse-x / self.width * 150));
+                                        }
+                                    }
+                                    double-clicked => { root.command("mute"); }
+                                    scroll-event(event) => {
+                                        if event.delta-y > 0 {
+                                            root.command("volume:" + min(150, root.model.volume + 5));
+                                        }
+                                        if event.delta-y < 0 {
+                                            root.command("volume:" + max(0, root.model.volume - 5));
+                                        }
+                                        return accept;
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: sleep-txt.preferred-width + 10px; height: 24px;
+                                TouchArea { clicked => { root.command("sleep"); } }
+                                sleep-txt := Text {
+                                    text: root.model.sleep-label != "" ? root.model.sleep-label : root.model.sleep-off-label;
+                                    color: root.model.sleep-label != "" ? Theme.accent-brand : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
+                            }
+                            Rectangle {
+                                width: eq-txt.preferred-width + 10px; height: 24px;
+                                TouchArea { clicked => { root.command("eq"); } }
+                                eq-txt := Text {
+                                    text: root.model.eq-label != "" ? root.model.eq-label : root.model.eq-off-label;
+                                    color: root.model.eq-label != "" ? Theme.accent-brand : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
+                            }
+                            Rectangle {
+                                width: rg-txt.preferred-width + 10px; height: 24px;
+                                TouchArea { clicked => { root.command("rg"); } }
+                                rg-txt := Text {
+                                    text: root.model.rg-label != "" ? root.model.rg-label : root.model.rg-off-label;
+                                    color: root.model.rg-label != "" ? Theme.accent-brand : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
+                            }
+                            Rectangle {
+                                width: speed-txt.preferred-width + 10px; height: 24px;
+                                TouchArea { clicked => { root.command("speed"); } }
+                                speed-txt := Text {
+                                    text: root.model.speed-label != "" ? root.model.speed-label : root.model.speed-off-label;
+                                    color: root.model.speed-label != "" ? Theme.accent-brand : Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
+                            }
+                            if !root.model.engine-available : Text {
+                                text: root.model.engine-missing-label;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                vertical-alignment: center;
                             }
                         }
-                    }
-                    Rectangle {
-                        width: sleep-txt.preferred-width + 10px; height: 24px;
-                        TouchArea { clicked => { root.command("sleep"); } }
-                        sleep-txt := Text {
-                            text: root.model.sleep-label != "" ? root.model.sleep-label : root.model.sleep-off-label;
-                            color: root.model.sleep-label != "" ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: eq-txt.preferred-width + 10px; height: 24px;
-                        TouchArea { clicked => { root.command("eq"); } }
-                        eq-txt := Text {
-                            text: root.model.eq-label != "" ? root.model.eq-label : root.model.eq-off-label;
-                            color: root.model.eq-label != "" ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: rg-txt.preferred-width + 10px; height: 24px;
-                        TouchArea { clicked => { root.command("rg"); } }
-                        rg-txt := Text {
-                            text: root.model.rg-label != "" ? root.model.rg-label : root.model.rg-off-label;
-                            color: root.model.rg-label != "" ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    Rectangle {
-                        width: speed-txt.preferred-width + 10px; height: 24px;
-                        TouchArea { clicked => { root.command("speed"); } }
-                        speed-txt := Text {
-                            text: root.model.speed-label != "" ? root.model.speed-label : root.model.speed-off-label;
-                            color: root.model.speed-label != "" ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            width: 100%; height: 100%;
-                        }
-                    }
-                    if !root.model.engine-available : Text {
-                        text: root.model.engine-missing-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
                     }
                 }
             }
-        }
-    }
         }
     }
 }
