@@ -706,6 +706,7 @@ viewer-media-kind-video = Video
 viewer-media-volume = Lautstärke { $n } %
 viewer-media-muted = Stumm
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = Tonhöhe aus
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = Zufall
 viewer-media-loop = Wiederholen

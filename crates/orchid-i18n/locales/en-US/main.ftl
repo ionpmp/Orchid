@@ -981,6 +981,7 @@ viewer-media-kind-video = Video
 viewer-media-volume = Vol { $n }%
 viewer-media-muted = Muted
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = pitch off
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = Shuffle
 viewer-media-loop = Loop

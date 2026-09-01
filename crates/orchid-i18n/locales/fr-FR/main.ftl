@@ -706,6 +706,7 @@ viewer-media-kind-video = Vidéo
 viewer-media-volume = Vol. { $n } %
 viewer-media-muted = Muet
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = hauteur libre
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = Aléatoire
 viewer-media-loop = Boucle

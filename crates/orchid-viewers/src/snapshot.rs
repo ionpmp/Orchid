@@ -409,6 +409,8 @@ pub struct MediaSnapshot {
     pub volume: u32,
     pub muted: bool,
     pub speed: f32,
+    /// Keep musical pitch when `speed` ≠ 1.
+    pub pitch_preserve: bool,
     pub has_video: bool,
     pub frame_rgba: Arc<Vec<u8>>,
     pub frame_width: u32,

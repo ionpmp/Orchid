@@ -170,6 +170,11 @@ impl MediaViewer {
         self.engine.speed_delta(delta);
     }
 
+    /// Toggle pitch-preserving speed (scaletempo2 via mpv).
+    pub fn toggle_pitch(&self) {
+        self.engine.toggle_pitch();
+    }
+
     /// Toggle mute.
     pub fn mute_toggle(&self) {
         self.engine.mute_toggle();
@@ -322,6 +327,7 @@ impl MediaViewer {
             "speed-up" => self.speed_delta(0.1),
             "speed-down" => self.speed_delta(-0.1),
             "speed-reset" => self.set_speed(1.0),
+            "pitch-toggle" => self.toggle_pitch(),
             "cycle-sub" => self.cycle_sub(),
             "toggle-sub" => self.toggle_sub(),
             "sub-add" => self.pick_and_add_sub(),
@@ -442,6 +448,7 @@ impl Viewer for MediaViewer {
             volume: shared.volume.load(Ordering::Relaxed),
             muted: shared.muted.load(Ordering::Relaxed),
             speed: shared.speed_x100.load(Ordering::Relaxed) as f32 / 100.0,
+            pitch_preserve: shared.pitch_preserve.load(Ordering::Relaxed),
             has_video: shared.has_video.load(Ordering::Relaxed),
             frame_rgba,
             frame_width,

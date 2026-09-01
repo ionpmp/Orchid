@@ -131,6 +131,10 @@ export component ViewerMediaView inherits Rectangle {
                 root.command("speed-reset");
                 return accept;
             }
+            if event.text == "k" || event.text == "K" {
+                root.command("pitch-toggle");
+                return accept;
+            }
             if event.modifiers.control && event.text == "0" {
                 root.command("sub-style-reset");
                 return accept;
@@ -572,6 +576,9 @@ export component ViewerMediaView inherits Rectangle {
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
+                        TouchArea {
+                            clicked => { root.command("pitch-toggle"); }
+                        }
                     }
                     if model.playlist-label != "" : Text {
                         text: model.playlist-label;

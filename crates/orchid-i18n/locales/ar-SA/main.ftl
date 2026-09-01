@@ -707,6 +707,7 @@ viewer-media-kind-video = فيديو
 viewer-media-volume = الصوت { $n }٪
 viewer-media-muted = صامت
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = طبقة صوت عادية
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = عشوائي
 viewer-media-loop = تكرار

@@ -706,6 +706,7 @@ viewer-media-kind-video = 视频
 viewer-media-volume = 音量 { $n }%
 viewer-media-muted = 静音
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = 变调
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = 随机
 viewer-media-loop = 循环

@@ -83,6 +83,8 @@ pub struct SharedPlayback {
     /// Soft target blit size from the UI viewport (`0` = uncapped aside from MAX_*).
     pub target_w: AtomicU32,
     pub target_h: AtomicU32,
+    /// Keep musical pitch when speed ≠ 1 (`audio-pitch-correction` / scaletempo2).
+    pub pitch_preserve: AtomicBool,
     /// Set when a new frame or transport property changed.
     pub dirty: AtomicBool,
 }
@@ -127,6 +129,7 @@ impl SharedPlayback {
             error: RwLock::new(None),
             target_w: AtomicU32::new(0),
             target_h: AtomicU32::new(0),
+            pitch_preserve: AtomicBool::new(true),
             dirty: AtomicBool::new(false),
         }
     }
@@ -164,6 +167,7 @@ enum EngineCmd {
     CycleAspect,
     CycleRotate,
     AudioDelayDelta(f64),
+    TogglePitch,
     Stop,
     FrameFwd,
     FrameBack,
@@ -333,6 +337,10 @@ impl MpvEngine {
         let _ = self.tx.send(EngineCmd::AudioDelayDelta(delta_secs));
     }
 
+    pub fn toggle_pitch(&self) {
+        let _ = self.tx.send(EngineCmd::TogglePitch);
+    }
+
     pub fn stop(&self) {
         let _ = self.tx.send(EngineCmd::Stop);
     }
@@ -399,11 +407,21 @@ fn run_worker(
         let prefs = prefs::load();
         let _ = set_opt(api, handle, "volume", &format!("{}", prefs.volume));
         let _ = set_opt(api, handle, "mute", if prefs.muted { "yes" } else { "no" });
+        // Keep musical pitch when speed ≠ 1 (mpv inserts scaletempo2).
+        let _ = set_opt(
+            api,
+            handle,
+            "audio-pitch-correction",
+            if prefs.pitch_preserve { "yes" } else { "no" },
+        );
         shared
             .volume
             .store(prefs.volume.round() as u32, Ordering::Relaxed);
         shared.muted.store(prefs.muted, Ordering::Relaxed);
         shared.hwdec_mode.store(prefs.hwdec_mode.min(1), Ordering::Relaxed);
+        shared
+            .pitch_preserve
+            .store(prefs.pitch_preserve, Ordering::Relaxed);
         let rc = (api.initialize)(handle);
         if rc < 0 {
             let msg = error_message(api, rc);
@@ -593,6 +611,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 v,
                 shared.muted.load(Ordering::Relaxed),
                 shared.hwdec_mode.load(Ordering::Relaxed),
+                shared.pitch_preserve.load(Ordering::Relaxed),
             );
             flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
@@ -606,6 +625,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 v,
                 shared.muted.load(Ordering::Relaxed),
                 shared.hwdec_mode.load(Ordering::Relaxed),
+                shared.pitch_preserve.load(Ordering::Relaxed),
             );
             flash_osd(shared, format!("Vol {:.0}%", v));
             shared.dirty.store(true, Ordering::Release);
@@ -638,6 +658,7 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 vol,
                 !muted,
                 shared.hwdec_mode.load(Ordering::Relaxed),
+                shared.pitch_preserve.load(Ordering::Relaxed),
             );
             flash_osd(
                 shared,
@@ -778,6 +799,26 @@ unsafe fn handle_cmd(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, c
                 .audio_delay_ms
                 .store((next * 1000.0).round() as i32, Ordering::Relaxed);
             flash_osd(shared, format!("A-delay {next:+.2}s"));
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::TogglePitch => {
+            let next = !shared.pitch_preserve.load(Ordering::Relaxed);
+            shared.pitch_preserve.store(next, Ordering::Relaxed);
+            let _ = set_flag(api, handle, "audio-pitch-correction", next);
+            prefs::store(
+                shared.volume.load(Ordering::Relaxed) as f64,
+                shared.muted.load(Ordering::Relaxed),
+                shared.hwdec_mode.load(Ordering::Relaxed),
+                next,
+            );
+            flash_osd(
+                shared,
+                if next {
+                    "Pitch preserve".into()
+                } else {
+                    "Pitch follow speed".into()
+                },
+            );
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::Stop => {
@@ -1049,6 +1090,7 @@ unsafe fn apply_next_hwdec(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayb
         shared.volume.load(Ordering::Relaxed) as f64,
         shared.muted.load(Ordering::Relaxed),
         next,
+        shared.pitch_preserve.load(Ordering::Relaxed),
     );
 }
 

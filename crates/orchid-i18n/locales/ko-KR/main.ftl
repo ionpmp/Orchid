@@ -706,6 +706,7 @@ viewer-media-kind-video = 비디오
 viewer-media-volume = 볼륨 { $n }%
 viewer-media-muted = 음소거
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = 피치 연동
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = 셔플
 viewer-media-loop = 반복

@@ -615,10 +615,16 @@ fn build_media_snapshot(
             &orchid_i18n::FluentArgs::new().with("n", s.volume.to_string()),
         )
     };
-    let speed_label = locale.tr_args(
+    let mut speed_label = locale.tr_args(
         "viewer-media-speed",
         &orchid_i18n::FluentArgs::new().with("n", format!("{:.1}", s.speed)),
     );
+    if !s.pitch_preserve {
+        speed_label = format!(
+            "{speed_label} · {}",
+            locale.tr("viewer-media-pitch-off")
+        );
+    }
     let playlist_label = if s.playlist_count > 0 {
         let base = locale.tr_args(
             "viewer-media-playlist",

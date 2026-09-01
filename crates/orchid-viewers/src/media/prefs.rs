@@ -12,6 +12,13 @@ pub struct MediaPrefs {
     /// 0 = `auto-copy`, 1 = `no`.
     #[serde(default)]
     pub hwdec_mode: u32,
+    /// Keep musical pitch when playback speed ≠ 1.
+    #[serde(default = "default_pitch_preserve")]
+    pub pitch_preserve: bool,
+}
+
+fn default_pitch_preserve() -> bool {
+    true
 }
 
 impl Default for MediaPrefs {
@@ -20,6 +27,7 @@ impl Default for MediaPrefs {
             volume: 100.0,
             muted: false,
             hwdec_mode: 0,
+            pitch_preserve: true,
         }
     }
 }
@@ -65,8 +73,8 @@ pub fn load() -> MediaPrefs {
     prefs
 }
 
-/// Persist volume / mute / hwdec mode.
-pub fn store(volume: f64, muted: bool, hwdec_mode: u32) {
+/// Persist volume / mute / hwdec / pitch-preserve.
+pub fn store(volume: f64, muted: bool, hwdec_mode: u32, pitch_preserve: bool) {
     let Ok(_g) = LOCK.lock() else {
         return;
     };
@@ -74,5 +82,6 @@ pub fn store(volume: f64, muted: bool, hwdec_mode: u32) {
         volume: volume.clamp(0.0, 150.0),
         muted,
         hwdec_mode: hwdec_mode.min(1),
+        pitch_preserve,
     });
 }

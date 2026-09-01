@@ -696,6 +696,7 @@ viewer-media-kind-video = Видео
 viewer-media-volume = Громкость { $n }%
 viewer-media-muted = Без звука
 viewer-media-speed = { $n }×
+viewer-media-pitch-off = тон со скоростью
 viewer-media-playlist = { $i } / { $n }
 viewer-media-shuffle = Случайно
 viewer-media-loop = Повтор
