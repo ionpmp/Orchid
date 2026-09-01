@@ -461,6 +461,7 @@ audio-player-empty-roots = Добавьте папку с музыкой, что
 audio-player-empty-library = В папках библиотеки нет аудиофайлов
 audio-player-scanning = Сканирование библиотеки…
 audio-player-empty-search = Ничего не найдено
+audio-player-empty-queue = Очередь пуста — добавьте треки из библиотеки или перетащите аудиофайлы
 audio-player-search-placeholder = Поиск треков, исполнителей, альбомов…
 audio-player-clear-queue = Очистить очередь
 audio-player-add-to-playlist = PL+

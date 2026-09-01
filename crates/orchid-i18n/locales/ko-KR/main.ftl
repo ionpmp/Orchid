@@ -471,6 +471,7 @@ audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
 audio-player-scanning = 라이브러리 검색 중…
 audio-player-empty-search = 검색과 일치하는 곡이 없습니다
+audio-player-empty-queue = Queue is empty — enqueue tracks from the library or drop audio files here
 audio-player-search-placeholder = 곡, 아티스트, 앨범 검색…
 audio-player-clear-queue = 대기열 비우기
 audio-player-add-to-playlist = PL+

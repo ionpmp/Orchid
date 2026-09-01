@@ -59,6 +59,42 @@ export component AudioPlayerView inherits Rectangle {
                 root.command("rg");
                 return accept;
             }
+            if event.text == "t" || event.text == "T" {
+                root.command("sleep");
+                return accept;
+            }
+            if event.text == "e" || event.text == "E" {
+                root.command("eq");
+                return accept;
+            }
+            if event.text == "k" || event.text == "K" {
+                root.command("speed");
+                return accept;
+            }
+            if event.text == Key.Return {
+                if root.model.search-query != "" {
+                    root.command("play-search");
+                    return accept;
+                }
+            }
+            if event.text == Key.Delete {
+                if root.model.browse-tab == 5 {
+                    root.command("remove-current-from-queue");
+                    return accept;
+                }
+            }
+            if event.text == Key.Home {
+                if root.model.browse-tab == 5 {
+                    root.command("queue-first");
+                    return accept;
+                }
+            }
+            if event.text == Key.End {
+                if root.model.browse-tab == 5 {
+                    root.command("queue-last");
+                    return accept;
+                }
+            }
             if event.text == Key.Backspace {
                 root.command("stop");
                 return accept;
@@ -190,6 +226,37 @@ export component AudioPlayerView inherits Rectangle {
                     placeholder: root.model.search-placeholder;
                     edited(q) => { root.command("search:" + q); }
                     escape-pressed => { root.command("clear-search"); }
+                }
+
+                if root.model.search-query != "" && root.model.tracks.length > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: play-search-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("play-search"); } }
+                    play-search-txt := Text {
+                        text: root.model.play-group-label;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-semibold;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.search-query != "" && root.model.tracks.length > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: enq-search-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("enqueue-search"); } }
+                    enq-search-txt := Text {
+                        text: root.model.enqueue-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
                 }
 
                 Rectangle {
@@ -491,7 +558,13 @@ export component AudioPlayerView inherits Rectangle {
                                     Rectangle {
                                         horizontal-stretch: 1;
                                         t-ta := TouchArea {
-                                            clicked => { root.command("play-track:" + t.path); }
+                                            clicked => {
+                                                if root.model.browse-tab == 5 {
+                                                    root.command("queue-play:" + t.path);
+                                                } else {
+                                                    root.command("play-track:" + t.path);
+                                                }
+                                            }
                                         }
                                         VerticalLayout {
                                             alignment: center;
@@ -545,7 +618,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab == 4 : Rectangle {
+                                    if root.model.browse-tab != 5 : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
                                         Text {
@@ -683,22 +756,34 @@ export component AudioPlayerView inherits Rectangle {
                             vertical-alignment: center;
                         }
                         progress-bar := Rectangle {
-                            height: 4px;
-                            background: Theme.surface-base;
-                            border-radius: 2px;
+                            height: 14px;
+                            background: transparent;
                             horizontal-stretch: 1;
-                            Rectangle {
-                                width: parent.width * root.model.progress;
-                                height: 100%;
-                                background: Theme.accent-brand;
-                                border-radius: 2px;
-                            }
                             seek-ta := TouchArea {
-                                clicked => {
-                                    if progress-bar.width > 0 {
-                                        root.command("seek-frac:" + (seek-ta.pressed-x / progress-bar.width));
+                                moved => {
+                                    if self.pressed && progress-bar.width > 0 {
+                                        root.command("seek-frac:" + (self.mouse-x / progress-bar.width));
                                     }
                                 }
+                                clicked => {
+                                    if progress-bar.width > 0 {
+                                        root.command("seek-frac:" + (self.mouse-x / progress-bar.width));
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                y: parent.height / 2 - 2px;
+                                height: 4px;
+                                width: parent.width;
+                                background: Theme.surface-base;
+                                border-radius: 2px;
+                            }
+                            Rectangle {
+                                y: parent.height / 2 - 2px;
+                                height: 4px;
+                                width: parent.width * root.model.progress;
+                                background: Theme.accent-brand;
+                                border-radius: 2px;
                             }
                         }
                         Text {

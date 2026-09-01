@@ -471,6 +471,7 @@ audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
 audio-player-scanning = Bibliothek wird gescannt…
 audio-player-empty-search = Keine Treffer für die Suche
+audio-player-empty-queue = Queue is empty — enqueue tracks from the library or drop audio files here
 audio-player-search-placeholder = Songs, Künstler, Alben suchen…
 audio-player-clear-queue = Warteschlange leeren
 audio-player-add-to-playlist = PL+

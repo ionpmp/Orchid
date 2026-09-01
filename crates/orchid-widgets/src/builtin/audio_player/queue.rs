@@ -166,6 +166,24 @@ impl PlayQueue {
         }
     }
 
+    /// Jump to the first track in the queue list (display order).
+    pub fn jump_first(&mut self) -> bool {
+        if self.paths.is_empty() {
+            return false;
+        }
+        self.index = 0;
+        true
+    }
+
+    /// Jump to the last track in the queue list (display order).
+    pub fn jump_last(&mut self) -> bool {
+        if self.paths.is_empty() {
+            return false;
+        }
+        self.index = self.paths.len() - 1;
+        true
+    }
+
     /// Append `path` to the end of the queue (no duplicates by path).
     pub fn enqueue_end(&mut self, path: &str) -> bool {
         if self.paths.iter().any(|p| p == path) {
@@ -354,5 +372,29 @@ mod tests {
         assert_eq!(q.current(), Some("b"));
         assert!(!q.move_up("a"));
         assert!(!q.move_down("c"));
+    }
+
+    #[test]
+    fn play_at_does_not_reshuffle() {
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into()],
+            0,
+            true,
+            RepeatMode::Off,
+        );
+        let order_before = q.order.clone();
+        assert!(q.play_at("c"));
+        assert_eq!(q.order, order_before);
+        assert_eq!(q.current(), Some("c"));
+    }
+
+    #[test]
+    fn jump_first_last() {
+        let mut q =
+            PlayQueue::from_paths(vec!["a".into(), "b".into(), "c".into()], 1, false, RepeatMode::Off);
+        assert!(q.jump_first());
+        assert_eq!(q.current(), Some("a"));
+        assert!(q.jump_last());
+        assert_eq!(q.current(), Some("c"));
     }
 }

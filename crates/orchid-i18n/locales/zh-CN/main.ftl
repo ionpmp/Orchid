@@ -471,6 +471,7 @@ audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
 audio-player-scanning = 正在扫描曲库…
 audio-player-empty-search = 没有匹配的曲目
+audio-player-empty-queue = Queue is empty — enqueue tracks from the library or drop audio files here
 audio-player-search-placeholder = 搜索歌曲、艺人、专辑…
 audio-player-clear-queue = 清空队列
 audio-player-add-to-playlist = PL+
