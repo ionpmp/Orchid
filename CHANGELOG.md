@@ -104,9 +104,10 @@ release yet.
   Drop files from Explorer onto a viewer to open them there. SW blit scales
   to the widget viewport (capped at 1920×1080). Video transport chrome
   auto-hides after ~2.5s idle (mouse move / keys / hover reveal; audio-only
-  keeps the bar). Pitch-preserving speed via mpv `audio-pitch-correction`
-  / scaletempo2 (K or click speed chip to toggle; persisted). Catalog
-  **Media Player** launcher opens a file picker then
+  keeps the bar).   Pitch-preserving speed via mpv `audio-pitch-correction`
+  / scaletempo2 (K or click speed chip to toggle; persisted). Paused idle
+  skips UI republish / slows mpv polling; catalog picker remembers the last
+  media folder. Catalog **Media Player** launcher opens a file picker then
   places a viewer on the canvas (distinct from **Now Playing** SMTC). Bundle
   `mpv-1.dll` / `libmpv-2.dll` under `third-party/mpv/win-x64/` (see
   `docs/BUILDING.md`); without it, chrome remains and files can still open

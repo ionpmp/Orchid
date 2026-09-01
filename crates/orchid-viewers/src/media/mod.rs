@@ -26,7 +26,7 @@ pub use sidecars::discover_sidecar_subs;
 /// Native file dialog for picking a local audio/video file.
 #[must_use]
 pub fn pick_media_file() -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new()
+    let mut dialog = rfd::FileDialog::new()
         .add_filter(
             "Media",
             &[
@@ -34,8 +34,17 @@ pub fn pick_media_file() -> Option<std::path::PathBuf> {
                 "flac", "ogg", "aac", "m4a", "wma", "opus", "aiff",
             ],
         )
-        .add_filter("All", &["*"])
-        .pick_file()
+        .add_filter("All", &["*"]);
+    if let Some(dir) = prefs::load().last_folder {
+        if dir.is_dir() {
+            dialog = dialog.set_directory(dir);
+        }
+    }
+    let path = dialog.pick_file()?;
+    if let Some(parent) = path.parent() {
+        prefs::store_last_folder(parent);
+    }
+    Some(path)
 }
 
 use engine::MpvEngine;
@@ -390,6 +399,9 @@ impl Viewer for MediaViewer {
         *self.os_path.write() = os.clone();
         *self.path.write() = Some(path);
         if let Some(os) = os {
+            if let Some(parent) = os.parent() {
+                prefs::store_last_folder(parent);
+            }
             let tags = cover::load_media_tags(&os);
             let art = cover::load_cover_art(&os);
             self.engine

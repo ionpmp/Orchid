@@ -1,5 +1,6 @@
-//! Persist last media volume / mute across sessions.
+//! Persist media viewer prefs (volume, mute, hwdec, pitch, last picker folder).
 
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,9 @@ pub struct MediaPrefs {
     /// Keep musical pitch when playback speed ≠ 1.
     #[serde(default = "default_pitch_preserve")]
     pub pitch_preserve: bool,
+    /// Last directory used by the catalog media file picker.
+    #[serde(default)]
+    pub last_folder: Option<PathBuf>,
 }
 
 fn default_pitch_preserve() -> bool {
@@ -28,11 +32,12 @@ impl Default for MediaPrefs {
             muted: false,
             hwdec_mode: 0,
             pitch_preserve: true,
+            last_folder: None,
         }
     }
 }
 
-fn store_path() -> Option<std::path::PathBuf> {
+fn store_path() -> Option<PathBuf> {
     orchid_storage::OrchidPaths::resolve()
         .ok()
         .map(|p| p.cache_dir.join("media_prefs.json"))
@@ -73,15 +78,25 @@ pub fn load() -> MediaPrefs {
     prefs
 }
 
-/// Persist volume / mute / hwdec / pitch-preserve.
+/// Persist volume / mute / hwdec / pitch-preserve (keeps `last_folder`).
 pub fn store(volume: f64, muted: bool, hwdec_mode: u32, pitch_preserve: bool) {
     let Ok(_g) = LOCK.lock() else {
         return;
     };
-    save_file(&MediaPrefs {
-        volume: volume.clamp(0.0, 150.0),
-        muted,
-        hwdec_mode: hwdec_mode.min(1),
-        pitch_preserve,
-    });
+    let mut prefs = load_file();
+    prefs.volume = volume.clamp(0.0, 150.0);
+    prefs.muted = muted;
+    prefs.hwdec_mode = hwdec_mode.min(1);
+    prefs.pitch_preserve = pitch_preserve;
+    save_file(&prefs);
+}
+
+/// Remember the folder shown in the next media file picker.
+pub fn store_last_folder(folder: &Path) {
+    let Ok(_g) = LOCK.lock() else {
+        return;
+    };
+    let mut prefs = load_file();
+    prefs.last_folder = Some(folder.to_path_buf());
+    save_file(&prefs);
 }
