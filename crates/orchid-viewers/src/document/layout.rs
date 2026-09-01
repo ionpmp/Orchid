@@ -2323,9 +2323,10 @@ mod tests {
         let content_w = 400.0;
         let (bytes, w, h) = dl.render_document(&doc, content_w);
         assert!(w > 100 && h > 40);
-        // Mid-column hairline at pad + content_w/2.
-        let vx = (PreviewInsets::default_letter().left + content_w / 2.0).round() as u32;
-        let vy = (PreviewInsets::default_letter().left + 8.0).round() as u32;
+        let s = PREVIEW_RENDER_SCALE;
+        // Mid-column hairline at pad + content_w/2 (device pixels).
+        let vx = ((PreviewInsets::default_letter().left + content_w / 2.0) * s).round() as u32;
+        let vy = ((PreviewInsets::default_letter().left + 8.0) * s).round() as u32;
         let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
         assert!(
             bytes[i] == TABLE_GRID_COLOR[0]
@@ -2349,9 +2350,10 @@ mod tests {
         let content_w = 400.0;
         let (bytes, w, h) = dl.render_document(&doc, content_w);
         assert!(w > 100 && h > 40);
+        let s = PREVIEW_RENDER_SCALE;
         // 1:3 split → border at 25% of content width, not 50%.
-        let vx = (PreviewInsets::default_letter().left + content_w * 0.25).round() as u32;
-        let vy = (PreviewInsets::default_letter().left + 8.0).round() as u32;
+        let vx = ((PreviewInsets::default_letter().left + content_w * 0.25) * s).round() as u32;
+        let vy = ((PreviewInsets::default_letter().left + 8.0) * s).round() as u32;
         let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
         assert!(
             bytes[i] == TABLE_GRID_COLOR[0]
@@ -2679,8 +2681,12 @@ mod tests {
         assert!((insets.bottom - 64.0).abs() < 0.1);
 
         let (_, w, h) = dl.render_document(&doc, content_w);
-        assert_eq!(w, (content_w + insets.left + insets.right).ceil() as u32);
-        assert!(h as f32 >= insets.top + insets.bottom + 16.0);
+        let s = PREVIEW_RENDER_SCALE;
+        assert_eq!(
+            w,
+            ((content_w + insets.left + insets.right) * s).ceil() as u32
+        );
+        assert!(h as f32 >= (insets.top + insets.bottom + 16.0) * s);
 
         let offset = dl
             .hit_test_plain_offset(
