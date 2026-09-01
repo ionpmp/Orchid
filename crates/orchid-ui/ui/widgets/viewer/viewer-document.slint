@@ -1891,8 +1891,8 @@ export component ViewerDocumentView inherits Rectangle {
                 Flickable {
                     width: parent.width;
                     height: parent.height;
-                    viewport-width: max(self.width, model.preview-width-px * 1px * max(0.5, model.preview-zoom-percent / 100));
-                    viewport-height: max(self.height, model.preview-height-px * 1px * max(0.5, model.preview-zoom-percent / 100));
+                    viewport-width: max(self.width, model.preview-width-px * 1px * max(0.5, model.preview-zoom-percent / 100) / max(1, model.preview-render-scale));
+                    viewport-height: max(self.height, model.preview-height-px * 1px * max(0.5, model.preview-zoom-percent / 100) / max(1, model.preview-render-scale));
 
                     // Mirror find-gen so Preview can scroll to the match.
                     property <int> sync-find-gen: model.find-gen;
@@ -1908,8 +1908,8 @@ export component ViewerDocumentView inherits Rectangle {
 
                     Rectangle {
                         x: max(0px, (parent.width - self.width) / 2);
-                        width: model.preview-width-px * 1px * max(0.5, model.preview-zoom-percent / 100);
-                        height: model.preview-height-px * 1px * max(0.5, model.preview-zoom-percent / 100);
+                        width: model.preview-width-px * 1px * max(0.5, model.preview-zoom-percent / 100) / max(1, model.preview-render-scale);
+                        height: model.preview-height-px * 1px * max(0.5, model.preview-zoom-percent / 100) / max(1, model.preview-render-scale);
                         background: #fafafc;
                         property <float> zoom: max(0.5, model.preview-zoom-percent / 100);
 

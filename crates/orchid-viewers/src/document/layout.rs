@@ -65,6 +65,8 @@ pub const DEFAULT_PREVIEW_WIDTH: f32 = 720.0;
 pub const LIST_INDENT_PX: f32 = 24.0;
 /// Cap rendered page height so huge docs stay interactive.
 pub const MAX_PREVIEW_HEIGHT: u32 = 4096;
+/// Device-pixel ratio for soft-rendered preview (sharper on HiDPI).
+pub const PREVIEW_RENDER_SCALE: f32 = 2.0;
 
 /// CSS-pixel page margins for the preview canvas (from `w:pgMar`).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -129,7 +131,15 @@ impl DocumentLayout {
     }
 
     /// Lay out a single paragraph at `max_width` CSS pixels.
-    pub fn layout_paragraph(&mut self, p: &Paragraph, max_width: f32) -> Layout<ColorBrush> {
+    ///
+    /// `scale` is the Parley display scale (1.0 for hit-testing, [`PREVIEW_RENDER_SCALE`] when rasterising).
+    pub fn layout_paragraph(
+        &mut self,
+        p: &Paragraph,
+        max_width: f32,
+        scale: f32,
+    ) -> Layout<ColorBrush> {
+        let scale = scale.max(0.5);
         let prefix = list_prefix(p);
         let body = p.plain_text();
         let text = if prefix.is_empty() {
@@ -139,7 +149,7 @@ impl DocumentLayout {
         };
         let mut builder: RangedBuilder<'_, ColorBrush> =
             self.layout_cx
-                .ranged_builder(&mut self.font_cx, &text, 1.0, true);
+                .ranged_builder(&mut self.font_cx, &text, scale, true);
         builder.push_default(StyleProperty::FontSize(14.0));
         builder.push_default(paragraph_line_height(p));
         builder.push_default(StyleProperty::Brush(ColorBrush::default()));
@@ -194,7 +204,7 @@ impl DocumentLayout {
                     brush.b = b;
                 }
                 brush.highlight = run.style.highlight;
-                brush.baseline_shift = baseline_shift;
+                brush.baseline_shift = baseline_shift * scale;
                 builder.push(StyleProperty::Brush(brush), offset..end);
             }
             offset = end;
@@ -220,6 +230,9 @@ impl DocumentLayout {
     }
 
     /// Like [`Self::render_document`], with optional selection / caret overlay.
+    ///
+    /// Rasterises at [`PREVIEW_RENDER_SCALE`] device pixels per CSS pixel so text
+    /// stays sharp when Slint displays the image at logical size on HiDPI screens.
     #[must_use]
     pub fn render_document_with_selection(
         &mut self,
@@ -227,15 +240,23 @@ impl DocumentLayout {
         content_width: f32,
         selection: Option<(usize, usize)>,
     ) -> (Arc<Vec<u8>>, u32, u32) {
-        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
-        let max_w = content_width.max(80.0);
-        // Content-relative Y (padding applied at paint time) — must match hit-test.
+        let scale = PREVIEW_RENDER_SCALE;
+        let base_insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let insets = PreviewInsets {
+            left: base_insets.left * scale,
+            right: base_insets.right * scale,
+            top: base_insets.top * scale,
+            bottom: base_insets.bottom * scale,
+        };
+        let max_w = content_width.max(80.0) * scale;
+        // Content-relative Y (padding applied at paint time) — hit-test stays at scale 1.
         let mut layouts: Vec<LaidBlock> = Vec::new();
         let mut grids: Vec<TableGridGeom> = Vec::new();
         let mut total_h = 0.0;
-        let para_gap = 10.0;
+        let para_gap = 10.0 * scale;
         let mut plain_offset = 0usize;
         let mut emitted_text = false;
+        let max_preview_h = MAX_PREVIEW_HEIGHT as f32 * scale;
 
         for block in &doc.blocks {
             match block {
@@ -246,16 +267,20 @@ impl DocumentLayout {
                     emitted_text = true;
                     let mut rule_y = None;
                     if p.page_break_before {
-                        const PAGE_BREAK_GAP: f32 = 28.0;
-                        rule_y = Some(total_h + 10.0);
-                        total_h += PAGE_BREAK_GAP;
+                        let page_break_gap = 28.0 * scale;
+                        rule_y = Some(total_h + 10.0 * scale);
+                        total_h += page_break_gap;
                     }
-                    total_h += twips_to_css_px(p.space_before_twips);
+                    total_h += twips_to_css_px(p.space_before_twips) * scale;
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
-                    let indent = list_indent_px(p);
-                    let layout = self.layout_paragraph(p, paragraph_wrap_width(max_w, p));
-                    let h = layout.height().max(16.0);
+                    let indent = list_indent_px(p) * scale;
+                    let layout = self.layout_paragraph(
+                        p,
+                        (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale),
+                        scale,
+                    );
+                    let h = layout.height().max(16.0 * scale);
                     layouts.push(LaidBlock {
                         layout,
                         y0: total_h,
@@ -273,7 +298,7 @@ impl DocumentLayout {
                         shade_w: max_w,
                     });
                     plain_offset += body_len;
-                    let after = twips_to_css_px(p.space_after_twips).max(para_gap);
+                    let after = (twips_to_css_px(p.space_after_twips) * scale).max(para_gap);
                     total_h += h + after;
                 }
                 Block::Table(t) => {
@@ -284,13 +309,14 @@ impl DocumentLayout {
                         &mut plain_offset,
                         &mut emitted_text,
                         &mut layouts,
+                        scale,
                     );
                     grids.push(grid);
                     total_h += para_gap;
                 }
                 Block::Image(img) => {
                     let (rgba, w, h_px) = prepare_preview_image(img, max_w);
-                    let h = (h_px as f32).max(24.0);
+                    let h = (h_px as f32).max(24.0 * scale);
                     layouts.push(LaidBlock {
                         layout: Layout::default(),
                         y0: total_h,
@@ -310,7 +336,7 @@ impl DocumentLayout {
                     total_h += h + para_gap;
                 }
             }
-            if total_h > MAX_PREVIEW_HEIGHT as f32 {
+            if total_h > max_preview_h {
                 break;
             }
         }
@@ -318,7 +344,7 @@ impl DocumentLayout {
         let width = (max_w + insets.left + insets.right).ceil() as u32;
         let height = (total_h + insets.top + insets.bottom)
             .ceil()
-            .clamp(64.0, MAX_PREVIEW_HEIGHT as f32) as u32;
+            .clamp(64.0 * scale, max_preview_h) as u32;
         let mut pixels = vec![255u8; (width as usize) * (height as usize) * 4];
 
         fill_rect(
@@ -540,7 +566,7 @@ impl DocumentLayout {
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
                     let wrap_w = paragraph_wrap_width(max_w, p);
-                    let layout = self.layout_paragraph(p, wrap_w);
+                    let layout = self.layout_paragraph(p, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
                     let after = twips_to_css_px(p.space_after_twips).max(para_gap);
@@ -635,7 +661,7 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let y0 = total_h;
                     let wrap_w = paragraph_wrap_width(max_w, p);
-                    let layout = self.layout_paragraph(p, wrap_w);
+                    let layout = self.layout_paragraph(p, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     if target >= plain_offset && target <= plain_offset + body_len {
                         return insets.top + y0;
@@ -645,7 +671,8 @@ impl DocumentLayout {
                 }
                 Block::Table(t) => {
                     let range_start = plain_offset;
-                    let measured = self.measure_table(t, max_w, &mut plain_offset, &mut emitted_text);
+                    let measured =
+                        self.measure_table(t, max_w, &mut plain_offset, &mut emitted_text, 1.0);
                     let table_y0 = total_h;
                     let row_y0s = row_origins(table_y0, &measured.row_heights);
                     if target >= range_start && target <= plain_offset {
@@ -716,11 +743,14 @@ impl DocumentLayout {
         plain_offset: &mut usize,
         emitted_text: &mut bool,
         layouts: &mut Vec<LaidBlock>,
+        scale: f32,
     ) -> TableGridGeom {
-        let mut measured = self.measure_table(t, max_w, plain_offset, emitted_text);
+        let mut measured = self.measure_table(t, max_w, plain_offset, emitted_text, scale);
         let table_y0 = *total_h;
         let row_y0s = row_origins(table_y0, &measured.row_heights);
         let mut cell_rects = Vec::new();
+        let pad = TABLE_CELL_PAD * scale;
+        let gap = TABLE_CELL_PARA_GAP * scale;
 
         for (ri, mrow) in measured.rows.iter_mut().enumerate() {
             let placements = mrow.placements.clone();
@@ -742,8 +772,8 @@ impl DocumentLayout {
                     rowspan,
                 );
                 cell_rects.push(TableCellRect { x0, y0, w, h });
-                let x_pad = x0 + TABLE_CELL_PAD;
-                let mut y = y0 + TABLE_CELL_PAD;
+                let x_pad = x0 + pad;
+                let mut y = y0 + pad;
                 let items = mrow
                     .items
                     .get_mut(ci)
@@ -803,7 +833,7 @@ impl DocumentLayout {
                             });
                         }
                     }
-                    y += item_h + TABLE_CELL_PARA_GAP;
+                    y += item_h + gap;
                 }
             }
         }
@@ -833,7 +863,7 @@ impl DocumentLayout {
         plain_offset: &mut usize,
         emitted_text: &mut bool,
     ) -> Option<Cursor> {
-        let measured = self.measure_table(t, max_w, plain_offset, emitted_text);
+        let measured = self.measure_table(t, max_w, plain_offset, emitted_text, 1.0);
         let table_y0 = *total_h;
         let row_y0s = row_origins(table_y0, &measured.row_heights);
         *total_h = table_y0 + measured.row_heights.iter().sum::<f32>();
@@ -933,7 +963,11 @@ impl DocumentLayout {
         max_w: f32,
         plain_offset: &mut usize,
         emitted_text: &mut bool,
+        scale: f32,
     ) -> MeasuredTable {
+        let scale = scale.max(0.5);
+        let pad = TABLE_CELL_PAD * scale;
+        let gap = TABLE_CELL_PARA_GAP * scale;
         let ncols = table_grid_column_count(t);
         let col_widths = table_column_widths_px(t, max_w, ncols);
         let mut rows = Vec::with_capacity(t.rows.len());
@@ -950,14 +984,12 @@ impl DocumentLayout {
                     .map(|p| (p.1, p.2))
                     .unwrap_or((0, 1));
                 let cell_w = col_widths.iter().skip(col0).take(span).sum::<f32>();
-                let inner_w = (cell_w - TABLE_CELL_PAD * 2.0).max(16.0);
-                let cell_items = self.layout_cell_items(cell, inner_w, plain_offset, emitted_text);
-                let mut content_h: f32 = cell_items
-                    .iter()
-                    .map(|i| i.height() + TABLE_CELL_PARA_GAP)
-                    .sum();
+                let inner_w = (cell_w - pad * 2.0).max(16.0 * scale);
+                let cell_items =
+                    self.layout_cell_items(cell, inner_w, plain_offset, emitted_text, scale);
+                let mut content_h: f32 = cell_items.iter().map(|i| i.height() + gap).sum();
                 if content_h > 0.0 {
-                    content_h -= TABLE_CELL_PARA_GAP;
+                    content_h -= gap;
                 }
                 if is_vmerge_continue(cell) {
                     content_h = 0.0;
@@ -971,10 +1003,10 @@ impl DocumentLayout {
 
         let mut row_heights: Vec<f32> = content_hs
             .iter()
-            .map(|hs| (hs.iter().copied().fold(0.0f32, f32::max) + TABLE_CELL_PAD * 2.0).max(20.0))
+            .map(|hs| (hs.iter().copied().fold(0.0f32, f32::max) + pad * 2.0).max(20.0 * scale))
             .collect();
         if row_heights.is_empty() {
-            row_heights.push(20.0);
+            row_heights.push(20.0 * scale);
         }
 
         for (ri, row) in t.rows.iter().enumerate() {
@@ -994,7 +1026,7 @@ impl DocumentLayout {
                     .and_then(|h| h.get(ci))
                     .copied()
                     .unwrap_or(0.0)
-                    + TABLE_CELL_PAD * 2.0;
+                    + pad * 2.0;
                 let end = (ri + rowspan).min(row_heights.len());
                 let have: f32 = row_heights[ri..end].iter().sum();
                 if needed > have && end > ri {
@@ -1017,12 +1049,14 @@ impl DocumentLayout {
         inner_w: f32,
         plain_offset: &mut usize,
         emitted_text: &mut bool,
+        scale: f32,
     ) -> Vec<CellItemLayout> {
+        let scale = scale.max(0.5);
         let mut items = Vec::new();
         if cell.paragraphs.is_empty() {
             for (image_idx, cell_img) in cell.images.iter().enumerate() {
                 let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
-                let h = (h_px as f32).max(24.0);
+                let h = (h_px as f32).max(24.0 * scale);
                 items.push(CellItemLayout::Image {
                     plain_start: *plain_offset,
                     image_idx,
@@ -1042,10 +1076,11 @@ impl DocumentLayout {
             *emitted_text = true;
             let body_len = p.plain_text().len();
             let prefix_len = list_prefix(p).len();
-            let indent = list_indent_px(p);
-            let wrap_w = (inner_w - indent - paragraph_right_indent_px(p)).max(12.0);
-            let layout = self.layout_paragraph(p, wrap_w);
-            let h = layout.height().max(14.0);
+            let indent = list_indent_px(p) * scale;
+            let wrap_w =
+                (inner_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale);
+            let layout = self.layout_paragraph(p, wrap_w, scale);
+            let h = layout.height().max(14.0 * scale);
             let plain_start = *plain_offset;
             items.push(CellItemLayout::Para {
                 layout,
@@ -1064,7 +1099,7 @@ impl DocumentLayout {
                     continue;
                 }
                 let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
-                let ih = (h_px as f32).max(24.0);
+                let ih = (h_px as f32).max(24.0 * scale);
                 items.push(CellItemLayout::Image {
                     plain_start: after_text,
                     image_idx,
@@ -1082,7 +1117,7 @@ impl DocumentLayout {
                 continue;
             }
             let (rgba, w, h_px) = prepare_preview_image(&cell_img.image, inner_w);
-            let ih = (h_px as f32).max(24.0);
+            let ih = (h_px as f32).max(24.0 * scale);
             items.push(CellItemLayout::Image {
                 plain_start: *plain_offset,
                 image_idx,
@@ -1776,7 +1811,7 @@ impl LayoutCache {
             self.width = width;
         }
         self.cache.entry(idx).or_insert_with(|| CachedLayout {
-            layout: dl.layout_paragraph(p, width),
+            layout: dl.layout_paragraph(p, width, 1.0),
         });
         &self.cache.get(&idx).expect("just inserted").layout
     }
@@ -2144,7 +2179,7 @@ mod tests {
     #[test]
     fn layout_paragraph_has_lines() {
         let mut dl = DocumentLayout::new();
-        let layout = dl.layout_paragraph(&sample_paragraph(), 400.0);
+        let layout = dl.layout_paragraph(&sample_paragraph(), 400.0, 1.0);
         assert!(!layout.is_empty());
     }
 
@@ -2162,7 +2197,7 @@ mod tests {
     #[test]
     fn render_produces_non_white_ink() {
         let mut dl = DocumentLayout::new();
-        let layout = dl.layout_paragraph(&sample_paragraph(), 200.0);
+        let layout = dl.layout_paragraph(&sample_paragraph(), 200.0, 1.0);
         let buf = render_to_rgba(&layout, 256, 64);
         assert!(
             buf.chunks_exact(4)
@@ -2675,8 +2710,8 @@ mod tests {
             line_spacing: 480,
             ..single.clone()
         };
-        let h1 = dl.layout_paragraph(&single, 120.0).height();
-        let h2 = dl.layout_paragraph(&double, 120.0).height();
+        let h1 = dl.layout_paragraph(&single, 120.0, 1.0).height();
+        let h2 = dl.layout_paragraph(&double, 120.0, 1.0).height();
         assert!(
             h2 > h1 * 1.3,
             "double spacing should be clearly taller: single={h1} double={h2}"
@@ -2702,8 +2737,8 @@ mod tests {
             line_spacing_rule: LineSpacingRule::Exact,
             ..auto.clone()
         };
-        let h_auto = dl.layout_paragraph(&auto, 400.0).height();
-        let h_exact = dl.layout_paragraph(&exact, 400.0).height();
+        let h_auto = dl.layout_paragraph(&auto, 400.0, 1.0).height();
+        let h_exact = dl.layout_paragraph(&exact, 400.0, 1.0).height();
         assert!(
             h_exact > h_auto + 10.0,
             "exact 720 twips should be taller than single auto: auto={h_auto} exact={h_exact}"
@@ -2726,11 +2761,11 @@ mod tests {
             indent_left_twips: 2880, // 2″ → ~192 CSS px less width
             ..flush.clone()
         };
-        let h_flush = dl.layout_paragraph(&flush, 400.0).height();
+        let h_flush = dl.layout_paragraph(&flush, 400.0, 1.0).height();
         // Same content_width budget as document layout: max_w - indent.
         let indent = list_indent_px(&indented);
         let h_ind = dl
-            .layout_paragraph(&indented, (400.0 - indent).max(40.0))
+            .layout_paragraph(&indented, (400.0 - indent).max(40.0), 1.0)
             .height();
         assert!(
             h_ind > h_flush,

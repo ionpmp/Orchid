@@ -78,6 +78,8 @@ pub struct DocumentSnapshot {
     pub preview_rgba: Arc<Vec<u8>>,
     pub preview_width_px: u32,
     pub preview_height_px: u32,
+    /// Device pixels per CSS pixel used when rasterising [`Self::preview_rgba`] (`2` = HiDPI).
+    pub preview_render_scale: i32,
     /// When true, the UI shows the plain-text editor instead of the preview.
     pub source_mode: bool,
     /// Bumped when find selects a match (Slint syncs source-mode selection).

@@ -3433,6 +3433,7 @@ impl Viewer for DocumentViewer {
             preview_rgba,
             preview_width_px,
             preview_height_px,
+            preview_render_scale: crate::document::layout::PREVIEW_RENDER_SCALE.round() as i32,
             source_mode,
             find_gen: *self.find_gen.lock(),
             find_anchor: *self.find_anchor.lock(),

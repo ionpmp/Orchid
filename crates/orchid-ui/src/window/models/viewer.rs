@@ -756,6 +756,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         preview_image: Image::default(),
         preview_width_px: 0,
         preview_height_px: 0,
+        preview_render_scale: 2,
         save_label: locale.tr("viewer-document-save").into(),
         print_label: locale.tr("viewer-document-print").into(),
         undo_label: locale.tr("viewer-document-undo").into(),
@@ -1052,6 +1053,7 @@ fn build_document_snapshot(
     model.source_mode = s.source_mode;
     model.preview_width_px = s.preview_width_px as i32;
     model.preview_height_px = s.preview_height_px as i32;
+    model.preview_render_scale = s.preview_render_scale.max(1);
     model.preview_image =
         slint_image_from_rgba(&s.preview_rgba, s.preview_width_px, s.preview_height_px);
     model.find_gen = s.find_gen;
