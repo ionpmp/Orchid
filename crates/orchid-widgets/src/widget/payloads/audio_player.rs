@@ -64,6 +64,7 @@ pub struct AudioPlayerPayload {
     pub repeat: u8,
     pub sleep_label: String,
     pub eq_label: String,
+    pub rg_label: String,
     pub speed_label: String,
     pub lyrics_line: String,
     pub has_lyrics: bool,

@@ -532,11 +532,19 @@ fn run_worker(
             .pitch_preserve
             .store(prefs.pitch_preserve, Ordering::Relaxed);
         shared.sub_style_index.store(
-            prefs.sub_style_index % SUB_STYLE_PRESETS.len() as u32,
+            if audio_only {
+                0
+            } else {
+                prefs.sub_style_index % SUB_STYLE_PRESETS.len() as u32
+            },
             Ordering::Relaxed,
         );
         shared.replaygain_index.store(
-            prefs.replaygain_index % REPLAYGAIN_MODES.len() as u32,
+            if audio_only {
+                0
+            } else {
+                prefs.replaygain_index % REPLAYGAIN_MODES.len() as u32
+            },
             Ordering::Relaxed,
         );
         let rc = (api.initialize)(handle);
@@ -696,6 +704,16 @@ unsafe fn create_render_context(
     } else {
         Ok(ctx)
     }
+}
+
+fn persist_look(mode: EngineMode, shared: &SharedPlayback) {
+    if matches!(mode, EngineMode::Audio) {
+        return;
+    }
+    prefs::store_look(
+        shared.sub_style_index.load(Ordering::Relaxed),
+        shared.replaygain_index.load(Ordering::Relaxed),
+    );
 }
 
 fn persist_transport(mode: EngineMode, shared: &SharedPlayback) {
@@ -900,7 +918,7 @@ unsafe fn handle_cmd(
         EngineCmd::SubStyleReset => {
             shared.sub_style_index.store(0, Ordering::Relaxed);
             apply_sub_style(api, handle, shared, 0);
-            prefs::store_look(0, shared.replaygain_index.load(Ordering::Relaxed));
+            persist_look(mode, shared);
             flash_osd(shared, "Subs default".into());
             shared.dirty.store(true, Ordering::Release);
         }
@@ -909,7 +927,7 @@ unsafe fn handle_cmd(
                 (shared.sub_style_index.load(Ordering::Relaxed) + 1) % SUB_STYLE_PRESETS.len() as u32;
             shared.sub_style_index.store(next, Ordering::Relaxed);
             apply_sub_style(api, handle, shared, next);
-            prefs::store_look(next, shared.replaygain_index.load(Ordering::Relaxed));
+            persist_look(mode, shared);
             let label = shared.sub_style_label.read().clone();
             flash_osd(
                 shared,
@@ -936,10 +954,7 @@ unsafe fn handle_cmd(
         }
         EngineCmd::CycleReplayGain => {
             apply_next_replaygain(api, handle, shared);
-            prefs::store_look(
-                shared.sub_style_index.load(Ordering::Relaxed),
-                shared.replaygain_index.load(Ordering::Relaxed),
-            );
+            persist_look(mode, shared);
             let label = shared.replaygain_label.read().clone();
             flash_osd(
                 shared,

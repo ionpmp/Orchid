@@ -128,6 +128,14 @@ impl PlayerSession {
         self.engine.pause();
     }
 
+    pub fn volume_delta(&self, delta: f64) {
+        self.engine.volume_delta(delta);
+    }
+
+    pub fn seek_rel(&self, seconds: f64) {
+        self.engine.seek_rel(seconds);
+    }
+
     pub fn cycle_eq(&self) {
         self.engine.cycle_eq();
     }
@@ -135,6 +143,15 @@ impl PlayerSession {
     #[must_use]
     pub fn eq_label(&self) -> String {
         self.engine.shared.eq_label.read().clone()
+    }
+
+    pub fn cycle_replaygain(&self) {
+        self.engine.cycle_replaygain();
+    }
+
+    #[must_use]
+    pub fn replaygain_label(&self) -> String {
+        self.engine.shared.replaygain_label.read().clone()
     }
 
     /// Cycle playback rate through common music-player presets.
