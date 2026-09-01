@@ -465,6 +465,7 @@ audio-player-speed-off = 1x
 audio-player-engine-missing = libmpv missing
 audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
+audio-player-scanning = 라이브러리 검색 중…
 media-unsupported = 이 플랫폼에서는 미디어 제어를 사용할 수 없습니다
 media-play = 재생
 media-pause = 일시 정지

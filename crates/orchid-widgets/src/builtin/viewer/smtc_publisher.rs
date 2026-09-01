@@ -1,14 +1,13 @@
 //! Publish Orchid's in-app media session to Windows SMTC (lock screen / media keys).
 //!
-//! Uses a hidden [`MediaPlayer`] only to obtain
-//! [`SystemMediaTransportControls`]. The SMTC consumer widget may see Orchid
-//! as the current session while this is enabled.
+//! Used by both the Media Viewer and the Audio Player. A single OS session is
+//! shared; the last widget that calls [`set_active`] owns media keys.
 
 #![cfg(windows)]
 
+use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
-use orchid_viewers::MediaSnapshot;
 use tracing::debug;
 use uuid::Uuid;
 use windows::core::{Ref, Result as WinResult, HSTRING};
@@ -25,14 +24,59 @@ use windows::Storage::Streams::{
 
 static STATE: OnceLock<Mutex<Option<PublisherState>>> = OnceLock::new();
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActiveKind {
+    Viewer,
+    AudioPlayer,
+}
+
 struct PublisherState {
     _player: MediaPlayer,
     smtc: SystemMediaTransportControls,
-    active: Option<Uuid>,
+    active: Option<(ActiveKind, Uuid)>,
     last_title: String,
     last_artist: String,
     last_playing: Option<bool>,
     last_cover_sig: u64,
+}
+
+/// Snapshot fields needed to drive SMTC (viewer or audio player).
+#[derive(Debug, Clone)]
+pub struct NowPlaying {
+    pub available: bool,
+    pub title: String,
+    pub artist: String,
+    pub playing: bool,
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    pub has_cover: bool,
+    pub cover_rgba: Arc<Vec<u8>>,
+    pub cover_width: u32,
+    pub cover_height: u32,
+}
+
+impl NowPlaying {
+    /// Build from a media viewer snapshot.
+    #[must_use]
+    pub fn from_media(snap: &orchid_viewers::MediaSnapshot) -> Self {
+        let title = if snap.title.is_empty() {
+            snap.path_display.clone()
+        } else {
+            snap.title.clone()
+        };
+        Self {
+            available: snap.available,
+            title,
+            artist: snap.artist.clone(),
+            playing: snap.playing,
+            position_ms: snap.position_ms,
+            duration_ms: snap.duration_ms,
+            has_cover: snap.has_cover,
+            cover_rgba: Arc::clone(&snap.cover_rgba),
+            cover_width: snap.cover_width,
+            cover_height: snap.cover_height,
+        }
+    }
 }
 
 fn state() -> &'static Mutex<Option<PublisherState>> {
@@ -89,35 +133,51 @@ fn init_publisher() -> WinResult<PublisherState> {
 }
 
 fn dispatch_command(command: &'static str) {
-    let id = {
+    let active = {
         let Ok(guard) = state().lock() else {
             return;
         };
         guard.as_ref().and_then(|s| s.active)
     };
-    let Some(id) = id else {
+    let Some((kind, id)) = active else {
         return;
     };
-    tokio::spawn(async move {
-        if let Err(e) = super::media_command(id, command).await {
-            debug!(error = %e, command, "SMTC media_command failed");
+    match kind {
+        ActiveKind::Viewer => {
+            tokio::spawn(async move {
+                if let Err(e) = super::media_command(id, command).await {
+                    debug!(error = %e, command, "SMTC viewer media_command failed");
+                }
+            });
         }
-    });
+        ActiveKind::AudioPlayer => {
+            crate::builtin::audio_player::execute_command(id, command);
+        }
+    }
 }
 
-/// Bind OS media keys to this viewer instance.
-pub fn set_active(instance_id: Uuid) {
+fn set_active_kind(kind: ActiveKind, instance_id: Uuid) {
     let Ok(mut guard) = state().lock() else {
         return;
     };
     let Some(state) = guard.as_mut() else {
         return;
     };
-    state.active = Some(instance_id);
+    state.active = Some((kind, instance_id));
     let _ = state.smtc.SetIsEnabled(true);
 }
 
-/// Clear SMTC when the active viewer closes or switches away from media.
+/// Bind OS media keys to this media viewer instance.
+pub fn set_active(instance_id: Uuid) {
+    set_active_kind(ActiveKind::Viewer, instance_id);
+}
+
+/// Bind OS media keys to this audio-player instance.
+pub fn set_active_audio(instance_id: Uuid) {
+    set_active_kind(ActiveKind::AudioPlayer, instance_id);
+}
+
+/// Clear SMTC when the active widget closes or switches away.
 pub fn clear_active(instance_id: Uuid) {
     let Ok(mut guard) = state().lock() else {
         return;
@@ -125,7 +185,7 @@ pub fn clear_active(instance_id: Uuid) {
     let Some(state) = guard.as_mut() else {
         return;
     };
-    if state.active == Some(instance_id) {
+    if state.active.is_some_and(|(_, id)| id == instance_id) {
         state.active = None;
         let _ = state.smtc.SetIsEnabled(false);
         let _ = state.smtc.SetPlaybackStatus(MediaPlaybackStatus::Closed);
@@ -136,15 +196,15 @@ pub fn clear_active(instance_id: Uuid) {
     }
 }
 
-/// Push metadata / timeline / status from a media snapshot.
-pub fn publish(instance_id: Uuid, snap: &MediaSnapshot) {
+/// Push metadata / timeline / status for the active instance.
+pub fn publish_now_playing(instance_id: Uuid, snap: &NowPlaying) {
     let Ok(mut guard) = state().lock() else {
         return;
     };
     let Some(state) = guard.as_mut() else {
         return;
     };
-    if state.active != Some(instance_id) {
+    if !state.active.is_some_and(|(_, id)| id == instance_id) {
         return;
     }
     if !snap.available {
@@ -153,11 +213,7 @@ pub fn publish(instance_id: Uuid, snap: &MediaSnapshot) {
     }
     let _ = state.smtc.SetIsEnabled(true);
 
-    let title = if snap.title.is_empty() {
-        snap.path_display.clone()
-    } else {
-        snap.title.clone()
-    };
+    let title = snap.title.clone();
     let artist = snap.artist.clone();
     let cover_sig = cover_signature(snap);
     let meta_changed = title != state.last_title || artist != state.last_artist;
@@ -208,13 +264,18 @@ pub fn publish(instance_id: Uuid, snap: &MediaSnapshot) {
     }
 }
 
+/// Push from a media viewer snapshot (compatibility wrapper).
+pub fn publish(instance_id: Uuid, snap: &orchid_viewers::MediaSnapshot) {
+    publish_now_playing(instance_id, &NowPlaying::from_media(snap));
+}
+
 fn ms_to_timespan(ms: u64) -> TimeSpan {
     TimeSpan {
         Duration: (ms as i64).saturating_mul(10_000),
     }
 }
 
-fn cover_signature(snap: &MediaSnapshot) -> u64 {
+fn cover_signature(snap: &NowPlaying) -> u64 {
     if !snap.has_cover || snap.cover_rgba.is_empty() {
         return 0;
     }
@@ -223,7 +284,10 @@ fn cover_signature(snap: &MediaSnapshot) -> u64 {
         .wrapping_add(snap.cover_height as u64);
     h ^= snap.cover_rgba.len() as u64;
     for (i, b) in snap.cover_rgba.iter().take(64).enumerate() {
-        h = h.wrapping_mul(31).wrapping_add(*b as u64).wrapping_add(i as u64);
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(u64::from(*b))
+            .wrapping_add(i as u64);
     }
     h
 }

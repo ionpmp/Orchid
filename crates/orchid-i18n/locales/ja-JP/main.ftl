@@ -465,6 +465,7 @@ audio-player-speed-off = 1x
 audio-player-engine-missing = libmpv missing
 audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
+audio-player-scanning = ライブラリをスキャン中…
 media-unsupported = このプラットフォームではメディアコントロールは利用できません
 media-play = 再生
 media-pause = 一時停止

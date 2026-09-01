@@ -465,6 +465,7 @@ audio-player-speed-off = 1x
 audio-player-engine-missing = libmpv missing
 audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
+audio-player-scanning = 正在扫描曲库…
 media-unsupported = 此平台不支持媒体控制
 media-play = 播放
 media-pause = 暂停

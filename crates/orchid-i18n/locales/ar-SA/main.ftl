@@ -466,6 +466,7 @@ audio-player-speed-off = 1x
 audio-player-engine-missing = libmpv missing
 audio-player-empty-roots = Add a music folder to build your library
 audio-player-empty-library = No audio files found in library folders
+audio-player-scanning = Scanning library…
 media-unsupported = عناصر التحكم بالوسائط غير متاحة على هذه المنصة
 media-play = تشغيل
 media-pause = إيقاف مؤقت

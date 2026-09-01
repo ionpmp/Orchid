@@ -455,6 +455,7 @@ audio-player-speed-off = 1x
 audio-player-engine-missing = Нет libmpv
 audio-player-empty-roots = Добавьте папку с музыкой, чтобы собрать библиотеку
 audio-player-empty-library = В папках библиотеки нет аудиофайлов
+audio-player-scanning = Сканирование библиотеки…
 media-unsupported = Управление медиа недоступно на этой платформе
 media-play = Воспроизвести
 media-pause = Пауза

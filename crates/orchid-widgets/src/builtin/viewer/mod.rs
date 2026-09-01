@@ -7,7 +7,7 @@ mod image_slideshow;
 mod image_thumbs;
 mod media_nav;
 #[cfg(windows)]
-mod smtc_publisher;
+pub(crate) mod smtc_publisher;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
