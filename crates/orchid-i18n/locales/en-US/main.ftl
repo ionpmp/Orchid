@@ -183,6 +183,8 @@ widget-audio-player-name = Audio Player
 widget-audio-player-desc = Local music library with playlists, shuffle, and sleep timer
 widget-media-viewer-name = Media Player
 widget-media-viewer-desc = Play local audio and video in Orchid (libmpv)
+widget-video-player-name = Video Player
+widget-video-player-desc = Open a local video file in the in-app player (libmpv)
 
 widget-password-name = Passwords
 widget-password-desc = Access your password database
@@ -1934,6 +1936,7 @@ dock-widget-search = Search
 dock-widget-media = Now Playing
 dock-widget-audio-player = Audio Player
 dock-widget-media-viewer = Media Player
+dock-widget-video-player = Video Player
 dock-widget-password = Passwords
 dock-widget-viewer = Viewer
 dock-widget-document-editor = Document

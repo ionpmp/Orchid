@@ -52,14 +52,24 @@ pub fn pick_media_folder() -> Option<std::path::PathBuf> {
 /// Native file dialog for picking a local audio/video file.
 #[must_use]
 pub fn pick_media_file() -> Option<std::path::PathBuf> {
+    pick_with_filter(
+        "Media",
+        &[
+            "mp4", "mkv", "webm", "avi", "mov", "wmv", "m4v", "mpeg", "mpg", "mp3", "wav", "flac",
+            "ogg", "aac", "m4a", "wma", "opus", "aiff",
+        ],
+    )
+}
+
+/// Native file dialog for picking a local video file.
+#[must_use]
+pub fn pick_video_file() -> Option<std::path::PathBuf> {
+    pick_with_filter("Video", VIDEO_FILE_EXTENSIONS)
+}
+
+fn pick_with_filter(label: &str, extensions: &[&str]) -> Option<std::path::PathBuf> {
     let mut dialog = rfd::FileDialog::new()
-        .add_filter(
-            "Media",
-            &[
-                "mp4", "mkv", "webm", "avi", "mov", "wmv", "m4v", "mpeg", "mpg", "mp3", "wav",
-                "flac", "ogg", "aac", "m4a", "wma", "opus", "aiff",
-            ],
-        )
+        .add_filter(label, extensions)
         .add_filter("All", &["*"]);
     if let Some(dir) = prefs::load().last_folder {
         if dir.is_dir() {
@@ -79,10 +89,21 @@ pub const MEDIA_FILE_EXTENSIONS: &[&str] = &[
     "aac", "m4a", "wma", "opus", "aiff",
 ];
 
+/// Extensions treated as video (catalog Video Player picker).
+pub const VIDEO_FILE_EXTENSIONS: &[&str] = &[
+    "mp4", "mkv", "webm", "avi", "mov", "wmv", "m4v", "mpeg", "mpg",
+];
+
 /// Whether `ext` (lowercase, no dot) is a media file.
 #[must_use]
 pub fn is_media_file_extension(ext: &str) -> bool {
     MEDIA_FILE_EXTENSIONS.contains(&ext)
+}
+
+/// Whether `ext` (lowercase, no dot) is a video file.
+#[must_use]
+pub fn is_video_file_extension(ext: &str) -> bool {
+    VIDEO_FILE_EXTENSIONS.contains(&ext)
 }
 
 fn kind_label_for(ext: &str) -> &'static str {

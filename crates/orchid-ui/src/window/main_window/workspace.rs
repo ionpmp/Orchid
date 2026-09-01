@@ -1587,6 +1587,8 @@ pub(crate) fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> Sh
         "universal-search" | "search" => locale.tr("dock-widget-search").into(),
         "media-player" | "media" => locale.tr("dock-widget-media").into(),
         "audio-player" => locale.tr("dock-widget-audio-player").into(),
+        "video-player" => locale.tr("dock-widget-video-player").into(),
+        "media-viewer" => locale.tr("dock-widget-media-viewer").into(),
         "password-manager" | "password" => locale.tr("dock-widget-password").into(),
         "viewer" => locale.tr("dock-widget-viewer").into(),
         "document-editor" => locale.tr("dock-widget-document-editor").into(),

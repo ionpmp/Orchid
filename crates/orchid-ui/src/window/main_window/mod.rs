@@ -644,6 +644,7 @@ impl MainWindowController {
         g.set_dock_widget_media(mgr.tr("dock-widget-media").into());
         g.set_dock_widget_audio_player(mgr.tr("dock-widget-audio-player").into());
         g.set_dock_widget_media_viewer(mgr.tr("dock-widget-media-viewer").into());
+        g.set_dock_widget_video_player(mgr.tr("dock-widget-video-player").into());
         g.set_dock_widget_password(mgr.tr("dock-widget-password").into());
         g.set_dock_widget_viewer(mgr.tr("dock-widget-viewer").into());
         g.set_dock_widget_document_editor(mgr.tr("dock-widget-document-editor").into());
@@ -664,6 +665,7 @@ impl MainWindowController {
         g.set_widget_media_desc(mgr.tr("widget-media-desc").into());
         g.set_widget_audio_player_desc(mgr.tr("widget-audio-player-desc").into());
         g.set_widget_media_viewer_desc(mgr.tr("widget-media-viewer-desc").into());
+        g.set_widget_video_player_desc(mgr.tr("widget-video-player-desc").into());
         g.set_widget_password_desc(mgr.tr("widget-password-desc").into());
         g.set_widget_viewer_desc(mgr.tr("widget-viewer-desc").into());
         g.set_widget_document_editor_desc(mgr.tr("widget-document-editor-desc").into());
