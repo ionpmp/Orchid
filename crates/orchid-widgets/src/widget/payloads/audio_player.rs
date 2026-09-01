@@ -40,6 +40,7 @@ pub struct AudioPlayerPayload {
     pub browse_tab: u8,
     pub browse_filter: String,
     pub browse_filter_label: String,
+    pub search_query: String,
     pub groups: Vec<AudioPlayerGroupRow>,
     pub tracks: Vec<AudioPlayerTrackRow>,
     pub playlists: Vec<AudioPlayerPlaylistRow>,

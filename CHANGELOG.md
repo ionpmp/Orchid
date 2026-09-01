@@ -241,9 +241,10 @@ release yet.
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders),
   playlists and favorites, shuffle / repeat, sleep timer, EQ presets, playback
-  speed presets, soft volume boost (to 150%), sidecar `.lrc` lyrics, background
-  library scan, Windows SMTC (lock screen / media keys), shared audio-only
-  libmpv session (separate from SMTC Now Playing and Viewer media chrome).
+  speed presets, soft volume boost (to 150%), library search, sidecar `.lrc`
+  lyrics, background library scan, Windows SMTC (lock screen / media keys),
+  shared audio-only libmpv session (separate from SMTC Now Playing and Viewer
+  media chrome).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
 - Weather, Moon (geometric phase disk), System indicators, Media, RSS,
   Recent files, Universal search, Password manager (KDBX4 + Windows Hello).

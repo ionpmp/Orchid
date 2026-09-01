@@ -14,6 +14,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             engine_available: false,
             browse_tab: 0,
             browse_filter: SharedString::new(),
+            search_query: SharedString::new(),
             groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
             tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
             playlists: ModelRc::new(VecModel::from(Vec::<AudioPlayerPlaylistItem>::new())),
@@ -49,6 +50,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         engine_available: false,
         browse_tab: 0,
         browse_filter: SharedString::new(),
+        search_query: SharedString::new(),
         groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
         tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
         playlists: ModelRc::new(VecModel::from(Vec::<AudioPlayerPlaylistItem>::new())),
@@ -86,6 +88,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         sleep_off_label: locale.tr("audio-player-sleep-off").into(),
         eq_off_label: locale.tr("audio-player-eq-off").into(),
         speed_off_label: locale.tr("audio-player-speed-off").into(),
+        search_placeholder: locale.tr("audio-player-search-placeholder").into(),
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
 }
@@ -105,6 +108,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.sleep_off_label = base.sleep_off_label;
     m.eq_off_label = base.eq_off_label;
     m.speed_off_label = base.speed_off_label;
+    m.search_placeholder = base.search_placeholder;
     m.engine_missing_label = base.engine_missing_label;
     m
 }
@@ -136,6 +140,7 @@ pub(crate) fn build_audio_player_model(
             engine_available: p.engine_available,
             browse_tab: i32::from(p.browse_tab),
             browse_filter: p.browse_filter.clone().into(),
+            search_query: p.search_query.clone().into(),
             groups: ModelRc::new(VecModel::from(
                 p.groups
                     .iter()

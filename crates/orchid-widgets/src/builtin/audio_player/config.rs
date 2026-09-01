@@ -113,6 +113,8 @@ pub struct AudioPlayerConfig {
     pub active_playlist_id: String,
     /// Artist / album / folder drill-down key (empty = top level).
     pub browse_filter: String,
+    /// Free-text library search (title / artist / album).
+    pub search_query: String,
 }
 
 impl Default for AudioPlayerConfig {
@@ -130,6 +132,7 @@ impl Default for AudioPlayerConfig {
             browse_tab: BrowseTab::Songs,
             active_playlist_id: String::new(),
             browse_filter: String::new(),
+            search_query: String::new(),
         }
     }
 }

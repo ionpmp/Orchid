@@ -103,28 +103,32 @@ impl LibraryIndex {
         self.tracks.iter().find(|t| t.path.to_string_lossy() == path)
     }
 
-    /// Flat list for the current browse tab / filter.
+    /// Flat list for the current browse tab / filter / search.
     #[must_use]
     pub fn browse_rows(
         &self,
         tab: BrowseTab,
         filter: &str,
+        search: &str,
         playlist_tracks: Option<&[String]>,
         favorites: &[String],
     ) -> BrowseResult {
+        let q = search.trim().to_lowercase();
+        let matches = |t: &LibraryTrack| track_matches(t, &q);
         match tab {
             BrowseTab::Songs => BrowseResult {
                 groups: Vec::new(),
                 tracks: self
                     .tracks
                     .iter()
+                    .filter(|t| matches(t))
                     .map(track_row)
                     .collect(),
             },
             BrowseTab::Artists => {
                 if filter.is_empty() {
                     let mut artists: BTreeMap<String, usize> = BTreeMap::new();
-                    for t in &self.tracks {
+                    for t in self.tracks.iter().filter(|t| matches(t)) {
                         *artists.entry(t.artist.clone()).or_default() += 1;
                     }
                     BrowseResult {
@@ -144,7 +148,7 @@ impl LibraryIndex {
                         tracks: self
                             .tracks
                             .iter()
-                            .filter(|t| t.artist == filter)
+                            .filter(|t| t.artist == filter && matches(t))
                             .map(track_row)
                             .collect(),
                     }
@@ -153,7 +157,7 @@ impl LibraryIndex {
             BrowseTab::Albums => {
                 if filter.is_empty() {
                     let mut albums: BTreeMap<(String, String), usize> = BTreeMap::new();
-                    for t in &self.tracks {
+                    for t in self.tracks.iter().filter(|t| matches(t)) {
                         *albums
                             .entry((t.album.clone(), t.artist.clone()))
                             .or_default() += 1;
@@ -180,7 +184,11 @@ impl LibraryIndex {
                         tracks: self
                             .tracks
                             .iter()
-                            .filter(|t| t.album == album && (artist.is_empty() || t.artist == artist))
+                            .filter(|t| {
+                                t.album == album
+                                    && (artist.is_empty() || t.artist == artist)
+                                    && matches(t)
+                            })
                             .map(track_row)
                             .collect(),
                     }
@@ -189,7 +197,7 @@ impl LibraryIndex {
             BrowseTab::Folders => {
                 if filter.is_empty() {
                     let mut folders: BTreeMap<String, usize> = BTreeMap::new();
-                    for t in &self.tracks {
+                    for t in self.tracks.iter().filter(|t| matches(t)) {
                         *folders.entry(t.folder.clone()).or_default() += 1;
                     }
                     BrowseResult {
@@ -209,7 +217,7 @@ impl LibraryIndex {
                         tracks: self
                             .tracks
                             .iter()
-                            .filter(|t| t.folder == filter)
+                            .filter(|t| t.folder == filter && matches(t))
                             .map(track_row)
                             .collect(),
                     }
@@ -223,7 +231,9 @@ impl LibraryIndex {
                         tracks: self
                             .tracks
                             .iter()
-                            .filter(|t| set.contains(t.path.to_string_lossy().as_ref()))
+                            .filter(|t| {
+                                set.contains(t.path.to_string_lossy().as_ref()) && matches(t)
+                            })
                             .map(track_row)
                             .collect(),
                     }
@@ -232,7 +242,9 @@ impl LibraryIndex {
                         groups: Vec::new(),
                         tracks: favorites
                             .iter()
-                            .filter_map(|p| self.find_by_path(p).map(track_row))
+                            .filter_map(|p| self.find_by_path(p))
+                            .filter(|t| matches(t))
+                            .map(track_row)
                             .collect(),
                     }
                 }
@@ -278,6 +290,29 @@ fn track_row(t: &LibraryTrack) -> TrackRow {
         album: t.album.clone(),
         subtitle: format!("{} — {}", t.artist, t.album),
     }
+}
+
+fn track_matches(t: &LibraryTrack, q: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    t.title.to_lowercase().contains(q)
+        || t.artist.to_lowercase().contains(q)
+        || t.album.to_lowercase().contains(q)
+        || t.path.to_string_lossy().to_lowercase().contains(q)
+}
+
+/// Whether a browse track row matches a lowercase search query.
+#[must_use]
+pub(crate) fn track_row_matches(row: &TrackRow, q: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    row.title.to_lowercase().contains(q)
+        || row.artist.to_lowercase().contains(q)
+        || row.album.to_lowercase().contains(q)
+        || row.path.to_lowercase().contains(q)
+        || row.subtitle.to_lowercase().contains(q)
 }
 
 fn split_album_key(filter: &str) -> (String, String) {
@@ -335,7 +370,40 @@ mod tests {
         fs::write(dir.path().join("d.txt"), b"").unwrap();
         let idx = LibraryIndex::scan(&[dir.path().to_string_lossy().into_owned()]);
         assert_eq!(idx.tracks.len(), 2);
-        let artists = idx.browse_rows(BrowseTab::Artists, "", None, &[]);
+        let artists = idx.browse_rows(BrowseTab::Artists, "", "", None, &[]);
         assert!(!artists.groups.is_empty());
+    }
+
+    #[test]
+    fn search_filters_songs_by_title_artist_album() {
+        let mut idx = LibraryIndex::default();
+        idx.tracks.push(LibraryTrack {
+            path: PathBuf::from("/music/a.mp3"),
+            title: "Neon Lights".into(),
+            artist: "Synth Wave".into(),
+            album: "Night Drive".into(),
+            genre: String::new(),
+            track: Some(1),
+            year: None,
+            folder: "/music".into(),
+        });
+        idx.tracks.push(LibraryTrack {
+            path: PathBuf::from("/music/b.mp3"),
+            title: "Acoustic Morning".into(),
+            artist: "Folk Duo".into(),
+            album: "Sunrise".into(),
+            genre: String::new(),
+            track: Some(2),
+            year: None,
+            folder: "/music".into(),
+        });
+        let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", None, &[]);
+        assert_eq!(neon.tracks.len(), 1);
+        assert_eq!(neon.tracks[0].title, "Neon Lights");
+        let folk = idx.browse_rows(BrowseTab::Artists, "", "folk", None, &[]);
+        assert_eq!(folk.groups.len(), 1);
+        assert_eq!(folk.groups[0].label, "Folk Duo");
+        let miss = idx.browse_rows(BrowseTab::Songs, "", "zzzz", None, &[]);
+        assert!(miss.tracks.is_empty());
     }
 }

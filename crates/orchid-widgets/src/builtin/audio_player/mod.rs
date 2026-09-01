@@ -292,6 +292,10 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.config.write().browse_filter.clear();
             h.publish();
         }
+        "clear-search" => {
+            h.config.write().search_query.clear();
+            h.publish();
+        }
         "new-playlist" => {
             let mut cfg = h.config.write();
             let n = cfg.playlists.len() + 1;
@@ -320,6 +324,10 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
                 h.sleep.write().set_minutes(m);
                 h.publish();
             }
+        }
+        cmd if let Some(raw) = cmd.strip_prefix("search:") => {
+            h.config.write().search_query = raw.to_string();
+            h.publish();
         }
         cmd if let Some(raw) = cmd.strip_prefix("tab:") => {
             if let Ok(t) = raw.parse::<u8>() {
@@ -376,7 +384,13 @@ fn play_track(h: &AudioHandle, path: &str) {
         .iter()
         .find(|p| p.id == cfg.active_playlist_id)
         .map(|p| p.tracks.as_slice());
-    let browse = lib.browse_rows(cfg.browse_tab, &cfg.browse_filter, playlist_tracks, &cfg.favorites);
+    let browse = lib.browse_rows(
+        cfg.browse_tab,
+        &cfg.browse_filter,
+        &cfg.search_query,
+        playlist_tracks,
+        &cfg.favorites,
+    );
     let paths: Vec<String> = if cfg.browse_tab == BrowseTab::NowPlaying {
         h.queue.read().paths.clone()
     } else if !browse.tracks.is_empty() {
@@ -499,6 +513,7 @@ impl AudioPlayerWidget {
             .find(|p| p.id == cfg.active_playlist_id)
             .map(|p| p.tracks.as_slice());
         let browse = if cfg.browse_tab == BrowseTab::NowPlaying {
+            let search = cfg.search_query.trim().to_lowercase();
             library::BrowseResult {
                 groups: Vec::new(),
                 tracks: q
@@ -526,12 +541,14 @@ impl AudioPlayerWidget {
                             })
                         })
                     })
+                    .filter(|row| library::track_row_matches(row, &search))
                     .collect(),
             }
         } else {
             lib.browse_rows(
                 cfg.browse_tab,
                 &cfg.browse_filter,
+                &cfg.search_query,
                 playlist_tracks,
                 &cfg.favorites,
             )
@@ -592,6 +609,11 @@ impl AudioPlayerWidget {
             "audio-player-scanning".into()
         } else if lib.tracks.is_empty() {
             "audio-player-empty-library".into()
+        } else if !cfg.search_query.trim().is_empty()
+            && browse.groups.is_empty()
+            && browse.tracks.is_empty()
+        {
+            "audio-player-empty-search".into()
         } else {
             String::new()
         };
@@ -618,6 +640,7 @@ impl AudioPlayerWidget {
             browse_tab: cfg.browse_tab.as_u8(),
             browse_filter: cfg.browse_filter.clone(),
             browse_filter_label: cfg.browse_filter.clone(),
+            search_query: cfg.search_query.clone(),
             groups: browse
                 .groups
                 .into_iter()
