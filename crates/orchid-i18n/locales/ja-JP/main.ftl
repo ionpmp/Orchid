@@ -52,6 +52,8 @@ widget-search-desc = ファイル検索、コマンド実行、設定を開く
 
 widget-media-name = 再生中
 widget-media-desc = システムの再生セッションを操作（Spotify、ブラウザなど）
+widget-audio-player-name = Audio Player
+widget-audio-player-desc = Local music library with playlists, shuffle, and sleep timer
 widget-media-viewer-name = メディアプレーヤー
 widget-media-viewer-desc = Orchidでローカルの音声・動画を再生
 
@@ -445,6 +447,22 @@ terminal-tooltip-pane-close = ペインを閉じる
 # ---- Media player ----
 media-no-session = 再生中のメディアはありません
 media-loading = メディアを読み込み中…
+
+# ---- Audio Player ----
+audio-player-tab-songs = Songs
+audio-player-tab-artists = Artists
+audio-player-tab-albums = Albums
+audio-player-tab-folders = Folders
+audio-player-tab-playlists = Playlists
+audio-player-tab-now-playing = Queue
+audio-player-back = Back
+audio-player-add-folder = Add folder
+audio-player-new-playlist = New playlist
+audio-player-no-track = No track
+audio-player-sleep-off = Sleep
+audio-player-engine-missing = libmpv missing
+audio-player-empty-roots = Add a music folder to build your library
+audio-player-empty-library = No audio files found in library folders
 media-unsupported = このプラットフォームではメディアコントロールは利用できません
 media-play = 再生
 media-pause = 一時停止
@@ -1596,6 +1614,7 @@ dock-widget-rss = ニュース
 dock-widget-recent-files = 最近
 dock-widget-search = 検索
 dock-widget-media = メディア
+dock-widget-audio-player = Audio Player
 dock-widget-media-viewer = メディアプレーヤー
 dock-widget-password = パスワード
 dock-widget-viewer = ビューア

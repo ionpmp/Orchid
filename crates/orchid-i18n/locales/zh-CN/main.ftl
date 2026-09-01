@@ -52,6 +52,8 @@ widget-search-desc = 搜索文件、运行命令、打开设置
 
 widget-media-name = 正在播放
 widget-media-desc = 控制系统媒体会话（Spotify、浏览器等）
+widget-audio-player-name = Audio Player
+widget-audio-player-desc = Local music library with playlists, shuffle, and sleep timer
 widget-media-viewer-name = 媒体播放器
 widget-media-viewer-desc = 在 Orchid 中播放本地音频和视频
 
@@ -445,6 +447,22 @@ terminal-tooltip-pane-close = 关闭窗格
 # ---- Media player ----
 media-no-session = 没有正在播放的媒体
 media-loading = 正在加载媒体…
+
+# ---- Audio Player ----
+audio-player-tab-songs = Songs
+audio-player-tab-artists = Artists
+audio-player-tab-albums = Albums
+audio-player-tab-folders = Folders
+audio-player-tab-playlists = Playlists
+audio-player-tab-now-playing = Queue
+audio-player-back = Back
+audio-player-add-folder = Add folder
+audio-player-new-playlist = New playlist
+audio-player-no-track = No track
+audio-player-sleep-off = Sleep
+audio-player-engine-missing = libmpv missing
+audio-player-empty-roots = Add a music folder to build your library
+audio-player-empty-library = No audio files found in library folders
 media-unsupported = 此平台不支持媒体控制
 media-play = 播放
 media-pause = 暂停
@@ -1596,6 +1614,7 @@ dock-widget-rss = 新闻
 dock-widget-recent-files = 最近
 dock-widget-search = 搜索
 dock-widget-media = 媒体
+dock-widget-audio-player = Audio Player
 dock-widget-media-viewer = 媒体播放器
 dock-widget-password = 密码
 dock-widget-viewer = 查看器

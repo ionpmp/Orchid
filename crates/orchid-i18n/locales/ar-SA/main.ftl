@@ -52,6 +52,8 @@ widget-search-desc = البحث في الملفات وتشغيل الأوامر 
 
 widget-media-name = التشغيل الآن
 widget-media-desc = التحكم في جلسة الوسائط في النظام
+widget-audio-player-name = Audio Player
+widget-audio-player-desc = Local music library with playlists, shuffle, and sleep timer
 widget-media-viewer-name = مشغل الوسائط
 widget-media-viewer-desc = تشغيل الصوت والفيديو محليًا في Orchid
 
@@ -446,6 +448,22 @@ terminal-tooltip-pane-close = إغلاق اللوحة
 # ---- Media player ----
 media-no-session = لا يوجد تشغيل
 media-loading = جارٍ تحميل الوسائط…
+
+# ---- Audio Player ----
+audio-player-tab-songs = Songs
+audio-player-tab-artists = Artists
+audio-player-tab-albums = Albums
+audio-player-tab-folders = Folders
+audio-player-tab-playlists = Playlists
+audio-player-tab-now-playing = Queue
+audio-player-back = Back
+audio-player-add-folder = Add folder
+audio-player-new-playlist = New playlist
+audio-player-no-track = No track
+audio-player-sleep-off = Sleep
+audio-player-engine-missing = libmpv missing
+audio-player-empty-roots = Add a music folder to build your library
+audio-player-empty-library = No audio files found in library folders
 media-unsupported = عناصر التحكم بالوسائط غير متاحة على هذه المنصة
 media-play = تشغيل
 media-pause = إيقاف مؤقت
@@ -1597,6 +1615,7 @@ dock-widget-rss = الأخبار
 dock-widget-recent-files = الأخيرة
 dock-widget-search = البحث
 dock-widget-media = الوسائط
+dock-widget-audio-player = Audio Player
 dock-widget-media-viewer = مشغل الوسائط
 dock-widget-password = كلمات المرور
 dock-widget-viewer = العارض

@@ -1,5 +1,6 @@
 //! Slint model builders for workspace widget frames.
 
+mod audio_player;
 mod calculator;
 mod calendar;
 mod clock;
@@ -21,6 +22,7 @@ mod viewer;
 mod weather;
 mod widget_settings;
 
+pub(crate) use audio_player::{build_audio_player_model, empty_audio_player_model};
 pub(crate) use calculator::{
     build_calculator_model, empty_calculator_model, patch_calculator_model,
 };

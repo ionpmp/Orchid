@@ -75,6 +75,21 @@ impl MainWindowController {
         });
     }
 
+    pub(super) fn on_audio_player_command(
+        self: &Arc<Self>,
+        instance_id: &SharedString,
+        cmd: &SharedString,
+    ) {
+        let Ok(id) = Uuid::parse_str(instance_id.as_str()) else {
+            return;
+        };
+        let command = cmd.as_str().to_string();
+        if command.is_empty() {
+            return;
+        }
+        orchid_widgets::builtin::audio_player::execute_command(id, &command);
+    }
+
     pub(super) fn notify_media_control_failed(
         self: &Arc<Self>,
         err: &orchid_widgets::builtin::media::MediaError,

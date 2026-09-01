@@ -52,6 +52,8 @@ widget-search-desc = Buscar arquivos, executar comandos, abrir configuraÃ§Ãµ
 
 widget-media-name = Tocando agora
 widget-media-desc = Controlar a sessão de mídia do sistema (Spotify, navegador…)
+widget-audio-player-name = Audio Player
+widget-audio-player-desc = Local music library with playlists, shuffle, and sleep timer
 widget-media-viewer-name = Media Player
 widget-media-viewer-desc = Reproduzir áudio e vídeo locais no Orchid
 
@@ -445,6 +447,22 @@ terminal-tooltip-pane-close = Fechar painel
 # ---- Media player ----
 media-no-session = Nenhuma mÃ­dia em reproduÃ§Ã£o
 media-loading = Carregando mÃ­diaâ€¦
+
+# ---- Audio Player ----
+audio-player-tab-songs = Songs
+audio-player-tab-artists = Artists
+audio-player-tab-albums = Albums
+audio-player-tab-folders = Folders
+audio-player-tab-playlists = Playlists
+audio-player-tab-now-playing = Queue
+audio-player-back = Back
+audio-player-add-folder = Add folder
+audio-player-new-playlist = New playlist
+audio-player-no-track = No track
+audio-player-sleep-off = Sleep
+audio-player-engine-missing = libmpv missing
+audio-player-empty-roots = Add a music folder to build your library
+audio-player-empty-library = No audio files found in library folders
 media-unsupported = Controles de mÃ­dia nÃ£o estÃ£o disponÃ­veis nesta plataforma
 media-play = Reproduzir
 media-pause = Pausar
@@ -1596,6 +1614,7 @@ dock-widget-rss = NotÃ­cias
 dock-widget-recent-files = Recentes
 dock-widget-search = Busca
 dock-widget-media = MÃ­dia
+dock-widget-audio-player = Audio Player
 dock-widget-media-viewer = Media Player
 dock-widget-password = Senhas
 dock-widget-viewer = Visualizador

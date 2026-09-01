@@ -18,6 +18,7 @@ import { RssView } from "../widgets/rss.slint";
 import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
 import { MediaView } from "../widgets/media.slint";
+import { AudioPlayerView } from "../widgets/audio-player.slint";
 import { PasswordView } from "../widgets/password.slint";
 import { ViewerView } from "../widgets/viewer/viewer.slint";
 import { FileManagerView } from "../widgets/file-manager/file-manager.slint";
@@ -141,6 +142,9 @@ export component WidgetFrame inherits Rectangle {
     callback media-play-pause();
     callback media-next();
     callback media-previous();
+
+    // Audio library player
+    callback audio-player-command(string, string);
 
     // Processes (`string` args are always `model.instance-id` first)
     callback processes-tab-changed(string, int);
@@ -340,6 +344,7 @@ export component WidgetFrame inherits Rectangle {
             type-id == "recent-files" ? "🕒" :
             type-id == "search" || type-id == "universal-search" ? "🔍" :
             type-id == "media" || type-id == "media-player" ? "🎵" :
+            type-id == "audio-player" ? "♪" :
             type-id == "password" || type-id == "password-manager" ? "🔑" :
             type-id == "viewer" ? "👁️" :
             type-id == "document-editor" ? "📝" :
@@ -991,6 +996,13 @@ export component WidgetFrame inherits Rectangle {
                     play-pause => { root.media-play-pause(); }
                     next => { root.media-next(); }
                     previous => { root.media-previous(); }
+                }
+
+                if model.type-id == "audio-player" : AudioPlayerView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.audio-player;
+                    command(cmd) => { root.audio-player-command(root.model.instance-id, cmd); }
                 }
 
                 if model.type-id == "password" || model.type-id == "password-manager" : PasswordView {

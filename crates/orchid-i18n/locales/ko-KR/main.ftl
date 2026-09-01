@@ -52,6 +52,8 @@ widget-search-desc = 파일 검색, 명령 실행, 설정 열기
 
 widget-media-name = 지금 재생 중
 widget-media-desc = 시스템 미디어 세션 제어 (Spotify, 브라우저 등)
+widget-audio-player-name = Audio Player
+widget-audio-player-desc = Local music library with playlists, shuffle, and sleep timer
 widget-media-viewer-name = 미디어 플레이어
 widget-media-viewer-desc = Orchid에서 로컬 오디오·비디오 재생
 
@@ -445,6 +447,22 @@ terminal-tooltip-pane-close = 창 닫기
 # ---- Media player ----
 media-no-session = 재생 중인 미디어 없음
 media-loading = 미디어 로드 중…
+
+# ---- Audio Player ----
+audio-player-tab-songs = Songs
+audio-player-tab-artists = Artists
+audio-player-tab-albums = Albums
+audio-player-tab-folders = Folders
+audio-player-tab-playlists = Playlists
+audio-player-tab-now-playing = Queue
+audio-player-back = Back
+audio-player-add-folder = Add folder
+audio-player-new-playlist = New playlist
+audio-player-no-track = No track
+audio-player-sleep-off = Sleep
+audio-player-engine-missing = libmpv missing
+audio-player-empty-roots = Add a music folder to build your library
+audio-player-empty-library = No audio files found in library folders
 media-unsupported = 이 플랫폼에서는 미디어 제어를 사용할 수 없습니다
 media-play = 재생
 media-pause = 일시 정지
@@ -1596,6 +1614,7 @@ dock-widget-rss = 뉴스
 dock-widget-recent-files = 최근
 dock-widget-search = 검색
 dock-widget-media = 미디어
+dock-widget-audio-player = Audio Player
 dock-widget-media-viewer = 미디어 플레이어
 dock-widget-password = 비밀번호
 dock-widget-viewer = 뷰어

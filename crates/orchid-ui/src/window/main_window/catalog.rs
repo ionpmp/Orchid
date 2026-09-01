@@ -220,6 +220,7 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
             | "recent-files"
             | "universal-search"
             | "media-player"
+            | "audio-player"
             | "media-viewer"
             | "password-manager"
             | "viewer"
@@ -243,6 +244,7 @@ fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collection
     g.set_show_recent_files(visible_ids.contains("recent-files"));
     g.set_show_search(visible_ids.contains("search"));
     g.set_show_media(visible_ids.contains("media"));
+    g.set_show_audio_player(visible_ids.contains("audio-player"));
     g.set_show_media_viewer(visible_ids.contains("media-viewer"));
     g.set_show_password(visible_ids.contains("password"));
     g.set_show_viewer(visible_ids.contains("viewer"));
@@ -280,6 +282,7 @@ pub(super) fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> 
         "recent-files" => "widget-recent-files-desc",
         "search" | "universal-search" => "widget-search-desc",
         "media" => "widget-media-desc",
+        "audio-player" => "widget-audio-player-desc",
         "media-viewer" => "widget-media-viewer-desc",
         "password" => "widget-password-desc",
         "viewer" => "widget-viewer-desc",
@@ -375,6 +378,12 @@ pub(super) fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-media").into(),
             description: dock_widget_description(locale, "media"),
             icon: "media".into(),
+        },
+        DockWidgetType {
+            type_id: "audio-player".into(),
+            label: locale.tr("dock-widget-audio-player").into(),
+            description: dock_widget_description(locale, "audio-player"),
+            icon: "audio-player".into(),
         },
         DockWidgetType {
             type_id: "media-viewer".into(),

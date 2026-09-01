@@ -114,6 +114,7 @@ export component WorkspaceView inherits Rectangle {
     callback media-play-pause();
     callback media-next();
     callback media-previous();
+    callback audio-player-command(string, string);
     callback processes-tab-changed(string, int);
     callback processes-search-changed(string, string);
     callback processes-sort-column-clicked(string, int);
@@ -514,6 +515,7 @@ export component WorkspaceView inherits Rectangle {
                     media-play-pause => { root.media-play-pause(); }
                     media-next => { root.media-next(); }
                     media-previous => { root.media-previous(); }
+                    audio-player-command(id, cmd) => { root.audio-player-command(id, cmd); }
                     processes-tab-changed(id, t) => { root.processes-tab-changed(id, t); }
                     processes-search-changed(id, q) => { root.processes-search-changed(id, q); }
                     processes-sort-column-clicked(id, c) => { root.processes-sort-column-clicked(id, c); }
