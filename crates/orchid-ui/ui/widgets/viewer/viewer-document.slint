@@ -1098,6 +1098,27 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(28px, or-label.preferred-width + 8px);
+                    height: 28px;
+                    background: tool-bg(false, or-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    or-ta := TouchArea { clicked => { root.action("page-orientation-toggle"); } }
+                    or-label := Text {
+                        text: model.page-orientation-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-page-orientation;
+                        show: or-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;

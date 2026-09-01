@@ -835,6 +835,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         first_line_less_label: locale.tr("viewer-document-first-line-less").into(),
         first_line_more_label: locale.tr("viewer-document-first-line-more").into(),
         page_size_label: locale.tr("viewer-document-page-letter").into(),
+        page_orientation_label: locale.tr("viewer-document-page-orientation").into(),
         image_insert_label: locale.tr("viewer-document-image-insert").into(),
         table_insert_label: locale.tr("viewer-document-table-insert").into(),
         table_row_insert_label: locale.tr("viewer-document-table-row-insert").into(),
@@ -872,6 +873,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_first_line_less: locale.tr("viewer-document-tip-first-line-less").into(),
         tip_first_line_more: locale.tr("viewer-document-tip-first-line-more").into(),
         tip_page_size: locale.tr("viewer-document-tip-page-size").into(),
+        tip_page_orientation: locale.tr("viewer-document-tip-page-orientation").into(),
         find_no_match_label: locale.tr("viewer-document-find-no-match").into(),
         find_gen: 0,
         find_anchor: 0,
@@ -1065,12 +1067,22 @@ fn build_document_snapshot(
     model.preview_zoom_percent = s.preview_zoom_percent;
     model.link_hover = s.link_hover;
     model.link_url = s.link_url.clone().into();
-    model.page_size_label = if s.page_is_a4 {
-        locale.tr("viewer-document-page-a4").into()
-    } else {
-        locale.tr("viewer-document-page-letter").into()
-    };
+    model.page_size_label = document_page_size_label(locale, s.page_is_a4, s.page_landscape);
     model
+}
+
+fn document_page_size_label(
+    locale: &LocaleManager,
+    page_is_a4: bool,
+    page_landscape: bool,
+) -> SharedString {
+    let key = match (page_is_a4, page_landscape) {
+        (false, false) => "viewer-document-page-letter",
+        (false, true) => "viewer-document-page-letter-landscape",
+        (true, false) => "viewer-document-page-a4",
+        (true, true) => "viewer-document-page-a4-landscape",
+    };
+    locale.tr(key).into()
 }
 
 fn composite_checkerboard(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Arc<Vec<u8>> {
