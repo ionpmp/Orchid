@@ -47,6 +47,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             has_cover: false,
             cover: Image::default(),
             queue_stats_label: SharedString::new(),
+            current_track_index: -1,
             has_library_roots: false,
             ..labels_only(locale)
         },
@@ -91,6 +92,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         has_cover: false,
         cover: Image::default(),
         queue_stats_label: SharedString::new(),
+        current_track_index: -1,
         has_library_roots: false,
         tab_songs: locale.tr("audio-player-tab-songs").into(),
         tab_artists: locale.tr("audio-player-tab-artists").into(),
@@ -114,6 +116,8 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         remove_label: locale.tr("audio-player-remove").into(),
         clear_queue_label: locale.tr("audio-player-clear-queue").into(),
         save_queue_as_playlist_label: locale.tr("audio-player-save-queue-as-playlist").into(),
+        jump_to_current_label: locale.tr("audio-player-jump-to-current").into(),
+        reshuffle_label: locale.tr("audio-player-reshuffle").into(),
         delete_playlist_label: locale.tr("audio-player-delete-playlist").into(),
         rename_playlist_label: locale.tr("audio-player-rename-playlist").into(),
         add_to_playlist_label: locale.tr("audio-player-add-to-playlist").into(),
@@ -235,6 +239,8 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.remove_label = base.remove_label;
     m.clear_queue_label = base.clear_queue_label;
     m.save_queue_as_playlist_label = base.save_queue_as_playlist_label;
+    m.jump_to_current_label = base.jump_to_current_label;
+    m.reshuffle_label = base.reshuffle_label;
     m.delete_playlist_label = base.delete_playlist_label;
     m.rename_playlist_label = base.rename_playlist_label;
     m.add_to_playlist_label = base.add_to_playlist_label;
@@ -367,6 +373,7 @@ pub(crate) fn build_audio_player_model(
             has_cover: p.has_cover,
             cover,
             queue_stats_label: queue_stats_label(p.queue_count, p.queue_duration_ms, locale),
+            current_track_index: p.current_track_index,
             has_library_roots: p.has_library_roots,
             sort_label: sort_label_for(p.library_sort, locale),
             is_current_favorite: p.is_current_favorite,

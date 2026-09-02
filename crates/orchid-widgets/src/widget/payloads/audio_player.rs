@@ -85,6 +85,8 @@ pub struct AudioPlayerPayload {
     pub roots: Vec<AudioPlayerRootRow>,
     pub queue: Vec<AudioPlayerTrackRow>,
     pub queue_index: i32,
+    /// Index of the current track in `tracks` (−1 if not listed).
+    pub current_track_index: i32,
     /// Number of tracks in the play queue.
     pub queue_count: u32,
     /// Sum of known ID3 durations for queued tracks (ms); 0 if none known.

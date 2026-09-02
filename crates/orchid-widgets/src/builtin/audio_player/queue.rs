@@ -13,6 +13,8 @@ pub struct PlayQueue {
     pub order: Vec<usize>,
     pub shuffle: bool,
     pub repeat: RepeatMode,
+    /// Extra entropy for [`Self::rebuild_order`] / reshuffle.
+    shuffle_seed: u64,
 }
 
 impl PlayQueue {
@@ -24,6 +26,7 @@ impl PlayQueue {
             order: Vec::new(),
             shuffle,
             repeat,
+            shuffle_seed: 0,
         };
         q.rebuild_order();
         q
@@ -35,7 +38,8 @@ impl PlayQueue {
             // Fisher–Yates with a simple LCG seeded from length + index.
             let mut state = (self.paths.len() as u64)
                 .wrapping_mul(0x9E37_79B9)
-                .wrapping_add(self.index as u64);
+                .wrapping_add(self.index as u64)
+                .wrapping_add(self.shuffle_seed.wrapping_mul(0x85EB_CA6B));
             for i in (1..self.order.len()).rev() {
                 state = state
                     .wrapping_mul(6364136223846793005)
@@ -306,6 +310,23 @@ impl PlayQueue {
         self.rebuild_order();
     }
 
+    /// Enable shuffle (if needed) and rebuild a new random order, keeping the
+    /// current track first in the shuffle permutation.
+    pub fn reshuffle_remaining(&mut self) -> bool {
+        if self.paths.len() < 2 {
+            return false;
+        }
+        self.shuffle = true;
+        self.shuffle_seed = self.shuffle_seed.wrapping_add(1).max(1);
+        // Mix in path count so consecutive calls differ even if seed wraps oddly.
+        self.shuffle_seed = self
+            .shuffle_seed
+            .wrapping_mul(0x9E37_79B9)
+            .wrapping_add(self.paths.len() as u64);
+        self.rebuild_order();
+        true
+    }
+
     pub fn cycle_repeat(&mut self) {
         self.repeat = self.repeat.cycle();
     }
@@ -416,6 +437,23 @@ mod tests {
         assert_eq!(q.current(), Some("b"));
         assert!(!q.move_to("b", 1));
         assert!(!q.move_to("missing", 0));
+    }
+
+    #[test]
+    fn reshuffle_remaining_keeps_current_first_in_order() {
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            2,
+            false,
+            RepeatMode::Off,
+        );
+        assert!(q.reshuffle_remaining());
+        assert!(q.shuffle);
+        assert_eq!(q.current(), Some("c"));
+        assert_eq!(q.order[0], 2);
+        assert!(q.reshuffle_remaining());
+        assert_eq!(q.order[0], 2);
+        assert_eq!(q.order.len(), 4);
     }
 
     #[test]

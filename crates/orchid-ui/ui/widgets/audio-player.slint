@@ -16,6 +16,16 @@ export component AudioPlayerView inherits Rectangle {
     property <int> q-drop-index: -1;
     property <length> q-row-stride: 41px;
 
+    public function scroll-to-current() {
+        if root.model.current-track-index < 0 {
+            return;
+        }
+        let y = root.q-row-stride * root.model.current-track-index;
+        let margin = browse-flick.height / 3;
+        let max-y = max(0px, browse-flick.viewport-height - browse-flick.height);
+        browse-flick.viewport-y = min(max-y, max(0px, y - margin));
+    }
+
     focus-scope := FocusScope {
         width: 100%;
         height: 100%;
@@ -116,6 +126,18 @@ export component AudioPlayerView inherits Rectangle {
             if event.text == Key.End {
                 if root.model.browse-tab == 6 {
                     root.command("queue-last");
+                    return accept;
+                }
+            }
+            if event.text == "." {
+                if root.model.browse-tab == 6 {
+                    root.scroll-to-current();
+                    return accept;
+                }
+            }
+            if event.text == "h" || event.text == "H" {
+                if root.model.browse-tab == 6 {
+                    root.command("reshuffle");
                     return accept;
                 }
             }
@@ -488,6 +510,36 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
+                if root.model.browse-tab == 6 && root.model.current-track-index >= 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: jump-cur-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.scroll-to-current(); } }
+                    jump-cur-txt := Text {
+                        text: root.model.jump-to-current-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 6 && root.model.tracks.length > 1 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: reshuffle-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("reshuffle"); } }
+                    reshuffle-txt := Text {
+                        text: root.model.reshuffle-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
                 if root.model.browse-tab == 6 && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
@@ -590,19 +642,10 @@ export component AudioPlayerView inherits Rectangle {
                 clip: true;
                 background: transparent;
 
-                if root.model.empty-hint != "" : Text {
+                browse-flick := Flickable {
                     width: 100%;
                     height: 100%;
-                    text: root.model.empty-hint;
-                    color: Theme.text-tertiary;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                if root.model.empty-hint == "" : browse-flick := Flickable {
-                    width: 100%;
-                    height: 100%;
+                    visible: root.model.empty-hint == "";
                     viewport-width: self.width;
                     viewport-height: browse-col.preferred-height;
 
@@ -899,6 +942,16 @@ export component AudioPlayerView inherits Rectangle {
                             }
                         }
                     }
+                }
+
+                if root.model.empty-hint != "" : Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.model.empty-hint;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
 

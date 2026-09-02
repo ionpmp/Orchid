@@ -252,7 +252,8 @@ release yet.
   group; library root chips with per-folder remove; Explorer drop of folders
   (add roots) or audio files (enqueue); play / enqueue all tracks matching the
   active library search (including filtered queue); queue tab play-at without
-  reshuffling shuffle order, Home/End jump, Delete removes current track, empty
+  reshuffling shuffle order, Home/End jump, **Jump to current** (`.` key),
+  **Reshuffle** remaining (keeps current first; `H` on Queue), Delete removes current track, empty
   queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year/Genre);
   favorite toggle on now-playing (star + F key); double-click a library track to
   enqueue; localized Favorites playlist name and library stats strip; file manager

@@ -490,6 +490,14 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.config.write().shuffle = next;
             h.publish();
         }
+        "reshuffle" => {
+            if !h.queue.write().reshuffle_remaining() {
+                return;
+            }
+            h.config.write().shuffle = true;
+            h.sync_queue_to_config();
+            h.publish();
+        }
         "repeat" => {
             h.queue.write().cycle_repeat();
             h.config.write().repeat = h.queue.read().repeat;
@@ -1511,6 +1519,17 @@ impl AudioPlayerWidget {
             self.handle.player.artist()
         };
 
+        let current_track_index = current
+            .as_deref()
+            .and_then(|cur| {
+                browse
+                    .tracks
+                    .iter()
+                    .position(|t| t.path == cur)
+                    .map(|i| i as i32)
+            })
+            .unwrap_or(-1);
+
         AudioPlayerPayload {
             engine_available: self.handle.player.available(),
             browse_tab: cfg.browse_tab.as_u8(),
@@ -1563,6 +1582,7 @@ impl AudioPlayerWidget {
                 )
             },
             queue_index: q.index as i32,
+            current_track_index,
             queue_count: q.paths.len() as u32,
             queue_duration_ms: queue_known_duration_ms(&lib, &q.paths),
             has_track: current.is_some(),
