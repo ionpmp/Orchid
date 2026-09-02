@@ -30,6 +30,8 @@ pub struct RunStyle {
     pub superscript: bool,
     /// Subscript (`w:vertAlign` = `subscript`). Mutually exclusive with [`Self::superscript`].
     pub subscript: bool,
+    /// All capitals (`w:caps`); stored text is unchanged, preview uppercases.
+    pub all_caps: bool,
     /// RGB colour (`None` = theme/default).
     pub color: Option<[u8; 3]>,
     /// Font family name.

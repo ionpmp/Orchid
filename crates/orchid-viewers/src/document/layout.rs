@@ -141,7 +141,17 @@ impl DocumentLayout {
     ) -> Layout<ColorBrush> {
         let scale = scale.max(0.5);
         let prefix = list_prefix(p);
-        let body = p.plain_text();
+        let body = p
+            .runs
+            .iter()
+            .map(|r| {
+                if r.style.all_caps {
+                    r.text.to_uppercase()
+                } else {
+                    r.text.clone()
+                }
+            })
+            .collect::<String>();
         let text = if prefix.is_empty() {
             body
         } else {

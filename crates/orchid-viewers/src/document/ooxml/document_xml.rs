@@ -378,7 +378,7 @@ fn parse_paragraph(
                         local_bookmarks.push((name, para_plain_len));
                     }
                 }
-                if in_r && matches!(local.as_str(), "b" | "i" | "u" | "color" | "rFonts" | "sz") {
+                if in_r && matches!(local.as_str(), "b" | "i" | "u" | "caps" | "color" | "rFonts" | "sz") {
                     if let Some(ref mut run) = current_run {
                         apply_r_pr_attr(&local, &e, &mut run.style);
                     }
@@ -561,6 +561,9 @@ fn apply_r_pr_attr(local: &str, e: &BytesStart<'_>, style: &mut RunStyle) {
                     style.subscript = false;
                 }
             }
+        }
+        "caps" => {
+            style.all_caps = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
         }
         "color" => {
             if let Some(val) = attr_val(e, "val") {
@@ -1296,6 +1299,11 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
             .write_event(Event::Empty(va))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if run.style.all_caps {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:caps")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if let Some([r, g, b]) = run.style.color {
         let mut c = BytesStart::new("w:color");
         c.push_attribute(("w:val", format!("{r:02X}{g:02X}{b:02X}").as_str()));
@@ -1840,6 +1848,60 @@ mod tests {
         .unwrap();
         match &blocks2[0] {
             Block::Paragraph(p) => assert!(p.runs[0].style.strikethrough),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+    #[test]
+    fn parse_and_write_all_caps() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:rPr><w:caps/></w:rPr>
+                <w:t>title</w:t>
+              </w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.all_caps);
+                assert_eq!(p.runs[0].text, "title");
+            }
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:caps"),
+            "serialized XML missing caps: {text}"
+        );
+        let (blocks2, _, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.all_caps),
             _ => panic!("expected paragraph"),
         }
     }

@@ -58,6 +58,8 @@ pub struct DocumentSnapshot {
     pub underline: bool,
     pub strikethrough: bool,
     pub highlight: bool,
+    /// All capitals (`w:caps`) at the caret.
+    pub all_caps: bool,
     /// Paragraph shading (`w:shd`) active at the caret.
     pub shade: bool,
     /// Bottom paragraph border (`w:pBdr/w:bottom`) active at the caret.
