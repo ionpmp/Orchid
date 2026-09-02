@@ -895,6 +895,56 @@ export struct AudioPlayerModel {
     engine-missing-label: string,
 }
 
+export struct VideoPlayerRootItem {
+    path: string,
+    label: string,
+}
+
+export struct VideoPlayerItem {
+    path: string,
+    title: string,
+    subtitle: string,
+    duration-label: string,
+    is-current: bool,
+}
+
+export struct VideoPlayerModel {
+    engine-available: bool,
+    browse-tab: int,
+    search-query: string,
+    roots: [VideoPlayerRootItem],
+    items: [VideoPlayerItem],
+    has-track: bool,
+    title: string,
+    is-playing: bool,
+    progress: float,
+    position-label: string,
+    duration-label: string,
+    volume: int,
+    muted: bool,
+    shuffle: bool,
+    repeat: int,
+    speed-label: string,
+    empty-hint: string,
+    has-library-roots: bool,
+    has-video: bool,
+    frame: image,
+    queue-count: int,
+    library-count: int,
+    tab-library: string,
+    tab-queue: string,
+    add-folder-label: string,
+    open-file-label: string,
+    rescan-label: string,
+    no-track-label: string,
+    search-placeholder: string,
+    enqueue-label: string,
+    remove-label: string,
+    clear-queue-label: string,
+    remove-root-label: string,
+    engine-missing-label: string,
+}
+
 export struct PasswordEntryItem {
     id: string,
     title: string,
@@ -1973,6 +2023,7 @@ export struct WidgetFrameModel {
     search: SearchModel,
     media: MediaModel,
     audio-player: AudioPlayerModel,
+    video-player: VideoPlayerModel,
     password: PasswordModel,
     viewer: ViewerModel,
     file-manager: FileManagerModel,

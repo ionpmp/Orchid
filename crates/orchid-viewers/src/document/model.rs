@@ -142,6 +142,8 @@ pub struct Paragraph {
     pub widow_control: bool,
     /// Skip space before/after when adjacent paragraphs share a style (`w:contextualSpacing`).
     pub contextual_spacing: bool,
+    /// Right-to-left paragraph (`w:bidi`).
+    pub bidi: bool,
     /// Space before paragraph in twips (`w:spacing/@w:before`). `0` = none.
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.

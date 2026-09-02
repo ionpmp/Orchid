@@ -74,6 +74,8 @@ pub struct DocumentSnapshot {
     pub widow_control: bool,
     /// Contextual spacing (`w:contextualSpacing`) active at the caret paragraph.
     pub contextual_spacing: bool,
+    /// Right-to-left paragraph (`w:bidi`) active at the caret.
+    pub bidi: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).
