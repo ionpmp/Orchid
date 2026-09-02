@@ -19,6 +19,7 @@ import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
 import { MediaView } from "../widgets/media.slint";
 import { AudioPlayerView } from "../widgets/audio-player.slint";
+import { VideoPlayerView } from "../widgets/video-player.slint";
 import { PasswordView } from "../widgets/password.slint";
 import { ViewerView } from "../widgets/viewer/viewer.slint";
 import { FileManagerView } from "../widgets/file-manager/file-manager.slint";
@@ -145,6 +146,7 @@ export component WidgetFrame inherits Rectangle {
 
     // Audio library player
     callback audio-player-command(string, string);
+    callback video-player-command(string, string);
 
     // Processes (`string` args are always `model.instance-id` first)
     callback processes-tab-changed(string, int);
@@ -1006,6 +1008,13 @@ export component WidgetFrame inherits Rectangle {
                     height: parent.height;
                     model: root.model.audio-player;
                     command(cmd) => { root.audio-player-command(root.model.instance-id, cmd); }
+                }
+
+                if model.type-id == "video-player" : VideoPlayerView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.video-player;
+                    command(cmd) => { root.video-player-command(root.model.instance-id, cmd); }
                 }
 
                 if model.type-id == "password" || model.type-id == "password-manager" : PasswordView {

@@ -113,6 +113,7 @@ impl SlintPayload {
             WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
             WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),
             WidgetPayload::AudioPlayer(p) => Self::Text(audio_player_to_text_lines(p)),
+            WidgetPayload::VideoPlayer(p) => Self::Text(video_player_to_text_lines(p)),
             WidgetPayload::PasswordManager(p) => Self::Text(password_to_text_lines(p)),
             WidgetPayload::Viewer(p) => Self::Text(viewer_to_text_lines(p)),
             WidgetPayload::FileManager(p) => Self::Text(file_manager_to_text_lines(p)),
@@ -380,6 +381,24 @@ fn audio_player_to_text_lines(p: &AudioPlayerPayload) -> Vec<String> {
     }
     if !p.sleep_label.is_empty() {
         lines.push(p.sleep_label.clone());
+    }
+    lines
+}
+
+fn video_player_to_text_lines(p: &orchid_widgets::VideoPlayerPayload) -> Vec<String> {
+    let mut lines = vec![
+        if p.has_track {
+            p.title.clone()
+        } else {
+            "No video".into()
+        },
+        format!("{} videos in library", p.library_count),
+    ];
+    if p.is_playing {
+        lines.push(format!(
+            "Playing {} / {}",
+            p.position_label, p.duration_label
+        ));
     }
     lines
 }

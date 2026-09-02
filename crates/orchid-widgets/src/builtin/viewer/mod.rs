@@ -434,6 +434,7 @@ impl ViewerWidgetInner {
         }
         if is_media_path(&path) {
             crate::builtin::audio_player::pause_all();
+            crate::builtin::video_player::pause_all();
             self.after_media_opened(&path).await;
             self.schedule_media_ticks();
             #[cfg(windows)]
@@ -3565,8 +3566,10 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         };
         if command == "play-pause" && !media.is_playing() {
             crate::builtin::audio_player::pause_all();
+            crate::builtin::video_player::pause_all();
         } else if command == "play" {
             crate::builtin::audio_player::pause_all();
+            crate::builtin::video_player::pause_all();
         }
         media.apply_command(command);
     }

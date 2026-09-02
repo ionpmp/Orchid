@@ -57,7 +57,7 @@ widget-audio-player-desc = Local music library with playlists, shuffle, and slee
 widget-media-viewer-name = メディアプレーヤー
 widget-media-viewer-desc = Orchidでローカルの音声・動画を再生
 widget-video-player-name = Video Player
-widget-video-player-desc = Open a local video file in the in-app player (libmpv)
+widget-video-player-desc = Local video library with queue, shuffle, and in-app playback
 
 widget-password-name = パスワード
 widget-password-desc = パスワードデータベースにアクセス
@@ -2330,3 +2330,24 @@ widget-maximize-tooltip = Maximize
 widget-restore-tooltip = Restore
 window-dock-failed-title = Could not dock
 window-dock-failed-body = No free cell on the canvas. Close or move a widget, then try again.
+
+# Video Player (en stub — translate)
+fm-action-play-in-video-player = Play in Video Player
+fm-action-enqueue-in-video-player = Add to Video Player queue
+video-player-tab-library = Library
+video-player-tab-queue = Queue
+video-player-add-folder = Add folder
+video-player-open-file = Open file
+video-player-rescan = Rescan
+video-player-no-track = No video
+video-player-search-placeholder = Search videos…
+video-player-enqueue = Add to queue
+video-player-remove = Remove
+video-player-clear-queue = Clear queue
+video-player-remove-root = Remove folder
+video-player-engine-missing = libmpv missing
+video-player-empty-roots = Add a video folder to build your library
+video-player-empty-library = No video files found in library folders
+video-player-scanning = Scanning library…
+video-player-empty-search = No videos match your search
+video-player-empty-queue = Queue is empty — enqueue videos from the library or drop video files here

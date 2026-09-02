@@ -7,7 +7,8 @@ use crate::widget::payloads::{
     NotesPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
     ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
     SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
-    UniversalSearchPayload, UserRowView, ViewerPayload, WeatherForecastDay, WeatherPayload,
+    UniversalSearchPayload, UserRowView, VideoPlayerPayload, ViewerPayload, WeatherForecastDay,
+    WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPanePayload, TerminalPayload, WidgetPayload};
 
@@ -39,6 +40,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::MediaPlayer(a), WidgetPayload::MediaPlayer(b)) => media_payload_eq(a, b),
         (WidgetPayload::AudioPlayer(a), WidgetPayload::AudioPlayer(b)) => {
             audio_player_payload_eq(a, b)
+        }
+        (WidgetPayload::VideoPlayer(a), WidgetPayload::VideoPlayer(b)) => {
+            video_player_payload_eq(a, b)
         }
         (WidgetPayload::PasswordManager(a), WidgetPayload::PasswordManager(b)) => {
             password_payload_eq(a, b)
@@ -870,6 +874,35 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.cover_height == b.cover_height
         && (std::sync::Arc::ptr_eq(&a.cover_rgba, &b.cover_rgba)
             || a.cover_rgba.as_ref() == b.cover_rgba.as_ref())
+}
+
+fn video_player_payload_eq(a: &VideoPlayerPayload, b: &VideoPlayerPayload) -> bool {
+    a.engine_available == b.engine_available
+        && a.browse_tab == b.browse_tab
+        && a.search_query == b.search_query
+        && a.roots == b.roots
+        && a.items == b.items
+        && a.queue == b.queue
+        && a.queue_index == b.queue_index
+        && a.queue_count == b.queue_count
+        && a.has_track == b.has_track
+        && a.title == b.title
+        && a.is_playing == b.is_playing
+        && a.position_ms / 100 == b.position_ms / 100
+        && a.duration_ms == b.duration_ms
+        && a.volume == b.volume
+        && a.muted == b.muted
+        && a.shuffle == b.shuffle
+        && a.repeat == b.repeat
+        && a.speed_label == b.speed_label
+        && a.library_count == b.library_count
+        && a.has_library_roots == b.has_library_roots
+        && a.empty_hint == b.empty_hint
+        && a.has_video == b.has_video
+        && a.frame_width == b.frame_width
+        && a.frame_height == b.frame_height
+        && (std::sync::Arc::ptr_eq(&a.frame_rgba, &b.frame_rgba)
+            || a.frame_rgba.as_ref() == b.frame_rgba.as_ref())
 }
 
 fn password_entry_eq(a: &PasswordEntryView, b: &PasswordEntryView) -> bool {

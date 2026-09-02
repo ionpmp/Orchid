@@ -53,10 +53,6 @@ impl MainWindowController {
             self.spawn_open_media_player(placement);
             return;
         }
-        if type_id == "video-player" {
-            self.spawn_open_video_player(placement);
-            return;
-        }
         if !is_known_widget_type(type_id) {
             warn!(type_id, "unknown widget type");
             return;

@@ -6,6 +6,7 @@
 //! the UI renderer.
 
 pub mod audio_player;
+pub mod video_player;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
@@ -27,6 +28,7 @@ pub use audio_player::{
     AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
     AudioPlayerTrackRow,
 };
+pub use video_player::{VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow};
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};

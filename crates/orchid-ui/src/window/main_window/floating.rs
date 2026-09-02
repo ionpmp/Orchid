@@ -290,14 +290,6 @@ impl MainWindowController {
         self.spawn_open_media_path(path, placement);
     }
 
-    /// Catalog launcher: pick a local video file, then open the in-app player on the canvas.
-    pub(super) fn spawn_open_video_player(self: &Arc<Self>, placement: AddWidgetPlacement) {
-        let Some(path) = orchid_viewers::pick_video_file() else {
-            return;
-        };
-        self.spawn_open_media_path(path, placement);
-    }
-
     fn spawn_open_media_path(
         self: &Arc<Self>,
         path: std::path::PathBuf,

@@ -58,6 +58,8 @@ pub struct ContextMenuInputs {
     pub in_recycle: bool,
     /// Selection includes at least one audio file the library player can play.
     pub selection_has_audio: bool,
+    /// Selection includes at least one video file the video player can play.
+    pub selection_has_video: bool,
 }
 
 /// Read-only header shown at the top of a file/folder context menu.
@@ -228,6 +230,18 @@ pub fn build_for_selection(
                 "fm-action-enqueue-in-audio-player",
                 "audio-player",
                 inputs.selection_has_audio,
+            ),
+            item(
+                "video.play",
+                "fm-action-play-in-video-player",
+                "video-player",
+                inputs.selection_has_video,
+            ),
+            item(
+                "video.enqueue",
+                "fm-action-enqueue-in-video-player",
+                "video-player",
+                inputs.selection_has_video,
             ),
             item(
                 "fs.file-assoc",

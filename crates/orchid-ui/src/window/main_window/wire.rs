@@ -1138,6 +1138,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_video_player_command({
+            let t = t.clone();
+            move |id, cmd| {
+                if let Some(c) = t.upgrade() {
+                    c.on_video_player_command(&id, &cmd);
+                }
+            }
+        });
 
         self.window.on_calculator_button({
             let t = t.clone();

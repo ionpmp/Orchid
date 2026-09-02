@@ -356,6 +356,9 @@ impl OrchidApp {
         widget_registry
             .register(orchid_widgets::builtin::audio_player::descriptor())
             .map_err(|e| UiError::Slint(format!("register audio-player: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::video_player::descriptor())
+            .map_err(|e| UiError::Slint(format!("register video-player: {e}")))?;
 
         // Password manager: needs an unlocked database + a secure clipboard.
         // For MVP we auto-create/unlock a dev database in debug builds. In release

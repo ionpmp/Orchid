@@ -123,6 +123,14 @@ pub enum ActionOutcome {
     EnqueueInAudioPlayer {
         paths: Vec<String>,
     },
+    /// Play selected video files in the Video Player widget.
+    PlayInVideoPlayer {
+        paths: Vec<String>,
+    },
+    /// Append selected video files to the Video Player queue.
+    EnqueueInVideoPlayer {
+        paths: Vec<String>,
+    },
     /// Open files with the system "Open with" application picker.
     OpenWithPicker {
         paths: Vec<String>,
@@ -3310,6 +3318,14 @@ pub fn context_menu_for(
                     )
                 })
         }),
+        selection_has_video: selected_entries.iter().any(|e| {
+            e.metadata.kind == orchid_fs::FsEntryKind::File
+                && e.name.rsplit('.').next().is_some_and(|ext| {
+                    crate::builtin::video_player::library::is_video_extension(
+                        &ext.to_ascii_lowercase(),
+                    )
+                })
+        }),
     };
     let fmt_locale = inner.deps.orchid_config.read().locale.clone();
     let info = info_for_selection(&selected_entries, &inner.deps.locale, &fmt_locale);
@@ -4283,6 +4299,48 @@ pub async fn run_action_with_opts(
                 return Ok(ActionOutcome::Done);
             }
             return Ok(ActionOutcome::EnqueueInAudioPlayer { paths: audio });
+        }
+        "video.play" => {
+            let mut video = Vec::new();
+            for p in &target_paths {
+                let path = std::path::Path::new(p);
+                if !path.is_file() {
+                    continue;
+                }
+                let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                    continue;
+                };
+                if crate::builtin::video_player::library::is_video_extension(
+                    &ext.to_ascii_lowercase(),
+                ) {
+                    video.push(p.clone());
+                }
+            }
+            if video.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::PlayInVideoPlayer { paths: video });
+        }
+        "video.enqueue" => {
+            let mut video = Vec::new();
+            for p in &target_paths {
+                let path = std::path::Path::new(p);
+                if !path.is_file() {
+                    continue;
+                }
+                let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                    continue;
+                };
+                if crate::builtin::video_player::library::is_video_extension(
+                    &ext.to_ascii_lowercase(),
+                ) {
+                    video.push(p.clone());
+                }
+            }
+            if video.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::EnqueueInVideoPlayer { paths: video });
         }
         "fs.file-assoc" => {
             let Some(p) = target_paths.first() else {

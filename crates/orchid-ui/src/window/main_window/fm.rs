@@ -457,6 +457,24 @@ impl MainWindowController {
         }
     }
 
+    /// Video Player instance under the canvas pointer (content area, below header).
+    pub(super) fn video_player_content_at_pointer(&self) -> Option<Uuid> {
+        let Some((cx, cy)) = *self.last_canvas_pointer.lock() else {
+            return None;
+        };
+        let (inst, bounds) = self.widget_bounds_at_canvas_point(
+            cx,
+            cy,
+            orchid_widgets::builtin::video_player::TYPE_ID,
+        )?;
+        let content_top = bounds.y + Self::WIDGET_FRAME_HEADER_PX;
+        if cy >= content_top && cy < bounds.y + bounds.height {
+            Some(inst)
+        } else {
+            None
+        }
+    }
+
     pub(super) fn fm_open_paths_in_viewer(self: &Arc<Self>, paths: Vec<String>) {
         let tw = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {
@@ -678,6 +696,12 @@ impl MainWindowController {
         // Audio Player: folders → library roots, audio files → enqueue.
         if let Some(audio_id) = self.audio_player_content_at_pointer() {
             if orchid_widgets::builtin::audio_player::ingest_os_paths(audio_id, &paths) {
+                return;
+            }
+        }
+        // Video Player: folders → library roots, video files → enqueue.
+        if let Some(video_id) = self.video_player_content_at_pointer() {
+            if orchid_widgets::builtin::video_player::ingest_os_paths(video_id, &paths) {
                 return;
             }
         }
@@ -2449,6 +2473,12 @@ impl MainWindowController {
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::EnqueueInAudioPlayer { paths } => {
                 self.enqueue_paths_in_audio_player(paths);
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::PlayInVideoPlayer { paths } => {
+                self.play_paths_in_video_player(paths);
+            }
+            orchid_widgets::builtin::file_manager::ActionOutcome::EnqueueInVideoPlayer { paths } => {
+                self.enqueue_paths_in_video_player(paths);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenWithPicker { paths } => {
                 for path in paths {
