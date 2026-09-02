@@ -234,6 +234,8 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-document-find-request(string, string, bool, bool);
     callback viewer-document-replace-request(string, string, string, bool, bool);
     callback viewer-document-link-request(string, string);
+    callback viewer-document-header-request(string, string);
+    callback viewer-document-footer-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -636,6 +638,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-document-find-request(id, q, fwd, mc) => { root.viewer-document-find-request(id, q, fwd, mc); }
                     viewer-document-replace-request(id, q, r, all, mc) => { root.viewer-document-replace-request(id, q, r, all, mc); }
                     viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
+                    viewer-document-header-request(id, text) => { root.viewer-document-header-request(id, text); }
+                    viewer-document-footer-request(id, text) => { root.viewer-document-footer-request(id, text); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
                     fm-pane-clicked(fm_id, p) => { root.fm-pane-clicked(fm_id, p); }
@@ -782,6 +786,8 @@ export component WorkspaceView inherits Rectangle {
             viewer-document-find-request(id, q, fwd, mc) => { root.viewer-document-find-request(id, q, fwd, mc); }
             viewer-document-replace-request(id, q, r, all, mc) => { root.viewer-document-replace-request(id, q, r, all, mc); }
             viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
+            viewer-document-header-request(id, text) => { root.viewer-document-header-request(id, text); }
+            viewer-document-footer-request(id, text) => { root.viewer-document-footer-request(id, text); }
         }
 
         for w[i] in root.workspace.floating-widgets: Rectangle {

@@ -3834,6 +3834,42 @@ pub async fn document_link(instance_id: Uuid, url: String) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Document: set or clear the default header story plain text.
+pub async fn document_header(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.set_header_plain_text(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Document: set or clear the default footer story plain text.
+pub async fn document_footer(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.set_footer_plain_text(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Document: pointer on the preview canvas
 /// (`phase`: 0=down, 1=move, 2=up, 3=double-click word select,
 /// 4=triple-click paragraph, 5=hover; `ctrl` opens hyperlinks on down).

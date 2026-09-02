@@ -128,6 +128,10 @@ pub struct DocumentSnapshot {
     pub page_is_a4: bool,
     /// True when page width exceeds height (landscape).
     pub page_landscape: bool,
+    /// Plain text of the default header story (paragraphs joined by `\n`).
+    pub header_text: String,
+    /// Plain text of the default footer story (paragraphs joined by `\n`).
+    pub footer_text: String,
 }
 
 /// Image snapshot.

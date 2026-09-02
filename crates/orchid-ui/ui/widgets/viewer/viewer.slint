@@ -58,6 +58,8 @@ export component ViewerView inherits Rectangle {
     callback document-find-request(string, bool, bool);
     callback document-replace-request(string, string, bool, bool);
     callback document-link-request(string);
+    callback document-header-request(string);
+    callback document-footer-request(string);
 
     callback media-command(string);
     callback media-seek-frac(float);
@@ -169,6 +171,8 @@ export component ViewerView inherits Rectangle {
         find-request(q, fwd, mc) => { root.document-find-request(q, fwd, mc); }
         replace-request(q, r, all, mc) => { root.document-replace-request(q, r, all, mc); }
         link-request(url) => { root.document-link-request(url); }
+        header-request(text) => { root.document-header-request(text); }
+        footer-request(text) => { root.document-footer-request(text); }
     }
 
     if model.kind == 8 : ViewerMediaView {

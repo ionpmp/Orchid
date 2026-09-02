@@ -2695,6 +2695,64 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Plain text of the default header story (`\n`-joined paragraphs).
+    #[must_use]
+    pub fn header_plain_text(&self) -> String {
+        self.document
+            .read()
+            .as_ref()
+            .map(|d| story_plain_text(&d.header))
+            .unwrap_or_default()
+    }
+
+    /// Plain text of the default footer story (`\n`-joined paragraphs).
+    #[must_use]
+    pub fn footer_plain_text(&self) -> String {
+        self.document
+            .read()
+            .as_ref()
+            .map(|d| story_plain_text(&d.footer))
+            .unwrap_or_default()
+    }
+
+    /// Replace the default header story from plain text (empty clears).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_header_plain_text(&self, text: &str) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let paragraphs = paragraphs_from_plain(text);
+        if paragraphs == doc.header {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetHeader { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Replace the default footer story from plain text (empty clears).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_footer_plain_text(&self, text: &str) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let paragraphs = paragraphs_from_plain(text);
+        if paragraphs == doc.footer {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetFooter { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Toggle page size between US Letter and ISO A4 (margins unchanged).
     ///
     /// # Errors
@@ -3136,6 +3194,32 @@ fn page_portrait_dims(ps: &PageSetup) -> (u32, u32) {
 fn is_a4_page(ps: &PageSetup) -> bool {
     let (w, h) = page_portrait_dims(ps);
     w == PAGE_A4_WIDTH_TWIPS && h == PAGE_A4_HEIGHT_TWIPS
+}
+
+fn story_plain_text(paragraphs: &[Paragraph]) -> String {
+    paragraphs
+        .iter()
+        .map(Paragraph::plain_text)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn paragraphs_from_plain(text: &str) -> Vec<Paragraph> {
+    let trimmed = text.trim_end_matches(['\r', '\n']);
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    trimmed
+        .split('\n')
+        .map(|line| Paragraph {
+            runs: vec![Run {
+                text: line.trim_end_matches('\r').to_string(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+        .collect()
 }
 
 fn bump_line_spacing(current: u32, delta: i32) -> u32 {
@@ -3989,6 +4073,8 @@ impl Viewer for DocumentViewer {
         };
         let page_is_a4 = is_a4_page(&doc.page_setup);
         let page_landscape = is_landscape_page(&doc.page_setup);
+        let header_text = story_plain_text(&doc.header);
+        let footer_text = story_plain_text(&doc.footer);
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -4042,6 +4128,8 @@ impl Viewer for DocumentViewer {
             link_url,
             page_is_a4,
             page_landscape,
+            header_text,
+            footer_text,
         })
     }
 

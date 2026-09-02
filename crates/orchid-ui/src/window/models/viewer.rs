@@ -799,8 +799,14 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         link_apply_label: locale.tr("viewer-document-link-apply").into(),
         link_remove_label: locale.tr("viewer-document-link-remove").into(),
         bookmark_label: locale.tr("viewer-document-bookmark").into(),
+        header_label: locale.tr("viewer-document-header").into(),
+        footer_label: locale.tr("viewer-document-footer").into(),
+        header_placeholder: locale.tr("viewer-document-header-placeholder").into(),
+        footer_placeholder: locale.tr("viewer-document-footer-placeholder").into(),
         tip_link: locale.tr("viewer-document-tip-link").into(),
         tip_bookmark: locale.tr("viewer-document-tip-bookmark").into(),
+        tip_header: locale.tr("viewer-document-tip-header").into(),
+        tip_footer: locale.tr("viewer-document-tip-footer").into(),
         tip_bold: locale.tr("viewer-document-tip-bold").into(),
         tip_italic: locale.tr("viewer-document-tip-italic").into(),
         tip_underline: locale.tr("viewer-document-tip-underline").into(),
@@ -848,6 +854,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_save: locale.tr("viewer-document-tip-save").into(),
         tip_print: locale.tr("viewer-document-tip-print").into(),
         link_url: SharedString::new(),
+        header_text: SharedString::new(),
+        footer_text: SharedString::new(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),
         font_family_prev_label: locale.tr("viewer-document-font-prev").into(),
@@ -1118,6 +1126,8 @@ fn build_document_snapshot(
     model.preview_zoom_percent = s.preview_zoom_percent;
     model.link_hover = s.link_hover;
     model.link_url = s.link_url.clone().into();
+    model.header_text = s.header_text.clone().into();
+    model.footer_text = s.footer_text.clone().into();
     model.page_size_label = document_page_size_label(locale, s.page_is_a4, s.page_landscape);
     model
 }

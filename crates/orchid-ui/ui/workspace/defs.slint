@@ -1458,8 +1458,14 @@ export struct ViewerDocumentModel {
     link-apply-label: string,
     link-remove-label: string,
     bookmark-label: string,
+    header-label: string,
+    footer-label: string,
+    header-placeholder: string,
+    footer-placeholder: string,
     tip-link: string,
     tip-bookmark: string,
+    tip-header: string,
+    tip-footer: string,
     tip-bold: string,
     tip-italic: string,
     tip-underline: string,
@@ -1508,6 +1514,10 @@ export struct ViewerDocumentModel {
     tip-print: string,
     /// External hyperlink URL at the caret (empty when none).
     link-url: string,
+    /// Default header story plain text (`\n`-joined).
+    header-text: string,
+    /// Default footer story plain text (`\n`-joined).
+    footer-text: string,
     font-smaller-label: string,
     font-larger-label: string,
     font-family-prev-label: string,

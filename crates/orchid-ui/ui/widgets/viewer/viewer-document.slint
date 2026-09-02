@@ -49,6 +49,10 @@ export component ViewerDocumentView inherits Rectangle {
     callback replace-request(string, string, bool, bool);
     /// Apply hyperlink URL (`""` removes the link under the selection/caret).
     callback link-request(string);
+    /// Apply header story plain text (`""` clears).
+    callback header-request(string);
+    /// Apply footer story plain text (`""` clears).
+    callback footer-request(string);
 
     background: transparent;
 
@@ -62,6 +66,8 @@ export component ViewerDocumentView inherits Rectangle {
     property <string> replace-query: "";
     property <bool> link-open: false;
     property <string> link-query: "";
+    property <int> story-open: 0; // 0=closed, 1=header, 2=footer
+    property <string> story-query: "";
 
     changed model => {
         if root.last-path != model.path-display {
@@ -678,6 +684,7 @@ export component ViewerDocumentView inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     link-ta := TouchArea {
                         clicked => {
+                            root.story-open = 0;
                             root.link-open = !root.link-open;
                             if (root.link-open) {
                                 root.link-query = model.link-url;
@@ -1392,6 +1399,68 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(36px, hdr-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(root.story-open == 1 || model.header-text != "", hdr-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hdr-ta := TouchArea {
+                        clicked => {
+                            root.link-open = false;
+                            if (root.story-open == 1) {
+                                root.story-open = 0;
+                            } else {
+                                root.story-open = 1;
+                                root.story-query = model.header-text;
+                            }
+                        }
+                    }
+                    hdr-btn-label := Text {
+                        text: model.header-label;
+                        color: tool-btn(root.story-open == 1 || model.header-text != "");
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-header;
+                        show: hdr-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, ftr-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(root.story-open == 2 || model.footer-text != "", ftr-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ftr-ta := TouchArea {
+                        clicked => {
+                            root.link-open = false;
+                            if (root.story-open == 2) {
+                                root.story-open = 0;
+                            } else {
+                                root.story-open = 2;
+                                root.story-query = model.footer-text;
+                            }
+                        }
+                    }
+                    ftr-btn-label := Text {
+                        text: model.footer-label;
+                        color: tool-btn(root.story-open == 2 || model.footer-text != "");
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-footer;
+                        show: ftr-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;
@@ -2066,6 +2135,120 @@ export component ViewerDocumentView inherits Rectangle {
         }
 
         if root.link-open : Rectangle { height: 1px; background: Theme.border-default; }
+
+        if root.story-open != 0 : HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            padding-top: 4px;
+            padding-bottom: 4px;
+            spacing: 6px;
+            alignment: center;
+
+            Text {
+                text: root.story-open == 1 ? model.header-label : model.footer-label;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 26px;
+                background: Theme.surface-base;
+                border-radius: Theme.radius-md;
+                border-width: 1px;
+                border-color: Theme.border-default;
+
+                if story-input.text == "" : Text {
+                    x: 8px;
+                    width: parent.width - 16px;
+                    height: 100%;
+                    text: root.story-open == 1 ? model.header-placeholder : model.footer-placeholder;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                story-input := TextInput {
+                    x: 8px;
+                    width: parent.width - 16px;
+                    height: 100%;
+                    text <=> root.story-query;
+                    single-line: true;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    font-family: Theme.font-family-sans;
+                    vertical-alignment: center;
+                    key-pressed(event) => {
+                        if (event.text == Key.Return) {
+                            if (root.story-open == 1) {
+                                root.header-request(root.story-query);
+                            } else if (root.story-open == 2) {
+                                root.footer-request(root.story-query);
+                            }
+                            root.story-open = 0;
+                            return accept;
+                        }
+                        if (event.text == Key.Escape) {
+                            root.story-open = 0;
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+            }
+
+            Rectangle {
+                width: max(48px, story-apply-label.preferred-width + 12px);
+                height: 26px;
+                background: story-apply-ta.has-hover ? Theme.surface-base : transparent;
+                border-radius: Theme.radius-md;
+                story-apply-ta := TouchArea {
+                    clicked => {
+                        if (root.story-open == 1) {
+                            root.header-request(root.story-query);
+                        } else if (root.story-open == 2) {
+                            root.footer-request(root.story-query);
+                        }
+                        root.story-open = 0;
+                    }
+                }
+                story-apply-label := Text {
+                    text: model.link-apply-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle {
+                width: max(56px, story-clear-label.preferred-width + 12px);
+                height: 26px;
+                background: story-clear-ta.has-hover ? Theme.surface-base : transparent;
+                border-radius: Theme.radius-md;
+                story-clear-ta := TouchArea {
+                    clicked => {
+                        if (root.story-open == 1) {
+                            root.header-request("");
+                        } else if (root.story-open == 2) {
+                            root.footer-request("");
+                        }
+                        root.story-query = "";
+                        root.story-open = 0;
+                    }
+                }
+                story-clear-label := Text {
+                    text: model.link-remove-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.story-open != 0 : Rectangle { height: 1px; background: Theme.border-default; }
 
         Rectangle {
             background: Theme.surface-base;
