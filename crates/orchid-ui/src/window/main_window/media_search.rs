@@ -101,6 +101,26 @@ impl MainWindowController {
             self.reveal_folder_in_fm(fs_path);
             return;
         }
+        if command == "copy-track-path" {
+            let Some(path) = orchid_widgets::builtin::audio_player::current_track_path(id) else {
+                return;
+            };
+            match crate::widgets::terminal::ArboardClipboard::new() {
+                Ok(cb) => {
+                    if let Err(e) = cb.copy(&path) {
+                        warn!(?e, "audio player copy track path");
+                    } else {
+                        self.push_notification(
+                            &self.locale.tr("widget-audio-player-name"),
+                            &self.locale.tr("processes-copied"),
+                            0,
+                        );
+                    }
+                }
+                Err(e) => warn!(?e, "open clipboard for audio player copy"),
+            }
+            return;
+        }
         orchid_widgets::builtin::audio_player::execute_command(id, command);
     }
 
@@ -154,6 +174,60 @@ impl MainWindowController {
                 warn!(?e, widget_id = %id, "prime audio player before play");
             }
             orchid_widgets::builtin::audio_player::play_paths(id, paths);
+            c.schedule_rebuild();
+        });
+    }
+
+    pub(super) fn enqueue_paths_in_audio_player(self: &Arc<Self>, paths: Vec<String>) {
+        if paths.is_empty() {
+            return;
+        }
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            let ws_id = match c.workspace_manager.active() {
+                Ok(w) => w.id,
+                Err(_) => return,
+            };
+            let audio_id = c
+                .widget_manager
+                .instances_for_workspace(ws_id)
+                .into_iter()
+                .find(|i| i.type_id == orchid_widgets::builtin::audio_player::TYPE_ID)
+                .map(|i| i.id);
+            let id = match audio_id {
+                Some(id) => id,
+                None => {
+                    let size = MainWindowController::minimal_widget_size(
+                        &c.widget_manager,
+                        orchid_widgets::builtin::audio_player::TYPE_ID,
+                    );
+                    match c
+                        .widget_manager
+                        .create(CreateWidgetRequest {
+                            type_id: orchid_widgets::builtin::audio_player::TYPE_ID.into(),
+                            workspace_id: ws_id,
+                            position: None,
+                            size: Some(size),
+                            initial_lifecycle: None,
+                            config_bytes: None,
+                        })
+                        .await
+                    {
+                        Ok(id) => id,
+                        Err(e) => {
+                            warn!(?e, "create audio player from file manager enqueue");
+                            return;
+                        }
+                    }
+                }
+            };
+            if let Err(e) = c.widget_manager.refresh_snapshot_cache(id).await {
+                warn!(?e, widget_id = %id, "prime audio player before enqueue");
+            }
+            orchid_widgets::builtin::audio_player::enqueue_paths(id, &paths);
             c.schedule_rebuild();
         });
     }

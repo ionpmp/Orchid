@@ -120,6 +120,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         remove_root_label: locale.tr("audio-player-remove-root").into(),
         sort_label: sort_label_for(0, locale),
         show_in_fm_label: locale.tr("audio-player-show-in-fm").into(),
+        export_m3u_label: locale.tr("audio-player-export-m3u").into(),
         is_current_favorite: false,
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
@@ -200,6 +201,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.play_group_label = base.play_group_label;
     m.remove_root_label = base.remove_root_label;
     m.show_in_fm_label = base.show_in_fm_label;
+    m.export_m3u_label = base.export_m3u_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }

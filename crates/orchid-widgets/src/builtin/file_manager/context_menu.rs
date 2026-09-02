@@ -224,6 +224,12 @@ pub fn build_for_selection(
                 inputs.selection_has_audio,
             ),
             item(
+                "audio.enqueue",
+                "fm-action-enqueue-in-audio-player",
+                "audio-player",
+                inputs.selection_has_audio,
+            ),
+            item(
                 "fs.file-assoc",
                 "fm-action-file-assoc",
                 "action-open-with",

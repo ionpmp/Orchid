@@ -119,6 +119,10 @@ pub enum ActionOutcome {
     PlayInAudioPlayer {
         paths: Vec<String>,
     },
+    /// Append selected audio files to the Audio Player queue without starting playback.
+    EnqueueInAudioPlayer {
+        paths: Vec<String>,
+    },
     /// Open files with the system "Open with" application picker.
     OpenWithPicker {
         paths: Vec<String>,
@@ -4258,6 +4262,27 @@ pub async fn run_action_with_opts(
                 return Ok(ActionOutcome::Done);
             }
             return Ok(ActionOutcome::PlayInAudioPlayer { paths: audio });
+        }
+        "audio.enqueue" => {
+            let mut audio = Vec::new();
+            for p in &target_paths {
+                let path = std::path::Path::new(p);
+                if !path.is_file() {
+                    continue;
+                }
+                let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                    continue;
+                };
+                if crate::builtin::audio_player::library::is_audio_extension(
+                    &ext.to_ascii_lowercase(),
+                ) {
+                    audio.push(p.clone());
+                }
+            }
+            if audio.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::EnqueueInAudioPlayer { paths: audio });
         }
         "fs.file-assoc" => {
             let Some(p) = target_paths.first() else {

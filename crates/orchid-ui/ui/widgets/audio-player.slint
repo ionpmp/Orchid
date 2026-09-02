@@ -77,6 +77,18 @@ export component AudioPlayerView inherits Rectangle {
                     return accept;
                 }
             }
+            if event.text == "g" || event.text == "G" {
+                if root.model.has-track {
+                    root.command("show-in-fm");
+                    return accept;
+                }
+            }
+            if event.text == "c" || event.text == "C" {
+                if root.model.has-track && !event.modifiers.control {
+                    root.command("copy-track-path");
+                    return accept;
+                }
+            }
             if event.text == Key.Return {
                 if root.model.search-query != "" {
                     root.command("play-search");
@@ -364,6 +376,21 @@ export component AudioPlayerView inherits Rectangle {
                     TouchArea { clicked => { root.command("delete-playlist"); } }
                     del-pl-txt := Text {
                         text: root.model.delete-playlist-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if (root.model.browse-tab == 4 || root.model.browse-tab == 5) && root.model.tracks.length > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-base;
+                    width: export-m3u-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("export-m3u"); } }
+                    export-m3u-txt := Text {
+                        text: root.model.export-m3u-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;

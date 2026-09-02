@@ -363,6 +363,28 @@ pub fn play_paths(instance_id: Uuid, paths: Vec<String>) {
     h.load_current();
 }
 
+/// Append `paths` to the queue (deduped). Does not start playback.
+pub fn enqueue_paths(instance_id: Uuid, paths: &[String]) {
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return;
+    };
+    let mut added = false;
+    {
+        let mut q = h.queue.write();
+        for path in paths {
+            if q.enqueue_end(path) {
+                added = true;
+            }
+        }
+    }
+    if !added {
+        return;
+    }
+    h.prefetch_following();
+    h.sync_queue_to_config();
+    h.publish();
+}
+
 /// Current queue track path, if any.
 #[must_use]
 pub fn current_track_path(instance_id: Uuid) -> Option<String> {
@@ -748,6 +770,11 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.sync_queue_to_config();
             h.publish();
         }
+        "export-m3u" => {
+            drop(h);
+            export_m3u(instance_id);
+            return;
+        }
         cmd if let Some(raw) = cmd.strip_prefix("toggle-favorite:") => {
             let mut cfg = h.config.write();
             if let Some(i) = cfg.favorites.iter().position(|p| p == raw) {
@@ -965,6 +992,84 @@ fn group_track_paths(h: &AudioHandle, group_key: &str) -> Vec<String> {
         cfg.library_sort,
     );
     browse.tracks.iter().map(|t| t.path.clone()).collect()
+}
+
+fn export_m3u(instance_id: Uuid) {
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return;
+    };
+    let cfg = h.config.read().clone();
+    let lib = h.library.read();
+    let (default_name, paths) = if cfg.browse_tab == BrowseTab::NowPlaying {
+        let paths = h.queue.read().paths.clone();
+        ("queue.m3u".into(), paths)
+    } else if cfg.browse_tab == BrowseTab::Playlists {
+        if cfg.active_playlist_id.is_empty() {
+            let paths = cfg.favorites.clone();
+            ("favorites.m3u".into(), paths)
+        } else if let Some(pl) = cfg
+            .playlists
+            .iter()
+            .find(|p| p.id == cfg.active_playlist_id)
+        {
+            let name = pl.name.clone();
+            let default = if name.starts_with("audio-player-") {
+                "playlist.m3u".into()
+            } else {
+                format!("{}.m3u", sanitize_filename_stem(&name))
+            };
+            (default, pl.tracks.clone())
+        } else {
+            return;
+        }
+    } else {
+        return;
+    };
+    drop(lib);
+    if paths.is_empty() {
+        return;
+    }
+    let Some(dest) = orchid_viewers::save_m3u_file(&default_name) else {
+        return;
+    };
+    let lib = h.library.read();
+    let mut body = String::from("#EXTM3U\n");
+    for path in &paths {
+        let label = lib
+            .find_by_path(path)
+            .map(|t| {
+                if t.artist.is_empty() {
+                    t.title.clone()
+                } else {
+                    format!("{} — {}", t.artist, t.title)
+                }
+            })
+            .unwrap_or_else(|| {
+                PathBuf::from(path)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone())
+            });
+        body.push_str(&format!("#EXTINF:-1,{label}\n{path}\n"));
+    }
+    drop(lib);
+    if std::fs::write(&dest, body).is_ok() {
+        h.publish();
+    }
+}
+
+fn sanitize_filename_stem(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else if c.is_whitespace() {
+                '_'
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 fn browse_filter_label(cfg: &AudioPlayerConfig, filter: &str) -> String {
