@@ -259,7 +259,10 @@ impl DocumentLayout {
         let mut layout = builder.build(&text);
         apply_paragraph_text_indent(&mut layout, p);
         layout.break_all_lines(Some(max_width.max(1.0)));
-        layout.align(parley_alignment(p.alignment), AlignmentOptions::default());
+        layout.align(
+            parley_alignment_for(p),
+            AlignmentOptions::default(),
+        );
         layout
     }
 
@@ -1900,6 +1903,21 @@ fn parley_alignment(a: Alignment) -> ParleyAlignment {
     }
 }
 
+/// Alignment for preview layout. `w:bidi` paragraphs use an RTL base direction;
+/// Word's left/right map to the paragraph start/end edges, so Left paints on the
+/// right and Right on the left when bidi is set (parley has no public RTL base API).
+fn parley_alignment_for(p: &Paragraph) -> ParleyAlignment {
+    if !p.bidi {
+        return parley_alignment(p.alignment);
+    }
+    match p.alignment {
+        Alignment::Left => ParleyAlignment::Right,
+        Alignment::Right => ParleyAlignment::Left,
+        Alignment::Center => ParleyAlignment::Center,
+        Alignment::Justify => ParleyAlignment::Justify,
+    }
+}
+
 /// Cache of laid-out paragraphs keyed by block index.
 #[derive(Debug, Default)]
 pub struct LayoutCache {
@@ -2379,6 +2397,33 @@ mod tests {
         let mut dl = DocumentLayout::new();
         let layout = dl.layout_paragraph(&sample_paragraph(), 400.0, 1.0);
         assert!(!layout.is_empty());
+    }
+
+    #[test]
+    fn bidi_left_align_places_line_on_the_right() {
+        let mut dl = DocumentLayout::new();
+        let mut ltr = sample_paragraph();
+        ltr.alignment = Alignment::Left;
+        let mut rtl = sample_paragraph();
+        rtl.alignment = Alignment::Left;
+        rtl.bidi = true;
+        let width = 400.0;
+        let ltr_layout = dl.layout_paragraph(&ltr, width, 1.0);
+        let rtl_layout = dl.layout_paragraph(&rtl, width, 1.0);
+        let ltr_off = ltr_layout
+            .get(0)
+            .expect("ltr line")
+            .metrics()
+            .offset;
+        let rtl_off = rtl_layout
+            .get(0)
+            .expect("rtl line")
+            .metrics()
+            .offset;
+        assert!(
+            rtl_off > ltr_off + 20.0,
+            "bidi left-align should push the line toward the right edge (ltr_off={ltr_off}, rtl_off={rtl_off})"
+        );
     }
 
     #[test]
