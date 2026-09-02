@@ -772,6 +772,17 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
                 h.publish();
             }
         }
+        cmd if let Some(raw) = cmd.strip_prefix("queue-move-to:") => {
+            if let Some((idx_s, path)) = raw.split_once('|') {
+                if let Ok(idx) = idx_s.parse::<usize>() {
+                    if h.queue.write().move_to(path, idx) {
+                        h.prefetch_following();
+                        h.sync_queue_to_config();
+                        h.publish();
+                    }
+                }
+            }
+        }
         cmd if let Some(raw) = cmd.strip_prefix("remove-from-active-playlist:") => {
             let mut cfg = h.config.write();
             let id = cfg.active_playlist_id.clone();

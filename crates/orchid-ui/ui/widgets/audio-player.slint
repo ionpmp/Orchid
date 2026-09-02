@@ -10,6 +10,12 @@ export component AudioPlayerView inherits Rectangle {
     background: transparent;
     clip: true;
 
+    /// Queue drag-reorder: source path while the grip is held.
+    property <string> q-drag-path: "";
+    property <int> q-drag-from: -1;
+    property <int> q-drop-index: -1;
+    property <length> q-row-stride: 41px;
+
     focus-scope := FocusScope {
         width: 100%;
         height: 100%;
@@ -594,7 +600,7 @@ export component AudioPlayerView inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                if root.model.empty-hint == "" : Flickable {
+                if root.model.empty-hint == "" : browse-flick := Flickable {
                     width: 100%;
                     height: 100%;
                     viewport-width: self.width;
@@ -680,14 +686,60 @@ export component AudioPlayerView inherits Rectangle {
 
                         if root.model.tracks.length > 0 : VerticalLayout {
                             spacing: 1px;
-                            for t in root.model.tracks : Rectangle {
+                            for t[i] in root.model.tracks : Rectangle {
                                 height: 40px;
-                                background: t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent);
+                                background: root.q-drag-path == t.path
+                                    ? Theme.surface-base
+                                    : (root.q-drag-path != "" && root.q-drop-index == i
+                                        ? Theme.accent-brand
+                                        : (t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent)));
+                                opacity: root.q-drag-path == t.path ? 0.55 : 1.0;
                                 border-radius: Theme.radius-md;
                                 HorizontalLayout {
                                     padding-left: 8px;
                                     padding-right: 8px;
                                     spacing: 6px;
+                                    if root.model.browse-tab == 6 : Rectangle {
+                                        width: 18px;
+                                        height: 28px;
+                                        Text {
+                                            text: "⋮⋮";
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                        TouchArea {
+                                            pointer-event(e) => {
+                                                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                                                    root.q-drag-path = t.path;
+                                                    root.q-drag-from = i;
+                                                    root.q-drop-index = i;
+                                                }
+                                                if root.q-drag-path == t.path && e.kind == PointerEventKind.move {
+                                                    let pointer-y = self.absolute-position.y - browse-flick.absolute-position.y + self.mouse-y;
+                                                    let content-y = pointer-y + browse-flick.viewport-y;
+                                                    let raw = content-y / root.q-row-stride;
+                                                    let idx = min(root.model.tracks.length - 1, max(0, floor(raw)));
+                                                    root.q-drop-index = idx;
+                                                }
+                                                if root.q-drag-path == t.path && e.kind == PointerEventKind.up {
+                                                    if root.q-drop-index >= 0 && root.q-drop-index != root.q-drag-from {
+                                                        root.command("queue-move-to:" + root.q-drop-index + "|" + root.q-drag-path);
+                                                    }
+                                                    root.q-drag-path = "";
+                                                    root.q-drag-from = -1;
+                                                    root.q-drop-index = -1;
+                                                }
+                                                if e.kind == PointerEventKind.cancel {
+                                                    root.q-drag-path = "";
+                                                    root.q-drag-from = -1;
+                                                    root.q-drop-index = -1;
+                                                }
+                                            }
+                                        }
+                                    }
                                     Rectangle {
                                         horizontal-stretch: 1;
                                         t-ta := TouchArea {
