@@ -2487,9 +2487,9 @@ mod tests {
         assert!(w > 100 && h > 40);
         let s = PREVIEW_RENDER_SCALE;
         let insets = PreviewInsets::default_letter();
-        // Top edge of bordered cell (first row).
+        // Top edge of bordered cell (first row; y0 already includes table offset).
         let vx = ((insets.left + 20.0) * s).round() as u32;
-        let vy = ((insets.top + 2.0) * s).round() as u32;
+        let vy = (insets.top * s).round() as u32;
         let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
         assert!(
             bytes[i] == PARA_BORDER_COLOR[0]
