@@ -41,6 +41,8 @@ pub struct ColorBrush {
     pub highlight: bool,
     /// Extra baseline shift in CSS px (negative raises for superscript).
     pub baseline_shift: f32,
+    /// Soft drop-shadow for `w:shadow` runs.
+    pub shadow: bool,
 }
 
 impl Default for ColorBrush {
@@ -52,6 +54,7 @@ impl Default for ColorBrush {
             a: 255,
             highlight: false,
             baseline_shift: 0.0,
+            shadow: false,
         }
     }
 }
@@ -223,6 +226,7 @@ impl DocumentLayout {
                 || paint_color.is_some()
                 || baseline_shift != 0.0
                 || run.style.vanish
+                || run.style.shadow
             {
                 let mut brush = ColorBrush::default();
                 if let Some([r, g, b]) = paint_color {
@@ -232,6 +236,7 @@ impl DocumentLayout {
                 }
                 brush.highlight = run.style.highlight;
                 brush.baseline_shift = baseline_shift * scale;
+                brush.shadow = run.style.shadow;
                 if run.style.vanish {
                     // Keep hidden text editable/visible in Preview as a faint ghost.
                     brush.a = 72;
@@ -2009,6 +2014,23 @@ fn render_glyph_run(
         let glyph_x = origin_x + run_x + glyph.x;
         let glyph_y = origin_y + run_y + glyph.y;
         run_x += glyph.advance;
+        if brush.shadow {
+            let mut shadow_brush = brush;
+            shadow_brush.r = 0;
+            shadow_brush.g = 0;
+            shadow_brush.b = 0;
+            shadow_brush.a = shadow_brush.a.min(96);
+            render_glyph(
+                pixels,
+                width,
+                height,
+                &mut scaler,
+                shadow_brush,
+                glyph.id as u16,
+                glyph_x + 1.5,
+                glyph_y + 1.5,
+            );
+        }
         render_glyph(
             pixels,
             width,

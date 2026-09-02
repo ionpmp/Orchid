@@ -37,6 +37,8 @@ pub struct RunStyle {
     pub small_caps: bool,
     /// Hidden text (`w:vanish`); still editable, preview draws faded.
     pub vanish: bool,
+    /// Character shadow (`w:shadow`).
+    pub shadow: bool,
     /// RGB colour (`None` = theme/default).
     pub color: Option<[u8; 3]>,
     /// Font family name.

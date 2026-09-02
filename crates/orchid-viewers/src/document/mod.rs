@@ -2188,6 +2188,7 @@ impl DocumentViewer {
                 'a' => s.all_caps,
                 'm' => s.small_caps,
                 'v' => s.vanish,
+                'w' => s.shadow,
                 _ => false,
             })
             .unwrap_or(false);
@@ -2232,6 +2233,10 @@ impl DocumentViewer {
             },
             'v' => RunStylePatch {
                 vanish: Some(!currently_on),
+                ..Default::default()
+            },
+            'w' => RunStylePatch {
+                shadow: Some(!currently_on),
                 ..Default::default()
             },
             _ => return Ok(()),
@@ -3829,6 +3834,7 @@ impl Viewer for DocumentViewer {
             all_caps,
             small_caps,
             vanish,
+            shadow,
             superscript,
             subscript,
             font_size_pt,
@@ -3845,6 +3851,7 @@ impl Viewer for DocumentViewer {
             style.as_ref().is_some_and(|s| s.all_caps),
             style.as_ref().is_some_and(|s| s.small_caps),
             style.as_ref().is_some_and(|s| s.vanish),
+            style.as_ref().is_some_and(|s| s.shadow),
             style.as_ref().is_some_and(|s| s.superscript),
             style.as_ref().is_some_and(|s| s.subscript),
             style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
@@ -3947,6 +3954,7 @@ impl Viewer for DocumentViewer {
             all_caps,
             small_caps,
             vanish,
+            shadow,
             shade,
             border_bottom,
             keep_next,

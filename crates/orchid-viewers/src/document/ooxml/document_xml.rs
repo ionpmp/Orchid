@@ -621,6 +621,9 @@ fn apply_r_pr_attr(local: &str, e: &BytesStart<'_>, style: &mut RunStyle) {
         "vanish" => {
             style.vanish = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
         }
+        "shadow" => {
+            style.shadow = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
+        }
         "color" => {
             if let Some(val) = attr_val(e, "val") {
                 style.color = parse_rgb(&val);
@@ -1414,6 +1417,11 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
             .write_event(Event::Empty(BytesStart::new("w:vanish")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if run.style.shadow {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:shadow")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if let Some([r, g, b]) = run.style.color {
         let mut c = BytesStart::new("w:color");
         c.push_attribute(("w:val", format!("{r:02X}{g:02X}{b:02X}").as_str()));
@@ -2129,6 +2137,69 @@ mod tests {
         .unwrap();
         match &blocks2[0] {
             Block::Paragraph(p) => assert!(p.runs[0].style.vanish),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+
+    #[test]
+    fn parse_and_write_shadow() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:rPr><w:shadow/></w:rPr>
+                <w:t>Shadowed</w:t>
+              </w:r>
+            </w:p>
+            <w:p>
+              <w:r><w:t>Plain</w:t></w:r>
+            </w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.runs[0].style.shadow);
+                assert!(!p.runs[0].style.vanish);
+                assert_eq!(p.plain_text(), "Shadowed");
+            }
+            _ => panic!("expected paragraph"),
+        }
+        match &blocks[1] {
+            Block::Paragraph(p) => assert!(!p.runs[0].style.shadow),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:shadow"),
+            "serialized XML missing shadow: {text}"
+        );
+        let (blocks2, _, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => assert!(p.runs[0].style.shadow),
             _ => panic!("expected paragraph"),
         }
     }

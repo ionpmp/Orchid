@@ -40,6 +40,7 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                     "u" if in_r_pr => defaults.run.underline = true,
                     "strike" | "dstrike" if in_r_pr => defaults.run.strikethrough = true,
                     "vanish" if in_r_pr => defaults.run.vanish = true,
+                    "shadow" if in_r_pr => defaults.run.shadow = true,
                     "highlight" if in_r_pr => {
                         let val = attr_val(&e, "val").unwrap_or_default();
                         defaults.run.highlight = !val.is_empty() && val != "none";
