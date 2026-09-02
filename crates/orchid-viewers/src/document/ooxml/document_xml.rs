@@ -871,6 +871,22 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                             setup.margin_right_twips = v;
                         }
                     }
+                    "headerReference" => {
+                        let ty = attr_val(&e, "type").unwrap_or_else(|| "default".into());
+                        if ty == "default" {
+                            if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
+                                setup.header_r_id = Some(id);
+                            }
+                        }
+                    }
+                    "footerReference" => {
+                        let ty = attr_val(&e, "type").unwrap_or_else(|| "default".into());
+                        if ty == "default" {
+                            if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
+                                setup.footer_r_id = Some(id);
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1751,6 +1767,22 @@ fn write_sect_pr(writer: &mut Writer<Cursor<Vec<u8>>>, setup: &PageSetup) -> Res
     writer
         .write_event(Event::Empty(mar))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if let Some(ref id) = setup.header_r_id {
+        let mut href = BytesStart::new("w:headerReference");
+        href.push_attribute(("w:type", "default"));
+        href.push_attribute(("r:id", id.as_str()));
+        writer
+            .write_event(Event::Empty(href))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(ref id) = setup.footer_r_id {
+        let mut fref = BytesStart::new("w:footerReference");
+        fref.push_attribute(("w:type", "default"));
+        fref.push_attribute(("r:id", id.as_str()));
+        writer
+            .write_event(Event::Empty(fref))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     writer
         .write_event(Event::End(BytesEnd::new("w:sectPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -3394,6 +3426,51 @@ mod tests {
         assert!(
             text.contains("w:w=\"15840\"") && text.contains("w:h=\"12240\""),
             "missing landscape pgSz dims: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_header_footer_references() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:pgSz w:w="12240" w:h="15840"/>
+              <w:headerReference w:type="default" r:id="rId7"/>
+              <w:footerReference w:type="default" r:id="rId8"/>
+              <w:headerReference w:type="first" r:id="rId9"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (_, page_setup, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(page_setup.header_r_id.as_deref(), Some("rId7"));
+        assert_eq!(page_setup.footer_r_id.as_deref(), Some("rId8"));
+        let doc = Document {
+            page_setup,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:headerReference") && text.contains("r:id=\"rId7\""),
+            "missing default headerReference: {text}"
+        );
+        assert!(
+            text.contains("w:footerReference") && text.contains("r:id=\"rId8\""),
+            "missing default footerReference: {text}"
+        );
+        assert!(
+            !text.contains("rId9"),
+            "first-page header should not round-trip yet: {text}"
         );
     }
 
