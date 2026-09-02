@@ -222,6 +222,7 @@ fn parse_paragraph(
         contextual_spacing: false,
         bidi: false,
         suppress_auto_hyphens: false,
+        outline_level: None,
         space_before_twips: 0,
         space_after_twips: 0,
         line_spacing: 0,
@@ -288,6 +289,13 @@ fn parse_paragraph(
                     }
                     "suppressAutoHyphens" if in_p_pr => {
                         p.suppress_auto_hyphens = true;
+                    }
+                    "outlineLvl" if in_p_pr => {
+                        if let Some(val) = attr_val(&e, "val") {
+                            if let Ok(lvl) = val.parse::<u8>() {
+                                p.outline_level = Some(lvl.min(8));
+                            }
+                        }
                     }
                     "spacing" if in_p_pr => {
                         apply_paragraph_spacing(&e, &mut p);
@@ -403,6 +411,13 @@ fn parse_paragraph(
                         }
                         "suppressAutoHyphens" => {
                             p.suppress_auto_hyphens = true;
+                        }
+                        "outlineLvl" => {
+                            if let Some(val) = attr_val(&e, "val") {
+                                if let Ok(lvl) = val.parse::<u8>() {
+                                    p.outline_level = Some(lvl.min(8));
+                                }
+                            }
                         }
                         "spacing" => {
                             apply_paragraph_spacing(&e, &mut p);
@@ -1060,6 +1075,13 @@ fn write_paragraph(
     if p.suppress_auto_hyphens {
         writer
             .write_event(Event::Empty(BytesStart::new("w:suppressAutoHyphens")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(lvl) = p.outline_level {
+        let mut ol = BytesStart::new("w:outlineLvl");
+        ol.push_attribute(("w:val", lvl.to_string().as_str()));
+        writer
+            .write_event(Event::Empty(ol))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     if p.space_before_twips > 0
@@ -3233,6 +3255,64 @@ mod tests {
         .unwrap();
         match &blocks2[0] {
             Block::Paragraph(p) => assert!(p.suppress_auto_hyphens),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
+
+    #[test]
+    fn parse_and_write_outline_level() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:outlineLvl w:val="0"/></w:pPr>
+              <w:r><w:t>Heading</w:t></w:r>
+            </w:p>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(p.outline_level, Some(0));
+                assert_eq!(p.plain_text(), "Heading");
+            }
+            _ => panic!("expected paragraph"),
+        }
+        match &blocks[1] {
+            Block::Paragraph(p) => assert_eq!(p.outline_level, None),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:outlineLvl"),
+            "serialized XML missing outlineLvl: {text}"
+        );
+        let (blocks2, _, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => assert_eq!(p.outline_level, Some(0)),
             _ => panic!("expected paragraph"),
         }
     }

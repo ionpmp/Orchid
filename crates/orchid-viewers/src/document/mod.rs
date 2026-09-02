@@ -1954,6 +1954,48 @@ impl DocumentViewer {
         Ok(())
     }
 
+
+    /// Cycle `w:outlineLvl` on selected paragraphs: body → H1…H9 → body.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn cycle_outline_level_selection(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let current = cursors
+            .iter()
+            .find_map(|c| paragraph_ref(doc, *c).map(|p| p.outline_level));
+        let next = match current.flatten() {
+            None => Some(0),
+            Some(lvl) if lvl < 8 => Some(lvl + 1),
+            Some(_) => None,
+        };
+        let mut blocks = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut blocks, cursor) {
+                if p.outline_level != next {
+                    p.outline_level = next;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step font size up (`direction > 0`) or down on the selection.
     ///
     /// # Errors
@@ -2960,6 +3002,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     contextual_spacing: prev.contextual_spacing,
                     bidi: prev.bidi,
                     suppress_auto_hyphens: prev.suppress_auto_hyphens,
+                    outline_level: prev.outline_level,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
                     line_spacing: prev.line_spacing,
@@ -3397,6 +3440,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         contextual_spacing: p.contextual_spacing,
         bidi: p.bidi,
         suppress_auto_hyphens: p.suppress_auto_hyphens,
+        outline_level: p.outline_level,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3421,6 +3465,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         contextual_spacing: false,
         bidi: false,
         suppress_auto_hyphens: false,
+        outline_level: None,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3471,6 +3516,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         contextual_spacing: p.contextual_spacing,
         bidi: p.bidi,
         suppress_auto_hyphens: p.suppress_auto_hyphens,
+        outline_level: p.outline_level,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3495,6 +3541,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         contextual_spacing: false,
         bidi: false,
         suppress_auto_hyphens: false,
+        outline_level: None,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3598,6 +3645,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         contextual_spacing: start_p.contextual_spacing,
         bidi: start_p.bidi,
         suppress_auto_hyphens: start_p.suppress_auto_hyphens,
+        outline_level: start_p.outline_level,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3693,6 +3741,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         contextual_spacing: start_p.contextual_spacing,
         bidi: start_p.bidi,
         suppress_auto_hyphens: start_p.suppress_auto_hyphens,
+        outline_level: start_p.outline_level,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3906,6 +3955,10 @@ impl Viewer for DocumentViewer {
         let contextual_spacing = para.is_some_and(|p| p.contextual_spacing);
         let bidi = para.is_some_and(|p| p.bidi);
         let suppress_auto_hyphens = para.is_some_and(|p| p.suppress_auto_hyphens);
+        let outline_level = para
+            .and_then(|p| p.outline_level)
+            .map(|lvl| i32::from(lvl))
+            .unwrap_or(-1);
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {
@@ -3963,6 +4016,7 @@ impl Viewer for DocumentViewer {
             contextual_spacing,
             bidi,
             suppress_auto_hyphens,
+            outline_level,
             superscript,
             subscript,
             font_size_pt,

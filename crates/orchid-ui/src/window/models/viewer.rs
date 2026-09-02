@@ -752,6 +752,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         contextual_spacing: false,
         bidi: false,
         suppress_auto_hyphens: false,
+        outline_level: -1,
+        outline_level_label: SharedString::from("P"),
         superscript: false,
         subscript: false,
         font_size_pt: 0.0,
@@ -816,6 +818,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_contextual_spacing: locale.tr("viewer-document-tip-contextual-spacing").into(),
         tip_bidi: locale.tr("viewer-document-tip-bidi").into(),
         tip_suppress_auto_hyphens: locale.tr("viewer-document-tip-suppress-auto-hyphens").into(),
+        tip_outline_level: locale.tr("viewer-document-tip-outline-level").into(),
         tip_color_black: locale.tr("viewer-document-tip-color-black").into(),
         tip_color_red: locale.tr("viewer-document-tip-color-red").into(),
         tip_color_blue: locale.tr("viewer-document-tip-color-blue").into(),
@@ -1079,6 +1082,8 @@ fn build_document_snapshot(
     model.contextual_spacing = s.contextual_spacing;
     model.bidi = s.bidi;
     model.suppress_auto_hyphens = s.suppress_auto_hyphens;
+    model.outline_level = s.outline_level;
+    model.outline_level_label = document_outline_level_label(s.outline_level);
     model.superscript = s.superscript;
     model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;
@@ -1115,6 +1120,14 @@ fn build_document_snapshot(
     model.link_url = s.link_url.clone().into();
     model.page_size_label = document_page_size_label(locale, s.page_is_a4, s.page_landscape);
     model
+}
+
+fn document_outline_level_label(level: i32) -> SharedString {
+    if level < 0 {
+        SharedString::from("P")
+    } else {
+        SharedString::from(format!("H{}", level + 1))
+    }
 }
 
 fn document_page_size_label(

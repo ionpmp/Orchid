@@ -232,7 +232,7 @@ release yet.
   parley+swash canvas, selection and keyboard editing, tables (cell nav,
   insert/delete row/col, merge/unmerge cells, `tblGrid` widths, `gridSpan`/`vMerge` preview),
   inline images (body + cells),
-  Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), HiDPI 2× preview raster, paragraph/cell shading (`w:shd` / `w:tcPr/w:shd` + preview; Shd toggle), table cell borders (`w:tcBorders` + preview; Bdr toggles cell box when caret in table), all capitals (`w:caps`; Aa toggle), small capitals (`w:smallCaps`; Sc toggle), hidden text (`w:vanish`; Hd toggle), character shadow (`w:shadow`; Sw toggle), insert/edit/remove hyperlinks
+  Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), HiDPI 2× preview raster, paragraph/cell shading (`w:shd` / `w:tcPr/w:shd` + preview; Shd toggle), table cell borders (`w:tcBorders` + preview; Bdr toggles cell box when caret in table), all capitals (`w:caps`; Aa toggle), small capitals (`w:smallCaps`; Sc toggle), hidden text (`w:vanish`; Hd toggle), character shadow (`w:shadow`; Sw toggle), heading outline level (`w:outlineLvl`; Ol/P/H1–H9 cycle), insert/edit/remove hyperlinks
   (Link toolbar / Ctrl+K; internal #bookmark; Bm inserts bookmark at caret), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), keep-with-next (`w:keepNext`; Kn toggle), keep lines together (`w:keepLines`; Kl toggle), widow/orphan control (`w:widowControl`; Wc toggle), contextual spacing (`w:contextualSpacing`; Cs toggle), RTL paragraph (`w:bidi`; Bi toggle), suppress auto hyphenation (`w:suppressAutoHyphens`; Hy toggle), paragraph spacing (Sb±/Sp±), line spacing (auto Ln± + exact/atLeast round-trip), paragraph indent (w:ind left/right; Ind± / Ir± / Fl±), paragraph box border (`w:pBdr` all sides; Bdr toggle), IME composition (preview), page margins from `pgMar` in preview (Mar+/-), Letter/A4 page size (Pg; keeps orientation) and landscape toggle (Or; `w:pgSz`/`w:orient` round-trip), status word/char counts, find match-case (Aa), catalog **Document** launcher,
   canvas dock; Word/LibreOffice fixtures and round-trip tests.
 - Spec draft for native **`.orchid`** container — see
@@ -266,7 +266,8 @@ release yet.
   persist in widget config and survive track changes. **Recent** playlist
   (last 50 played tracks, chronological). Library / queue rows show ID3
   duration when TLEN is present. Digits **1–7** switch browse tabs
-  when the player has focus.
+  when the player has focus. Drag the queue-row grip (`⋮⋮`) to reorder
+  (↑/↓ still work).
 - **Video Player**: dockable local video library (folders + queue, shuffle /
   repeat, libmpv RGBA surface) — catalog creates the widget (no longer a
   one-shot file-picker → viewer launcher). File Manager **Play in Video Player**

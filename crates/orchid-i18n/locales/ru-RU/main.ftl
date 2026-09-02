@@ -811,6 +811,7 @@ viewer-document-tip-widow-control = Widow and orphan control
 viewer-document-tip-contextual-spacing = Contextual spacing (same style)
 viewer-document-tip-bidi = Right-to-left paragraph
 viewer-document-tip-suppress-auto-hyphens = Suppress automatic hyphenation
+viewer-document-tip-outline-level = Cycle heading outline level
 viewer-document-tip-color-black = Text color: black
 viewer-document-tip-color-red = Text color: red
 viewer-document-tip-color-blue = Text color: blue

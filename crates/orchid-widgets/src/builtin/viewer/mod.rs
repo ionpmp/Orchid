@@ -3643,6 +3643,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "contextual-spacing" => doc.toggle_contextual_spacing_selection(),
                 "bidi" => doc.toggle_bidi_selection(),
                 "suppress-auto-hyphens" => doc.toggle_suppress_auto_hyphens_selection(),
+                "outline-level-cycle" => doc.cycle_outline_level_selection(),
                 "insert-bookmark" => doc.insert_bookmark_at_selection().map(|_| ()),
                 "superscript" => doc.toggle_style_all('^'),
                 "subscript" => doc.toggle_style_all('_'),

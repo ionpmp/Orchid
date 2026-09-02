@@ -587,6 +587,27 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: 32px;
+                    height: 28px;
+                    background: tool-bg(model.outline-level >= 0, ol-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ol-ta := TouchArea { clicked => { root.action("outline-level-cycle"); } }
+                    Text {
+                        text: model.outline-level-label;
+                        color: tool-btn(model.outline-level >= 0);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-outline-level;
+                        show: ol-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: 28px;
                     height: 28px;
                     background: tool-bg(model.superscript, super-ta.has-hover);

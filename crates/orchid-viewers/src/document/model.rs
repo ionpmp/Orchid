@@ -150,6 +150,9 @@ pub struct Paragraph {
     pub bidi: bool,
     /// Do not hyphenate this paragraph (`w:suppressAutoHyphens`).
     pub suppress_auto_hyphens: bool,
+    /// Outline/heading level (`w:outlineLvl`, 0 = Heading 1 … 8 = Heading 9).
+    /// `None` = body text (element omitted).
+    pub outline_level: Option<u8>,
     /// Space before paragraph in twips (`w:spacing/@w:before`). `0` = none.
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.

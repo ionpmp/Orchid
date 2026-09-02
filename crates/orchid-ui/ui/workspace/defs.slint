@@ -1395,6 +1395,9 @@ export struct ViewerDocumentModel {
     contextual-spacing: bool,
     bidi: bool,
     suppress-auto-hyphens: bool,
+    /// `-1` = body paragraph, `0`..=`8` = Heading 1..=9.
+    outline-level: int,
+    outline-level-label: string,
     superscript: bool,
     subscript: bool,
     /// Font size in points at the caret (`0` = default).
@@ -1467,6 +1470,7 @@ export struct ViewerDocumentModel {
     tip-contextual-spacing: string,
     tip-bidi: string,
     tip-suppress-auto-hyphens: string,
+    tip-outline-level: string,
     tip-color-black: string,
     tip-color-red: string,
     tip-color-blue: string,

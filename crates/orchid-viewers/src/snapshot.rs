@@ -82,6 +82,8 @@ pub struct DocumentSnapshot {
     pub bidi: bool,
     /// Suppress auto hyphenation (`w:suppressAutoHyphens`) at the caret.
     pub suppress_auto_hyphens: bool,
+    /// Outline level at caret (`-1` = body, `0`..=`8` = Heading 1..=9).
+    pub outline_level: i32,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).

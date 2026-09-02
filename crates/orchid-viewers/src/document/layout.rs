@@ -163,7 +163,14 @@ impl DocumentLayout {
         let mut builder: RangedBuilder<'_, ColorBrush> =
             self.layout_cx
                 .ranged_builder(&mut self.font_cx, &text, scale, true);
-        builder.push_default(StyleProperty::FontSize(14.0));
+        let default_pt = p
+            .outline_level
+            .map(outline_level_font_pt)
+            .unwrap_or(14.0);
+        builder.push_default(StyleProperty::FontSize(default_pt));
+        if p.outline_level.is_some_and(|lvl| lvl <= 2) {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+        }
         builder.push_default(paragraph_line_height(p));
         builder.push_default(StyleProperty::Brush(ColorBrush::default()));
         builder.push_default(StyleProperty::FontFamily(FontFamily::named("Segoe UI")));
@@ -193,7 +200,10 @@ impl DocumentLayout {
             if run.style.strikethrough {
                 builder.push(StyleProperty::Strikethrough(true), offset..end);
             }
-            let base_pt = run.style.font_size_pt.unwrap_or(14.0);
+            let base_pt = run
+                .style
+                .font_size_pt
+                .unwrap_or(default_pt);
             let (mut effective_pt, baseline_shift) = if run.style.superscript {
                 (base_pt * 0.65, -base_pt * 0.4)
             } else if run.style.subscript {
@@ -1813,6 +1823,18 @@ fn fill_rect_blend(
         for px in x..x1 {
             blend_pixel(pixels, buf_w, px, py, rgba[0], rgba[1], rgba[2], rgba[3]);
         }
+    }
+}
+
+
+fn outline_level_font_pt(level: u8) -> f32 {
+    match level {
+        0 => 24.0,
+        1 => 20.0,
+        2 => 16.0,
+        3 => 14.0,
+        4 => 13.0,
+        _ => 12.0,
     }
 }
 
