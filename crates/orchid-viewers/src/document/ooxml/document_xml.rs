@@ -2770,6 +2770,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn parse_and_write_page_break_before() {
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
