@@ -741,6 +741,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         strikethrough: false,
         highlight: false,
         shade: false,
+        border_bottom: false,
         superscript: false,
         subscript: false,
         font_size_pt: 0.0,
@@ -767,6 +768,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         strikethrough_label: locale.tr("viewer-document-strikethrough").into(),
         highlight_label: locale.tr("viewer-document-highlight").into(),
         shade_label: locale.tr("viewer-document-shade").into(),
+        border_bottom_label: locale.tr("viewer-document-border-bottom").into(),
         superscript_label: locale.tr("viewer-document-superscript").into(),
         subscript_label: locale.tr("viewer-document-subscript").into(),
         clear_formatting_label: locale.tr("viewer-document-clear-formatting").into(),
@@ -781,6 +783,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_strikethrough: locale.tr("viewer-document-tip-strikethrough").into(),
         tip_highlight: locale.tr("viewer-document-tip-highlight").into(),
         tip_shade: locale.tr("viewer-document-tip-shade").into(),
+        tip_border_bottom: locale.tr("viewer-document-tip-border-bottom").into(),
         tip_color_black: locale.tr("viewer-document-tip-color-black").into(),
         tip_color_red: locale.tr("viewer-document-tip-color-red").into(),
         tip_color_blue: locale.tr("viewer-document-tip-color-blue").into(),
@@ -1033,6 +1036,7 @@ fn build_document_snapshot(
     model.strikethrough = s.strikethrough;
     model.highlight = s.highlight;
     model.shade = s.shade;
+    model.border_bottom = s.border_bottom;
     model.superscript = s.superscript;
     model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;
