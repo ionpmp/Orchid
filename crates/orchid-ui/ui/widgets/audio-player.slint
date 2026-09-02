@@ -680,6 +680,12 @@ export component AudioPlayerView inherits Rectangle {
                                             }
                                         }
                                     }
+                                    if t.duration-label != "" : Text {
+                                        text: t.duration-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                    }
                                     Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("toggle-favorite:" + t.path); } }

@@ -82,6 +82,7 @@ pub enum LibrarySort {
     Title = 1,
     Album = 2,
     Year = 3,
+    Genre = 4,
 }
 
 impl LibrarySort {
@@ -91,7 +92,8 @@ impl LibrarySort {
             Self::ArtistAlbum => Self::Title,
             Self::Title => Self::Album,
             Self::Album => Self::Year,
-            Self::Year => Self::ArtistAlbum,
+            Self::Year => Self::Genre,
+            Self::Genre => Self::ArtistAlbum,
         }
     }
 
@@ -106,6 +108,7 @@ impl LibrarySort {
             1 => Self::Title,
             2 => Self::Album,
             3 => Self::Year,
+            4 => Self::Genre,
             _ => Self::ArtistAlbum,
         }
     }

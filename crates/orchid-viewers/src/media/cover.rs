@@ -39,6 +39,8 @@ pub struct TrackMeta {
     pub genre: String,
     pub track: Option<u32>,
     pub year: Option<i32>,
+    /// Length from ID3 TLEN when present (milliseconds).
+    pub duration_ms: Option<u32>,
 }
 
 /// Load display tags from ID3 when available; otherwise use the file stem as title.
@@ -92,6 +94,7 @@ pub fn load_track_meta(path: &Path) -> TrackMeta {
             .unwrap_or_default(),
         track: tag.track(),
         year: tag.year(),
+        duration_ms: tag.duration(),
     }
 }
 

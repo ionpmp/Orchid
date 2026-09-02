@@ -950,26 +950,22 @@ fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
         q.paths
             .iter()
             .filter_map(|p| {
-                lib.find_by_path(p).map(|t| TrackRow {
-                    path: t.path.to_string_lossy().into_owned(),
-                    title: t.title.clone(),
-                    artist: t.artist.clone(),
-                    album: t.album.clone(),
-                    subtitle: format!("{} — {}", t.artist, t.album),
-                })
-                .or_else(|| {
-                    let stem = PathBuf::from(p)
-                        .file_stem()
-                        .map(|s| s.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| p.clone());
-                    Some(TrackRow {
-                        path: p.clone(),
-                        title: stem,
-                        artist: String::new(),
-                        album: String::new(),
-                        subtitle: p.clone(),
+                lib.find_by_path(p)
+                    .map(library::track_row)
+                    .or_else(|| {
+                        let stem = PathBuf::from(p)
+                            .file_stem()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| p.clone());
+                        Some(TrackRow {
+                            path: p.clone(),
+                            title: stem,
+                            artist: String::new(),
+                            album: String::new(),
+                            subtitle: p.clone(),
+                            duration_label: String::new(),
+                        })
                     })
-                })
             })
             .filter(|row| library::track_row_matches(row, &search))
             .map(|row| row.path)
@@ -1237,6 +1233,7 @@ fn track_rows_from(
             artist: t.artist.clone(),
             album: t.album.clone(),
             subtitle: t.subtitle.clone(),
+            duration_label: t.duration_label.clone(),
             is_current: current == Some(t.path.as_str()),
             is_favorite: favorites.iter().any(|f| f == &t.path),
         })
@@ -1321,26 +1318,22 @@ impl AudioPlayerWidget {
                     .paths
                     .iter()
                     .filter_map(|p| {
-                        lib.find_by_path(p).map(|t| TrackRow {
-                            path: t.path.to_string_lossy().into_owned(),
-                            title: t.title.clone(),
-                            artist: t.artist.clone(),
-                            album: t.album.clone(),
-                            subtitle: format!("{} — {}", t.artist, t.album),
-                        })
-                        .or_else(|| {
-                            let stem = PathBuf::from(p)
-                                .file_stem()
-                                .map(|s| s.to_string_lossy().into_owned())
-                                .unwrap_or_else(|| p.clone());
-                            Some(TrackRow {
-                                path: p.clone(),
-                                title: stem,
-                                artist: String::new(),
-                                album: String::new(),
-                                subtitle: p.clone(),
+                        lib.find_by_path(p)
+                            .map(library::track_row)
+                            .or_else(|| {
+                                let stem = PathBuf::from(p)
+                                    .file_stem()
+                                    .map(|s| s.to_string_lossy().into_owned())
+                                    .unwrap_or_else(|| p.clone());
+                                Some(TrackRow {
+                                    path: p.clone(),
+                                    title: stem,
+                                    artist: String::new(),
+                                    album: String::new(),
+                                    subtitle: p.clone(),
+                                    duration_label: String::new(),
+                                })
                             })
-                        })
                     })
                     .filter(|row| library::track_row_matches(row, &search))
                     .collect(),

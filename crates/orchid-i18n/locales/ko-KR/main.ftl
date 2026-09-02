@@ -491,6 +491,7 @@ audio-player-sort-artist = Artist
 audio-player-sort-title = Title
 audio-player-sort-album = Album
 audio-player-sort-year = Year
+audio-player-sort-genre = Genre
 audio-player-remove-root = Remove folder
 audio-player-favorites = Favorites
 audio-player-recent = Recent

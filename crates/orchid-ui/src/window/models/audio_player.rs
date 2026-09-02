@@ -132,6 +132,7 @@ fn sort_label_for(sort: u8, locale: &LocaleManager) -> SharedString {
         1 => "audio-player-sort-title",
         2 => "audio-player-sort-album",
         3 => "audio-player-sort-year",
+        4 => "audio-player-sort-genre",
         _ => "audio-player-sort-artist",
     };
     locale.tr(key).into()
@@ -258,6 +259,7 @@ pub(crate) fn build_audio_player_model(
                         path: t.path.clone().into(),
                         title: t.title.clone().into(),
                         subtitle: t.subtitle.clone().into(),
+                        duration_label: t.duration_label.clone().into(),
                         is_current: t.is_current,
                         is_favorite: t.is_favorite,
                     })

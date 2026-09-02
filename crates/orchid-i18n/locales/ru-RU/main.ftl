@@ -481,6 +481,7 @@ audio-player-sort-artist = Исполнитель
 audio-player-sort-title = Название
 audio-player-sort-album = Альбом
 audio-player-sort-year = Год
+audio-player-sort-genre = Жанр
 audio-player-remove-root = Удалить папку
 audio-player-favorites = Избранное
 audio-player-recent = Недавние

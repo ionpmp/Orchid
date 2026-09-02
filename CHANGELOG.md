@@ -253,7 +253,7 @@ release yet.
   (add roots) or audio files (enqueue); play / enqueue all tracks matching the
   active library search (including filtered queue); queue tab play-at without
   reshuffling shuffle order, Home/End jump, Delete removes current track, empty
-  queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year);
+  queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year/Genre);
   favorite toggle on now-playing (star + F key); double-click a library track to
   enqueue; localized Favorites playlist name and library stats strip; file manager
   **Play in Audio Player** / **Add to queue** for audio selections; **Export** /
@@ -264,7 +264,8 @@ release yet.
   into mpv paused on startup; browse Back shows a human breadcrumb; now-playing
   shows album; playlist rename prefills the current name; EQ / ReplayGain / speed
   persist in widget config and survive track changes. **Recent** playlist
-  (last 50 played tracks, chronological). Digits **1–6** switch browse tabs
+  (last 50 played tracks, chronological). Library / queue rows show ID3
+  duration when TLEN is present. Digits **1–6** switch browse tabs
   when the player has focus.
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).

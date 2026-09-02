@@ -22,6 +22,7 @@ pub struct AudioPlayerTrackRow {
     pub artist: String,
     pub album: String,
     pub subtitle: String,
+    pub duration_label: String,
     pub is_current: bool,
     pub is_favorite: bool,
 }

@@ -38,6 +38,8 @@ pub struct LibraryTrack {
     pub track: Option<u32>,
     pub year: Option<i32>,
     pub folder: String,
+    /// ID3 TLEN duration when known (milliseconds).
+    pub duration_ms: Option<u32>,
 }
 
 impl LibraryTrack {
@@ -64,6 +66,7 @@ impl LibraryTrack {
             track: meta.track,
             year: meta.year,
             folder,
+            duration_ms: meta.duration_ms,
         }
     }
 }
@@ -292,6 +295,7 @@ pub struct TrackRow {
     pub artist: String,
     pub album: String,
     pub subtitle: String,
+    pub duration_label: String,
 }
 
 /// Result of a browse query.
@@ -301,13 +305,29 @@ pub struct BrowseResult {
     pub tracks: Vec<TrackRow>,
 }
 
-fn track_row(t: &LibraryTrack) -> TrackRow {
+pub(crate) fn track_row(t: &LibraryTrack) -> TrackRow {
     TrackRow {
         path: t.path.to_string_lossy().into_owned(),
         title: t.title.clone(),
         artist: t.artist.clone(),
         album: t.album.clone(),
         subtitle: format!("{} — {}", t.artist, t.album),
+        duration_label: t
+            .duration_ms
+            .map(|ms| format_duration_ms(u64::from(ms)))
+            .unwrap_or_default(),
+    }
+}
+
+fn format_duration_ms(ms: u64) -> String {
+    let total = ms / 1000;
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
     }
 }
 
@@ -347,6 +367,22 @@ fn compare_tracks(a: &LibraryTrack, b: &LibraryTrack, sort: LibrarySort) -> std:
                 .cmp(&ya)
                 .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
         },
+        LibrarySort::Genre => {
+            let ga = if a.genre.is_empty() {
+                "\u{ffff}"
+            } else {
+                a.genre.as_str()
+            };
+            let gb = if b.genre.is_empty() {
+                "\u{ffff}"
+            } else {
+                b.genre.as_str()
+            };
+            ga.to_lowercase()
+                .cmp(&gb.to_lowercase())
+                .then_with(|| a.artist.to_lowercase().cmp(&b.artist.to_lowercase()))
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+        }
     }
 }
 
@@ -357,6 +393,7 @@ fn track_matches(t: &LibraryTrack, q: &str) -> bool {
     t.title.to_lowercase().contains(q)
         || t.artist.to_lowercase().contains(q)
         || t.album.to_lowercase().contains(q)
+        || t.genre.to_lowercase().contains(q)
         || t.path.to_string_lossy().to_lowercase().contains(q)
 }
 
@@ -444,6 +481,7 @@ mod tests {
             track: Some(1),
             year: None,
             folder: "/music".into(),
+            duration_ms: None,
         });
         idx.tracks.push(LibraryTrack {
             path: PathBuf::from("/music/b.mp3"),
@@ -454,6 +492,7 @@ mod tests {
             track: Some(2),
             year: None,
             folder: "/music".into(),
+            duration_ms: None,
         });
         let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", "", None, &[], &[], LibrarySort::default());
         assert_eq!(neon.tracks.len(), 1);
@@ -477,6 +516,7 @@ mod tests {
             track: None,
             year: None,
             folder: "/music".into(),
+            duration_ms: None,
         });
         idx.tracks.push(LibraryTrack {
             path: PathBuf::from("/music/a.mp3"),
@@ -487,6 +527,7 @@ mod tests {
             track: None,
             year: None,
             folder: "/music".into(),
+            duration_ms: None,
         });
         let sorted = idx.browse_rows(
             BrowseTab::Songs,
@@ -503,6 +544,63 @@ mod tests {
     }
 
     #[test]
+    fn sort_orders_songs_by_genre() {
+        let mut idx = LibraryIndex::default();
+        idx.tracks.push(LibraryTrack {
+            path: PathBuf::from("/music/rock.mp3"),
+            title: "Riff".into(),
+            artist: "A".into(),
+            album: "One".into(),
+            genre: "Rock".into(),
+            track: None,
+            year: None,
+            folder: "/music".into(),
+            duration_ms: None,
+        });
+        idx.tracks.push(LibraryTrack {
+            path: PathBuf::from("/music/jazz.mp3"),
+            title: "Swing".into(),
+            artist: "B".into(),
+            album: "Two".into(),
+            genre: "Jazz".into(),
+            track: None,
+            year: None,
+            folder: "/music".into(),
+            duration_ms: None,
+        });
+        let sorted = idx.browse_rows(
+            BrowseTab::Songs,
+            "",
+            "",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::Genre,
+        );
+        assert_eq!(sorted.tracks[0].title, "Swing");
+        assert_eq!(sorted.tracks[1].title, "Riff");
+    }
+
+    #[test]
+    fn formats_duration_label_from_ms() {
+        assert_eq!(format_duration_ms(125_000), "2:05");
+        assert_eq!(format_duration_ms(3_661_000), "1:01:01");
+        let t = LibraryTrack {
+            path: PathBuf::from("/a.mp3"),
+            title: "A".into(),
+            artist: "X".into(),
+            album: "Y".into(),
+            genre: String::new(),
+            track: None,
+            year: None,
+            folder: "/music".into(),
+            duration_ms: Some(125_000),
+        };
+        assert_eq!(track_row(&t).duration_label, "2:05");
+    }
+
+    #[test]
     fn recent_playlist_preserves_play_order() {
         let mut idx = LibraryIndex::default();
         for (path, title) in [("/a.mp3", "A"), ("/b.mp3", "B"), ("/c.mp3", "C")] {
@@ -515,7 +613,8 @@ mod tests {
                 track: None,
                 year: None,
                 folder: "/music".into(),
-            });
+            duration_ms: None,
+        });
         }
         let recent = vec!["/c.mp3".into(), "/a.mp3".into()];
         let rows = idx.browse_rows(
