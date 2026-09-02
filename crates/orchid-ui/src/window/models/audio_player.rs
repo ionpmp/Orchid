@@ -94,6 +94,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         tab_artists: locale.tr("audio-player-tab-artists").into(),
         tab_albums: locale.tr("audio-player-tab-albums").into(),
         tab_folders: locale.tr("audio-player-tab-folders").into(),
+        tab_genres: locale.tr("audio-player-tab-genres").into(),
         tab_playlists: locale.tr("audio-player-tab-playlists").into(),
         tab_now_playing: locale.tr("audio-player-tab-now-playing").into(),
         back_label: locale.tr("audio-player-back").into(),
@@ -178,6 +179,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.tab_artists = base.tab_artists;
     m.tab_albums = base.tab_albums;
     m.tab_folders = base.tab_folders;
+    m.tab_genres = base.tab_genres;
     m.tab_playlists = base.tab_playlists;
     m.tab_now_playing = base.tab_now_playing;
     m.back_label = base.back_label;

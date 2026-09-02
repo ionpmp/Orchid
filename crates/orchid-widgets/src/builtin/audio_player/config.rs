@@ -50,8 +50,9 @@ pub enum BrowseTab {
     Artists = 1,
     Albums = 2,
     Folders = 3,
-    Playlists = 4,
-    NowPlaying = 5,
+    Genres = 4,
+    Playlists = 5,
+    NowPlaying = 6,
 }
 
 impl BrowseTab {
@@ -61,8 +62,9 @@ impl BrowseTab {
             1 => Self::Artists,
             2 => Self::Albums,
             3 => Self::Folders,
-            4 => Self::Playlists,
-            5 => Self::NowPlaying,
+            4 => Self::Genres,
+            5 => Self::Playlists,
+            6 => Self::NowPlaying,
             _ => Self::Songs,
         }
     }

@@ -456,6 +456,7 @@ audio-player-tab-songs = Songs
 audio-player-tab-artists = Artists
 audio-player-tab-albums = Albums
 audio-player-tab-folders = Folders
+audio-player-tab-genres = Genres
 audio-player-tab-playlists = Playlists
 audio-player-tab-now-playing = Queue
 audio-player-back = Back

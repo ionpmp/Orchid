@@ -445,6 +445,7 @@ audio-player-tab-songs = Треки
 audio-player-tab-artists = Исполнители
 audio-player-tab-albums = Альбомы
 audio-player-tab-folders = Папки
+audio-player-tab-genres = Жанры
 audio-player-tab-playlists = Плейлисты
 audio-player-tab-now-playing = Очередь
 audio-player-back = Назад

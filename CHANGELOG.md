@@ -239,7 +239,7 @@ release yet.
   [`docs/ORCHID_FORMAT.md`](docs/ORCHID_FORMAT.md) (not implemented yet).
 
 #### Built-in widgets
-- **Audio Player**: local music library (Songs / Artists / Albums / Folders),
+- **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
   playlists (create / rename / delete / add tracks) and favorites, shuffle /
   repeat, sleep timer, EQ presets, ReplayGain, playback speed presets, soft
   volume boost (to 150%), library search, add-to-queue / play-next / reorder /
@@ -265,7 +265,7 @@ release yet.
   shows album; playlist rename prefills the current name; EQ / ReplayGain / speed
   persist in widget config and survive track changes. **Recent** playlist
   (last 50 played tracks, chronological). Library / queue rows show ID3
-  duration when TLEN is present. Digits **1–6** switch browse tabs
+  duration when TLEN is present. Digits **1–7** switch browse tabs
   when the player has focus.
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).

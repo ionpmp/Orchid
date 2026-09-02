@@ -96,19 +96,19 @@ export component AudioPlayerView inherits Rectangle {
                 }
             }
             if event.text == Key.Delete {
-                if root.model.browse-tab == 5 {
+                if root.model.browse-tab == 6 {
                     root.command("remove-current-from-queue");
                     return accept;
                 }
             }
             if event.text == Key.Home {
-                if root.model.browse-tab == 5 {
+                if root.model.browse-tab == 6 {
                     root.command("queue-first");
                     return accept;
                 }
             }
             if event.text == Key.End {
-                if root.model.browse-tab == 5 {
+                if root.model.browse-tab == 6 {
                     root.command("queue-last");
                     return accept;
                 }
@@ -143,6 +143,10 @@ export component AudioPlayerView inherits Rectangle {
             }
             if event.text == "6" {
                 root.command("tab:5");
+                return accept;
+            }
+            if event.text == "7" {
+                root.command("tab:6");
                 return accept;
             }
             return reject;
@@ -221,7 +225,7 @@ export component AudioPlayerView inherits Rectangle {
                     horizontal-stretch: 1;
                     TouchArea { clicked => { focus-scope.focus(); root.command("tab:4"); } }
                     Text {
-                        text: root.model.tab-playlists;
+                        text: root.model.tab-genres;
                         color: root.model.browse-tab == 4 ? Theme.surface-base : Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
@@ -235,8 +239,22 @@ export component AudioPlayerView inherits Rectangle {
                     horizontal-stretch: 1;
                     TouchArea { clicked => { focus-scope.focus(); root.command("tab:5"); } }
                     Text {
-                        text: root.model.tab-now-playing;
+                        text: root.model.tab-playlists;
                         color: root.model.browse-tab == 5 ? Theme.surface-base : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: root.model.browse-tab == 6 ? Theme.accent-brand : Theme.surface-base;
+                    horizontal-stretch: 1;
+                    TouchArea { clicked => { focus-scope.focus(); root.command("tab:6"); } }
+                    Text {
+                        text: root.model.tab-now-playing;
+                        color: root.model.browse-tab == 6 ? Theme.surface-base : Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -307,7 +325,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab != 5 : Rectangle {
+                if root.model.browse-tab != 6 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: sort-txt.preferred-width + 16px;
@@ -367,7 +385,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab == 4 : Rectangle {
+                if root.model.browse-tab == 5 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: new-pl-txt.preferred-width + 16px;
@@ -382,7 +400,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab == 4 && root.model.active-playlist-id != "" && root.model.active-playlist-id != "__recent__" : Rectangle {
+                if root.model.browse-tab == 5 && root.model.active-playlist-id != "" && root.model.active-playlist-id != "__recent__" : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: rename-pl-txt.preferred-width + 16px;
@@ -397,7 +415,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab == 4 : Rectangle {
+                if root.model.browse-tab == 5 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: del-pl-txt.preferred-width + 16px;
@@ -412,7 +430,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if (root.model.browse-tab == 4 || root.model.browse-tab == 5) && root.model.tracks.length > 0 : Rectangle {
+                if (root.model.browse-tab == 5 || root.model.browse-tab == 6) && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: export-m3u-txt.preferred-width + 16px;
@@ -427,7 +445,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab == 4 || root.model.browse-tab == 5 : Rectangle {
+                if root.model.browse-tab == 5 || root.model.browse-tab == 6 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: import-m3u-txt.preferred-width + 16px;
@@ -442,7 +460,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab == 5 && root.model.tracks.length > 0 : Rectangle {
+                if root.model.browse-tab == 6 && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: clear-q-txt.preferred-width + 16px;
@@ -504,7 +522,7 @@ export component AudioPlayerView inherits Rectangle {
                 vertical-stretch: 0;
             }
 
-            if root.model.browse-tab == 4 && root.model.renaming-playlist : SearchField {
+            if root.model.browse-tab == 5 && root.model.renaming-playlist : SearchField {
                 field-height: 28px;
                 vertical-stretch: 0;
                 query: root.model.rename-playlist-draft;
@@ -513,7 +531,7 @@ export component AudioPlayerView inherits Rectangle {
                 escape-pressed => { root.command("cancel-rename-playlist"); }
             }
 
-            if root.model.browse-tab == 4 && root.model.empty-hint == "" : Flickable {
+            if root.model.browse-tab == 5 && root.model.empty-hint == "" : Flickable {
                 height: 28px;
                 vertical-stretch: 0;
                 viewport-width: pl-row.preferred-width;
@@ -652,14 +670,14 @@ export component AudioPlayerView inherits Rectangle {
                                         horizontal-stretch: 1;
                                         t-ta := TouchArea {
                                             clicked => {
-                                                if root.model.browse-tab == 5 {
+                                                if root.model.browse-tab == 6 {
                                                     root.command("queue-play:" + t.path);
                                                 } else {
                                                     root.command("play-track:" + t.path);
                                                 }
                                             }
                                             double-clicked => {
-                                                if root.model.browse-tab != 5 {
+                                                if root.model.browse-tab != 6 {
                                                     root.command("enqueue:" + t.path);
                                                 }
                                             }
@@ -698,7 +716,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab != 5 : Rectangle {
+                                    if root.model.browse-tab != 6 : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("enqueue:" + t.path); } }
                                         Text {
@@ -710,7 +728,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab != 5 : Rectangle {
+                                    if root.model.browse-tab != 6 : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("play-next:" + t.path); } }
                                         Text {
@@ -722,7 +740,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab != 5 && root.model.active-playlist-id != "__recent__" : Rectangle {
+                                    if root.model.browse-tab != 6 && root.model.active-playlist-id != "__recent__" : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
                                         Text {
@@ -734,7 +752,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab == 4 : Rectangle {
+                                    if root.model.browse-tab == 5 : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("remove-from-active-playlist:" + t.path); } }
                                         Text {
@@ -746,7 +764,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab == 5 : Rectangle {
+                                    if root.model.browse-tab == 6 : Rectangle {
                                         width: 22px; height: 28px;
                                         TouchArea { clicked => { root.command("queue-up:" + t.path); } }
                                         Text {
@@ -758,7 +776,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab == 5 : Rectangle {
+                                    if root.model.browse-tab == 6 : Rectangle {
                                         width: 22px; height: 28px;
                                         TouchArea { clicked => { root.command("queue-down:" + t.path); } }
                                         Text {
@@ -770,7 +788,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab == 5 : Rectangle {
+                                    if root.model.browse-tab == 6 : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("remove-from-queue:" + t.path); } }
                                         Text {

@@ -229,6 +229,39 @@ impl LibraryIndex {
                     }
                 }
             }
+            BrowseTab::Genres => {
+                if filter.is_empty() {
+                    let mut genres: BTreeMap<String, usize> = BTreeMap::new();
+                    for t in self
+                        .tracks
+                        .iter()
+                        .filter(|t| matches(t) && !t.genre.trim().is_empty())
+                    {
+                        *genres.entry(t.genre.clone()).or_default() += 1;
+                    }
+                    BrowseResult {
+                        groups: genres
+                            .into_iter()
+                            .map(|(name, count)| BrowseGroup {
+                                key: name.clone(),
+                                label: name,
+                                count: count as u32,
+                            })
+                            .collect(),
+                        tracks: Vec::new(),
+                    }
+                } else {
+                    BrowseResult {
+                        groups: Vec::new(),
+                        tracks: self
+                            .tracks
+                            .iter()
+                            .filter(|t| t.genre == filter && matches(t))
+                            .map(track_row)
+                            .collect(),
+                    }
+                }
+            }
             BrowseTab::Playlists => {
                 if active_playlist_id == super::RECENT_PLAYLIST_ID {
                     BrowseResult {
@@ -580,6 +613,55 @@ mod tests {
         );
         assert_eq!(sorted.tracks[0].title, "Swing");
         assert_eq!(sorted.tracks[1].title, "Riff");
+    }
+
+    #[test]
+    fn genres_tab_groups_and_filters() {
+        let mut idx = LibraryIndex::default();
+        for (path, title, genre) in [
+            ("/a.mp3", "A", "Rock"),
+            ("/b.mp3", "B", "Jazz"),
+            ("/c.mp3", "C", "Rock"),
+            ("/d.mp3", "D", ""),
+        ] {
+            idx.tracks.push(LibraryTrack {
+                path: PathBuf::from(path),
+                title: title.into(),
+                artist: "X".into(),
+                album: "Y".into(),
+                genre: genre.into(),
+                track: None,
+                year: None,
+                folder: "/music".into(),
+                duration_ms: None,
+            });
+        }
+        let groups = idx.browse_rows(
+            BrowseTab::Genres,
+            "",
+            "",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::Title,
+        );
+        assert_eq!(groups.groups.len(), 2);
+        assert!(groups.groups.iter().any(|g| g.key == "Rock" && g.count == 2));
+        assert!(groups.groups.iter().any(|g| g.key == "Jazz" && g.count == 1));
+        let rock = idx.browse_rows(
+            BrowseTab::Genres,
+            "Rock",
+            "",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::Title,
+        );
+        assert_eq!(rock.tracks.len(), 2);
+        assert_eq!(rock.tracks[0].title, "A");
+        assert_eq!(rock.tracks[1].title, "C");
     }
 
     #[test]
