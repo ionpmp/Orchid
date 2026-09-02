@@ -115,6 +115,10 @@ pub enum ActionOutcome {
     OpenInViewerMany {
         paths: Vec<String>,
     },
+    /// Play selected audio files in the Audio Player widget (queue replace + play).
+    PlayInAudioPlayer {
+        paths: Vec<String>,
+    },
     /// Open files with the system "Open with" application picker.
     OpenWithPicker {
         paths: Vec<String>,
@@ -3294,6 +3298,14 @@ pub fn context_menu_for(
             orchid_fs::is_recycle_listing(&tab_path)
                 || target_paths.iter().any(|p| orchid_fs::is_recycle_item(p))
         },
+        selection_has_audio: selected_entries.iter().any(|e| {
+            e.metadata.kind == orchid_fs::FsEntryKind::File
+                && e.name.rsplit('.').next().is_some_and(|ext| {
+                    crate::builtin::audio_player::library::is_audio_extension(
+                        &ext.to_ascii_lowercase(),
+                    )
+                })
+        }),
     };
     let fmt_locale = inner.deps.orchid_config.read().locale.clone();
     let info = info_for_selection(&selected_entries, &inner.deps.locale, &fmt_locale);
@@ -4225,6 +4237,27 @@ pub async fn run_action_with_opts(
                 });
             }
             return Ok(ActionOutcome::OpenInEditor { path: p.clone() });
+        }
+        "audio.play" => {
+            let mut audio = Vec::new();
+            for p in &target_paths {
+                let path = std::path::Path::new(p);
+                if !path.is_file() {
+                    continue;
+                }
+                let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                    continue;
+                };
+                if crate::builtin::audio_player::library::is_audio_extension(
+                    &ext.to_ascii_lowercase(),
+                ) {
+                    audio.push(p.clone());
+                }
+            }
+            if audio.is_empty() {
+                return Ok(ActionOutcome::Done);
+            }
+            return Ok(ActionOutcome::PlayInAudioPlayer { paths: audio });
         }
         "fs.file-assoc" => {
             let Some(p) = target_paths.first() else {

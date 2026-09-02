@@ -184,7 +184,9 @@ enum EngineCmd {
     SubStyleReset,
     CycleSubStyle,
     CycleEq,
+    SetEqIndex(u32),
     CycleReplayGain,
+    SetReplayGainIndex(u32),
     CycleHwdec,
     CycleSleep,
     CycleAspect,
@@ -391,8 +393,16 @@ impl MpvEngine {
         let _ = self.tx.send(EngineCmd::CycleEq);
     }
 
+    pub fn set_eq_index(&self, index: u32) {
+        let _ = self.tx.send(EngineCmd::SetEqIndex(index));
+    }
+
     pub fn cycle_replaygain(&self) {
         let _ = self.tx.send(EngineCmd::CycleReplayGain);
+    }
+
+    pub fn set_replaygain_index(&self, index: u32) {
+        let _ = self.tx.send(EngineCmd::SetReplayGainIndex(index));
     }
 
     pub fn cycle_hwdec(&self) {
@@ -754,18 +764,25 @@ unsafe fn handle_cmd(
             *shared.resume_path.write() = Some(path.clone());
             *shared.pending_resume_secs.write() = resume_secs;
             *shared.ab_label.write() = String::new();
-            shared.eq_index.store(0, Ordering::Relaxed);
-            *shared.eq_label.write() = String::new();
             *shared.chapter_items.write() = Vec::new();
             *shared.chapter_label.write() = String::new();
-            let _ = command_args(api, handle, &["af", "clr"]);
             let _ = command_args(api, handle, &["set", "ab-loop-a", "no"]);
             let _ = command_args(api, handle, &["set", "ab-loop-b", "no"]);
             // Re-apply session look / gain after a fresh load.
             let style = shared.sub_style_index.load(Ordering::Relaxed);
             apply_sub_style(api, handle, shared, style);
-            let rg = shared.replaygain_index.load(Ordering::Relaxed) as usize % REPLAYGAIN_MODES.len();
-            let _ = set_string(api, handle, "replaygain", REPLAYGAIN_MODES[rg].1);
+            apply_eq_at_index(
+                api,
+                handle,
+                shared,
+                shared.eq_index.load(Ordering::Relaxed),
+            );
+            apply_replaygain_at_index(
+                api,
+                handle,
+                shared,
+                shared.replaygain_index.load(Ordering::Relaxed),
+            );
             for sub in sidecars {
                 let s = sub.to_string_lossy();
                 let _ = command_args(api, handle, &["sub-add", s.as_ref()]);
@@ -952,6 +969,10 @@ unsafe fn handle_cmd(
             );
             shared.dirty.store(true, Ordering::Release);
         }
+        EngineCmd::SetEqIndex(index) => {
+            apply_eq_at_index(api, handle, shared, index);
+            shared.dirty.store(true, Ordering::Release);
+        }
         EngineCmd::CycleReplayGain => {
             apply_next_replaygain(api, handle, shared);
             persist_look(mode, shared);
@@ -964,6 +985,10 @@ unsafe fn handle_cmd(
                     label
                 },
             );
+            shared.dirty.store(true, Ordering::Release);
+        }
+        EngineCmd::SetReplayGainIndex(index) => {
+            apply_replaygain_at_index(api, handle, shared, index);
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::CycleHwdec => {
@@ -1348,9 +1373,13 @@ unsafe fn apply_sub_style(
 /// ReplayGain modes via mpv `replaygain` (tags in file; no af conflict with EQ).
 const REPLAYGAIN_MODES: &[(&str, &str)] = &[("", "no"), ("RG track", "track"), ("RG album", "album")];
 
-unsafe fn apply_next_replaygain(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
-    let next =
-        (shared.replaygain_index.load(Ordering::Relaxed) + 1) % REPLAYGAIN_MODES.len() as u32;
+unsafe fn apply_replaygain_at_index(
+    api: &MpvApi,
+    handle: MpvHandle,
+    shared: &SharedPlayback,
+    index: u32,
+) {
+    let next = index % REPLAYGAIN_MODES.len() as u32;
     shared.replaygain_index.store(next, Ordering::Relaxed);
     let (label, mode) = REPLAYGAIN_MODES[next as usize];
     let _ = set_string(api, handle, "replaygain", mode);
@@ -1361,6 +1390,12 @@ unsafe fn apply_next_replaygain(api: &MpvApi, handle: MpvHandle, shared: &Shared
     };
 }
 
+unsafe fn apply_next_replaygain(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next =
+        (shared.replaygain_index.load(Ordering::Relaxed) + 1) % REPLAYGAIN_MODES.len() as u32;
+    apply_replaygain_at_index(api, handle, shared, next);
+}
+
 /// Simple lavfi EQ presets (Flat → Bass → Treble → Vocal).
 const EQ_PRESETS: &[(&str, Option<&str>)] = &[
     ("", None),
@@ -1369,8 +1404,13 @@ const EQ_PRESETS: &[(&str, Option<&str>)] = &[
     ("Vocal", Some("lavfi=[equalizer=f=300:t=h:width=200:g=-3,equalizer=f=3000:t=h:width=1000:g=4]")),
 ];
 
-unsafe fn apply_next_eq(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
-    let next = (shared.eq_index.load(Ordering::Relaxed) + 1) % EQ_PRESETS.len() as u32;
+unsafe fn apply_eq_at_index(
+    api: &MpvApi,
+    handle: MpvHandle,
+    shared: &SharedPlayback,
+    index: u32,
+) {
+    let next = index % EQ_PRESETS.len() as u32;
     shared.eq_index.store(next, Ordering::Relaxed);
     let (label, filter) = EQ_PRESETS[next as usize];
     let _ = command_args(api, handle, &["af", "clr"]);
@@ -1382,6 +1422,11 @@ unsafe fn apply_next_eq(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback
     } else {
         format!("EQ {label}")
     };
+}
+
+unsafe fn apply_next_eq(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
+    let next = (shared.eq_index.load(Ordering::Relaxed) + 1) % EQ_PRESETS.len() as u32;
+    apply_eq_at_index(api, handle, shared, next);
 }
 
 /// Preferred decode modes for the SW blit path (`auto-copy` keeps frames in system RAM).

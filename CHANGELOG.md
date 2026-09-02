@@ -233,7 +233,7 @@ release yet.
   insert/delete row/col, merge/unmerge cells, `tblGrid` widths, `gridSpan`/`vMerge` preview),
   inline images (body + cells),
   Find/Replace (`Ctrl+F` / F3, `n/m` status, Preview scroll-to-match, Find/Link hover tips, format/align/list + image/table + font/Preview + Save/Print + spacing/indent/page toolbar tips), Preview zoom (Z± / Ctrl+wheel / Ctrl+0, 50–300%), HiDPI 2× preview raster, paragraph/cell shading (`w:shd` / `w:tcPr/w:shd` + preview; Shd toggle), insert/edit/remove hyperlinks
-  (Link toolbar / Ctrl+K; internal #bookmark), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), paragraph spacing (Sb±/Sp±), line spacing (auto Ln± + exact/atLeast round-trip), paragraph indent (w:ind left/right; Ind± / Ir± / Fl±), IME composition (preview), page margins from `pgMar` in preview (Mar+/-), Letter/A4 page size (Pg; keeps orientation) and landscape toggle (Or; `w:pgSz`/`w:orient` round-trip), status word/char counts, find match-case (Aa), catalog **Document** launcher,
+  (Link toolbar / Ctrl+K; internal #bookmark), print (toolbar / Ctrl+P), page breaks (Ctrl+Enter), paragraph spacing (Sb±/Sp±), line spacing (auto Ln± + exact/atLeast round-trip), paragraph indent (w:ind left/right; Ind± / Ir± / Fl±), bottom paragraph border (w:pBdr/w:bottom; Bdr toggle), IME composition (preview), page margins from `pgMar` in preview (Mar+/-), Letter/A4 page size (Pg; keeps orientation) and landscape toggle (Or; `w:pgSz`/`w:orient` round-trip), status word/char counts, find match-case (Aa), catalog **Document** launcher,
   canvas dock; Word/LibreOffice fixtures and round-trip tests.
 - Spec draft for native **`.orchid`** container — see
   [`docs/ORCHID_FORMAT.md`](docs/ORCHID_FORMAT.md) (not implemented yet).
@@ -255,7 +255,12 @@ release yet.
   reshuffling shuffle order, Home/End jump, Delete removes current track, empty
   queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year);
   favorite toggle on now-playing (star + F key); double-click a library track to
-  enqueue; localized Favorites playlist name and library stats strip.
+  enqueue; localized Favorites playlist name and library stats strip; file manager
+  **Play in Audio Player** for audio selections; **Folder** button reveals the
+  current track directory in the file manager. Restores the persisted queue track
+  into mpv paused on startup; browse Back shows a human breadcrumb; now-playing
+  shows album; playlist rename prefills the current name; EQ / ReplayGain / speed
+  persist in widget config and survive track changes.
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).

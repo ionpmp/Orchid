@@ -56,6 +56,8 @@ pub struct ContextMenuInputs {
     pub in_archive: bool,
     /// Current folder is the Recycle Bin virtual listing.
     pub in_recycle: bool,
+    /// Selection includes at least one audio file the library player can play.
+    pub selection_has_audio: bool,
 }
 
 /// Read-only header shown at the top of a file/folder context menu.
@@ -214,6 +216,12 @@ pub fn build_for_selection(
                 "fm-action-edit-in-viewer",
                 "widget-viewer",
                 single_file,
+            ),
+            item(
+                "audio.play",
+                "fm-action-play-in-audio-player",
+                "audio-player",
+                inputs.selection_has_audio,
             ),
             item(
                 "fs.file-assoc",

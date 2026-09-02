@@ -53,6 +53,8 @@ pub struct AudioPlayerPayload {
     pub library_sort: u8,
     pub is_current_favorite: bool,
     pub renaming_playlist: bool,
+    /// Prefill for the inline rename field (active playlist name).
+    pub rename_playlist_draft: String,
     pub active_playlist_id: String,
     pub groups: Vec<AudioPlayerGroupRow>,
     pub tracks: Vec<AudioPlayerTrackRow>,

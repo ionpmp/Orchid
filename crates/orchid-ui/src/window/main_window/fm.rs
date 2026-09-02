@@ -2444,6 +2444,9 @@ impl MainWindowController {
                     }
                 });
             }
+            orchid_widgets::builtin::file_manager::ActionOutcome::PlayInAudioPlayer { paths } => {
+                self.play_paths_in_audio_player(paths);
+            }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenWithPicker { paths } => {
                 for path in paths {
                     let open_path = match orchid_fs::FsPath::new(&path) {

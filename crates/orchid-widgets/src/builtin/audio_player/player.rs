@@ -166,6 +166,24 @@ impl PlayerSession {
         self.engine.set_speed(next);
     }
 
+    pub fn apply_session_prefs(&self, eq_index: u32, replaygain_index: u32, speed: f64) {
+        self.engine.set_eq_index(eq_index);
+        self.engine.set_replaygain_index(replaygain_index);
+        if (speed - 1.0).abs() > 0.01 {
+            self.engine.set_speed(speed);
+        }
+    }
+
+    #[must_use]
+    pub fn eq_index(&self) -> u32 {
+        self.engine.shared.eq_index.load(Ordering::Relaxed)
+    }
+
+    #[must_use]
+    pub fn replaygain_index(&self) -> u32 {
+        self.engine.shared.replaygain_index.load(Ordering::Relaxed)
+    }
+
     #[must_use]
     pub fn speed(&self) -> f64 {
         self.engine.shared.speed_x100.load(Ordering::Relaxed) as f64 / 100.0

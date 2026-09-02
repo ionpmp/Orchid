@@ -15,8 +15,10 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             engine_available: false,
             browse_tab: 0,
             browse_filter: SharedString::new(),
+            browse_filter_label: SharedString::new(),
             search_query: SharedString::new(),
             renaming_playlist: false,
+            rename_playlist_draft: SharedString::new(),
             active_playlist_id: SharedString::new(),
             groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
             tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
@@ -56,8 +58,10 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         engine_available: false,
         browse_tab: 0,
         browse_filter: SharedString::new(),
+        browse_filter_label: SharedString::new(),
         search_query: SharedString::new(),
         renaming_playlist: false,
+        rename_playlist_draft: SharedString::new(),
         active_playlist_id: SharedString::new(),
         groups: ModelRc::new(VecModel::from(Vec::<AudioPlayerGroupItem>::new())),
         tracks: ModelRc::new(VecModel::from(Vec::<AudioPlayerTrackItem>::new())),
@@ -115,6 +119,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         play_group_label: locale.tr("audio-player-play-group").into(),
         remove_root_label: locale.tr("audio-player-remove-root").into(),
         sort_label: sort_label_for(0, locale),
+        show_in_fm_label: locale.tr("audio-player-show-in-fm").into(),
         is_current_favorite: false,
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
     }
@@ -194,6 +199,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.move_down_label = base.move_down_label;
     m.play_group_label = base.play_group_label;
     m.remove_root_label = base.remove_root_label;
+    m.show_in_fm_label = base.show_in_fm_label;
     m.engine_missing_label = base.engine_missing_label;
     m
 }
@@ -225,8 +231,10 @@ pub(crate) fn build_audio_player_model(
             engine_available: p.engine_available,
             browse_tab: i32::from(p.browse_tab),
             browse_filter: p.browse_filter.clone().into(),
+            browse_filter_label: p.browse_filter_label.clone().into(),
             search_query: p.search_query.clone().into(),
             renaming_playlist: p.renaming_playlist,
+            rename_playlist_draft: p.rename_playlist_draft.clone().into(),
             active_playlist_id: p.active_playlist_id.clone().into(),
             groups: ModelRc::new(VecModel::from(
                 p.groups

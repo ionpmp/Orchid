@@ -818,6 +818,7 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.library_sort == b.library_sort
         && a.is_current_favorite == b.is_current_favorite
         && a.renaming_playlist == b.renaming_playlist
+        && a.rename_playlist_draft == b.rename_playlist_draft
         && a.active_playlist_id == b.active_playlist_id
         && a.groups == b.groups
         && a.tracks == b.tracks

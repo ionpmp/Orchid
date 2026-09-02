@@ -157,6 +157,12 @@ pub struct AudioPlayerConfig {
     pub library_sort: LibrarySort,
     /// Inline rename editor open for the active user playlist.
     pub renaming_playlist: bool,
+    /// Last EQ preset index (session restore for audio-only engine).
+    pub eq_index: u32,
+    /// Last ReplayGain mode index.
+    pub replaygain_index: u32,
+    /// Playback speed ×100 (100 = 1.0×).
+    pub speed_x100: u32,
 }
 
 impl Default for AudioPlayerConfig {
@@ -177,6 +183,9 @@ impl Default for AudioPlayerConfig {
             search_query: String::new(),
             library_sort: LibrarySort::default(),
             renaming_playlist: false,
+            eq_index: 0,
+            replaygain_index: 0,
+            speed_x100: 100,
         }
     }
 }
@@ -200,6 +209,11 @@ impl AudioPlayerConfig {
             && !self.active_playlist_id.is_empty()
         {
             self.active_playlist_id.clear();
+        }
+        self.eq_index %= 4;
+        self.replaygain_index %= 3;
+        if self.speed_x100 == 0 {
+            self.speed_x100 = 100;
         }
     }
 }

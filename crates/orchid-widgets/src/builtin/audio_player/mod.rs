@@ -79,6 +79,9 @@ impl AudioHandle {
         cfg.repeat = q.repeat;
         cfg.volume = self.player.volume() as f32;
         cfg.muted = self.player.muted();
+        cfg.eq_index = self.player.eq_index();
+        cfg.replaygain_index = self.player.replaygain_index();
+        cfg.speed_x100 = (self.player.speed() * 100.0).round() as u32;
     }
 
     fn load_current(&self) {
@@ -105,6 +108,19 @@ impl AudioHandle {
             crate::builtin::viewer::smtc_publisher::set_active_audio(self.instance_id);
             self.push_smtc();
         }
+    }
+
+    /// Load the current queue track into mpv without starting playback (session restore).
+    fn restore_current_paused(&self) {
+        let path = {
+            let q = self.queue.read();
+            q.current().map(str::to_string)
+        };
+        let Some(path) = path else {
+            return;
+        };
+        self.load_path(&path);
+        self.player.pause();
     }
 
     /// Sync chrome after mpv already advanced into a prefetched track.
@@ -326,6 +342,37 @@ pub fn ingest_os_paths(instance_id: Uuid, paths: &[String]) -> bool {
     added_root || enqueued
 }
 
+/// Replace the queue with `paths` and start playback at index 0.
+pub fn play_paths(instance_id: Uuid, paths: Vec<String>) {
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return;
+    };
+    if paths.is_empty() {
+        return;
+    }
+    let cfg = h.config.read().clone();
+    {
+        let mut q = h.queue.write();
+        q.replace(paths, 0);
+        q.shuffle = cfg.shuffle;
+        q.repeat = cfg.repeat;
+        if q.shuffle {
+            q.rebuild_order();
+        }
+    }
+    h.load_current();
+}
+
+/// Current queue track path, if any.
+#[must_use]
+pub fn current_track_path(instance_id: Uuid) -> Option<String> {
+    AUDIO_LIVE.get(&instance_id)?
+        .queue
+        .read()
+        .current()
+        .map(str::to_string)
+}
+
 /// Execute a transport / browse command string.
 pub fn execute_command(instance_id: Uuid, command: &str) {
     let Some(h) = AUDIO_LIVE.get(&instance_id) else {
@@ -407,14 +454,17 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         "eq" => {
             h.player.cycle_eq();
+            h.sync_queue_to_config();
             h.publish();
         }
         "rg" | "replaygain" => {
             h.player.cycle_replaygain();
+            h.sync_queue_to_config();
             h.publish();
         }
         "speed" => {
             h.player.cycle_speed();
+            h.sync_queue_to_config();
             h.publish();
         }
         "sort" => {
@@ -917,6 +967,31 @@ fn group_track_paths(h: &AudioHandle, group_key: &str) -> Vec<String> {
     browse.tracks.iter().map(|t| t.path.clone()).collect()
 }
 
+fn browse_filter_label(cfg: &AudioPlayerConfig, filter: &str) -> String {
+    if filter.is_empty() {
+        return String::new();
+    }
+    match cfg.browse_tab {
+        BrowseTab::Albums => {
+            if let Some((album, artist)) = filter.split_once('\u{1f}') {
+                if artist.is_empty() {
+                    album.to_string()
+                } else {
+                    format!("{album} — {artist}")
+                }
+            } else {
+                filter.to_string()
+            }
+        }
+        BrowseTab::Folders => PathBuf::from(filter)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| filter.to_string()),
+        _ => filter.to_string(),
+    }
+}
+
 fn format_time(ms: u64) -> String {
     let total = ms / 1000;
     let h = total / 3600;
@@ -983,6 +1058,11 @@ impl AudioPlayerWidget {
         if config.muted != player.muted() {
             player.mute_toggle();
         }
+        player.apply_session_prefs(
+            config.eq_index,
+            config.replaygain_index,
+            f64::from(config.speed_x100) / 100.0,
+        );
         let handle = Arc::new(AudioHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
@@ -997,6 +1077,7 @@ impl AudioPlayerWidget {
             scan_gen: AtomicU64::new(0),
         });
         AUDIO_LIVE.insert(instance_id, Arc::clone(&handle));
+        handle.restore_current_paused();
         kick_scan(Arc::clone(&handle));
         Self {
             instance_id,
@@ -1158,13 +1239,19 @@ impl AudioPlayerWidget {
             engine_available: self.handle.player.available(),
             browse_tab: cfg.browse_tab.as_u8(),
             browse_filter: cfg.browse_filter.clone(),
-            browse_filter_label: cfg.browse_filter.clone(),
+            browse_filter_label: browse_filter_label(&cfg, &cfg.browse_filter),
             search_query: cfg.search_query.clone(),
             library_sort: cfg.library_sort.as_u8(),
             is_current_favorite: current
                 .as_deref()
                 .is_some_and(|p| cfg.favorites.iter().any(|f| f == p)),
             renaming_playlist: cfg.renaming_playlist,
+            rename_playlist_draft: cfg
+                .playlists
+                .iter()
+                .find(|p| p.id == cfg.active_playlist_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_default(),
             active_playlist_id: cfg.active_playlist_id.clone(),
             groups: browse
                 .groups
@@ -1338,7 +1425,13 @@ impl Widget for AudioPlayerWidget {
         );
         *self.handle.library.write() = LibraryIndex::default();
         *self.handle.queue.write() = queue;
+        self.handle.player.apply_session_prefs(
+            cfg.eq_index,
+            cfg.replaygain_index,
+            f64::from(cfg.speed_x100) / 100.0,
+        );
         *self.handle.config.write() = cfg;
+        self.handle.restore_current_paused();
         kick_scan(Arc::clone(&self.handle));
         Ok(())
     }

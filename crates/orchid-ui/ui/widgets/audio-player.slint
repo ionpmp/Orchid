@@ -216,7 +216,9 @@ export component AudioPlayerView inherits Rectangle {
                     width: back-txt.preferred-width + 16px;
                     TouchArea { clicked => { root.command("clear-filter"); } }
                     back-txt := Text {
-                        text: root.model.back-label;
+                        text: root.model.browse-filter-label != ""
+                            ? root.model.back-label + " · " + root.model.browse-filter-label
+                            : root.model.back-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
@@ -435,7 +437,7 @@ export component AudioPlayerView inherits Rectangle {
             if root.model.browse-tab == 4 && root.model.renaming-playlist : SearchField {
                 field-height: 28px;
                 vertical-stretch: 0;
-                query: "";
+                query: root.model.rename-playlist-draft;
                 placeholder: root.model.rename-playlist-label;
                 edited(q) => { root.command("rename-playlist:" + q); }
                 escape-pressed => { root.command("cancel-rename-playlist"); }
@@ -763,6 +765,12 @@ export component AudioPlayerView inherits Rectangle {
                                 font-size: Theme.font-size-sm;
                                 overflow: elide;
                             }
+                            if root.model.album != "" : Text {
+                                text: root.model.album;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-sm;
+                                overflow: elide;
+                            }
                             if root.model.has-lyrics : Text {
                                 text: root.model.lyrics-line;
                                 color: Theme.accent-brand;
@@ -903,6 +911,21 @@ export component AudioPlayerView inherits Rectangle {
                                     color: root.model.repeat > 0 ? Theme.accent-brand : Theme.text-tertiary;
                                     font-size: Theme.font-size-sm;
                                     font-weight: Theme.weight-semibold;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%; height: 100%;
+                                }
+                            }
+                            if root.model.has-track : Rectangle {
+                                border-radius: Theme.radius-md;
+                                background: Theme.surface-base;
+                                width: show-fm-txt.preferred-width + 12px;
+                                height: 24px;
+                                TouchArea { clicked => { root.command("show-in-fm"); } }
+                                show-fm-txt := Text {
+                                    text: root.model.show-in-fm-label;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                     width: 100%; height: 100%;
