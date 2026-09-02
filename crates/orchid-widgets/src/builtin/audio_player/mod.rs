@@ -5,6 +5,7 @@
 pub mod config;
 pub mod library;
 pub mod lyrics;
+pub mod m3u;
 pub mod player;
 pub mod queue;
 pub mod sleep;
@@ -801,6 +802,27 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             export_m3u(instance_id);
             return;
         }
+        "import-m3u" => {
+            drop(h);
+            import_m3u(instance_id);
+            return;
+        }
+        "escape" => {
+            let mut cfg = h.config.write();
+            if cfg.renaming_playlist {
+                cfg.renaming_playlist = false;
+                drop(cfg);
+                h.publish();
+            } else if !cfg.search_query.is_empty() {
+                cfg.search_query.clear();
+                drop(cfg);
+                h.publish();
+            } else if !cfg.browse_filter.is_empty() {
+                cfg.browse_filter.clear();
+                drop(cfg);
+                h.publish();
+            }
+        }
         cmd if let Some(raw) = cmd.strip_prefix("toggle-favorite:") => {
             let mut cfg = h.config.write();
             if let Some(i) = cfg.favorites.iter().position(|p| p == raw) {
@@ -1094,6 +1116,62 @@ fn export_m3u(instance_id: Uuid) {
     if std::fs::write(&dest, body).is_ok() {
         h.publish();
     }
+}
+
+fn import_m3u(instance_id: Uuid) {
+    let Some(src) = orchid_viewers::pick_m3u_file() else {
+        return;
+    };
+    let Ok(text) = std::fs::read_to_string(&src) else {
+        return;
+    };
+    let parsed = m3u::parse_m3u(&text, src.parent());
+    let paths: Vec<String> = parsed
+        .into_iter()
+        .filter(|p| PathBuf::from(p).is_file())
+        .collect();
+    if paths.is_empty() {
+        return;
+    }
+    let Some(h) = AUDIO_LIVE.get(&instance_id) else {
+        return;
+    };
+    let tab = h.config.read().browse_tab;
+    if tab == BrowseTab::NowPlaying {
+        let was_empty = h.queue.read().paths.is_empty();
+        {
+            let mut q = h.queue.write();
+            for path in &paths {
+                q.enqueue_end(path);
+            }
+        }
+        if was_empty {
+            h.load_current();
+        } else {
+            h.prefetch_following();
+            h.sync_queue_to_config();
+            h.publish();
+        }
+        return;
+    }
+
+    // Playlists tab (or elsewhere): create a user playlist from the file.
+    let name = src
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Imported")
+        .to_string();
+    let mut pl = PlaylistEntry::new(name);
+    pl.tracks = paths;
+    let mut cfg = h.config.write();
+    cfg.active_playlist_id = pl.id.clone();
+    cfg.playlists.push(pl);
+    cfg.browse_tab = BrowseTab::Playlists;
+    cfg.browse_filter.clear();
+    drop(cfg);
+    h.publish();
 }
 
 fn sanitize_filename_stem(name: &str) -> String {

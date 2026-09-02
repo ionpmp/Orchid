@@ -476,6 +476,7 @@ audio-player-enqueue = Q+
 audio-player-play-group = Играть
 audio-player-show-in-fm = Папка
 audio-player-export-m3u = Экспорт M3U
+audio-player-import-m3u = Импорт M3U
 audio-player-sort-artist = Исполнитель
 audio-player-sort-title = Название
 audio-player-sort-album = Альбом

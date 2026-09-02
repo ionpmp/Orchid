@@ -256,10 +256,11 @@ release yet.
   queue hint; Enter plays all search matches; library sort (Artist/Title/Album/Year);
   favorite toggle on now-playing (star + F key); double-click a library track to
   enqueue; localized Favorites playlist name and library stats strip; file manager
-  **Play in Audio Player** / **Add to queue** for audio selections; **Export M3U**
-  on queue and playlist tabs; **Folder** button reveals the
-  current track directory in the file manager; **G** reveals folder, **C** copies
-  the track path. Restores the persisted queue track
+  **Play in Audio Player** / **Add to queue** for audio selections; **Export** /
+  **Import M3U** on queue and playlist tabs (import appends to the queue or creates
+  a playlist); Escape clears rename / search / browse drill-down; **Folder** button
+  reveals the current track directory in the file manager; **G** reveals folder,
+  **C** copies the track path. Restores the persisted queue track
   into mpv paused on startup; browse Back shows a human breadcrumb; now-playing
   shows album; playlist rename prefills the current name; EQ / ReplayGain / speed
   persist in widget config and survive track changes. **Recent** playlist
