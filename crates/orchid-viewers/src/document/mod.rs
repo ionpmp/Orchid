@@ -1804,6 +1804,43 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Toggle `w:widowControl` on selected paragraphs.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_widow_control_selection(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let clear = cursors
+            .iter()
+            .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.widow_control));
+        let new_keep = !clear;
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                if p.widow_control != new_keep {
+                    p.widow_control = new_keep;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step font size up (`direction > 0`) or down on the selection.
     ///
     /// # Errors
@@ -2796,6 +2833,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     page_break_before: prev.page_break_before,
                     keep_next: prev.keep_next,
                     keep_lines: prev.keep_lines,
+                    widow_control: prev.widow_control,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
                     line_spacing: prev.line_spacing,
@@ -3229,6 +3267,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         page_break_before: p.page_break_before,
         keep_next: p.keep_next,
         keep_lines: p.keep_lines,
+        widow_control: p.widow_control,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3249,6 +3288,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         page_break_before: false,
         keep_next: false,
         keep_lines: false,
+        widow_control: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3295,6 +3335,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         page_break_before: p.page_break_before,
         keep_next: p.keep_next,
         keep_lines: p.keep_lines,
+        widow_control: p.widow_control,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3315,6 +3356,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         page_break_before: false,
         keep_next: false,
         keep_lines: false,
+        widow_control: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3414,6 +3456,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         page_break_before: start_p.page_break_before,
         keep_next: start_p.keep_next,
         keep_lines: start_p.keep_lines,
+        widow_control: start_p.widow_control,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3505,6 +3548,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         page_break_before: start_p.page_break_before,
         keep_next: start_p.keep_next,
         keep_lines: start_p.keep_lines,
+        widow_control: start_p.widow_control,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3710,6 +3754,7 @@ impl Viewer for DocumentViewer {
         };
         let keep_next = para.is_some_and(|p| p.keep_next);
         let keep_lines = para.is_some_and(|p| p.keep_lines);
+        let widow_control = para.is_some_and(|p| p.widow_control);
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {
@@ -3761,6 +3806,7 @@ impl Viewer for DocumentViewer {
             border_bottom,
             keep_next,
             keep_lines,
+            widow_control,
             superscript,
             subscript,
             font_size_pt,

@@ -151,6 +151,7 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.border_bottom == b.border_bottom
                 && a.keep_next == b.keep_next
                 && a.keep_lines == b.keep_lines
+                && a.widow_control == b.widow_control
                 && a.superscript == b.superscript
                 && a.subscript == b.subscript
                 && a.font_size_pt.to_bits() == b.font_size_pt.to_bits()

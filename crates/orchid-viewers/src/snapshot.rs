@@ -70,6 +70,8 @@ pub struct DocumentSnapshot {
     pub keep_next: bool,
     /// Keep lines together (`w:keepLines`) active at the caret paragraph.
     pub keep_lines: bool,
+    /// Widow/orphan control (`w:widowControl`) active at the caret paragraph.
+    pub widow_control: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).
