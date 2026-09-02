@@ -143,9 +143,12 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.bold == b.bold
                 && a.italic == b.italic
                 && a.underline == b.underline
+                && a.strikethrough == b.strikethrough
                 && a.highlight == b.highlight
                 && a.shade == b.shade
                 && a.border_bottom == b.border_bottom
+                && a.superscript == b.superscript
+                && a.subscript == b.subscript
                 && a.font_size_pt.to_bits() == b.font_size_pt.to_bits()
                 && a.font_family == b.font_family
                 && a.color_rgb == b.color_rgb
@@ -157,6 +160,9 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.preview_width_px == b.preview_width_px
                 && a.preview_height_px == b.preview_height_px
                 && a.preview_render_scale == b.preview_render_scale
+                && a.preview_zoom_percent == b.preview_zoom_percent
+                && a.page_is_a4 == b.page_is_a4
+                && a.page_landscape == b.page_landscape
                 && (std::sync::Arc::ptr_eq(&a.plain_text, &b.plain_text)
                     || a.plain_text.as_ref() == b.plain_text.as_ref())
                 && (std::sync::Arc::ptr_eq(&a.preview_rgba, &b.preview_rgba)
