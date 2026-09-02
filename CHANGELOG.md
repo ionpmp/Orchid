@@ -267,8 +267,10 @@ release yet.
   (last 50 played tracks, chronological). Library / queue rows show ID3
   duration when TLEN is present. Digits **1–7** switch browse tabs
   when the player has focus.
-- Catalog **Video Player** launcher: video-only file picker → in-app libmpv
-  viewer on the canvas (alongside **Media Player** for audio/video).
+- **Video Player**: dockable local video library (folders + queue, shuffle /
+  repeat, libmpv RGBA surface) — catalog creates the widget (no longer a
+  one-shot file-picker → viewer launcher). File Manager **Play in Video Player**
+  / **Add to queue**; Explorer drop onto the player.
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
 - Weather, Moon (geometric phase disk), System indicators, Media, RSS,
   Recent files, Universal search, Password manager (KDBX4 + Windows Hello).
